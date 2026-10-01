@@ -1051,6 +1051,15 @@ agents.
 
 1. **Install and pair.** App Store → open → **Pair with hivemind** → scan the QR from
    Settings → Devices → *Pair a phone* on the desktop. Name and colour carry over.
+
+   *As built (M5 step 2, pairing 0.3):* the phone is a device of kind `phone`, which only enters
+   a code, and only an app's. It is given a certificate naming it, signed by the person key, and
+   never the key: it is the person's device without being able to make another one the person's,
+   and a lost phone gives no key away (unpair it on the computer). The computer lists it as a
+   phone and never offers it as a place to run a frame, open a workspace on or move one to. The
+   Rust side is `crates/hive-phone` (`hive-phone pair <link>` in a terminal), held with the app to
+   `conformance/pairing.json`. Name and colour do not carry over yet, and it pairs on the local
+   network: the reach chooser (step 2 below) comes with the phone's shell.
 2. **Away from this network?** On the local network (the default) the phone works only on
    the same Wi-Fi and only while the app is open. The pairing sheet asks once:
    - *Use hivemind's servers* — reach your devices from anywhere; notifications through our

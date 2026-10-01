@@ -27,7 +27,7 @@ export class Devices {
     if (!Array.isArray(all)) return [];
     return all.filter((d): d is PairedDevice => {
       const e = d as Partial<PairedDevice> | null;
-      return !!e && typeof e.name === "string" && (e.kind === "app" || e.kind === "host") && certificateVerifies(e.certificate) && e.certificate.device === e.device;
+      return !!e && typeof e.name === "string" && (e.kind === "app" || e.kind === "host" || e.kind === "phone") && certificateVerifies(e.certificate) && e.certificate.device === e.device;
     });
   }
 

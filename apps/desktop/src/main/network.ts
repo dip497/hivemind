@@ -346,14 +346,18 @@ function keepPaired(device: PairedDevice): void {
  *  host network's relays. */
 type JoinReply = PairReply | { ok: false; error: "not-admitted"; message: string };
 
-/** Connect to one of the person's devices, where it said it is reached when it paired. */
-/** Whether `device` is one of this person's, paired here. */
+/** The person's devices paired here that frames run on, workspaces are held on and hosting moves
+ *  to: their computers and hosts. A phone runs nothing (spec/pairing.md 0.3). */
+const placesToRun = (): PairedDevice[] => pairedDevices().list().filter((d) => d.kind !== "phone");
+
+/** Whether `device` is one of this person's computers or hosts, paired here. */
 export function isYourDevice(device: string): boolean {
-  return pairedDevices().list().some((d) => d.device === device);
+  return placesToRun().some((d) => d.device === device);
 }
 
+/** Connect to one of the person's computers or hosts, where it said it is reached when it paired. */
 export async function dialDevice(device: string): Promise<Link> {
-  const d = pairedDevices().list().find((x) => x.device === device);
+  const d = placesToRun().find((x) => x.device === device);
   if (!d) throw new Error("that device is not one of yours: pair it under Settings → Devices");
   return (await network()).dial(device, { addrs: d.addrs, relay: d.relay });
 }
@@ -491,7 +495,7 @@ export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promis
 
   // The workspaces each of the person's other devices holds; null for one that does not answer.
   handle("net:device-workspaces", async () => {
-    const hosts = pairedDevices().list();
+    const hosts = placesToRun();
     if (hosts.length === 0) return [];
     const hn = await network();
     return Promise.all(hosts.map(async (d) => {
@@ -506,7 +510,7 @@ export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promis
 
   // Open a workspace another of the person's devices holds: a joined workspace this person owns.
   handle("net:open-device-workspace", (_e, device: unknown, workspace: unknown, name: unknown) => {
-    const host = pairedDevices().list().find((d) => d.device === device);
+    const host = placesToRun().find((d) => d.device === device);
     if (!host || typeof workspace !== "string" || !/^[0-9a-f]{32}$/.test(workspace)) throw new Error("open: that is not a workspace of one of your devices");
     const names = { workspace: typeof name === "string" && name ? name.slice(0, 200) : "workspace", host: host.name };
     // The person's own: its key is theirs to derive, and its record is on their network.
@@ -518,9 +522,9 @@ export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promis
   // whoever is in it follows; its frames here stay here. Its `hive://` name, which this computer
   // opens it by from now on, as its owner, from the device it is on.
   handleEffect("net:move-hosting", (repo: unknown) => ({ target: typeof repo === "string" ? repo : undefined }), async (_e, repo: unknown, device: unknown) => {
-    const to = pairedDevices().list().find((d) => d.device === device);
+    const to = placesToRun().find((d) => d.device === device);
     if (typeof repo !== "string" || !repo || repo.startsWith("hive://")) throw new Error("move: only a workspace hosted here moves from here");
-    if (!to) throw new Error("move: that is not one of your devices");
+    if (!to) throw new Error("move: that is not one of your computers or hosts");
     const notice = await hostingHere().moveTo(repo, to.device);
     const workspace = workspaceStore().ownership(repo)!.workspaceId as string;
     joinedList().add({

@@ -42,7 +42,7 @@ use iroh::{
     endpoint::{Connection, RecvStream, SendStream},
     endpoint_info::UserData,
     protocol::{AcceptError, ProtocolHandler, Router},
-    Endpoint, EndpointAddr, EndpointId, SecretKey, TransportAddr,
+    Endpoint, EndpointId, SecretKey, TransportAddr,
 };
 use iroh_mdns_address_lookup::{DiscoveryEvent, MdnsAddressLookup};
 use serde::{Deserialize, Serialize};
@@ -346,25 +346,9 @@ impl Daemon {
         }
     }
 
-    fn addr_of(peer: &str, addrs: &[String], relay: &Option<String>) -> Result<EndpointAddr> {
-        let id =
-            EndpointId::from_str(peer).with_context(|| format!("{peer} is not a device id"))?;
-        let mut addr = EndpointAddr::new(id);
-        for a in addrs {
-            addr = addr.with_ip_addr(
-                a.parse()
-                    .with_context(|| format!("{a} is not an address"))?,
-            );
-        }
-        if let Some(url) = relay {
-            addr = addr.with_relay_url(url.parse()?);
-        }
-        Ok(addr)
-    }
-
     async fn dial(&self, req: u64, peer: String, addrs: Vec<String>, relay: Option<String>) {
         let connected = async {
-            let addr = Self::addr_of(&peer, &addrs, &relay)?;
+            let addr = net::addr_of(&peer, &addrs, &relay)?;
             Ok::<_, anyhow::Error>(self.endpoint.connect(addr, ws::ALPN).await?)
         };
         match connected.await {
@@ -389,18 +373,8 @@ impl Daemon {
         relay: Option<String>,
         hello: Value,
     ) {
-        let answered = async {
-            let addr = Self::addr_of(&peer, &addrs, &relay)?;
-            let connection = self.endpoint.connect(addr, pair::ALPN).await?;
-            let (mut send, mut recv) = connection.open_bi().await?;
-            write_frame(&mut send, serde_json::to_string(&hello)?.as_bytes()).await?;
-            send.finish()?;
-            let reply = read_frame(&mut recv)
-                .await?
-                .context("the host closed without answering")?;
-            connection.close(0u32.into(), b"done");
-            Ok::<_, anyhow::Error>(serde_json::from_slice(&reply)?)
-        };
+        let answered =
+            async { pair::ask(&self.endpoint, net::addr_of(&peer, &addrs, &relay)?, &hello).await };
         match answered.await {
             Ok(reply) => self.tell(ToMain::Paired { req, reply }),
             Err(e) => self.tell(ToMain::Failed {

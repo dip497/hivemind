@@ -181,6 +181,39 @@ describe("two apps pair", () => {
   });
 });
 
+describe("a phone pairs with an app alone", () => {
+  /** A phone: a device key, and nothing of a person until it pairs. */
+  const phone = () => {
+    const id = idOf(newSeed());
+    return { id, prove: (offer: PairingOffer, offering: string) => ({ v: 1, pair: "prove", proof: pairProof(offer.code, "entering", offering, id), name: "phone", kind: "phone", addrs: [], relay: null }) };
+  };
+
+  test("a host does not pair with a phone: neither gives, and nothing is given", () => {
+    const host = device("host", "server");
+    const p = phone();
+    const { offer, settled } = offered(host);
+    expect(offer.answer(p.id, p.prove(offer, host.device))).toEqual({ ok: false, error: "same-kind" });
+    expect(settled).toHaveLength(0);
+  });
+
+  test("an app entering a code that a phone answers gives it nothing: a phone never offers, and is never given the person key", async () => {
+    const app = device("app", "laptop");
+    const code = newCode();
+    const claimed = device("app", "phone");
+    const sent: unknown[] = [];
+    const failed = await enterPairing({
+      me: app, code, offering: claimed.device,
+      ask: async (hello) => {
+        sent.push(hello);
+        return { ok: true, proof: pairProof(code, "offering", claimed.device, app.device), name: "phone", kind: "phone", certificate: claimed.certificate, addrs: [], relay: null };
+      },
+    }).catch((e: unknown) => e);
+    expect(failed).toBeInstanceOf(PairingFailed);
+    expect(sent.some((h) => (h as { pair?: string }).pair === "give")).toBe(false);
+    expect(JSON.stringify(sent)).not.toContain(Buffer.from(app.person).toString("hex"));
+  });
+});
+
 describe("codes and links", () => {
   test("a code is six of the words, entered in any case and with spaces or hyphens", () => {
     const code = newCode();

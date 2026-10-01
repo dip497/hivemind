@@ -4,12 +4,14 @@
 //! mDNS among the devices on the same network. It always has a relay map, empty on the local
 //! network, so a workspace on another network can add its host's relays while it runs.
 
-use anyhow::Result;
+use std::str::FromStr;
+
+use anyhow::{Context, Result};
 use iroh::{
     address_lookup::{PkarrPublisher, PkarrResolver},
     endpoint::{presets, Builder, EndpointHooks, RelayMode},
     tls::CaTlsConfig,
-    Endpoint, RelayMap, RelayUrl, SecretKey,
+    Endpoint, EndpointAddr, EndpointId, RelayMap, RelayUrl, SecretKey,
 };
 use iroh_mdns_address_lookup::MdnsAddressLookup;
 use url::Url;
@@ -102,4 +104,20 @@ async fn bind(mut builder: Builder, nearby: Option<MdnsAddressLookup>) -> Result
         builder = builder.address_lookup(lookup);
     }
     Ok(builder.bind().await?)
+}
+
+/// The device `peer`, where it says it is reached: its direct addresses, and its relay.
+pub fn addr_of(peer: &str, addrs: &[String], relay: &Option<String>) -> Result<EndpointAddr> {
+    let id = EndpointId::from_str(peer).with_context(|| format!("{peer} is not a device id"))?;
+    let mut addr = EndpointAddr::new(id);
+    for a in addrs {
+        addr = addr.with_ip_addr(
+            a.parse()
+                .with_context(|| format!("{a} is not an address"))?,
+        );
+    }
+    if let Some(url) = relay {
+        addr = addr.with_relay_url(url.parse()?);
+    }
+    Ok(addr)
 }

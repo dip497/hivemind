@@ -48,4 +48,5 @@ directory only its user can open (0700), one file each (0600): `device.key` and 
 the seed in lowercase hex, `device.cert` the certificate as above. The app keeps them in
 `<userData>/identity`, `hive host` in the same place under its config directory. They are made on
 first use and never replaced by the app itself: pairing replaces the person key and the
-certificate, and unpairing forgets them.
+certificate, and unpairing forgets them. A phone keeps no person key: its `device.cert` is the one
+the app it paired with signed for it (`pairing.md`).

@@ -1,13 +1,14 @@
 /**
- * Settings → Devices (R14, M3, spec/pairing.md): the person's other devices this computer is
+ * Settings → Devices (R14, M3, M5, spec/pairing.md): the person's other devices this computer is
  * paired with, and pairing another. A host (`hive host` on a server, a VPS, a box in the office)
  * takes your person; another computer entering this one's code does too, and this computer
  * entering another's becomes its person. Either way the workspaces each holds are yours, and open
- * from Open recent. Enter the six words the other device shows (found on this network) or its
- * link (from anywhere), or show a code from here.
+ * from Open recent. A phone scans this computer's code and is certified as yours; it runs nothing.
+ * Enter the six words the other device shows (found on this network) or its link (from anywhere),
+ * or show a code from here.
  */
 import { useEffect, useMemo, useState } from "react";
-import { Check, Copy, Laptop, Server } from "lucide-react";
+import { Check, Copy, Laptop, Server, Smartphone } from "lucide-react";
 import { encode } from "uqr";
 import type { PairedDeviceSummary } from "../../shared/ipc";
 import { Button } from "./components/ui/button";
@@ -26,12 +27,12 @@ export function DevicesPrefs() {
   }, []);
   return (
     <div className="settings-stack">
-      <Section title="Your devices" hint="Hosts and computers that are you">
+      <Section title="Your devices" hint="Hosts, computers and phones that are you">
         {devices === undefined ? null : devices === null ? (
           <p className="settings-note">Only the app knows</p>
         ) : devices.length === 0 ? (
           <p className="text-[12px] text-[var(--color-fg3)]" data-devices-none>
-            None yet. Pair your other computers to open each one's workspaces from the other, and a host to keep them, and the agents in them, running while this computer sleeps.
+            None yet. Pair your other computers to open each one's workspaces from the other, a host to keep them, and the agents in them, running while this computer sleeps, and your phone to see what needs you.
           </p>
         ) : (
           <ul className="flex flex-col" data-devices>
@@ -42,23 +43,31 @@ export function DevicesPrefs() {
       <Section title="Pair with a device" hint="Another computer's Settings → Devices, or hive host pair on a host">
         <EnterLink />
       </Section>
-      <Section title="Or show a code" hint="For another computer, or hive host pair <words or link> on a host">
+      <Section title="Or show a code" hint="For another computer, a phone, or hive host pair <words or link> on a host">
         <OfferCode />
       </Section>
     </div>
   );
 }
 
+/** How each kind of device is shown. */
+const KINDS = {
+  host: { Icon: Server, what: "Always on" },
+  app: { Icon: Laptop, what: "A computer" },
+  phone: { Icon: Smartphone, what: "A phone" },
+} as const;
+
 function DeviceRow({ device }: { device: PairedDeviceSummary }) {
   const [error, setError] = useState<string | null>(null);
+  const { Icon, what } = KINDS[device.kind];
   return (
     <li className="settings-row" data-device={device.device} data-device-kind={device.kind}>
       <div className="flex items-center gap-2.5">
-        {device.kind === "host" ? <Server size={15} className="text-[var(--color-fg3)]" /> : <Laptop size={15} className="text-[var(--color-fg3)]" />}
+        <Icon size={15} className="text-[var(--color-fg3)]" />
         <div>
           <label>{device.name}</label>
           <p>
-            {device.kind === "host" ? "Always on" : "A computer"} · paired {new Date(device.pairedAt).toLocaleDateString()}
+            {what} · paired {new Date(device.pairedAt).toLocaleDateString()}
             {error && <span className="text-[var(--color-err)]" role="alert"> · {error}</span>}
           </p>
         </div>
@@ -121,31 +130,44 @@ function EnterLink() {
   );
 }
 
-/** A code for a host to enter: shown as its words, a link and a QR code of the link. */
+/** A code for another device to enter: shown as its words, a link and a QR code of the link; for a
+ *  phone, the QR code to scan. One at a time: this computer keeps one code open. */
 function OfferCode() {
-  const [offer, setOffer] = useState<{ code: string; link: string; expires: number } | null>(null);
+  const [offer, setOffer] = useState<{ code: string; link: string; expires: number; phone: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const show = async () => {
+  const show = async (phone: boolean) => {
     setError(null);
-    try { setOffer(await window.hive.pairOffer()); } catch (e) { setError(messageOf(e)); }
+    try { setOffer({ ...(await window.hive.pairOffer()), phone }); } catch (e) { setError(messageOf(e)); }
   };
   if (!offer) {
     return (
       <div className="flex flex-col gap-2">
-        <div><Button size="sm" variant="outline" data-pair-offer onClick={() => void show()}>Show a code</Button></div>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" data-pair-offer onClick={() => void show(false)}>Show a code</Button>
+          <Button size="sm" variant="outline" data-pair-phone onClick={() => void show(true)}><Smartphone /> Pair a phone</Button>
+        </div>
         {error && <p className="text-[12px] text-[var(--color-err)]" role="alert">{error}</p>}
       </div>
     );
   }
+  const until = new Date(offer.expires).toLocaleTimeString();
   return (
-    <div className="flex items-start gap-4" data-pair-offered>
+    <div className="flex items-start gap-4" data-pair-offered={offer.phone ? "phone" : "code"}>
       <Qr text={offer.link} />
       <div className="flex min-w-0 flex-col gap-2">
-        <p className="font-mono text-[14px] tracking-wide" data-pair-code>{offer.code.split("-").join(" ")}</p>
-        <p className="text-[12px] text-[var(--color-fg3)]">
-          Enter these words (on this network) or the link on the other computer, under Settings → Devices, or run <code className="font-mono">hive host pair</code> with them on a host. It works once, until {new Date(offer.expires).toLocaleTimeString()}.
-        </p>
+        {offer.phone ? (
+          <p className="text-[12px] text-[var(--color-fg2)]">
+            Scan this with hivemind on your phone. It becomes yours, to see what needs you and answer it, and runs nothing itself. It works once, until {until}.
+          </p>
+        ) : (
+          <>
+            <p className="font-mono text-[14px] tracking-wide" data-pair-code>{offer.code.split("-").join(" ")}</p>
+            <p className="text-[12px] text-[var(--color-fg3)]">
+              Enter these words (on this network) or the link on the other computer, under Settings → Devices, or run <code className="font-mono">hive host pair</code> with them on a host. It works once, until {until}.
+            </p>
+          </>
+        )}
         <div>
           <Button size="sm" variant="outline" data-pair-copy title={offer.link}
             onClick={() => { void navigator.clipboard.writeText(offer.link).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}>

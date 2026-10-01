@@ -59,11 +59,23 @@ pub const ADMIN_KEY: &str = "admin.key";
 /// the access role for its own network makes one the first time (`hive-net serve --all`). It
 /// signs the network's profile and its enrolments, so it is kept like the others (0600).
 pub fn admin_key(dir: &Path) -> Result<(SecretKey, bool)> {
-    let file = dir.join(ADMIN_KEY);
+    kept_or_made(dir, ADMIN_KEY, "network's admin key")
+}
+
+/// The `what` kept in `dir` as `name`, and whether it was made just now: made from 32 random
+/// bytes the first time, and kept as the app keeps its keys (`dir` 0700, the file 0600).
+pub fn kept_or_made(dir: &Path, name: &str, what: &str) -> Result<(SecretKey, bool)> {
+    let file = dir.join(name);
     if file.exists() {
-        return Ok((seed_file(&file, "network's admin key")?, false));
+        return Ok((seed_file(&file, what)?, false));
     }
-    fs::create_dir_all(dir).with_context(|| format!("cannot make {}", dir.display()))?;
+    let mut folder = fs::DirBuilder::new();
+    folder.recursive(true);
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut folder, 0o700);
+    folder
+        .create(dir)
+        .with_context(|| format!("cannot make {}", dir.display()))?;
     let key = SecretKey::from_bytes(&rand::random::<[u8; 32]>());
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);
@@ -92,9 +104,9 @@ pub fn seed_file(file: &Path, what: &str) -> Result<SecretKey> {
     Ok(SecretKey::from_bytes(&bytes))
 }
 
-/// Where the app keeps this machine's keys: `identity` in its data folder.
-pub fn app_identity_dir() -> Option<PathBuf> {
-    let data = if cfg!(target_os = "macos") {
+/// Where this user's applications keep their data on this machine.
+pub fn data_dir() -> Option<PathBuf> {
+    Some(if cfg!(target_os = "macos") {
         PathBuf::from(env::var_os("HOME")?).join("Library/Application Support")
     } else if cfg!(windows) {
         PathBuf::from(env::var_os("APPDATA")?)
@@ -103,8 +115,12 @@ pub fn app_identity_dir() -> Option<PathBuf> {
             Some(dir) => PathBuf::from(dir),
             None => PathBuf::from(env::var_os("HOME")?).join(".config"),
         }
-    };
-    Some(data.join("hivemind").join("identity"))
+    })
+}
+
+/// Where the app keeps this machine's keys: `identity` in its data folder.
+pub fn app_identity_dir() -> Option<PathBuf> {
+    Some(data_dir()?.join("hivemind").join("identity"))
 }
 
 #[cfg(test)]

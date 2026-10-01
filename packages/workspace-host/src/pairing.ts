@@ -2,6 +2,7 @@
  * Pairing two devices of one person (spec/pairing.md; design §5.2, R14, M3): one device gives the
  * person key it holds and the other takes it, so both are that person. An app gives to a host; of
  * two apps, the one entering the code is the device being added, and takes; two hosts do not pair.
+ * A phone (0.3) enters an app's code and is given a certificate naming it, never the person key.
  * A device that shares workspaces with others, either way, never takes. One device offers a code
  * (six words, or a link carrying them and where the device is); the other enters it and dials. Over
  * `hive/pair/1` each proves it holds the code, bound to the two devices' keys, before anything is
@@ -17,6 +18,9 @@ import { PAIRING_WORDS } from "./pairing-words.js";
 
 /** An app (someone's own computer), which gives its person; a host, which takes one. */
 export type DeviceKind = "app" | "host";
+/** A device paired with: an app, a host, or a phone (0.3), which an app certifies and never gives
+ *  the person key; a phone runs nothing and only enters a code. */
+export type PairedKind = DeviceKind | "phone";
 
 /** Where a device is reached: its direct addresses, and the relay it is on. */
 export interface Reached {
@@ -41,7 +45,7 @@ export interface PairingDevice extends Reached {
 export interface PairedWith extends Reached {
   device: string;
   name: string;
-  kind: DeviceKind;
+  kind: PairedKind;
   /** A certificate that names the other device as the person's. */
   certificate: DeviceCertificate;
 }
@@ -135,6 +139,7 @@ const reachedOf = (m: Record<string, unknown>): Reached => ({
   relay: typeof m.relay === "string" && m.relay.length <= 500 ? m.relay : null,
 });
 const isKind = (v: unknown): v is DeviceKind => v === "app" || v === "host";
+const isPairedKind = (v: unknown): v is PairedKind => isKind(v) || v === "phone";
 /** A device's name, as another will list it: text, not too long. */
 const nameOf = (v: unknown): string | null => (typeof v === "string" && v.trim() && v.length <= 200 ? v.trim() : null);
 
@@ -199,11 +204,20 @@ export class PairingOffer {
     const me = this.me;
     if (!sameProof(h.proof, pairProof(this.code, "entering", me.device, peer))) return this.wrong();
     const name = nameOf(h.name);
-    if (!name || !isKind(h.kind) || !certificateVerifies(h.certificate)) return fail("malformed");
-    if (h.certificate.device !== peer) return fail("not-this-device");
-    if (h.kind === "host" && me.kind === "host") return fail("same-kind");
+    if (!name || !isPairedKind(h.kind)) return fail("malformed");
+    // Only an app gives: a host pairs with an app alone.
+    if (me.kind === "host" && h.kind !== "app") return fail("same-kind");
     const proof = pairProof(this.code, "offering", me.device, peer);
     const mine = { ok: true, proof, name: me.name, kind: me.kind, certificate: me.certificate, addrs: me.addrs, relay: me.relay };
+    if (h.kind === "phone") {
+      // A phone is given a certificate naming it, signed by the person key, and never the key.
+      const yours = certifyDevice(me.person, peer);
+      this.over = true;
+      this.settled({ with: { device: peer, name, kind: "phone", certificate: yours, ...reachedOf(h) }, person: null });
+      return { ...mine, yours };
+    }
+    if (!certificateVerifies(h.certificate)) return fail("malformed");
+    if (h.certificate.device !== peer) return fail("not-this-device");
     if (me.kind === "app") {
       // The entering device would take this person, and cannot: those it shares with know it as another.
       if (h.shares === true) return fail("shares");

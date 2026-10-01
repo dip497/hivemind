@@ -1,19 +1,28 @@
-# Pairing (0.2)
+# Pairing (0.3)
 
 Two devices become one person's (R14 and §5.2 in `docs/design/multiplayer-2026-09-28.md`): the
-device being added receives the person key and certifies itself with it (`identity.md`), so it is
-that person everywhere, and each device keeps the other in its list of the person's devices. It
+device being added receives the person key and certifies itself with it (`identity.md`), or, a
+phone, a certificate the other signs for it, so it is that person everywhere, and each device keeps
+the other in its list of the person's devices. It
 runs over `hive/pair/1`, the one protocol a device answers for devices it does not know yet.
 
 ## The two sides
 
-Each device is of a **kind**: `app` (the desktop app, someone's own computer) or `host` (`hive
-host`, a machine that serves workspaces with nobody at it). One device **gives** the person it
-holds and the other **takes** it:
+Each device is of a **kind**: `app` (the desktop app, someone's own computer), `host` (`hive
+host`, a machine that serves workspaces with nobody at it) or `phone` (0.3: the phone app, which
+runs nothing and is given no person key). One device **gives** the person it holds and the other
+**takes** it:
 
 - an app and a host: the app gives, the host takes;
 - two apps: the one entering the code is the device being added, and takes (§5.2);
-- two hosts do not pair.
+- an app and a phone: the app gives, and the phone is always the one entering (it scans the
+  app's link);
+- two hosts, a host and a phone, and two phones do not pair: neither of them gives.
+
+A phone takes a **certificate**, not the person key: the app certifies the phone's device with the
+person key, and the phone keeps that certificate. It is the person's device, as the certificate
+says, and holds nothing it could make another device the person's with; a lost phone gives away no
+key. A phone never offers a code.
 
 The taker's own person key is set aside (`person.key.<its id>.old`), not deleted, and the
 workspaces it owned are the new person's from then on: each one's document names the new person
@@ -36,6 +45,8 @@ device, valid for five minutes and used once. Three wrong proofs void it. It is 
 { "v": 1, "device": "<offering device's key hex>", "addrs": ["<ip:port>", …], "relay": "<url>" | null,
   "code": "<the six words, hyphen-separated>", "name": "<the offering device's name>", "kind": "app" | "host" }
 ```
+
+A phone reads a link from its QR code; `kind` is the offering device's, so never `phone`.
 
 **Finding the offering device from the words alone.** While a code is open, the offering device
 announces a tag on the local network, in the user data of its mDNS record: `hive-pair=<tag>`,
@@ -67,27 +78,36 @@ is good only between those two devices.
    `shares` (0.2, optional) says the entering device shares a workspace with someone, its own or
    someone else's: it must not take another person, so an offering app refuses it.
 
+   A phone (0.3) has no certificate yet and shares nothing, so it sends neither:
+
+   ```json
+   { "v": 1, "pair": "prove", "proof": "<proof(\"entering\")>", "name": "<its name>", "kind": "phone",
+     "addrs": ["<ip:port>", …], "relay": "<url>" | null }
+   ```
+
    The offering device checks that a code is open, that the proof is right (compared in constant
    time; a wrong one counts against the code), that the certificate verifies and names the device
-   that connected, that the two are not both hosts, and, when it is an app, that the entering
-   device does not share. It answers
+   that connected (from any device but a phone), that one of the two gives (an app; a host refuses
+   a host or a phone), and, when it is an app, that the entering device does not share. It answers
 
    ```json
    { "ok": true, "proof": "<proof(\"offering\")>", "name": "<its name>", "kind": "app" | "host", "certificate": { … },
      "addrs": [ … ], "relay": … }
    ```
 
-   and, when it is the giver, also `"person": "<the person seed, hex>"`. The entering device checks
-   that proof, and that the person given is the one that signed the giver's certificate, before it
-   uses anything in the answer. From here each knows the other holds the code.
+   and, when it is the giver, also `"person": "<the person seed, hex>"`, or, to a phone, in its
+   place `"yours": { … }`: a device certificate naming the phone, signed by the person key. The
+   entering device checks that proof, and that the person given is the one that signed the giver's
+   certificate (a phone: that `yours` verifies, names the phone itself and that same person),
+   before it uses anything in the answer. From here each knows the other holds the code.
 2. **Give** (only when the entering device is the giver). It sends
    `{ "v": 1, "pair": "give", "proof": "<proof(\"give\")>", "person": "<the person seed, hex>" }`,
    and the offering device, which proved itself in step 1, checks the proof and that the person is
    the one that signed the certificate the giver showed, and answers `{ "ok": true }`.
 
 A failure answers `{ "ok": false, "error": "expired" | "wrong-code" | "malformed" | "not-this-device" | "same-kind" | "shares" }`
-(`same-kind`: both are hosts; `shares`: the entering device would take the person, and shares a
-workspace).
+(`same-kind`: neither of the two gives, as for two hosts, or a host and a phone; `shares`: the
+entering device would take the person, and shares a workspace).
 A host that already owns a workspace someone else was let into does not offer or enter a code:
 taking another person would make that workspace no longer its owner's.
 
@@ -95,10 +115,16 @@ taking another person would make that workspace no longer its owner's.
 
 - The taker keeps the person key it was given and certifies its own device with it. The giver
   certifies the taker's device with the same key, so each holds a certificate for the other that
-  names the person.
+  names the person. A phone keeps the certificate it was given as its own (`device.cert`), and no
+  person key.
 - Each keeps the other in its list of the person's devices, `devices.json` next to its keys: its
   key, name, kind, where it says it is reached (`addrs`, `relay`), when it was paired, and that
   certificate.
 - The person's devices are the owner of every workspace the person owns, wherever it is hosted:
   a host admits them, and tells them which workspaces it holds. Relays still admit by enrolment
   (`network-access.md`).
+- A phone is listed as one of the person's devices, and is never a place to run a frame, to host a
+  workspace or to move one to.
+
+The cases in `../conformance/pairing.json` (proofs, codes, links, and a phone pairing with an app,
+message by message) decide whether an implementation follows this.

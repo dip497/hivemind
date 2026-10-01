@@ -15,8 +15,9 @@ export type { Grant };
 export interface PairedDeviceSummary {
   device: string;
   name: string;
-  /** "host": `hive host`, always on; "app": someone's own computer. */
-  kind: "app" | "host";
+  /** "host": `hive host`, always on; "app": someone's own computer; "phone": the phone app, which
+   *  runs nothing (spec/pairing.md 0.3). */
+  kind: "app" | "host" | "phone";
   pairedAt: number;
 }
 
@@ -320,8 +321,9 @@ export interface HiveIpc {
   devices(): Promise<PairedDeviceSummary[]>;
   /** A device was paired with, or forgotten. */
   onDevicesChanged(cb: () => void): () => void;
-  /** A code for another of your devices to enter (a host's `hive host pair <link>`, or another
-   *  computer's Settings → Devices): it takes your person. */
+  /** A code for another of your devices to enter (a host's `hive host pair <link>`, another
+   *  computer's Settings → Devices, or a phone scanning its link): it takes your person, or, a
+   *  phone, a certificate naming it as yours. */
   pairOffer(): Promise<{ code: string; link: string; expires: number }>;
   /** Enter the code or link another of your devices shows: a host takes your person; another
    *  computer gives its own, and this computer becomes that person (`took`). */

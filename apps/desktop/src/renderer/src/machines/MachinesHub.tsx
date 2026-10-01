@@ -154,8 +154,9 @@ function MachineList({ picking, onChoose, onChooseDevice, onEdit, onAdd, usageOf
     setBusy(({ [m.id]: _drop, ...rest }) => rest);
   };
 
-  // Your devices are places a frame can run (M3): listed when choosing one.
-  const devices = picking ? snap.devices ?? [] : [];
+  // Your computers and hosts are places a frame can run (M3): listed when choosing one. A phone
+  // runs nothing.
+  const devices = picking ? (snap.devices ?? []).filter((d) => d.kind !== "phone") : [];
   if (snap.machines.length === 0 && devices.length === 0) {
     return (
       <div className="px-6 py-12 grid gap-3 place-items-center text-center">

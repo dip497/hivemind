@@ -1,0 +1,681 @@
+{
+ "about": "Cases every pairing implementation must pass (spec/pairing.md 0.3): proofs, codes, links, and a phone pairing with an app, message by message. Made with Python's hmac, hashlib and base64 and the OpenSSL command line's Ed25519, apart from the TypeScript and the Rust they test. Seeds are 32-byte Ed25519 secrets in hex, ids public keys in lowercase hex; a code's words are spec/pairing-words.json's.",
+ "proof": [
+  {
+   "code": "amber-cellar-helmet-lemon-salmon-zipper",
+   "label": "entering",
+   "offering": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+   "entering": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+   "proof": "0390ccbad8f946426fbcf6ff72b845123293cf0195690ffea44e035b4031765e"
+  },
+  {
+   "code": "amber-cellar-helmet-lemon-salmon-zipper",
+   "label": "offering",
+   "offering": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+   "entering": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+   "proof": "5cd2516b99a5bda2d513d7ee4b7f90124f0ac8b3bad8a5a3032404e59809a12e"
+  },
+  {
+   "code": "amber-cellar-helmet-lemon-salmon-zipper",
+   "label": "give",
+   "offering": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+   "entering": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+   "proof": "73522050a4ede570603c80367abd92483e76333fdb829d17d6f7ab2349bc9d2c"
+  },
+  {
+   "code": "acorn-actor-adobe-agent-alarm-album",
+   "label": "entering",
+   "offering": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+   "entering": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+   "proof": "0505036a3a2d1cab97daa463ce495e816e2435342d44cad291ca2c73b84903aa"
+  },
+  {
+   "code": "acorn-actor-adobe-agent-alarm-album",
+   "label": "offering",
+   "offering": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+   "entering": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+   "proof": "c3440339d65468973c8a5cad8b70aff66facb25f861255eb49b4898939784da4"
+  },
+  {
+   "code": "acorn-actor-adobe-agent-alarm-album",
+   "label": "give",
+   "offering": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+   "entering": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+   "proof": "5a8aca2b0ace71586e0d9514e9acdbadb65cf7b2b1a4301ac9b081550a1bf6c4"
+  }
+ ],
+ "code": [
+  {
+   "text": "amber cellar helmet lemon salmon zipper",
+   "code": "amber-cellar-helmet-lemon-salmon-zipper",
+   "about": "words with spaces"
+  },
+  {
+   "text": "amber-cellar-helmet-lemon-salmon-zipper",
+   "code": "amber-cellar-helmet-lemon-salmon-zipper",
+   "about": "words with hyphens"
+  },
+  {
+   "text": "  AMBER-- CELLAR-- HELMET-- LEMON-- SALMON-- ZIPPER\t",
+   "code": "amber-cellar-helmet-lemon-salmon-zipper",
+   "about": "in any case, any run of spaces, tabs and hyphens, around and between"
+  },
+  {
+   "text": "amber-cellar-helmet-lemon-salmon",
+   "code": null,
+   "about": "five words"
+  },
+  {
+   "text": "amber-cellar-helmet-lemon-salmon-zipper-agent",
+   "code": null,
+   "about": "seven words"
+  },
+  {
+   "text": "amber-zebrax-helmet-lemon-salmon-zipper",
+   "code": null,
+   "about": "a word not on the list"
+  },
+  {
+   "text": "",
+   "code": null,
+   "about": "nothing"
+  }
+ ],
+ "link": [
+  {
+   "text": "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOlsiMTkyLjE2OC4xLjIwOjQxNjQxIiwiW2ZkMDA6OjIwXTo0MTY0MSJdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJQcml5YSdzIGRlc2t0b3AiLCJraW5kIjoiYXBwIn0",
+   "link": {
+    "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "addrs": [
+     "192.168.1.20:41641",
+     "[fd00::20]:41641"
+    ],
+    "relay": null,
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "name": "Priya's desktop",
+    "kind": "app"
+   },
+   "about": "an app's link"
+  },
+  {
+   "text": "  hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOlsiMTkyLjE2OC4xLjIwOjQxNjQxIiwiW2ZkMDA6OjIwXTo0MTY0MSJdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJQcml5YSdzIGRlc2t0b3AiLCJraW5kIjoiYXBwIn0\n",
+   "link": {
+    "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "addrs": [
+     "192.168.1.20:41641",
+     "[fd00::20]:41641"
+    ],
+    "relay": null,
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "name": "Priya's desktop",
+    "kind": "app"
+   },
+   "about": "with space around it"
+  },
+  {
+   "text": "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOltdLCJyZWxheSI6Imh0dHBzOi8vcmVsYXkuZXhhbXBsZS5uZXQuLyIsImNvZGUiOiJhbWJlci1jZWxsYXItaGVsbWV0LWxlbW9uLXNhbG1vbi16aXBwZXIiLCJuYW1lIjoiaG9tZS1zZXJ2ZXIiLCJraW5kIjoiaG9zdCJ9",
+   "link": {
+    "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "addrs": [],
+    "relay": "https://relay.example.net./",
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "name": "home-server",
+    "kind": "host"
+   },
+   "about": "a host's, through a relay"
+  },
+  {
+   "text": "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOlsiMTAuMC4wLjE6MSIsNywieHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHgiLG51bGxdLCJyZWxheSI6NSwiY29kZSI6IkFNQkVSIENFTExBUiBIRUxNRVQgTEVNT04gU0FMTU9OIFpJUFBFUiIsIm5hbWUiOiIgIERlc2sgICIsImtpbmQiOiJhcHAifQ",
+   "link": {
+    "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "addrs": [
+     "10.0.0.1:1"
+    ],
+    "relay": null,
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "name": "Desk",
+    "kind": "app"
+   },
+   "about": "only text addresses of 100 characters at most; a relay that is not text is none; the code as words are entered; the name trimmed"
+  },
+  {
+   "text": "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOlsiMTAuMC4wLjA6MSIsIjEwLjAuMC4xOjEiLCIxMC4wLjAuMjoxIiwiMTAuMC4wLjM6MSIsIjEwLjAuMC40OjEiLCIxMC4wLjAuNToxIiwiMTAuMC4wLjY6MSIsIjEwLjAuMC43OjEiLCIxMC4wLjAuODoxIiwiMTAuMC4wLjk6MSIsIjEwLjAuMC4xMDoxIiwiMTAuMC4wLjExOjEiLCIxMC4wLjAuMTI6MSIsIjEwLjAuMC4xMzoxIiwiMTAuMC4wLjE0OjEiLCIxMC4wLjAuMTU6MSIsIjEwLjAuMC4xNjoxIiwiMTAuMC4wLjE3OjEiLCIxMC4wLjAuMTg6MSIsIjEwLjAuMC4xOToxIl0sInJlbGF5IjpudWxsLCJjb2RlIjoiYW1iZXItY2VsbGFyLWhlbG1ldC1sZW1vbi1zYWxtb24temlwcGVyIiwibmFtZSI6IkRlc2siLCJraW5kIjoiYXBwIn0",
+   "link": {
+    "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "addrs": [
+     "10.0.0.0:1",
+     "10.0.0.1:1",
+     "10.0.0.2:1",
+     "10.0.0.3:1",
+     "10.0.0.4:1",
+     "10.0.0.5:1",
+     "10.0.0.6:1",
+     "10.0.0.7:1",
+     "10.0.0.8:1",
+     "10.0.0.9:1",
+     "10.0.0.10:1",
+     "10.0.0.11:1",
+     "10.0.0.12:1",
+     "10.0.0.13:1",
+     "10.0.0.14:1",
+     "10.0.0.15:1"
+    ],
+    "relay": null,
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "name": "Desk",
+    "kind": "app"
+   },
+   "about": "sixteen addresses at most"
+  },
+  {
+   "text": "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJEZXNrIiwia2luZCI6ImFwcCJ9",
+   "link": {
+    "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "addrs": [],
+    "relay": null,
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "name": "Desk",
+    "kind": "app"
+   },
+   "about": "no addresses and no relay"
+  },
+  {
+   "text": "hivemind://network/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOlsiMTkyLjE2OC4xLjIwOjQxNjQxIiwiW2ZkMDA6OjIwXTo0MTY0MSJdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJQcml5YSdzIGRlc2t0b3AiLCJraW5kIjoiYXBwIn0",
+   "link": null,
+   "about": "not a pairing link"
+  },
+  {
+   "text": "hivemind://pair/eyJ2IjoyLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOltdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJEZXNrIiwia2luZCI6ImFwcCJ9",
+   "link": null,
+   "about": "another version"
+  },
+  {
+   "text": "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJDN0I2OTdCOTJGQzYzQTJERDY2MEY2RjAyRjJDRTMyRUI0QTg0MjgzOUNCRTQyMTM4NDVFM0I0MzkwRjQ0NkMzIiwiYWRkcnMiOltdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJEZXNrIiwia2luZCI6ImFwcCJ9",
+   "link": null,
+   "about": "a device not in lowercase hex"
+  },
+  {
+   "text": "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NiIsImFkZHJzIjpbXSwicmVsYXkiOm51bGwsImNvZGUiOiJhbWJlci1jZWxsYXItaGVsbWV0LWxlbW9uLXNhbG1vbi16aXBwZXIiLCJuYW1lIjoiRGVzayIsImtpbmQiOiJhcHAifQ",
+   "link": null,
+   "about": "a device too short"
+  },
+  {
+   "text": "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOltdLCJyZWxheSI6bnVsbCwiY29kZSI6Im5vdCB0aGUgd29yZHMiLCJuYW1lIjoiRGVzayIsImtpbmQiOiJhcHAifQ",
+   "link": null,
+   "about": "a code that is not the words"
+  },
+  {
+   "text": "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOltdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiIgICAiLCJraW5kIjoiYXBwIn0",
+   "link": null,
+   "about": "no name"
+  },
+  {
+   "text": "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOltdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm4iLCJraW5kIjoiYXBwIn0",
+   "link": null,
+   "about": "a name too long"
+  },
+  {
+   "text": "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOltdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJEZXNrIiwia2luZCI6InBob25lIn0",
+   "link": null,
+   "about": "a phone never offers a code"
+  },
+  {
+   "text": "hivemind://pair/!!!",
+   "link": null,
+   "about": "not base64url JSON"
+  }
+ ],
+ "phone": {
+  "about": "A phone scans an app's link and enters its code: it proves it holds the code, and the app answers with its own certificate and one naming the phone, signed by the person key. The phone keeps the app as one of the person's devices, and the certificate given as its own.",
+  "code": "amber-cellar-helmet-lemon-salmon-zipper",
+  "app": {
+   "deviceSeed": "f98dd5a7ad85343beabe7f01999eb89d9a3a66739fbf309e44270a536d6e3d24",
+   "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+   "personSeed": "7f7b5b4fba3324b9e7dfffe29bd0d653f65a44f24344214d281435a52b5e785c",
+   "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+   "name": "Priya's desktop",
+   "addrs": [
+    "192.168.1.20:41641",
+    "[fd00::20]:41641"
+   ],
+   "relay": null
+  },
+  "phone": {
+   "deviceSeed": "7f9b453c49d6f637f0a7a964830c1ffc0fda76aede49f618942bb9dc7397d6a8",
+   "device": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+   "name": "Priya's phone",
+   "addrs": [
+    "192.168.1.31:52007"
+   ],
+   "relay": null
+  },
+  "link": "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOlsiMTkyLjE2OC4xLjIwOjQxNjQxIiwiW2ZkMDA6OjIwXTo0MTY0MSJdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJQcml5YSdzIGRlc2t0b3AiLCJraW5kIjoiYXBwIn0",
+  "prove": {
+   "v": 1,
+   "pair": "prove",
+   "proof": "0390ccbad8f946426fbcf6ff72b845123293cf0195690ffea44e035b4031765e",
+   "name": "Priya's phone",
+   "kind": "phone",
+   "addrs": [
+    "192.168.1.31:52007"
+   ],
+   "relay": null
+  },
+  "answer": {
+   "ok": true,
+   "proof": "5cd2516b99a5bda2d513d7ee4b7f90124f0ac8b3bad8a5a3032404e59809a12e",
+   "name": "Priya's desktop",
+   "kind": "app",
+   "certificate": {
+    "v": 1,
+    "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+    "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "issuedAt": 1790000000000,
+    "signature": "d4ca61df6b1e28a24da5b12f2a2848dda90d0fc29b02b1825f8bd62cc9329b414901d2a4d901a29de469ee47f2f51f484f6b223f505686e1455f9fa11d61af08"
+   },
+   "addrs": [
+    "192.168.1.20:41641",
+    "[fd00::20]:41641"
+   ],
+   "relay": null,
+   "yours": {
+    "v": 1,
+    "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+    "device": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+    "issuedAt": 1790000123456,
+    "signature": "3132d3bd1ca150ee50bed4e4f4b0a764eb04f1c13e9404d15eb87f51323223fcc8126732eecffbc8df7c0eb806d5983fbcb709e5c9d618f6f187a84d11be430e"
+   }
+  },
+  "paired": {
+   "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+   "name": "Priya's desktop",
+   "kind": "app",
+   "certificate": {
+    "v": 1,
+    "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+    "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "issuedAt": 1790000000000,
+    "signature": "d4ca61df6b1e28a24da5b12f2a2848dda90d0fc29b02b1825f8bd62cc9329b414901d2a4d901a29de469ee47f2f51f484f6b223f505686e1455f9fa11d61af08"
+   },
+   "addrs": [
+    "192.168.1.20:41641",
+    "[fd00::20]:41641"
+   ],
+   "relay": null
+  },
+  "certificate": {
+   "v": 1,
+   "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+   "device": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+   "issuedAt": 1790000123456,
+   "signature": "3132d3bd1ca150ee50bed4e4f4b0a764eb04f1c13e9404d15eb87f51323223fcc8126732eecffbc8df7c0eb806d5983fbcb709e5c9d618f6f187a84d11be430e"
+  },
+  "refused": [
+   {
+    "about": "the app refused: the code was wrong",
+    "answer": {
+     "ok": false,
+     "error": "wrong-code"
+    }
+   },
+   {
+    "about": "a proof of the other label",
+    "answer": {
+     "ok": true,
+     "proof": "0390ccbad8f946426fbcf6ff72b845123293cf0195690ffea44e035b4031765e",
+     "name": "Priya's desktop",
+     "kind": "app",
+     "certificate": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+      "issuedAt": 1790000000000,
+      "signature": "d4ca61df6b1e28a24da5b12f2a2848dda90d0fc29b02b1825f8bd62cc9329b414901d2a4d901a29de469ee47f2f51f484f6b223f505686e1455f9fa11d61af08"
+     },
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "yours": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+      "issuedAt": 1790000123456,
+      "signature": "3132d3bd1ca150ee50bed4e4f4b0a764eb04f1c13e9404d15eb87f51323223fcc8126732eecffbc8df7c0eb806d5983fbcb709e5c9d618f6f187a84d11be430e"
+     }
+    }
+   },
+   {
+    "about": "a proof made for another phone",
+    "answer": {
+     "ok": true,
+     "proof": "771f1e0223a3ec8b64c2c8d7d355b26b642f56a0936795fda11b760a3ba482d2",
+     "name": "Priya's desktop",
+     "kind": "app",
+     "certificate": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+      "issuedAt": 1790000000000,
+      "signature": "d4ca61df6b1e28a24da5b12f2a2848dda90d0fc29b02b1825f8bd62cc9329b414901d2a4d901a29de469ee47f2f51f484f6b223f505686e1455f9fa11d61af08"
+     },
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "yours": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+      "issuedAt": 1790000123456,
+      "signature": "3132d3bd1ca150ee50bed4e4f4b0a764eb04f1c13e9404d15eb87f51323223fcc8126732eecffbc8df7c0eb806d5983fbcb709e5c9d618f6f187a84d11be430e"
+     }
+    }
+   },
+   {
+    "about": "a proof of another code",
+    "answer": {
+     "ok": true,
+     "proof": "eef19054296c0627aaac0ea0938e95f98b28448ac1d2ff3894e5a3a78f22308e",
+     "name": "Priya's desktop",
+     "kind": "app",
+     "certificate": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+      "issuedAt": 1790000000000,
+      "signature": "d4ca61df6b1e28a24da5b12f2a2848dda90d0fc29b02b1825f8bd62cc9329b414901d2a4d901a29de469ee47f2f51f484f6b223f505686e1455f9fa11d61af08"
+     },
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "yours": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+      "issuedAt": 1790000123456,
+      "signature": "3132d3bd1ca150ee50bed4e4f4b0a764eb04f1c13e9404d15eb87f51323223fcc8126732eecffbc8df7c0eb806d5983fbcb709e5c9d618f6f187a84d11be430e"
+     }
+    }
+   },
+   {
+    "about": "the app's certificate names another device",
+    "answer": {
+     "ok": true,
+     "proof": "5cd2516b99a5bda2d513d7ee4b7f90124f0ac8b3bad8a5a3032404e59809a12e",
+     "name": "Priya's desktop",
+     "kind": "app",
+     "certificate": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "6bf9ecdac39cfef4e13fb20daf5d0166a6fd8f3ddf4efed21c3aba48b7879eb5",
+      "issuedAt": 1790000000000,
+      "signature": "a97d8f54a24b4e3d8e3d00fc069915ecf7908c1b8e00b02b9076f4392ad351f1edf68af6e460925d2b82534eb5ae00ab8537212294eb1a9d6ae60827cc2eb30e"
+     },
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "yours": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+      "issuedAt": 1790000123456,
+      "signature": "3132d3bd1ca150ee50bed4e4f4b0a764eb04f1c13e9404d15eb87f51323223fcc8126732eecffbc8df7c0eb806d5983fbcb709e5c9d618f6f187a84d11be430e"
+     }
+    }
+   },
+   {
+    "about": "the app's certificate does not verify",
+    "answer": {
+     "ok": true,
+     "proof": "5cd2516b99a5bda2d513d7ee4b7f90124f0ac8b3bad8a5a3032404e59809a12e",
+     "name": "Priya's desktop",
+     "kind": "app",
+     "certificate": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+      "issuedAt": 1790000000000,
+      "signature": "d4ca61df6b1e28a24da5b12f2a2848dda90d0fc29b02b1825f8bd62cc9329b414901d2a4d901a29de469ee47f2f51f484f6b223f505686e1455f9fa11d61af00"
+     },
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "yours": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+      "issuedAt": 1790000123456,
+      "signature": "3132d3bd1ca150ee50bed4e4f4b0a764eb04f1c13e9404d15eb87f51323223fcc8126732eecffbc8df7c0eb806d5983fbcb709e5c9d618f6f187a84d11be430e"
+     }
+    }
+   },
+   {
+    "about": "the certificate given names another phone",
+    "answer": {
+     "ok": true,
+     "proof": "5cd2516b99a5bda2d513d7ee4b7f90124f0ac8b3bad8a5a3032404e59809a12e",
+     "name": "Priya's desktop",
+     "kind": "app",
+     "certificate": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+      "issuedAt": 1790000000000,
+      "signature": "d4ca61df6b1e28a24da5b12f2a2848dda90d0fc29b02b1825f8bd62cc9329b414901d2a4d901a29de469ee47f2f51f484f6b223f505686e1455f9fa11d61af08"
+     },
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "yours": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "6bf9ecdac39cfef4e13fb20daf5d0166a6fd8f3ddf4efed21c3aba48b7879eb5",
+      "issuedAt": 1790000123456,
+      "signature": "30fd90f68b80f7f72b55d6052261de27dfcff4b1e56d47c57ae24b70073ef576b592ceabbd33e56eec28f9cfea7a53e79cc671b8fcb8f713747a47067ed6a000"
+     }
+    }
+   },
+   {
+    "about": "the certificate given is another person's",
+    "answer": {
+     "ok": true,
+     "proof": "5cd2516b99a5bda2d513d7ee4b7f90124f0ac8b3bad8a5a3032404e59809a12e",
+     "name": "Priya's desktop",
+     "kind": "app",
+     "certificate": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+      "issuedAt": 1790000000000,
+      "signature": "d4ca61df6b1e28a24da5b12f2a2848dda90d0fc29b02b1825f8bd62cc9329b414901d2a4d901a29de469ee47f2f51f484f6b223f505686e1455f9fa11d61af08"
+     },
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "yours": {
+      "v": 1,
+      "person": "52ca7e56c4bb7328505bb64657e63a9878ec1538272f17492ffc0f37f7490cda",
+      "device": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+      "issuedAt": 1790000123456,
+      "signature": "2f2554e7b4c5d68336666be2d2ee825232b500e5cb7196182881b44621fe8d9895eebab2a26745eceac139da72e4af9069b2b76ead9a53ebf6cce7ccd160e406"
+     }
+    }
+   },
+   {
+    "about": "no certificate given: the person key instead",
+    "answer": {
+     "ok": true,
+     "proof": "5cd2516b99a5bda2d513d7ee4b7f90124f0ac8b3bad8a5a3032404e59809a12e",
+     "name": "Priya's desktop",
+     "kind": "app",
+     "certificate": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+      "issuedAt": 1790000000000,
+      "signature": "d4ca61df6b1e28a24da5b12f2a2848dda90d0fc29b02b1825f8bd62cc9329b414901d2a4d901a29de469ee47f2f51f484f6b223f505686e1455f9fa11d61af08"
+     },
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "person": "7f7b5b4fba3324b9e7dfffe29bd0d653f65a44f24344214d281435a52b5e785c"
+    }
+   },
+   {
+    "about": "the certificate given is of another version",
+    "answer": {
+     "ok": true,
+     "proof": "5cd2516b99a5bda2d513d7ee4b7f90124f0ac8b3bad8a5a3032404e59809a12e",
+     "name": "Priya's desktop",
+     "kind": "app",
+     "certificate": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+      "issuedAt": 1790000000000,
+      "signature": "d4ca61df6b1e28a24da5b12f2a2848dda90d0fc29b02b1825f8bd62cc9329b414901d2a4d901a29de469ee47f2f51f484f6b223f505686e1455f9fa11d61af08"
+     },
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "yours": {
+      "v": 2,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+      "issuedAt": 1790000123456,
+      "signature": "3132d3bd1ca150ee50bed4e4f4b0a764eb04f1c13e9404d15eb87f51323223fcc8126732eecffbc8df7c0eb806d5983fbcb709e5c9d618f6f187a84d11be430e"
+     }
+    }
+   },
+   {
+    "about": "the certificate given was signed at a time not every implementation reads exactly",
+    "answer": {
+     "ok": true,
+     "proof": "5cd2516b99a5bda2d513d7ee4b7f90124f0ac8b3bad8a5a3032404e59809a12e",
+     "name": "Priya's desktop",
+     "kind": "app",
+     "certificate": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+      "issuedAt": 1790000000000,
+      "signature": "d4ca61df6b1e28a24da5b12f2a2848dda90d0fc29b02b1825f8bd62cc9329b414901d2a4d901a29de469ee47f2f51f484f6b223f505686e1455f9fa11d61af08"
+     },
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "yours": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+      "issuedAt": 9007199254740992,
+      "signature": "9bad3a5389a1338e136ff8556c97fd72a956e865b58eff14b26a57826d4857d4e8614eb99d94cfa3abdbaa2cfdcd01377f9a499cbc61f76da9f669c39a1a7a00"
+     }
+    }
+   },
+   {
+    "about": "a host answering: a phone pairs with an app alone",
+    "answer": {
+     "ok": true,
+     "proof": "5cd2516b99a5bda2d513d7ee4b7f90124f0ac8b3bad8a5a3032404e59809a12e",
+     "name": "Priya's desktop",
+     "kind": "host",
+     "certificate": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+      "issuedAt": 1790000000000,
+      "signature": "d4ca61df6b1e28a24da5b12f2a2848dda90d0fc29b02b1825f8bd62cc9329b414901d2a4d901a29de469ee47f2f51f484f6b223f505686e1455f9fa11d61af08"
+     },
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "yours": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+      "issuedAt": 1790000123456,
+      "signature": "3132d3bd1ca150ee50bed4e4f4b0a764eb04f1c13e9404d15eb87f51323223fcc8126732eecffbc8df7c0eb806d5983fbcb709e5c9d618f6f187a84d11be430e"
+     }
+    }
+   },
+   {
+    "about": "a phone answering",
+    "answer": {
+     "ok": true,
+     "proof": "5cd2516b99a5bda2d513d7ee4b7f90124f0ac8b3bad8a5a3032404e59809a12e",
+     "name": "Priya's desktop",
+     "kind": "phone",
+     "certificate": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+      "issuedAt": 1790000000000,
+      "signature": "d4ca61df6b1e28a24da5b12f2a2848dda90d0fc29b02b1825f8bd62cc9329b414901d2a4d901a29de469ee47f2f51f484f6b223f505686e1455f9fa11d61af08"
+     },
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "yours": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+      "issuedAt": 1790000123456,
+      "signature": "3132d3bd1ca150ee50bed4e4f4b0a764eb04f1c13e9404d15eb87f51323223fcc8126732eecffbc8df7c0eb806d5983fbcb709e5c9d618f6f187a84d11be430e"
+     }
+    }
+   },
+   {
+    "about": "no name",
+    "answer": {
+     "ok": true,
+     "proof": "5cd2516b99a5bda2d513d7ee4b7f90124f0ac8b3bad8a5a3032404e59809a12e",
+     "name": " ",
+     "kind": "app",
+     "certificate": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+      "issuedAt": 1790000000000,
+      "signature": "d4ca61df6b1e28a24da5b12f2a2848dda90d0fc29b02b1825f8bd62cc9329b414901d2a4d901a29de469ee47f2f51f484f6b223f505686e1455f9fa11d61af08"
+     },
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "yours": {
+      "v": 1,
+      "person": "9499c9fb1212a9a00832dde82a71464c7133386441bc575d4f025bfbef719c39",
+      "device": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+      "issuedAt": 1790000123456,
+      "signature": "3132d3bd1ca150ee50bed4e4f4b0a764eb04f1c13e9404d15eb87f51323223fcc8126732eecffbc8df7c0eb806d5983fbcb709e5c9d618f6f187a84d11be430e"
+     }
+    }
+   }
+  ]
+ }
+}
