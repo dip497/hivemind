@@ -12,20 +12,27 @@ import { Check, FolderOpen, Loader2, RefreshCw, Server, Settings2, SquareTermina
 import type { Grant, SessionSummary } from "../../../shared/ipc";
 import { parseDeviceUri, parseRemote, remoteBasename, remotePath, sshTargetOf, REMOTE_SCHEME } from "@hivemind/core/remote-uri";
 import { joinedId, useShown } from "../multiplayer/shown";
-import { A_DEVICE, GONE_MACHINE, errText, openMachines, placeOf, statusOf, useMachines, type Place } from "./store";
+import { A_DEVICE, GONE_MACHINE, errText, openMachines, ownerOf, ownerStatus, placeOf, statusOf, useMachines, whoseComputer, type Place } from "./store";
+import { useMachineOwners } from "./owners";
 
 /** What a frame's machine is called: its saved name, or the device's (M3), else the host an ssh
  *  folder is on, else one no longer saved or paired. */
 const nameOf = (uri: string, { machine, device, hostId }: Place) =>
   machine?.label ?? device?.name ?? (hostId?.startsWith("device:") ? A_DEVICE : hostId && uri.startsWith(REMOTE_SCHEME) ? parseRemote(uri).host : GONE_MACHINE);
+
+/** The frame folder `uri`'s machine, its name and how it is doing: on a participant's computer
+ *  (M4), theirs, connected or not; else as this machine's links say. */
+function useMachineAt(uri: string) {
+  const snap = useMachines();
+  const place = placeOf(snap, uri);
+  const owner = ownerOf(place, uri, useMachineOwners(useShown().repo));
+  return { snap, place, owner, name: owner ? whoseComputer(owner) : nameOf(uri, place), status: owner ? ownerStatus(owner) : statusOf(snap, place.hostId) };
+}
 import { AttentionNote, MachineDot, statusWords } from "./status";
 import { openSessionIds } from "./open-sessions";
 
 export function MachineChip({ uri, frameId, onUnbind }: { uri: string; frameId: string; onUnbind: () => void }) {
-  const snap = useMachines();
-  const place = placeOf(snap, uri);
-  const status = statusOf(snap, place.hostId);
-  const name = nameOf(uri, place);
+  const { name, status } = useMachineAt(uri);
   const btn = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   return (
@@ -62,10 +69,8 @@ export function MachineChip({ uri, frameId, onUnbind }: { uri: string; frameId: 
 }
 
 function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }: { anchor: DOMRect; uri: string; frameId: string; onUnbind: () => void; onClose: () => void }) {
-  const snap = useMachines();
-  const place = placeOf(snap, uri);
+  const { snap, place, owner, name, status } = useMachineAt(uri);
   const { machine, hostId } = place;
-  const status = statusOf(snap, hostId);
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,7 +101,7 @@ function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }: { anchor: DOM
       <div className="px-2 pt-1.5 pb-1 grid gap-0.5">
         <span className="flex items-center gap-2 text-[13px] font-medium text-[var(--color-fg)]">
           <MachineDot status={status} size={8} />
-          <span className="truncate">{nameOf(uri, place)}</span>
+          <span className="truncate">{name}</span>
           <span className="ml-auto text-[11px] font-normal text-[var(--color-fg2)] tabular-nums">{statusWords(status)}</span>
         </span>
         <span className="text-[11px] font-mono text-[var(--color-fg3)] truncate" title={uri}>{remotePath(uri)}</span>
@@ -114,7 +119,7 @@ function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }: { anchor: DOM
       {(status.state === "reconnecting" || status.state === "offline") && (
         <div className="mx-1 flex items-center gap-2 rounded-md bg-[var(--color-bg)] px-2 py-1.5 text-[11px] text-[var(--color-fg2)]">
           <span className="flex-1 truncate" title={status.detail}>{status.detail ?? "Waiting for the network…"}</span>
-          {hostId && <Button variant="link" size="xs" onClick={() => void window.hive.machineReconnect(hostId)} className="shrink-0">Retry now</Button>}
+          {hostId && !owner && <Button variant="link" size="xs" onClick={() => void window.hive.machineReconnect(hostId)} className="shrink-0">Retry now</Button>}
         </div>
       )}
       {status.state === "no-hive" && (

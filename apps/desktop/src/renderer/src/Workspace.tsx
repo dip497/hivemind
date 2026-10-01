@@ -59,6 +59,7 @@ import { useWorktrees } from "./useWorktrees";
 // Loaded when it is first opened: the dialog (add form, machine list, folder picker) is not startup work.
 const MachinesHub = lazy(() => import("./machines/MachinesHub").then((m) => ({ default: m.MachinesHub })));
 import { frameMachine, placeOf, useMachines, type MachinesRequest } from "./machines/store";
+import { useMachineOwners } from "./machines/owners";
 import { rebindFrames } from "./machines/frame-binding";
 import type { MachineInfo, SessionSummary } from "../../shared/ipc";
 import type { PlanReview } from "@hivemind/workspace-api/plans";
@@ -334,6 +335,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // What a machine is in use by, for the remove dialog: frames bound to a folder on it, and the
   // terminals in them.
   const machinesSnap = useMachines();
+  const machineOwners = useMachineOwners(repoPath);
   const terminalsOn = useCallback((machineId: string) => {
     const frames = new Set(framesRef.current.filter((f) => placeOf(machinesSnap, f.workspacePath).machine?.id === machineId).map((f) => f.id));
     return { frames, terminals: tilesRef.current.filter((t) => isTerminalKind(t.kind) && frames.has(frameOfRef.current[t.id] ?? "")) };
@@ -619,7 +621,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     if (!viewHost) return;
     viewHost.viewEvents.setWorkspace(persistKey, tiles.map((t) => {
       const frame = frameOf[t.id] ? frames.find((f) => f.id === frameOf[t.id]) : undefined;
-      const machine = frame ? frameMachine(machinesSnap, frame.workspacePath) : undefined;
+      const machine = frame ? frameMachine(machinesSnap, frame.workspacePath, machineOwners) : undefined;
       const agent = agentOfTile(t);
       return {
         id: t.id, frameId: frameOf[t.id] ?? null, kind: t.kind, name: tileNames[t.id] ?? t.label,
@@ -627,7 +629,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
         ...(machine && machine.state !== "online" ? { unwatched: true } : {}),
       };
     }), spawnLinks);
-  }, [viewHost, persistKey, tiles, frameOf, frames, tileNames, machinesSnap, spawnLinks]);
+  }, [viewHost, persistKey, tiles, frameOf, frames, tileNames, machinesSnap, machineOwners, spawnLinks]);
   // Host chrome + wallpaper policy come from the active view's preference.
   const settings = useSettings();
   const chrome = useMemo(() => {

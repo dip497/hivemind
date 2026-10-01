@@ -17,6 +17,8 @@ import { WorktreePicker } from "./WorktreePicker";
 import { useGitBranch } from "./queries";
 import { isRemote, remoteBasename, remoteDisplay } from "@hivemind/core/remote-uri";
 import { frameMachine, useMachines } from "./machines/store";
+import { useMachineOwners } from "./machines/owners";
+import { useShown } from "./multiplayer/shown";
 import { MachineChip } from "./machines/MachineChip";
 import { useAgents } from "./agents";
 import type { ArrangeMode } from "./frame-layout";
@@ -136,7 +138,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
   const wsName = data.workspacePath?.split("/").filter(Boolean).pop();
   const isRemoteWs = isRemote(data.workspacePath);
   // `machine:dir` for the remote pill (e.g. build-box:app): the saved machine's name, or the host.
-  const machineName = frameMachine(useMachines(), data.workspacePath)?.name;
+  const machineName = frameMachine(useMachines(), data.workspacePath, useMachineOwners(useShown().repo))?.name;
   const remoteHostLabel = isRemoteWs ? `${machineName}:${remoteBasename(data.workspacePath!)}` : "";
   // Current branch of this repo frame (base or workspace zone) — shown as a
   // badge like Zed's title bar. Uses the dedicated long-staleTime git:branch

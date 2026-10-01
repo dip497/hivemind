@@ -7,7 +7,7 @@
 // the host puts in the guest's frame runs nowhere: the guest's machine runs only what its person
 // placed, and shows the host nothing else; until they let the others run terminals and agents
 // there, when one the host puts there runs on their computer, in their folder, started by the
-// host, and their window shows it.
+// host, and their window shows it. The host's board names their computer by them, there or not.
 import { test, expect, type ElectronApplication, type Page } from "@playwright/test";
 import { execSync } from "node:child_process";
 import fs from "node:fs";
@@ -92,6 +92,9 @@ test("a guest puts a frame of their own on their computer: a shell they open in 
   let frame = "";
   await expect.poll(async () => (frame = (await frames(guest)).find((f) => !had.includes(f)) ?? ""), { timeout: 10_000 }).not.toBe("");
   await expect.poll(() => frames(host), { timeout: 15_000 }).toContain(frame);
+  // On the host's board, the frame says whose computer it runs on, and that they are there.
+  const theirComputer = host.locator(`.react-flow__node-frame[data-id="${frame}"] [aria-label="machine Priya's computer"]`);
+  await expect(theirComputer).toHaveAttribute("data-machine-state", "online", { timeout: 15_000 });
 
   // A shell they open in it runs on their computer, in their folder.
   const shell = await openShell(guest, frame);
@@ -198,4 +201,8 @@ test("a guest puts a frame of their own on their computer: a shell they open in 
     }
     return read(path.join(folder, "guest-typed.txt"));
   }, { timeout: 30_000, intervals: [2_000] }).toBe("guest-42");
+
+  // They leave: it is still their computer on the host's board, which says they are not there.
+  await guest.locator("[data-leave]").click();
+  await expect(theirComputer).toHaveAttribute("data-machine-state", "offline", { timeout: 30_000 });
 });

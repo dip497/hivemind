@@ -17,6 +17,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { toast } from "sonner";
 import { PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, type HostMessage, type SurfaceRect, type ViewFrameFolder, type ViewFrameMachine, type ViewPermission, type ViewTheme } from "@hivemind/view-sdk/protocol";
 import { frameMachine, useMachines } from "../../../machines/store";
+import { useMachineOwners } from "../../../machines/owners";
+import { useShown } from "../../../multiplayer/shown";
 import type { ViewPackageInfo } from "../../../../../shared/ipc";
 import type { WorkspaceViewProps } from "../../workspace-view";
 import { TileSlot } from "../../tile-host";
@@ -223,10 +225,11 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
 
     // A frame bound to a machine carries that machine's name and link state; a local one carries nothing.
     const machines = useMachines();
+    const owners = useMachineOwners(useShown().repo);
     const machineOf = useCallback((workspacePath?: string): { machine?: ViewFrameMachine } => {
-      const machine = frameMachine(machines, workspacePath);
+      const machine = frameMachine(machines, workspacePath, owners);
       return machine ? { machine } : {};
-    }, [machines]);
+    }, [machines, owners]);
 
     // Structure: frames / tiles / membership (+ current names). Colours resolved.
     const nameOf = useMemo(() => new Map(layerTiles.map((t) => [t.id, t.name])), [layerTiles]);

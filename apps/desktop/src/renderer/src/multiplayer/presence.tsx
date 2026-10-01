@@ -21,6 +21,9 @@ const NOBODY: Participant[] = [];
 /** Someone else in a workspace, one per person, as their face shows them. */
 export type Face = Pick<Participant, "person" | "name" | "color">;
 const NO_FACES: Face[] = [];
+/** A device of someone else's in a workspace now (its connection is `peer:<device>`), and theirs. */
+export type DeviceHere = { device: string; person: string; name: string };
+const NO_DEVICES: DeviceHere[] = [];
 
 /** This person, once the app has said who that is; null where no app answers (a browser). */
 let me: { personId: string; suggestedName: string } | null = null;
@@ -29,6 +32,7 @@ let me: { personId: string; suggestedName: string } | null = null;
 const heard = new Map<string, Participant[]>();
 const others = new Map<string, Participant[]>();
 const faces = new Map<string, Face[]>();
+const devices = new Map<string, DeviceHere[]>();
 const listeners = new Set<() => void>();
 let listening = false;
 
@@ -40,6 +44,8 @@ function sift(repo: string): boolean {
   others.set(repo, next);
   const nextFaces = [...new Map(next.map((p) => [p.person, { person: p.person, name: p.name, color: p.color }])).values()];
   if (JSON.stringify(nextFaces) !== JSON.stringify(faces.get(repo) ?? NO_FACES)) faces.set(repo, nextFaces);
+  const nextDevices = next.filter((p) => p.id.startsWith("peer:")).map((p) => ({ device: p.id.slice("peer:".length), person: p.person, name: p.name }));
+  if (JSON.stringify(nextDevices) !== JSON.stringify(devices.get(repo) ?? NO_DEVICES)) devices.set(repo, nextDevices);
   return true;
 }
 const tell = (): void => { for (const l of listeners) l(); };
@@ -72,6 +78,11 @@ export function usePeopleHere(repo: string | null): Participant[] {
 /** The faces of everyone else in `repo`, one per person: changes only as people come and go. */
 export function useFacesHere(repo: string | null): Face[] {
   return useSyncExternalStore(subscribe, () => (repo ? faces.get(repo) ?? NO_FACES : NO_FACES));
+}
+
+/** The devices of everyone else in `repo` here now: changes only as they come and go. */
+export function useDevicesHere(repo: string | null): DeviceHere[] {
+  return useSyncExternalStore(subscribe, () => (repo ? devices.get(repo) ?? NO_DEVICES : NO_DEVICES));
 }
 
 /** Who else is in `repo`, now and whenever that changes, for what is not a component (a view's

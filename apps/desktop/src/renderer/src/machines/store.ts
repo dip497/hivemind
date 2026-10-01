@@ -71,15 +71,34 @@ export const GONE_MACHINE = "a machine no longer saved";
 /** What a device no longer paired with this one is called where a frame runs on it. */
 export const A_DEVICE = "a device not paired here";
 
+/** The person whose computer a frame runs on when it is a participant's (M4), as a window knows
+ *  them, and whether they are connected now. */
+export interface MachineOwner { name: string; here: boolean }
+/** What a participant's computer is called where a frame runs on it. */
+export const whoseComputer = (o: MachineOwner): string => (o.name ? `${o.name}'s computer` : "someone's computer");
+/** Whose computer the frame folder `uri` is on, when it is neither saved nor one of this person's
+ *  devices, as `owners` knows them; null for any other. */
+export function ownerOf(place: Place, uri: string | null | undefined, owners?: (device: string) => MachineOwner | null): MachineOwner | null {
+  const at = !place.machine && !place.device && owners ? parseDeviceUri(uri ?? "") : null;
+  return at ? owners!(at.device) : null;
+}
+/** How a participant's computer is doing, as far as this window can tell: connected, or not. */
+export const ownerStatus = (o: MachineOwner): MachineStatus =>
+  o.here ? { state: "online", at: 0 } : { state: "offline", detail: `${o.name || "Its person"} is not connected: what runs there shows here once they are`, at: 0 };
+
 /** Where a frame runs, as every view sees it (the view protocol's `ViewFrame.machine`, 1.1): the
  *  saved machine's name — else the host itself, so a frame on a host never saved still says where
  *  it is — and the link's state. A local frame gets nothing. */
 export function frameMachine(
   s: MachinesSnapshot,
   workspacePath: string | null | undefined,
+  owners?: (device: string) => MachineOwner | null,
 ): { name: string; state: MachineStatus["state"]; rttMs?: number } | undefined {
   if (!isRemote(workspacePath)) return undefined;
-  const { machine, device, hostId } = placeOf(s, workspacePath);
+  const place = placeOf(s, workspacePath);
+  const owner = ownerOf(place, workspacePath, owners);
+  if (owner) return { name: whoseComputer(owner), state: ownerStatus(owner).state };
+  const { machine, device, hostId } = place;
   const st = statusOf(s, hostId);
   const name = machine?.label ?? device?.name ?? (hostId?.startsWith("device:") ? A_DEVICE : hostId?.replace(/:22$/, "")) ?? GONE_MACHINE;
   return { name, state: hostId ? st.state : "offline", ...(st.rttMs !== undefined ? { rttMs: st.rttMs } : {}) };

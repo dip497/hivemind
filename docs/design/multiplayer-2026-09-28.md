@@ -787,6 +787,10 @@ each one's terminals stream from where they run.
    - *My machine* → pick a folder or repo on your own disk.
 2. The frame is created on the shared board with a machine badge ("on Priya's laptop").
    Agents spawned in it run on Priya's machine, with Priya's agent logins and keys.
+   *As built (M4 step 2c):* the frame's machine chip, its header and what views are told name a
+   participant's computer by its person ("Priya's computer"): from who is here (presence names a
+   peer's connection `peer:<device>`) and, in the owner's windows, from the workspace's list, which
+   knows their devices while they are away; it reads offline while they are not connected (item 6).
 3. Everyone sees the frame's terminals live (they stream from Priya's machine to the host
    and on to the others, or directly peer to peer; see §5.5).
 4. Priya is the **owner** of that frame's machine: she alone can grant keyboard or agent
