@@ -239,8 +239,14 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       if (stopping) return started.stop();
       started.admit(lists.admitted());
       net = started;
-      // On a network with a lookup server, where the workspaces hosted here are.
-      records = new HostRecords({ net: started, hosted: hostedHere, onWarn: o.onWarn });
+      // On a network with a lookup server, where the workspaces hosted here are; one taken over
+      // while this host was away is handed to the device hosting it now.
+      records = new HostRecords({
+        net: started,
+        hosted: hostedHere,
+        elsewhere: (workspace, found) => void hosting.yieldTo(workspace, found).catch((e: unknown) => o.onWarn(`could not hand over workspace ${workspace.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`)),
+        onWarn: o.onWarn,
+      });
       void records.start();
     } catch (e) {
       o.onWarn(`hive-net did not start: ${e instanceof Error ? e.message : String(e)}; trying again`);

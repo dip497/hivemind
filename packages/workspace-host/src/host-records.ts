@@ -7,10 +7,13 @@
  *
  * A record counts the moves that brought the workspace where it is: one not said yet is said with
  * the count this device knows (1, for a workspace never moved), one naming this device is said
- * again as it is, and one naming another device is that device's to say (the workspace moved
- * there), unless this device knows of a later move: it took the workspace from that device.
+ * again as it is, and one naming another device is that device's to say, unless this device
+ * knows of a later move (it took the workspace from that device). One naming another device after
+ * more moves than this one knows of, or as many by a device whose id is lower (two took it over
+ * at once), says the workspace is that device's now, taken over while this one was away: the
+ * embedder hears of it (`elsewhere`).
  */
-import type { HiveNet } from "./hive-net.js";
+import type { FoundHost, HiveNet } from "./hive-net.js";
 
 /** A workspace this device hosts: its id, its public key (what its record is filed under), and the
  *  moves that brought it here, as its access list says (none: never moved). */
@@ -31,6 +34,9 @@ export class HostRecords {
     net: HiveNet;
     /** The workspaces this device hosts, shared with someone. */
     hosted(): Hosted[];
+    /** `workspace`, hosted here as far as this device knew, is hosted by another device now, as
+     *  `found` says (spec/hosting.md). */
+    elsewhere?(workspace: string, found: FoundHost): void;
     onWarn?(message: string): void;
   }) {}
 
@@ -60,13 +66,15 @@ export class HostRecords {
     }
   }
 
-  /** Say `ws`'s record, unless another device's names it after as many moves or more. */
+  /** Say `ws`'s record, unless another device's names it after more moves, or as many by a device
+   *  whose id is lower: the workspace is that device's now. */
   private async say(ws: Hosted): Promise<void> {
     const { net } = this.o;
     const mine = ws.seq ?? 1;
     const now = await net.resolveHost(ws.key);
-    if (now && now.host !== net.ready.id && now.seq >= mine) {
+    if (now && now.host !== net.ready.id && (now.seq > mine || (now.seq === mine && now.host < net.ready.id))) {
       this.o.onWarn?.(`workspace ${ws.workspace.slice(0, 8)}… is hosted by ${now.host.slice(0, 8)}… now`);
+      this.o.elsewhere?.(ws.workspace, now);
       return;
     }
     await net.publishHost(ws.workspace, Math.max(mine, now?.host === net.ready.id ? now.seq : 0));

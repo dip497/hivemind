@@ -3,7 +3,8 @@
  * this person may do there while connected; amber while it reconnects; grey while its host cannot
  * be reached, with the last board shown; and how it ended (left, or removed), when what is shown
  * is the last copy, which is only read. Leave is here, and, on a workspace of yours that was moved
- * from this computer to another of your devices, Move here (§5.7 F).
+ * from this computer to another of your devices, Move here (§5.7 F), or, while that device cannot
+ * be reached, Host it here, from the board as it was last seen (§5.7 E).
  */
 import { useEffect, useState } from "react";
 import { House, LogOut } from "lucide-react";
@@ -48,11 +49,11 @@ export function SharedBanner({ onMoved }: { onMoved: (folder: string) => void })
   }, [workspace, owner]);
   if (!workspace || !status) return null;
   const ended = status.state === "left" || status.state === "removed";
-  const moveHere = async () => {
+  const bringHere = async (how: (workspace: string) => Promise<string>) => {
     setMoving(true);
     setError(null);
     try {
-      onMoved(await window.hive.moveHostingHere(workspace));
+      onMoved(await how(workspace));
     } catch (e) {
       setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(e));
     } finally {
@@ -70,8 +71,13 @@ export function SharedBanner({ onMoved }: { onMoved: (folder: string) => void })
       <span className="max-w-[520px] truncate">{says(status)}</span>
       {error && <span className="max-w-[260px] truncate text-[var(--color-err)]" role="alert" title={error}>{error}</span>}
       {home && status.state === "connected" && (
-        <Button size="sm" variant="ghost" disabled={moving} onClick={() => void moveHere()} title={`Host it on this computer again, from ${home}`} data-move-here>
+        <Button size="sm" variant="ghost" disabled={moving} onClick={() => void bringHere(window.hive.moveHostingHere)} title={`Host it on this computer again, from ${home}`} data-move-here>
           <House aria-hidden /> {moving ? "Moving…" : "Move here"}
+        </Button>
+      )}
+      {home && status.state === "offline" && (
+        <Button size="sm" variant="ghost" disabled={moving} onClick={() => void bringHere(window.hive.takeOver)} title={`Host it on this computer again, from ${home}, as it was last seen here`} data-take-over>
+          <House aria-hidden /> {moving ? "Taking over…" : "Host it here"}
         </Button>
       )}
       {!ended && (

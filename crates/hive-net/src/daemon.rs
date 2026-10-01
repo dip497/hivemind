@@ -19,8 +19,9 @@
 //! - daemon → main: `ready {id, addrs, relay, lookup}`, `incoming {conn, peer}`, `dialed {req, conn}`,
 //!   `failed {req, error}`, `recv {conn, stream, data}`, `closed {conn, reason}`,
 //!   `pair-request {req, peer, hello}`, `paired {req, reply}`, `nearby {req, devices}`,
-//!   `published {req}`, `signed {req, packet}` and `host {req, host, seq}` (null for both when no
-//!   record is kept).
+//!   `published {req}`, `signed {req, packet}` and `host {req, host, seq, packet}` (null for all
+//!   when no record is kept; `packet`, the record as one device hands it to another, only from a
+//!   lookup server).
 //!
 //! A stream is named by its first frame and opened by the device that dialled; `data` is the
 //! frame's bytes as text, which is all main sends. What the frames mean is main's.
@@ -191,6 +192,8 @@ enum ToMain {
         req: u64,
         host: Option<String>,
         seq: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        packet: Option<String>,
     },
 }
 
@@ -508,6 +511,7 @@ impl Daemon {
                         req,
                         host: Some(r.host.to_string()),
                         seq: Some(r.seq),
+                        packet: None,
                     }),
                     Err(e) => self.tell(ToMain::Failed {
                         req,
@@ -521,8 +525,9 @@ impl Daemon {
                     match d.resolve_host(&key, lookup.as_deref()).await {
                         Ok(found) => d.tell(ToMain::Host {
                             req,
-                            host: found.map(|r| r.host.to_string()),
-                            seq: found.map(|r| r.seq),
+                            host: found.as_ref().map(|(r, _)| r.host.to_string()),
+                            seq: found.as_ref().map(|(r, _)| r.seq),
+                            packet: found.map(|(_, text)| text),
                         }),
                         Err(e) => d.tell(ToMain::Failed {
                             req,
@@ -564,7 +569,11 @@ impl Daemon {
 
     /// Which device hosts the workspace whose key is `key`, as the lookup server `lookup` (or the
     /// network's) has it.
-    async fn resolve_host(&self, key: &str, lookup: Option<&str>) -> Result<Option<HostRecord>> {
+    async fn resolve_host(
+        &self,
+        key: &str,
+        lookup: Option<&str>,
+    ) -> Result<Option<(HostRecord, String)>> {
         let workspace =
             iroh::PublicKey::from_str(key).with_context(|| format!("{key} is not a key"))?;
         let lookup = match lookup {

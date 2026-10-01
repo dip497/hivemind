@@ -525,7 +525,7 @@ async fn host_record_command(args: &Args) -> Result<()> {
             println!(
                 "{}",
                 match found {
-                    Some(r) => serde_json::json!({ "host": r.host.to_string(), "seq": r.seq }),
+                    Some((r, _)) => serde_json::json!({ "host": r.host.to_string(), "seq": r.seq }),
                     None => serde_json::Value::Null,
                 }
             );

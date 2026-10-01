@@ -105,7 +105,7 @@ export class PeerLinks {
       let message: unknown;
       try { message = JSON.parse(text); } catch { return; }
       const answered = hosting ? hosting.answer(link.peer, message) : Promise.resolve({ ok: false, error: "this device hosts nothing it is handed" });
-      void answered.then((answer) => { if (answer) link.send("hosting", JSON.stringify(answer)); });
+      void answered.then((answer) => link.send("hosting", JSON.stringify(answer)));
     });
     link.on("device", (text) => {
       if (!lists.ownersDevice(link.peer)) return link.close("removed");

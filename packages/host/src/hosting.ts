@@ -5,8 +5,12 @@
  * new host keeps them and answers; the old one records in the list where the workspace is now,
  * with a record signed by the workspace's key, and its links to the workspace are told so and
  * closed, which is the embedder's (`PeerLinks.moved`), and then hands over what changed while it
- * went (`catch-up`). One of the owner's devices may ask the device hosting a workspace to hand it
- * over to it (`move`): how a workspace comes back to the computer it was moved from.
+ * went (`catch-up`), answered once it is taken in: a connection closed the moment the other side
+ * has the bytes can still lose them before they are read. One of the owner's devices may ask the device hosting a workspace to hand it
+ * over to it (`move`): how a workspace comes back to the computer it was moved from. And while
+ * the device hosting it is gone, one of the owner's devices may host it from the copy it kept
+ * (`takeOver`, §5.7 E); the old host, back, finds the later record at the lookup server, and
+ * hands over what it had (`yieldTo`).
  *
  * Frames on the old host stay there: before it goes, each folder on it names it
  * (`machine://<old host>/path`), so their terminals keep running in its daemon (step 3a); and the
@@ -18,7 +22,7 @@
 import { machineUri, parseDeviceUri } from "@hivemind/core/remote-uri";
 import type { AccessLists } from "@hivemind/workspace-host/access";
 import type { Moved } from "@hivemind/workspace-host/doc-sync";
-import type { Link } from "@hivemind/workspace-host/hive-net";
+import type { FoundHost, Link } from "@hivemind/workspace-host/hive-net";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { ownershipIn } from "@hivemind/workspace-doc/schema";
 import type { FrameRecord } from "@hivemind/workspace-doc/shapes";
@@ -104,10 +108,55 @@ export class Hosting {
       this.o.moved(workspace, notice);
       // Nothing changes it here from now on: what changed while it went goes after it.
       const since = store.exportSince(repo, sent);
-      if (since.length > 0) link.send("hosting", JSON.stringify({ t: "catch-up", workspace, doc: b64(since) } satisfies HostingMessage));
+      if (since.length > 0) {
+        const caught = await ask(link, { t: "catch-up", workspace, doc: b64(since) }).catch((e: unknown): HostingAnswer => ({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+        if (!caught.ok) this.o.onWarn?.(`what changed in ${workspace.slice(0, 8)}… while it moved did not go with it: ${caught.error}`);
+      }
       return notice;
     } finally {
       // Closed behind what went on it.
+      link.close("moved");
+    }
+  }
+
+  /**
+   * Host `workspace` here, at `repo` (its folder on this device), from `copy`, what this device kept
+   * of it, while the device hosting it is gone (a take-over, §5.7 E): one move later than the last
+   * this device knows of, as the record it then says at the lookup server says. The old host's own
+   * folders are named by its id, where their terminals ran; this device's are plainly its own.
+   */
+  takeOver(workspace: string, repo: string, copy: Uint8Array): number {
+    const { store, lists } = this.o;
+    const self = this.o.self();
+    const was = lists.hosting(workspace);
+    if (!was || was.host === self) throw new Error("this workspace is hosted here already");
+    const seq = was.seq + 1;
+    store.adopt(repo, copy, { writer: `host:${was.host}` });
+    this.nameFolders(repo, (folder) => offDevice(self, onDevice(was.host, folder)));
+    lists.setHosting(workspace, self, seq);
+    this.o.took(workspace, repo);
+    return seq;
+  }
+
+  /**
+   * `workspace`, hosted here as far as this device knew, is hosted by another device now, as
+   * `found`, its record at the lookup server, says: taken over while this device was away. The
+   * devices connected to it here are told where it is, and closed; what this device has of it,
+   * its own folders named by its id, goes to the new host, which merges it; and from then on a
+   * device that comes for it here is told where it is.
+   */
+  async yieldTo(workspace: string, found: FoundHost): Promise<void> {
+    const { store, lists } = this.o;
+    const repo = lists.repoOf(workspace) ?? store.repoOf(workspace);
+    lists.setHosting(workspace, found.host, found.seq, found.record);
+    this.o.moved(workspace, { t: "moved", host: found.host, seq: found.seq, record: found.record });
+    if (!repo) return;
+    this.nameFolders(repo, (folder) => onDevice(this.o.self(), folder));
+    const link = await this.o.dial(found.host);
+    try {
+      const answer = await ask(link, { t: "catch-up", workspace, doc: b64(store.exportSince(repo, null)) });
+      if (!answer.ok) throw new Error(`${found.host.slice(0, 8)}… did not take what this device had: ${answer.error}`);
+    } finally {
       link.close("moved");
     }
   }
@@ -124,16 +173,16 @@ export class Hosting {
     }
   }
 
-  /** What one of the owner's devices, `peer`, sends this one on the `hosting` stream, and the
-   *  answer, if it wants one. */
-  async answer(peer: string, message: unknown): Promise<HostingAnswer | null> {
+  /** What one of the owner's devices, `peer`, sends this one on the `hosting` stream: the answer. */
+  async answer(peer: string, message: unknown): Promise<HostingAnswer> {
     const { store, lists } = this.o;
     if (!lists.ownersDevice(peer)) return { ok: false, error: "only the owner's devices hand a workspace over" };
     const m = message as Partial<HostingMessage> | null;
     if (m?.t === "catch-up") {
       const repo = isHex(m.workspace, 16) && typeof m.doc === "string" ? lists.repoOf(m.workspace) : null;
-      if (repo && lists.hosting(m.workspace!)?.host === this.o.self()) store.importFrom(repo, fromB64(m.doc!), { writer: `host:${peer}` });
-      return null;
+      if (!repo || lists.hosting(m.workspace!)?.host !== this.o.self()) return { ok: false, error: "that workspace is not hosted here" };
+      store.importFrom(repo, fromB64(m.doc!), { writer: `host:${peer}` });
+      return { ok: true };
     }
     if (m?.t === "move") {
       if (!isHex(m.workspace, 16)) return { ok: false, error: "malformed" };

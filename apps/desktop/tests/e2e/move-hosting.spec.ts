@@ -6,9 +6,11 @@
 // the other sees; the shell the laptop had in it is the same process, on the laptop, in its
 // folder; and the laptop opening its folder again opens it from the host. Then the laptop moves it
 // back (Move here, on its banner): its window opens the folder as before, the guest follows it home,
-// what was done at the host is there, and the shell is the same process still.
-import { test, expect, type ElectronApplication } from "@playwright/test";
-import { execSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
+// what was done at the host is there, and the shell is the same process still. And on a network
+// with a lookup server, the host gone: the laptop hosts the workspace from the copy it kept (Host
+// it here), and the guest finds it there by its record.
+import { test, expect, type ElectronApplication, type Page } from "@playwright/test";
+import { execFileSync, execSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { HIVE_NET, hiveNetBuilt, join, note, notes, person, share, tiles } from "./helpers/multiplayer";
@@ -44,19 +46,47 @@ test.afterEach(async () => {
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 
-test("a laptop moves a shared workspace to its host: its window and the guest follow, the board is one, and its shell runs on the laptop still; moved back, all of it comes home", async () => {
-  test.skip(!hiveNetBuilt() || !hostable, "needs hive-net (cargo build in crates/hive-net) and a current apps/cli/dist/hive (cd apps/cli && bun scripts/build.ts)");
-  test.setTimeout(240_000);
+/** A network with a lookup server and no relays, signed by its admin: the signed profile. */
+async function lookupNetwork(): Promise<string> {
+  const server = spawn(HIVE_NET, ["serve", "--lookup", "--data", path.join(root, "lookup"), "--bind", "127.0.0.1:0", "--lookup-limit", "off"], { stdio: ["ignore", "pipe", "ignore"] });
+  procs.push(server);
+  const lookup = await new Promise<string>((resolve) => {
+    let out = "";
+    server.stdout!.on("data", (d: Buffer) => {
+      out += d.toString();
+      const m = /lookup serving on (\S+)/.exec(out);
+      if (m) resolve(m[1]!);
+    });
+  });
+  const admin = path.join(root, "admin.key");
+  fs.writeFileSync(admin, `${"ef".repeat(32)}\n`);
+  const by = (JSON.parse(execFileSync(HIVE_NET, ["access", "voucher", "--kind", "enrol", "--admin", admin], { encoding: "utf8" })) as { by: string }).by;
+  const text = path.join(root, "profile.json");
+  fs.writeFileSync(text, JSON.stringify({ v: 1, name: "Home", relays: [], lookup, admin: by, local: { mdns: true } }));
+  return execFileSync(HIVE_NET, ["profile", "sign", text, "--admin", admin], { encoding: "utf8" });
+}
+
+/**
+ * The host running, and the laptop (with a shell in its workspace, its terminals in its daemon as
+ * outside tests) paired with it by its link, sharing the workspace with a guest who is in and has
+ * it open: on the network `profile` when one is given, every one of them.
+ */
+async function sharedAndPaired(profile?: string) {
+  if (profile) {
+    fs.mkdirSync(path.join(root, "server", "network"), { recursive: true });
+    fs.writeFileSync(path.join(root, "server", "network", "profile"), profile);
+  }
   const host = spawn(HIVE, ["host", "run"], { env: hostEnv(), stdio: "ignore" });
   procs.push(host);
   await expect.poll(() => status()?.running ?? false, { timeout: 30_000 }).toBe(true);
   const hostDevice = status()!.device;
+  const onNetwork = async (w: Page) => { if (profile) await w.evaluate((p) => window.hive.useNetwork(p), profile); };
 
-  // The laptop, with a shell in its workspace, its terminals in its daemon as outside tests.
   const api = path.join(root, "api");
   fs.mkdirSync(api);
   execSync("git init -q", { cwd: api });
   const laptop = await person(root, "laptop", api, apps, { HIVEMIND_PTY_DAEMON: "1" });
+  await onNetwork(laptop);
   await laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
   await expect.poll(async () => (await tiles(laptop)).length).toBeGreaterThan(0);
 
@@ -82,11 +112,29 @@ test("a laptop moves a shared workspace to its host: its window and the guest fo
   const elsewhere = path.join(root, "elsewhere");
   fs.mkdirSync(elsewhere);
   const guest = await person(root, "guest", elsewhere, apps);
+  await onNetwork(guest);
   const link = await share(laptop, "edit");
   await join(guest, laptop, link);
   await guest.locator("[data-join-open]").click();
   await expect.poll(() => tiles(guest), { timeout: 20_000 }).toEqual(await tiles(laptop));
-  const before = await tiles(laptop);
+  return { laptop, guest, hostDevice, api, before: await tiles(laptop) };
+}
+
+/** Share → move it to the host: the laptop's window opens it from there as its owner, and the
+ *  guest follows. */
+async function moveToHost(laptop: Page, guest: Page, hostDevice: string): Promise<void> {
+  await laptop.locator("[data-share]").click();
+  await expect(laptop.locator("[data-move-to]")).toHaveValue(hostDevice);
+  await laptop.locator("[data-move-hosting]").click();
+  await expect(laptop.locator('[data-shared-banner][data-state="connected"]')).toHaveAttribute("data-access", "owner", { timeout: 20_000 });
+  await expect.poll(async () => ((await guest.evaluate(() => window.hive.joined()))[0] as { host?: string } | undefined)?.host, { timeout: 10_000 }).toBe(hostDevice);
+  await expect(guest.locator('[data-shared-banner][data-state="connected"]')).toHaveAttribute("data-access", "edit", { timeout: 10_000 });
+}
+
+test("a laptop moves a shared workspace to its host: its window and the guest follow, the board is one, and its shell runs on the laptop still; moved back, all of it comes home", async () => {
+  test.skip(!hiveNetBuilt() || !hostable, "needs hive-net (cargo build in crates/hive-net) and a current apps/cli/dist/hive (cd apps/cli && bun scripts/build.ts)");
+  test.setTimeout(240_000);
+  const { laptop, guest, hostDevice, api, before } = await sharedAndPaired();
   // The laptop's shell, before the move: which process it is.
   const shell = before.find((t) => t.startsWith("tile-shell"))!;
   const type = async (file: string, command: string) => {
@@ -106,20 +154,13 @@ test("a laptop moves a shared workspace to its host: its window and the guest fo
   };
   const pid = await type("pid-before.txt", "echo $$");
 
-  // Share → move it to the host.
-  await laptop.locator("[data-share]").click();
-  await expect(laptop.locator("[data-move-to]")).toHaveValue(hostDevice);
+  // Share → move it to the host. The laptop's window opens it from there, as its owner, and the
+  // guest follows it within seconds, with no new invite; the host holds it under the laptop's
+  // folder for it.
   const moved = Date.now();
-  await laptop.locator("[data-move-hosting]").click();
-
-  // The laptop's window opens it from the host, as its owner; the host holds it under the
-  // laptop's folder for it.
-  await expect(laptop.locator('[data-shared-banner][data-state="connected"]')).toHaveAttribute("data-access", "owner", { timeout: 20_000 });
-  await expect.poll(() => status()?.workspaces.some((w) => w.repo.endsWith(api) && w.repo.startsWith("machine://")) ?? false, { timeout: 10_000 }).toBe(true);
-  // The guest follows it there within seconds, with no new invite.
-  await expect.poll(async () => ((await guest.evaluate(() => window.hive.joined()))[0] as { host?: string } | undefined)?.host, { timeout: 10_000 }).toBe(hostDevice);
-  await expect(guest.locator('[data-shared-banner][data-state="connected"]')).toHaveAttribute("data-access", "edit", { timeout: 10_000 });
+  await moveToHost(laptop, guest, hostDevice);
   expect(Date.now() - moved).toBeLessThan(20_000);
+  await expect.poll(() => status()?.workspaces.some((w) => w.repo.endsWith(api) && w.repo.startsWith("machine://")) ?? false, { timeout: 10_000 }).toBe(true);
 
   // The board is the same for both, and what the guest writes the laptop sees, through the host.
   await expect.poll(() => tiles(laptop), { timeout: 20_000 }).toEqual(before);
@@ -154,4 +195,29 @@ test("a laptop moves a shared workspace to its host: its window and the guest fo
   // The shell is the same process, in its folder, the laptop's own again.
   expect(await type("pid-home.txt", "echo $$")).toBe(pid);
   expect(await type("where-home.txt", "pwd")).toBe(api);
+});
+
+test("on a network with a lookup server, the host gone, the laptop hosts the workspace from the copy it kept, and the guest finds it there by its record", async () => {
+  test.skip(!hiveNetBuilt() || !hostable, "needs hive-net (cargo build in crates/hive-net) and a current apps/cli/dist/hive (cd apps/cli && bun scripts/build.ts)");
+  test.setTimeout(240_000);
+  const { laptop, guest, hostDevice, before } = await sharedAndPaired(await lookupNetwork());
+  await moveToHost(laptop, guest, hostDevice);
+  await note(guest, "at the host");
+  await expect.poll(() => notes(laptop), { timeout: 20_000 }).toContain("at the host");
+
+  // The host goes. The laptop cannot reach it, and offers to host the workspace itself again.
+  expect(hive("host", "stop").status).toBe(0);
+  await expect(laptop.locator('[data-shared-banner][data-state="offline"]')).toBeVisible({ timeout: 60_000 });
+  await laptop.locator("[data-take-over]").click();
+  // Its window is on its folder again, a workspace of its own, with the board as it last saw it.
+  await expect(laptop.locator("[data-shared-banner]")).toHaveCount(0, { timeout: 20_000 });
+  expect(await laptop.evaluate(() => window.hive.joined())).toEqual([]);
+  await expect.poll(() => notes(laptop), { timeout: 20_000 }).toContain("at the host");
+  // The guest, dialling the host again and again, finds it on the laptop by its record.
+  const laptopDevice = (await laptop.evaluate(() => window.hive.identity())).deviceId;
+  await expect.poll(async () => ((await guest.evaluate(() => window.hive.joined()))[0] as { host?: string } | undefined)?.host, { timeout: 60_000 }).toBe(laptopDevice);
+  await expect(guest.locator('[data-shared-banner][data-state="connected"]')).toHaveAttribute("data-access", "edit", { timeout: 30_000 });
+  await expect.poll(() => tiles(guest), { timeout: 20_000 }).toEqual(before);
+  await note(guest, "found it");
+  await expect.poll(() => notes(laptop), { timeout: 20_000 }).toContain("found it");
 });

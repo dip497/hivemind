@@ -490,6 +490,16 @@ async fn a_host_says_at_its_lookup_server_that_it_hosts_a_workspace_and_a_device
     let found = guest.next("host").await;
     assert_eq!(found["host"], host.id.as_str());
     assert_eq!(found["seq"], 1);
+    // With the record as the server keeps it, to hand on: it says the same, by the workspace's key.
+    guest
+        .send(json!({ "t": "verify-host", "req": 5, "key": key, "packet": found["packet"] }))
+        .await;
+    let handed = guest.next_of(&["host", "failed"]).await;
+    assert_eq!(
+        (handed["host"].clone(), handed["seq"].clone()),
+        (json!(host.id), json!(1)),
+        "{handed}"
+    );
 
     // Asked with no lookup server named, and none on its network, it cannot say.
     guest

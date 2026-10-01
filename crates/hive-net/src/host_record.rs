@@ -104,8 +104,9 @@ pub async fn publish(lookup: &Url, workspace: &SecretKey, record: HostRecord) ->
 }
 
 /// The host record of the workspace whose key is `workspace`, as the lookup server `lookup` has
-/// it, its signature checked; none when it has none.
-pub async fn resolve(lookup: &Url, workspace: PublicKey) -> Result<Option<HostRecord>> {
+/// it, its signature checked, with the packet as one device hands it to another (`to_text`); none
+/// when it has none.
+pub async fn resolve(lookup: &Url, workspace: PublicKey) -> Result<Option<(HostRecord, String)>> {
     let response = crate::access::client::http()?
         .get(at(lookup, &workspace))
         .send()
@@ -119,5 +120,5 @@ pub async fn resolve(lookup: &Url, workspace: PublicKey) -> Result<Option<HostRe
     }
     let packet = SignedPacket::from_relay_payload(&workspace, &response.bytes().await?)
         .context("the record is not signed by the workspace's key")?;
-    Ok(Some(HostRecord::of(&packet)?))
+    Ok(Some((HostRecord::of(&packet)?, to_text(&packet))))
 }

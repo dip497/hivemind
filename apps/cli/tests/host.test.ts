@@ -6,8 +6,9 @@
 // it as its owner; a terminal the laptop starts there runs on after the laptop is gone. The laptop
 // moves a workspace it shares to the host (spec/hosting.md): the host takes it, says so at the
 // network's lookup server, and the guest in it follows; then it asks for it back, and the guest
-// follows it home. Here the laptop is this test, with keys and a hive-net of its own. Needs
-// crates/hive-net's build.
+// follows it home; moved there again and the host gone, the laptop hosts it from the copy it kept,
+// and the host, back, hands over what it had. Here the laptop is this test, with keys and a
+// hive-net of its own. Needs crates/hive-net's build.
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -303,7 +304,7 @@ describe.skipIf(!built)("hive host", () => {
     }
   });
 
-  test("takes a workspace a laptop moves to it: the guest in it is told where, by the workspace's key, and follows here; one who comes back to the laptop is told too; and hands it back when the laptop asks", async () => {
+  test("takes a workspace a laptop moves to it: the guest in it is told where, by the workspace's key, and follows here; one who comes back to the laptop is told too; hands it back when the laptop asks; and, gone while the laptop took it over, hands over what it had", async () => {
     const own = { ...env, HIVEMIND_APP_DATA: path.join(dir, "data4"), HIVEMIND_PTY_SOCK: path.join(dir, "d4.sock") };
     // All three on a network with a lookup server, where a workspace's host says it hosts it.
     const profile = await lookupNetwork(path.join(dir, "network4"));
@@ -406,7 +407,7 @@ describe.skipIf(!built)("hive host", () => {
       expect(await guest.verifyHost(key, notice.record)).toEqual({ host: offered.device, seq: 2 });
       expect(lists.hosting(workspace)).toEqual({ host: offered.device, seq: 2, record: notice.record });
       // The host says at the lookup server that it hosts it now, for whoever looks there later.
-      expect(await until(() => guest.resolveHost(key).then((r) => r?.host === offered.device && r), "the host to say it hosts it")).toEqual({ host: offered.device, seq: 2 });
+      expect(await until(() => guest.resolveHost(key).then((r) => r?.host === offered.device && r), "the host to say it hosts it")).toMatchObject({ host: offered.device, seq: 2 });
       // The frame stays on the laptop, named by it; the host keeps the workspace under the laptop's folder for it.
       expect(store.getCore(repo)!.frames[0]!.workspacePath).toBe(machineUri(keys.deviceId, repo));
       expect(await until(() => status(own)?.workspaces.find((w) => w.workspace === workspace) ?? null, "the host to hold it")).toEqual({ workspace, repo: machineUri(keys.deviceId, repo) });
@@ -446,6 +447,39 @@ describe.skipIf(!built)("hive host", () => {
       const again = await until(() => follow(keys.deviceId, laptop.ready.addrs).then((r) => (r.access ? r : null)), "the guest to be let in at the laptop again");
       expect(again.access).toBe("edit");
       expect(again.replica.getCore(workspaceUrl(workspace))!.frames[0]!.workspacePath).toBe(repo);
+
+      // At the host again, the fourth move. The laptop keeps a copy, as one of the owner's devices
+      // with it open does, until it is away; the guest, at the host, changes it meanwhile.
+      expect((await hosting.moveTo(repo, offered.device)).seq).toBe(4);
+      const kept = new WorkspaceStore({ dir: path.join(laptopDir, "shared") });
+      const keeping = await laptop.dial(offered.device, where);
+      expect(await new Promise<string>((resolve) => {
+        replicate(kept, workspaceUrl(workspace), streamOf(keeping, "sync"), { workspace, changes: () => () => {}, onWelcome: resolve });
+      })).toBe("owner");
+      keeping.close();
+      const there2 = await until(() => follow(offered.device, offered.addrs).then((r) => (r.access ? r : null)), "the guest to be let in at the host again");
+      const was = there2.replica.getCore(workspaceUrl(workspace))!;
+      there2.replica.setCore(workspaceUrl(workspace), { ...was, frames: was.frames.map((f) => ({ ...f, title: "changed while the laptop was away" })) }, { base: was });
+      await until(() => follow(offered.device, offered.addrs).then((r) => r.replica.getCore(workspaceUrl(workspace))?.frames[0]?.title === "changed while the laptop was away"), "the host to have the guest's change");
+
+      // The host goes. The laptop hosts it again from the copy it kept, one move later, its frame
+      // plainly its own, and says so at the lookup server; the guest finds it there and is let in.
+      expect(data<{ stopped: boolean }>(hive(["host", "stop", "--json"], { env: own })).stopped).toBe(true);
+      expect(hosting.takeOver(workspace, repo, kept.exportSince(workspaceUrl(workspace), null))).toBe(5);
+      expect(lists.hosting(workspace)).toEqual({ host: keys.deviceId, seq: 5, record: null });
+      expect(store.getCore(repo)!.frames[0]).toMatchObject({ workspacePath: repo, title: "built at the host" });
+      await laptop.publishHost(workspace, 5);
+      expect(await guest.resolveHost(key)).toMatchObject({ host: keys.deviceId, seq: 5 });
+      expect((await until(() => follow(keys.deviceId, laptop.ready.addrs).then((r) => (r.access ? r : null)), "the guest to be let in at the laptop")).access).toBe("edit");
+
+      // The host, back, finds the later record: it hands over what it had, which the laptop merges,
+      // and tells whoever comes to it where the workspace is now.
+      runHost(own);
+      await until(() => store.getCore(repo)?.frames[0]?.title === "changed while the laptop was away", "the host to hand over what it had");
+      expect(store.getCore(repo)!.frames[0]!.workspacePath).toBe(repo);
+      const late = await until(() => follow(offered.device, offered.addrs).then((r) => r.moved), "the host to say where it is now");
+      expect(late).toMatchObject({ host: keys.deviceId, seq: 5 });
+      expect(await guest.verifyHost(key, late.record)).toEqual({ host: keys.deviceId, seq: 5 });
     } finally {
       laptop.stop();
       guest.stop();

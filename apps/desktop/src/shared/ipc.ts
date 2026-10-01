@@ -326,6 +326,9 @@ export interface HiveIpc {
   /** Move `workspace`, moved from here, back from the device hosting it (M3): whoever is in it
    *  follows. Its folder, to open it by again. */
   moveHostingHere(workspace: string): Promise<string>;
+  /** Host `workspace`, moved from here, on this computer again from the copy kept here, while the
+   *  device hosting it cannot be reached (M3): whoever is in it finds it here. Its folder. */
+  takeOver(workspace: string): Promise<string>;
   // ── this device's network (R16) ───────────────────────────
   /** The network profile in use: a built-in one (`local`, `hosted`) or one its admin signed. */
   network(): Promise<NetworkProfile>;

@@ -17,7 +17,8 @@ _hive.<z-base-32 of the workspace's public key>.   TXT   "host=<device id>;seq=<
 
 - `host` is the hosting device's id, its public key in lowercase hex (its iroh `EndpointId`).
 - `seq` counts the moves: the first host publishes 1, each move or take-over the one before plus
-  one. Two devices taking over at once: the higher `seq` wins, a tie goes to the lower device id.
+  one. Two devices taking over at once: the higher `seq` wins, a tie goes to the lower device id
+  (`hosting.md`, Taking over).
 - A reader ignores parts of the text it does not know, and a packet with no `_hive` record or
   more than one is not a host record.
 
@@ -41,7 +42,9 @@ not published again for seven days, so the host publishes again every hour and a
   hour after, and when a workspace is moved to it: a workspace not said yet with the count of
   moves it knows (1 for one never moved), one whose record names it as the record is, and one
   whose record names another device not at all (that device hosts it now) unless it knows of a
-  later move (it took the workspace from that device, `hosting.md`).
+  later move (it took the workspace from that device, `hosting.md`). A record naming another
+  device after more moves than it knows of, or as many by a device whose id is lower, says the
+  workspace was taken over while this device was away: it hands it over (`hosting.md`).
 - An invite carries the workspace's public key (`k` in the link's fragment) and, made on a
   network with a lookup server, that server (`l`). Before each dial the guest reads the record
   there and, when it names another device after more moves than the guest knows of, dials that

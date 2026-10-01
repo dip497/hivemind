@@ -29,6 +29,12 @@ export interface HostRecord {
   seq: number;
 }
 
+/** A host record as a lookup server keeps it: what it says, and the record itself, signed by the
+ *  workspace's key, to hand on to whoever asks (spec/hosting.md). */
+export interface FoundHost extends HostRecord {
+  record: string;
+}
+
 /** One connection to another device, on `hive/ws/1`: frames of text on named streams. */
 export interface Link {
   /** The other device's id, as its key proved it. */
@@ -183,10 +189,12 @@ export class HiveNet {
 
   /** Which device hosts the workspace whose public key is `key`, as the lookup server `lookup` (or
    *  this network's) has it, its signature checked; null when it names none. */
-  async resolveHost(key: string, lookup?: string | null): Promise<HostRecord | null> {
+  async resolveHost(key: string, lookup?: string | null): Promise<FoundHost | null> {
     const answer = await this.ask({ t: "resolve-host", key, ...(lookup ? { lookup } : {}) });
     if (answer.t === "failed") throw new Error(String(answer.error));
-    return typeof answer.host === "string" && typeof answer.seq === "number" ? { host: answer.host, seq: answer.seq } : null;
+    return typeof answer.host === "string" && typeof answer.seq === "number" && typeof answer.packet === "string"
+      ? { host: answer.host, seq: answer.seq, record: answer.packet }
+      : null;
   }
 
   /** A record saying that `host` hosts the person's workspace `workspace`, the `seq`th to, signed by

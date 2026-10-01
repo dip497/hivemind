@@ -1,4 +1,4 @@
-# Hosting (0.2)
+# Hosting (0.3)
 
 Moving a workspace's hosting from one of its owner's devices to another (§5.7 B, F and §5.8 in
 `docs/design/multiplayer-2026-09-28.md`, M3): the device hosting it (the **old host**) hands the
@@ -6,7 +6,9 @@ new one (the **new host**) the workspace's document and its access list; whoever
 it is told where it went, with a host record (`host-record.md`), and follows by themselves, with
 no new invite. Frames stay where they are: their terminals keep running on the machine they ran
 on. Another of the owner's devices may ask the device hosting a workspace to hand it over to it
-(**move**): how a workspace comes back to the computer it was moved from.
+(**move**): how a workspace comes back to the computer it was moved from. And while the device
+hosting it cannot be reached, the device it was moved from may host it again from the copy it
+kept (**taking over**); the old host, back, hands over what it had.
 
 ## Who may
 
@@ -56,7 +58,9 @@ connection's `hosting` stream, one JSON message per text frame.
      its changes, and closes its connection with the reason `moved`;
    - sends what changed while the move went, **catch-up**, old → new:
      `{ "t": "catch-up", "workspace": "<id>", "doc": "<base64: a Loro update since what take carried>" }`,
-     which the new host imports only into a workspace it hosts. It is not answered.
+     which the new host imports only into a workspace it hosts, answered as **take** is once it is
+     taken in. The old host closes the connection only after the answer (or 30 s): a connection
+     closed as soon as the other side has the bytes can still lose them before they are read.
 
    From then on the old host no longer says the workspace's record, and opens the workspace as
    any of the owner's devices does: by its id, from the new host.
@@ -98,7 +102,29 @@ its leading public key). The connection closes after it. A device that is sent i
 A device that comes to the old host for the workspace later (its `hello` on `sync`) is sent the
 same notice and closed with `moved`.
 
+## Taking over
+
+While the device hosting a workspace cannot be reached, the device the workspace was moved from
+(its folder is there) may host it again from the copy it kept of the board (§5.7 E):
+
+- one move later than the last it knows of: `seq` + 1;
+- the folders of its frames as the old host had them: a plain path is the old host's own folder,
+  named by the old host's id (`machine://<old host>/path`), where its terminals ran; one named by
+  this device's id is plainly its own (`/path`);
+- it says its host record (`host-record.md`) at the network's lookup server, where whoever is in
+  the workspace finds it: a guest reads the record before each dial. Nothing tells the guests
+  otherwise, so without a lookup server they keep dialling the old host.
+
+The old host, back, reads the record of each workspace it hosts when its network starts and every
+hour (`host-record.md`). One naming another device after more moves than it knows of, or as many
+by a device whose id is lower (two took it over at once), is that device's now: the old host
+records that, with the record, so that a device that comes to it for the workspace is told where it
+is (**moved**); tells the devices connected to it the same, and closes them; names its own folders
+by its id; and hands the new host what it has, **catch-up** with its whole document, which the new
+host merges. It is a copy there from then on.
+
 ## Not yet
 
-Taking over from a host that is gone (§5.7 E), and the owner's other devices keeping the document
-and the list in step (§5.8, Replicas), come later.
+The owner's other devices keeping the document and the access list in step (§5.8, Replicas): only
+the device a workspace was moved from has its list, so only it takes the workspace over. A list
+changes only on the device hosting the workspace for now.

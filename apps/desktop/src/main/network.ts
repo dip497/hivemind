@@ -29,7 +29,7 @@ import { displayName, machineIdentity, takePerson } from "./identity.js";
 import { idOf, workspaceSeed, type Seed } from "@hivemind/workspace-host/identity";
 import { getSettings } from "./settings-store.js";
 import { broadcast, userWindow } from "./windows.js";
-import { onWorkspaceChange, workspaceStore } from "./workspace-store-ipc.js";
+import { onWorkspaceChange, sharedStore, workspaceStore } from "./workspace-store-ipc.js";
 import { PeerLinks } from "@hivemind/host/peer-links";
 import { forgetShared, leaveShared, openShared, sharedStatus, type SharedStatus } from "./shared-workspaces.js";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
@@ -234,7 +234,13 @@ export function network(): Promise<HiveNet> {
     });
     hn.admit(accessLists().admitted());
     records?.stop();
-    records = new HostRecords({ net: hn, hosted: hostedHere, onWarn: (m) => console.warn(`[hosting] ${m}`) });
+    records = new HostRecords({
+      net: hn,
+      hosted: hostedHere,
+      // Taken over while this computer was away: what it has goes to the device hosting it now.
+      elsewhere: (workspace, found) => void hostingHere().yieldTo(workspace, found).catch((e: unknown) => console.warn(`[hosting] could not hand over ${workspace.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`)),
+      onWarn: (m) => console.warn(`[hosting] ${m}`),
+    });
     records.start();
     return hn;
   })().catch((e: unknown) => { current = null; throw e; });
@@ -560,6 +566,16 @@ export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promis
     const host = folder ? accessLists().hosting(workspace as string)!.host : null;
     if (!folder || !host) throw new Error("move: only a workspace moved from this computer moves back to it");
     await hostingHere().moveHere(workspace as string, host);
+    return folder;
+  });
+
+  // Host a workspace moved from here again, from the copy kept here, while the device hosting it
+  // cannot be reached (M3, §5.7 E): whoever is in it finds it here by its record. Its folder.
+  handleEffect("net:take-over", (workspace: unknown) => ({ target: typeof workspace === "string" ? `hive://${workspace}` : undefined }), (_e, workspace: unknown) => {
+    const folder = typeof workspace === "string" ? folderHere(workspace) : null;
+    if (!folder) throw new Error("take over: only a workspace moved from this computer is hosted here again");
+    if (sharedStatus(workspace as string)?.state === "connected") throw new Error("take over: its host answers; move it here instead");
+    hostingHere().takeOver(workspace as string, folder, sharedStore().exportSince(`hive://${workspace as string}`, null));
     return folder;
   });
 
