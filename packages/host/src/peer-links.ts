@@ -22,6 +22,7 @@ import type { Duplex } from "node:stream";
 import type { Link } from "@hivemind/workspace-host/hive-net";
 import type { AccessLists } from "@hivemind/workspace-host/access";
 import { parseSync, serveReplica, type Changes } from "@hivemind/workspace-host/doc-sync";
+import { serveList } from "@hivemind/workspace-host/list-sync";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { servePeer, type TextChannel } from "@hivemind/workspace-api/peers";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
@@ -132,13 +133,16 @@ export class PeerLinks {
       // A workspace shared by invite is named in its list; any of the owner's is in the store.
       const repo = lists.repoOf(hello.workspace) ?? store.repoOf(hello.workspace);
       if (!access || !person || !repo) return link.close("removed");
-      const stop = serveReplica(store, repo, streamOf(link, "sync"), {
+      const replica = serveReplica(store, repo, streamOf(link, "sync"), {
         seen: hello.seen,
         access,
         changes: this.o.changes,
         writer: `peer:${link.peer}`,
         onDropped: (why) => this.o.onWarn?.(`from ${link.peer.slice(0, 8)}…: ${why}`),
       });
+      // The owner's other devices keep its list in step, to take it over with as it is (M3).
+      const list = access === "owner" ? serveList(lists, hello.workspace, streamOf(link, "list")) : () => {};
+      const stop = () => { replica(); list(); };
       servePeer(server, streamOf(link, "api"), {
         actor: { kind: "peer", person, device: link.peer, access },
         workspace: hello.workspace,

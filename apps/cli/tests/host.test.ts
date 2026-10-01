@@ -7,8 +7,10 @@
 // moves a workspace it shares to the host (spec/hosting.md): the host takes it, says so at the
 // network's lookup server, and the guest in it follows; then it asks for it back, and the guest
 // follows it home; moved there again and the host gone, the laptop hosts it from the copy it kept,
-// and the host, back, hands over what it had. Here the laptop is this test, with keys and a
-// hive-net of its own. Needs crates/hive-net's build.
+// and the host, back, hands over what it had. Its owner, at the laptop, manages who is in a
+// workspace it hosts (the workspace API's people.*), is asked there about someone joining, and
+// keeps its list in step. Here the laptop is this test, with keys and a hive-net of its own.
+// Needs crates/hive-net's build.
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -21,6 +23,9 @@ import { HiveNet, type Where } from "@hivemind/workspace-host/hive-net";
 import { enterPairing, pairAnnouncement, PairingOffer, parsePairLink, type Pairing } from "@hivemind/workspace-host/pairing";
 import { WorkspaceStore, type WorkspaceChange } from "@hivemind/workspace-host/store";
 import { replicate } from "@hivemind/workspace-host/doc-sync";
+import { followList } from "@hivemind/workspace-host/list-sync";
+import { parseJoinLink } from "@hivemind/workspace-host/join-link";
+import type { JoinQuestion } from "@hivemind/workspace-api/people";
 import type { Access } from "@hivemind/workspace-host/access";
 import { peerTransport, workspaceUrl } from "@hivemind/workspace-api/peers";
 import { WorkspaceClient } from "@hivemind/workspace-api/client";
@@ -438,12 +443,13 @@ describe.skipIf(!built)("hive host", () => {
       // The laptop asks for it back: hosted there again, at its own folder, with what was done at the
       // host; its frame is plainly the laptop's again.
       await hosting.moveHere(workspace, offered.device);
-      expect(lists.hosting(workspace)).toEqual({ host: keys.deviceId, seq: 3, record: null });
       expect(store.getCore(repo)!.frames[0]).toMatchObject({ workspacePath: repo, title: "built at the host" });
-      // The guest at the host is told where it went, by the workspace's key, and follows it home.
+      // The guest at the host is told where it went, by the workspace's key, and follows it home;
+      // the laptop keeps that record, which the host handed over with it.
       const home = await followed.told;
       expect(home).toMatchObject({ host: keys.deviceId, seq: 3 });
       expect(await guest.verifyHost(key, home.record)).toEqual({ host: keys.deviceId, seq: 3 });
+      expect(lists.hosting(workspace)).toEqual({ host: keys.deviceId, seq: 3, record: home.record });
       const again = await until(() => follow(keys.deviceId, laptop.ready.addrs).then((r) => (r.access ? r : null)), "the guest to be let in at the laptop again");
       expect(again.access).toBe("edit");
       expect(again.replica.getCore(workspaceUrl(workspace))!.frames[0]!.workspacePath).toBe(repo);
@@ -483,6 +489,132 @@ describe.skipIf(!built)("hive host", () => {
     } finally {
       laptop.stop();
       guest.stop();
+      hive(["host", "stop"], { env: own });
+      hive(["daemon", "stop"], { env: own });
+    }
+  });
+
+  test("its owner, at the laptop it moved a workspace from, sees who is in it there, makes a link, is asked about someone joining and lets them in, changes a role and takes someone off; the laptop keeps the list in step, and still tells whoever comes to it where the workspace is", async () => {
+    const own = { ...env, HIVEMIND_APP_DATA: path.join(dir, "data5"), HIVEMIND_PTY_SOCK: path.join(dir, "d5.sock") };
+    runHost(own);
+    await until(() => status(own)?.running || null, "the host to answer");
+    const repo = path.join(dir, "team");
+    fs.mkdirSync(repo);
+
+    // The laptop's workspace, shared with a guest, with a link out to it.
+    const laptopDir = path.join(dir, "laptop5");
+    const keys = machineKeys(path.join(laptopDir, "identity"));
+    const store = new WorkspaceStore({ dir: path.join(laptopDir, "workspaces"), person: keys.person });
+    store.setCore(repo, { frames: [{ id: "f1", title: "team", workspacePath: repo }], tiles: [] });
+    const workspace = store.ownership(repo)!.workspaceId as string;
+    const url = workspaceUrl(workspace);
+    let hostCert: DeviceCertificate | null = null;
+    const lists = new AccessLists({ dir: path.join(laptopDir, "access"), owner: keys.person, devices: () => (hostCert ? [hostCert] : []) });
+    const standIn = async (name: string) => {
+      const identity = path.join(dir, name, "identity");
+      return { keys: machineKeys(identity), net: await HiveNet.start({ bin: HIVE_NET, identity, socket: path.join(dir, `${name}.sock`), onIncoming: (l) => l.close(), onPairRequest: async () => ({ ok: false, error: "declined" }) }) };
+    };
+    const { keys: guestKeys, net: guest } = await standIn("guest5");
+    const { keys: newKeys, net: newcomer } = await standIn("new5");
+    lists.grant(workspace, guestKeys.personId, "edit");
+    lists.addDevice(workspace, guestKeys.certificate);
+    const early = lists.invite(workspace, repo, "view", 600_000);
+    let where: Where | undefined;
+    const hosting = new Hosting({
+      self: () => keys.deviceId, person: () => keys.personId, store, lists,
+      dial: (device) => laptop.dial(device, where), sign: (w, seq, host) => laptop.signHost(w, seq, host), moved: (w, notice) => peers.moved(w, notice),
+      took: () => laptop.admit(lists.admitted()),
+    });
+    const server = new WorkspaceServer([], new Intents(new AuditLog({ file: path.join(laptopDir, "audit.jsonl") })));
+    const peers = new PeerLinks({ store, changes: () => () => {}, lists, server, hosting });
+    const laptop = await HiveNet.start({ bin: HIVE_NET, identity: path.join(laptopDir, "identity"), socket: path.join(dir, "l5.sock"), onIncoming: (l) => peers.serve(l), onPairRequest: async () => ({ ok: false }) });
+    let made = 0;
+    /** Into the workspace at `device`, from `net`: the role let in as, or where it is now; how the
+     *  connection ends; and what came on its `list` stream, which it asks for as any device may. */
+    const enter = (net: HiveNet, device: string, addrs: string[]) => new Promise<{ access: string | null; moved: Moved | null; closed: Promise<string>; listed: string[] }>((resolve) => {
+      net.dial(device, { addrs, relay: null }).then((link) => {
+        const listed: string[] = [];
+        streamOf(link, "list").on((text) => listed.push(text));
+        void link.closed.then(() => resolve({ access: null, moved: null, closed: link.closed, listed }));
+        replicate(new WorkspaceStore({ dir: path.join(dir, "replicas5", String(made++)) }), url, streamOf(link, "sync"), {
+          workspace, changes: () => () => {},
+          onWelcome: (access) => {
+            link.send("list", JSON.stringify({ t: "follow", workspace }));
+            resolve({ access, moved: null, closed: link.closed, listed });
+          },
+          onMoved: (moved) => resolve({ access: null, moved, closed: link.closed, listed }),
+        });
+      }, (e: unknown) => resolve({ access: null, moved: null, closed: Promise.resolve(String(e)), listed: [] }));
+    });
+    try {
+      // Paired with the host by its link, as above, and the workspace moved there.
+      const pairing = spawn(...cmd(["host", "pair", "--json"]), { env: { ...process.env, ...own } });
+      running.push(pairing);
+      const offered = parsePairLink((JSON.parse(await lines(pairing.stdout!)()) as { data: { offer: { link: string } } }).data.offer.link)!;
+      where = { addrs: offered.addrs, relay: offered.relay };
+      hostCert = (await enterPairing({
+        me: { device: keys.deviceId, name: "laptop", kind: "app", certificate: keys.certificate, person: keys.person, addrs: laptop.ready.addrs, relay: laptop.ready.relay },
+        code: offered.code, offering: offered.device, ask: (hello) => laptop.pair(offered.device, where, hello),
+      })).with.certificate;
+      await until(() => status(own)?.person === keys.personId || null, "the host to be the laptop's person");
+      laptop.admit(lists.admitted());
+      const notice = await hosting.moveTo(repo, offered.device);
+      const atHost = await until(() => enter(guest, offered.device, offered.addrs).then((r) => (r.access ? r : null)), "the guest to be let in at the host");
+      expect(atHost.access).toBe("edit");
+
+      // Someone with a link asks to join while none of the owner's devices is connected there: no,
+      // at once, with nobody to ask.
+      const ask = (secret: string) => newcomer.pair(offered.device, where!, { v: 1, workspace, secret, certificate: newKeys.certificate, profile: { name: "Noor", color: "#22aa66" } });
+      expect(await ask(early)).toEqual({ ok: false, error: "declined" });
+
+      // The laptop opens it from the host as its owner, keeping its list in step, and sees who is in it.
+      const opened = await laptop.dial(offered.device, where);
+      expect(await new Promise<string>((resolve) => {
+        replicate(new WorkspaceStore({ dir: path.join(laptopDir, "shared") }), url, streamOf(opened, "sync"), {
+          workspace, changes: () => () => {},
+          onWelcome: (access) => { followList(lists, workspace, streamOf(opened, "list")); resolve(access); },
+        });
+      })).toBe("owner");
+      const client = new WorkspaceClient(peerTransport(streamOf(opened, "api")));
+      expect((await client.call("people.list", url)).map((p) => [p.person, p.role, p.present])).toEqual([[guestKeys.personId, "edit", true]]);
+
+      // A link it makes there names the host, the workspace and its key.
+      const link = parseJoinLink(await client.call("people.invite", url, "view", 600_000, false))!;
+      expect(link).toMatchObject({ host: offered.device, workspace, names: { workspace: "team" }, hosting: { key: idOf(workspaceSeed(keys.person, workspace)) } });
+
+      // Someone asks to join with it: the laptop is asked, and lets them in.
+      const asked = new Promise<[string, JoinQuestion]>((resolve) => client.on("people.asked", (about, question) => resolve([about, question])));
+      const settled = new Promise<[string, number]>((resolve) => client.on("people.answered", (about, req) => resolve([about, req])));
+      const joining = ask(link.secret);
+      const [about, question] = await asked;
+      expect(about).toBe(url);
+      expect(question).toMatchObject({ workspace: "team", profile: { name: "Noor", color: "#22aa66" }, role: "view" });
+      expect(await client.call("people.answer", url, question.req, true)).toEqual({ answered: true });
+      expect(await joining).toEqual({ ok: true, role: "view", workspace });
+      expect(await settled).toEqual([url, question.req]);
+      const joined = await until(() => enter(newcomer, offered.device, offered.addrs).then((r) => (r.access ? r : null)), "the newcomer to be let in");
+      expect(joined.access).toBe("view");
+
+      // A new role for the guest, and the newcomer taken off: each one's connection closes.
+      await client.call("people.role", url, guestKeys.personId, "terminals");
+      expect(await atHost.closed).toContain("role changed");
+      await client.call("people.remove", url, newKeys.personId);
+      expect(await joined.closed).toContain("removed");
+      // Nor are they let in again: the host's network turns them away at the door.
+      expect(await (await enter(newcomer, offered.device, offered.addrs)).closed).toContain("not admitted");
+
+      // The laptop's list is the host's, the workspace's folder on the laptop its own; only the
+      // owner's devices are sent it, the guest asking too.
+      await until(() => lists.people(workspace).map((p) => `${p.person} ${p.role}`).join() === `${guestKeys.personId} terminals`, "the laptop's list to be the host's");
+      expect(lists.repoOf(workspace)).toBe(repo);
+      expect(atHost.listed).toEqual([]);
+      // Whoever comes back to the laptop for it is told where it is still.
+      expect((await enter(guest, keys.deviceId, laptop.ready.addrs)).moved).toEqual(notice);
+      opened.close();
+    } finally {
+      laptop.stop();
+      guest.stop();
+      newcomer.stop();
       hive(["host", "stop"], { env: own });
       hive(["daemon", "stop"], { env: own });
     }

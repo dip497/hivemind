@@ -151,3 +151,35 @@ test("what cannot be granted is refused", () => {
   expect(() => a.grant(ws, priya.id, "view", Date.now() - 1)).toThrow(TypeError);
   expect(a.people(ws)).toEqual([]);
 });
+
+test("one of the owner's devices keeps the list as its host has it, where the workspace is on it staying its own; each change is heard", () => {
+  const ws = newWorkspaceId();
+  // The device a workspace was moved from keeps its list, with its folder; the host took the list.
+  const laptop = new AccessLists({ dir: path.join(dir, "laptop"), owner });
+  laptop.invite(ws, "/home/me/api", "view", 60_000);
+  const host = new AccessLists({ dir: path.join(dir, "host"), owner });
+  host.adoptList(ws, laptop.exportList(ws), "machine://laptop/home/me/api");
+  host.setHosting(ws, "ab".repeat(32), 2);
+  // While it is hosted there, someone is let in and someone else taken off.
+  const priya = someone();
+  const sam = someone();
+  host.grant(ws, sam.id, "edit");
+  laptop.follow(ws, host.exportList(ws));
+  host.grant(ws, priya.id, "terminals");
+  host.revoke(ws, sam.id);
+  const heard: string[] = [];
+  laptop.subscribe((w) => heard.push(w));
+  laptop.follow(ws, host.exportList(ws));
+  expect(laptop.people(ws).map((p) => [p.person, p.role])).toEqual([[priya.id, "terminals"]]);
+  expect(laptop.hosting(ws)).toEqual({ host: "ab".repeat(32), seq: 2, record: null });
+  expect(laptop.repoOf(ws)).toBe("/home/me/api");
+  expect(heard).toEqual([ws]);
+  // Another of the owner's devices, which never had the list, keeps it too, with no folder for it.
+  const other = new AccessLists({ dir: path.join(dir, "other"), owner });
+  other.follow(ws, host.exportList(ws));
+  expect(other.people(ws).map((p) => p.person)).toEqual([priya.id]);
+  expect(other.repoOf(ws)).toBeNull();
+  // A change made here is heard as well.
+  laptop.grant(ws, sam.id, "view");
+  expect(heard).toEqual([ws, ws]);
+});

@@ -103,6 +103,7 @@ export interface AccessListsOptions {
 /** The access lists of the workspaces this person owns. */
 export class AccessLists {
   private readonly docs = new Map<string, LoroDoc>();
+  private readonly listeners = new Set<(workspace: string) => void>();
   private ownerId: string;
 
   constructor(private readonly opts: AccessListsOptions) {
@@ -291,6 +292,27 @@ export class AccessLists {
     });
   }
 
+  /** Keep the list of `workspace` as the device hosting it has it (M3, design §5.8): one of the
+   *  owner's devices keeps it in step, so whichever of them takes the workspace over carries it as
+   *  it was. Where the workspace is on this device (its repo here) stays this device's own. */
+  follow(workspace: string, list: Uint8Array): void {
+    if (!isHex(workspace, 16)) throw new TypeError("access: a workspace is named by its 16-byte id in hex");
+    const repo = this.repoOf(workspace);
+    this.edit(workspace, (doc) => {
+      doc.import(list);
+      const meta = doc.getMap("meta");
+      if (meta.get("repo") === repo) return;
+      if (repo === null) meta.delete("repo");
+      else meta.set("repo", repo);
+    });
+  }
+
+  /** Hear each change to a list, made here or followed: by the workspace it is of. */
+  subscribe(listener: (workspace: string) => void): () => void {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  }
+
   /** The workspaces with a list here. */
   workspaces(): string[] {
     return storedKeys(this.opts.dir).filter((k) => isHex(k, 16));
@@ -333,5 +355,6 @@ export class AccessLists {
     change(doc);
     doc.commit();
     writeDoc(this.opts.dir, workspace, doc);
+    for (const listener of this.listeners) listener(workspace);
   }
 }

@@ -1,4 +1,4 @@
-# Workspace API (0.4)
+# Workspace API (0.5)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -137,6 +137,19 @@ log.
 | `plan.list` | `repo` | the plans the workspace's agents wait on a person for: `[{requestId, tileId, plan, cwd}]`; each after it is a `plan.review` event | |
 | `plan.decide` | `tile`, `requestId`, `"allow"` or `"deny"`, `feedback`? | `{answered, by}`: the first answer is the one the agent gets; a later one, or one about another tile's plan, answers nothing (`by`: who answered first) | target the agent's tile, detail the answer |
 
+| `people.list` | `repo` | who is on the workspace's access list: `[{person, name, color, role, grantedAt, expires, devices, present}]`, `present` whether they are connected now; `[]` for a workspace that does not say whose it is yet | read |
+| `people.role` | `repo`, `person`, `role` | `null`: their connections close, so they work under the new role at once; *Can drive agents* is given only to someone connected now | target `repo`, detail the person and the role |
+| `people.remove` | `repo`, `person` | `null`: off the list, their connections closed, and the link they came in by lets nobody in again | target `repo`, detail the person |
+| `people.invite` | `repo`, `role` (`view`, `edit` or `terminals`), `expiresIn` (ms), `reusable`? | a join link, `hivemind://join/<host's device id>#…`: where the host is, the workspace's name and its owner's, its key and the network's lookup server, and on a network whose relays admit only whom they are told to a voucher for the guest's device; used once unless `reusable` | target `repo`, detail the role |
+| `people.answer` | `repo`, `req`, `allow` | `{answered}`: whether this answer to the question `req` (`people.asked`) counted, the first one does | target `repo`, detail `allow` or `deny` |
+
+Only the workspace's owner asks the `people.*` methods: at a window of the host's own, or from
+another of their devices while the workspace is hosted on one they moved it to (a peer whose role
+is the owner's). Someone asking to join with a link (`spec/pairing.md`'s `hive/pair/1`, with the
+link's secret) is asked about at each of the owner's clients connected then (`people.asked`): the
+first answer counts, the others are told it came (`people.answered`), and with none of them
+connected the host declines at once. Nobody answering within 170 s is a no.
+
 | `store.open` | `repo` | `{core, views: {[viewId]: layout}, objects}`: a workspace's layouts, for a client that holds them | read |
 | `store.core` | `repo` | the core layout (frames, tiles, their names), or null | read |
 | `store.view` | `repo`, `viewId` | `{v, data}`, or null | read |
@@ -196,6 +209,8 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `file.changed` | `repo`, `{paths}` | to each client watching the repo (the app's window watches the one it opens), at most one every 300 ms |
 | `store.changed` | `{repo, part}` (`core`, `board` or `view:<id>`) | to every client but the one whose write it was, on each change to a workspace's layouts |
 | `presence.changed` | `repo`, `[{id, person, name, color, cursor, over, selection}]` | to every client, as someone in the workspace moves, selects, arrives or leaves (at once after a quiet spell, and at most every 50 ms): everyone there now, one per connection (`id`), `person` their key |
+| `people.asked` | `repo`, `{req, workspace, profile, role}` | to the owner's clients, as someone asks to join with a link: `workspace` the workspace's name, `profile` `{name, color}` as they gave it, `role` the link's |
+| `people.answered` | `repo`, `req` | to the owner's clients, as the question `req` is answered, or nobody answered it in time |
 
 ## A client that holds the layouts
 
@@ -222,5 +237,5 @@ TypeScript: `StoreReplica` (`packages/workspace-api/src/store-replica.ts`).
 TypeScript: `packages/workspace-api` (the methods' types, a client over any transport, and the
 server that answers them, and a replica of the store for a client over a stream); the host's
 domains in `packages/host` (git and worktrees, files, issues, reviews, agents, terminals, plans,
-presence, the store), which the app's main process, the dev-bridge and `hive host` serve, each over its
-own way of running a session and its own store.
+presence, people, the store), which the app's main process, the dev-bridge and `hive host` serve,
+each over its own way of running a session and its own store.

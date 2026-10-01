@@ -9,6 +9,8 @@ import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnaps
 import type { Links, PipeChange, SpawnChange, StatusChange, TileOpened } from "./agents.js";
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
 import type { Answerer, PlanDecided, PlanReview } from "./plans.js";
+import type { JoinQuestion, PersonHere } from "./people.js";
+import type { LinkRole, Role } from "@hivemind/workspace-host/access";
 import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
@@ -75,6 +77,11 @@ export interface WorkspaceMethods {
   /** Answer the plan `requestId` the agent in `tile` handed off: the first answer is the one the
    *  agent gets. `answered` false: someone answered first (`by`), or it is no longer waited on. */
   "plan.decide": (tile: string, requestId: string, decision: "allow" | "deny", feedback?: string) => { answered: boolean; by: Answerer | null };
+  "people.list": (repo: string) => PersonHere[];
+  "people.role": (repo: string, person: string, role: Role) => void;
+  "people.remove": (repo: string, person: string) => void;
+  "people.invite": (repo: string, role: LinkRole, expiresIn: number, reusable?: boolean) => string;
+  "people.answer": (repo: string, req: number, allow: boolean) => { answered: boolean };
   /** A workspace's layouts, for a client that holds them: every read after it answers from what
    *  it holds, and each `store.changed` says what to read again. */
   "store.open": (repo: string) => StoreSnapshot;
@@ -153,6 +160,10 @@ export interface WorkspaceEvents {
   "store.changed": (change: Pick<WorkspaceChange, "repo" | "part">) => void;
   /** Who is in the workspace `repo` now, each as they last said (`presence.set`). */
   "presence.changed": (repo: string, people: Participant[]) => void;
+  /** Someone asks to join `repo`: to its owner's clients, the first answer counting (M3). */
+  "people.asked": (repo: string, question: JoinQuestion) => void;
+  /** The question `req` about `repo` was answered, or nobody answered it in time. */
+  "people.answered": (repo: string, req: number) => void;
 }
 
 export type Method = keyof WorkspaceMethods;

@@ -9,8 +9,8 @@
  * ctl`, `control/plane.ts`), as the app's are: the daemon passes the machine's control-plane
  * socket on to it, and the host starts the sessions of the tiles it spawns itself.
  *
- * Nobody sits at it, so it asks nobody anything: someone asking to join is declined (the owner
- * invites from one of their devices), an agent's approvals go to the agent that supervises it or
+ * Nobody sits at it: someone asking to join is asked about at the owner's devices connected to it,
+ * and declined when none is; an agent's approvals go to the agent that supervises it or
  * fall back to the agent's own prompt, answered by whoever drives it, and a verb that needs a
  * window (focus, a plan's review, a view) is refused. It becomes someone's by pairing with one of
  * their devices (spec/pairing.md): it takes their person, after which it is started again as them,
@@ -33,6 +33,7 @@ import { AccessLists } from "@hivemind/workspace-host/access";
 import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
 import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, PairingOffer, parseCode, parsePairLink, type Pairing, type PairingDevice } from "@hivemind/workspace-host/pairing";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
+import { Sharing } from "@hivemind/workspace-host/sharing";
 import { HiveNet, type Link, type Ready } from "@hivemind/workspace-host/hive-net";
 import { HostRecords, type Hosted } from "@hivemind/workspace-host/host-records";
 import { idOf, workspaceSeed } from "@hivemind/workspace-host/identity";
@@ -50,6 +51,7 @@ import { deviceSessions, onDevices } from "./device-sessions.js";
 import { Hosting } from "./hosting.js";
 import { workspaceDomains } from "./domains.js";
 import { PeerLinks } from "./peer-links.js";
+import { People } from "./people.js";
 import { Plans } from "./plans.js";
 import { presence } from "./presence.js";
 import { makeSpawnPacer } from "./spawn-pacer.js";
@@ -196,6 +198,24 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     backend,
   });
   const plans = new Plans({ publish: (event, ...params) => api.publish(event, ...params), who, repoOf: (bare) => store.workspaceOf(bare) });
+  // Who is in its workspaces: their owner manages them, and is asked about someone asking to join,
+  // from any of their devices connected here.
+  const peopleHere = new People({
+    lists: () => lists,
+    workspaceOf: (repo) => store.ownership(repo)?.workspaceId ?? null,
+    connected: (workspace) => peers.connectedTo(workspace),
+    disconnect: (workspace, person, reason) => peers.disconnect(workspace, person, reason),
+    admit: () => net?.admit(lists.admitted()),
+    network: async () => {
+      if (!net || !profiles) throw new Error("this host is not on the network yet: is hive-net installed beside hive?");
+      return { ready: net.ready, profiles };
+    },
+    owner: async () => catalog.settings().profile.name || deviceName(),
+    keyOf: (workspace) => idOf(workspaceSeed(keys.person, workspace)),
+    publishTo: (to, event, ...params) => api.publishTo(to, event, ...params),
+    ownerHere: (workspace) => peers.connectedTo(workspace).has(keys.personId),
+  });
+  const sharing = new Sharing(lists, (request) => peopleHere.ask(request), (devices) => net?.admit(devices));
   const api: WorkspaceServer = new WorkspaceServer([
     ...workspaceDomains,
     layouts.domain,
@@ -203,6 +223,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     terminals.domain,
     plans.domain,
     presence(() => api, () => keys.personId),
+    peopleHere.domain,
   ], intents, o.onWarn);
 
   // The control plane (`hive ctl`): the verbs that need no window, for the agents here and for
@@ -312,8 +333,9 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
         socket: socketIn(o.dir, "hive-net.sock", "net"),
         profile: profiles.arg(),
         onIncoming: (link) => peers.serve(link),
-        // A device of a person entering the code offered here; nobody here can let anyone else in.
-        onPairRequest: async (peer, hello) => ((hello as { pair?: unknown } | null)?.pair && offer ? offer.answer(peer, hello) : { ok: false, error: "declined" }),
+        // A device of a person entering the code offered here, or someone asking to join, whom the
+        // owner is asked about at their devices connected here.
+        onPairRequest: async (peer, hello) => ((hello as { pair?: unknown } | null)?.pair ? (offer ? offer.answer(peer, hello) : { ok: false, error: "declined" }) : sharing.answer(peer, hello)),
         onExit: (why) => {
           net = null;
           records?.stop();

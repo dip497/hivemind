@@ -106,7 +106,7 @@ export function servePeer(server: WorkspaceServer, channel: TextChannel, peer: P
   };
   const outbound = (event: EventMessage): EventMessage | null => {
     if (event.event === "store.changed") return null; // the document reaches peers by its own sync
-    if (event.event === "file.changed" || event.event === "presence.changed") {
+    if (event.event === "file.changed" || event.event === "presence.changed" || event.event === "people.asked" || event.event === "people.answered") {
       return event.params[0] === peer.repo ? { event: event.event, params: [url, ...event.params.slice(1)] } : null;
     }
     if (event.event === "terminal.activity") {

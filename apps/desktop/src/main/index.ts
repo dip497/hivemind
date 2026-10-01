@@ -74,7 +74,7 @@ import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatc
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
-import { dialDevice, installNetworkIpc, movedAway, openJoined, personName, stopNetwork } from "./network.js";
+import { dialDevice, installNetworkIpc, movedAway, openJoined, peopleHere, personName, stopNetwork } from "./network.js";
 import { elsewhere, mayWriteShared } from "./shared-workspaces.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
@@ -1172,6 +1172,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   terminals.domain,
   plans.domain,
   presence(() => workspaceServer, () => machineIdentity().personId),
+  peopleHere.domain,
 ], hostIntents(), (m) => console.warn(`[workspace] ${m}`));
 const workspaceIpc = serveWorkspaceApi(workspaceServer, elsewhere);
 

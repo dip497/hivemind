@@ -2,7 +2,7 @@ import * as SettingsDialog from "@radix-ui/react-dialog";
 import { ThemePanel } from "./ThemePanel";
 import { RecentProjects } from "./RecentProjects";
 import { ROLE_LABELS } from "./multiplayer/people";
-import { PeopleHere } from "./multiplayer/presence";
+import { WorkspaceActions } from "./multiplayer/workspace-actions";
 import { SharedBanner } from "./multiplayer/shared-banner";
 import { ShownWorkspaceProvider } from "./multiplayer/shown";
 import { setWorkspaceOccluded } from "./workspace-occlusion";
@@ -10,7 +10,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { UPDATE_START, UPDATE_STEPS, updateProgress, type UpdateProgress } from "../../shared/update-progress";
-import { Bell, ChevronRight, ExternalLink, Loader2, Plus, Settings, Share2, X, Palette, PanelsTopLeft, Puzzle, Bot, Keyboard, Info } from "lucide-react";
+import { Bell, ChevronRight, ExternalLink, Loader2, Plus, Settings, X, Palette, PanelsTopLeft, Puzzle, Bot, Keyboard, Info } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
@@ -206,18 +206,34 @@ export function App() {
   const [recentOpen, setRecentOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
-  // Someone asks to join a workspace shared from here: the person here lets them in, or not.
-  useEffect(() => window.hive.onJoinRequest((r) => {
-    const who = r.profile.name || "Someone";
-    const id = toast(`${who} wants to join ${r.workspace} as ${ROLE_LABELS[r.role] ?? r.role}`, {
-      duration: Infinity,
-      action: { label: "Allow", onClick: () => window.hive.answerJoin(r.req, true) },
-      cancel: { label: "Deny", onClick: () => window.hive.answerJoin(r.req, false) },
-      onDismiss: () => window.hive.answerJoin(r.req, false),
-      className: "hm-join-request",
+  // Someone asks to join a workspace of the person's, hosted here or on another of their devices:
+  // they let them in, or not. Answered at another window or device, the question goes.
+  const joinAsked = useRef(new Map<string, string | number>());
+  useEffect(() => {
+    const offAsked = window.hive.onJoinRequest((r) => {
+      const key = `${r.repo}#${r.req}`;
+      const answer = (allow: boolean) => {
+        if (!joinAsked.current.delete(key)) return;
+        window.hive.answerJoin(r.repo, r.req, allow);
+      };
+      const who = r.profile.name || "Someone";
+      joinAsked.current.set(key, toast(`${who} wants to join ${r.workspace} as ${ROLE_LABELS[r.role] ?? r.role}`, {
+        duration: Infinity,
+        action: { label: "Allow", onClick: () => answer(true) },
+        cancel: { label: "Deny", onClick: () => answer(false) },
+        onDismiss: () => answer(false),
+        className: "hm-join-request",
+      }));
     });
-    return id;
-  }), []);
+    const offAnswered = window.hive.onJoinAnswered((repo, req) => {
+      const key = `${repo}#${req}`;
+      const id = joinAsked.current.get(key);
+      if (id === undefined) return;
+      joinAsked.current.delete(key);
+      toast.dismiss(id);
+    });
+    return () => { offAsked(); offAnswered(); };
+  }, []);
   useEffect(() => {
     const onFolder = () => void pickFolder();
     const onRecent = () => setRecentOpen(true);
@@ -423,21 +439,7 @@ export function App() {
           />
           <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
             <SharedBanner onMoved={openMoved} />
-            {repoPath && <PeopleHere repo={repoPath} onManage={repoPath.startsWith("hive://") ? undefined : () => setPeopleOpen(true)} />}
-            {/* A workspace joined from elsewhere is its owner's to share. */}
-            {repoPath && !repoPath.startsWith("hive://") && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setShareOpen(true)}
-                className="pointer-events-auto"
-                title="Invite people to this workspace"
-                data-share
-              >
-                <Share2 aria-hidden />
-                <span>Share</span>
-              </Button>
-            )}
+            <WorkspaceActions onShare={() => setShareOpen(true)} onPeople={() => setPeopleOpen(true)} />
             {root && (
               <Button
                 variant="secondary"
@@ -479,7 +481,7 @@ export function App() {
         />
         <Suspense fallback={null}>
           {repoPath && shareOpen && <ShareDialog repo={repoPath} open onClose={() => setShareOpen(false)} onPeople={() => { setShareOpen(false); setPeopleOpen(true); }} onMoved={(uri) => { setShareOpen(false); openMoved(uri); }} />}
-          {repoPath && peopleOpen && !repoPath.startsWith("hive://") && <PeopleDialog repo={repoPath} open onClose={() => setPeopleOpen(false)} />}
+          {repoPath && peopleOpen && <PeopleDialog repo={repoPath} open onClose={() => setPeopleOpen(false)} />}
         </Suspense>
         <NewIssueModal
           root={root}

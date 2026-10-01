@@ -9,6 +9,7 @@ import type { PairedDeviceSummary } from "../../../shared/ipc";
 import type { NetworkProfile } from "@hivemind/workspace-host/network-profile";
 import { ReachChooser } from "./reach-chooser";
 import { ROLE_LABELS } from "./people";
+import { useShown } from "./shown";
 import { Check, Copy, Share2, Users } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { Button } from "../components/ui/button";
@@ -27,8 +28,11 @@ export function ShareDialog({ repo, open, onClose, onPeople, onMoved }: { repo: 
   const [copied, setCopied] = useState(false);
   const [net, setNet] = useState<NetworkProfile | null>(null);
   const [reaching, setReaching] = useState(false);
-  useEffect(() => { if (open) void window.hive.network().then(setNet, () => setNet(null)); }, [open]);
-  const name = repo.split(/[\\/]/).filter(Boolean).pop() ?? repo;
+  // A workspace hosted on another of the person's devices: that device makes the link, on its network.
+  const elsewhere = repo.startsWith("hive://");
+  useEffect(() => { if (open && !elsewhere) void window.hive.network().then(setNet, () => setNet(null)); }, [open, elsewhere]);
+  const { shared } = useShown();
+  const name = elsewhere ? shared?.names.workspace ?? "this workspace" : repo.split(/[\\/]/).filter(Boolean).pop() ?? repo;
 
   const create = async () => {
     setBusy(true);
@@ -51,9 +55,9 @@ export function ShareDialog({ repo, open, onClose, onPeople, onMoved }: { repo: 
       <DialogContent className="sm:max-w-[460px]" data-share-dialog>
         <DialogTitle className="flex items-center"><Share2 size={15} className="mr-2" /> Invite people to {name}</DialogTitle>
         <DialogDescription>
-          {net && net.builtin !== "local" ? `Works for people on this network, and through ${net.profile.name}'s servers.` : "Works for people on this network."} You are asked before anyone joins.
+          {elsewhere ? "Works for people who can reach the device it is hosted on." : net && net.builtin !== "local" ? `Works for people on this network, and through ${net.profile.name}'s servers.` : "Works for people on this network."} You are asked before anyone joins.
         </DialogDescription>
-        {net?.builtin === "local" && (reaching
+        {!elsewhere && net?.builtin === "local" && (reaching
           ? <ReachChooser current={net} onChosen={(n) => { setNet(n); setReaching(false); setLink(null); }} onCancel={() => { setReaching(false); setError("Stays on this network: the link works only here."); }} />
           : <Button size="sm" variant="ghost" className="self-start" onClick={() => setReaching(true)} data-invite-elsewhere>Invite someone elsewhere…</Button>)}
         <div className="settings-row">
@@ -84,7 +88,7 @@ export function ShareDialog({ repo, open, onClose, onPeople, onMoved }: { repo: 
         )}
         {error && <p className="text-[12px] text-[var(--color-err)]" role="alert">{error}</p>}
         <Button variant="ghost" size="sm" className="self-start" onClick={onPeople} data-share-people><Users /> People with access…</Button>
-        {!repo.startsWith("hive://") && <Hosting repo={repo} onMoved={onMoved} />}
+        {!elsewhere && <Hosting repo={repo} onMoved={onMoved} />}
       </DialogContent>
     </Dialog>
   );

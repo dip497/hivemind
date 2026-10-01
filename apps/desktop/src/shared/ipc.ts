@@ -282,9 +282,13 @@ export interface HiveIpc {
   joinPreview(text: string): Promise<{ workspace: string; host: string } | null>;
   /** Ask the host a link names to let this person in: the role they were given, or why not. */
   join(text: string): Promise<{ ok: true; role: string; workspace: string } | { ok: false; error: string; message?: string }>;
-  /** Someone asks to join a workspace shared from here; answer with `answerJoin`. */
-  onJoinRequest(cb: (r: { req: number; profile: { name: string; color: string }; role: string; workspace: string }) => void): () => void;
-  answerJoin(req: number, allow: boolean): void;
+  /** Someone asks to join a workspace of this person's (`repo`: as this window names it): answer
+   *  with `answerJoin`. */
+  onJoinRequest(cb: (r: { repo: string; req: number; profile: { name: string; color: string }; role: string; workspace: string }) => void): () => void;
+  /** A question about someone asking to join was answered, here or at another of the person's
+   *  devices, or nobody answered it in time. */
+  onJoinAnswered(cb: (repo: string, req: number) => void): () => void;
+  answerJoin(repo: string, req: number, allow: boolean): void;
   /** Who is on the workspace `repo`'s access list, under the names they joined with, and whether
    *  each is connected now. */
   people(repo: string): Promise<SharedPerson[]>;

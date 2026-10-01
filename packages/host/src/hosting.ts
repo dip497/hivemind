@@ -29,7 +29,7 @@ import type { FrameRecord } from "@hivemind/workspace-doc/shapes";
 
 /** What the `hosting` stream carries. */
 export type HostingMessage =
-  | { t: "take"; workspace: string; seq: number; root: string; doc: string; list: string }
+  | { t: "take"; workspace: string; seq: number; record: string; root: string; doc: string; list: string }
   | { t: "catch-up"; workspace: string; doc: string }
   | { t: "move"; workspace: string };
 export type HostingAnswer = { ok: true } | { ok: false; error: string };
@@ -96,7 +96,7 @@ export class Hosting {
       // Its folders on this device stay this device's: their terminals keep running here.
       this.nameFolders(repo, (folder) => onDevice(self, folder));
       const sent = store.version(repo);
-      const answer = await ask(link, { t: "take", workspace, seq, root: repo, doc: b64(store.exportSince(repo, null)), list: b64(lists.exportList(workspace)) })
+      const answer = await ask(link, { t: "take", workspace, seq, record, root: repo, doc: b64(store.exportSince(repo, null)), list: b64(lists.exportList(workspace)) })
         .catch((e: unknown): HostingAnswer => ({ ok: false, error: e instanceof Error ? e.message : String(e) }));
       if (!answer.ok) {
         // Not taken: it stays here, its folders plainly this device's again.
@@ -198,7 +198,7 @@ export class Hosting {
     const { store, lists } = this.o;
     const self = this.o.self();
     const at = m?.t === "take" && typeof m.root === "string" ? parseDeviceUri(m.root) : null;
-    if (m?.t !== "take" || !isHex(m.workspace, 16) || !Number.isSafeInteger(m.seq) || typeof m.root !== "string" || !(m.root.startsWith("/") || at) || typeof m.doc !== "string" || typeof m.list !== "string") {
+    if (m?.t !== "take" || !isHex(m.workspace, 16) || !Number.isSafeInteger(m.seq) || typeof m.record !== "string" || typeof m.root !== "string" || !(m.root.startsWith("/") || at) || typeof m.doc !== "string" || typeof m.list !== "string") {
       return { ok: false, error: "malformed" };
     }
     const known = lists.hosting(m.workspace);
@@ -211,7 +211,9 @@ export class Hosting {
     store.adopt(repo, doc, { writer: `host:${peer}` });
     this.nameFolders(repo, (folder) => offDevice(self, folder));
     lists.adoptList(m.workspace, fromB64(m.list), repo);
-    lists.setHosting(m.workspace, self, m.seq!);
+    // With the record of the move, as the device it came from keeps it: the list is the same on
+    // each of the owner's devices that keeps it in step with this one (`follow`).
+    lists.setHosting(m.workspace, self, m.seq!, m.record);
     this.o.took(m.workspace, repo);
     return { ok: true };
   }

@@ -11,8 +11,9 @@
  * person leaves, or the host removes them; what is kept then is the last copy, which may no
  * longer be written.
  */
-import type { Access } from "@hivemind/workspace-host/access";
+import type { Access, AccessLists } from "@hivemind/workspace-host/access";
 import { mayEdit, replicate, type Moved } from "@hivemind/workspace-host/doc-sync";
+import { followList } from "@hivemind/workspace-host/list-sync";
 import type { Link } from "@hivemind/workspace-host/hive-net";
 import { peerTransport, workspaceUrl } from "@hivemind/workspace-api/peers";
 import type { ClientTransport } from "@hivemind/workspace-api/client";
@@ -41,6 +42,9 @@ export interface Reach {
   /** It is hosted elsewhere now: keep where, so the next dial goes there. Whether it is followed
    *  (a notice that does not hold up is not). */
   moved?(notice: Moved): Promise<boolean>;
+  /** Where the person keeps their workspaces' lists: welcomed as the owner's, the list is kept in
+   *  step with the host's (M3), which sends it to the owner's devices alone. */
+  lists?: Pick<AccessLists, "follow">;
 }
 
 interface Open {
@@ -93,10 +97,17 @@ export async function openShared(workspace: string, access: Access, reach: Reach
     entry.api = peerTransport(streamOf(link, "api"));
     entry.api.events(reach.publish);
     let following: Promise<boolean> = Promise.resolve(false);
+    let stopList = (): void => {};
     const stop = replicate(sharedStore(), repo, streamOf(link, "sync"), {
       workspace,
       changes: onWorkspaceChange,
-      onWelcome: (given) => { entry.tries = 0; set("connected", given); },
+      onWelcome: (given) => {
+        entry.tries = 0;
+        set("connected", given);
+        // Welcomed as the owner's: the list is kept in step with the host's (M3).
+        stopList();
+        if (given === "owner" && reach.lists) stopList = followList(reach.lists, workspace, streamOf(link, "list"), (why) => console.warn(`[shared] ${workspace}: ${why}`));
+      },
       onMoved: (notice) => {
         following = (reach.moved?.(notice) ?? Promise.resolve(false)).catch((e: unknown) => {
           console.warn(`[shared] ${workspace}: not followed: ${e instanceof Error ? e.message : String(e)}`);
@@ -107,6 +118,7 @@ export async function openShared(workspace: string, access: Access, reach: Reach
     });
     void link.closed.then(async (why) => {
       stop();
+      stopList();
       entry.link = null;
       entry.api = null;
       if (open.get(workspace) !== entry) return;

@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { HiveIpc, HcpCommand, HcpPipeEvent, HcpSpawnEvent, HcpSpawnedEvent, HcpStatusEvent, AppErrorEvent } from "../shared/ipc.js";
 import { WorkspaceClient } from "@hivemind/workspace-api/client";
 import type { Answer, EventMessage } from "@hivemind/workspace-api/protocol";
+import type { Role } from "@hivemind/workspace-host/access";
 
 /** The workspace API (R8): this window's connection to main, which answers its calls on one
  *  channel, takes its notices on another, and sends it events on a third. */
@@ -183,18 +184,15 @@ const api: HiveIpc & {
   setBrowserCdpEnabled: (enabled) => ipcRenderer.invoke("setBrowserCdpEnabled", enabled),
   relaunchApp: () => ipcRenderer.invoke("relaunchApp"),
   identity: () => ipcRenderer.invoke("identity:get"),
-  share: (repo, role, expiresIn, reusable) => ipcRenderer.invoke("net:share", repo, role, expiresIn, reusable),
+  share: (repo, role, expiresIn, reusable) => workspace.call("people.invite", repo, role, expiresIn, reusable),
   joinPreview: (text) => ipcRenderer.invoke("net:join-preview", text),
   join: (text) => ipcRenderer.invoke("net:join", text),
-  onJoinRequest: (cb) => {
-    const h = (_e: Electron.IpcRendererEvent, r: Parameters<typeof cb>[0]) => cb(r);
-    ipcRenderer.on("net:join-request", h);
-    return () => { ipcRenderer.removeListener("net:join-request", h); };
-  },
-  answerJoin: (req, allow) => ipcRenderer.send("net:join-answer", req, allow),
-  people: (repo) => ipcRenderer.invoke("net:people", repo),
-  setRole: (repo, person, role) => ipcRenderer.invoke("net:set-role", repo, person, role),
-  removePerson: (repo, person) => ipcRenderer.invoke("net:remove", repo, person),
+  onJoinRequest: (cb) => workspace.on("people.asked", (repo, question) => cb({ repo, ...question })),
+  onJoinAnswered: (cb) => workspace.on("people.answered", cb),
+  answerJoin: (repo, req, allow) => void workspace.call("people.answer", repo, req, allow).catch(() => { /* the host went: it declines */ }),
+  people: (repo) => workspace.call("people.list", repo),
+  setRole: (repo, person, role) => workspace.call("people.role", repo, person, role as Role),
+  removePerson: (repo, person) => workspace.call("people.remove", repo, person),
   joined: () => ipcRenderer.invoke("net:joined"),
   sharedStatus: (workspace) => ipcRenderer.invoke("net:shared-status", workspace),
   onSharedStatus: (cb) => {

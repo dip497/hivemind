@@ -182,6 +182,13 @@ host is gone, **Host it here** carries on from the board as your computer last s
 network with a lookup server the people in it find it there, and the host, back, hands over what
 changed on it meanwhile.
 
+While the host has it, you manage who is in it from your computer as before: **Share** makes a
+link that brings people to the host, **People** changes roles and takes people off there, and
+someone asking to join is asked about in each of your windows with it open (nobody at one: they
+are told no). Your computer keeps the list as the host has it, so **Host it here** carries it on
+with whoever was let in or taken off meanwhile. A link made there names you as the host's profile
+does (`hive config set profile.name '"Your Name"'` on the host), or by the machine's name.
+
 On the host, `hive ctl` drives its agents as it does the app's. Run on that machine, by you or by
 an agent in one of its terminals, `hive ctl spawn` starts an agent there with no window, in the
 caller's workspace or the one the host serves, and gives it its task: on its command line where

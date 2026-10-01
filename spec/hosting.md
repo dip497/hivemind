@@ -1,4 +1,4 @@
-# Hosting (0.3)
+# Hosting (0.4)
 
 Moving a workspace's hosting from one of its owner's devices to another (§5.7 B, F and §5.8 in
 `docs/design/multiplayer-2026-09-28.md`, M3): the device hosting it (the **old host**) hands the
@@ -30,12 +30,14 @@ connection's `hosting` stream, one JSON message per text frame.
 1. **take**, old → new:
 
    ```json
-   { "t": "take", "workspace": "<the workspace's 16-byte id, hex>", "seq": 2, "root": "<the workspace's folder on the old host>",
+   { "t": "take", "workspace": "<the workspace's 16-byte id, hex>", "seq": 2, "record": "<base64: the host record it signed>",
+     "root": "<the workspace's folder on the old host>",
      "doc": "<base64: the workspace document, a Loro snapshot>", "list": "<base64: its access list, a Loro snapshot>" }
    ```
 
    `seq` counts the moves, as the host record does: the one the old host knows plus one (a
-   workspace never moved is at 1).
+   workspace never moved is at 1). `record` is the host record naming the new host at `seq`, as
+   the notice below carries it.
 
 2. **The answer**, new → old: `{ "ok": true }`, or `{ "ok": false, "error": "<why>" }`. The new host
    refuses a device that is not its person's, a malformed message, a `seq` not above the last one
@@ -46,8 +48,9 @@ connection's `hosting` stream, one JSON message per text frame.
    Taking it, the new host keeps the document as the workspace at
    `machine://<old host's device id>/<root>` (where a tile in no frame of its own runs, and what
    `hive://<workspaceId>` reads as there), and the list as that workspace's; records that it hosts
-   it, at `seq`; lets in whom the list lets in; and says its host record, at `seq`, where there is
-   a lookup server. A `root` that names a device already (`machine://<device id>/<path>`: the
+   it, at `seq`, with `record` (so the list is the same on each of the owner's devices that keeps
+   it in step, below); lets in whom the list lets in; and says its host record, at `seq`, where
+   there is a lookup server. A `root` that names a device already (`machine://<device id>/<path>`: the
    workspace was moved before) is kept as it is, unless it names the new host itself: then the
    workspace is back at its own folder, `path`, merged into what the new host kept of it there,
    and every folder of a frame named by the new host's id is plainly its own again (`/path`).
@@ -123,8 +126,21 @@ is (**moved**); tells the devices connected to it the same, and closes them; nam
 by its id; and hands the new host what it has, **catch-up** with its whole document, which the new
 host merges. It is a copy there from then on.
 
+## The list, kept in step
+
+Who is in a workspace changes on the device hosting it: its owner lets someone in or takes them off
+there, from any of their devices (`workspace-api.md`, `people.*`). Each of the owner's devices
+connected to it keeps the list as the host has it, on the connection's `list` stream, so whichever
+of them takes the workspace over carries it as it was (§5.8):
+
+1. Welcomed as the owner's on `sync`, the device asks: `{ "t": "follow", "workspace": "<id>" }`.
+   The host answers only the owner's devices; anyone else asking is sent nothing.
+2. The host sends the list then, and again each time it changes:
+   `{ "t": "list", "workspace": "<id>", "data": "<base64: the access list, a Loro snapshot>" }`.
+3. The device merges it into its own copy, keeping where the workspace is on it (its folder) as
+   its own.
+
 ## Not yet
 
-The owner's other devices keeping the document and the access list in step (§5.8, Replicas): only
-the device a workspace was moved from has its list, so only it takes the workspace over. A list
-changes only on the device hosting the workspace for now.
+Taking a workspace over on a device with no folder for it (§5.8, Replicas): only the device it was
+moved from, where its folder is, takes it over, with the board as it last saw it there.

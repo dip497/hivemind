@@ -14,9 +14,9 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import type { Duplex } from "node:stream";
 import { HiveNet, type Link } from "@hivemind/workspace-host/hive-net";
-import { AccessLists, LINK_ROLES, ROLES, type LinkRole, type Role } from "@hivemind/workspace-host/access";
-import { Sharing, type JoinRequest, type PairReply } from "@hivemind/workspace-host/sharing";
-import { formatJoinLink, parseJoinLink } from "@hivemind/workspace-host/join-link";
+import { AccessLists } from "@hivemind/workspace-host/access";
+import { Sharing, type PairReply } from "@hivemind/workspace-host/sharing";
+import { parseJoinLink } from "@hivemind/workspace-host/join-link";
 import { JoinedList } from "@hivemind/workspace-host/joined";
 import { NetworkProfiles } from "@hivemind/workspace-host/network-profile";
 import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
@@ -24,7 +24,8 @@ import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, Pairing
 import { heldWorkspaces } from "@hivemind/host/peer-links";
 import { HostRecords, type Hosted } from "@hivemind/workspace-host/host-records";
 import { Hosting } from "@hivemind/host/hosting";
-import { handle, handleEffect, on } from "./app-ipc.js";
+import { People } from "@hivemind/host/people";
+import { handle, handleEffect } from "./app-ipc.js";
 import { displayName, machineIdentity, takePerson } from "./identity.js";
 import { idOf, workspaceSeed, type Seed } from "@hivemind/workspace-host/identity";
 import { getSettings } from "./settings-store.js";
@@ -150,26 +151,10 @@ function joinedList(): JoinedList {
   return (joined ??= new JoinedList(path.join(app.getPath("userData"), "joined.json")));
 }
 
-/** Questions to the person here about someone asking to join, by request. */
-const asking = new Map<number, (allow: boolean) => void>();
-let nextAsk = 1;
-/** How long the person here has to answer before the request is declined. */
-const ANSWER_WITHIN_MS = 170_000;
-
-function askPerson(request: JoinRequest): Promise<boolean> {
-  const win = userWindow();
-  if (!win) return Promise.resolve(false);
-  const req = nextAsk++;
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => { asking.delete(req); resolve(false); }, ANSWER_WITHIN_MS);
-    asking.set(req, (allow) => { clearTimeout(timer); asking.delete(req); resolve(allow); });
-    win.webContents.send("net:join-request", { req, profile: request.profile, role: request.role, workspace: path.basename(request.repo) });
-  });
-}
-
 let sharing: Sharing | null = null;
 function sharingOf(): Sharing {
-  return (sharing ??= new Sharing(accessLists(), askPerson, (devices) => {
+  // The person is asked at this app's windows, or at another of their devices connected to it.
+  return (sharing ??= new Sharing(accessLists(), (request) => peopleHere.ask(request), (devices) => {
     void current?.then((n) => n.admit(devices));
     for (const device of devices) void vouchFor(device);
   }));
@@ -300,6 +285,8 @@ export async function openJoined(workspace: string, publish: (event: EventMessag
       return hn.dial(at.host, at.where);
     },
     publish,
+    // A workspace of the person's hosted on another of their devices: its list, kept in step (M3).
+    lists: accessLists(),
     // The workspace moved to another of its owner's devices (M3): where it is now, as the record
     // its key signed says, is where the next dial goes.
     moved: async (notice) => joinedList().follow(workspace, notice, await network()),
@@ -317,13 +304,6 @@ function joinedStatus(workspace: string): ({ names: { workspace: string; host: s
   if (!joined) return null;
   const live = joined.ended ? null : sharedStatus(workspace);
   return { names: joined.names, state: joined.ended ?? live?.state ?? "offline", access: live?.access ?? joined.role };
-}
-
-/** The workspace id of `repo` here, which this person owns: what the People panel manages. */
-function ownedWorkspace(repo: unknown): string {
-  const own = typeof repo === "string" ? workspaceStore().ownership(repo) : null;
-  if (!own) throw new Error("people: this workspace is not shared from here");
-  return own.workspaceId;
 }
 
 /** A code this app offers for one of the person's hosts to enter (Settings → Devices). */
@@ -359,7 +339,26 @@ export async function dialDevice(device: string): Promise<Link> {
 
 /** Serve this computer's workspaces to whom the access lists let in. `daemon`: this computer's PTY
  *  daemon, where the person's other devices run terminals in frames here (none without one). */
+/** Who is in the workspaces hosted here (`people.*`): the People panel and Share, at a window of
+ *  this app's, or on another of the person's devices while a workspace of theirs is hosted here. */
+export const peopleHere = new People({
+  lists: accessLists,
+  workspaceOf: (repo) => workspaceStore().ownership(repo)?.workspaceId ?? null,
+  connected: (workspace) => peers?.connectedTo(workspace) ?? new Set<string>(),
+  disconnect: (workspace, person, reason) => peers?.disconnect(workspace, person, reason),
+  admit: admitNow,
+  network: async () => ({ ready: (await network()).ready, profiles: networkProfiles() }),
+  owner: () => displayName(getSettings().profile.name),
+  // Until the workspace moves, the record of where it is hosted names the device the link does.
+  keyOf: (workspace) => hostedAs(workspace).key,
+  publishTo: (to, event, ...params) => apiServer?.publishTo(to, event, ...params),
+  ownerHere: (workspace) => !!userWindow() || (peers?.connectedTo(workspace).has(machineIdentity().personId) ?? false),
+});
+/** The workspace API every window and device is answered by, once it is set up. */
+let apiServer: WorkspaceServer | null = null;
+
 export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promise<Duplex>): void {
+  apiServer = server;
   peers = new PeerLinks({ store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), onWarn: (m) => console.warn(`[peers] ${m}`) });
   // The network in use, changed here or by `hive network use`: the daemon starts again on it.
   try {
@@ -380,30 +379,13 @@ export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promis
   if (accessLists().workspaces().some((ws) => accessLists().people(ws).length > 0)) {
     void network().catch((e: unknown) => console.warn(`[network] ${e instanceof Error ? e.message : String(e)}`));
   }
-  // An invite link to the workspace `repo`, for `role`, for `expiresIn` ms, used once unless `reusable`.
-  handleEffect("net:share", (repo: unknown) => ({ target: typeof repo === "string" ? repo : undefined }), async (_e, repo: unknown, role: unknown, expiresIn: unknown, reusable: unknown) => {
-    if (typeof repo !== "string" || !repo) throw new Error("share: which workspace?");
-    if (!LINK_ROLES.includes(role as LinkRole)) throw new Error(`share: a link cannot carry ${String(role)}`);
-    const own = workspaceStore().ownership(repo);
-    if (!own) throw new Error("share: this workspace does not say whose it is yet; change something in it first");
-    const secret = accessLists().invite(own.workspaceId, repo, role as LinkRole, Number(expiresIn), reusable === true);
-    const hn = await network();
-    const host = await displayName(getSettings().profile.name);
-    // On a network whose relays admit only who they are told to, the link carries a voucher for
-    // the guest's device, for as long as the link lasts; on an open one, where to register.
-    const access = (await networkProfiles().active()).profile.access;
-    const admission = !access ? null : {
-      access: access.url,
-      voucher: access.policy === "closed" ? await networkProfiles().voucher({ expiresIn: Number(expiresIn) / 1000, uses: reusable === true ? 100 : 1 }) : null,
-    };
-    // The link carries the workspace's key, which a record of where it is hosted is checked
-    // against, and on a network with a lookup server where to look for that record: the guest
-    // finds its host there wherever it is by then. (The record is said when the daemon starts and
-    // every hour; until the workspace moves, it names the device the link does.)
-    const hosting = { key: hostedAs(own.workspaceId).key, lookup: hn.ready.lookup };
-    return formatJoinLink({ host: hn.ready.id, workspace: own.workspaceId, secret, where: { addrs: hn.ready.addrs, relay: hn.ready.relay }, names: { workspace: path.basename(repo), host }, admission, hosting });
-  });
-
+  // The person's workspaces hosted on another of their devices: their documents and lists are kept
+  // in step while this app is online, whether a window shows them or not (M3, design §5.8), so
+  // the one taken over carries what was done meanwhile and who was let in.
+  for (const j of joinedList().list()) {
+    if (j.role !== "owner" || j.ended) continue;
+    void openJoined(j.workspace, (event) => server.relay(event)).catch((e: unknown) => console.warn(`[network] ${j.workspace.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`));
+  }
   // What a link offers, to show before joining: null when it is not one.
   handle("net:join-preview", (_e, text: unknown) => {
     const link = typeof text === "string" ? parseJoinLink(text) : null;
@@ -434,38 +416,6 @@ export function installNetworkIpc(server: WorkspaceServer, daemon?: () => Promis
       });
     }
     return reply;
-  });
-
-  // The person here answers someone asking to join.
-  on("net:join-answer", (_e, req: unknown, allow: unknown) => asking.get(Number(req))?.(allow === true));
-
-  // Who is on the workspace `repo`'s list, and whether each is connected now.
-  handle("net:people", (_e, repo: unknown) => {
-    const own = typeof repo === "string" ? workspaceStore().ownership(repo) : null;
-    if (!own) return [];
-    const here = peers?.connectedTo(own.workspaceId) ?? new Set<string>();
-    return accessLists().people(own.workspaceId).map((p) => ({ ...p, present: here.has(p.person) }));
-  });
-
-  // Give someone on the list another role. They are reconnected, to work under it at once.
-  // Driving agents runs commands on this machine: it is given only to someone connected now.
-  handleEffect("net:set-role", (repo: unknown, person: unknown, role: unknown) => ({ target: typeof repo === "string" ? repo : undefined, detail: `${String(person).slice(0, 8)}… → ${String(role)}` }), (_e, repo: unknown, person: unknown, role: unknown) => {
-    const ws = ownedWorkspace(repo);
-    if (!ROLES.includes(role as Role)) throw new Error(`people: ${String(role)} is not a role`);
-    const current = accessLists().people(ws).find((p) => p.person === person);
-    if (!current) throw new Error("people: they are not on this workspace's list");
-    if (role === "agents" && !peers?.connectedTo(ws).has(current.person)) throw new Error("people: Can drive agents is given only to someone here now");
-    accessLists().grant(ws, current.person, role as Role, current.expires);
-    peers?.disconnect(ws, current.person, "role changed");
-  });
-
-  // Take someone off the list: their connections close at once, and the link they came in by
-  // lets nobody in again.
-  handleEffect("net:remove", (repo: unknown, person: unknown) => ({ target: typeof repo === "string" ? repo : undefined, detail: String(person).slice(0, 8) }), async (_e, repo: unknown, person: unknown) => {
-    const ws = ownedWorkspace(repo);
-    if (typeof person !== "string" || !accessLists().revoke(ws, person)) throw new Error("people: they are not on this workspace's list");
-    peers?.disconnect(ws, person, "removed");
-    admitNow();
   });
 
   // The workspaces this person joined elsewhere.
