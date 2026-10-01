@@ -13,23 +13,30 @@
 //!                               answer what an agent waits on you for (`needs --json` names the
 //!                               wait): a line typed into its terminal, or its plan approved or
 //!                               sent back; only while it still waits on that, and once
+//!   hive-phone push --listen <ip:port>
+//!                               be told what happens on the devices this phone paired with (an
+//!                               agent begins waiting on you, finishes, fails): they post to this
+//!                               address, the one they reach the phone at, and each notice is
+//!                               printed as it comes, until Ctrl+C
 //!
 //! Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),
 //! `--name <name>` (pair: what the app lists this phone as; default `Phone`), `--json` (pair,
-//! devices, needs, answer: as JSON).
+//! devices, needs, answer, push: as JSON, a notice a line).
 
-use std::{path::PathBuf, process::ExitCode, time::SystemTime};
+use std::{path::PathBuf, process::ExitCode, sync::Arc, time::SystemTime};
 
 use anyhow::{bail, Context, Result};
 use hive_net::net::{self, Reach};
 use hive_phone::{
     identity::Identity,
     needs::{self, Need},
-    pairing, workspace,
+    pairing,
+    push::{self, PushKeys},
+    workspace,
 };
 use serde_json::{json, Value};
 
-const USAGE: &str = "usage: hive-phone id | pair <link> | devices | needs | watch <workspace> <tile> | answer <workspace> <tile> <since> --text <line>|--approve|--changes <what>  [--identity <dir>] [--name <name>] [--json]";
+const USAGE: &str = "usage: hive-phone id | pair <link> | devices | needs | watch <workspace> <tile> | answer <workspace> <tile> <since> --text <line>|--approve|--changes <what> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
 
 #[derive(Default)]
 struct Args {
@@ -43,6 +50,8 @@ struct Args {
     text: Option<String>,
     approve: bool,
     changes: Option<String>,
+    /// `push`'s: where this phone listens for its notices.
+    listen: Option<String>,
 }
 
 fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
@@ -57,6 +66,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
             "--text" => args.text = Some(argv.next().context("--text needs a value")?),
             "--approve" => args.approve = true,
             "--changes" => args.changes = Some(argv.next().context("--changes needs a value")?),
+            "--listen" => args.listen = Some(argv.next().context("--listen needs a value")?),
             flag if flag.starts_with("--") => bail!("{flag} is not an option\n{USAGE}"),
             _ if args.command.is_empty() => args.command = arg,
             _ => args.rest.push(arg),
@@ -246,10 +256,90 @@ async fn run(args: Args) -> Result<()> {
                 println!("not answered: it waits on that no more, or it was answered already");
             }
         }
+        "push" => {
+            let keys = Arc::new(PushKeys::kept_or_made(&identity_dir(&args)?)?);
+            let at = args.listen.as_deref().context("push: --listen <ip:port>")?;
+            let listener = tokio::net::TcpListener::bind(at).await?;
+            let endpoint = format!("http://{}/push", listener.local_addr()?);
+            let subscription = keys.subscription(&endpoint);
+            let devices: Vec<_> = phone.devices().into_iter().map(|d| d.with).collect();
+            if devices.is_empty() {
+                bail!("this phone is paired with nothing yet: `hive-phone pair <link>`");
+            }
+            let net = net::endpoint(phone.key().clone(), &Reach::local(), vec![]).await?;
+            let (mut told, mut away) = (vec![], vec![]);
+            for d in &devices {
+                let given = async {
+                    let at = hive_net::net::addr_of(&d.device, &d.addrs, &d.relay)?;
+                    let connection = net.connect(at, hive_net::ws::ALPN).await?;
+                    push::subscribe(&connection, &subscription).await?;
+                    connection.close(0u32.into(), b"done");
+                    Ok::<_, anyhow::Error>(())
+                };
+                match tokio::time::timeout(std::time::Duration::from_secs(10), given).await {
+                    Ok(Ok(())) => told.push(d.name.clone()),
+                    _ => away.push(d.name.clone()),
+                }
+            }
+            net.close().await;
+            if args.json {
+                println!(
+                    "{}",
+                    json!({ "endpoint": endpoint, "told": told, "away": away })
+                );
+            } else {
+                println!("told at {endpoint}: {}", told.join(", "));
+                for name in &away {
+                    println!("{name} is away: it is not told where to reach this phone");
+                }
+            }
+            notices(listener, keys, args.json).await?;
+        }
         "" => bail!("{USAGE}"),
         other => bail!("{other}: not a command\n{USAGE}"),
     }
     Ok(())
+}
+
+/// Take the notices posted to this phone's endpoint, each decrypted and printed as it comes, until
+/// stopped. One not for this phone, or changed on its way, is refused (400).
+async fn notices(listener: tokio::net::TcpListener, keys: Arc<PushKeys>, json: bool) -> Result<()> {
+    use http_body_util::{BodyExt, Empty};
+    use hyper::{body::Bytes, server::conn::http1, service::service_fn, Response, StatusCode};
+    loop {
+        let (stream, _) = listener.accept().await?;
+        let keys = keys.clone();
+        tokio::spawn(async move {
+            let service = service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
+                let keys = keys.clone();
+                async move {
+                    let body = req.into_body().collect().await?.to_bytes();
+                    let status = match keys
+                        .decrypt(&body)
+                        .ok()
+                        .and_then(|n| serde_json::from_slice::<Value>(&n).ok())
+                    {
+                        Some(notice) => {
+                            if json {
+                                println!("{notice}");
+                            } else {
+                                let s = |k: &str| notice[k].as_str().unwrap_or("").to_string();
+                                println!("{} · {} — {}", s("agent"), s("name"), s("t"));
+                            }
+                            StatusCode::CREATED
+                        }
+                        None => StatusCode::BAD_REQUEST,
+                    };
+                    let mut res = Response::new(Empty::<Bytes>::new());
+                    *res.status_mut() = status;
+                    Ok::<_, hyper::Error>(res)
+                }
+            });
+            let _ = http1::Builder::new()
+                .serve_connection(hyper_util::rt::TokioIo::new(stream), service)
+                .await;
+        });
+    }
 }
 
 #[tokio::main]

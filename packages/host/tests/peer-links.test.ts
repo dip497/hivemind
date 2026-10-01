@@ -1,11 +1,13 @@
 // One of the owner's phones on the links a device serves (peer-links.ts, spec/pairing.md 0.3): let
 // in as the person's device, it is answered which workspaces the device holds and what waits on
-// the person there (spec/needs.md), and may open one workspace to watch its terminals and answer
-// its agents, as the owner's device; it is served nothing else the owner's computers are: no
-// terminals started or typed into, no workspace's board, files or other calls, no hosting. The
-// owner's laptop, on the same links, is served each of them.
+// the person there (spec/needs.md), gives where it is told what happens there (spec/push.md), and
+// may open one workspace to watch its terminals and answer its agents, as the owner's device; it
+// is served nothing else the owner's computers are: no terminals started or typed into, no
+// workspace's board, files or other calls, no hosting. The owner's laptop, on the same links, is
+// served each of them, and is told nothing on a phone's behalf.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
+import { createECDH } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -60,6 +62,8 @@ function computer() {
   /** What was typed into a terminal, and by whom; each agent answered, and by whom. */
   const typed: Array<{ by: Actor; tile: unknown }> = [];
   const answered: Array<{ by: Actor; tile: unknown }> = [];
+  /** Where each device is told what happens here. */
+  const subscribed: Array<{ device: string; sub: unknown }> = [];
   const terminals = {
     answers: {
       "terminal.open": (from: Connection, opts: unknown) => { watched.push({ by: from.actor, opts }); return { pid: 1, joined: true }; },
@@ -80,6 +84,7 @@ function computer() {
       { tileId: "t1", status: { state: "waiting", kind: "permission", since: 1_790_000_000_000, title: "Editing Nav.tsx" } },
       { tileId: "t2", status: { state: "working", since: 1_790_000_000_000 } },
     ],
+    subscribe: (device, sub) => subscribed.push({ device, sub }),
   });
   /** `device` connects: what it hears on each stream, and its end of the link. */
   const connect = (device: string) => {
@@ -92,7 +97,7 @@ function computer() {
     }
     return { heard, send: (stream: string, m: unknown) => deviceEnd.send(stream, JSON.stringify(m)), closed: computerEnd.closed };
   };
-  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, connect };
+  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, subscribed, connect };
 }
 const until = async (done: () => boolean) => { for (let t = 0; t < 5_000 && !done(); t += 20) await wait(20); };
 
@@ -155,4 +160,25 @@ test("a phone opens a workspace to watch its terminals and answer its agents, as
     other.send("api", first);
     assert.equal(await Promise.race([other.closed, wait(2_000).then(() => "open")]), "removed", JSON.stringify(first));
   }
+});
+
+test("a phone gives where it is told what happens here and is answered that it was taken, or that it is no subscription; the owner's laptop is told nothing", async () => {
+  const c = computer();
+  const key = createECDH("prime256v1");
+  key.generateKeys();
+  const sub = { endpoint: "https://push.example/phone", p256dh: key.getPublicKey().toString("base64url"), auth: Buffer.alloc(16, 1).toString("base64url") };
+  const phone = c.connect(c.phone);
+  phone.send("device", { t: "push", ...sub });
+  phone.send("device", { t: "push", ...sub, endpoint: "file:///etc/passwd" });
+  await until(() => phone.heard.get("device")!.length >= 2);
+  assert.deepEqual(phone.heard.get("device")!.map((m) => JSON.parse(m) as unknown), [{ t: "push", ok: true }, { t: "push", ok: false, error: "not a push subscription" }]);
+
+  // The laptop's is not taken: answered in order, it hears only its question's answer.
+  const laptop = c.connect(c.laptop);
+  laptop.send("device", { t: "push", ...sub, endpoint: "https://push.example/laptop" });
+  laptop.send("device", { t: "workspaces" });
+  await until(() => laptop.heard.get("device")!.length >= 1);
+  await wait(100);
+  assert.deepEqual(laptop.heard.get("device")!.map((m) => (JSON.parse(m) as { t: string }).t), ["workspaces"]);
+  assert.deepEqual(c.subscribed, [{ device: c.phone, sub }]);
 });

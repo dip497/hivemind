@@ -1379,6 +1379,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       daemon: PERSIST_PTY ? ptyDaemon.connectDaemon : undefined,
       granted: (device) => terminals.machineChanged(`peer:${device}`),
       statuses: () => control.status.all(),
+      onStatus: (listener) => { control.status.subscribe(listener); },
       plans: () => plans.reviews(),
     });
     installWorkspaceStoreIpc(layouts, workspaceIpc.connect, (change) =>

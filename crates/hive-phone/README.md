@@ -12,6 +12,8 @@ hive-phone needs                      # what waits on you on them, the one waiti
 hive-phone watch <workspace> <tile>   # an agent's terminal, read-only, until it ends (or Ctrl+C)
 hive-phone answer <workspace> <tile> <since> --text 1   # answer what it waits on (or --approve,
                                       # --changes '<what>' for a plan); once, while it still waits
+hive-phone push --listen 192.168.1.31:8080   # be told, at this address, when an agent begins
+                                      # waiting on you, finishes or fails; each notice as it comes
 ```
 
 Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),
@@ -22,6 +24,12 @@ proves it holds the code, and is given a certificate naming it as yours, signed 
 It never holds that key, so a lost phone gives none away; unpair it on the computer. It pairs on
 the local network for now: the link says where the app is.
 
+A phone is told what happens while you are away (`spec/push.md`): it gives each device it paired
+with a Web Push subscription (an endpoint, and a P-256 push key and a secret of its own, kept as
+`push.key` and `push.auth` beside its device key), and they post each notice there encrypted to it
+(RFC 8291), so the push service, or anyone on the network, reads nothing of it. `push --listen` is
+its own endpoint, on an address your computers reach it at; the apps give a push service's.
+
 ```bash
-cargo test --locked   # conformance/pairing.json and needs.json (the phone's side), and what a phone keeps
+cargo test --locked   # conformance/pairing.json, needs.json and push.json (the phone's side), and what a phone keeps
 ```

@@ -3,7 +3,12 @@
  * device holds, as their phone lists it, the one waiting longest first. Electron-free: the
  * device's documents, its agents' statuses and the plans they hand off in, the list out.
  */
+import path from "node:path";
 import type { InputKind } from "@hivemind/agents";
+import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
+import type { WorkspaceStore } from "@hivemind/workspace-host/store";
+import type { PlanReview } from "@hivemind/workspace-api/plans";
+import { toBareId } from "@hivemind/workspace-api/tile-id";
 
 /** What an agent can wait on the person for. One waiting for an `approval` waits on the agent
  *  that supervises it, not on the person. */
@@ -12,9 +17,6 @@ const ON_THE_PERSON: readonly InputKind[] = ["permission", "question", "plan", "
 /** Whether an agent whose status is `status` waits on the person now. */
 export const waitsOnThePerson = (status: { state: string; kind?: InputKind }): boolean =>
   status.state === "waiting" && !!status.kind && ON_THE_PERSON.includes(status.kind);
-import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
-import type { PlanReview } from "@hivemind/workspace-api/plans";
-import { toBareId } from "@hivemind/workspace-api/tile-id";
 
 /** An agent waiting on the person. */
 export interface Need {
@@ -39,6 +41,25 @@ export interface HeldBoard {
   core: CoreLayout | null;
 }
 
+/** The workspaces `store` holds, with their boards. */
+export function heldBoards(store: Pick<WorkspaceStore, "repos" | "ownership" | "getCore">): Array<HeldBoard & { repo: string }> {
+  return store.repos().flatMap((repo) => {
+    const workspace = store.ownership(repo)?.workspaceId;
+    return workspace ? [{ workspace, name: path.basename(repo), repo, core: store.getCore(repo) }] : [];
+  });
+}
+
+/** Which agent of `held` the tile `tileId` is: its workspace, and what it is called (what the
+ *  person named its tile, else what it says it is doing, `title`, else what it was started to do,
+ *  else its tile's label); null for a tile in none of them. */
+export function agentOf(held: HeldBoard[], tileId: string, title?: string): { workspace: string; name: string; tile: string; agent: string } | null {
+  const tile = toBareId(tileId);
+  const board = held.find((h) => h.core?.tiles.some((t) => t.id === tile));
+  const record = board?.core?.tiles.find((t) => t.id === tile);
+  if (!board || !record) return null;
+  return { workspace: board.workspace, name: board.name, tile, agent: board.core?.tileNames?.[tile] || title || record.task || record.label };
+}
+
 /** An agent's status, as much of it as says whether it waits on the person. */
 export interface WaitingStatus {
   tileId: string;
@@ -53,13 +74,10 @@ export function needsOf(held: HeldBoard[], statuses: WaitingStatus[], plans: Pla
   const needs: Need[] = [];
   for (const { tileId, status } of statuses) {
     if (!waitsOnThePerson(status) || !status.kind) continue;
-    const tile = toBareId(tileId);
-    const board = held.find((h) => h.core?.tiles.some((t) => t.id === tile));
-    const record = board?.core?.tiles.find((t) => t.id === tile);
-    if (!board || !record) continue;
-    const agent = board.core?.tileNames?.[tile] || status.title || record.task || record.label;
-    const plan = status.kind === "plan" ? plans.find((p) => toBareId(p.tileId) === tile)?.plan : undefined;
-    needs.push({ workspace: board.workspace, name: board.name, tile, agent, kind: status.kind, since: status.since, ...(plan === undefined ? {} : { plan }) });
+    const at = agentOf(held, tileId, status.title);
+    if (!at) continue;
+    const plan = status.kind === "plan" ? plans.find((p) => toBareId(p.tileId) === at.tile)?.plan : undefined;
+    needs.push({ ...at, kind: status.kind, since: status.since, ...(plan === undefined ? {} : { plan }) });
   }
   return needs.sort((a, b) => a.since - b.since || (a.tile < b.tile ? -1 : a.tile > b.tile ? 1 : 0));
 }

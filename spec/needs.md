@@ -54,6 +54,6 @@ person's own devices, a phone among them.
 
 One of the person's devices asks another on the `device` stream of a connection on `hive/ws/1`
 (the stream it asks which workspaces are there on): `{ "t": "needs" }`, and is answered
-`{ "t": "needs", "needs": [ … ] }`. A phone may ask this, and which workspaces there are, and
-nothing else there (`pairing.md`). A device that does not answer within a few seconds, or cannot
+`{ "t": "needs", "needs": [ … ] }`. A phone may ask this and which workspaces there are, and give
+where it is told what happens there (`push.md`), and nothing else there (`pairing.md`). A device that does not answer within a few seconds, or cannot
 be reached, is said to be away; what it last said is not kept.

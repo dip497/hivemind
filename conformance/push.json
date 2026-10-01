@@ -1,0 +1,28 @@
+{
+ "about": "Web Push message encryption (RFC 8291, over RFC 8188's aes128gcm): RFC 8291's example (§5) with Appendix A's intermediate values, base64url, taken from the RFC's text. Its body is 144 bytes (§5 says Content-Length 145, a known erratum: 86 of header, 41 of message, the delimiter, the 16-byte tag). A device encrypts a notice to a phone (from the sender's key and the salt, the body); the phone decrypts it (from its own key and secret, the message). `refused`: bodies the phone of that example refuses though they decrypt, each a notice is not (spec/push.md: one record, the last); made apart from the code with node:crypto, from the example's keys and the salt 0x5a × 16.",
+ "rfc8291": {
+  "plaintext": "V2hlbiBJIGdyb3cgdXAsIEkgd2FudCB0byBiZSBhIHdhdGVybWVsb24",
+  "asPublic": "BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8",
+  "asPrivate": "yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw",
+  "uaPublic": "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4",
+  "uaPrivate": "q1dXpw3UpT5VOmu_cf_v6ih07Aems3njxI-JWgLcM94",
+  "salt": "DGv6ra1nlYgDCS1FRnbzlw",
+  "auth": "BTBZMqHH6r4Tts7J_aSIgg",
+  "recordSize": 4096,
+  "ecdhSecret": "kyrL1jIIOHEzg3sM2ZWRHDRB62YACZhhSlknJ672kSs",
+  "ikm": "S4lYMb_L0FxCeq0WhDx813KgSYqU26kOyzWUdsXYyrg",
+  "cek": "oIhVW04MRdy2XN9CiKLxTg",
+  "nonce": "4h_95klXJ5E_qnoN",
+  "body": "DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A_yl95bQpu6cVPTpK4Mqgkf1CXztLVBSt2Ks3oZwbuwXPXLWyouBWLVWGNWQexSgSxsj_Qulcy4a-fN"
+ },
+ "refused": [
+  {
+   "about": "its one record says another follows (delimiter 1): the message was cut short",
+   "body": "WlpaWlpaWlpaWlpaWlpaWgAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A-mwIRoS-apoXUcKYb0HN5up11eDu429ivpHQjzK5ZVygbNfGI-TIvxajyVBjZpi7-ME3WLOMWyK8JI"
+  },
+  {
+   "about": "more than one record: its record is longer than the record size it gives (18)",
+   "body": "WlpaWlpaWlpaWlpaWlpaWgAAABJBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A-mwIRoS-apoXUcKYb0HN5up11eDu429ivpHQjzK5ZVygbNfGI-TIvxaj8kVfNiJXlvE2zAiFBO8sv4"
+  }
+ ]
+}

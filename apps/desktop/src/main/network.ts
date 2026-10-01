@@ -32,7 +32,8 @@ import { getSettings } from "./settings-store.js";
 import { broadcast, userWindow } from "./windows.js";
 import { onWorkspaceChange, sharedStore, workspaceStore } from "./workspace-store-ipc.js";
 import { PeerLinks, type ShownMachine } from "@hivemind/host/peer-links";
-import type { WaitingStatus } from "@hivemind/host/needs";
+import { heldBoards, type WaitingStatus } from "@hivemind/host/needs";
+import { PushNotices, PushSubscriptions, postNotice } from "@hivemind/host/push";
 import type { PlanReview } from "@hivemind/workspace-api/plans";
 import { participantAt } from "@hivemind/host/device-sessions";
 import type { TerminalMachine } from "@hivemind/host/terminals";
@@ -70,6 +71,11 @@ function socketPath(): string {
 
 let lists: AccessLists | null = null;
 let paired: Devices | null = null;
+let pushed: PushSubscriptions | null = null;
+/** Where each of the person's phones is told what happens here (M5, spec/push.md). */
+function pushSubscriptions(): PushSubscriptions {
+  return (pushed ??= new PushSubscriptions(path.join(app.getPath("userData"), "identity", "push.json")));
+}
 /** The person's other devices this app paired with, kept beside its keys. */
 function pairedDevices(): Devices {
   return (paired ??= new Devices(path.join(app.getPath("userData"), "identity", "devices.json")));
@@ -388,24 +394,35 @@ let daemonHere: (() => Promise<Duplex>) | undefined;
 
 /** What the network's links are served from besides the workspace API: this computer's PTY daemon,
  *  where the person's other devices run terminals in frames here (none without one); a participant
- *  lending their machine anew (M4); and this computer's agents' statuses and the plans they wait
- *  on, for what waits on the person (M5). */
+ *  lending their machine anew (M4); and this computer's agents' statuses, each change to them, and
+ *  the plans they wait on, for what waits on the person and what their phones are told (M5). */
 export interface NetworkSources {
   daemon?: () => Promise<Duplex>;
   granted?: (device: string) => void;
   statuses: () => WaitingStatus[];
+  onStatus: (listener: (change: WaitingStatus) => void) => void;
   plans: () => PlanReview[];
 }
 
-export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, statuses, plans }: NetworkSources): void {
+export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, statuses, onStatus, plans }: NetworkSources): void {
   apiServer = server;
   daemonHere = daemon;
   peers = new PeerLinks({
     store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), granted,
     phone: (device) => pairedDevices().list().some((d) => d.device === device && d.kind === "phone"),
     statuses, plans,
+    subscribe: (device, sub) => pushSubscriptions().set(device, sub),
     onWarn: (m) => console.warn(`[peers] ${m}`),
   });
+  // The person's phones are told what happens here, encrypted to each (M5).
+  const notices = new PushNotices({
+    boards: () => heldBoards(workspaceStore()),
+    changes: onWorkspaceChange,
+    subscriptions: pushSubscriptions(),
+    post: postNotice,
+    onWarn: (m) => console.warn(`[push] ${m}`),
+  });
+  onStatus((change) => notices.changed(change));
   // The network in use, changed here or by `hive network use`: the daemon starts again on it.
   try {
     fs.watchFile(networkProfiles().file, { interval: 2_000 }, (now, before) => { if (now.mtimeMs !== before.mtimeMs) restartNetwork(); });
@@ -507,6 +524,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
   // Forget one of the person's devices: its workspaces are no longer listed here.
   handleEffect("net:unpair", (device: unknown) => ({ detail: String(device).slice(0, 8) }), (_e, device: unknown) => {
     if (typeof device !== "string" || !pairedDevices().remove(device)) throw new Error("unpair: that device is not paired with this one");
+    pushSubscriptions().remove(device);
     admitNow();
     broadcast("net:devices-changed");
   });

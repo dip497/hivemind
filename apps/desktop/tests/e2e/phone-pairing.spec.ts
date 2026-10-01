@@ -4,10 +4,13 @@
 // person's and never the person key; each lists the other; the phone is never a place to open a
 // workspace on, move one to or run a frame on; let in by the computer as the person's device, it
 // is served what a phone does and nothing more (what it sends to start a terminal there starts
-// nothing); and unpairing it on the computer forgets it.
+// nothing); and unpairing it on the computer forgets it. Then the phone at work (spec/needs.md,
+// spec/push.md): told when an agent on the computer begins waiting on the person, it lists, watches
+// and answers it; unpaired, it is told nothing more.
 import { test, expect, type ElectronApplication } from "@playwright/test";
 import { execFile, execSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { HiveNet } from "@hivemind/workspace-host/hive-net";
@@ -117,7 +120,7 @@ test("a phone scans the computer's code and is certified as the person's: each l
   await expect(desktop.locator(`[data-device="${phoneId}"]`)).toHaveCount(0);
 });
 
-test("the phone asks the computer what needs the person: an agent there waiting on a permission, by what it says it is doing, in its workspace; watches its terminal, read-only; answers it, once; and nothing waits once it works again", async () => {
+test("the phone is told when an agent on the computer begins waiting on the person, and asks what needs them: the agent, by what it says it is doing, in its workspace; watches its terminal, read-only; answers it, once; nothing waits once it works again; and unpaired, it is told nothing more", async () => {
   test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
   test.setTimeout(120_000);
   // A stand-in agent, read from its screen: it says what it is doing in its title, and asks to
@@ -141,8 +144,19 @@ test("the phone asks the computer what needs the person: an agent there waiting 
     "  - when: { contains: probe is thinking }", "    then: working", "",
   ].join("\n"));
   const d = await desktopWith({ PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` });
-  const { phone } = await pairPhone(d);
+  const { phone, phoneId } = await pairPhone(d);
   await d.desktop.keyboard.press("Escape");
+  // The phone gives the computer an address of its own to be told at, and takes each notice there.
+  const pushed = spawn(HIVE_PHONE, ["push", "--listen", "127.0.0.1:0", "--identity", phone, "--json"]);
+  procs.push(pushed);
+  const told: Array<Record<string, unknown>> = [];
+  let line = "";
+  pushed.stdout!.on("data", (b: Buffer) => {
+    const lines = (line + b.toString()).split("\n");
+    line = lines.pop()!;
+    for (const l of lines) told.push(JSON.parse(l) as Record<string, unknown>);
+  });
+  await expect.poll(() => told[0], { timeout: 30_000 }).toMatchObject({ told: [os.hostname()], away: [] });
   const needs = async () => JSON.parse((await run(HIVE_PHONE, ["needs", "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as { needs: Array<Record<string, unknown>>; away: unknown[] };
   expect(await needs()).toEqual({ needs: [], away: [] });
 
@@ -156,6 +170,8 @@ test("the phone asks the computer what needs the person: an agent there waiting 
   await expect.poll(async () => (waiting = (await needs()).needs[0])?.kind, { timeout: 30_000 }).toBe("permission");
   expect(waiting).toMatchObject({ name: "api", tile, agent: "Editing Nav.tsx", kind: "permission" });
   expect(Date.now() - (waiting!.since as number)).toBeLessThan(60_000);
+  // Told as it began, encrypted to the phone and read by it alone.
+  await expect.poll(() => told.slice(1), { timeout: 10_000 }).toEqual([{ v: 1, t: "needs", ...waiting }]);
 
   // Watched from the phone: its screen as it is, then what it prints as it comes.
   const watching = spawn(HIVE_PHONE, ["watch", waiting!.workspace as string, tile, "--identity", phone]);
@@ -171,4 +187,18 @@ test("the phone asks the computer what needs the person: an agent there waiting 
   await expect.poll(() => seen, { timeout: 20_000 }).toContain("probe is thinking");
   await expect.poll(async () => (await needs()).needs.length, { timeout: 30_000 }).toBe(0);
   expect(await answer()).toEqual({ answered: false });
+
+  // Unpaired on the computer: another agent there begins waiting on the person, and the phone is
+  // told nothing of it.
+  await d.devices();
+  await d.desktop.locator(`[data-device="${phoneId}"] [data-unpair]`).click();
+  await expect(d.desktop.locator(`[data-device="${phoneId}"]`)).toHaveCount(0);
+  await d.desktop.keyboard.press("Escape");
+  await d.desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:shortcut", { detail: "agent" })));
+  await expect(terminal).toHaveCount(2, { timeout: 20_000 });
+  const other = (await terminal.evaluateAll((ts, first) => ts.map((t) => t.getAttribute("data-id")).find((id) => id !== first), tile))!;
+  const state = async () => (await d.desktop.evaluate(() => window.hive.hcpStatusAll())).find((s) => s.tileId.replace(/^hm:/, "") === other)?.status;
+  await expect.poll(async () => (await state())?.kind, { timeout: 30_000 }).toBe("permission");
+  await new Promise((r) => setTimeout(r, 2_000));
+  expect(told).toHaveLength(2);
 });

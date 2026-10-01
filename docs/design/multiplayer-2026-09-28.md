@@ -1081,6 +1081,13 @@ agents.
    Not yet: the machine column, and "4 agents working".
 4. **Push notification.** "*api · Fix nav overflow* needs permission: Edit Nav.tsx" with
    **Allow** / **Deny** actions on the notification itself; tap opens the item.
+
+   *As built (M5 step 5, `spec/push.md`):* the phone gives each device it paired with a Web Push
+   subscription (an endpoint, and a P-256 push key and secret of its own) on the `device` stream;
+   the device that runs the agent tells it when one begins waiting on the person (a new `since`),
+   finishes or fails, the notice encrypted to that phone (RFC 8291) and posted to the endpoint.
+   An agent first seen as the device starts is told of from its next change on. Not built here:
+   the notification itself and its actions, which are the phone app's.
 5. **Answer.** Permission → Allow once / Always / Deny. Question → the options as buttons,
    plus a text box. Plan → the plan as text, Approve / Ask for changes.
 
@@ -1116,6 +1123,13 @@ agents.
   ciphertext and an opaque handle. The server wakes the phone through APNs or FCM with a
   generic alert; on iOS a Notification Service Extension decrypts the real text on the
   device (it has about 30 seconds). Only hosts the phone has authorised can push to it.
+
+  *Decided while building it (M5 step 5):* the encryption is Web Push's (RFC 8291, over RFC 8188's
+  `aes128gcm`) on every route, not HPKE (§12.4): UnifiedPush takes it as it is, a phone on the local
+  network can be its own endpoint, and the push server, when it is built, carries the same
+  ciphertext. Only the person's devices hold the phone's secret, so only they can send it a message
+  it decrypts. No VAPID: a push service that requires it (Apple's and Google's web push) is not one
+  a phone here gives.
 - **Answers never go through the push server.** Tapping **Allow** / **Deny** (marked
   `.authenticationRequired`, so the phone must be unlocked) wakes the app in the
   background for about 30 seconds — Apple does not guarantee it — and the app dials the
