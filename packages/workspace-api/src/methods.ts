@@ -150,6 +150,9 @@ export interface WorkspaceEvents {
   "terminal.keyboard.asked": (tile: string, asker: Typist) => void;
   /** A terminal's size changed: a client whose own differs draws it at this size. */
   "terminal.size": (tile: string, cols: number, rows: number) => void;
+  /** Someone types into `tile`: to each client that opened it but theirs, at most once a second
+   *  for the same person typing (R4). */
+  "terminal.typing": (tile: string, by: Typist) => void;
   /** An agent handed off a plan for review (M2). */
   "plan.review": (review: PlanReview) => void;
   /** A plan was answered, and by whom; or its agent stopped waiting (`decision` null). */

@@ -1,7 +1,8 @@
 // Terminals together (M2, design §4.2 D), with two app instances: a guest who may use terminals
 // watches the host's shell live, and their keys do not reach it; they ask for the keyboard and the
 // host gives it; then they type into the host's shell, which takes their size while the host's
-// window draws it at that size; the host takes it back, and the guest's keys stop reaching it.
+// window draws it at that size, and the host's tile says they are typing while their pointer is
+// not drawn; the host takes it back, and the guest's keys stop reaching it.
 // When the host goes away and comes back, the guest's terminal shows the host's shell again, live,
 // and the keyboard the guest held is the host's again.
 import { test, expect, type ElectronApplication, type Page } from "@playwright/test";
@@ -80,6 +81,20 @@ test("a guest watches the host's shell; given the keyboard they type into it and
   const theirs = await run(guest, `stty size > ${repo}/guest-size`, `${repo}/guest-size`, /^\d+ \d+$/);
   expect(Number(theirs.split(" ")[1])).toBeGreaterThan(Number(before.split(" ")[1]));
   await expect.poll(() => drawnScale(host).then(Number)).toBeLessThan(1);
+
+  // While they type, the host's tile says so, and their pointer, drawn on the host's board until
+  // then, is not; a moment after, it is again.
+  const priya = (await guest.evaluate(() => window.hive.identity())).personId;
+  const typing = terminal(host).locator("[data-typing]");
+  const pointer = host.locator(`[data-presence-cursor="${priya}"]`);
+  await clickInto(guest);
+  await expect(typing).toHaveCount(0, { timeout: 10_000 });
+  await expect(pointer).toHaveCount(1);
+  await guest.keyboard.type("echo typed\n");
+  await expect(typing).toHaveText("Priya is typing");
+  await expect(pointer).toHaveCount(0);
+  await expect(typing).toHaveCount(0, { timeout: 10_000 });
+  await expect(pointer).toHaveCount(1);
   await clickInto(host);
   await host.keyboard.type(`touch ${repo}/host-while-lent\n`);
 

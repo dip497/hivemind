@@ -12,7 +12,8 @@
  * a guest, and then the guest's alone. Among the host's windows the one that typed last sizes a
  * session; a guest holding its keyboard sizes it. Every client is told a session's size when it
  * changes, so one whose own differs draws it at that size. A pause is a short lease: see
- * PAUSE_MAX_MS.
+ * PAUSE_MAX_MS. Whoever types is named to the others showing the session (`terminal.typing`,
+ * R4), and a guest's typing is marked in the audit log once a burst (never what was typed).
  *
  * Starting a session is the intent of whoever opens it, unless the host asked for it itself (a
  * control-plane spawn) or the client only shows one the host holds; ending one is the intent of
@@ -78,6 +79,10 @@ export interface TerminalsOptions {
 export const PAUSE_MAX_MS = 120;
 /** Sessions ended are remembered so a close that follows is not an intent; ids never repeat. */
 const ENDED_KEPT = 512;
+/** While someone keeps typing into a session, the others are told again this often. */
+export const TYPING_EVERY_MS = 1000;
+/** A guest's typing into a session is marked in the audit log again after this long without it. */
+export const TYPED_BURST_MS = 60_000;
 
 type TerminalMethod = "terminal.open";
 type TerminalNotice =
@@ -91,6 +96,10 @@ export class Terminals {
   private readonly viewers = new WeakMap<Connection, Viewer>();
   /** The client that last typed into each session. */
   private readonly typers = new Map<string, Connection>();
+  /** Who the others were last told types into each session, and when. */
+  private readonly typing = new Map<string, { by: Connection; at: number }>();
+  /** When each guest last typed into each session, for the audit log's marks. */
+  private readonly typed = new WeakMap<Connection, Map<string, number>>();
   private readonly pauses = new Map<string, ReturnType<typeof setTimeout>>();
   /** Sessions ended here, the latest last. */
   private readonly ended = new Set<string>();
@@ -139,6 +148,7 @@ export class Terminals {
         if (!viewer) return;
         for (const tile of this.relay.leaveAll(viewer)) this.letGo(tile);
         for (const [tile, typer] of this.typers) if (typer === connection) this.typers.delete(tile);
+        for (const [tile, told] of this.typing) if (told.by === connection) this.typing.delete(tile);
       },
     };
   }
@@ -201,8 +211,30 @@ export class Terminals {
     // Among the host's windows, the last to type sizes the session; a guest does while they hold
     // its keyboard.
     if (isHost(from)) this.typers.set(tile, from);
+    this.attribute(tile, from);
     if (this.opts.backend.echoes(tile)) this.relay.markInput(tile);
     this.opts.backend.write(tile, data, paste);
+  }
+
+  /** `from` types into `tile`: the others showing it are told who (again only after
+   *  TYPING_EVERY_MS while the same one types on), and a guest's typing is marked in the audit
+   *  log once a burst. */
+  private attribute(tile: string, from: Connection): void {
+    const now = Date.now();
+    const told = this.typing.get(tile);
+    if (told?.by !== from || now - told.at >= TYPING_EVERY_MS) {
+      this.typing.set(tile, { by: from, at: now });
+      const by = this.keyboards.typist(from);
+      for (const c of this.openers.get(tile) ?? []) if (c !== from && !c.closed.aborted) emit(c, "terminal.typing", tile, by);
+    }
+    if (isHost(from)) return;
+    let typed = this.typed.get(from);
+    if (!typed) this.typed.set(from, (typed = new Map()));
+    const last = typed.get(tile);
+    typed.set(tile, now);
+    if (last !== undefined && now - last < TYPED_BURST_MS) return;
+    void this.opts.intents.perform(from.actor, { verb: "terminal.write", target: toBareId(tile) }, () => undefined)
+      .catch((e: unknown) => this.opts.onError?.(`terminal.write ${toBareId(tile)}: ${e instanceof Error ? e.message : String(e)}`));
   }
 
   private resize(tile: string, cols: number, rows: number, from: Connection): void {
@@ -246,6 +278,7 @@ export class Terminals {
   private drop(tile: string): void {
     this.relay.forget(tile);
     this.typers.delete(tile);
+    this.typing.delete(tile);
     this.openers.delete(tile);
     this.sizes.delete(tile);
     this.keyboards.forget(tile);

@@ -13,6 +13,7 @@ import { useInternalNode, useReactFlow, useStore, ViewportPortal } from "@xyflow
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
 import { useSettings } from "../settings-store";
 import { colorOf, initialsOf } from "./people";
+import { useTypingPeople } from "./typing";
 
 const SEND_EVERY_MS = 50;
 const STILL_HERE_EVERY_MS = 20_000;
@@ -150,6 +151,8 @@ export function SayHere({ repo, selection }: { repo: string; selection: string[]
 export function PresenceLayer({ repo, pane }: { repo: string; pane: RefObject<HTMLElement | null> }) {
   const { screenToFlowPosition } = useReactFlow();
   const people = usePeopleHere(repo);
+  // Someone typing into a terminal shows there ("Priya is typing"), not as a pointer.
+  const typing = useTypingPeople();
 
   useEffect(() => {
     const el = pane.current;
@@ -187,7 +190,7 @@ export function PresenceLayer({ repo, pane }: { repo: string; pane: RefObject<HT
       {/* Pointers over the board rather than in it: a pointer that moves repaints this layer only,
           not the board of a hundred tiles under it. No shadow filter: it is repainted each move. */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" style={{ contain: "strict", zIndex: 10_000 }}>
-        {people.map((p) => p.cursor && (
+        {people.map((p) => p.cursor && !typing.has(p.person) && (
           <div
             key={p.id}
             data-presence-cursor={p.person}

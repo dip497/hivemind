@@ -1,4 +1,4 @@
-# Workspace API (0.5)
+# Workspace API (0.6)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -50,7 +50,10 @@ Each call is some actor's: over both transports above, the person at the host's 
 method with an effect is carried out through the host's intents and recorded in its audit log
 (`audit.jsonl`, one JSON line each), its verb the method's name: who asked, what it acted on
 (`target`), a `detail`, and how it ended (`ok`, `error` with the code it failed with). A read is
-not recorded. What someone wrote (a commit message, a file's contents) is never recorded.
+not recorded. What someone wrote (a commit message, a file's contents) is never recorded. A
+keystroke is not a method; a guest's typing into a terminal (a peer whose role is not the
+owner's) is marked once a burst, `terminal.write` with the terminal's tile as its target, again
+after a minute without it, and never what was typed.
 
 ## Peers
 
@@ -204,6 +207,7 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `terminal.keyboard` | `tile`, `{id, person, name}` or null | to every client, as a terminal's keyboard changes hands (null: back with the host); to a client that opens the terminal while someone else holds it |
 | `terminal.keyboard.asked` | `tile`, `{id, person, name}` | to the keyboard's holder, as someone asks for it: `id` is who to give it to |
 | `terminal.size` | `tile`, `cols`, `rows` | to every client, as a terminal's session takes a size, and to one that opens it: a client whose own differs draws it at this size |
+| `terminal.typing` | `tile`, `{id, person, name}` | to each client that opened the terminal but the one typing, as someone types into it: at most once a second while the same one types on. A client says so on the terminal for a moment, and does not draw that person's pointer meanwhile |
 | `plan.review` | `{requestId, tileId, plan, cwd}` | to every client, as an agent hands off a plan: it waits until someone who may drive agents answers it |
 | `plan.decided` | `{requestId, tileId, decision, by}` | to every client, as a plan is answered (`by`: `{person, name}`), or its agent stops waiting (`decision` and `by` null) |
 | `file.changed` | `repo`, `{paths}` | to each client watching the repo (the app's window watches the one it opens), at most one every 300 ms |

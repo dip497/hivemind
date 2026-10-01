@@ -557,6 +557,8 @@ export interface HiveIpc {
   onKeyboardAsked(cb: (tileId: string, asker: Typist) => void): () => void;
   /** A terminal's session took a size: a window whose own differs draws it at that size. */
   onTerminalSize(cb: (tileId: string, cols: number, rows: number) => void): () => void;
+  /** Someone types into a terminal this window shows: at most once a second while they type on. */
+  onTyping(cb: (tileId: string, by: Typist) => void): () => void;
   /** True when HIVEMIND_PTY_DAEMON=1 — terminals persist across window close. */
   persistentPty: boolean;
 

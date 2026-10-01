@@ -128,7 +128,8 @@ export class Keyboards {
     return t;
   }
 
-  private typist(connection: Connection): Typist {
+  /** Who is at `connection`, as the others are told: one id per window, or per peer device. */
+  typist(connection: Connection): Typist {
     let id = this.ids.get(connection);
     if (!id) this.ids.set(connection, (id = connection.actor.kind === "peer" ? `peer:${connection.actor.device}` : `window:${++this.made}`));
     return { id, ...this.opts.who(connection) };

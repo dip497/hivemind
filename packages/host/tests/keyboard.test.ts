@@ -3,7 +3,8 @@
 // there is no window), and a guest's keys never reach the session; a guest who
 // asks is heard by the host's windows showing it; given the keyboard, the guest alone types and
 // sizes the session, and everyone is told who holds it; it comes back to the host when taken,
-// after five idle minutes, and when its holder goes; and everyone is told a session's size.
+// after five idle minutes, and when its holder goes; and everyone is told a session's size. Whoever
+// types is named to the others showing it (R4), and a guest's typing is marked in the audit log.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -14,17 +15,19 @@ import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
 import type { Actor } from "@hivemind/workspace-host/intents";
-import { Terminals } from "../src/terminals.ts";
+import { TYPED_BURST_MS, TYPING_EVERY_MS, Terminals } from "../src/terminals.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-keyboard-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const PRIYA = "b".repeat(64);
+let made = 0;
 
 function host() {
   const calls: string[] = [];
   let server!: WorkspaceServer;
+  const audit = path.join(tmp, `audit-${made++}.jsonl`);
   const terminals = new Terminals({
-    intents: new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })),
+    intents: new Intents(new AuditLog({ file: audit })),
     relay: { record: () => {}, screenPrefix: "" },
     publish: (event, ...params) => server.publish(event, ...params),
     who: (c) => (c.actor.kind === "peer" ? { person: c.actor.person, name: "Priya" } : { person: "a".repeat(64), name: "Adarsh" }),
@@ -48,7 +51,8 @@ function host() {
   const open = (from: Connection, starts = false) => server.answer("terminal.open", [{ tileId: "hm:t1", cwd: tmp, cmd: "/bin/sh", cols: 80, rows: 24, ...(starts ? {} : { attachOnly: true }) }], from);
   const notice = (from: Connection, method: string, ...params: unknown[]) => server.notice(method, params, from);
   const told = (c: { received: EventMessage[] }, event: string) => c.received.filter((m) => m.event === event).map((m) => m.params);
-  return { calls, client, open, notice, told };
+  const audited = () => (fs.existsSync(audit) ? fs.readFileSync(audit, "utf8") : "").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { verb: string; target?: string; actor: Actor; outcome: string });
+  return { calls, client, open, notice, told, audited };
 }
 const guestActor: Actor = { kind: "peer", person: PRIYA, device: "d".repeat(64), access: "terminals" };
 
@@ -152,3 +156,43 @@ test("whoever opens a session is told who holds its keyboard and its size; back 
   assert.deepEqual(h.calls, ["resize 120x40"]);
 });
 
+
+test("whoever types is named to the others showing the session, again only after a second while they type on; a guest's typing is marked in the audit log once a burst, never what was typed", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  const h = host();
+  const [win, guest, elsewhere] = [h.client({ kind: "person" }), h.client(guestActor), h.client({ kind: "person" })];
+  await h.open(win);
+  await h.open(guest);
+  h.notice(guest, "terminal.keyboard.ask", "hm:t1");
+  const asker = (h.told(win, "terminal.keyboard.asked")[0] as [string, { id: string }])[1];
+  h.notice(win, "terminal.keyboard.give", "hm:t1", asker.id);
+  const settled = () => new Promise((r) => setImmediate(r));
+
+  // The guest types: the host's window showing it is told who; the guest is not, nor a client that
+  // does not show it; typing on within the second tells nobody again.
+  h.notice(guest, "terminal.write", "hm:t1", "echo secret");
+  h.notice(guest, "terminal.write", "hm:t1", "\r");
+  assert.deepEqual(h.told(win, "terminal.typing"), [["hm:t1", asker]]);
+  assert.deepEqual(h.told(guest, "terminal.typing"), []);
+  assert.deepEqual(h.told(elsewhere, "terminal.typing"), []);
+  t.mock.timers.tick(TYPING_EVERY_MS);
+  h.notice(guest, "terminal.write", "hm:t1", "ls\r");
+  assert.equal(h.told(win, "terminal.typing").length, 2);
+
+  // Marked once for the burst, as the guest's; again after a quiet spell; never what was typed.
+  await settled();
+  const marks = () => h.audited().filter((r) => r.verb === "terminal.write");
+  assert.deepEqual(marks().map((r) => [r.target, r.actor, r.outcome]), [["t1", guestActor, "ok"]]);
+  t.mock.timers.tick(TYPED_BURST_MS);
+  h.notice(guest, "terminal.write", "hm:t1", "pwd\r");
+  await settled();
+  assert.equal(marks().length, 2);
+  assert.doesNotMatch(JSON.stringify(h.audited()), /secret|pwd/);
+
+  // The host's own typing is named to the guest, and is not marked.
+  h.notice(win, "terminal.keyboard.take", "hm:t1");
+  h.notice(win, "terminal.write", "hm:t1", "exit\r");
+  await settled();
+  assert.deepEqual((h.told(guest, "terminal.typing").at(-1) as [string, { person: string; name: string }])[1].name, "Adarsh");
+  assert.equal(marks().length, 2);
+});

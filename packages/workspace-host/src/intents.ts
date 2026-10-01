@@ -4,7 +4,7 @@
  * `perform` checks it against the policy, runs it, and records how it ended in the audit log.
  * The layout, the views and the board are not changed by intents: those are the document's own
  * edits, each attributed to its writer. Keystrokes, resizes and flow control are not intents
- * either.
+ * either; a guest's typing is marked once a burst (`terminal.write`), never what was typed.
  *
  * The policy: an intent that only one tile may ask for is refused to any other tile. A person
  * at this machine may ask for anything.

@@ -17,6 +17,7 @@ import type { PtySize } from "../pty-size-sync";
 import { Button } from "../components/ui/button";
 import { useFacesHere } from "./presence";
 import { joinedId, useShown } from "./shown";
+import { useTyping } from "./typing";
 
 interface Heard {
   /** Who holds it: null while the host does. */
@@ -126,18 +127,21 @@ export function useTerminalKeyboard(tile: string): TerminalKeyboard {
 const ASKED_FOR_MS = 30_000;
 
 /**
- * In a terminal's title bar: who has its keyboard (once someone else is in the workspace); asking
- * for it, or taking it back; and the asks this window may answer, as toasts.
+ * In a terminal's title bar: who has its keyboard (once someone else is in the workspace), and who
+ * is typing into it now; asking for it, or taking it back; and the asks this window may answer, as
+ * toasts.
  */
 export function KeyboardChip({ tile, name, kb }: { tile: string; name: string; kb: TerminalKeyboard }) {
   const asked = useAsked(tile, kb.holder?.name);
   useAsks(tile, name, kb.asks);
+  const typing = useTyping(tile);
   if (!kb.holder) return null;
   return (
     <span className="nodrag inline-flex shrink-0 items-center gap-1 text-[10.5px] text-[var(--color-fg3)]" data-keyboard={tile} data-keyboard-holder={kb.holder.name}>
       <span className="inline-flex items-center gap-1 rounded bg-[var(--color-bg)] px-1 py-px" title={kb.holder.you ? "You have the keyboard" : `${kb.holder.name} has the keyboard`}>
         <Keyboard size={11} aria-hidden /> {kb.holder.name}
       </span>
+      {typing && <span className="animate-pulse text-[var(--color-fg2)]" data-typing={tile}>{typing} is typing</span>}
       {kb.mayTake && (
         <Button variant="ghost" size="micro" onClick={() => window.hive.keyboardTake(tile)} title="Take the keyboard back (Ctrl/⌘⇧K)" data-keyboard-take>
           Take back

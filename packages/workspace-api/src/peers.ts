@@ -51,6 +51,7 @@ function tilesOf(event: EventMessage): string[] | null {
     case "terminal.keyboard":
     case "terminal.keyboard.asked":
     case "terminal.size":
+    case "terminal.typing":
       return [String(p)];
     case "status.changed":
       return [String((p as Record<string, unknown>)?.tileId)];
