@@ -3,6 +3,7 @@ import { ToolsOverview, ToolPage } from "./settings-tools";
 import { BrowsePlugins, InstalledPlugins } from "./settings-plugins";
 import { ProfilePrefs } from "./settings-profile";
 import { NetworkPrefs } from "./settings-network";
+import { DevicesPrefs } from "./settings-devices";
 /**
  * Settings pages that read and write settings.json (via settings-store /
  * theme-store): Appearance, Views (installed community packages, per-view
@@ -169,7 +170,7 @@ const NavigateContext = createContext<(id: string) => void>(() => {});
 export const useSettingsNavigate = (): ((id: string) => void) => useContext(NavigateContext);
 
 /** Must match the registry's `chunk: "lazy"` pages (unit tested); plugin pages (`agent:…`) are always lazy. */
-export const LAZY_SETTINGS_PAGES = ["profile", "network", "appearance", "shortcuts", "agents", "views", "tools", "plugins", "installed"] as const;
+export const LAZY_SETTINGS_PAGES = ["profile", "network", "devices", "appearance", "shortcuts", "agents", "views", "tools", "plugins", "installed"] as const;
 
 export default function SettingsPages({ page, navigate }: { page: string; navigate: (id: string) => void }) {
   return <NavigateContext.Provider value={navigate}>{renderPage(page)}</NavigateContext.Provider>;
@@ -178,6 +179,7 @@ export default function SettingsPages({ page, navigate }: { page: string; naviga
 function renderPage(page: string) {
   if (page === "profile") return <ProfilePrefs />;
   if (page === "network") return <NetworkPrefs />;
+  if (page === "devices") return <DevicesPrefs />;
   if (page === "appearance") return <AppearancePrefs />;
   if (page === "shortcuts") return <ShortcutPrefs />;
   if (page === "agents") return <AgentsOverview />;

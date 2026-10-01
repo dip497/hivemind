@@ -98,7 +98,8 @@ export function useTerminalKeyboard(tile: string): TerminalKeyboard {
   const others = useFacesHere(repo).length > 0;
   const now = useSyncExternalStore(useCallback((l: () => void) => subscribe(tile, l), [tile]), () => heard.get(tile) ?? NOTHING);
   const { holder, size } = now;
-  if (joined) {
+  // A workspace of this person's own on a host of theirs (R14): here as the host, not as a guest.
+  if (joined && shared?.access !== "owner") {
     const you = !!holder && holder.id === me;
     const host = shared?.names.host || "The host";
     const drives = shared?.state === "connected" && (shared.access === "terminals" || shared.access === "agents");

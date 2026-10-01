@@ -9,7 +9,9 @@
  *
  * Nobody sits at it, so it asks nobody anything: someone asking to join is declined (the owner
  * invites from one of their devices), and an agent's approvals fall back to the agent's own
- * prompt, answered by whoever drives it.
+ * prompt, answered by whoever drives it. It becomes someone's by pairing with one of their
+ * devices (spec/pairing.md): it takes their person, after which it is started again as them, and
+ * each of their devices it was paired with is the owner of every workspace it holds.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -19,12 +21,13 @@ import type { Duplex } from "node:stream";
 import { DaemonEndpoint, REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
 import { StatusStore, isSessionStatus } from "@hivemind/agent-host/status-store";
 import { AccessLists } from "@hivemind/workspace-host/access";
+import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
+import { enterPairing, formatPairLink, PairingOffer, parseCode, parsePairLink, type Pairing, type PairingDevice } from "@hivemind/workspace-host/pairing";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { HiveNet, type Ready } from "@hivemind/workspace-host/hive-net";
 import { Intents } from "@hivemind/workspace-host/intents";
-import { machineKeys } from "@hivemind/workspace-host/keyring";
+import { adoptPerson, machineKeys } from "@hivemind/workspace-host/keyring";
 import { NetworkProfiles } from "@hivemind/workspace-host/network-profile";
-import { storedKeys } from "@hivemind/workspace-host/doc-file";
 import { WorkspaceStore, type WorkspaceChange } from "@hivemind/workspace-host/store";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
@@ -57,8 +60,22 @@ export interface HeadlessHost {
   where(): Ready | null;
   /** The workspaces it holds, by folder, with their ids once they say whose they are. */
   workspaces(): Array<{ repo: string; workspace: string | null }>;
+  /** Serve the folder `repo` on this machine as one of its workspaces, made if it is new. */
+  add(repo: string): { repo: string; workspace: string };
+  /** The person's other devices it was paired with. */
+  devices(): PairedDevice[];
+  /** Offer a code for one of a person's devices to enter (this host takes the person). `paired`
+   *  resolves with that device once it has, when the host must be started again, as that person;
+   *  it rejects when the code expires first. */
+  offerPairing(): { code: string; link: string; expires: number; paired: Promise<PairedDevice> };
+  /** Enter the code or link another device offers. Resolves with that device once paired, when the
+   *  host must be started again, as that person. */
+  enterPairing(text: string): Promise<PairedDevice>;
   stop(): Promise<void>;
 }
+
+/** This machine's name, as the person's other devices list it. */
+const deviceName = (): string => os.hostname() || "host";
 
 /** hive-net's socket: in the data folder, unless the path is too long for a socket. */
 function netSocket(dir: string): string {
@@ -72,7 +89,13 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   const identity = path.join(o.dir, "identity");
   const keys = machineKeys(identity, o.onWarn);
   const intents = new Intents(new AuditLog({ file: path.join(o.dir, "audit.jsonl"), onWarn: o.onWarn }));
-  const lists = new AccessLists({ dir: path.join(o.dir, "access"), owner: keys.person, onWarn: o.onWarn });
+  const devices = new Devices(path.join(identity, "devices.json"));
+  const lists = new AccessLists({
+    dir: path.join(o.dir, "access"),
+    owner: keys.person,
+    devices: () => devices.list().map((d) => d.certificate),
+    onWarn: o.onWarn,
+  });
   const heard = new Set<(change: WorkspaceChange) => void>();
   const workspacesDir = path.join(o.dir, "workspaces");
   // A change is made by a client, so after the server below is there to tell the others.
@@ -154,8 +177,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
         socket: netSocket(o.dir),
         profile: profiles.arg(),
         onIncoming: (link) => peers.serve(link),
-        // Nobody here can let someone in.
-        onPairRequest: async () => ({ ok: false, error: "declined" }),
+        // A device of a person entering the code offered here; nobody here can let anyone else in.
+        onPairRequest: async (peer, hello) => ((hello as { pair?: unknown } | null)?.pair && offer ? offer.answer(peer, hello) : { ok: false, error: "declined" }),
         onExit: (why) => {
           net = null;
           if (stopping) return;
@@ -184,11 +207,64 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     });
   }
 
+  // Pairing (spec/pairing.md): this host takes the person, and keeps the device it paired with.
+  const me = (): PairingDevice => ({
+    device: keys.deviceId, name: deviceName(), kind: "host", certificate: keys.certificate, person: keys.person,
+    addrs: net?.ready.addrs ?? [], relay: net?.ready.relay ?? null,
+  });
+  const mayTake = (): void => {
+    if (lists.workspaces().some((ws) => lists.people(ws).length > 0)) {
+      throw new Error("this host already has workspaces others were let into: pairing would make them no longer their owner's");
+    }
+  };
+  const keep = (pairing: Pairing): PairedDevice => {
+    if (pairing.person) adoptPerson(identity, pairing.person, o.onWarn);
+    const paired: PairedDevice = { ...pairing.with, pairedAt: Date.now() };
+    devices.add(paired);
+    return paired;
+  };
+  let offer: PairingOffer | null = null;
+
   return {
     device: keys.deviceId,
     person: keys.personId,
     where: () => net?.ready ?? null,
-    workspaces: () => storedKeys(workspacesDir).map((repo) => ({ repo, workspace: store.ownership(repo)?.workspaceId ?? null })),
+    workspaces: () => store.repos().map((repo) => ({ repo, workspace: store.ownership(repo)?.workspaceId ?? null })),
+    add: (repo) => {
+      if (!path.isAbsolute(repo) || !fs.statSync(repo, { throwIfNoEntry: false })?.isDirectory()) {
+        throw new Error(`${repo} is not a folder on this machine`);
+      }
+      if (!store.getCore(repo)) store.setCore(repo, { frames: [], tiles: [] });
+      return { repo, workspace: store.ownership(repo)!.workspaceId as string };
+    },
+    devices: () => devices.list(),
+    offerPairing: () => {
+      mayTake();
+      const ready = net?.ready;
+      if (!ready) throw new Error("this host is not on the network yet: is hive-net installed beside hive?");
+      let settle!: (pairing: Pairing) => void;
+      const settled = new Promise<Pairing>((resolve) => { settle = resolve; });
+      const made = new PairingOffer(me(), (pairing) => settle(pairing));
+      offer = made;
+      const paired = new Promise<PairedDevice>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("the code expired before a device entered it")), made.expires - Date.now());
+        void settled.then((pairing) => { clearTimeout(timer); resolve(keep(pairing)); });
+      }).finally(() => { if (offer === made) offer = null; });
+      const link = formatPairLink({ device: keys.deviceId, addrs: ready.addrs, relay: ready.relay, code: made.code, name: deviceName(), kind: "host" });
+      return { code: made.code, link, expires: made.expires, paired };
+    },
+    enterPairing: async (text) => {
+      mayTake();
+      const link = parsePairLink(text);
+      if (!link) {
+        if (parseCode(text)) throw new Error("the words alone find a device on this network only: enter the link the other device shows");
+        throw new Error("that is not a pairing code or link");
+      }
+      if (!net) throw new Error("this host is not on the network yet: is hive-net installed beside hive?");
+      const on = net;
+      const where = { addrs: link.addrs, relay: link.relay };
+      return keep(await enterPairing({ me: me(), code: link.code, offering: link.device, ask: (hello) => on.pair(link.device, where, hello) }));
+    },
     stop: async () => {
       stopping = true;
       if (again) clearTimeout(again);

@@ -154,13 +154,19 @@ the workspaces in this machine's app data folder, runs their terminals in the ma
 daemon, and reaches the network through hive-net (installed beside `hive`).
 
 ```text
-hive host run       # serve until stopped (what a service runs); one host per machine
-hive host status    # whether it runs, as which device, where it is reached, its workspaces
-hive host stop      # stop serving; the terminals keep running in the daemon
+hive host run         # serve until stopped (what a service runs); one host per machine
+hive host status      # whether it runs, as which device, where it is reached, its workspaces
+hive host stop        # stop serving; the terminals keep running in the daemon
+hive host pair        # print a code, its link and a QR code for your app to enter
+hive host pair <link> # or enter the link your app shows (Settings → Devices → Show a code)
+hive host add <dir>   # serve a folder on this machine as one of its workspaces
 ```
 
 The host is the same device the app would be on that machine (it uses the app's keys), so it
-does not run while the app does.
+does not run while the app does. Pairing makes it you: in the app, **Settings → Devices → Pair
+with a host** takes the link `hive host pair` prints, and from then on **Open recent → On your
+hosts** lists the workspaces it serves. A workspace opened from there is yours; its terminals and
+agents run on the host and keep running whatever your computer does.
 
 ## Optional tools
 

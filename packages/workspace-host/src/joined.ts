@@ -5,7 +5,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import type { Role } from "./access.js";
+import type { Access } from "./access.js";
 import type { Where } from "./hive-net.js";
 
 export interface JoinedWorkspace {
@@ -13,8 +13,8 @@ export interface JoinedWorkspace {
   /** The host's device id. */
   host: string;
   where: Where;
-  /** The role the host last gave. */
-  role: Role;
+  /** The role the host last gave; "owner" in a workspace of the person's, on one of their devices. */
+  role: Access;
   names: { workspace: string; host: string };
   joinedAt: number;
   /** Set when this person left it, or the host removed them: what is kept here is the last copy. */

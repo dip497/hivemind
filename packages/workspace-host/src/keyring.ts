@@ -38,6 +38,22 @@ export function machineKeys(dir: string, onWarn: (message: string) => void = () 
   return { device, person, deviceId, personId, certificate };
 }
 
+/**
+ * Make `person` the person key kept in `dir`: pairing gave it (spec/pairing.md). The one kept
+ * before is set aside as `person.key.<its id>.old`, never deleted, and the device's certificate is
+ * made again from the new one. The keys as they are now.
+ */
+export function adoptPerson(dir: string, person: Seed, onWarn: (message: string) => void = () => {}): MachineKeys {
+  const file = path.join(dir, "person.key");
+  const before = readIfThere(file)?.trim();
+  if (before && /^[0-9a-f]{64}$/.test(before)) {
+    const was = idOf(new Uint8Array(Buffer.from(before, "hex")));
+    if (was !== idOf(person)) fs.renameSync(file, path.join(dir, `person.key.${was}.old`));
+  }
+  replacePrivate(file, `${Buffer.from(person).toString("hex")}\n`);
+  return machineKeys(dir, onWarn);
+}
+
 /** The seed in `file`, or a new one written there when there is none. */
 function seedIn(file: string, onWarn: (message: string) => void): Seed {
   for (;;) {

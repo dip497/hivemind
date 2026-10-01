@@ -16,9 +16,12 @@ these; the cases in `../conformance/` decide whether they do. Design:
 | `identity.md` | Device, person and workspace keys, and device certificates | 0.1 |
 | `network-profile.md` | Where a network's servers are, signed by its admin | 0.1 |
 | `network-access.md` | Who may use a network's relays: enrolment, vouchers, registration | 0.1 |
+| `pairing.md` | Two devices of one person: the code, the proofs, the person key handed over | 0.1 |
 
 Versions are `major.minor`: a minor adds optional fields or enum values a reader may ignore; a
 major changes or removes something. Until 1.0 anything may change.
 
 The TypeScript constants in `packages/hive-agents/src/events.ts` and `status.ts` are checked
-against these files by `packages/hive-agents/tests/spec-sync.test.ts`.
+against these files by `packages/hive-agents/tests/spec-sync.test.ts`, and the pairing words in
+`packages/workspace-host/src/pairing-words.ts` against `pairing-words.json` by
+`packages/workspace-host/tests/pairing.test.ts`.

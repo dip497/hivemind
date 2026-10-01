@@ -98,6 +98,18 @@ test("each workspace says whose it is: an id of its own, this person, and the wo
   expect(ownership("/a")).toEqual(a);
 });
 
+test("a workspace is found by its id, whether it is open or only on disk; an id no workspace has finds none", () => {
+  const s = new WorkspaceStore({ dir, person });
+  s.setCore("/a", core("api"));
+  s.setCore("/b", core("web"));
+  const b = s.ownership("/b")!.workspaceId as string;
+  expect(s.repoOf(b)).toBe("/b");
+  expect(s.repos().sort()).toEqual(["/a", "/b"]);
+  // A store that has not opened it yet finds it on disk.
+  expect(restart().repoOf(b)).toBe("/b");
+  expect(restart().repoOf("0".repeat(32))).toBeNull();
+});
+
 test("a workspace from before workspaces had owners is this person's from its next write; one that says whose it is stays theirs", () => {
   fs.mkdirSync(dir);
   fs.writeFileSync(path.join(dir, `${API}.loro`), FIXTURE);

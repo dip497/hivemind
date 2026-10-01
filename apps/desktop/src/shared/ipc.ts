@@ -9,6 +9,18 @@ import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/lay
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
 import type { NetworkHealth, NetworkProfile } from "@hivemind/workspace-host/network-profile";
 
+/** One of the person's other devices, as Settings → Devices lists it (R14, spec/pairing.md). */
+export interface PairedDeviceSummary {
+  device: string;
+  name: string;
+  /** "host": `hive host`, always on; "app": someone's own computer. */
+  kind: "app" | "host";
+  pairedAt: number;
+}
+
+/** A workspace one of the person's hosts holds. */
+export interface DeviceWorkspace { workspace: string; name: string; repo: string }
+
 /** Someone on a workspace's access list, as the People panel shows them. */
 export interface SharedPerson {
   person: string;
@@ -283,6 +295,21 @@ export interface HiveIpc {
   onSharedStatus(cb: (workspace: string, status: SharedStatus) => void): () => void;
   /** Leave a joined workspace: its connection closes, and the last copy is kept to read. */
   leave(workspace: string): Promise<void>;
+  // ── your devices (R14, spec/pairing.md) ───────────────────
+  /** The person's devices this app paired with. */
+  devices(): Promise<PairedDeviceSummary[]>;
+  /** A device was paired with, or forgotten. */
+  onDevicesChanged(cb: () => void): () => void;
+  /** A code for one of your hosts to enter (`hive host pair <link>`): it takes your person. */
+  pairOffer(): Promise<{ code: string; link: string; expires: number }>;
+  /** Enter the link one of your hosts shows (`hive host pair`): it takes your person. */
+  pairEnter(text: string): Promise<PairedDeviceSummary>;
+  /** Forget one of your devices: it is no longer you here. */
+  unpair(device: string): Promise<void>;
+  /** The workspaces each of your hosts holds; null for one that does not answer. */
+  deviceWorkspaces(): Promise<Array<{ device: string; name: string; workspaces: DeviceWorkspace[] | null }>>;
+  /** Open a workspace one of your hosts holds, as yours: its `hive://` name, to open. */
+  openDeviceWorkspace(device: string, workspace: string, name: string): Promise<string>;
   // ── this device's network (R16) ───────────────────────────
   /** The network profile in use: a built-in one (`local`, `hosted`) or one its admin signed. */
   network(): Promise<NetworkProfile>;

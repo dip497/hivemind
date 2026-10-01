@@ -93,6 +93,9 @@ export interface AccessListsOptions {
   dir: string;
   /** The person key of the owner, whose devices keep these lists and whose key signs them. */
   owner: Seed;
+  /** The certificates of the owner's other devices this one was paired with (spec/pairing.md):
+   *  each is the owner in every workspace. */
+  devices?: () => DeviceCertificate[];
   /** Hears what the embedder should log: a grant dropped, a list set aside. */
   onWarn?: (message: string) => void;
 }
@@ -151,9 +154,16 @@ export class AccessLists {
     return true;
   }
 
+  /** Whether `device` is one of the owner's own, paired with this one. */
+  ownersDevice(device: string): boolean {
+    const cert = this.opts.devices?.().find((c) => c.device === device);
+    return !!cert && certificateVerifies(cert) && cert.person === this.ownerId;
+  }
+
   /** What the device `device` may do in `workspace` now: the owner's devices are the owner; a
    *  person's are their role until it expires; any other, nothing. */
   accessOf(workspace: string, device: string): Access | null {
+    if (this.ownersDevice(device)) return "owner";
     const cert = this.doc(workspace).getMap("devices").get(device) as DeviceCertificate | undefined;
     if (!cert || !certificateVerifies(cert) || cert.device !== device) return null;
     if (cert.person === this.ownerId) return "owner";
@@ -162,6 +172,7 @@ export class AccessLists {
 
   /** The person whose device `device` is, when it may reach `workspace` now. */
   personOf(workspace: string, device: string): string | null {
+    if (this.ownersDevice(device)) return this.ownerId;
     if (!this.accessOf(workspace, device)) return null;
     return (this.doc(workspace).getMap("devices").get(device) as DeviceCertificate).person;
   }
@@ -247,6 +258,7 @@ export class AccessLists {
       const certs = Object.values(this.doc(ws).getMap("devices").toJSON() as Record<string, DeviceCertificate>);
       for (const cert of certs) if (this.accessOf(ws, cert.device)) out.add(cert.device);
     }
+    for (const cert of this.opts.devices?.() ?? []) if (this.ownersDevice(cert.device)) out.add(cert.device);
     return [...out].sort();
   }
 

@@ -34,7 +34,7 @@ import { readView, readViews, writeView } from "@hivemind/workspace-doc/views";
 import { readOwnership, stampOwnership, stampSchema, type Ownership } from "@hivemind/workspace-doc/schema";
 import type { BoardObject, CoreLayout, TileRecord, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "./layout.js";
-import { readDoc, writeDoc } from "./doc-file.js";
+import { readDoc, storedKeys, writeDoc } from "./doc-file.js";
 import { idOf, newWorkspaceId, workspaceSeed, type Seed } from "./identity.js";
 
 export type { LegacyLayout, WorkspaceChange } from "./layout.js";
@@ -100,6 +100,16 @@ export class WorkspaceStore {
   /** Whose the workspace `repo` is: its id, its owner and its workspace key (R3). */
   ownership(repo: string): Ownership | null {
     return readOwnership(this.workspace(repo).doc);
+  }
+
+  /** The workspaces this store holds, open or on disk: each one's folder. */
+  repos(): string[] {
+    return [...new Set([...storedKeys(this.opts.dir), ...this.workspaces.keys()])];
+  }
+
+  /** The folder of the workspace whose id is `workspaceId`, or null when this store holds none. */
+  repoOf(workspaceId: string): string | null {
+    return this.repos().find((repo) => this.ownership(repo)?.workspaceId === workspaceId) ?? null;
   }
 
   /** The board's objects, or none. A fresh copy each call. */

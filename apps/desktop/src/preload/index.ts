@@ -203,6 +203,17 @@ const api: HiveIpc & {
     return () => { ipcRenderer.removeListener("net:shared-status", h); };
   },
   leave: (workspace) => ipcRenderer.invoke("net:leave", workspace),
+  devices: () => ipcRenderer.invoke("net:devices"),
+  onDevicesChanged: (cb) => {
+    const h = () => cb();
+    ipcRenderer.on("net:devices-changed", h);
+    return () => { ipcRenderer.removeListener("net:devices-changed", h); };
+  },
+  pairOffer: () => ipcRenderer.invoke("net:pair-offer"),
+  pairEnter: (text) => ipcRenderer.invoke("net:pair-enter", text),
+  unpair: (device) => ipcRenderer.invoke("net:unpair", device),
+  deviceWorkspaces: () => ipcRenderer.invoke("net:device-workspaces"),
+  openDeviceWorkspace: (device, workspace, name) => ipcRenderer.invoke("net:open-device-workspace", device, workspace, name),
   network: () => ipcRenderer.invoke("net:network"),
   networkHealth: () => ipcRenderer.invoke("net:network-health"),
   useNetwork: (given) => ipcRenderer.invoke("net:use-network", given),

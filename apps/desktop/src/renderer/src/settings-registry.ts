@@ -1,6 +1,6 @@
 /** Settings navigation: fixed pages, grouped, plus one page per plugin (`agent:claude`,
  *  `view:canvas`, `tool:browser`). `chunk` keeps cheap pages out of the lazy Settings bundle. */
-import { Bell, Bot, Info, Keyboard, Layers, Package, Palette, Store, UserRound, Wrench, Network } from "lucide-react";
+import { Bell, Bot, Info, Keyboard, Layers, Package, Palette, Store, UserRound, Wrench, Network, MonitorSmartphone } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export type SettingsGroup = "General" | "Agents" | "Views" | "Tools" | "Plugins";
@@ -21,6 +21,7 @@ export interface SettingsPageDef {
 export const SETTINGS_PAGES: readonly SettingsPageDef[] = [
   { id: "profile", group: "General", label: "Profile", icon: UserRound, description: "Your name and colour, and this computer's ids.", chunk: "lazy" },
   { id: "network", group: "General", label: "Network", icon: Network, description: "Which servers this computer uses, if any, and the update check.", chunk: "lazy" },
+  { id: "devices", group: "General", label: "Devices", icon: MonitorSmartphone, description: "Your hosts and other computers, and pairing another.", chunk: "lazy" },
   { id: "appearance", group: "General", label: "Appearance", icon: Palette, description: "Theme, wallpaper, and effects.", chunk: "lazy" },
   { id: "notifications", group: "General", label: "Notifications", icon: Bell, description: "Alerts and sounds.", chunk: "eager" },
   { id: "shortcuts", group: "General", label: "Shortcuts", icon: Keyboard, description: "Keyboard shortcuts.", chunk: "lazy" },

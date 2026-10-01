@@ -7,7 +7,11 @@
  * closes, "removed". The links served are kept here, so the host can say who is connected and
  * close a person's when it removes them or changes their role (design §4.2 E). The app and the
  * headless host each serve their own store's workspaces this way.
+ *
+ * One of the owner's own devices (paired, spec/pairing.md) is the owner of every workspace here,
+ * shared or not, and may ask on the `device` stream which ones there are (design §5.3).
  */
+import path from "node:path";
 import type { Link } from "@hivemind/workspace-host/hive-net";
 import type { AccessLists } from "@hivemind/workspace-host/access";
 import { parseSync, serveReplica, type Changes } from "@hivemind/workspace-host/doc-sync";
@@ -35,6 +39,44 @@ export interface PeerLinksOptions {
 
 interface Served { workspace: string; person: string; link: Link }
 
+/** A workspace a host holds, as it tells one of its owner's devices. */
+export interface HeldWorkspace { workspace: string; name: string; repo: string }
+
+/** What the `device` stream carries: the question (no list), and the host's answer. */
+export interface DeviceMessage { t: "workspaces"; workspaces?: HeldWorkspace[] }
+
+function parseDevice(text: string): DeviceMessage | null {
+  try {
+    const m = JSON.parse(text) as { t?: unknown; workspaces?: unknown };
+    if (m.t !== "workspaces") return null;
+    if (!Array.isArray(m.workspaces)) return { t: "workspaces" };
+    const workspaces = m.workspaces.filter((w): w is HeldWorkspace => {
+      const x = w as Partial<HeldWorkspace> | null;
+      return !!x && typeof x.workspace === "string" && typeof x.name === "string" && typeof x.repo === "string";
+    });
+    return { t: "workspaces", workspaces };
+  } catch {
+    return null;
+  }
+}
+
+/** Ask the host at the other end of `link` which workspaces it holds: this device is one of its
+ *  owner's. */
+export function heldWorkspaces(link: Link, timeoutMs = 10_000): Promise<HeldWorkspace[]> {
+  return new Promise((resolve, reject) => {
+    const off = link.on("device", (text) => {
+      const m = parseDevice(text);
+      if (!m?.workspaces) return;
+      clearTimeout(timer);
+      off();
+      resolve(m.workspaces);
+    });
+    const timer = setTimeout(() => { off(); reject(new Error("the device did not say which workspaces it holds")); }, timeoutMs);
+    void link.closed.then((why) => { clearTimeout(timer); off(); reject(new Error(`the device closed the connection: ${why}`)); });
+    link.send("device", JSON.stringify({ t: "workspaces" } satisfies DeviceMessage));
+  });
+}
+
 export class PeerLinks {
   private readonly served = new Set<Served>();
 
@@ -43,13 +85,24 @@ export class PeerLinks {
   /** Serve the device on `link` the workspace it names, if its person may reach it. */
   serve(link: Link): void {
     const { store, lists, server } = this.o;
+    link.on("device", (text) => {
+      if (!lists.ownersDevice(link.peer)) return link.close("removed");
+      const asked = parseDevice(text);
+      if (!asked || asked.workspaces) return;
+      const workspaces = store.repos().flatMap((repo) => {
+        const workspace = store.ownership(repo)?.workspaceId;
+        return workspace ? [{ workspace, name: path.basename(repo), repo }] : [];
+      });
+      link.send("device", JSON.stringify({ t: "workspaces", workspaces } satisfies DeviceMessage));
+    });
     const off = link.on("sync", (text) => {
       const hello = parseSync(text);
       if (hello?.t !== "hello") return;
       off();
       const access = lists.accessOf(hello.workspace, link.peer);
       const person = lists.personOf(hello.workspace, link.peer);
-      const repo = lists.repoOf(hello.workspace);
+      // A workspace shared by invite is named in its list; any of the owner's is in the store.
+      const repo = lists.repoOf(hello.workspace) ?? store.repoOf(hello.workspace);
       if (!access || !person || !repo) return link.close("removed");
       const stop = serveReplica(store, repo, streamOf(link, "sync"), {
         seen: hello.seen,

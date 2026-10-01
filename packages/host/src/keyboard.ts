@@ -25,8 +25,10 @@ export interface KeyboardOptions {
 /** A keyboard left this long by the one it was given to comes back to the host. */
 export const KEYBOARD_IDLE_MS = 5 * 60_000;
 
-/** Whether a connection is one of the host's own windows. */
-export const isHost = (c: Connection): boolean => c.actor.kind !== "peer";
+/** Whether a connection is the host's own: one of its windows, or another device of its owner's
+ *  (spec/pairing.md), which is the host's person wherever it is, as at `hive host`, where no
+ *  window ever is. */
+export const isHost = (c: Connection): boolean => c.actor.kind !== "peer" || c.actor.access === "owner";
 
 interface Lease {
   holder: Connection;

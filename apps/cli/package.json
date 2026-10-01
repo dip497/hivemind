@@ -21,11 +21,13 @@
     "@hivemind/view-sdk": "workspace:*",
     "@hivemind/workspace-host": "workspace:*",
     "citty": "catalog:",
+    "uqr": "catalog:",
     "yaml": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@hivemind/tsconfig": "workspace:*",
+    "@hivemind/workspace-api": "workspace:*",
     "@types/bun": "^1.4.2",
     "@types/node": "catalog:",
     "typescript": "catalog:"

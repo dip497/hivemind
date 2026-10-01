@@ -99,6 +99,27 @@ test("a revoked person, and one whose grant has expired, gets nothing, on any of
   expect(a.people(ws).map((p) => p.person)).toEqual([priya.id]);
 });
 
+test("the owner's other devices, paired with this one, are the owner in every workspace and are let in; one not the owner's is not", () => {
+  const ws = newWorkspaceId();
+  const laptop = certifyDevice(owner, idOf(newSeed()));
+  const theirs = someone().cert;
+  // A certificate altered after it was made: it names the owner but its signature does not hold.
+  const forged = { ...certifyDevice(owner, idOf(newSeed())), issuedAt: 1 };
+  const paired = [laptop, theirs, forged];
+  const a = new AccessLists({ dir, owner, devices: () => paired });
+  for (const w of [ws, newWorkspaceId()]) {
+    expect(a.accessOf(w, laptop.device)).toBe("owner");
+    expect(a.personOf(w, laptop.device)).toBe(idOf(owner));
+    expect(a.accessOf(w, theirs.device)).toBeNull();
+    expect(a.accessOf(w, forged.device)).toBeNull();
+  }
+  expect(a.admitted()).toEqual([laptop.device]);
+  // Unpaired, it is nobody here.
+  paired.splice(0, 1);
+  expect(a.accessOf(ws, laptop.device)).toBeNull();
+  expect(a.admitted()).toEqual([]);
+});
+
 test("what cannot be granted is refused", () => {
   const ws = newWorkspaceId();
   const a = lists();

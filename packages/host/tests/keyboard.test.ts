@@ -1,5 +1,6 @@
 // One keyboard per terminal (keyboard.ts through terminals.ts, M2): until the
-// host gives it away its own windows type and a guest's keys never reach the session; a guest who
+// host gives it away its own windows type, as does a device of its owner's (R14: at `hive host`
+// there is no window), and a guest's keys never reach the session; a guest who
 // asks is heard by the host's windows showing it; given the keyboard, the guest alone types and
 // sizes the session, and everyone is told who holds it; it comes back to the host when taken,
 // after five idle minutes, and when its holder goes; and everyone is told a session's size.
@@ -50,6 +51,18 @@ function host() {
   return { calls, client, open, notice, told };
 }
 const guestActor: Actor = { kind: "peer", person: PRIYA, device: "d".repeat(64), access: "terminals" };
+
+test("a device of the owner's types as the host's own windows do, and a guest's keys still never reach the session", async () => {
+  const h = host();
+  const [laptop, guest] = [h.client({ kind: "peer", person: "a".repeat(64), device: "e".repeat(64), access: "owner" }), h.client(guestActor)];
+  await h.open(laptop, true);
+  await h.open(guest);
+  h.notice(laptop, "terminal.write", "hm:t1", "ls\r");
+  h.notice(guest, "terminal.write", "hm:t1", "rm -rf ~\r");
+  h.notice(laptop, "terminal.resize", "hm:t1", 100, 30);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(h.calls, ["write ls\r", "resize 100x30"]);
+});
 
 test("until the host gives it away, its windows type and a guest's keys never reach the session; given it, the guest alone types and sizes it", async () => {
   const h = host();

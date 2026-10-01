@@ -4,7 +4,7 @@ import { test, expect, beforeEach, afterEach } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { machineKeys } from "../src/keyring.ts";
+import { adoptPerson, machineKeys } from "../src/keyring.ts";
 import { certificateVerifies, certifyDevice, idOf, newSeed } from "../src/identity.ts";
 
 let dir: string;
@@ -51,4 +51,19 @@ test("a key file that cannot be read as a key is set aside, a new key is made, a
   const aside = fs.readdirSync(dir).find((f) => f.startsWith("device.key.bad-"));
   expect(aside && fs.readFileSync(path.join(dir, aside), "utf8")).toBe("not a key\n");
   expect(machineKeys(dir).deviceId).toBe(again.deviceId);
+});
+
+test("a person given by pairing is the one kept from then on; the one before is set aside, never deleted", () => {
+  const before = machineKeys(dir);
+  const given = newSeed();
+  const now = adoptPerson(dir, given);
+  expect(now.personId).toBe(idOf(given));
+  expect(now.deviceId).toBe(before.deviceId);
+  expect([now.certificate.person, now.certificate.device]).toEqual([idOf(given), before.deviceId]);
+  expect(certificateVerifies(now.certificate)).toBe(true);
+  // After a restart, still the person given.
+  expect(machineKeys(dir).personId).toBe(idOf(given));
+  const aside = path.join(dir, `person.key.${before.personId}.old`);
+  expect(fs.readFileSync(aside, "utf8").trim()).toBe(Buffer.from(before.person).toString("hex"));
+  if (process.platform !== "win32") expect(mode(path.join(dir, "person.key"))).toBe(0o600);
 });
