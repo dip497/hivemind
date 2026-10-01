@@ -11,12 +11,15 @@
  * The store checks the layouts it is given (a TypeError refuses one); what is checked here is
  * that the names are text. A workspace the host may only read (a copy of one shared from
  * elsewhere, as a viewer or after it ended, M1) takes no write: the client is told the part
- * changed, so it reads it again and its own change is put back.
+ * changed, so it reads it again and its own change is put back. Nor does a copy take a change to
+ * its layout that this person's role there does not allow (`refuse`): its host would not take it,
+ * and the copy would part from the host's.
  */
 import { ApiError, text } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import type { Method } from "@hivemind/workspace-api/methods";
 import type { LegacyLayout, ViewLayout, WorkspaceChange, WorkspaceStore } from "@hivemind/workspace-host/store";
+import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
 
 type StoreMethod = Extract<Method, `store.${string}`>;
 
@@ -32,15 +35,22 @@ export class Layouts {
   private writersMade = 0;
 
   /** `store`: the store that holds a repo's layout (the host's own, or its replicas of others'
-   *  workspaces, M1), made when it is first needed. `mayWrite`: whether a repo's may be written. */
-  constructor(store: (repo: string) => WorkspaceStore, mayWrite: (repo: string) => boolean = () => true) {
+   *  workspaces, M1), made when it is first needed. `mayWrite`: whether a repo's may be written.
+   *  `refuse`: why a change of a repo's core layout from `before` to `after` may not be made here,
+   *  or null. */
+  constructor(
+    store: (repo: string) => WorkspaceStore,
+    mayWrite: (repo: string) => boolean = () => true,
+    refuse: (repo: string, before: CoreLayout | null, after: CoreLayout) => string | null = () => null,
+  ) {
     const repoOf = (v: unknown) => text(v, "repo");
-    /** Whether `from` may write `part` of `repo`; when not, it is told the part changed. */
-    const writable = (from: Connection, repo: string, part: string): boolean => {
-      if (mayWrite(repo)) return true;
+    /** Tell `from` that `part` of `repo` changed: it reads it again, and its own change is put back. */
+    const putBack = (from: Connection, repo: string, part: string): false => {
       setTimeout(() => from.send({ event: "store.changed", params: [{ repo, part }] }), 0);
       return false;
     };
+    /** Whether `from` may write `part` of `repo`; when not, it is told the part changed. */
+    const writable = (from: Connection, repo: string, part: string): boolean => mayWrite(repo) || putBack(from, repo, part);
     const as = (from: Connection) => ({ writer: this.writerOf(from) });
     /** The store `from` writes `repo` in, remembered so its history there goes with it. */
     const writing = (from: Connection, repo: string): WorkspaceStore => {
@@ -66,7 +76,11 @@ export class Layouts {
         "store.objects": (_, repo) => { const r = repoOf(repo); return store(r).getObjects(r); },
         "store.setCore": (from, repo, core, base) => {
           const r = repoOf(repo);
-          if (writable(from, r, "core")) refused(() => writing(from, r).setCore(r, core, { ...as(from), base }));
+          if (!writable(from, r, "core")) return;
+          const s = writing(from, r);
+          // What the client changed: from the layout it read, else the one here.
+          if (refuse(r, (base ?? s.getCore(r)) as CoreLayout | null, core as CoreLayout)) return void putBack(from, r, "core");
+          refused(() => s.setCore(r, core, { ...as(from), base }));
         },
         "store.setView": (from, repo, viewId, layout, base) => {
           const r = repoOf(repo);

@@ -54,6 +54,14 @@ interface Workspace {
   histories: Map<string, UndoManager>;
 }
 
+/** What `importFrom` throws for changes its check refused: nothing of them was taken. */
+export class RefusedImport extends Error {
+  constructor(why: string) {
+    super(why);
+    this.name = "RefusedImport";
+  }
+}
+
 /** Who writes: told with the change, so the others hear of it and the writer does not. */
 export interface Writer {
   writer?: string;
@@ -271,9 +279,16 @@ export class WorkspaceStore {
 
   /** Take another replica's changes (updates or a whole document, as `exportSince` gives them) as
    *  `from`'s edit: written, and told like any other change. Throws for bytes that are not a
-   *  document's. */
-  importFrom(repo: string, bytes: Uint8Array, from: Writer = {}): void {
+   *  document's. `check`, when given, sees the core layout as it is and as the changes would make
+   *  it, first: a reason it gives refuses them (`RefusedImport`), and nothing is taken. */
+  importFrom(repo: string, bytes: Uint8Array, from: Writer = {}, check?: (before: CoreLayout | null, after: CoreLayout | null) => string | null): void {
     const { doc } = this.workspace(repo);
+    if (check) {
+      const trial = doc.fork();
+      trial.import(bytes);
+      const why = check(readCore(doc), readCore(trial));
+      if (why) throw new RefusedImport(why);
+    }
     const before = JSON.stringify(doc.frontiers());
     doc.import(bytes);
     if (JSON.stringify(doc.frontiers()) === before) return;

@@ -923,6 +923,10 @@ Rules:
 - Roles are per workspace on the host, and per machine for frames that run elsewhere.
 - Invite links carry at most *Can use terminals*.
 - Every intent is checked on the machine that executes it.
+- A peer's changes to the workspace document are checked by the host against their role before
+  it takes any (`packages/workspace-host/src/edit-rules.ts`): placing, closing or changing what a
+  tile that runs something runs is driving agents, and where a frame's tiles run is the owner's,
+  because the host's own window starts the tiles its document has.
 - Guest input and approvals are marked in the audit log and in the terminal's writer ring.
 
 ---

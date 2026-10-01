@@ -139,7 +139,8 @@ networked parts fit together, decided now so every step builds toward it:
 ### Known issues
 
 None open. Fixed on 2026-09-29 (see the log): a read of a gone tile waiting out its timeout, closed tiles leaving their processes running, agent pipes and
-spawn wires not being drawn, and two issues found while verifying R1.
+spawn wires not being drawn, and two issues found while verifying R1. Fixed on 2026-10-01: a
+guest who may edit the board could start a command on the host (see the log).
 
 ## Decisions so far
 
@@ -518,3 +519,30 @@ spawn wires not being drawn, and two issues found while verifying R1.
 - 2026-10-01 — R4 done: write attribution ("Priya is typing" on the terminal, the pointer hidden
   meanwhile, a guest's typing marked in the audit log). Phase 0 is done but R13's deployment,
   which waits on cloud accounts. Next: M4.
+- 2026-10-01 — Found while planning M4, and fixed before it: a guest who may only edit the board
+  (*Can edit board*, which invite links carry) could make the host run any command. The host took
+  whatever a peer changed in the workspace document, and its own window starts each terminal tile
+  its document has, with the record's `cmd` and `args` as written (within 1.5 s, as the host's
+  person, so `terminal.open`'s role check never applied); a frame's folder in the document could
+  also point those sessions at the owner's other machines or ssh. Sharing had not shipped in a
+  release. Now what a peer may change in the layout follows their role
+  (`packages/workspace-host/src/edit-rules.ts`, design §6): moving, sizing, naming and grouping,
+  *Can edit board*; placing, taking away or changing what a terminal, agent or browser tile runs
+  (kind, command, arguments, session, page), or moving one to another frame, *Can drive agents*;
+  where a frame's tiles run (folder, worktree and branch, the frame it nests in), and taking away
+  a frame that says so, the owner's. The host checks each change a peer sends before it takes any
+  of it (`serveReplica` imports through `WorkspaceStore.importFrom`'s check, on a fork of the
+  document, and drops a change that does more, whole); the store's writes through the API are the
+  owner's (`roles.ts`); and a guest's own app checks its windows' changes to its copy the same way
+  (`refusedShared`, the `Layouts` hook), putting back what the host would refuse, so an honest
+  copy never parts from the host's (`spec/workspace-api.md` 0.7). Tests: `edit-rules.test.ts`
+  (24 rows: each change by the least role that may make it, refused to the role below; twelve
+  mutations caught with the sync test: neither the sync nor the store checking, frames not
+  checked, *Can use terminals* driving agents, a browser running nothing, arguments not what runs,
+  moving between frames, taking away, only known kinds running, a placed frame taken away, a new
+  frame's folder, a worktree), `doc-sync.test.ts` (an editor's naming taken and their shell not,
+  said why; a driver's frame folder refused and their shell taken), `peers.test.ts` (an editor may
+  not call `store.setCore`), `multiplayer-board.spec.ts` (with two apps: a shell the guest adds is
+  put back on their board and never reaches the host; a device of theirs that writes a shell tile
+  running `touch` into its copy is refused, as the host's log says, and nothing runs on the host;
+  two wiring mutations caught; with the host's check taken out, the command ran on the host).

@@ -93,3 +93,34 @@ test("a replica that connects again gets what it missed, and what it wrote meanw
   expect(host.store.getObjects("/a").map((o) => o.id).sort()).toEqual(["n1", "n2"]);
   expect(guest.store.version("hive://w")).toEqual(host.store.version("/a"));
 });
+
+test("a guest who edits the board changes it, but what would start something on the host, or say where a frame runs, never reaches it; one who drives agents may start one", () => {
+  const host = storeWith("host", newSeed());
+  host.store.setCore("/a", { ...core("api"), frames: [{ id: "f1", title: "api", workspacePath: "/work/api" }] });
+  const was = host.store.getCore("/a")!;
+  const editor = storeWith("editor");
+  const dropped: string[] = [];
+  connect(host, editor, "edit", dropped);
+  // Moving and naming: taken.
+  const theirs = editor.store.getCore("hive://w")!;
+  editor.store.setCore("hive://w", { ...theirs, tileNames: { t1: "build" } }, { writer: "window", base: theirs });
+  expect(host.store.getCore("/a")!.tileNames).toEqual({ t1: "build" });
+  // A shell of theirs: not taken, and said why.
+  const named = editor.store.getCore("hive://w")!;
+  editor.store.setCore("hive://w", { ...named, tiles: [...named.tiles, { id: "t9", kind: "shell", label: "sh", cmd: "/bin/sh" }] }, { writer: "window", base: named });
+  expect(host.store.getCore("/a")!.tiles.map((t) => t.id)).toEqual(["t1"]);
+  expect(dropped).toEqual([expect.stringMatching(/^a change its role does not allow: adding tile t9/)]);
+  // Nor is the frame's folder, though they may drive agents; their shell is taken.
+  const driver = storeWith("driver");
+  const refused: string[] = [];
+  connect(host, driver, "agents", refused);
+  const at = driver.store.getCore("hive://w")!;
+  driver.store.setCore("hive://w", { ...at, frames: [{ id: "f1", title: "api", workspacePath: "/" }] }, { writer: "window", base: at });
+  expect(host.store.getCore("/a")!.frames).toEqual(was.frames);
+  expect(refused).toEqual([expect.stringMatching(/where frame f1 runs is the owner's/)]);
+  const driving = storeWith("driving");
+  connect(host, driving, "agents");
+  const now = driving.store.getCore("hive://w")!;
+  driving.store.setCore("hive://w", { ...now, tiles: [...now.tiles, { id: "t8", kind: "shell", label: "sh", cmd: "/bin/sh" }] }, { writer: "window", base: now });
+  expect(host.store.getCore("/a")!.tiles.map((t) => t.id)).toEqual(["t1", "t8"]);
+});

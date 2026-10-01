@@ -75,7 +75,7 @@ import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, sett
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { dialDevice, installNetworkIpc, movedAway, openJoined, peopleHere, personName, stopNetwork } from "./network.js";
-import { elsewhere, mayWriteShared } from "./shared-workspaces.js";
+import { elsewhere, mayWriteShared, refusedShared } from "./shared-workspaces.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
@@ -1152,8 +1152,12 @@ async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ p
 
 /** The workspace store, through the workspace API: each window writes as itself. */
 // A copy of a workspace shared from elsewhere is written only while its host lets this person
-// edit its board (M1).
-const layouts = new Layouts(storeFor, (repo) => !repo.startsWith("hive://") || mayWriteShared(repo.slice("hive://".length)));
+// edit its board (M1), and only with what their role there allows.
+const layouts = new Layouts(
+  storeFor,
+  (repo) => !repo.startsWith("hive://") || mayWriteShared(repo.slice("hive://".length)),
+  (repo, before, after) => (repo.startsWith("hive://") ? refusedShared(repo.slice("hive://".length), before, after) : null),
+);
 
 // The workspace API (R8): git and worktrees, files, issues, review comments, agents' status and
 /** Plans agents hand off, told to every client, answered by one who may drive agents (M2). */

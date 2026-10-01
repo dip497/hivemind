@@ -31,12 +31,8 @@ const LEAST: Record<string, Role> = {
   "terminal.flow": "view",
   "terminal.detach": "view",
   "terminal.watchActivity": "view",
-  // Editing the board.
-  "store.setCore": "edit",
-  "store.setView": "edit",
-  "store.setObjects": "edit",
-  "store.undo": "edit",
-  "store.redo": "edit",
+  // Editing the board is the document's own sync (`doc-sync.ts`), where the host takes only what
+  // the role allows: the store's writes are the owner's.
   // Typing into a terminal (with the keyboard handed over, R4) and sizing it; asking for its
   // keyboard, and handing on one held. Taking it back is the host's.
   "terminal.write": "terminals",

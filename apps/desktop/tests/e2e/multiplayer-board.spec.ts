@@ -1,12 +1,13 @@
 // The workspace over the network (M1, design §4.2 C and G): a guest who joined opens the host's
 // workspace and sees its tiles; a note either writes reaches the other; a guest who may only view
-// sees the host's changes and writes nothing, to the host or to their own copy; and each sees
-// where the other is.
+// sees the host's changes and writes nothing, to the host or to their own copy; a guest who may
+// edit the board starts nothing on the host; and each sees where the other is.
 import { test, expect, type ElectronApplication } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { hiveNetBuilt, note, notes, sharedWorkspace as shared, tiles } from "./helpers/multiplayer";
+import { hiveNetBuilt, note, notes, share, sharedWorkspace as shared, tiles } from "./helpers/multiplayer";
+import { guest as windowless } from "./helpers/guest";
 
 let root: string;
 const apps: ElectronApplication[] = [];
@@ -36,6 +37,35 @@ test("a guest who may only view sees the host's changes and writes nothing, not 
   await expect.poll(() => notes(guest), { timeout: 10_000 }).toEqual(["from the host"]);
   await host.waitForTimeout(1000);
   expect(await notes(host)).toEqual(["from the host"]);
+});
+
+test("a guest who may edit the board starts nothing on the host: a shell they add is put back on their own board, and one a device of theirs writes into the document itself is refused, and never runs there", async () => {
+  test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
+  const { host, guest } = await sharedWorkspace("edit");
+  const hostLog: string[] = [];
+  apps[0]!.process().stderr?.on("data", (d: Buffer) => hostLog.push(d.toString()));
+  const before = await tiles(host);
+
+  // From their window: put back at once, and the host never has it.
+  await guest.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
+  await expect.poll(() => tiles(guest), { timeout: 10_000 }).toEqual(before);
+  expect(await tiles(host)).toEqual(before);
+
+  // From a device of theirs that writes its copy of the document itself: the host says it does not
+  // take it, and its window, which starts a tile it has within moments, runs nothing.
+  const ran = path.join(root, "ran-on-the-host");
+  const link = await share(host, "edit");
+  const device = await windowless(path.join(root, "device"), "Sam", link, async () => {
+    await host.locator(".hm-join-request").getByRole("button", { name: "Allow" }).click();
+  });
+  const core = device.store.getCore(device.repo)!;
+  const shell = { id: "tile-shell-sam", kind: "shell", label: "sh", cmd: "/bin/sh", args: ["-c", `touch ${ran}`] };
+  device.store.setCore(device.repo, { ...core, tiles: [...core.tiles, shell] }, { writer: "device", base: core });
+  await expect.poll(() => hostLog.join(""), { timeout: 10_000 }).toMatch(/a change its role does not allow: adding tile tile-shell-sam/);
+  await host.waitForTimeout(3_000);
+  expect(fs.existsSync(ran)).toBe(false);
+  expect(await tiles(host)).toEqual(before);
+  device.stop();
 });
 
 test("each sees where the other is: the guest's pointer, named, and the tile they selected on the host's board; the host's face on the guest's", async () => {

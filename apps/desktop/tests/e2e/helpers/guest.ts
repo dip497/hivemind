@@ -21,6 +21,8 @@ const streamOf = (link: Link, stream: string): TextChannel => ({
 
 export interface Guest {
   client: WorkspaceClient;
+  /** Their copy of the workspace, which they may write as any replica may. */
+  store: WorkspaceStore;
   /** The workspace as the host names it to peers: `hive://<id>`. */
   repo: string;
   stop(): void;
@@ -58,6 +60,7 @@ export async function guest(dir: string, name: string, invite: string, allow: ()
   });
   return {
     client: new WorkspaceClient(peerTransport(streamOf(conn, "api"))),
+    store,
     repo,
     stop: () => { stopSync(); conn.close("left"); net.stop(); },
   };

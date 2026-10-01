@@ -13,6 +13,8 @@
  */
 import type { Access, AccessLists } from "@hivemind/workspace-host/access";
 import { mayEdit, replicate, type Moved } from "@hivemind/workspace-host/doc-sync";
+import { refusedEdit } from "@hivemind/workspace-host/edit-rules";
+import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
 import { followList } from "@hivemind/workspace-host/list-sync";
 import type { Link } from "@hivemind/workspace-host/hive-net";
 import { peerTransport, workspaceUrl } from "@hivemind/workspace-api/peers";
@@ -167,6 +169,14 @@ export function sharedStatus(workspace: string): SharedStatus | null {
 export function mayWriteShared(workspace: string): boolean {
   const entry = open.get(workspace);
   return !!entry && mayEdit(entry.status.access);
+}
+
+/** Why a window here may not change the layout of its copy of `workspace` from `before` to
+ *  `after`, or null: what the host would not take from this person's role there (`edit-rules.ts`),
+ *  which would part the copy from the host's. */
+export function refusedShared(workspace: string, before: CoreLayout | null, after: CoreLayout): string | null {
+  const entry = open.get(workspace);
+  return entry ? refusedEdit(before, after, entry.status.access) : "not connected to this workspace's host";
 }
 
 /** A terminal a window opens in a workspace shared from elsewhere is shown, never started there,

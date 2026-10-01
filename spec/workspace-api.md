@@ -1,4 +1,4 @@
-# Workspace API (0.6)
+# Workspace API (0.7)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -60,11 +60,17 @@ after a minute without it, and never what was typed.
 A peer names the workspace by its id, `hive://<workspaceId>`, wherever a call takes a repo (or a
 `cwd` inside it); the host reads that as its repo. Each call and notice is checked against the
 peer's role on the workspace (design §6) before it runs, and one the role does not allow is
-`FORBIDDEN` (a notice is dropped): reads and watching terminals are anyone's with access; the
-board's edits need *Can edit board*; typing into and resizing a terminal, and asking for its
-keyboard or handing it on, *Can use terminals*; answering an agent's plan, and opening and closing
-tiles, *Can drive agents*;
-anything else is the owner's (taking a keyboard back among them). A peer's `terminal.open` of a
+`FORBIDDEN` (a notice is dropped): reads and watching terminals are anyone's with access; typing
+into and resizing a terminal, and asking for its keyboard or handing it on, *Can use terminals*;
+answering an agent's plan, and opening and closing tiles, *Can drive agents*; anything else is the
+owner's (taking a keyboard back among them, and the `store.*` writes). A peer edits the board
+through the workspace document's own sync (the connection's `sync` stream), where the host takes
+only what the peer's role allows, and drops a change that does more, whole: moving, sizing,
+naming and grouping what is on the board, *Can edit board*; placing, taking away or changing what
+a tile that runs something on the host runs (a terminal's, an agent's or a browser page's: its
+kind, command, arguments, session or page), or moving it to another frame, *Can drive agents*;
+and where a frame's tiles run (its folder, its worktree and branch, the frame it nests in), and
+taking away a frame that says so, the owner's. A peer's `terminal.open` of a
 session already running shows it (`attachOnly`), whatever its role. A peer is sent only the
 events about its workspace's tiles, and a tile outside the workspace is refused to it. A
 terminal is named by its session, `hm:<tile>`; the tile is the workspace's. Events reach a peer

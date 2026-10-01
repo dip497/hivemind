@@ -3,12 +3,15 @@
  * frames (a `hive/ws/1` connection's `sync` stream). The replica says what it has seen (`hello`);
  * the host answers with what it lacks (`welcome`), and from then on each side sends its changes as
  * they are made (`update`), from what the other has seen, so each sends only what the other
- * lacks. The host takes a replica's changes only when its access lets it edit the board: a
- * viewer's are dropped. A device the workspace has moved away from says where it is now
+ * lacks. The host takes a replica's changes only when its access lets it edit the board, and
+ * only what that access lets it change (`edit-rules.ts`): a viewer's are dropped, and so is a
+ * change that starts something on the host without driving agents, or says where a frame runs
+ * without being the owner. A device the workspace has moved away from says where it is now
  * (`moved`, M3) and closes.
  */
 import { ROLES, type Access } from "./access.js";
-import type { WorkspaceChange, WorkspaceStore } from "./store.js";
+import { refusedEdit } from "./edit-rules.js";
+import { RefusedImport, type WorkspaceChange, type WorkspaceStore } from "./store.js";
 
 /** Text frames, both ways. */
 export interface SyncChannel {
@@ -74,9 +77,9 @@ export function serveReplica(
     if (m?.t !== "update") return;
     if (!mayEdit(opts.access)) return opts.onDropped?.("a viewer's change");
     try {
-      store.importFrom(repo, fromB64(m.data), { writer: opts.writer });
+      store.importFrom(repo, fromB64(m.data), { writer: opts.writer }, (before, after) => refusedEdit(before, after, opts.access));
     } catch (e) {
-      opts.onDropped?.(`a change that is not a document's (${e instanceof Error ? e.message : String(e)})`);
+      opts.onDropped?.(e instanceof RefusedImport ? `a change its role does not allow: ${e.message}` : `a change that is not a document's (${e instanceof Error ? e.message : String(e)})`);
     }
   });
   // Listening before the welcome goes: the replica answers it with what it wrote while away.

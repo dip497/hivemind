@@ -82,9 +82,11 @@ test("a peer's calls run as the peer, with the workspace it names read as its re
   expect(await code(viewer.client.call("git.commit", workspaceUrl(W), "m"))).toBe("FORBIDDEN");
   expect(ran.map((r) => r.what)).toEqual(["file.read"]);
 
+  // The board is edited through the document's sync, which takes only what the role allows: the
+  // store's writes are the owner's, whatever the role.
   const editor = connect("edit");
-  await editor.client.call("store.setCore", workspaceUrl(W), {});
-  expect(ran).toEqual([{ what: "store.setCore", by: editor.actor, args: [REPO] }]);
+  expect(await code(editor.client.call("store.setCore", workspaceUrl(W), {}))).toBe("FORBIDDEN");
+  expect(ran).toEqual([]);
   // Starting what runs on the host is for those who drive agents; its cwd is read as a path here.
   expect(await code(editor.client.call("terminal.open", { tileId: "in-1", cwd: `${workspaceUrl(W)}/src` } as never))).toBe("FORBIDDEN");
   const driver = connect("agents");
