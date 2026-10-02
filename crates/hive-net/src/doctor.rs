@@ -41,7 +41,7 @@ pub async fn check(key: SecretKey, reach: &Reach, access: Option<String>) -> Val
         }
         relays.push(answer);
     }
-    let http = crate::access::client::http().ok();
+    let http = crate::egress::trusted().ok();
     // Whether `url` answers with success, or with `also`.
     let answers =
         |url: String, also: Option<u16>| {

@@ -528,7 +528,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     boards: () => heldBoards(workspaceStore()),
     changes: onWorkspaceChange,
     subscriptions: pushSubscriptions(),
-    post: postNotice,
+    post: (endpoint, body, urgency, sign) => postNotice(endpoint, body, urgency, sign ? machineIdentity().device : null),
     onWarn: (m) => console.warn(`[push] ${m}`),
   });
   onStatus((change) => notices.changed(change));

@@ -36,8 +36,13 @@ A phone is told what happens while you are away (`spec/push.md`): it gives each 
 with a Web Push subscription (an endpoint, and a P-256 push key and a secret of its own, kept as
 `push.key` and `push.auth` beside its device key), and they post each notice there encrypted to it
 (RFC 8291), so the push service, or anyone on the network, reads nothing of it. `push --listen` is
-its own endpoint, on an address your computers reach it at; the apps give a push service's.
+its own endpoint, on an address your computers reach it at; the apps give a push service's. On a
+network with a push server (`spec/push.md` 0.3), the phone registers there first, naming the
+devices that may tell it, and gives them the address the server gives it; the server passes each
+notice on to the listener, as a UnifiedPush distributor's part. Where it registered is kept
+(`push-server.json`), so that unpairing a device registers it again without that device.
 
 ```bash
-cargo test --locked   # conformance/pairing.json, needs.json and push.json (the phone's side), and what a phone keeps
+cargo test --locked   # conformance/pairing.json, needs.json and push.json (the phone's side), what a phone keeps,
+                      # and registering again at a push server without a device unpaired
 ```

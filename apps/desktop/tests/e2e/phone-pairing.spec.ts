@@ -11,7 +11,9 @@
 // said; back, as it starts or wakes, it tells the phone, which shows it once it found it away
 // (spec/push.md 0.2); and unpaired from the phone while away, only the phone forgets. And the
 // computer on a network of its own: its link says how to get onto that network from elsewhere,
-// and the phone takes the network and is let onto it (spec/pairing.md 0.5, 0.6).
+// and the phone takes the network and is let onto it (spec/pairing.md 0.5, 0.6); with a push
+// server there, the phone registers at it, naming the computer, and is told through it, which
+// keeps nothing of what it passes on; unpaired, the computer is named no more (spec/push.md 0.3).
 import { test, expect, type ElectronApplication } from "@playwright/test";
 import { execFile, execSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -329,3 +331,33 @@ for (const [policy, admission] of [["closed", "vouched for by the app"], ["open-
     expect(await needsOf(phone)).toEqual({ needs: [], working: 0, away: [] });
   });
 }
+
+test("on a network with a push server, the phone registers there, naming the computer, and is told through it what waits on the person; the server keeps nothing of what it passes on; unpaired, the computer is named no more", async () => {
+  test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
+  test.setTimeout(120_000);
+  const net = await ownNetwork(root, procs, "closed");
+  const d = await desktopWith(probeAgent());
+  expect(await d.desktop.evaluate((l) => window.hive.useNetwork(l), net.link)).toMatchObject({ admission: "enrolled" });
+  const { phone, phoneId } = await pairPhone(d);
+  await d.desktop.keyboard.press("Escape");
+
+  // The phone registers at the network's push server, which gives the computer its address there.
+  const told = listen(phone);
+  await expect.poll(() => told[0], { timeout: 30_000 }).toMatchObject({ via: net.push, told: [os.hostname()], away: [] });
+  expect(told[0]!.endpoint).toMatch(new RegExp(`^${net.push}/[0-9a-f]{32}$`));
+  const registrations = () => Object.values((JSON.parse(fs.readFileSync(path.join(net.data, "push.json"), "utf8")) as { phones: Record<string, Record<string, unknown>> }).phones);
+  expect(registrations()).toEqual([expect.objectContaining({ device: phoneId, platform: "unifiedpush", senders: [d.me.deviceId] })]);
+
+  // An agent on the computer begins waiting on the person: the computer posts it, signed, to the
+  // push server, which passes it on to the phone, and the phone decrypts it.
+  const tile = await startProbe(d);
+  await expect.poll(() => told.slice(1), { timeout: 30_000 }).toEqual([expect.objectContaining({ v: 1, t: "needs", name: "api", tile, agent: "Editing Nav.tsx", kind: "permission" })]);
+  // What the server keeps names no workspace, agent or wait.
+  const kept = fs.readFileSync(path.join(net.data, "push.json"), "utf8");
+  for (const secret of ["api", "Editing Nav.tsx", tile, "permission"]) expect(kept).not.toContain(secret);
+
+  // Unpaired from the phone: it registers again, and the computer is named no more.
+  const unpaired = JSON.parse((await run(HIVE_PHONE, ["unpair", d.me.deviceId, "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as unknown;
+  expect(unpaired).toMatchObject({ device: d.me.deviceId, told: true });
+  expect(registrations()).toEqual([expect.objectContaining({ device: phoneId, senders: [] })]);
+});

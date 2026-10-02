@@ -17,7 +17,7 @@ JSON text:
   "relays": [{ "url": "https://relay.hive.example.com" }],
   "lookup": "https://dns.hive.example.com/pkarr",
   "access": { "url": "https://access.hive.example.com", "policy": "closed" },
-  "push": { "url": "https://push.hive.example.com", "kinds": ["unifiedpush"] },
+  "push": { "url": "https://hive.example.com/push", "kinds": ["unifiedpush"], "vapid": "<its key>" },
   "admin": "<the admin's public key, hex>",
   "local": { "mdns": true },
   "issuedAt": 1790000000000
@@ -32,7 +32,11 @@ JSON text:
 - `lookup` is a pkarr relay: a device on the network publishes there which relay it is reached
   through, signed by its key (`PUT <lookup>/<z-base-32 of its id>`), and finds another by its id
   alone; workspaces' host records are kept there too (`host-record.md`). `hive-net serve` serves
-  it at `/pkarr`, beside the relay, and the access service at `/access`.
+  it at `/pkarr`, beside the relay, the access service at `/access` and the push server at `/push`.
+- `push` is the network's push server (`push.md` 0.3): where a phone registers to be told what the
+  person's devices post it; `kinds`, where it can tell a phone (`unifiedpush`, `apns`, `fcm`); and
+  `vapid`, its VAPID key (RFC 8292, P-256, uncompressed, base64url), which a phone gives its
+  UnifiedPush distributor so the server may post there.
 - A reader ignores a field it does not know (a minor version adds them).
 
 ## The signed file

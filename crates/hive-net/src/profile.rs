@@ -44,6 +44,10 @@ pub struct AccessService {
 pub struct PushService {
     pub url: String,
     pub kinds: Vec<String>,
+    /// Its VAPID key (RFC 8292), uncompressed, base64url: what a phone gives its UnifiedPush
+    /// distributor, so the server may post there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vapid: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -183,8 +187,9 @@ pub fn builtin(name: &str) -> Option<Verified> {
                 policy: Policy::OpenPow,
             }),
             push: Some(PushService {
-                url: "https://push.hivemind.griiken.com".into(),
+                url: "https://push.hivemind.griiken.com/push".into(),
                 kinds: vec!["apns".into(), "fcm".into(), "unifiedpush".into()],
+                vapid: None,
             }),
             admin: None,
             local: Local { mdns: true },

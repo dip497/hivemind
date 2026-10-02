@@ -10,32 +10,8 @@ mod support;
 use std::{fs, path::Path};
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use rcgen::{BasicConstraints, CertificateParams, CertifiedIssuer, IsCa, KeyPair};
 use serde_json::Value;
 use support::*;
-
-/// A certificate authority, and a certificate it signed for 127.0.0.1: the CA's file, and the
-/// certificate's and its key's.
-fn certificates(root: &Path) -> (String, String, String) {
-    let mut ca = CertificateParams::new(Vec::<String>::new()).unwrap();
-    ca.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
-    let ca = CertifiedIssuer::self_signed(ca, KeyPair::generate().unwrap()).unwrap();
-    let key = KeyPair::generate().unwrap();
-    let cert = CertificateParams::new(vec!["127.0.0.1".to_string()])
-        .unwrap()
-        .signed_by(&key, &ca)
-        .unwrap();
-    let file = |name: &str, pem: String| {
-        let path = root.join(name);
-        fs::write(&path, pem).unwrap();
-        path.to_str().unwrap().to_string()
-    };
-    (
-        file("ca.pem", ca.pem()),
-        file("cert.pem", cert.pem()),
-        file("key.pem", key.serialize_pem()),
-    )
-}
 
 /// `serve --all` over HTTPS on `bind` with the certificate in files, and its extra `args`.
 fn serve_https(root: &Path, cert: &str, key: &str, bind: &str, args: &[&str]) -> Running {

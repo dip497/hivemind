@@ -9,7 +9,7 @@ import { createECDH } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { RECORD_SIZE, encrypt, encryptWith, subscriptionOf } from "../src/web-push.ts";
+import { MAX_PLAINTEXT, RECORD_SIZE, encrypt, encryptWith, subscriptionOf } from "../src/web-push.ts";
 
 const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../conformance/push.json");
 const r = (JSON.parse(fs.readFileSync(file, "utf8")) as { rfc8291: Record<string, string> }).rfc8291;
@@ -31,11 +31,16 @@ test("each message has a key pair and a salt of its own, in one record of the sp
   }
   assert.notDeepEqual(one.subarray(0, 16), two.subarray(0, 16), "salts");
   assert.notDeepEqual(one.subarray(21, 86), two.subarray(21, 86), "keys");
+  // A whole message is at most 4096 bytes (RFC 8291 §4): 3993 of notice.
+  assert.equal(encrypt(Buffer.alloc(MAX_PLAINTEXT, 1), to).length, 4096);
+  assert.throws(() => encrypt(Buffer.alloc(MAX_PLAINTEXT + 1, 1), to), RangeError);
 });
 
-test("a subscription is taken only when it is one: an http(s) endpoint, a P-256 key, a 16-byte secret", () => {
+test("a subscription is taken only when it is one: an http(s) endpoint, a P-256 key, a 16-byte secret; and it asks for signed notices only in so many words", () => {
   const good = { endpoint: "https://push.example/sub/1", p256dh: r.uaPublic, auth: r.auth };
   assert.deepEqual(subscriptionOf({ ...good, extra: 1 }), good);
+  assert.deepEqual(subscriptionOf({ ...good, sign: true }), { ...good, sign: true });
+  assert.deepEqual(subscriptionOf({ ...good, sign: "true" }), good);
   assert.deepEqual(subscriptionOf({ ...good, endpoint: "http://192.168.1.31:8080/push" })?.endpoint, "http://192.168.1.31:8080/push");
   const bad: unknown[] = [
     null, { ...good, endpoint: "file:///etc/passwd" }, { ...good, endpoint: "not a url" }, { ...good, endpoint: `https://x/${"a".repeat(1000)}` },

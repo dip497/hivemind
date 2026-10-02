@@ -4,15 +4,18 @@
 // each phone subscribed is posted the notice encrypted to it alone, urgently when it waits on them;
 // one its push service no longer knows is dropped; an agent not yet on a board here is told of
 // once it is, by at most 200 characters of its name; a device back tells each phone so; and the
-// subscriptions are kept one per phone, readable by this user alone.
+// subscriptions are kept one per phone, readable by this user alone; and each notice is posted as
+// Web Push takes it, signed by the device that posts it, as a push server asks (0.3).
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { createDecipheriv, createECDH, createHmac, type ECDH } from "node:crypto";
+import { createDecipheriv, createECDH, createHash, createHmac, createPublicKey, verify, type ECDH } from "node:crypto";
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { newSeed, idOf } from "@hivemind/workspace-host/identity";
 import type { WorkspaceChange } from "@hivemind/workspace-host/layout";
-import { AGENT_MAX, toldOf, PushNotices, PushSubscriptions, type Notice } from "../src/push.ts";
+import { AGENT_MAX, toldOf, postNotice, PushNotices, PushSubscriptions, type Notice } from "../src/push.ts";
 import type { HeldBoard, WaitingStatus } from "../src/needs.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-push-"));
@@ -61,14 +64,14 @@ test("an agent that begins waiting on the person, finishes or fails is told; not
   for (const [before, now, t, about] of cases) assert.equal(toldOf(before, now), t, about);
 });
 
-test("each phone subscribed is posted the notice encrypted to it alone, urgently when it waits on them; one its push service no longer knows is dropped", async () => {
+test("each phone subscribed is posted the notice encrypted to it alone, urgently when it waits on them, signed where its subscription asks; one its push service no longer knows is dropped", async () => {
   const [a, b] = [phone("https://push.example/a"), phone("https://push.example/b")];
   const subscriptions = new PushSubscriptions(path.join(tmp, `push-${made++}.json`));
-  subscriptions.set("a".repeat(64), a.sub);
+  subscriptions.set("a".repeat(64), { ...a.sub, sign: true });
   subscriptions.set("b".repeat(64), b.sub);
-  const posted: Array<{ endpoint: string; body: Buffer; urgency: string }> = [];
+  const posted: Array<{ endpoint: string; body: Buffer; urgency: string; sign: boolean }> = [];
   // b's push service no longer knows it.
-  const notices = new PushNotices({ boards: () => held, changes: () => () => {}, subscriptions, post: async (endpoint, body, urgency) => { posted.push({ endpoint, body, urgency }); return endpoint.endsWith("/b") ? 410 : 201; } });
+  const notices = new PushNotices({ boards: () => held, changes: () => () => {}, subscriptions, post: async (endpoint, body, urgency, sign) => { posted.push({ endpoint, body, urgency, sign }); return endpoint.endsWith("/b") ? 410 : 201; } });
   notices.changed(change(st("working")));
   notices.changed(change(st("waiting", "permission", T)));
   await new Promise((r) => setImmediate(r));
@@ -77,7 +80,7 @@ test("each phone subscribed is posted the notice encrypted to it alone, urgently
   assert.deepEqual(read(sent["https://push.example/a"]!.body, a.key, a.auth), notice);
   assert.deepEqual(read(sent["https://push.example/b"]!.body, b.key, b.auth), notice);
   assert.throws(() => read(sent["https://push.example/a"]!.body, b.key, b.auth), "not b's to read");
-  assert.deepEqual(posted.map((p) => p.urgency), ["high", "high"]);
+  assert.deepEqual(posted.map((p) => [p.endpoint, p.urgency, p.sign]), [["https://push.example/a", "high", true], ["https://push.example/b", "high", false]]);
   assert.deepEqual(subscriptions.list().map((s) => s.device), ["a".repeat(64)]);
 
   posted.length = 0;
@@ -88,12 +91,13 @@ test("each phone subscribed is posted the notice encrypted to it alone, urgently
   assert.deepEqual(read(posted[0]!.body, a.key, a.auth), { v: 1, t: "finished", workspace: W, name: "api", tile: "t1", agent: "Claude", since: T + 2 });
 });
 
-test("an agent on no board here yet is told of once its window saves its tile, by at most 200 characters of its name, unless its status changes first", async () => {
+test("an agent on no board here yet is told of once its window saves its tile, by at most 200 characters of its name and its workspace's, unless its status changes first", async () => {
   const a = phone("https://push.example/a");
   const subscriptions = new PushSubscriptions(path.join(tmp, `push-${made++}.json`));
   subscriptions.set("a".repeat(64), a.sub);
   const tiles = [{ id: "t1", kind: "claude", label: "Claude" }];
-  const boards = (): HeldBoard[] => [{ workspace: W, name: "api", repo: "/home/p/api", core: { frames: [], tiles: [...tiles] } }];
+  const named = "ä".repeat(AGENT_MAX + 50);
+  const boards = (): HeldBoard[] => [{ workspace: W, name: named, repo: "/home/p/api", core: { frames: [], tiles: [...tiles] } }];
   const heard = new Set<(change: WorkspaceChange) => void>();
   const posted: unknown[] = [];
   const notices = new PushNotices({
@@ -119,17 +123,17 @@ test("an agent on no board here yet is told of once its window saves its tile, b
   assert.deepEqual(posted, []);
   await save("t2");
   await save("t3");
-  assert.deepEqual(posted, [{ v: 1, t: "needs", workspace: W, name: "api", tile: "t2", agent: "🐝".repeat(AGENT_MAX), kind: "permission", since: T }]);
+  assert.deepEqual(posted, [{ v: 1, t: "needs", workspace: W, name: "ä".repeat(AGENT_MAX), tile: "t2", agent: "🐝".repeat(AGENT_MAX), kind: "permission", since: T }]);
 });
 
-test("a device back tells each phone subscribed, encrypted to it, by its id and what it is called, plainly", async () => {
+test("a device back tells each phone subscribed, encrypted to it, by its id and what it is called (at most 200 characters of it), plainly", async () => {
   const [a, b] = [phone("https://push.example/a"), phone("https://push.example/b")];
   const subscriptions = new PushSubscriptions(path.join(tmp, `push-${made++}.json`));
   subscriptions.set("a".repeat(64), a.sub);
   subscriptions.set("b".repeat(64), b.sub);
   const posted: Array<{ endpoint: string; body: Buffer; urgency: string }> = [];
   const notices = new PushNotices({
-    me: () => ({ device: "d".repeat(64), name: "desk" }),
+    me: () => ({ device: "d".repeat(64), name: "desk".repeat(AGENT_MAX) }),
     boards: () => held,
     changes: () => () => {},
     subscriptions,
@@ -141,7 +145,7 @@ test("a device back tells each phone subscribed, encrypted to it, by its id and 
   const sent = Object.fromEntries(posted.map((p) => [p.endpoint, p]));
   for (const [to, endpoint] of [[a, "https://push.example/a"], [b, "https://push.example/b"]] as const) {
     const back = read(sent[endpoint]!.body, to.key, to.auth) as { since: number };
-    assert.deepEqual({ ...back, since: 0 }, { v: 1, t: "back", device: "d".repeat(64), name: "desk", since: 0 });
+    assert.deepEqual({ ...back, since: 0 }, { v: 1, t: "back", device: "d".repeat(64), name: "desk".repeat(AGENT_MAX / 4), since: 0 });
     assert.ok(back.since >= before && back.since <= Date.now());
   }
   assert.deepEqual(posted.map((p) => p.urgency), ["normal", "normal"]);
@@ -153,11 +157,54 @@ test("subscriptions are kept one per phone, readable by this user alone; anythin
   const [a, a2, b] = [phone("https://push.example/a"), phone("https://push.example/a2"), phone("https://push.example/b")];
   subscriptions.set("a".repeat(64), a.sub);
   subscriptions.set("b".repeat(64), b.sub);
-  subscriptions.set("a".repeat(64), a2.sub);
-  assert.deepEqual(subscriptions.list(), [{ device: "b".repeat(64), ...b.sub }, { device: "a".repeat(64), ...a2.sub }]);
+  subscriptions.set("a".repeat(64), { ...a2.sub, sign: true });
+  assert.deepEqual(subscriptions.list(), [{ device: "b".repeat(64), ...b.sub }, { device: "a".repeat(64), ...a2.sub, sign: true }]);
   assert.equal(fs.statSync(file).mode & 0o777, 0o600);
   subscriptions.remove("b".repeat(64));
   const kept = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
-  fs.writeFileSync(file, JSON.stringify({ ...kept, ["c".repeat(64)]: { endpoint: "ftp://x", p256dh: "", auth: "" }, nonsense: a.sub }));
-  assert.deepEqual(subscriptions.list(), [{ device: "a".repeat(64), ...a2.sub }]);
+  fs.writeFileSync(file, JSON.stringify({ ...kept, ["c".repeat(64)]: { endpoint: "ftp://x", p256dh: "", auth: "" }, ["d".repeat(64)]: { ...b.sub, sign: "yes" }, nonsense: a.sub }));
+  assert.deepEqual(subscriptions.list(), [{ device: "a".repeat(64), ...a2.sub, sign: true }, { device: "d".repeat(64), ...b.sub }]);
+});
+
+test("a notice is posted as Web Push takes it; signed, where its subscription asks, by the device that posts it over the phone's handle, its time and its body; and never where a redirect points", async () => {
+  const got: Array<{ url: string; headers: http.IncomingHttpHeaders; body: Buffer }> = [];
+  const server = http.createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (c: Buffer) => chunks.push(c));
+    req.on("end", () => {
+      got.push({ url: req.url ?? "", headers: req.headers, body: Buffer.concat(chunks) });
+      if (req.url === "/moved") res.writeHead(307, { Location: "/push/elsewhere" }).end();
+      else res.writeHead(201).end();
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  after(() => server.close());
+  const { port } = server.address() as { port: number };
+  const handle = "00112233445566778899aabbccddeeff";
+  const device = newSeed();
+  const body = Buffer.from("a notice, encrypted to the phone");
+  const before = Date.now();
+  assert.equal(await postNotice(`http://127.0.0.1:${port}/push/${handle}`, body, "high", device), 201);
+  const [{ headers, body: posted }] = got;
+  assert.deepEqual(posted, body);
+  assert.deepEqual(
+    { ttl: headers.ttl, urgency: headers.urgency, encoding: headers["content-encoding"], type: headers["content-type"] },
+    { ttl: "86400", urgency: "high", encoding: "aes128gcm", type: "application/octet-stream" },
+  );
+  // Hive-Sender: the device, the time, Ed25519 over "hive/push-notice/1\n", the handle, "\n",
+  // the time, "\n" and SHA-256 of the body (checked here apart from the code).
+  const [id, at, signature, ...rest] = String(headers["hive-sender"]).split(" ");
+  assert.deepEqual(rest, []);
+  assert.equal(id, idOf(device));
+  assert.ok(Number(at) >= before && Number(at) <= Date.now(), at);
+  const signed = Buffer.concat([Buffer.from(`hive/push-notice/1\n${handle}\n${at}\n`), createHash("sha256").update(body).digest()]);
+  const key = createPublicKey({ key: Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), Buffer.from(id!, "hex")]), format: "der", type: "spki" });
+  assert.ok(verify(null, signed, key, Buffer.from(signature!, "hex")), "the signature is the device's over the handle, the time and the body");
+
+  // Unsigned where the subscription does not ask: the device's key goes to no one else.
+  assert.equal(await postNotice(`http://127.0.0.1:${port}/up/a-phone`, body, "normal", null), 201);
+  assert.equal(got[1]!.headers["hive-sender"], undefined);
+  // A redirect is not followed: the notice goes nowhere else.
+  await assert.rejects(postNotice(`http://127.0.0.1:${port}/moved`, body, "normal", device));
+  assert.deepEqual(got.map((g) => g.url), [`/push/${handle}`, "/up/a-phone", "/moved"]);
 });

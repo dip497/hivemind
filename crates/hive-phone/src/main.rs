@@ -27,8 +27,10 @@
 //!   hive-phone push --listen <ip:port>
 //!                               be told what happens on the devices this phone paired with (an
 //!                               agent begins waiting on you, finishes, fails): they post to this
-//!                               address, the one they reach the phone at, and each notice is
-//!                               printed as it comes, until Ctrl+C
+//!                               address, or, on a network with a push server, to the address it
+//!                               gives this phone, which passes each on here (a UnifiedPush
+//!                               distributor's part); each notice is printed as it comes, until
+//!                               Ctrl+C
 //!
 //! Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),
 //! `--name <name>` (pair: what the app lists this phone as; default `Phone`), `--json` (pair,
@@ -37,7 +39,7 @@
 use std::{path::PathBuf, process::ExitCode, sync::Arc, time::SystemTime};
 
 use anyhow::{bail, Context, Result};
-use hive_net::net;
+use hive_net::{net, push::Platform};
 use hive_phone::{
     identity::Identity,
     needs::{self, Need},
@@ -320,6 +322,15 @@ async fn run(args: Args) -> Result<()> {
             let endpoint = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
             let told = phone.unpair(&endpoint, device).await?;
             endpoint.close().await;
+            // Its push server is told the devices that may tell this phone now: not that one.
+            if let Err(e) =
+                push::register_again(&identity_dir(&args)?, phone.key(), &senders(&phone)?).await
+            {
+                eprintln!(
+                    "hive-phone: the push server still lets {} tell this phone: {e:#}",
+                    device.name
+                );
+            }
             if args.json {
                 println!(
                     "{}",
@@ -432,15 +443,37 @@ async fn run(args: Args) -> Result<()> {
             }
         }
         "push" => {
-            let keys = Arc::new(PushKeys::kept_or_made(&identity_dir(&args)?)?);
+            let dir = identity_dir(&args)?;
+            let keys = Arc::new(PushKeys::kept_or_made(&dir)?);
             let at = args.listen.as_deref().context("push: --listen <ip:port>")?;
             let listener = tokio::net::TcpListener::bind(at).await?;
-            let endpoint = format!("http://{}/push", listener.local_addr()?);
-            let subscription = keys.subscription(&endpoint);
+            let listening = format!("http://{}/push", listener.local_addr()?);
             if phone.devices().is_empty() {
                 bail!("this phone is paired with nothing yet: `hive-phone pair <link>`");
             }
             let (net, devices) = reaching(&phone).await?;
+            // Through the network's push server, when it has one that passes notices on to a
+            // distributor: this listener is this phone's.
+            let server = phone
+                .network()
+                .and_then(|n| n.profile.push)
+                .filter(|p| p.kinds.iter().any(|k| k == "unifiedpush"))
+                .map(|p| p.url);
+            let via = match &server {
+                Some(url) => {
+                    let to = (Platform::Unifiedpush, listening.as_str(), false);
+                    match push::register(&dir, phone.key(), url, to, &senders(&phone)?).await {
+                        Ok(endpoint) => Some((url.clone(), endpoint)),
+                        Err(e) => {
+                            eprintln!("hive-phone: {e:#}: the devices post here directly");
+                            None
+                        }
+                    }
+                }
+                None => None,
+            };
+            let endpoint = via.as_ref().map_or(listening.clone(), |(_, e)| e.clone());
+            let subscription = keys.subscription(&endpoint, via.is_some());
             let (mut told, mut away) = (vec![], vec![]);
             for d in &devices {
                 let given = async {
@@ -459,9 +492,12 @@ async fn run(args: Args) -> Result<()> {
             if args.json {
                 println!(
                     "{}",
-                    json!({ "endpoint": endpoint, "told": told, "away": away })
+                    json!({ "endpoint": endpoint, "via": via.map(|(url, _)| url), "told": told, "away": away })
                 );
             } else {
+                if let Some((url, _)) = &via {
+                    println!("told through the push server {url}");
+                }
                 println!("told at {endpoint}: {}", told.join(", "));
                 for name in &away {
                     println!("{name} is away: it is not told where to reach this phone");
@@ -473,6 +509,20 @@ async fn run(args: Args) -> Result<()> {
         other => bail!("{other}: not a command\n{USAGE}"),
     }
     Ok(())
+}
+
+/// The devices that may tell this phone what happens on them: the person's, as it knows them.
+fn senders(phone: &Identity) -> Result<Vec<iroh::PublicKey>> {
+    phone
+        .devices()
+        .iter()
+        .map(|d| {
+            d.with
+                .device
+                .parse()
+                .with_context(|| format!("{} is no device", d.with.device))
+        })
+        .collect()
 }
 
 /// This phone on the network, and the person's devices it reaches: those it paired with, and the

@@ -1,7 +1,9 @@
 //! What happens while the person is away, told to their phone (M5, spec/push.md): the phone keeps
 //! a push key (P-256) and a secret, gives each of the person's devices where to tell it (a Web Push
 //! subscription), and decrypts what they send (RFC 8291, over RFC 8188's `aes128gcm`). Whatever
-//! carries a notice reads nothing of it. Held to `conformance/push.json`.
+//! carries a notice reads nothing of it. Held to `conformance/push.json`. On a network with a push
+//! server, the phone registers there, naming the devices that may tell it, and is told through it
+//! (0.3).
 
 use std::{fs, path::Path};
 
@@ -14,7 +16,13 @@ use p256::{elliptic_curve::sec1::ToEncodedPoint, PublicKey, SecretKey};
 use serde_json::{json, Value};
 use sha2::Sha256;
 
+use hive_net::push::{client, Platform};
+use serde::{Deserialize, Serialize};
+
 use crate::{devices, identity::write_private};
+
+/// Where this phone last registered at its network's push server, kept beside its keys.
+const REGISTERED: &str = "push-server.json";
 
 fn hmac(key: &[u8], data: &[&[u8]]) -> [u8; 32] {
     let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC takes any key");
@@ -67,13 +75,18 @@ impl PushKeys {
             .to_vec()
     }
 
-    /// Where it is told, and with what: a Web Push subscription.
-    pub fn subscription(&self, endpoint: &str) -> Value {
-        json!({
+    /// Where it is told, and with what: a Web Push subscription; one that asks each device to sign
+    /// what it posts when `sign` (a push server's endpoint, spec/push.md 0.3).
+    pub fn subscription(&self, endpoint: &str, sign: bool) -> Value {
+        let mut subscription = json!({
             "endpoint": endpoint,
             "p256dh": URL_SAFE_NO_PAD.encode(self.public()),
             "auth": URL_SAFE_NO_PAD.encode(self.auth),
-        })
+        });
+        if sign {
+            subscription["sign"] = json!(true);
+        }
+        subscription
     }
 
     /// What `body`, sent to this phone, says (RFC 8291 §3.4, RFC 8188 §2): refused when it is not
@@ -88,6 +101,11 @@ impl PushKeys {
         ensure!(
             rs > 17 && record.len() <= rs,
             "a push message of more than one record"
+        );
+        // The sender's key, uncompressed (RFC 8291 §4).
+        ensure!(
+            idlen == 65 && sender[0] == 0x04,
+            "a push message from a key not given whole"
         );
         let shared = p256::ecdh::diffie_hellman(
             self.secret.to_nonzero_scalar(),
@@ -130,4 +148,58 @@ pub async fn subscribe(connection: &Connection, subscription: &Value) -> Result<
         bail!("{}", devices::refusal(&answer));
     }
     Ok(())
+}
+
+/// Where this phone registered to be told through a push server: the server, and where it tells
+/// the phone.
+#[derive(Serialize, Deserialize)]
+struct Registered {
+    url: String,
+    platform: Platform,
+    token: String,
+    sandbox: bool,
+}
+
+/// Register at the push server `url` to be told at `platform`'s `token` by the devices `senders`
+/// (spec/push.md 0.3), keeping where in `dir`: the address those devices tell this phone at.
+pub async fn register(
+    dir: &Path,
+    key: &iroh::SecretKey,
+    url: &str,
+    (platform, token, sandbox): (Platform, &str, bool),
+    senders: &[iroh::PublicKey],
+) -> Result<String> {
+    let endpoint = client::register(url, key, platform, token, sandbox, senders).await?;
+    let kept = Registered {
+        url: url.into(),
+        platform,
+        token: token.into(),
+        sandbox,
+    };
+    write_private(&dir.join(REGISTERED), &serde_json::to_string(&kept)?)?;
+    Ok(endpoint)
+}
+
+/// Register anew where this phone last registered, to be told by `senders` alone now (one was
+/// unpaired): so a device it no longer names posts it nothing. False when it registered nowhere.
+pub async fn register_again(
+    dir: &Path,
+    key: &iroh::SecretKey,
+    senders: &[iroh::PublicKey],
+) -> Result<bool> {
+    let Ok(text) = fs::read_to_string(dir.join(REGISTERED)) else {
+        return Ok(false);
+    };
+    let kept: Registered =
+        serde_json::from_str(&text).with_context(|| format!("{REGISTERED} is not one"))?;
+    client::register(
+        &kept.url,
+        key,
+        kept.platform,
+        &kept.token,
+        kept.sandbox,
+        senders,
+    )
+    .await?;
+    Ok(true)
 }

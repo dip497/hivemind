@@ -91,7 +91,7 @@ fn at(lookup: &Url, key: &PublicKey) -> String {
 /// File `record`, signed by `workspace`'s key, at the lookup server `lookup`.
 pub async fn publish(lookup: &Url, workspace: &SecretKey, record: HostRecord) -> Result<()> {
     let packet = record.sign(workspace)?;
-    let response = crate::access::client::http()?
+    let response = crate::egress::trusted()?
         .put(at(lookup, &workspace.public()))
         .body(packet.to_relay_payload())
         .send()
@@ -107,7 +107,7 @@ pub async fn publish(lookup: &Url, workspace: &SecretKey, record: HostRecord) ->
 /// it, its signature checked, with the packet as one device hands it to another (`to_text`); none
 /// when it has none.
 pub async fn resolve(lookup: &Url, workspace: PublicKey) -> Result<Option<(HostRecord, String)>> {
-    let response = crate::access::client::http()?
+    let response = crate::egress::trusted()?
         .get(at(lookup, &workspace))
         .send()
         .await

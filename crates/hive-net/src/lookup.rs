@@ -9,53 +9,28 @@
 //! the front's, so behind any front every device would share one.
 
 use std::{
-    collections::HashMap,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::Path,
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    sync::Arc,
+    time::Duration,
 };
 
 use anyhow::{Context, Result};
 use iroh_dns_server::{config::Config, Server};
 use serde_json::json;
 
+use crate::limit::Limit;
+
 /// How many records one address may publish at once…
-const BURST: f64 = 5.0;
+const BURST: u32 = 5;
 /// …and how soon after that it may publish one more.
 const EVERY: Duration = Duration::from_secs(2);
 /// Past this many addresses, those that have not published lately are forgotten.
 const ADDRESSES: usize = 100_000;
 
-/// What holds back publishing: each address may publish [`BURST`] records at once, then one every
-/// [`EVERY`].
-#[derive(Debug, Default)]
-pub struct PutLimit {
-    buckets: Mutex<HashMap<IpAddr, (f64, Instant)>>,
-}
-
-impl PutLimit {
-    /// Whether `from` may publish now; when it may, this one is counted.
-    pub fn allow(&self, from: IpAddr) -> bool {
-        let now = Instant::now();
-        let refill = |tokens: f64, at: Instant| {
-            (tokens + now.duration_since(at).as_secs_f64() / EVERY.as_secs_f64()).min(BURST)
-        };
-        let mut buckets = self.buckets.lock().unwrap();
-        if buckets.len() > ADDRESSES {
-            buckets.retain(|_, (tokens, at)| refill(*tokens, *at) < BURST);
-        }
-        let (tokens, at) = buckets.entry(from).or_insert((BURST, now));
-        *tokens = refill(*tokens, *at);
-        *at = now;
-        if *tokens >= 1.0 {
-            *tokens -= 1.0;
-            true
-        } else {
-            false
-        }
-    }
-}
+/// What holds back publishing: each address (`limit::source`) may publish [`BURST`] records at
+/// once, then one every [`EVERY`].
+pub type PutLimit = Limit<IpAddr>;
 
 /// A running lookup server; it stops when dropped.
 pub struct Lookup {
@@ -107,7 +82,7 @@ impl Lookup {
         Ok(Self {
             server,
             http,
-            limit: limited.then(Arc::default),
+            limit: limited.then(|| Arc::new(Limit::new(BURST, EVERY, ADDRESSES))),
         })
     }
 

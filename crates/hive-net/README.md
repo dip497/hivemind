@@ -44,6 +44,23 @@ hive-net access vouch http://<host>:3341 \
 hive-net access revoke http://<host>:3341 <id> --admin admin.key
 ```
 
+A phone that cannot be reached at an address of its own is told through the network's push server
+(`spec/push.md` 0.3): it registers there, naming the devices that may tell it, and they post it
+notices encrypted to it and signed by them, which the server passes on unread to a UnifiedPush
+distributor (with its VAPID token), or through Apple's or Google's service given their
+credentials. It posts into none of its own networks but those `--push-allow` names. Its code is
+`src/push/` (`wire`: what is read and signed; `store`: the registrations; `apns`, `fcm`,
+`unifiedpush`: one route each; `client`: the phone's side), on `egress.rs` (where it may post, and
+the clients that do), `limit.rs`, `signed.rs`, `state_file.rs` and `jwt.rs`.
+
+```bash
+hive-net serve --push --data ./push                                  # UnifiedPush, on the internet
+hive-net serve --push --push-allow 192.168.1.0/24 --data ./push      # …and in this building
+hive-net serve --push --data ./push --apns-key AuthKey_ABC123.p8 --apns-key-id ABC123 \
+  --apns-team TEAM123456 --apns-topic com.example.hivemind           # iPhones of that app
+hive-net serve --push --data ./push --fcm service-account.json       # Android, through Google
+```
+
 ```bash
 cargo test --locked        # the CLI end to end: the key's id against conformance/identity.json,
                            # the local network by mDNS, and through a relay it serves; profiles

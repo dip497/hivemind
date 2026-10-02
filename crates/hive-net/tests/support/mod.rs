@@ -3,6 +3,7 @@
 
 #![allow(dead_code)]
 
+use rcgen::{BasicConstraints, CertificateParams, CertifiedIssuer, IsCa, KeyPair};
 use std::{
     fs,
     io::{BufRead, BufReader, Read, Write},
@@ -67,13 +68,41 @@ pub fn start(args: &[&str], env: &[(&str, &str)]) -> Running {
     Running { child, lines }
 }
 
-/// Run `hive-net <args>` to its end, with `env` set.
+/// Run `hive-net <args>` to its end, with `env` set; one still running after a minute (a server
+/// that started where it should have refused to) is stopped, and fails as killed.
 pub fn hive_net(args: &[&str], env: &[(&str, &str)]) -> Output {
-    Command::new(BIN)
+    let mut child = Command::new(BIN)
         .args(args)
         .envs(env.iter().copied())
-        .output()
-        .unwrap()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let all_of = |mut from: Box<dyn Read + Send>| {
+        thread::spawn(move || {
+            let mut all = Vec::new();
+            let _ = from.read_to_end(&mut all);
+            all
+        })
+    };
+    let stdout = all_of(Box::new(child.stdout.take().unwrap()));
+    let stderr = all_of(Box::new(child.stderr.take().unwrap()));
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if Instant::now() > deadline {
+            let _ = child.kill();
+            break child.wait().unwrap();
+        }
+        thread::sleep(Duration::from_millis(20));
+    };
+    Output {
+        status,
+        stdout: stdout.join().unwrap(),
+        stderr: stderr.join().unwrap(),
+    }
 }
 
 pub fn text(out: &Output) -> String {
@@ -110,6 +139,35 @@ pub fn device(root: &Path, name: &str) -> (String, String) {
     (
         dir.to_str().unwrap().to_string(),
         String::from_utf8(out.stdout).unwrap().trim().to_string(),
+    )
+}
+
+/// A certificate authority, and a certificate it signed for 127.0.0.1: the CA's file, and the
+/// certificate's and its key's.
+pub fn certificates(root: &Path) -> (String, String, String) {
+    certificates_for(root, &["127.0.0.1"])
+}
+
+/// A certificate authority, and a certificate it signed for `names`: the CA's file, and the
+/// certificate's and its key's.
+pub fn certificates_for(root: &Path, names: &[&str]) -> (String, String, String) {
+    let mut ca = CertificateParams::new(Vec::<String>::new()).unwrap();
+    ca.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    let ca = CertifiedIssuer::self_signed(ca, KeyPair::generate().unwrap()).unwrap();
+    let key = KeyPair::generate().unwrap();
+    let cert = CertificateParams::new(names.iter().map(|n| n.to_string()).collect::<Vec<_>>())
+        .unwrap()
+        .signed_by(&key, &ca)
+        .unwrap();
+    let file = |name: &str, pem: String| {
+        let path = root.join(name);
+        fs::write(&path, pem).unwrap();
+        path.to_str().unwrap().to_string()
+    };
+    (
+        file("ca.pem", ca.pem()),
+        file("cert.pem", cert.pem()),
+        file("key.pem", key.serialize_pem()),
     )
 }
 

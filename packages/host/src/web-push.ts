@@ -14,17 +14,23 @@ export interface Subscription {
   p256dh: string;
   /** Its authentication secret (16 bytes). */
   auth: string;
+  /** The endpoint is a push server's that passes on only what the person's devices sign: each
+   *  notice posted there is signed (spec/push.md 0.3). */
+  sign?: true;
 }
 
 /** The record size every message is sent in: one record holds it whole. */
 export const RECORD_SIZE = 4096;
+/** The most a message says: a whole message is 4096 bytes, of which its header takes 86, its tag
+ *  16 and its delimiter 1 (RFC 8291 §4). */
+export const MAX_PLAINTEXT = 4096 - 86 - 16 - 1;
 
 const hmac = (key: Uint8Array, data: Uint8Array): Buffer => createHmac("sha256", key).update(data).digest();
 
 /** `plaintext` encrypted to the phone whose key is `uaPublic` and secret `auth`, by the key
  *  `asPrivate`, with `salt` (RFC 8291 §3.4; RFC 8188 §2): the message body to send. */
 export function encryptWith(plaintext: Uint8Array, uaPublic: Uint8Array, auth: Uint8Array, asPrivate: Uint8Array, salt: Uint8Array): Buffer {
-  if (plaintext.length + 1 + 16 > RECORD_SIZE) throw new RangeError("web push: a notice is one record");
+  if (plaintext.length > MAX_PLAINTEXT) throw new RangeError("web push: a notice is one message of at most 4096 bytes");
   const ecdh = createECDH("prime256v1");
   ecdh.setPrivateKey(asPrivate);
   const asPublic = ecdh.getPublicKey();
@@ -71,5 +77,5 @@ export function subscriptionOf(v: unknown): Subscription | null {
   } catch {
     return null;
   }
-  return { endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth };
+  return { endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth, ...(s.sign === true ? { sign: true as const } : {}) };
 }

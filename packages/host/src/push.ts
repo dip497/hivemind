@@ -4,11 +4,13 @@
  * phone that gave this device a push subscription, encrypted to that phone (web-push.ts) and
  * posted to its endpoint. Whatever carries it reads nothing of it. Electron-free.
  */
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { InputKind } from "@hivemind/agents";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import type { Changes } from "@hivemind/workspace-host/doc-sync";
+import { idOf, signWith, type Seed } from "@hivemind/workspace-host/identity";
 import { agentOf, waitsOnThePerson, type HeldBoard, type WaitingStatus } from "./needs.js";
 import { encrypt, subscriptionOf, type Subscription } from "./web-push.js";
 
@@ -39,9 +41,12 @@ export interface Back {
 
 type Status = WaitingStatus["status"];
 
-/** How much of an agent's name a notice carries, in characters: a task can be a whole prompt,
- *  and a notice is one record. */
+/** How much of an agent's name, and of its workspace's, a notice carries, in characters: a task
+ *  can be a whole prompt, and a notice must fit what Apple's push service carries (spec/push.md). */
 export const AGENT_MAX = 200;
+
+/** The first `AGENT_MAX` characters of `name`. */
+const short = (name: string): string => [...name].slice(0, AGENT_MAX).join("");
 
 /** What an agent's status changing from `before` to `status` tells the phones: that it began
  *  waiting on the person, finished, or failed; null for anything else, and for an agent first seen
@@ -57,8 +62,7 @@ export function toldOf(before: Status | undefined, status: Status): Notice["t"] 
 function noticeFor(t: Notice["t"], { tileId, status }: WaitingStatus, held: HeldBoard[]): Notice | null {
   const at = agentOf(held, tileId, status.title);
   if (!at) return null;
-  const agent = [...at.agent].slice(0, AGENT_MAX).join("");
-  return { v: 1, t, ...at, agent, ...(t === "needs" ? { kind: status.kind } : {}), since: status.since };
+  return { v: 1, t, ...at, name: short(at.name), agent: short(at.agent), ...(t === "needs" ? { kind: status.kind } : {}), since: status.since };
 }
 
 /** The phones subscribed here, kept in a file beside this device's keys (0600): one each. */
@@ -88,7 +92,7 @@ export class PushSubscriptions {
   private write(all: Array<{ device: string } & Subscription>): void {
     fs.mkdirSync(path.dirname(this.file), { recursive: true, mode: 0o700 });
     const tmp = `${this.file}.${process.pid}.tmp`;
-    const kept = Object.fromEntries(all.map(({ device, endpoint, p256dh, auth }) => [device, { endpoint, p256dh, auth }]));
+    const kept = Object.fromEntries(all.map(({ device, ...sub }) => [device, sub]));
     fs.writeFileSync(tmp, `${JSON.stringify(kept, null, 2)}\n`, { mode: 0o600 });
     fs.renameSync(tmp, this.file);
   }
@@ -101,19 +105,34 @@ export interface PushOptions {
   boards(): HeldBoard[];
   changes: Changes;
   subscriptions: PushSubscriptions;
-  /** Post `body` to `endpoint`: the status the push service answered. */
-  post(endpoint: string, body: Buffer, urgency: "high" | "normal"): Promise<number>;
+  /** Post `body` to `endpoint`, signed when `sign`: the status the push service answered. */
+  post(endpoint: string, body: Buffer, urgency: "high" | "normal", sign: boolean): Promise<number>;
   onWarn?(message: string): void;
 }
 
 /** How long a push service keeps a notice for a phone it cannot reach: a day. */
 const TTL_S = 24 * 3600;
 
-/** Post a notice the way Web Push takes it (RFC 8030): encrypted, kept a day. */
-export async function postNotice(endpoint: string, body: Buffer, urgency: "high" | "normal"): Promise<number> {
+/** Who posts `body` to `endpoint` at `at`: the device whose key `device` is, its signature over
+ *  the phone's handle (the last segment of the endpoint's path), the time and the body's hash
+ *  (spec/push.md 0.3, "Sending"). */
+function sender(device: Seed, endpoint: string, at: number, body: Buffer): string {
+  const handle = new URL(endpoint).pathname.split("/").filter(Boolean).pop() ?? "";
+  const signed = Buffer.concat([Buffer.from(`hive/push-notice/1\n${handle}\n${at}\n`), createHash("sha256").update(body).digest()]);
+  return `${idOf(device)} ${at} ${Buffer.from(signWith(device, signed)).toString("hex")}`;
+}
+
+/** Post a notice the way Web Push takes it (RFC 8030): encrypted, kept a day; signed by this
+ *  device, whose key `device` is, for a push server that tells the phone only what the devices it
+ *  named sign (a subscription that says `sign`). Never where a redirect points. */
+export async function postNotice(endpoint: string, body: Buffer, urgency: "high" | "normal", device: Seed | null): Promise<number> {
   const res = await fetch(endpoint, {
     method: "POST",
-    headers: { TTL: String(TTL_S), "Content-Encoding": "aes128gcm", "Content-Type": "application/octet-stream", Urgency: urgency },
+    redirect: "error",
+    headers: {
+      TTL: String(TTL_S), "Content-Encoding": "aes128gcm", "Content-Type": "application/octet-stream", Urgency: urgency,
+      ...(device ? { "Hive-Sender": sender(device, endpoint, Date.now(), body) } : {}),
+    },
     body: new Uint8Array(body),
     signal: AbortSignal.timeout(15_000),
   });
@@ -149,7 +168,8 @@ export class PushNotices {
   /** This device is back (it started, or woke): each phone is told, and shows it when it found
    *  this device away. */
   back(): void {
-    this.send({ v: 1, t: "back", ...this.o.me(), since: Date.now() }, "normal");
+    const { device, name } = this.o.me();
+    this.send({ v: 1, t: "back", device, name: short(name), since: Date.now() }, "normal");
   }
 
   /** The boards changed: each agent now on one is told of. */
@@ -174,7 +194,7 @@ export class PushNotices {
     const plaintext = Buffer.from(JSON.stringify(message));
     for (const sub of this.o.subscriptions.list()) {
       // A subscription the push service no longer knows is dropped (RFC 8030 §7.3).
-      void this.o.post(sub.endpoint, encrypt(plaintext, sub), urgency).then(
+      void this.o.post(sub.endpoint, encrypt(plaintext, sub), urgency, sub.sign === true).then(
         (status) => { if (status === 404 || status === 410) this.o.subscriptions.remove(sub.device); },
         (e: unknown) => this.o.onWarn?.(`push to ${sub.device.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`),
       );

@@ -1,9 +1,10 @@
 //! The server roles (§13.4), which anyone can run for their own devices, on one port, so a network
 //! needs one name and one certificate: the relay, which carries traffic between devices that
 //! cannot reach each other directly; the lookup server (`lookup.rs`), where devices say how they
-//! are reached and workspaces where they are hosted; and the access role (`access.rs`), which says
-//! who may use the relay. Requests go by path: `/pkarr/…` and `/dns-query` to the lookup server,
-//! `/access/…` to the access role, the rest to the relay. Plain HTTP (a network inside a building,
+//! are reached and workspaces where they are hosted; the access role (`access.rs`), which says
+//! who may use the relay; and the push role (`push.rs`), which tells phones what happens on the
+//! person's devices. Requests go by path: `/pkarr/…` and `/dns-query` to the lookup server,
+//! `/access/…` to the access role, `/push/…` to the push role, the rest to the relay. Plain HTTP (a network inside a building,
 //! or behind a proxy that ends TLS), or HTTPS with a certificate from Let's Encrypt or one kept in
 //! files; then the relay also answers QUIC address discovery and the captive-portal check, as
 //! iroh's own relay server does.
@@ -42,6 +43,7 @@ use tokio_stream::StreamExt;
 use crate::{
     access,
     lookup::{Lookup, PutLimit},
+    push,
 };
 
 /// How long a connection has for its TLS handshake, and a request for its headers.
@@ -87,6 +89,8 @@ pub struct Options {
     pub domain: Option<String>,
     /// The access role.
     pub access: Option<access::Service>,
+    /// The push role.
+    pub push: Option<push::Service>,
 }
 
 /// The roles, serving.
@@ -121,6 +125,7 @@ struct Front {
     relay: Option<RelayService>,
     lookup: Option<(SocketAddr, Option<Arc<PutLimit>>)>,
     access: Option<access::Service>,
+    push: Option<push::Service>,
     /// For passing requests on to the lookup server, on this machine.
     local: reqwest::Client,
 }
@@ -218,6 +223,7 @@ impl Serving {
             relay: relay.as_ref().and_then(|r| r.relay_service().cloned()),
             lookup: lookup.as_ref().map(|l| (l.http_addr(), l.limit())),
             access: opts.access.clone(),
+            push: opts.push.clone(),
             local: reqwest::Client::builder().no_proxy().build()?,
         });
         let front = tokio::spawn(async move {
@@ -364,7 +370,11 @@ impl Front {
         if let Some((lookup, limit)) = &self.lookup {
             if path.starts_with("/pkarr/") || path == "/dns-query" {
                 let publishing = req.method() == hyper::Method::PUT;
-                if publishing && limit.as_ref().is_some_and(|limit| !limit.allow(peer)) {
+                if publishing
+                    && limit
+                        .as_ref()
+                        .is_some_and(|limit| !limit.allow(crate::limit::source(peer)))
+                {
                     return answer(429, "too many records from this address: wait a little");
                 }
                 return self.to_lookup(*lookup, req).await;
@@ -373,6 +383,11 @@ impl Front {
         if let Some(access) = &self.access {
             if path == "/access" || path.starts_with("/access/") {
                 return access.handle(under(req, "/access")).await.map(boxed);
+            }
+        }
+        if let Some(push) = &self.push {
+            if path == "/push" || path.starts_with("/push/") {
+                return push.handle(under(req, "/push"), peer).await.map(boxed);
             }
         }
         match relay {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # R13's checks, against the stack `infra/compose.yml` runs (CI runs them on every change, so the
-# stack cannot rot): the network's link printed and kept across a restart; a device nobody
-# enrolled turned away by the relay, and told why; devices enrolled with the admin's links let
+# stack cannot rot): the network's link printed and kept across a restart, naming its push server,
+# which answers; a device nobody enrolled turned away by the relay, and told why; devices enrolled with the admin's links let
 # in; one found by its id alone through the lookup server and reached through the relay; a
 # workspace's host record read back; and after the server restarts, its devices back on it.
 #
@@ -45,7 +45,8 @@ enrol() {
 within 60 curl -sf "$BASE/healthz" -o /dev/null || { echo "the stack does not answer at $BASE"; exit 1; }
 link=$(printed_link)
 check "the server printed the network's link" yes "$([ -n "$link" ] && echo yes || echo no)"
-check "it names this server's relay, lookup and access" yes "$("$BIN" profile verify "$link" | python3 -c "import json,sys; p=json.load(sys.stdin)['profile']; print('yes' if p['relays'][0]['url']=='$BASE' and p['lookup']=='$BASE/pkarr' and p['access']['url']=='$BASE/access' else 'no: '+json.dumps(p))")"
+check "it names this server's relay, lookup, access and push server" yes "$("$BIN" profile verify "$link" | python3 -c "import json,sys; p=json.load(sys.stdin)['profile']; print('yes' if p['relays'][0]['url']=='$BASE' and p['lookup']=='$BASE/pkarr' and p['access']['url']=='$BASE/access' and p['push']['url']=='$BASE/push' and p['push']['kinds']==['unifiedpush'] and len(p['push'].get('vapid',''))==87 else 'no: '+json.dumps(p))")"
+check "its push server answers" '"ok"' "$(curl -sf "$BASE/push/healthz" || echo none)"
 
 A=$(device a); B=$(device b); STRANGER=$(device stranger)
 refused=$(on_relay "$STRANGER")

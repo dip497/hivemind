@@ -369,7 +369,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     boards: () => heldBoards(store),
     changes: (listener) => { heard.add(listener); return () => { heard.delete(listener); }; },
     subscriptions: pushSubscriptions,
-    post: postNotice,
+    post: (endpoint, body, urgency, sign) => postNotice(endpoint, body, urgency, sign ? keys.device : null),
     onWarn: (m) => o.onWarn(`push: ${m}`),
   });
   control.status.subscribe((change) => notices.changed(change));

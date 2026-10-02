@@ -1,6 +1,6 @@
 ---
 title: Self-hosting
-description: Run your own network for hivemind — a relay, a lookup server and admission, on one machine.
+description: Run your own network for hivemind — a relay, a lookup server, admission and push, on one machine.
 ---
 
 A fresh install uses no servers at all: devices on the same network find each other there, and
@@ -17,9 +17,10 @@ puts beside `hive`, MIT-licensed; hivemind's own servers run exactly the same.
 | **Relay** | Carries traffic between devices that cannot reach each other directly (about one network in ten). Traffic through it is end-to-end encrypted: it sees which devices talk, not what they say. |
 | **Lookup server** | Where each device says which relay it is on, signed by its key, so others find it by its id alone; and where each workspace says which device hosts it. |
 | **Access** | Who may use the relay. On a *closed* network (the default), the devices you enrol, and guests your devices vouch for; on an *open-pow* one, any device that registers with a moment of work. |
+| **Push** | Tells your phones what happens on your devices while you are away (an agent waiting on you, finished, failed). What it passes on is encrypted to the phone, so it reads none of it, and it passes on only what the devices the phone named have signed. |
 
 `hive-net serve` runs any of them, on **one port**: the lookup server at `/pkarr`, access at
-`/access`, the relay on the rest. `--all` is all three. A network is described by a **profile**,
+`/access`, push at `/push`, the relay on the rest. `--all` is all four. A network is described by a **profile**,
 signed by the network's **admin key**, and handed around as a link (`hivemind://network/…`).
 
 ## On a server with a public name
@@ -143,11 +144,35 @@ A relay keeps the service's yes for five minutes (`--access-cache`), so a short 
 nobody out, and a no for ten seconds. Write a profile naming every relay and sign it: `hive-net
 profile sign profile.json --admin admin.key`, then `hive-net profile link` on the signed file.
 
+## Push
+
+A phone registers with the network's push server as it starts, naming your devices, and they tell
+it through the server from then on. The server reaches the phone where the phone says:
+
+- **UnifiedPush** (Android, with a distributor app such as ntfy): always, over https. The notice
+  goes on as it came, with a VAPID token of the server's own key, which the network's profile names
+  for the phone to give its distributor. A distributor on the server's own network — inside a
+  building, say — is reached only on the networks you name, `--push-allow 192.168.1.0/24`
+  (repeatable; `HIVE_PUSH_ALLOW=192.168.1.0/24` with `infra/compose.yml`); otherwise the server posts
+  to addresses on the internet alone, so it cannot be made to post into your network.
+- **Apple** (iPhone): with an APNs key from the Apple Developer team that signed the iPhone app
+  (`--apns-key AuthKey_….p8 --apns-key-id … --apns-team … --apns-topic <the app's bundle id>`).
+  Apple's keys reach only their own team's apps: hivemind's App Store app is told through
+  hivemind's push server, which sees only ciphertext, unless you build and sign the app yourself.
+  Make the key for *Sandbox & Production*: one server tells both kinds of build.
+- **Google** (Android through Firebase): with a service account of the Firebase project the
+  Android build was made with (`--fcm service-account.json`).
+
+Beside the access role (`--all`), a phone registers only once it is on the network. The network's
+profile says where the push server is, which of these it does, and its VAPID key. It counts
+requests by the address it sees: behind a proxy that ends TLS, every device is the proxy, so run
+it where it sees the devices' own addresses.
+
 ## Ports
 
 | Port | For |
 |---|---|
-| 443/tcp (or `--bind`) | HTTPS: relay, lookup, access. 3340 without a certificate. |
+| 443/tcp (or `--bind`) | HTTPS: relay, lookup, access, push. 3340 without a certificate. |
 | 80/tcp (`--http-bind`) | The captive-portal check, with HTTPS. |
 | 7842/udp (`--quic-bind`) | QUIC address discovery, with HTTPS. |
 | 53 (`--dns-bind`, off) | The lookup server's DNS side, answering for `--domain` once you delegate it there. hivemind's apps do not need it. |
@@ -160,7 +185,10 @@ profile sign profile.json --admin admin.key`, then `hive-net profile link` on th
 - `lookup/` — devices' and workspaces' records; devices publish theirs again, so losing it costs
   a few minutes, not data.
 - `network.json` — the signed profile; made again from the admin key.
+- `push.json` — the phones registered for push; each registers again as it starts, so losing it
+  costs little. `push-vapid.key` — the VAPID key the profile names: lose it and every phone has to
+  register with its distributor again.
 
 ## Not yet
 
-Push notifications (an agent waiting on you, on your phone) come with the phone app.
+The phone apps themselves (iPhone, Android) are not out yet; the push server is ready for them.

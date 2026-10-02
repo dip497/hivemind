@@ -3,10 +3,10 @@
 //!   hive-net id                    print this device's id (its EndpointId)
 //!   hive-net run                   answer pings until stopped
 //!   hive-net ping <id>             ping a device by its id
-//!   hive-net serve [--relay] [--lookup] [--access] [--all] [--domain <name>] [--data <dir>] …
+//!   hive-net serve [--relay] [--lookup] [--access] [--push] [--all] [--domain <name>] [--data <dir>] …
 //!                                  the server roles on one port (`serve.rs`): a relay (for the
 //!                                  devices the access role allows), a lookup server, the access
-//!                                  role; `--all` is all three
+//!                                  role, the push role (`push.rs`); `--all` is all four
 //!   hive-net access voucher --kind enrol|visit [--device <id>] [--expires-in <s>] [--uses <n>]
 //!                                  a voucher signed by this device (or `--admin <key file>`)
 //!   hive-net access redeem|vouch <url> <voucher>   use one at a network's access service
@@ -40,7 +40,13 @@
 //! `--policy closed|open-pow` (default closed), `--pow-bits <n>` (default 20). A relay without
 //! the access role beside it asks one elsewhere: `--access-url <url>`, keeping a yes for
 //! `--access-cache <s>` (default 300; a no for at most 10). The lookup server:
-//! `--dns-bind <ip:port>` (answer DNS there too), `--lookup-limit per-address|off`. `--url
+//! `--dns-bind <ip:port>` (answer DNS there too), `--lookup-limit per-address|off`. The push
+//! role tells phones through a UnifiedPush distributor on the public internet, and on those of
+//! this server's own networks named with `--push-allow <cidr>` (repeatable); through Apple's
+//! service with `--apns-key <.p8>
+//! --apns-key-id <id> --apns-team <id> --apns-topic <bundle id>`, and Google's with `--fcm
+//! <service account .json>`; beside the access role, it registers the phones that role allows.
+//! `--url
 //! <base>` is how devices reach this server, when it is not what `--domain` or `--bind` says;
 //! with it (or `--domain`), and the admin key kept here, the network's link is printed, its
 //! signed profile kept as `network.json` in `--data`; `--name` names the network.
@@ -52,12 +58,14 @@ use std::{
 use anyhow::{bail, Context, Result};
 use hive_net::{
     access::{self, Service},
+    egress::Allowed,
     host_record::{self, HostRecord},
     key,
     net::{self, Reach},
     ping::{self, Pong},
-    profile,
+    profile, push,
     serve::{Certificate, Options, Serving},
+    signed::now_ms,
 };
 use iroh::{protocol::Router, EndpointAddr, EndpointId, PublicKey, RelayUrl, TransportAddr};
 use iroh_relay::server::{AllowAll, DynAccessControl};
@@ -65,7 +73,7 @@ use iroh_relay::server::{AllowAll, DynAccessControl};
 /// How long a ping waits for its answer.
 const PING_TIMEOUT: Duration = Duration::from_secs(10);
 
-const USAGE: &str = "usage: hive-net id | run | ping <id> | serve [--relay] [--lookup] [--access] [--all] … | daemon --socket <path> | doctor | profile verify|sign|link … | access voucher|redeem|vouch|register|revoke|enrol-link … | host-record publish|resolve …  [--identity <dir>] [--profile <profile>] [--relay <url>]... [--lookup <url>] [--addr <ip:port>]... [--bind <ip:port>]";
+const USAGE: &str = "usage: hive-net id | run | ping <id> | serve [--relay] [--lookup] [--access] [--push] [--all] … | daemon --socket <path> | doctor | profile verify|sign|link … | access voucher|redeem|vouch|register|revoke|enrol-link … | host-record publish|resolve …  [--identity <dir>] [--profile <profile>] [--relay <url>]... [--lookup <url>] [--addr <ip:port>]... [--bind <ip:port>]";
 
 #[derive(Default)]
 struct Args {
@@ -83,6 +91,13 @@ struct Args {
     rest: Vec<String>,
     access_role: bool,
     lookup_role: bool,
+    push_role: bool,
+    push_allow: Vec<String>,
+    apns_key: Option<PathBuf>,
+    apns_key_id: Option<String>,
+    apns_team: Option<String>,
+    apns_topic: Option<String>,
+    fcm: Option<PathBuf>,
     all: bool,
     lookup: Option<url::Url>,
     admin_id: Option<String>,
@@ -131,6 +146,16 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
             "--access" => args.access_role = true,
             "--lookup" if args.command == "serve" => args.lookup_role = true,
             "--lookup" => args.lookup = Some(value(&mut argv, &arg)?.parse()?),
+            "--push" => args.push_role = true,
+            // Empty is none: a compose file passes a variable left unset as "".
+            "--push-allow" => args
+                .push_allow
+                .extend(Some(value(&mut argv, &arg)?).filter(|v| !v.is_empty())),
+            "--apns-key" => args.apns_key = Some(value(&mut argv, &arg)?.into()),
+            "--apns-key-id" => args.apns_key_id = Some(value(&mut argv, &arg)?),
+            "--apns-team" => args.apns_team = Some(value(&mut argv, &arg)?),
+            "--apns-topic" => args.apns_topic = Some(value(&mut argv, &arg)?),
+            "--fcm" => args.fcm = Some(value(&mut argv, &arg)?.into()),
             "--all" => args.all = true,
             "--admin-id" => args.admin_id = Some(value(&mut argv, &arg)?),
             "--policy" => args.policy = Some(value(&mut argv, &arg)?),
@@ -273,7 +298,13 @@ async fn run(args: Args) -> Result<()> {
             let key = args.device_key()?;
             println!("{}", hive_net::doctor::check(key, &reach, access).await);
         }
-        "serve" if args.relay_role || args.lookup_role || args.access_role || args.all => {
+        "serve"
+            if args.relay_role
+                || args.lookup_role
+                || args.access_role
+                || args.push_role
+                || args.all =>
+        {
             serve(&args).await?
         }
         "access" => access_command(&args).await?,
@@ -283,13 +314,15 @@ async fn run(args: Args) -> Result<()> {
     Ok(())
 }
 
-/// The server roles asked for, on one port (`serve.rs`): a relay, a lookup server and the access
-/// role, in any mix (`--all`: every one). A relay admits what the access role beside it allows,
-/// or asks one elsewhere (`--access-url`), or admits every device.
+/// The server roles asked for, on one port (`serve.rs`): a relay, a lookup server, the access
+/// role and the push role, in any mix (`--all`: every one). A relay admits what the access role
+/// beside it allows, or asks one elsewhere (`--access-url`), or admits every device; the push
+/// role registers the phones the access role beside it allows, or any phone.
 async fn serve(args: &Args) -> Result<()> {
     let relay_role = args.relay_role || args.all;
     let lookup_role = args.lookup_role || args.all;
     let access_role = args.access_role || args.all;
+    let push_role = args.push_role || args.all;
     let data = || {
         args.data
             .clone()
@@ -324,6 +357,50 @@ async fn serve(args: &Args) -> Result<()> {
             admin,
             policy,
             args.pow_bits.unwrap_or(20),
+        )?)
+    } else {
+        None
+    };
+    let push = if push_role {
+        let apns = match (
+            &args.apns_key,
+            &args.apns_key_id,
+            &args.apns_team,
+            &args.apns_topic,
+        ) {
+            (Some(file), Some(id), Some(team), Some(topic)) => Some(push::Apns::new(
+                &std::fs::read_to_string(file)
+                    .with_context(|| format!("cannot read {}", file.display()))?,
+                id,
+                team,
+                topic,
+            )?),
+            (None, None, None, None) => None,
+            _ => bail!("--apns-key, --apns-key-id, --apns-team and --apns-topic go together"),
+        };
+        let fcm = match &args.fcm {
+            Some(file) => Some(push::Fcm::new(
+                &std::fs::read_to_string(file)
+                    .with_context(|| format!("cannot read {}", file.display()))?,
+            )?),
+            None => None,
+        };
+        // Who runs the server, as its VAPID tokens say.
+        let contact = args
+            .contact
+            .as_ref()
+            .map(|c| format!("mailto:{c}"))
+            .or_else(|| args.url.clone())
+            .or_else(|| args.domain.as_ref().map(|d| format!("https://{d}")));
+        Some(push::Service::open(
+            &data()?,
+            push::Options {
+                apns,
+                fcm,
+                admits: access.clone(),
+                allowed: Allowed::parse(&args.push_allow)?,
+                contact,
+            },
         )?)
     } else {
         None
@@ -383,6 +460,7 @@ async fn serve(args: &Args) -> Result<()> {
         lookup,
         domain: args.domain.clone(),
         access: access.clone(),
+        push: push.clone(),
     })
     .await?;
 
@@ -399,9 +477,18 @@ async fn serve(args: &Args) -> Result<()> {
     if access_role {
         println!("access serving on {base}/access");
     }
+    if push.is_some() {
+        println!("push serving on {base}/push");
+    }
     if let Some(admin) = &admin_key {
         if args.url.is_some() || args.domain.is_some() {
-            let signed = network_profile(args, &data()?, &base, admin, relay_role, lookup_role)?;
+            let told = push.as_ref().map(|p| profile::PushService {
+                url: format!("{base}/push"),
+                kinds: p.kinds(),
+                vapid: Some(p.vapid()),
+            });
+            let signed =
+                network_profile(args, &data()?, &base, admin, relay_role, lookup_role, told)?;
             println!("network link: {}", profile::link(&signed));
         } else {
             println!(
@@ -435,6 +522,7 @@ fn network_profile(
     admin: &iroh::SecretKey,
     relay: bool,
     lookup: bool,
+    push: Option<profile::PushService>,
 ) -> Result<profile::Signed> {
     let policy = match args.policy.as_deref().unwrap_or("closed") {
         "open-pow" => profile::Policy::OpenPow,
@@ -461,7 +549,7 @@ fn network_profile(
             url: format!("{base}/access"),
             policy,
         }),
-        push: None,
+        push,
         admin: Some(admin.public().to_string()),
         local: profile::Local { mdns: true },
         issued_at: 0,
@@ -478,7 +566,7 @@ fn network_profile(
             }
         }
     }
-    want.issued_at = access::now_ms();
+    want.issued_at = now_ms();
     let signed = profile::sign(&serde_json::to_string(&want)?, admin)?;
     std::fs::write(&file, serde_json::to_string_pretty(&signed)?)
         .with_context(|| format!("cannot write {}", file.display()))?;
@@ -536,7 +624,7 @@ async fn host_record_command(args: &Args) -> Result<()> {
 }
 
 async fn access_command(args: &Args) -> Result<()> {
-    use hive_net::access::{client, now_ms, Kind, Voucher};
+    use hive_net::access::{client, Kind, Voucher};
     let verb = args.target.as_deref().context(USAGE)?;
     let arg = |i: usize| args.rest.get(i).map(String::as_str).context(USAGE);
     // A voucher given as its JSON, or a file holding it.

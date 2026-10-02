@@ -2,7 +2,8 @@
 
 What a hivemind network's servers are, to run them yourself (R13 in
 `docs/design/multiplayer-2026-09-28.md`): one `hive-net serve --all` serving a relay, a lookup
-server and the access role on one port. The guide is `docs/src/content/docs/guide/self-hosting.md`
+server, the access role and the push server on one port (phones told at a distributor in the
+building too with `HIVE_PUSH_ALLOW=<its network>`). The guide is `docs/src/content/docs/guide/self-hosting.md`
 (on the docs site: *Self-hosting*).
 
 | File | What |
@@ -19,5 +20,6 @@ bash infra/check.sh                                       # the checks (HIVE_URL
 ```
 
 hivemind's own network (the *Hosted* profile) runs the same binary: three relays, one per
-region, each `hive-net serve --relay --access-url …` under systemd, a lookup server, and the
-access service. Deploying it waits on its cloud accounts.
+region, each `hive-net serve --relay --access-url …` under systemd, a lookup server, the
+access service, and the push server with hivemind's Apple and Google credentials. Deploying it
+waits on its cloud accounts.

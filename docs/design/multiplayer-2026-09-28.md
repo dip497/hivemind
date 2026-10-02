@@ -1375,6 +1375,64 @@ Built for M5. It holds our APNs and FCM credentials and nothing else of value.
   none today — the same membership also lets us sign and notarise the macOS app) and a
   Firebase project for FCM (free).
 
+*Built (M5 step 13, 2026-10-02; `crates/hive-net/src/push/`, `spec/push.md` 0.3), with these
+changes from the above, checked against Apple's, Google's and UnifiedPush's documentation and
+against Threema's push-relay, chatmail's notifiers, Sygnal, autopush and ntfy:*
+
+- **One binary, no new stack.** The role is `hive-net serve --push` (in `--all`) on hyper and
+  reqwest (HTTP/2 by ALPN, which Apple requires; the connection kept and pinged hourly), with
+  `ring` for the ES256 provider token, the RS256 service-account assertion and the VAPID token: no
+  axum, apns-h2 or yup-oauth2. Its parts are modules of their own (`wire`, `store`, `apns`, `fcm`,
+  `unifiedpush`, `client`), on crate modules the access and lookup roles share (`signed`,
+  `state_file`, `limit`, `egress`, `jwt`). It keeps its registrations in `push.json` in `--data`
+  (readable by its user alone, synced to the disk before it replaces the last), not Firestore: the
+  hosted deployment runs it as one instance with a lasting disk (not Cloud Run, whose disk goes
+  with each instance and would take every phone's registration with it), and waits on the cloud
+  accounts, as R13's does.
+- **The phone names its senders.** In place of "host K may push to this handle until T" and a
+  signed revocation, the phone's registration (signed by its device key) lists the devices that
+  may tell it, and the phone registers again, under the same handle, whenever that list changes
+  and before it gives a new device its subscription: unpairing a device is one more registration,
+  and a registration no later than the one kept is refused, so an old one sent again cannot bring
+  an unpaired device back.
+- **Web Push on every route, signed by the device.** The ciphertext is Web Push's (RFC 8291, see
+  §9.3), not HPKE, so a phone's own UnifiedPush distributor takes it as it is, and the server passes
+  on nothing that is not one such message. A device signs each post (`Hive-Sender`: Ed25519 over
+  the phone's handle, the time and the body's hash) where the phone's subscription asks it to (and
+  nowhere else, so third parties never see its key), within ten minutes of the server's clock (not
+  60 s: a phone's clock and a laptop's drift), and the server remembers each (device, time, body)
+  it passed on for that long instead of a message id inside. A notice is one message of at most
+  4096 bytes; there are no padding buckets, and its names are cut to 200 characters so that it
+  fits what Apple carries.
+- **Quotas, errors.** 60 notices at once per phone then one a second, 600 requests at once per
+  address (an IPv6 address by its /64) then ten a second; an unknown handle and a sender the
+  phone did not name get the same 404. A busy or failing service (429, 5xx) is tried once more
+  within ten seconds, and a provider token Apple says expired, or an access token Google refuses,
+  is made again. Only 410, `BadDeviceToken` and Google's `UNREGISTERED` drop a registration (and
+  the device then gets 410 and forgets the address): `DeviceTokenNotForTopic` or a bare 404 would
+  drop every phone of a server misconfigured. The device is told nothing of where a failure was;
+  the server logs it, never with a token or a handle.
+- **APNs and FCM as designed**, except the expiry follows the notice's TTL (a day), the priority
+  its urgency (10 and `HIGH` for an agent waiting, else 5 and `NORMAL`), and no collapse id. A
+  notice too large for either is answered 413, not sent.
+- **Added: VAPID.** The server keeps a P-256 key of its own (`push-vapid.key`), names it in the
+  profile (`push.vapid`), and signs each post to a UnifiedPush distributor with it (RFC 8292), so
+  a distributor that asks for VAPID takes the server's posts; the phone gives its distributor that
+  key.
+- **Added: where it posts.** A distributor's address is the phone's to give, so the server posts to
+  one on its own networks (private, shared, link-local or loopback addresses, literal or looked up)
+  only on the networks it is told it serves (`--push-allow`), through no proxy and following no
+  redirect, and to one on the internet over https alone; it reads at most 8 KiB of any answer.
+  Beside the access role, a phone registers only once it is on the network.
+- **Not at rest encrypted.** The tokens are kept in a file only the server's user can read; a
+  token alone lets nobody send the phone anything without the server's Apple or Google
+  credentials, which never leave it.
+- **Still to come, outside this repository:** iOS cannot drop a notification its Notification
+  Service Extension cannot decrypt (one a stranger could not have made, since the server takes only
+  what the phone's devices sign) without Apple's `com.apple.developer.usernotifications.filtering`
+  entitlement, to be asked for with the App Store build; and FCM's move from `token` to `fid`
+  targeting, which `token` still accepts.
+
 ### 12.5 Operations
 
 - **Monitoring:** Prometheus scrapes relays (9090, private), the lookup server (9117,

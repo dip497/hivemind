@@ -12,53 +12,32 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     sync::{Arc, Mutex},
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 
 use anyhow::{bail, ensure, Context, Result};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full, Limited};
 use hyper::{body::Incoming, Request, Response};
-use iroh::{PublicKey, SecretKey, Signature};
+use iroh::{PublicKey, SecretKey};
 use iroh_relay::server::{Access, AccessControl, ClientRequest};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use crate::profile::Policy;
+use crate::{
+    egress,
+    profile::Policy,
+    signed::{self, key_of, now_ms, verify},
+    state_file,
+};
 
 const VOUCHER: &[u8] = b"hive/voucher/1\n";
 const REDEEM: &[u8] = b"hive/redeem/1\n";
 const REGISTER: &[u8] = b"hive/register/1\n";
 const REVOKE: &[u8] = b"hive/revoke/1\n";
-/// How far a registration's or a revocation's time may be from the service's clock.
-const CLOCK_SKEW_MS: u64 = 10 * 60 * 1000;
 /// The largest request body the service reads.
 const MAX_BODY: usize = 64 * 1024;
-
-pub fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
-
-fn key_of(hex_key: &str) -> Result<PublicKey> {
-    let mut bytes = [0u8; 32];
-    hex::decode_to_slice(hex_key, &mut bytes).with_context(|| format!("{hex_key} is not a key"))?;
-    PublicKey::from_bytes(&bytes).with_context(|| format!("{hex_key} is not a key"))
-}
-
-fn signature_of(hex_sig: &str) -> Result<Signature> {
-    let mut bytes = [0u8; 64];
-    hex::decode_to_slice(hex_sig, &mut bytes).context("a signature is 64 bytes in hex")?;
-    Ok(Signature::from_bytes(&bytes))
-}
-
-fn verify(key: &PublicKey, bytes: &[u8], signature: &str) -> Result<()> {
-    key.verify(bytes, &signature_of(signature)?)
-        .map_err(|_| anyhow::anyhow!("the signature does not verify"))
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -209,11 +188,7 @@ impl Service {
     pub fn open(dir: &Path, admin: PublicKey, policy: Policy, bits: u32) -> Result<Self> {
         fs::create_dir_all(dir).with_context(|| format!("cannot make {}", dir.display()))?;
         let file = dir.join("access.json");
-        let state = match fs::read_to_string(&file) {
-            Ok(text) => serde_json::from_str(&text)
-                .with_context(|| format!("{} is not the service's", file.display()))?,
-            Err(_) => State::default(),
-        };
+        let state = state_file::read(&file)?;
         Ok(Self {
             state: Arc::new(Mutex::new(state)),
             file,
@@ -233,10 +208,7 @@ impl Service {
     }
 
     fn save(&self, state: &State) -> Result<()> {
-        let tmp = self.file.with_extension("json.tmp");
-        fs::write(&tmp, serde_json::to_vec_pretty(state)?)?;
-        fs::rename(&tmp, &self.file)?;
-        Ok(())
+        state_file::write(&self.file, state)
     }
 
     /// Whether `by` may sign a voucher of `kind` here.
@@ -312,7 +284,7 @@ impl Service {
             "this network does not take registrations"
         );
         ensure!(
-            now_ms().abs_diff(at) <= CLOCK_SKEW_MS,
+            signed::near(at, now_ms()),
             "the registration's time is too far from now"
         );
         let bytes = register_bytes(device, at, nonce);
@@ -335,7 +307,7 @@ impl Service {
         signature: &str,
     ) -> Result<()> {
         ensure!(
-            now_ms().abs_diff(at) <= CLOCK_SKEW_MS,
+            signed::near(at, now_ms()),
             "the revocation's time is too far from now"
         );
         verify(by, &revoke_bytes(by, device, at), signature)?;
@@ -475,7 +447,7 @@ impl Remote {
     pub fn new(url: &str, remember: Duration) -> Result<Self> {
         Ok(Self {
             url: url.trim_end_matches('/').to_string(),
-            http: client::http()?,
+            http: egress::trusted()?,
             answers: Arc::default(),
             remember,
         })
@@ -537,22 +509,12 @@ impl AccessControl for Remote {
 pub mod client {
     use super::*;
 
-    /// A client trusting what this device's endpoint trusts (`net::trusted`).
-    pub(crate) fn http() -> Result<reqwest::Client> {
-        let provider = Arc::new(rustls::crypto::ring::default_provider());
-        let _ = rustls::crypto::ring::default_provider().install_default();
-        let tls = crate::net::trusted().client_config(provider)?;
-        Ok(reqwest::Client::builder()
-            .tls_backend_preconfigured(tls)
-            .build()?)
-    }
-
     fn at(access: &str, path: &str) -> String {
         format!("{}{path}", access.trim_end_matches('/'))
     }
 
     async fn post(access: &str, path: &str, body: Value) -> Result<()> {
-        let response = http()?
+        let response = egress::trusted()?
             .post(at(access, path))
             .header("content-type", "application/json")
             .body(body.to_string())
@@ -590,7 +552,7 @@ pub mod client {
     /// Register `key`'s device on an `open-pow` network: the work it asks for, then the request.
     pub async fn register(access: &str, key: &SecretKey) -> Result<()> {
         let bits: Value = serde_json::from_str(
-            &http()?
+            &egress::trusted()?
                 .get(at(access, "/pow"))
                 .send()
                 .await
