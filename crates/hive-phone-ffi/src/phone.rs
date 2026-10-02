@@ -89,13 +89,13 @@ impl Phone {
     }
 
     /// Unpair from `device`, by its id: whether it was told; one that was not still lists the
-    /// phone, and is unpaired on it.
+    /// phone, and is to be unpaired there too.
     pub async fn unpair(&self, device: String) -> Result<bool, PhoneError> {
         let (identity, connections) = (self.identity.clone(), self.connections.clone());
         on_runtime(async move {
             let endpoint = connections.endpoint().await?;
             let unpaired = identity.unpair_from(&endpoint, &device).await?;
-            connections.renew().await;
+            connections.devices_changed();
             Ok(unpaired.told)
         })
         .await

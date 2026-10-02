@@ -114,8 +114,15 @@ impl Connections {
         self.0.foreground.send_replace(false);
     }
 
-    /// The person's devices, or the network the phone reaches them through, changed (it paired,
-    /// or unpaired): each is reached anew, through the network it is on now.
+    /// The person's devices changed, the network they are reached through as it was (one was
+    /// unpaired): each still the person's is dialled, and none other.
+    pub fn devices_changed(&self) {
+        self.0.know_devices();
+        (self.0.changed)();
+    }
+
+    /// The person's devices, and the network the phone reaches them through, may have changed
+    /// (it paired): each is reached anew, through the network it is on now.
     pub async fn renew(&self) {
         let old = self.0.endpoint.lock().await.take();
         for link in lock(&self.0.links).values() {
@@ -143,11 +150,13 @@ impl Connections {
             .get(device)
             .map(|link| (link.connection.subscribe(), link.wake.clone()));
         if let Some((mut live, wake)) = link.filter(|_| *self.0.foreground.borrow()) {
-            if let Some(connection) = live.borrow().clone() {
+            let open =
+                |c: &Option<Connection>| c.as_ref().is_some_and(|c| c.close_reason().is_none());
+            if let Some(connection) = live.borrow().clone().filter(|c| c.close_reason().is_none()) {
                 return Ok(connection);
             }
             wake.notify_one();
-            let made = tokio::time::timeout(ANSWER_WITHIN, live.wait_for(Option::is_some)).await;
+            let made = tokio::time::timeout(ANSWER_WITHIN, live.wait_for(open)).await;
             if let Ok(Ok(made)) = made {
                 return Ok(made.clone().expect("a connection"));
             }

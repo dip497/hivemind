@@ -2,7 +2,8 @@
 //! 2026-10-02.md §3.2): nothing is dialled before the foreground; in it, each device is reached and
 //! kept, what it says is kept, and whose devices these are as its app says; a call goes out on the
 //! connection kept, and only in a workspace the device holds; in the background the connection is
-//! closed, and back in the foreground the device is reached again; a device gone is found away.
+//! closed, and back in the foreground the device is reached again; a device gone is found away. A
+//! device unpaired is told, forgotten, and its connection closed.
 
 mod support;
 
@@ -69,4 +70,20 @@ async fn a_device_is_kept_reached_in_the_foreground_closed_in_the_background_and
         until(Duration::from_secs(30), away).await,
         "never found away"
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_device_unpaired_is_told_forgotten_and_its_connection_closed() {
+    let desk = Desk::start(22).await;
+    let phone = paired_with(&tmp("unpaired"), &desk);
+    let connections = Connections::new(phone.clone(), || {});
+    connections.foreground();
+    assert!(until(Duration::from_secs(10), || connections.seen()[0].reachable).await);
+    let endpoint = connections.endpoint().await.unwrap();
+    let unpaired = phone.unpair_from(&endpoint, &desk.id).await.unwrap();
+    connections.devices_changed();
+    assert!(unpaired.told);
+    assert!(connections.seen().is_empty());
+    // The call's own connection, and the one kept.
+    assert!(until(Duration::from_secs(5), || desk.closed.load(SeqCst) == 2).await);
 }
