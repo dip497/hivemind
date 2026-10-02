@@ -113,7 +113,7 @@ final class TerminalView: UIScrollView, UIScrollViewDelegate, UIKeyInput {
     /// Back to the newest line, and following it again.
     func jumpToNewest() {
         following = true
-        setContentOffset(CGPoint(x: contentOffset.x, y: max(0, contentSize.height - bounds.height)), animated: true)
+        setContentOffset(CGPoint(x: contentOffset.x, y: rest), animated: true)
     }
 
     // MARK: Layout
@@ -271,15 +271,25 @@ final class TerminalView: UIScrollView, UIScrollViewDelegate, UIKeyInput {
 
     // MARK: Following the newest line
 
-    private func scrollToNewest() {
+    /// Where the view rests while it follows (design §6.4): the newest line the last in sight, or
+    /// the top while every line above it fits; a full screen, at its bottom.
+    private var rest: CGFloat {
+        guard let newest = lines.newest else { return 0 }
         let bottom = max(0, contentSize.height - bounds.height)
-        if contentOffset.y != bottom {
-            contentOffset = CGPoint(x: contentOffset.x, y: bottom)
+        let below = CGFloat(newest - lines.origin + 1) * metrics.lineHeight - bounds.height
+        return min(bottom, max(0, below))
+    }
+
+    private func scrollToNewest() {
+        let rest = self.rest
+        if contentOffset.y != rest {
+            contentOffset = CGPoint(x: contentOffset.x, y: rest)
         }
     }
 
+    /// At or past where the view rests: the person is back at the newest line.
     private var atNewest: Bool {
-        contentOffset.y >= contentSize.height - bounds.height - metrics.lineHeight
+        contentOffset.y >= rest - metrics.lineHeight
     }
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
@@ -350,7 +360,7 @@ final class TerminalView: UIScrollView, UIScrollViewDelegate, UIKeyInput {
         let maxY = max(0, contentSize.height - bounds.height)
         contentOffset = CGPoint(
             x: min(max(0, anchor.x - onScreen.x), maxX),
-            y: following ? maxY : min(max(0, anchor.y - onScreen.y), maxY))
+            y: following ? rest : min(max(0, anchor.y - onScreen.y), maxY))
     }
 
     // MARK: Typing, as the person

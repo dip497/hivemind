@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -46,8 +47,10 @@ private const val MAX_ZOOM = 6f
 
 /**
  * An agent's live terminal: fitted to the width at first, pinched to zoom, following the newest
- * line until the person scrolls up. Lines are drawn one by one, in a lazy list keyed by their
- * index, so a line that changes redraws alone and one that scrolls keeps its place.
+ * line until the person scrolls up (design §6.4: the cursor's line or the last line written, kept
+ * the last in sight, also as the view is made shorter). Lines are drawn one by one, in a lazy
+ * list keyed by their index, so a line that changes redraws alone and one that scrolls keeps its
+ * place.
  */
 @Composable
 fun TerminalView(terminal: Terminal, modifier: Modifier = Modifier) {
@@ -83,7 +86,7 @@ fun TerminalView(terminal: Terminal, modifier: Modifier = Modifier) {
                 zoom = next
                 // The point between the fingers stays where it is, across.
                 across.dispatchRawDelta((across.value + centroidX) * applied - centroidX - across.value)
-                terminal.follow.grew(terminal.lineCount - 1)
+                terminal.follow.grew(terminal.rest)
             },
     ) {
         val cols = terminal.cols.coerceAtLeast(1)
@@ -91,6 +94,10 @@ fun TerminalView(terminal: Terminal, modifier: Modifier = Modifier) {
         val cells = remember(painter, viewport, cols, zoom) { painter.cells(viewport * zoom / cols) }
         val width = with(density) { (cells.width * cols).toDp() }
         val lineHeight = with(density) { cells.height.toDp() }
+        // The whole lines in sight, each as tall as it is laid out: following, the view rests where
+        // the newest line is the last of them, and rests there again once the view is shorter.
+        val inView = constraints.maxHeight / with(density) { lineHeight.roundToPx() }.coerceAtLeast(1)
+        SideEffect { terminal.fit(inView) }
         Box(Modifier.fillMaxSize().horizontalScroll(across)) {
             LazyColumn(state = terminal.follow.list, modifier = Modifier.width(width).fillMaxHeight()) {
                 items(count = terminal.lineCount, key = { terminal.firstLine + it }) { position ->
@@ -98,7 +105,7 @@ fun TerminalView(terminal: Terminal, modifier: Modifier = Modifier) {
                 }
             }
         }
-        NewestButton(terminal.follow) { terminal.lineCount - 1 }
+        NewestButton(terminal.follow) { terminal.rest }
     }
 }
 

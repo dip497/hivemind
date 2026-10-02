@@ -63,6 +63,28 @@ class Terminal {
     /** Where the view is, following the newest line: kept here, so an update and the scroll it brings land in one frame. */
     val follow = Follow()
 
+    /**
+     * The line the view keeps in sight while it follows (design §6.4): the newer of the cursor's
+     * line and the last line with anything on it (a line that draws nothing comes with no text), so
+     * that a screen still filling from the top is followed where it is written, and a full one at
+     * its bottom; -1 while there is neither.
+     */
+    private var newest = -1
+
+    /** How many whole lines the view shows, as it was last laid out; 1 until it has been. */
+    private var inView = 1
+
+    /** Where the view rests while it follows: the line that leaves [newest] the last in sight, or the first while every line above it fits. */
+    val rest: Int get() = (newest - inView + 1).coerceAtLeast(0)
+
+    /** The view shows [lines] whole lines now (laid out anew: the keyboard, a turn, a pinch); following, it rests where [newest] stays in sight. */
+    fun fit(lines: Int) {
+        val shown = lines.coerceAtLeast(1)
+        if (shown == inView) return
+        inView = shown
+        follow.grew(rest)
+    }
+
     /** The line [position] lines after [firstLine]. */
     fun slot(position: Int): LineSlot = slots[position]
 
@@ -97,6 +119,8 @@ class Terminal {
         }
 
         lineCount = count
-        follow.grew(count - 1)
+        val written = slots.indexOfLast { it.line.text.isNotEmpty() }
+        newest = if (cursorSlot != null) maxOf(cursorAt.toInt(), written) else written
+        follow.grew(rest)
     }
 }

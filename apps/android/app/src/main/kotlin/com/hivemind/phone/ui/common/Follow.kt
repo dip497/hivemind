@@ -24,7 +24,9 @@ import com.hivemind.phone.R
 /**
  * A list that follows its newest item (design §6.4): until the person scrolls up, and again once
  * they are back at the bottom, by hand or by the newest-item button. Kept by what fills the list,
- * so that what it adds and the scroll that shows it land in one frame.
+ * so that what it adds and the scroll that shows it land in one frame. Following, the list rests
+ * at an item its owner names, from the top: the chat at its last, which the list's end then
+ * brings to the bottom; the terminal at the line that leaves its newest line the last in sight.
  */
 @Stable
 class Follow {
@@ -33,15 +35,15 @@ class Follow {
     /** Whether the list keeps its newest item in view. */
     var on by mutableStateOf(true)
 
-    /** The list now ends at [last]: shown while following, though not while the person moves it. */
-    fun grew(last: Int) {
-        if (on && last >= 0 && !list.isScrollInProgress) list.requestScrollToItem(last)
+    /** The list changed, and rests at [at]: shown while following, though not while the person moves it. */
+    fun grew(at: Int) {
+        if (on && at >= 0 && !list.isScrollInProgress) list.requestScrollToItem(at)
     }
 
-    /** Back to the newest item, [last], following it again. */
-    fun newest(last: Int) {
+    /** Back to where the list rests, [at], following it again. */
+    fun newest(at: Int) {
         on = true
-        if (last >= 0) list.requestScrollToItem(last)
+        if (at >= 0) list.requestScrollToItem(at)
     }
 }
 
@@ -57,12 +59,12 @@ fun FollowTheNewest(follow: Follow) {
     }
 }
 
-/** Scrolled up: a button back to the newest item, [last] (read when it is tapped). */
+/** Scrolled up: a button back to where the list rests, [at] (read when it is tapped). */
 @Composable
-fun BoxScope.NewestButton(follow: Follow, last: () -> Int) {
+fun BoxScope.NewestButton(follow: Follow, at: () -> Int) {
     if (!follow.on) {
         SmallFloatingActionButton(
-            onClick = { follow.newest(last()) },
+            onClick = { follow.newest(at()) },
             modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
         ) { Icon(Icons.Filled.KeyboardArrowDown, stringResource(R.string.list_newest)) }
     }

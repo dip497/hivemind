@@ -46,6 +46,24 @@ struct TerminalLines {
 
     subscript(index: UInt64) -> TerminalLine? { held[index] }
 
+    /// The line the terminal keeps in sight while it follows (design §6.4): the newer of the
+    /// cursor's line and the last line with anything on it (a line that draws nothing comes with no
+    /// text), so that a screen still filling from the top is followed where it is written, and a
+    /// full one at its bottom; nil while there is neither.
+    var newest: UInt64? {
+        var written: UInt64?
+        var index = end
+        while index > origin {
+            index -= 1
+            if held[index]?.text.isEmpty == false {
+                written = index
+                break
+            }
+        }
+        let shown = cursor.map(\.line).flatMap { $0 >= origin && $0 < end ? $0 : nil }
+        return [written, shown].compactMap { $0 }.max()
+    }
+
     /// Takes one update: the lines it carries replace theirs, and every other line keeps what it said.
     mutating func apply(_ update: ScreenUpdate) -> TerminalChanges {
         var changes = TerminalChanges()

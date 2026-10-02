@@ -37,16 +37,20 @@ func aLine(_ index: UInt64, _ text: String) -> ScreenLine {
     ScreenLine(index: index, text: text, runs: Data())
 }
 
-func anUpdate(revision: UInt64, cols: UInt16 = 80, first: UInt64, count: UInt64, _ lines: [ScreenLine]) -> ScreenUpdate {
+/// A screen update; the cursor on the newest line, shown, unless told where and whether.
+func anUpdate(
+    revision: UInt64, cols: UInt16 = 80, rows: UInt16 = 24, first: UInt64, count: UInt64,
+    cursor: UInt64? = nil, cursorShown: Bool = true, _ lines: [ScreenLine]
+) -> ScreenUpdate {
     ScreenUpdate(
         revision: revision,
         cols: cols,
-        rows: 24,
+        rows: rows,
         firstLine: first,
         lineCount: count,
-        cursorLine: count == 0 ? 0 : count - 1,
+        cursorLine: cursor ?? (count == 0 ? 0 : count - 1),
         cursorCol: 0,
-        cursorVisible: true,
+        cursorVisible: cursorShown,
         lines: lines)
 }
 
