@@ -62,3 +62,12 @@ gha-creds-*.json
 # Astro writes type stubs wherever it is run; the site keeps its own under docs/.
 /.astro/
 target/
+
+# The Android app (apps/android): Gradle's caches and outputs, the SDK path Android Studio writes,
+# and what scripts/phone/build-android.sh generates: the core's libraries (jniLibs) and its Kotlin
+# bindings.
+apps/android/**/build/
+apps/android/.gradle/
+apps/android/.kotlin/
+apps/android/local.properties
+apps/android/app/generated/

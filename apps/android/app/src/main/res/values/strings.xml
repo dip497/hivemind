@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">hivemind</string>
+
+    <!-- Tabs -->
+    <string name="tab_needs">Needs you</string>
+    <string name="tab_agents">Agents</string>
+    <string name="tab_devices">Devices</string>
+
+    <!-- How long ago: in lists, beside a wait or a state -->
+    <string name="ago_now">now</string>
+    <string name="ago_minutes">%d min</string>
+    <string name="ago_hours">%d h</string>
+    <string name="ago_days">%d d</string>
+
+    <!-- Where an agent runs: its workspace (or folder) and its machine -->
+    <string name="where">%1$s · %2$s</string>
+
+    <!-- An agent's state -->
+    <string name="state_idle">idle</string>
+    <string name="state_working">working</string>
+    <string name="state_waiting">waiting on you</string>
+    <string name="state_done">done</string>
+    <string name="state_failed">failed</string>
+    <string name="state_interrupted">interrupted</string>
+    <string name="state_limited">limited</string>
+    <string name="state_exited">exited</string>
+
+    <!-- Why it waits on the person -->
+    <string name="wait_permission">permission</string>
+    <string name="wait_question">question</string>
+    <string name="wait_plan">plan</string>
+    <string name="wait_other">waiting on you</string>
+    <string name="waits_for">%1$s · %2$s</string>
+
+    <!-- Needs you -->
+    <string name="needs_none">Nothing needs you.</string>
+    <plurals name="needs_none_working">
+        <item quantity="one">Nothing needs you. %d agent working.</item>
+        <item quantity="other">Nothing needs you. %d agents working.</item>
+    </plurals>
+    <string name="needs_away">%s is away</string>
+    <string name="needs_away_heard">%1$s is away · last heard %2$s ago</string>
+    <string name="needs_as_last_heard">%s · as last heard</string>
+
+    <!-- Answers -->
+    <string name="action_allow">Allow</string>
+    <string name="action_deny">Deny</string>
+    <string name="action_review_plan">Read the plan</string>
+    <string name="action_approve">Approve</string>
+    <string name="action_ask_changes">Ask for changes</string>
+    <string name="changes_hint">What to change</string>
+    <string name="reply_hint">Reply</string>
+    <string name="action_send">Send</string>
+
+    <!-- Agents -->
+    <string name="agents_none">No agents on your devices yet.</string>
+    <string name="agents_device_away">%s · away</string>
+    <string name="action_stop">Stop</string>
+    <string name="action_close">Close</string>
+
+    <!-- An agent -->
+    <string name="action_back">Back</string>
+    <string name="action_diff">Diff</string>
+    <string name="agent_subtitle">%1$s · %2$s · %3$s</string>
+    <string name="mode_message">Message</string>
+    <string name="mode_type">Type</string>
+    <string name="message_hint">Message %s</string>
+    <string name="type_hint">Typed into its terminal as you</string>
+    <string name="keyboard_held">%s has its keyboard.</string>
+    <string name="ended_code">The session ended (%d).</string>
+    <string name="ended_lost">The connection to its device went.</string>
+
+    <!-- The phone's lock, before starting or closing an agent -->
+    <string name="lock_start_title">Start %s</string>
+    <string name="lock_close_title">Close %s</string>
+    <string name="lock_subtitle">It runs on your computer.</string>
+
+    <!-- Diff -->
+    <string name="diff_title">Changes</string>
+    <string name="action_refresh">Refresh</string>
+    <string name="diff_none">No changes.</string>
+    <string name="diff_truncated">The diff is cut at 512 KiB.</string>
+    <string name="diff_no_patch">No diff to show for this file.</string>
+
+    <!-- Start -->
+    <string name="start_title">Start an agent</string>
+    <string name="start_device">Device</string>
+    <string name="start_workspace">Workspace</string>
+    <string name="start_folder">Folder</string>
+    <string name="start_agent">Agent</string>
+    <string name="start_prompt">Prompt (optional)</string>
+    <string name="action_start">Start</string>
+    <string name="start_no_places">The phone lists the workspaces that have an agent in them: start one on your computer first.</string>
+
+    <!-- Devices -->
+    <string name="devices_whose">%s\'s devices</string>
+    <string name="device_computer">computer</string>
+    <string name="device_host">host</string>
+    <string name="device_reachable">%s · reachable</string>
+    <string name="device_connecting">%s · connecting…</string>
+    <string name="device_away">%s · away</string>
+    <string name="device_away_heard">%1$s · away · last heard %2$s ago</string>
+    <string name="action_unpair">Unpair</string>
+    <string name="unpair_title">Unpair %s?</string>
+    <string name="unpair_body">Each forgets the other. To pair again, scan the code on it.</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_pair_another">Pair another device</string>
+
+    <!-- Pair -->
+    <string name="pair_title">Pair with hivemind</string>
+    <string name="pair_how">On your computer, open Settings → Devices → Pair a phone, and point the camera at the code. Or paste the link it shows.</string>
+    <string name="action_allow_camera">Use the camera</string>
+    <string name="pair_link">Link</string>
+    <string name="action_paste">Paste</string>
+    <string name="action_pair">Pair</string>
+    <string name="pair_pairing">Pairing…</string>
+    <string name="pair_whose">This phone is %s\'s now.</string>
+    <string name="pair_with">Paired with %s.</string>
+    <string name="action_continue">Continue</string>
+
+    <!-- What a screen tells once, after an action -->
+    <string name="notice_failed">That did not work.</string>
+    <string name="notice_already_answered">It no longer waits on you.</string>
+    <string name="notice_not_running">No agent runs there now.</string>
+    <string name="notice_not_stopped">It was not in a turn.</string>
+    <string name="notice_already_closed">It was already closed.</string>
+    <string name="notice_already_unpaired">It had already forgotten this phone.</string>
+    <string name="notice_no_lock">Set a screen lock on this phone to start or close agents.</string>
+
+    <string name="core_broken">hivemind could not open what this phone keeps: %s</string>
+</resources>

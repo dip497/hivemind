@@ -1,0 +1,147 @@
+name: phone-android
+
+# The Android app (apps/android) over the phone's Rust core (docs/design/phone-app-2026-10-02.md):
+# the core built for arm64-v8a and x86_64, the app assembled and unit-tested, then launched on an
+# emulator for a Maestro smoke flow. On every push touching the phone, on any branch.
+on:
+  push:
+    paths:
+      - apps/android/**
+      - crates/hive-phone/**
+      - crates/hive-phone-ffi/**
+      - crates/hive-net/**
+      - scripts/phone/**
+      - .github/workflows/phone-android.yml
+  pull_request:
+    paths:
+      - apps/android/**
+      - crates/hive-phone/**
+      - crates/hive-phone-ffi/**
+      - crates/hive-net/**
+      - scripts/phone/**
+      - .github/workflows/phone-android.yml
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Rust (stable) for the host and the app's two ABIs
+        run: |
+          rustup update stable --no-self-update && rustup default stable
+          rustup target add aarch64-linux-android x86_64-linux-android
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/cargo-ndk
+            crates/hive-phone-ffi/target
+          key: phone-android-cargo-${{ runner.os }}-${{ hashFiles('crates/hive-phone-ffi/Cargo.lock') }}
+          restore-keys: phone-android-cargo-${{ runner.os }}-
+
+      - name: cargo-ndk
+        run: command -v cargo-ndk || cargo install cargo-ndk --locked --version 4.1.2
+
+      - name: The NDK the app is built with (gradle/libs.versions.toml)
+        run: |
+          ndk=$(sed -n 's/^ndk = "\(.*\)"/\1/p' apps/android/gradle/libs.versions.toml)
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ndk" > /dev/null
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build (the core through buildCore) and unit tests
+        working-directory: apps/android
+        run: ./gradlew assembleDebug testDebugUnitTest
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hivemind-phone-debug
+          path: apps/android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: What the unit tests said
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: apps/android/app/build/reports/tests/
+
+  emulator:
+    # The built app on an emulator (KVM on ubuntu-latest), driven by apps/android/maestro.
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: hivemind-phone-debug
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/cache@v4
+        id: avd
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: phone-android-avd-35-x86_64
+
+      - name: An emulator snapshot, made once and cached
+        if: steps.avd.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "snapshot made"
+
+      - name: Smoke flow
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            adb install -r app-debug.apk
+            maestro test apps/android/maestro --format junit --output maestro-report.xml
+
+      - name: What Maestro said
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-report
+          path: |
+            maestro-report.xml
+            ~/.maestro/tests/
+          if-no-files-found: ignore
