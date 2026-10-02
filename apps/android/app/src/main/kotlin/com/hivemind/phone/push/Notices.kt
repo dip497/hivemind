@@ -118,18 +118,19 @@ class Notices(private val context: Context) {
     }
 
     /**
-     * Clears each wait shown that its device, heard since the notification was posted, no longer
-     * lists: answered, or waiting no more. What the core kept from before says nothing of a newer
-     * wait, so a device not heard since leaves it be.
+     * Clears each wait shown that its device, having said what waits there since the notification
+     * was posted, no longer lists: answered, or waiting no more. What it said before says nothing of
+     * a newer wait, nor do the workspaces it told since, so a device that has not said since leaves
+     * it be.
      */
     fun cleared(overview: Overview) {
-        val heard = overview.devices.associate { it.id to (it.heardAt?.toLong() ?: Long.MIN_VALUE) }
+        val said = overview.devices.associate { it.id to (it.answeredAt?.toLong() ?: Long.MIN_VALUE) }
         val listed = overview.needs.mapNotNull { agent -> agent.waiting?.let { agent.at to it.since.toLong() } }.toSet()
         for (shown in manager.activeNotifications) {
             if (shown.id != WAITS) continue
             val wait = Wait.from(shown.notification.extras) ?: continue
-            val heardSince = (heard[wait.agent.device] ?: Long.MIN_VALUE) > shown.postTime
-            if (heardSince && (wait.agent to wait.since) !in listed) manager.cancel(shown.tag, WAITS)
+            val saidSince = (said[wait.agent.device] ?: Long.MIN_VALUE) > shown.postTime
+            if (saidSince && (wait.agent to wait.since) !in listed) manager.cancel(shown.tag, WAITS)
         }
     }
 
