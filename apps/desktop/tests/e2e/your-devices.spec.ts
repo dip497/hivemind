@@ -3,16 +3,20 @@
 // network, and becomes the desktop's person, the workspace it had moving with it. Each lists the
 // other; the laptop's Open recent lists the desktop's workspace, which it opens as its owner, and a
 // shell started there runs on the desktop, in the desktop's folder; and the desktop opens the
-// laptop's the same way.
+// laptop's the same way. A computer on a network of its own offers a link that lets the device
+// entering it onto that network first (spec/pairing.md 0.6).
 import { test, expect, type ElectronApplication } from "@playwright/test";
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync, execSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { readDoc } from "@hivemind/workspace-host/doc-file";
-import { hiveNetBuilt, person, tiles } from "./helpers/multiplayer";
+import { parsePairLink } from "@hivemind/workspace-host/pairing";
+import { hiveNetBuilt, ownNetwork, person, tiles } from "./helpers/multiplayer";
 
 let root: string;
 const apps: ElectronApplication[] = [];
+/** A network's server, stopped after each test. */
+const procs: ChildProcess[] = [];
 test.beforeEach(() => { root = fs.mkdtempSync("/tmp/hm-devices-"); });
 test.afterEach(async () => {
   // The two apps' daemons only, before the apps close (closing waits on them) and after. An app
@@ -24,6 +28,7 @@ test.afterEach(async () => {
     if (!gone) a.process().kill("SIGKILL");
   }
   reap();
+  for (const p of procs.splice(0)) p.kill();
   try { execSync(`pkill -KILL -f -- "--user-data-dir=${root}/"`, { stdio: "ignore" }); } catch { /* none */ }
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
@@ -97,4 +102,24 @@ test("a laptop enters the desktop's six words and becomes its person; each opens
   await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-recent")));
   await desktop.locator("[data-host-workspace]").filter({ hasText: "notes" }).click({ timeout: 20_000 });
   await expect(desktop.locator('[data-shared-banner][data-state="connected"]')).toHaveAttribute("data-access", "owner", { timeout: 20_000 });
+});
+
+test("a computer on a network of its own offers a link that gets the device entering it onto that network first, with the voucher it carries", async () => {
+  test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
+  test.setTimeout(120_000);
+  const net = await ownNetwork(root, procs, "closed");
+  const desktop = await person(root, "desktop", repo("api"), apps);
+  expect(await desktop.evaluate((l) => window.hive.useNetwork(l), net.link)).toMatchObject({ admission: "enrolled" });
+  const laptop = await person(root, "laptop", repo("notes"), apps);
+  const laptopIs = (await laptop.evaluate(() => window.hive.identity())).deviceId;
+  const allowed = async () => (await fetch(`${net.access}/allowed/${laptopIs}`)).text();
+  expect(await allowed()).toBe("false");
+
+  const { link } = await desktop.evaluate(() => window.hive.pairOffer()) as { link: string };
+  const voucher = parsePairLink(link)!.admission!.voucher as { nonce: string; kind: string };
+  expect(voucher.kind).toBe("visit");
+  await laptop.evaluate((l) => window.hive.pairEnter(l), link);
+  const kept = JSON.parse(fs.readFileSync(path.join(net.data, "access.json"), "utf8")) as { redeemed: Record<string, number> };
+  expect(kept.redeemed[voucher.nonce]).toBe(1);
+  expect(await allowed()).toBe("true");
 });

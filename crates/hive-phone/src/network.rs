@@ -8,10 +8,13 @@ use std::fs;
 use anyhow::Result;
 use hive_net::{
     net::Reach,
-    profile::{self, Policy, Verified},
+    profile::{self, Verified},
 };
 
-use crate::identity::{write_private, Identity};
+use crate::{
+    identity::{write_private, Identity},
+    pairing::Admission,
+};
 
 const NETWORK: &str = "network.json";
 
@@ -34,6 +37,35 @@ impl Identity {
             .unwrap_or_else(Reach::local)
     }
 
+    /// How it reaches a device that says it is reached through `relay` too.
+    pub fn reach_through(&self, relay: Option<&str>) -> Reach {
+        let mut reach = self.reach();
+        if let Some(relay) = relay.and_then(|r| r.parse().ok()) {
+            if !reach.relays.contains(&relay) {
+                reach.relays.push(relay);
+            }
+        }
+        reach
+    }
+
+    /// Get onto the network of a device whose link carries `admission`, to reach it from
+    /// anywhere: with the voucher it carries, on a closed network, after which that device vouches
+    /// for this phone as they pair; or registering, on an open one. How.
+    pub async fn let_in(&self, admission: &Admission) -> Result<&'static str> {
+        Ok(match &admission.voucher {
+            Some(voucher) => {
+                let voucher = serde_json::from_value(voucher.clone())
+                    .map_err(|_| anyhow::anyhow!("the link's voucher is not one"))?;
+                hive_net::access::client::redeem(&admission.access, &voucher, self.key()).await?;
+                "vouched for by the app"
+            }
+            None => {
+                hive_net::access::client::register(&admission.access, self.key()).await?;
+                "registered"
+            }
+        })
+    }
+
     /// Keep `given` as this phone's network, or none.
     pub(crate) fn keep_network(&self, given: Option<&str>) -> Result<()> {
         match given {
@@ -46,20 +78,5 @@ impl Identity {
                 _ => Ok(()),
             },
         }
-    }
-
-    /// Let this phone onto its network's relays where it does that itself: registering on an
-    /// `open-pow` network. On a `closed` one the app vouched for it as it paired. What happened.
-    pub async fn admit(&self) -> Result<&'static str> {
-        let Some(access) = self.network().and_then(|n| n.profile.access) else {
-            return Ok("none needed");
-        };
-        Ok(match access.policy {
-            Policy::OpenPow => {
-                hive_net::access::client::register(&access.url, self.key()).await?;
-                "registered"
-            }
-            Policy::Closed => "vouched for by the app",
-        })
     }
 }

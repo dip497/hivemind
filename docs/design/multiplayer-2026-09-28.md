@@ -1073,7 +1073,9 @@ agents.
    *As built (M5 step 7, `spec/pairing.md` 0.5):* the phone takes the network of the app it pairs
    with, its answer carrying it, and reaches the person's devices through it from then on; the app
    vouches for it on a closed network, and it registers itself on an open one. The chooser itself
-   (a phone choosing otherwise) comes with the phone's shell.
+   (a phone choosing otherwise) comes with the phone's shell. From elsewhere (M5 step 8, 0.6): the
+   pairing link carries the network's access service and a voucher for one use, as an invite does,
+   so the phone (or a computer) entering it gets onto the network before it dials.
 3. **Home: Needs you.** A list, most urgent first: agent, workspace, machine, reason
    (permission · question · plan), how long it has waited. Empty state: "Nothing needs
    you. 4 agents working."

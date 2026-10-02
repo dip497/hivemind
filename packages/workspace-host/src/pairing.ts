@@ -120,6 +120,13 @@ function sameProof(given: unknown, expected: string): boolean {
 }
 
 /** A code and where its device is, as one link. */
+/** How a device elsewhere gets onto the offering device's network to reach it (0.6): the
+ *  network's access service, and a voucher to visit it with (none: it registers, on an open one). */
+export interface Admission {
+  access: string;
+  voucher: Record<string, unknown> | null;
+}
+
 export interface PairLink {
   device: string;
   addrs: string[];
@@ -127,6 +134,7 @@ export interface PairLink {
   code: string;
   name: string;
   kind: DeviceKind;
+  admission?: Admission;
 }
 
 const LINK_PREFIX = "hivemind://pair/";
@@ -146,6 +154,14 @@ const isPairedKind = (v: unknown): v is PairedKind => isKind(v) || v === "phone"
 /** A device's name, as another will list it: text, not too long. */
 const nameOf = (v: unknown): string | null => (typeof v === "string" && v.trim() && v.length <= 200 ? v.trim() : null);
 
+/** What a link says of getting onto its network, when it says it well: nothing otherwise. */
+function admissionOf(v: unknown): { admission?: Admission } {
+  const a = v as { access?: unknown; voucher?: unknown } | null;
+  if (!a || typeof a.access !== "string" || !/^https?:\/\//.test(a.access) || a.access.length > 500) return {};
+  const voucher = a.voucher && typeof a.voucher === "object" && !Array.isArray(a.voucher) ? (a.voucher as Record<string, unknown>) : null;
+  return { admission: { access: a.access, voucher } };
+}
+
 /** The link in `text`, or null when it is not a pairing link. */
 export function parsePairLink(text: string): PairLink | null {
   const t = text.trim();
@@ -155,7 +171,7 @@ export function parsePairLink(text: string): PairLink | null {
     const code = typeof l.code === "string" ? parseCode(l.code) : null;
     const name = nameOf(l.name);
     if (l.v !== 1 || !isKey(l.device) || !code || !name || !isKind(l.kind)) return null;
-    return { device: l.device, ...reachedOf(l), code, name, kind: l.kind };
+    return { device: l.device, ...reachedOf(l), code, name, kind: l.kind, ...admissionOf(l.admission) };
   } catch {
     return null;
   }

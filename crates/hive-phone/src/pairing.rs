@@ -101,6 +101,14 @@ fn reached_of(m: &Map<String, Value>) -> (Vec<String>, Option<String>) {
     (addrs, relay)
 }
 
+/// How a device elsewhere gets onto the offering device's network to reach it (0.6): the
+/// network's access service, and a voucher to visit it with (none: it registers, on an open one).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Admission {
+    pub access: String,
+    pub voucher: Option<Value>,
+}
+
 /// A code and where the device offering it is, as its link carries them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PairLink {
@@ -111,6 +119,21 @@ pub struct PairLink {
     pub name: String,
     /// The offering device's: `app` or `host`.
     pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admission: Option<Admission>,
+}
+
+/// What a link says of getting onto its network, when it says it well.
+fn admission_of(v: Option<&Value>) -> Option<Admission> {
+    let a = v?.as_object()?;
+    let access = a
+        .get("access")?
+        .as_str()
+        .filter(|u| (u.starts_with("https://") || u.starts_with("http://")) && units(u) <= 500)?;
+    Some(Admission {
+        access: access.to_string(),
+        voucher: a.get("voucher").filter(|v| v.is_object()).cloned(),
+    })
 }
 
 /// The link in `text`, or none when it is not a pairing link.
@@ -136,6 +159,7 @@ pub fn parse_link(text: &str) -> Option<PairLink> {
         code,
         name,
         kind: kind.to_string(),
+        admission: admission_of(l.get("admission")),
     })
 }
 

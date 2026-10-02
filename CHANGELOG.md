@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: pair your phone, or another computer, with a computer of yours from anywhere. On a network of your own, the pairing link lets the device entering it onto that network first, as an invite does: with a voucher for one use on a network that admits only who it is told to, or by registering on an open one.
 - New: a phone paired with a computer that is on a network of its own (Settings → Network) takes that network, and reaches your computers through its relays and lookup server from then on, not only on the same Wi-Fi. On a network that admits only who it is told to, your computer lets the phone in as it pairs; on an open one, the phone registers itself. `hive-phone network` says which network the phone is on.
 - Fixed: after changing networks in Settings → Network, the network started again up to two seconds later, cutting off whatever had begun meanwhile (a phone pairing, an invite). It starts again at once now.
 - New: your phone says how many agents are at work on your computers ("Nothing needs you. 4 agents working."), and of a computer that is away, what it last said needed you and when. It can unpair itself from a computer too: `hive-phone unpair <computer>` makes each forget the other, and the computer's audit log records the phone did it. A computer the phone cannot reach is forgotten by the phone alone, and still lists the phone until you unpair it there.

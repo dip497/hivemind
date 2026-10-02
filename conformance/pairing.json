@@ -180,6 +180,87 @@
    "about": "no addresses and no relay"
   },
   {
+   "text": "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOlsiMTkyLjE2OC4xLjIwOjQxNjQxIiwiW2ZkMDA6OjIwXTo0MTY0MSJdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJQcml5YSdzIGRlc2t0b3AiLCJraW5kIjoiYXBwIiwiYWRtaXNzaW9uIjp7ImFjY2VzcyI6Imh0dHBzOi8vYWNjZXNzLmV4YW1wbGUubmV0Iiwidm91Y2hlciI6eyJ2IjoxLCJraW5kIjoidmlzaXQiLCJieSI6IjNkNDAxN2MzZTg0Mzg5NWE5MmI3MGFhNzRkMWI3ZWJjOWM5ODJjY2YyZWM0OTY4Y2MwY2Q1NWYxMmFmNDY2MGMiLCJkZXZpY2UiOm51bGwsIm5vbmNlIjoiMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYiLCJleHBpcmVzIjoxNzkwMDAwMzAwMDAwLCJ1c2VzIjoxLCJzaWduYXR1cmUiOiJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYiJ9fX0",
+   "link": {
+    "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "addrs": [
+     "192.168.1.20:41641",
+     "[fd00::20]:41641"
+    ],
+    "relay": null,
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "name": "Priya's desktop",
+    "kind": "app",
+    "admission": {
+     "access": "https://access.example.net",
+     "voucher": {
+      "v": 1,
+      "kind": "visit",
+      "by": "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c",
+      "device": null,
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "expires": 1790000300000,
+      "uses": 1,
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
+     }
+    }
+   },
+   "about": "an app's on a closed network: its access service, and a voucher to visit it with"
+  },
+  {
+   "text": "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOlsiMTkyLjE2OC4xLjIwOjQxNjQxIiwiW2ZkMDA6OjIwXTo0MTY0MSJdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJQcml5YSdzIGRlc2t0b3AiLCJraW5kIjoiYXBwIiwiYWRtaXNzaW9uIjp7ImFjY2VzcyI6Imh0dHBzOi8vYWNjZXNzLmV4YW1wbGUubmV0Iiwidm91Y2hlciI6bnVsbH19",
+   "link": {
+    "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "addrs": [
+     "192.168.1.20:41641",
+     "[fd00::20]:41641"
+    ],
+    "relay": null,
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "name": "Priya's desktop",
+    "kind": "app",
+    "admission": {
+     "access": "https://access.example.net",
+     "voucher": null
+    }
+   },
+   "about": "an app's on an open network: where to register"
+  },
+  {
+   "text": "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOlsiMTkyLjE2OC4xLjIwOjQxNjQxIiwiW2ZkMDA6OjIwXTo0MTY0MSJdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJQcml5YSdzIGRlc2t0b3AiLCJraW5kIjoiYXBwIiwiYWRtaXNzaW9uIjp7ImFjY2VzcyI6ImZ0cDovL2FjY2Vzcy5leGFtcGxlLm5ldCIsInZvdWNoZXIiOnsidiI6MSwia2luZCI6InZpc2l0IiwiYnkiOiIzZDQwMTdjM2U4NDM4OTVhOTJiNzBhYTc0ZDFiN2ViYzljOTgyY2NmMmVjNDk2OGNjMGNkNTVmMTJhZjQ2NjBjIiwiZGV2aWNlIjpudWxsLCJub25jZSI6IjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5YWJjZGVmIiwiZXhwaXJlcyI6MTc5MDAwMDMwMDAwMCwidXNlcyI6MSwic2lnbmF0dXJlIjoiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWIifX19",
+   "link": {
+    "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "addrs": [
+     "192.168.1.20:41641",
+     "[fd00::20]:41641"
+    ],
+    "relay": null,
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "name": "Priya's desktop",
+    "kind": "app"
+   },
+   "about": "an admission whose access is not a server's URL is none"
+  },
+  {
+   "text": "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOlsiMTkyLjE2OC4xLjIwOjQxNjQxIiwiW2ZkMDA6OjIwXTo0MTY0MSJdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJQcml5YSdzIGRlc2t0b3AiLCJraW5kIjoiYXBwIiwiYWRtaXNzaW9uIjp7ImFjY2VzcyI6Imh0dHBzOi8vYWNjZXNzLmV4YW1wbGUubmV0Iiwidm91Y2hlciI6InZpc2l0In19",
+   "link": {
+    "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "addrs": [
+     "192.168.1.20:41641",
+     "[fd00::20]:41641"
+    ],
+    "relay": null,
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "name": "Priya's desktop",
+    "kind": "app",
+    "admission": {
+     "access": "https://access.example.net",
+     "voucher": null
+    }
+   },
+   "about": "a voucher that is not an object is none"
+  },
+  {
    "text": "hivemind://network/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOlsiMTkyLjE2OC4xLjIwOjQxNjQxIiwiW2ZkMDA6OjIwXTo0MTY0MSJdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJQcml5YSdzIGRlc2t0b3AiLCJraW5kIjoiYXBwIn0",
    "link": null,
    "about": "not a pairing link"

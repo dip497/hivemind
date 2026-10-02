@@ -8,8 +8,9 @@
 // (spec/needs.md, spec/push.md): told when an agent on the computer begins waiting on the person,
 // it lists, watches and answers it, and counts the agents at work; unpaired on the computer, it is
 // told nothing more. And the computer away: the phone shows what it last said, and unpaired from
-// the phone then, only the phone forgets. And the computer on a network of its own: the phone takes
-// that network and is let onto it (spec/pairing.md 0.5).
+// the phone then, only the phone forgets. And the computer on a network of its own: its link says
+// how to get onto that network from elsewhere, and the phone takes the network and is let onto it
+// (spec/pairing.md 0.5, 0.6).
 import { test, expect, type ElectronApplication } from "@playwright/test";
 import { execFile, execSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -254,7 +255,7 @@ test("a computer away is shown with what it last said needed the person, and whe
 });
 
 for (const [policy, admission] of [["closed", "vouched for by the app"], ["open-pow", "registered"]] as const) {
-  test(`a phone paired with a computer on a network takes that network and is let onto it (${policy}: ${admission}), and reaches the computer`, async () => {
+  test(`a phone pairing with a computer on a network gets onto it as the link says, takes that network and is let onto it (${policy}: ${admission}), and reaches the computer`, async () => {
     test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
     test.setTimeout(120_000);
     const net = await ownNetwork(root, procs, policy);
@@ -262,8 +263,16 @@ for (const [policy, admission] of [["closed", "vouched for by the app"], ["open-
     expect(await d.desktop.evaluate((l) => window.hive.useNetwork(l), net.link)).toMatchObject({ admission: policy === "closed" ? "enrolled" : "registered" });
     const allowed = async (device: string) => (await fetch(`${net.access}/allowed/${device}`)).text();
 
-    const { phone, paired, phoneId } = await pairPhone(d);
+    const { link, phone, paired, phoneId } = await pairPhone(d);
     expect(paired).toMatchObject({ network: "Example Corp", admission });
+    // The link said how to get onto the network from elsewhere, and the phone did, as it paired:
+    // with the voucher it carried on a closed network.
+    const carried = parsePairLink(link)!.admission!;
+    expect(carried).toMatchObject({ access: net.access, voucher: policy === "closed" ? expect.objectContaining({ kind: "visit", uses: 1, device: null }) : null });
+    if (carried.voucher) {
+      const kept = JSON.parse(fs.readFileSync(path.join(net.data, "access.json"), "utf8")) as { redeemed: Record<string, number> };
+      expect(kept.redeemed[(carried.voucher as { nonce: string }).nonce]).toBe(1);
+    }
     await expect.poll(() => allowed(phoneId)).toBe("true");
     const on = JSON.parse((await run(HIVE_PHONE, ["network", "--identity", phone, "--json"])).stdout) as { profile: { name: string; relays: Array<{ url: string }> } };
     expect([on.profile.name, on.profile.relays.map((r) => r.url)]).toEqual(["Example Corp", [net.relay]]);

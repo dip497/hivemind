@@ -1,4 +1,4 @@
-# Pairing (0.5)
+# Pairing (0.6)
 
 Two devices become one person's (R14 and §5.2 in `docs/design/multiplayer-2026-09-28.md`): the
 device being added receives the person key and certifies itself with it (`identity.md`), or, a
@@ -43,10 +43,19 @@ device, valid for five minutes and used once. Three wrong proofs void it. It is 
 
 ```json
 { "v": 1, "device": "<offering device's key hex>", "addrs": ["<ip:port>", …], "relay": "<url>" | null,
-  "code": "<the six words, hyphen-separated>", "name": "<the offering device's name>", "kind": "app" | "host" }
+  "code": "<the six words, hyphen-separated>", "name": "<the offering device's name>", "kind": "app" | "host",
+  "admission": { "access": "<url>", "voucher": { … } | null } }
 ```
 
 A phone reads a link from its QR code; `kind` is the offering device's, so never `phone`.
+
+`admission` (0.6) is there when the offering device is on a network with an access service
+(`network-access.md`), as an invite carries it: on a `closed` network, a `visit` voucher it signed,
+naming no device, for one use, expiring with the code; on an `open-pow` one, none (the entering
+device registers). A device entering the code from elsewhere gets onto that network with it first,
+redeeming the voucher or registering, and then dials the offering device through `relay`. An
+`admission` whose `access` is not an `http:` or `https:` URL of at most 500 characters is none; a
+`voucher` that is not an object is none.
 
 **Finding the offering device from the words alone.** While a code is open, the offering device
 announces a tag on the local network, in the user data of its mDNS record: `hive-pair=<tag>`,
@@ -130,7 +139,8 @@ taking another person would make that workspace no longer its owner's.
 - A phone given a network that verifies keeps it, and reaches the person's devices through it
   from then on: its relays and its lookup server, as well as the local network. On a `closed`
   network the app vouches for the phone as it pairs (`network-access.md`), as it does for any of
-  the person's devices that reaches it; on an `open-pow` one the phone registers itself. A network
+  the person's devices that reaches it; on an `open-pow` one the phone registered itself, as the
+  link's `admission` said (0.6). A network
   that does not verify is not taken. Pairing again with the same person's app keeps the network
   when that app gives none; with another person's, the phone takes that one's network, or none.
 

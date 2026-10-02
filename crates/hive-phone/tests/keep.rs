@@ -276,6 +276,20 @@ fn the_network_an_app_gives_is_kept_and_reached_through_until_another_persons_ap
         ["https://relay.hive.example.com/"]
     );
     assert!(reach.mdns, "and the local network too");
+    // A device that says it is reached through another relay is dialled through that one too.
+    let relays = |r: Reach| r.relays.iter().map(|r| r.to_string()).collect::<Vec<_>>();
+    assert_eq!(
+        relays(phone.reach_through(Some("https://relay.elsewhere.example/"))),
+        [
+            "https://relay.hive.example.com/",
+            "https://relay.elsewhere.example/"
+        ]
+    );
+    assert_eq!(
+        relays(phone.reach_through(Some("https://relay.hive.example.com/"))),
+        ["https://relay.hive.example.com/"]
+    );
+    assert_eq!(phone.reach_through(None), phone.reach());
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

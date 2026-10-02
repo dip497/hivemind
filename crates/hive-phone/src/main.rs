@@ -165,18 +165,22 @@ async fn run(args: Args) -> Result<()> {
             let link = pairing::parse_link(text).context(
                 "that is not a pairing link: it is the one under Settings → Devices on your computer",
             )?;
-            // The link says where the app is.
-            let endpoint = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
+            // Onto the app's network first, as its link says, to reach it from anywhere; then to
+            // the app, where the link says it is.
+            let admission = match &link.admission {
+                Some(admission) => phone
+                    .let_in(admission)
+                    .await
+                    .context("not let onto the app's network")?,
+                None => "none needed",
+            };
+            let reach = phone.reach_through(link.relay.as_deref());
+            let endpoint = net::endpoint(phone.key().clone(), &reach, vec![]).await?;
             let paired =
                 pairing::pair(&endpoint, args.name.as_deref().unwrap_or("Phone"), &link).await;
             endpoint.close().await;
             let paired = paired?;
             phone.keep(&paired, now_ms())?;
-            // Onto the network the app is on, where the phone does that itself.
-            let admission = match phone.admit().await {
-                Ok(how) => how.to_string(),
-                Err(e) => format!("not admitted: {e:#}"),
-            };
             let network = phone.network().map(|n| n.profile.name);
             let person = &paired.certificate.person;
             if args.json {

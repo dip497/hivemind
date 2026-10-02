@@ -533,7 +533,16 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     offered = offer;
     hn.advertise(pairAnnouncement(offer.code));
     setTimeout(withdraw, offer.expires - Date.now()).unref();
-    return { code: offer.code, link: formatPairLink({ device: me.device, addrs: me.addrs, relay: me.relay, code: offer.code, name: me.name, kind: "app" }), expires: offer.expires };
+    // On a network whose relays admit only who they are told to, the link carries a voucher for
+    // the device entering it from elsewhere, for as long as the code lasts; on an open one, where
+    // to register (0.6).
+    const access = (await networkProfiles().active()).profile.access;
+    const admission = !access ? undefined : {
+      access: access.url,
+      voucher: access.policy === "closed" ? await networkProfiles().voucher({ expiresIn: (offer.expires - Date.now()) / 1000, uses: 1 }) : null,
+    };
+    const link = formatPairLink({ device: me.device, addrs: me.addrs, relay: me.relay, code: offer.code, name: me.name, kind: "app", ...(admission ? { admission } : {}) });
+    return { code: offer.code, link, expires: offer.expires };
   });
 
   // Enter the code or link another of the person's devices shows: a host (`hive host pair`) takes
@@ -546,6 +555,11 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     // From the words alone, the device offering them on this network; a link says where it is.
     const offering = link?.device ?? (await offeringNearby(code, () => hn.nearby()));
     const where = link ? { addrs: link.addrs, relay: link.relay } : { addrs: [], relay: null };
+    // Onto the offering device's network first, as its link says.
+    if (link?.admission) {
+      if (link.admission.voucher) await networkProfiles().redeem(link.admission.access, link.admission.voucher);
+      else await networkProfiles().register(link.admission.access);
+    }
     const done = await enterPairing({ me: { ...(await pairingMe()), shares: sharesWorkspaces() }, code, offering, ask: (hello) => hn.pair(offering, where, hello) });
     if (done.person) becomePerson(done.person);
     const device = { ...done.with, pairedAt: Date.now() };
