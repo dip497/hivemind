@@ -44,9 +44,14 @@ wire() {
   in_ns "$1" ip addr add "$3/24" dev "v-$1"; in_ns "$1" ip link set "v-$1" up
   in_ns "$2" ip addr add "$4/24" dev "v-$1-p"; in_ns "$2" ip link set "v-$1-p" up
 }
-# Start `hive-net <args>` in namespace $1 and print the first line it prints.
+# Start `hive-net <args>` in namespace $1 and print the first line it prints (all it prints is kept
+# in $TMP/$1.out). The file is made anew each time: what ran in $1 before may still write to the old
+# one (a relay still running there; the shell of a device stopped there to start it again, which
+# writes "Terminated" as the device dies, at the end of what the device had written). Only emptied,
+# the file read NULs and "Terminated" first, which was taken for the device's id.
 start() {
   local ns=$1 out=$TMP/$1.out; shift
+  rm -f "$out"
   in_ns "$ns" "$BIN" "$@" > "$out" 2>&1 &
   for _ in $(seq 1 100); do [ -s "$out" ] && break; sleep 0.1; done
   head -1 "$out"
@@ -105,7 +110,7 @@ for _ in $(seq 1 20); do
   if grep -q "^$id_c answered" <<<"$out"; then found=yes; break; fi
   sleep 1
 done
-check "from a third network, found by its id through the lookup server" "yes" "$found"
+check "from a third network, found by its id through the lookup server" "yes" "$([ "$found" = yes ] && echo yes || echo "no: $out")"
 published=$(in_ns hm-c "$BIN" host-record publish --identity "$C" --lookup "$SERVER/pkarr" --workspace ws-1 --seq 1 2>&1 || true)
 workspace=$(grep -o '"workspace":"[0-9a-f]*"' <<<"$published" | cut -d'"' -f4)
 read_back=$(in_ns hm-e "$BIN" host-record resolve "$workspace" --lookup "$SERVER/pkarr" 2>&1 || true)
