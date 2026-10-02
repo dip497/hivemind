@@ -715,7 +715,9 @@ guest who may edit the board could start a command on the host (see the log).
 - 2026-10-02 — Versions: every GitHub Action on its Node 24 major (Node 20 left the runners
   2026-09-23), iOS CI on macos-26 with the newest stable Xcode (the App Store takes Xcode 26 builds
   only), the release's macOS builds off the deprecated macos-14 with a check that what they ship still
-  starts on macOS 14, Node 24, pnpm 10.34.6, Maestro 2.11, the emulator on Android 17. Bun stays on
-  1.3: the view SDK's request tests hang under `bun test` 1.4. Running the packages on the new
+  starts on macOS 14, Node 24, pnpm 10.34.6, Bun 1.4, Maestro 2.11, the emulator on Android 17 (with
+  the newest SDK command-line tools: the image's cannot make its AVD). Two view SDK tests hung under
+  Bun 1.3.14 and later, a Bun bug (oven-sh/bun#37189); they settle their requests another way and
+  check the same outcomes. Running the packages on the new
   versions found a test leaving `XDG_CONFIG_HOME` set to "undefined" and a timing test that failed on
   a busy machine; both fixed.
