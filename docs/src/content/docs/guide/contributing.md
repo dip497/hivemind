@@ -18,7 +18,7 @@ templates/              hive-browser skill source
 docs/design/            architecture notes (historical; do not rewrite)
 ```
 
-pnpm workspace; Node ≥ 22, pnpm ≥ 10, bun ≥ 1.1 (CLI compile only).
+pnpm workspace; Node ≥ 22, pnpm 12 (`packageManager` in package.json pins the exact version), bun ≥ 1.1 (CLI compile only).
 
 ## Install dependencies
 

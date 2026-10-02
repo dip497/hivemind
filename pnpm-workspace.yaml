@@ -4,11 +4,11 @@ packages:
 
 catalog:
   typescript: 5.9.3
-  '@types/node': 22.19.19
+  '@types/node': 22.20.4
   zod: 3.25.76
-  yaml: 2.9.0
+  yaml: 2.9.1
   gray-matter: 4.0.3
-  loro-crdt: 1.16.3
+  loro-crdt: 1.16.4
   citty: ^0.1.6
   chokidar: ^4.0.3
   simple-git: ^3.36.0
@@ -18,14 +18,14 @@ catalog:
   '@types/react': ^19.3.0
   '@types/react-dom': ^19.3.0
   zustand: ^5.0.15
-  '@tanstack/react-query': ^5.102.8
-  '@xyflow/react': ^12.11.6
+  '@tanstack/react-query': ^5.104.0
+  '@xyflow/react': ^12.12.0
   '@xterm/xterm': ^6.0.0
   '@xterm/headless': 6.0.0
   '@xterm/addon-webgl': ^0.19.0
   '@xterm/addon-fit': ^0.11.0
   '@xterm/addon-search': ^0.16.0
-  '@pierre/diffs': 1.4.2
+  '@pierre/diffs': 1.5.1
   sonner: ^1.7.4
   cmdk: ^1.1.1
   '@radix-ui/react-tooltip': ^1.2.16
@@ -50,3 +50,30 @@ catalog:
 
 ignoredOptionalDependencies:
   - cpu-features
+
+# Every pnpm setting lives here: since pnpm 11, .npmrc carries only registry and auth settings,
+# and the "pnpm" field of package.json is not read at all.
+nodeLinker: isolated
+shamefullyHoist: false
+autoInstallPeers: true
+strictPeerDependencies: false
+
+# Which dependencies' install scripts run (true) or are skipped (false). A dependency with an
+# install script that is not listed fails the install (strictDepBuilds, on since pnpm 11).
+allowBuilds:
+  electron: true
+  esbuild: true
+  '@lydell/node-pty': true
+  better-sqlite3: true
+  # Picks a 7-Zip for Squirrel.Windows installers; the Windows build is a zip.
+  electron-winstaller: false
+
+overrides:
+  'js-yaml@>=3 <3.15.2': 3.15.2
+  'js-yaml@>=4 <4.3.2': 4.3.2
+  undici@8.5.0: 8.10.2
+  extract-zip: npm:@electron-internal/extract-zip@^1.0.5
+
+patchedDependencies:
+  '@xterm/addon-webgl@0.19.0': patches/@xterm__addon-webgl@0.19.0.patch
+  electron@39.8.10: patches/electron@39.8.10.patch

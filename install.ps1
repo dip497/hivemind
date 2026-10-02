@@ -10,7 +10,7 @@
     irm https://raw.githubusercontent.com/dip497/hivemind/main/install.ps1 | iex
 
   WITH -Dev: clones the source repo and builds locally. Needs git, node >= 22,
-  pnpm >= 10, bun >= 1.1.
+  pnpm >= 12, bun >= 1.1.
 
     & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dip497/hivemind/main/install.ps1))) -Dev
 
@@ -251,7 +251,7 @@ function Install-Prebuilt {
 # --------------------------------------------------------------------- dev ---
 function Install-Dev {
   foreach ($c in @("git", "node", "pnpm", "bun")) {
-    if (-not (Get-Command $c -ErrorAction SilentlyContinue)) { Die "$c missing - install it first (node >= 22, pnpm >= 10, bun >= 1.1)" }
+    if (-not (Get-Command $c -ErrorAction SilentlyContinue)) { Die "$c missing - install it first (node >= 22, pnpm >= 12, bun >= 1.1)" }
   }
   $src = Join-Path $AppDir "src"
   if (Test-Path (Join-Path $src ".git")) {
