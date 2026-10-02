@@ -1288,6 +1288,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "hive-phone",
+ "serde_json",
  "thiserror 2.0.21",
  "tokio",
  "uniffi",

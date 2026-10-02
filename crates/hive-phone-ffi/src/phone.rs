@@ -26,7 +26,7 @@ pub struct Phone {
     identity: Arc<Identity>,
     /// What the phone is called, as an app lists it.
     name: String,
-    connections: Connections,
+    pub(crate) connections: Connections,
     overviews: Overviews,
 }
 

@@ -103,6 +103,17 @@ pub enum DeviceKind {
     Host,
 }
 
+impl DeviceKind {
+    /// A device's kind as pairing names it: `host`, else a computer (`app`).
+    pub(crate) fn named(kind: &str) -> Self {
+        if kind == "host" {
+            Self::Host
+        } else {
+            Self::Computer
+        }
+    }
+}
+
 /// One of the person's devices: whether it is connected now, when it was found away, and when it
 /// last answered.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -193,11 +204,7 @@ pub fn overview(revision: u64, seen: &[Seen], person: Option<person::Person>) ->
             .map(|device| Device {
                 id: device.with.device.clone(),
                 name: device.with.name.clone(),
-                kind: if device.with.kind == "host" {
-                    DeviceKind::Host
-                } else {
-                    DeviceKind::Computer
-                },
+                kind: DeviceKind::named(&device.with.kind),
                 reachable: device.reachable,
                 away_since: device.away_since,
                 heard_at: device.heard.as_ref().map(|heard| heard.at),

@@ -958,6 +958,34 @@ public func FfiConverterTypeOverviewListener_lower(_ value: OverviewListener) ->
 public protocol PhoneProtocol: AnyObject, Sendable {
     
     /**
+     * Close `agent`: its session ends, and its tile leaves the board. Whether it was there to
+     * close; not when it was closed already.
+     */
+    func closeAgent(agent: AgentRef) async throws  -> Bool
+    
+    /**
+     * What `agent` changed in the folder it runs in.
+     */
+    func diff(agent: AgentRef) async throws  -> Diff
+    
+    /**
+     * Interrupt `agent`'s turn, with the keys its manifest says: whether it was; not when it was
+     * neither working nor waiting on the person.
+     */
+    func interrupt(agent: AgentRef) async throws  -> Bool
+    
+    /**
+     * Start an agent in `workspace`, which `device` holds, as `start` says: the agent, on its
+     * board from then on.
+     */
+    func start(device: String, workspace: String, start: Start) async throws  -> AgentRef
+    
+    /**
+     * What may be started in `workspace`, which `device` holds.
+     */
+    func startable(device: String, workspace: String) async throws  -> Startable
+    
+    /**
      * Answer what `agent` waits on the person for, the wait that began at `since`: whether it
      * landed; not when it waits on that no more, or was answered.
      */
@@ -1084,6 +1112,104 @@ public static func `open`(dir: String, name: String)throws  -> Phone  {
 }
     
 
+    
+    /**
+     * Close `agent`: its session ends, and its tile leaves the board. Whether it was there to
+     * close; not when it was closed already.
+     */
+open func closeAgent(agent: AgentRef)async throws  -> Bool  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_hive_phone_ffi_fn_method_phone_close_agent(
+                        self.uniffiCloneHandle(),FfiConverterTypeAgentRef_lower(agent)
+                )
+            },
+            pollFunc: ffi_hive_phone_ffi_rust_future_poll_i8,
+            completeFunc: ffi_hive_phone_ffi_rust_future_complete_i8,
+            freeFunc: ffi_hive_phone_ffi_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypePhoneError_lift
+        )
+}
+    
+    /**
+     * What `agent` changed in the folder it runs in.
+     */
+open func diff(agent: AgentRef)async throws  -> Diff  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_hive_phone_ffi_fn_method_phone_diff(
+                        self.uniffiCloneHandle(),FfiConverterTypeAgentRef_lower(agent)
+                )
+            },
+            pollFunc: ffi_hive_phone_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_hive_phone_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_hive_phone_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeDiff_lift,
+            errorHandler: FfiConverterTypePhoneError_lift
+        )
+}
+    
+    /**
+     * Interrupt `agent`'s turn, with the keys its manifest says: whether it was; not when it was
+     * neither working nor waiting on the person.
+     */
+open func interrupt(agent: AgentRef)async throws  -> Bool  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_hive_phone_ffi_fn_method_phone_interrupt(
+                        self.uniffiCloneHandle(),FfiConverterTypeAgentRef_lower(agent)
+                )
+            },
+            pollFunc: ffi_hive_phone_ffi_rust_future_poll_i8,
+            completeFunc: ffi_hive_phone_ffi_rust_future_complete_i8,
+            freeFunc: ffi_hive_phone_ffi_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypePhoneError_lift
+        )
+}
+    
+    /**
+     * Start an agent in `workspace`, which `device` holds, as `start` says: the agent, on its
+     * board from then on.
+     */
+open func start(device: String, workspace: String, start: Start)async throws  -> AgentRef  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_hive_phone_ffi_fn_method_phone_start(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(device),FfiConverterString.lower(workspace),FfiConverterTypeStart_lower(start)
+                )
+            },
+            pollFunc: ffi_hive_phone_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_hive_phone_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_hive_phone_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeAgentRef_lift,
+            errorHandler: FfiConverterTypePhoneError_lift
+        )
+}
+    
+    /**
+     * What may be started in `workspace`, which `device` holds.
+     */
+open func startable(device: String, workspace: String)async throws  -> Startable  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_hive_phone_ffi_fn_method_phone_startable(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(device),FfiConverterString.lower(workspace)
+                )
+            },
+            pollFunc: ffi_hive_phone_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_hive_phone_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_hive_phone_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeStartable_lift,
+            errorHandler: FfiConverterTypePhoneError_lift
+        )
+}
     
     /**
      * Answer what `agent` waits on the person for, the wait that began at `since`: whether it
@@ -1998,6 +2124,195 @@ public func FfiConverterTypeDevice_lower(_ value: Device) -> RustBuffer {
 
 
 /**
+ * What an agent changed in the folder it runs in, since its last commit: the files, and the
+ * unified diff, cut at 512 KiB (`truncated`).
+ */
+public struct Diff: Equatable, Hashable {
+    public var files: [DiffFile]
+    public var patch: String
+    public var truncated: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(files: [DiffFile], patch: String, truncated: Bool) {
+        self.files = files
+        self.patch = patch
+        self.truncated = truncated
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension Diff: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiff: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Diff {
+        return
+            try Diff(
+                files: FfiConverterSequenceTypeDiffFile.read(from: &buf), 
+                patch: FfiConverterString.read(from: &buf), 
+                truncated: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Diff, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeDiffFile.write(value.files, into: &buf)
+        FfiConverterString.write(value.patch, into: &buf)
+        FfiConverterBool.write(value.truncated, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiff_lift(_ buf: RustBuffer) throws -> Diff {
+    return try FfiConverterTypeDiff.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiff_lower(_ value: Diff) -> RustBuffer {
+    return FfiConverterTypeDiff.lower(value)
+}
+
+
+/**
+ * A file an agent changed: its status (`M`, `A`, `D`, `R` or `?`, new to git), and the lines the
+ * patch adds to it and removes.
+ */
+public struct DiffFile: Equatable, Hashable {
+    public var path: String
+    public var status: String
+    public var added: UInt32
+    public var removed: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(path: String, status: String, added: UInt32, removed: UInt32) {
+        self.path = path
+        self.status = status
+        self.added = added
+        self.removed = removed
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension DiffFile: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiffFile: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiffFile {
+        return
+            try DiffFile(
+                path: FfiConverterString.read(from: &buf), 
+                status: FfiConverterString.read(from: &buf), 
+                added: FfiConverterUInt32.read(from: &buf), 
+                removed: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DiffFile, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.path, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+        FfiConverterUInt32.write(value.added, into: &buf)
+        FfiConverterUInt32.write(value.removed, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiffFile_lift(_ buf: RustBuffer) throws -> DiffFile {
+    return try FfiConverterTypeDiffFile.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiffFile_lower(_ value: DiffFile) -> RustBuffer {
+    return FfiConverterTypeDiffFile.lower(value)
+}
+
+
+/**
+ * A frame of the workspace: a folder to start an agent in, and the machine it is on, by name.
+ */
+public struct Frame: Equatable, Hashable {
+    public var id: String
+    public var name: String
+    public var machine: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, name: String, machine: String) {
+        self.id = id
+        self.name = name
+        self.machine = machine
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension Frame: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFrame: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Frame {
+        return
+            try Frame(
+                id: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                machine: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Frame, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.machine, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFrame_lift(_ buf: RustBuffer) throws -> Frame {
+    return try FfiConverterTypeFrame.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFrame_lower(_ value: Frame) -> RustBuffer {
+    return FfiConverterTypeFrame.lower(value)
+}
+
+
+/**
  * What the phone shows of the person's agents and devices, at a revision.
  */
 public struct Overview: Equatable, Hashable {
@@ -2140,6 +2455,67 @@ public func FfiConverterTypePaired_lift(_ buf: RustBuffer) throws -> Paired {
 #endif
 public func FfiConverterTypePaired_lower(_ value: Paired) -> RustBuffer {
     return FfiConverterTypePaired.lower(value)
+}
+
+
+/**
+ * The device a pairing link pairs with: its id, its name and its kind.
+ */
+public struct PairsWith: Equatable, Hashable {
+    public var device: String
+    public var name: String
+    public var kind: DeviceKind
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(device: String, name: String, kind: DeviceKind) {
+        self.device = device
+        self.name = name
+        self.kind = kind
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PairsWith: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePairsWith: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PairsWith {
+        return
+            try PairsWith(
+                device: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                kind: FfiConverterTypeDeviceKind.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PairsWith, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.device, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterTypeDeviceKind.write(value.kind, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePairsWith_lift(_ buf: RustBuffer) throws -> PairsWith {
+    return try FfiConverterTypePairsWith.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePairsWith_lower(_ value: PairsWith) -> RustBuffer {
+    return FfiConverterTypePairsWith.lower(value)
 }
 
 
@@ -2426,6 +2802,255 @@ public func FfiConverterTypeScreenUpdate_lift(_ buf: RustBuffer) throws -> Scree
 #endif
 public func FfiConverterTypeScreenUpdate_lower(_ value: ScreenUpdate) -> RustBuffer {
     return FfiConverterTypeScreenUpdate.lower(value)
+}
+
+
+/**
+ * An agent to start: which, in which frame (none: where the workspace starts its agents), with
+ * its first prompt, model and mode (none: its own; never its unattended mode unless asked).
+ */
+public struct Start: Equatable, Hashable {
+    public var program: String
+    public var frame: String?
+    public var prompt: String?
+    public var model: String?
+    public var mode: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(program: String, frame: String?, prompt: String?, model: String?, mode: String?) {
+        self.program = program
+        self.frame = frame
+        self.prompt = prompt
+        self.model = model
+        self.mode = mode
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension Start: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStart: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Start {
+        return
+            try Start(
+                program: FfiConverterString.read(from: &buf), 
+                frame: FfiConverterOptionString.read(from: &buf), 
+                prompt: FfiConverterOptionString.read(from: &buf), 
+                model: FfiConverterOptionString.read(from: &buf), 
+                mode: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Start, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.program, into: &buf)
+        FfiConverterOptionString.write(value.frame, into: &buf)
+        FfiConverterOptionString.write(value.prompt, into: &buf)
+        FfiConverterOptionString.write(value.model, into: &buf)
+        FfiConverterOptionString.write(value.mode, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStart_lift(_ buf: RustBuffer) throws -> Start {
+    return try FfiConverterTypeStart.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStart_lower(_ value: Start) -> RustBuffer {
+    return FfiConverterTypeStart.lower(value)
+}
+
+
+/**
+ * One of an agent's launch choices, `model` or `mode`: the values it lists; none, typed freely.
+ */
+public struct StartOption: Equatable, Hashable {
+    public var id: String
+    public var label: String
+    public var values: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, label: String, values: [String]) {
+        self.id = id
+        self.label = label
+        self.values = values
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StartOption: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStartOption: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StartOption {
+        return
+            try StartOption(
+                id: FfiConverterString.read(from: &buf), 
+                label: FfiConverterString.read(from: &buf), 
+                values: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StartOption, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.label, into: &buf)
+        FfiConverterSequenceString.write(value.values, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStartOption_lift(_ buf: RustBuffer) throws -> StartOption {
+    return try FfiConverterTypeStartOption.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStartOption_lower(_ value: StartOption) -> RustBuffer {
+    return FfiConverterTypeStartOption.lower(value)
+}
+
+
+/**
+ * An agent the device can start: `claude` · "Claude Code", and its launch choices.
+ */
+public struct StartProgram: Equatable, Hashable {
+    public var id: String
+    public var label: String
+    public var options: [StartOption]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, label: String, options: [StartOption]) {
+        self.id = id
+        self.label = label
+        self.options = options
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StartProgram: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStartProgram: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StartProgram {
+        return
+            try StartProgram(
+                id: FfiConverterString.read(from: &buf), 
+                label: FfiConverterString.read(from: &buf), 
+                options: FfiConverterSequenceTypeStartOption.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StartProgram, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.label, into: &buf)
+        FfiConverterSequenceTypeStartOption.write(value.options, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStartProgram_lift(_ buf: RustBuffer) throws -> StartProgram {
+    return try FfiConverterTypeStartProgram.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStartProgram_lower(_ value: StartProgram) -> RustBuffer {
+    return FfiConverterTypeStartProgram.lower(value)
+}
+
+
+/**
+ * What may be started in a workspace: the agents, and the frames to start them in.
+ */
+public struct Startable: Equatable, Hashable {
+    public var programs: [StartProgram]
+    public var frames: [Frame]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(programs: [StartProgram], frames: [Frame]) {
+        self.programs = programs
+        self.frames = frames
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension Startable: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStartable: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Startable {
+        return
+            try Startable(
+                programs: FfiConverterSequenceTypeStartProgram.read(from: &buf), 
+                frames: FfiConverterSequenceTypeFrame.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Startable, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeStartProgram.write(value.programs, into: &buf)
+        FfiConverterSequenceTypeFrame.write(value.frames, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStartable_lift(_ buf: RustBuffer) throws -> Startable {
+    return try FfiConverterTypeStartable.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStartable_lower(_ value: Startable) -> RustBuffer {
+    return FfiConverterTypeStartable.lower(value)
 }
 
 
@@ -3106,6 +3731,30 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypePairsWith: FfiConverterRustBuffer {
+    typealias SwiftType = PairsWith?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypePairsWith.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypePairsWith.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypePerson: FfiConverterRustBuffer {
     typealias SwiftType = Person?
 
@@ -3253,6 +3902,56 @@ fileprivate struct FfiConverterSequenceTypeDevice: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeDiffFile: FfiConverterRustBuffer {
+    typealias SwiftType = [DiffFile]
+
+    public static func write(_ value: [DiffFile], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeDiffFile.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [DiffFile] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [DiffFile]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeDiffFile.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeFrame: FfiConverterRustBuffer {
+    typealias SwiftType = [Frame]
+
+    public static func write(_ value: [Frame], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFrame.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Frame] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Frame]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFrame.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeScreenLine: FfiConverterRustBuffer {
     typealias SwiftType = [ScreenLine]
 
@@ -3270,6 +3969,56 @@ fileprivate struct FfiConverterSequenceTypeScreenLine: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeScreenLine.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeStartOption: FfiConverterRustBuffer {
+    typealias SwiftType = [StartOption]
+
+    public static func write(_ value: [StartOption], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeStartOption.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [StartOption] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [StartOption]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeStartOption.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeStartProgram: FfiConverterRustBuffer {
+    typealias SwiftType = [StartProgram]
+
+    public static func write(_ value: [StartProgram], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeStartProgram.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [StartProgram] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [StartProgram]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeStartProgram.read(from: &buf))
         }
         return seq
     }
@@ -3332,6 +4081,17 @@ public func coreVersion() -> String  {
     )
 })
 }
+/**
+ * The device `link`, a scanned QR code's text, pairs with; none when it is no pairing link.
+ */
+public func pairsWith(link: String) -> PairsWith?  {
+    return try!  FfiConverterOptionTypePairsWith.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_func_pairs_with(
+        FfiConverterString.lower(link),uniffiCallStatus
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -3351,10 +4111,28 @@ private let initializationResult: InitializationResult = {
     if (uniffi_hive_phone_ffi_checksum_func_core_version() != 43642) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_hive_phone_ffi_checksum_func_pairs_with() != 42769) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_hive_phone_ffi_checksum_method_following_stop() != 34156) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_overviewlistener_changed() != 56418) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_phone_close_agent() != 46941) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_phone_diff() != 8750) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_phone_interrupt() != 61311) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_phone_start() != 37023) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_phone_startable() != 27790) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_phone_answer() != 5893) {

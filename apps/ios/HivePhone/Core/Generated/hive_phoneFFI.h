@@ -341,6 +341,31 @@ void uniffi_hive_phone_ffi_fn_free_phone(uint64_t handle, RustCallStatus *_Nonnu
 uint64_t uniffi_hive_phone_ffi_fn_constructor_phone_open(RustBuffer dir, RustBuffer name, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_CLOSE_AGENT
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_CLOSE_AGENT
+uint64_t uniffi_hive_phone_ffi_fn_method_phone_close_agent(uint64_t ptr, RustBuffer agent
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_DIFF
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_DIFF
+uint64_t uniffi_hive_phone_ffi_fn_method_phone_diff(uint64_t ptr, RustBuffer agent
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_INTERRUPT
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_INTERRUPT
+uint64_t uniffi_hive_phone_ffi_fn_method_phone_interrupt(uint64_t ptr, RustBuffer agent
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_START
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_START
+uint64_t uniffi_hive_phone_ffi_fn_method_phone_start(uint64_t ptr, RustBuffer device, RustBuffer workspace, RustBuffer start
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_STARTABLE
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_STARTABLE
+uint64_t uniffi_hive_phone_ffi_fn_method_phone_startable(uint64_t ptr, RustBuffer device, RustBuffer workspace
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_ANSWER
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_ANSWER
 uint64_t uniffi_hive_phone_ffi_fn_method_phone_answer(uint64_t ptr, RustBuffer agent, uint64_t since, RustBuffer answer
@@ -460,6 +485,11 @@ RustBuffer uniffi_hive_phone_ffi_fn_method_watch_update(uint64_t ptr, uint64_t s
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_CORE_VERSION
 RustBuffer uniffi_hive_phone_ffi_fn_func_core_version(RustCallStatus *_Nonnull out_status
     
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_PAIRS_WITH
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_PAIRS_WITH
+RustBuffer uniffi_hive_phone_ffi_fn_func_pairs_with(RustBuffer link, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_FFI_HIVE_PHONE_FFI_RUSTBUFFER_ALLOC
@@ -728,6 +758,12 @@ uint16_t uniffi_hive_phone_ffi_checksum_func_core_version(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_PAIRS_WITH
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_PAIRS_WITH
+uint16_t uniffi_hive_phone_ffi_checksum_func_pairs_with(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_FOLLOWING_STOP
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_FOLLOWING_STOP
 uint16_t uniffi_hive_phone_ffi_checksum_method_following_stop(void
@@ -737,6 +773,36 @@ uint16_t uniffi_hive_phone_ffi_checksum_method_following_stop(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_OVERVIEWLISTENER_CHANGED
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_OVERVIEWLISTENER_CHANGED
 uint16_t uniffi_hive_phone_ffi_checksum_method_overviewlistener_changed(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_CLOSE_AGENT
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_CLOSE_AGENT
+uint16_t uniffi_hive_phone_ffi_checksum_method_phone_close_agent(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_DIFF
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_DIFF
+uint16_t uniffi_hive_phone_ffi_checksum_method_phone_diff(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_INTERRUPT
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_INTERRUPT
+uint16_t uniffi_hive_phone_ffi_checksum_method_phone_interrupt(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_START
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_START
+uint16_t uniffi_hive_phone_ffi_checksum_method_phone_start(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_STARTABLE
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_STARTABLE
+uint16_t uniffi_hive_phone_ffi_checksum_method_phone_startable(void
     
 );
 #endif

@@ -7,14 +7,18 @@ use std::{future::Future, sync::LazyLock};
 
 use tokio::runtime::{Builder, Runtime};
 
+mod control;
 mod error;
 mod overview;
+mod pairing;
 mod phone;
 mod records;
 mod watch;
 
+pub use control::{Diff, DiffFile, Frame, Start, StartOption, StartProgram, Startable};
 pub use error::PhoneError;
 pub use overview::{Following, OverviewListener};
+pub use pairing::{pairs_with, PairsWith};
 pub use phone::Phone;
 pub use records::*;
 pub use watch::{ScreenLine, ScreenListener, ScreenUpdate, Watch};
