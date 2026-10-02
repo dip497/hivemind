@@ -2,7 +2,8 @@ name: phone-android
 
 # The Android app (apps/android) over the phone's Rust core (docs/design/phone-app-2026-10-02.md):
 # the core built for arm64-v8a and x86_64, the app assembled and unit-tested, then launched on an
-# emulator for a Maestro smoke flow. On every push touching the phone, on any branch.
+# emulator for a Maestro smoke flow, and on another paired with the desktop app, driving an agent
+# there. On every push touching the phone, on any branch.
 on:
   push:
     paths:
@@ -11,6 +12,8 @@ on:
       - crates/hive-phone-ffi/**
       - crates/hive-net/**
       - scripts/phone/**
+      - apps/desktop/tests/e2e/phone-app.spec.ts
+      - apps/desktop/tests/e2e/helpers/phone.ts
       - .github/workflows/phone-android.yml
   pull_request:
     paths:
@@ -19,6 +22,8 @@ on:
       - crates/hive-phone-ffi/**
       - crates/hive-net/**
       - scripts/phone/**
+      - apps/desktop/tests/e2e/phone-app.spec.ts
+      - apps/desktop/tests/e2e/helpers/phone.ts
       - .github/workflows/phone-android.yml
   workflow_dispatch:
 
@@ -128,4 +133,96 @@ jobs:
             maestro-report.xml
             maestro-report-logcat.txt
             ~/.maestro/tests/
+          if-no-files-found: ignore
+
+  computer:
+    # The built app on an emulator, paired with the desktop app running beside it on the runner as
+    # the person pairs a phone, driving an agent there: the desktop's e2e spec
+    # apps/desktop/tests/e2e/phone-app.spec.ts (PHONE_APP=android) offers Pair a phone and runs
+    # apps/android/maestro/computer with the link. The emulator reaches the desktop at the addresses
+    # the link carries, the runner's own, through its virtual router.
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: hivemind-phone-debug
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Maestro
+        env:
+          MAESTRO_VERSION: "2.11.0"
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - uses: pnpm/action-setup@v6
+        with:
+          # The version from `packageManager` in package.json.
+          run_install: false
+
+      - name: The desktop app (its renderer and main)
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @hivemind/desktop run build
+
+      - name: Rust (stable)
+        run: rustup update stable --no-self-update && rustup default stable
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/hive-net/target
+          # ci.yml's: the same debug build.
+          key: hive-net-${{ runner.os }}-${{ hashFiles('crates/hive-net/Cargo.lock') }}
+          restore-keys: hive-net-${{ runner.os }}-
+
+      - name: hive-net, the desktop app's network
+        run: cargo build --locked --manifest-path crates/hive-net/Cargo.toml
+
+      - name: SDK command-line tools, the newest (the image's cannot make an Android 17 AVD)
+        run: bash scripts/phone/update-cmdline-tools.sh
+
+      # Booted cold, as for the smoke flow.
+      - name: The app paired with the desktop app, driving its agent
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          MAESTRO_CLI_NO_ANALYTICS: "1"
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: "120000"
+        with:
+          api-level: "37.0"
+          target: google_apis
+          arch: x86_64
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          # One line: the runner runs each line of a script on its own.
+          script: bash scripts/phone/emulator-computer.sh app-debug.apk logcat.txt
+
+      - name: What the desktop and the phone saw
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phone-android-computer
+          path: |
+            apps/desktop/test-results/
+            logcat.txt
           if-no-files-found: ignore

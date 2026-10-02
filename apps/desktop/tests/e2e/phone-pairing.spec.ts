@@ -24,6 +24,7 @@ import { HiveNet } from "@hivemind/workspace-host/hive-net";
 import { parsePairLink } from "@hivemind/workspace-host/pairing";
 import { heldWorkspaces } from "@hivemind/host/peer-links";
 import { HIVE_NET, hiveNetBuilt, ownNetwork, person } from "./helpers/multiplayer";
+import { offerPhonePairing, talkerAgent } from "./helpers/phone";
 
 const HIVE_PHONE = path.resolve("../../crates/hive-phone/target/debug/hive-phone");
 const run = promisify(execFile);
@@ -66,11 +67,7 @@ async function desktopWith(env: Record<string, string> = {}) {
 /** Settings → Devices → Pair a phone, on `d`: a QR code of the computer's link (read here off its
  *  Copy button, as the phone reads it off the code), which the phone scans, and pairs. */
 async function pairPhone(d: Awaited<ReturnType<typeof desktopWith>>) {
-  await d.devices();
-  await d.desktop.locator("[data-pair-phone]").click();
-  await expect(d.desktop.locator('[data-pair-offered="phone"] [data-pair-qr]')).toBeVisible();
-  const link = (await d.desktop.locator("[data-pair-copy]").getAttribute("title"))!;
-  expect(link).toMatch(/^hivemind:\/\/pair\//);
+  const link = await offerPhonePairing(d.desktop);
   const phone = path.join(root, "phone");
   const paired = JSON.parse((await run(HIVE_PHONE, ["pair", link, "--identity", phone, "--name", "Priya's phone", "--json"], { timeout: 60_000 })).stdout) as Record<string, unknown>;
   const phoneId = (await run(HIVE_PHONE, ["id", "--identity", phone])).stdout.trim();
@@ -134,55 +131,6 @@ function scribeAgent(): void {
     "interrupt: [ctrl-c]",
     "detect:", "  default: idle", "  rules:",
     "  - when: { contains: scribe is writing }", "    then: working", "",
-  ].join("\n"));
-}
-
-/** A third stand-in agent, one that keeps its conversation as Claude Code does: given
- *  `--session-id <id>` as it starts (its manifest binds one), it writes each line it is given, and
- *  its reply, as Claude Code's records to `<home>/talk/<id>.jsonl`, which its manifest names as its
- *  session file. Given `/clear`, it begins another session, recorded for its tile in
- *  `$TALKER_TRACKS` as Claude Code's tracker hook records one, its file written from the next line
- *  on. */
-function talkerAgent(): void {
-  fs.writeFileSync(path.join(root, "bin", "talker-agent"), [
-    "#!/bin/bash",
-    "id=''",
-    "while [ $# -gt 0 ]; do case \"$1\" in --session-id) id=\"$2\"; shift 2;; *) shift;; esac; done",
-    "mkdir -p \"$HOME/talk\"",
-    "f=\"$HOME/talk/$id.jsonl\"",
-    "printf 'talker> '",
-    "n=0",
-    "while read -r line; do",
-    "  if [ \"$line\" = /clear ]; then",
-    "    id=\"$id-2\"; f=\"$HOME/talk/$id.jsonl\"",
-    "    t=$(printf '%s' \"$HIVEMIND_TILE\" | base64 | tr '+/' '-_' | tr -d '=')",
-    "    mkdir -p \"$TALKER_TRACKS\" && printf '{\"session_id\":\"%s\"}' \"$id\" > \"$TALKER_TRACKS/$t.json\"",
-    "    printf 'cleared\\n'; continue",
-    "  fi",
-    "  n=$((n+1)); at=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)",
-    "  printf '{\"type\":\"user\",\"uuid\":\"p%s\",\"timestamp\":\"%s\",\"message\":{\"role\":\"user\",\"content\":\"%s\"}}\\n' \"$n\" \"$at\" \"$line\" >> \"$f\"",
-    "  printf '{\"type\":\"assistant\",\"uuid\":\"a%s\",\"timestamp\":\"%s\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"You said %s\"}]}}\\n' \"$n\" \"$at\" \"$line\" >> \"$f\"",
-    "  printf 'heard: %s\\n' \"$line\"",
-    "done",
-  ].join("\n"), { mode: 0o755 });
-  const agent = path.join(root, "desktop", "hivemind", "agents", "talker");
-  fs.mkdirSync(agent, { recursive: true });
-  fs.writeFileSync(path.join(agent, "agent.yaml"), [
-    "manifestVersion: 2", "id: talker", "label: Talker", "bin: talker-agent", "enabled: true",
-    "caps: { promptDelivery: typed, turnSignal: false, resume: tile, supervise: human, blockedDetection: false }",
-    // As Claude Code's: its tile is in its environment, where its tracker finds it.
-    "launch: { hcp: true }",
-    "session:",
-    "  bind: { args: [--session-id, '{newId}'] }",
-    "  resume: { args: [--resume, '{id}'], from: { bound: --session-id }, exists: '{home}/talk/{id}.jsonl' }",
-    // Its session file mapped as any agent's is: its records' fields, nothing Hivemind knows.
-    "  transcript:",
-    "    id: uuid",
-    "    at: timestamp",
-    "    said:",
-    "    - { require: { type: user }, text: message.content, who: person }",
-    "    - { require: { type: assistant }, each: message.content, item: { type: text }, text: text, who: agent }",
-    "detect: { default: idle, rules: [] }", "",
   ].join("\n"));
 }
 
@@ -411,7 +359,7 @@ test("the phone follows what an agent and the person say to each other, as the a
   test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
   test.setTimeout(120_000);
   const env = probeAgent();
-  talkerAgent();
+  talkerAgent(root);
   const home = path.join(root, "home");
   fs.mkdirSync(home);
   const d = await desktopWith({ ...env, HOME: home, TALKER_TRACKS: path.join(root, "desktop", "hivemind-dev", "tile-sessions") });

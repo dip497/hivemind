@@ -32,6 +32,9 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -102,10 +105,16 @@ fun TerminalView(terminal: Terminal, modifier: Modifier = Modifier) {
 @Composable
 private fun TerminalLine(slot: LineSlot, painter: TerminalPainter, cells: Cells, height: Dp) {
     // The slot is read while drawing, not composing: a changed line costs a redraw, nothing more.
+    // Its text is what accessibility reads of it (TalkBack, and so the UI tests), read in its
+    // semantics, which a changed line updates without composing either; a blank line has none.
     Spacer(
         Modifier
             .fillMaxWidth()
             .height(height)
+            .semantics {
+                val shown = slot.line.text
+                if (shown.isNotEmpty()) text = AnnotatedString(shown)
+            }
             .drawBehind { painter.draw(drawContext.canvas.nativeCanvas, slot.line, slot.cursor, cells) },
     )
 }

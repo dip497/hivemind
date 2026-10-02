@@ -2,9 +2,9 @@ name: phone-ios
 
 # The iOS app (docs/design/phone-app-2026-10-02.md, P5) on a macOS runner: the Rust core for the
 # simulator (the app's own build phase builds it), the Xcode project from apps/ios/project.yml, the
-# unit and UI tests on an iPhone simulator, the committed Swift bindings held to the core, and the
-# app for an iPhone as it ships (Release, the core for devices). No Apple account: nothing is
-# signed.
+# unit and UI tests on an iPhone simulator, the committed Swift bindings held to the core, the app
+# for an iPhone as it ships (Release, the core for devices), and the app on the simulator paired with
+# the desktop app on the runner, driving an agent there. No Apple account: nothing is signed.
 on:
   push:
     paths:
@@ -13,6 +13,8 @@ on:
       - "crates/hive-phone-ffi/**"
       - "crates/hive-net/**"
       - "scripts/phone/**"
+      - "apps/desktop/tests/e2e/phone-app.spec.ts"
+      - "apps/desktop/tests/e2e/helpers/phone.ts"
       - ".github/workflows/phone-ios.yml"
   pull_request:
     paths:
@@ -21,6 +23,8 @@ on:
       - "crates/hive-phone-ffi/**"
       - "crates/hive-net/**"
       - "scripts/phone/**"
+      - "apps/desktop/tests/e2e/phone-app.spec.ts"
+      - "apps/desktop/tests/e2e/helpers/phone.ts"
       - ".github/workflows/phone-ios.yml"
   workflow_dispatch:
 
@@ -34,7 +38,7 @@ concurrency:
 jobs:
   ios:
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
 
@@ -45,7 +49,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: crates/hive-phone-ffi
+          workspaces: |
+            crates/hive-phone-ffi
+            crates/hive-net
           key: ios
           cache-on-failure: true
 
@@ -105,6 +111,47 @@ jobs:
             -configuration Release -destination "generic/platform=iOS" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             CODE_SIGNING_ALLOWED=NO
+
+      # The app against the desktop app: hive-net and the desktop for the runner, then the desktop's
+      # e2e spec apps/desktop/tests/e2e/phone-app.spec.ts, which starts it, offers Pair a phone, and
+      # runs HivePhoneUITests/ComputerUITests (built above, for testing) with the link. The
+      # simulator shares the Mac's network: it reaches the desktop at the addresses the link carries.
+      - name: hive-net, the desktop app's network
+        run: cargo build --locked --manifest-path crates/hive-net/Cargo.toml
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - uses: pnpm/action-setup@v6
+        with:
+          # The version from `packageManager` in package.json.
+          run_install: false
+
+      - name: The desktop app (its renderer and main)
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @hivemind/desktop run build
+
+      - name: The app paired with the desktop app, driving its agent
+        working-directory: apps/desktop
+        env:
+          PHONE_APP: ios
+          PHONE_SIMULATOR: ${{ env.SIMULATOR }}
+          PHONE_DERIVED_DATA: ${{ runner.temp }}/DerivedData
+        # A run that skipped the spec fails.
+        run: |
+          set -o pipefail
+          pnpm exec playwright test phone-app.spec.ts --retries=0 --reporter=list | tee "$RUNNER_TEMP/phone-app.txt"
+          grep -q "1 passed" "$RUNNER_TEMP/phone-app.txt"
+
+      - name: What the desktop and the phone saw
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phone-ios-computer
+          path: apps/desktop/test-results/
+          if-no-files-found: ignore
 
       - name: What the tests saw
         if: failure()

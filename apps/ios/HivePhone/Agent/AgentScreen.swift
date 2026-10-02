@@ -145,6 +145,7 @@ struct AgentScreen: View {
                 .textFieldStyle(.roundedBorder)
                 .submitLabel(.send)
                 .onSubmit(send)
+                .accessibilityIdentifier("agent.reply")
             Button(action: send) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title2)

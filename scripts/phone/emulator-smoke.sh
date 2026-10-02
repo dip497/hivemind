@@ -12,25 +12,9 @@ apk="${1:?usage: scripts/phone/emulator-smoke.sh <app.apk> [junit report]}"
 report="${2:-maestro-report.xml}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-# Booted, its package manager answering, and so ten times in a row a second apart: a device that
-# drops off between two answers starts the count again. Three minutes at most.
+# On adb, and staying there.
 steady() {
-  local in_a_row=0 until=$((SECONDS + 180))
-  while ((in_a_row < 10)); do
-    if ((SECONDS > until)); then
-      echo "the emulator did not stay on adb" >&2
-      adb devices -l >&2 || true
-      return 1
-    fi
-    timeout 30 adb wait-for-device || true
-    if [[ "$(timeout 10 adb shell getprop sys.boot_completed 2> /dev/null | tr -d '\r')" == 1 ]] &&
-      timeout 10 adb shell pm path android > /dev/null 2>&1; then
-      in_a_row=$((in_a_row + 1))
-    else
-      in_a_row=0
-    fi
-    sleep 1
-  done
+  bash "$root/scripts/phone/emulator-steady.sh"
 }
 
 # What the device logged, beside the report, when the flow does not pass.
