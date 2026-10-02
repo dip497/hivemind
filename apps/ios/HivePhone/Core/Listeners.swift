@@ -36,14 +36,14 @@ final class ScreenRelay: ScreenListener, @unchecked Sendable {
     }
 
     func keyboard(holder: String?) {
-        let onKeyboard = onKeyboard
+        let onKeyboard = self.onKeyboard
         DispatchQueue.main.async {
             MainActor.assumeIsolated { onKeyboard(holder) }
         }
     }
 
     func ended(code: Int64?) {
-        let onEnded = onEnded
+        let onEnded = self.onEnded
         DispatchQueue.main.async {
             MainActor.assumeIsolated { onEnded(code) }
         }

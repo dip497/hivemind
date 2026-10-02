@@ -71,8 +71,8 @@ final class QRScannerController: UIViewController, AVCaptureMetadataOutputObject
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        let session = session
-        sessionQueue.async { session.stopRunning() }
+        let camera = self.session
+        sessionQueue.async { camera.stopRunning() }
     }
 
     private func start(_ camera: AVCaptureDevice) {
@@ -94,8 +94,9 @@ final class QRScannerController: UIViewController, AVCaptureMetadataOutputObject
         layer.frame = view.bounds
         view.layer.insertSublayer(layer, at: 0)
         preview = layer
-        let session = session
-        sessionQueue.async { session.startRunning() }
+        // startRunning blocks until the camera runs: off the main thread.
+        let running = self.session
+        sessionQueue.async { running.startRunning() }
     }
 
     private func say(_ text: String) {
