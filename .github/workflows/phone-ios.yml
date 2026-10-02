@@ -2,8 +2,9 @@ name: phone-ios
 
 # The iOS app (docs/design/phone-app-2026-10-02.md, P5) on a macOS runner: the Rust core for the
 # simulator (the app's own build phase builds it), the Xcode project from apps/ios/project.yml, the
-# unit and UI tests on an iPhone simulator, and the committed Swift bindings held to the core. No
-# Apple account: nothing is signed.
+# unit and UI tests on an iPhone simulator, the committed Swift bindings held to the core, and the
+# app for an iPhone as it ships (Release, the core for devices). No Apple account: nothing is
+# signed.
 on:
   push:
     paths:
@@ -93,6 +94,16 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIMULATOR" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             -resultBundlePath "$RUNNER_TEMP/HivePhone.xcresult" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: The app for an iPhone, as it ships (Release)
+        # The core built for aarch64-apple-ios in its `mobile-dist` profile and linked into the app
+        # for a device, which the simulator's build above never does.
+        run: |
+          xcodebuild build \
+            -project apps/ios/HivePhone.xcodeproj -scheme HivePhone \
+            -configuration Release -destination "generic/platform=iOS" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             CODE_SIGNING_ALLOWED=NO
 
       - name: What the tests saw
