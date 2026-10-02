@@ -1,7 +1,9 @@
 //! An agent's terminal, watched from the phone (docs/design/phone-app-2026-10-02.md §5.3): its
 //! output and size go to a screen on a thread of its own, which publishes a frame at most every
-//! 16 ms; who holds its keyboard, and its end, are told as they come; and what the person types
-//! goes in as them, in the order they typed it, keys a moment apart.
+//! 16 ms; who holds its keyboard is told as it changes; and what the person types goes in as them,
+//! in the order they typed it, keys a moment apart. The watch goes on across the background, the
+//! foreground and the device's reconnects, the screen sent again each time; it ends only with the
+//! session.
 
 use std::{convert::Infallible, sync::Arc};
 
@@ -10,6 +12,7 @@ use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
     connections::Connections,
+    failure::Failure,
     keys,
     screen::{Frame, LiveScreen},
     workspace::{self, Watched},
@@ -21,7 +24,8 @@ pub trait Watcher: Send + Sync {
     fn frame_ready(&self, revision: u64);
     /// Who holds its keyboard now, by name: none while the person's devices do.
     fn keyboard(&self, holder: Option<String>);
-    /// The session ended with its code, or the connection went (none).
+    /// The session ended, with its code; or there is none to watch now (none): it ended unseen,
+    /// its workspace is not on that device now, or the device refused it. Told once, last.
     fn ended(&self, code: Option<i64>);
 }
 
@@ -40,7 +44,7 @@ pub struct Watching {
 
 impl Watching {
     /// Watch the terminal of `tile` in `workspace` on `device`, the phone `me` (its id) watching:
-    /// a blank screen at first. Called in the runtime the connections run on.
+    /// a blank screen until the device sends it. Called in the runtime the connections run on.
     pub fn start(
         connections: &Connections,
         me: &str,
@@ -53,7 +57,7 @@ impl Watching {
         let screen = Arc::new(LiveScreen::start(move |revision| {
             told.frame_ready(revision)
         }));
-        let (typed, typing) = mpsc::unbounded_channel();
+        let (typed, mut typing) = mpsc::unbounded_channel();
         let (connections, me, device) = (
             connections.clone(),
             format!("peer:{me}"),
@@ -62,21 +66,35 @@ impl Watching {
         let (workspace, tile, fed) = (workspace.to_string(), tile.to_string(), screen.clone());
         // Everything the watch does is one task: stopped, all of it goes, its streams with it.
         let watching = tokio::spawn(async move {
-            let ended = async {
-                let connection = connections.holding(&device, &workspace).await?;
+            let mut again = false;
+            let code = loop {
+                let Ok(connection) = connections.kept_for(&device, &workspace).await else {
+                    break None;
+                };
+                // Each connection is sent the screen whole first: on the first, drawn as it comes;
+                // on each after, drawn in place of what the last showed.
+                let mut anew = std::mem::replace(&mut again, true);
+                // What is typed while no connection takes it goes in on the next.
                 let (keyed, written) = mpsc::channel(64);
                 let watched =
                     workspace::watch(&connection, &workspace, &tile, Some(written), |w| match w {
+                        Watched::Output(data) if std::mem::take(&mut anew) => {
+                            fed.redraw(data.as_bytes())
+                        }
                         Watched::Output(data) => fed.output(data.as_bytes()),
                         Watched::Size(cols, rows) => fed.size(cols, rows),
                         Watched::Keyboard(holder) => watcher.keyboard(holder_of(holder, &me)),
                     });
-                tokio::select! {
-                    ended = watched => ended,
-                    never = type_in(typing, keyed) => match never {},
+                let watched = tokio::select! {
+                    watched = watched => watched,
+                    never = type_in(&mut typing, keyed) => match never {},
+                };
+                match watched {
+                    Ok(Some(ended)) => break ended.code,
+                    Err(e) if Failure::refused(&e) => break None,
+                    _ => Connections::again(&connection).await,
                 }
             };
-            let code = ended.await.ok().flatten().map(|ended| ended.code);
             watcher.ended(code);
         });
         Self {
@@ -121,10 +139,10 @@ fn holder_of(holder: Option<&Value>, me: &str) -> Option<String> {
     Some(name.unwrap_or("someone").to_string())
 }
 
-/// What the person types, in order, for as long as the watch goes on: text as it is, keys as their
-/// bytes a moment apart.
+/// What the person types, in order, for as long as a connection takes it: text as it is, keys as
+/// their bytes a moment apart.
 async fn type_in(
-    mut typed: mpsc::UnboundedReceiver<Typed>,
+    typed: &mut mpsc::UnboundedReceiver<Typed>,
     written: mpsc::Sender<String>,
 ) -> Infallible {
     while let Some(typed) = typed.recv().await {

@@ -26,7 +26,7 @@ pub trait Paced {
 
 /// Run `paced` on a thread of its own, called `name`, until every sender of its inputs is gone:
 /// each is taken as it comes, and a snapshot made at once after a quiet spell, else 16 ms after
-/// the last one, of all that came meanwhile.
+/// the last one, of all that came meanwhile; the last of them too, once its senders are gone.
 pub fn spawn<P: Paced + Send + 'static>(name: &str, mut paced: P) -> Sender<P::Input> {
     let (send, inputs) = mpsc::channel();
     thread::Builder::new()
@@ -46,7 +46,10 @@ fn run<P: Paced>(paced: &mut P, inputs: &Receiver<P::Input>) {
             match inputs.recv_timeout(due.saturating_duration_since(Instant::now())) {
                 Ok(input) => Some(input),
                 Err(RecvTimeoutError::Timeout) => None,
-                Err(RecvTimeoutError::Disconnected) => return,
+                Err(RecvTimeoutError::Disconnected) => {
+                    thread::sleep(due.saturating_duration_since(Instant::now()));
+                    return paced.publish();
+                }
             }
         } else {
             match inputs.recv() {

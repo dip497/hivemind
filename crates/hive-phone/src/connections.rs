@@ -8,7 +8,10 @@
 
 use std::{
     collections::BTreeMap,
-    sync::{Arc, Mutex, PoisonError},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, PoisonError,
+    },
     time::{Duration, Instant},
 };
 
@@ -21,6 +24,7 @@ use tokio::{
 };
 
 use crate::{
+    agents,
     devices::{self, PairedDevice, ANSWER_WITHIN},
     failure::Failure,
     identity::Identity,
@@ -35,6 +39,8 @@ const FIRST_WAIT: Duration = Duration::from_millis(250);
 const LONGEST_WAIT: Duration = Duration::from_secs(16);
 /// Connected this long, a device's next wait is the first again.
 const STEADY: Duration = Duration::from_secs(30);
+/// How long a stream the device ended waits to be opened again, the connection staying.
+const AGAIN: Duration = Duration::from_secs(1);
 
 /// The phone's connections, shared by all that use them.
 #[derive(Clone)]
@@ -94,8 +100,8 @@ impl Connections {
     /// The app came to the foreground: every device is dialled now, every wait ended. Called in
     /// the runtime the connections run on.
     pub fn foreground(&self) {
-        self.0.foreground.send_replace(true);
         self.0.know_devices();
+        self.0.foreground.send_replace(true);
         for link in lock(&self.0.links).values() {
             link.wake.notify_one();
         }
@@ -185,6 +191,65 @@ impl Connections {
             );
         }
         Ok(connection)
+    }
+
+    /// The connection kept to `device`, once there is one: in the foreground, as its dialling
+    /// makes it, and never one of its own, so a stream on it lives no longer than the app is in
+    /// front. Fails for a device that is not one of the person's.
+    pub async fn kept(&self, device: &str) -> Result<Connection> {
+        let open = |c: &Option<Connection>| c.as_ref().is_some_and(|c| c.close_reason().is_none());
+        loop {
+            let link = lock(&self.0.links)
+                .get(device)
+                .map(|link| link.connection.subscribe());
+            if let Some(mut live) = link {
+                // The link goes once the device is forgotten.
+                if let Ok(kept) = live.wait_for(open).await {
+                    return Ok(kept.clone().expect("a connection"));
+                }
+                continue;
+            }
+            let devices = self.0.identity.devices();
+            if devices.is_empty() {
+                return Err(Failure::NotPaired.into());
+            }
+            if !devices.iter().any(|d| d.with.device == device) {
+                let failure = Failure::Invalid(format!("{device} is not one of your devices"));
+                return Err(failure.into());
+            }
+            // None is dialled before the foreground; one just paired, a moment after.
+            let mut foreground = self.0.foreground.subscribe();
+            let _ = foreground.wait_for(|in_front| *in_front).await;
+            tokio::time::sleep(FIRST_WAIT).await;
+        }
+    }
+
+    /// The connection kept to `device`, for a stream in `workspace`, which it holds: waited for as
+    /// `kept` waits for it, across the background, the foreground and the device's reconnects.
+    /// Fails when the device holds the workspace no more, or is no longer one of the person's.
+    pub async fn kept_for(&self, device: &str, workspace: &str) -> Result<Connection> {
+        loop {
+            let connection = self.kept(device).await?;
+            let holds = workspace::holds(&connection, workspace);
+            match tokio::time::timeout(ANSWER_WITHIN, holds).await {
+                Ok(Ok(true)) => return Ok(connection),
+                Ok(Ok(false)) => {
+                    let name = self.name(device);
+                    let gone = format!("{name} does not hold that workspace now");
+                    return Err(Failure::Unreachable(gone).into());
+                }
+                // Not answered: asked again, on the next connection when this one went.
+                _ => Self::again(&connection).await,
+            }
+        }
+    }
+
+    /// A stream on `connection` ended, not of its own: it is opened again on the connection kept
+    /// next, after a moment when the device ended it and the connection stays.
+    pub async fn again(connection: &Connection) {
+        if connection.close_reason().is_none() {
+            tokio::time::sleep(AGAIN).await;
+        }
     }
 
     /// What the phone knows of each of the person's devices now, as they are listed.
@@ -333,9 +398,12 @@ async fn keep_dialling(
     }
 }
 
-/// Hear what `paired` says as it is reached on `connection`: an app this phone paired with, which
-/// of the person's computers and hosts it tells of, and whose they are (spec/pairing.md 0.7, 0.8);
-/// every device, what waits on the person there (spec/needs.md). One that does not answer is away.
+/// Hear what `paired` says while it is reached on `connection`: an app this phone paired with,
+/// which of the person's computers and hosts it tells of, and whose they are (spec/pairing.md 0.7,
+/// 0.8); every device, the workspaces it holds, and every agent there as they change, on its
+/// `agents` stream (spec/agents.md "Following"). A device that sends no list of them in the time it
+/// has to answer is asked what waits on the person there instead (spec/needs.md); one that does not
+/// answer that either is away.
 async fn hear(shared: Arc<Shared>, paired: PairedDevice, connection: Connection) {
     let with = paired.with;
     if with.kind == "app" && paired.via.is_empty() {
@@ -354,17 +422,44 @@ async fn hear(shared: Arc<Shared>, paired: PairedDevice, connection: Connection)
             (shared.changed)();
         }
     }
-    let asked = needs::ask_on(&connection, &with.name);
-    match tokio::time::timeout(ANSWER_WITHIN, asked).await {
-        Ok(Ok(answer)) => {
-            let _ = shared.keep(|identity| identity.hear(&[(with.device, answer)], now_ms()));
-        }
-        _ => {
-            let _ = shared.keep(|identity| identity.mark_away(&[with.device], now_ms()));
-            connection.close(0u32.into(), b"no answer");
-        }
+    if let Ok(Ok(held)) = tokio::time::timeout(ANSWER_WITHIN, workspace::held(&connection)).await {
+        let _ = shared.keep(|identity| identity.hear_workspaces(&with.device, &held, now_ms()));
+        (shared.changed)();
     }
-    (shared.changed)();
+    let listed = AtomicBool::new(false);
+    let following = agents::follow(&connection, &with.device, |list| {
+        listed.store(true, Ordering::Relaxed);
+        let _ = shared.keep(|identity| identity.hear_agents(&with.device, &list, now_ms()));
+        (shared.changed)();
+    });
+    let unanswered = tokio::time::sleep(ANSWER_WITHIN);
+    tokio::pin!(following, unanswered);
+    let stopped = tokio::select! {
+        _ = &mut following => true,
+        () = &mut unanswered => false,
+    };
+    // Gone with the connection, the device is not away: the phone may have closed it.
+    if connection.close_reason().is_some() {
+        return;
+    }
+    if !listed.load(Ordering::Relaxed) {
+        let asked = needs::ask_on(&connection, &with.name);
+        match tokio::time::timeout(ANSWER_WITHIN, asked).await {
+            Ok(Ok(answer)) => {
+                let answers = [(with.device.clone(), answer)];
+                let _ = shared.keep(|identity| identity.hear(&answers, now_ms()));
+            }
+            _ => {
+                let away = std::slice::from_ref(&with.device);
+                let _ = shared.keep(|identity| identity.mark_away(away, now_ms()));
+                connection.close(0u32.into(), b"no answer");
+            }
+        }
+        (shared.changed)();
+    }
+    if !stopped {
+        let _ = following.await;
+    }
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {

@@ -661,8 +661,10 @@ async fn run(args: Args) -> Result<()> {
             };
             let ended = watched.await;
             endpoint.close().await;
-            if let Some(ended) = ended? {
-                eprintln!("\nhive-phone: the session ended ({})", ended.code);
+            match ended?.map(|ended| ended.code) {
+                Some(Some(code)) => eprintln!("\nhive-phone: the session ended ({code})"),
+                Some(None) => eprintln!("hive-phone: no session runs there"),
+                None => {}
             }
         }
         "answer" => {

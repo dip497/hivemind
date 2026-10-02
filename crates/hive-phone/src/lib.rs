@@ -18,6 +18,7 @@ pub mod pairing;
 pub mod person;
 pub mod push;
 pub mod screen;
+pub mod talking;
 pub mod watching;
 pub mod workspace;
 

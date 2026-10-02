@@ -7,12 +7,14 @@ use std::{future::Future, sync::LazyLock};
 
 use tokio::runtime::{Builder, Runtime};
 
+mod conversation;
 mod error;
 mod overview;
 mod phone;
 mod records;
 mod watch;
 
+pub use conversation::{Conversation, ConversationListener, Entry, Tool, ToolResult, Who};
 pub use error::PhoneError;
 pub use overview::{Following, OverviewListener};
 pub use phone::Phone;
