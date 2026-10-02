@@ -66,6 +66,11 @@ view's own tiles and frames; the person at the view is never among them. A surfa
 host once a `structure` has named its tile (a docked tile from a saved layout that is gone stays
 held back), and leaves when one no longer does.
 
+Protocol 1.6 says whether the screen places those surfaces (`hm.supports("surfaces")`): a desktop
+window does, and so does a phone's app, which puts its own live terminal over your view where a
+rect asks. On a screen that does not, lay the view out without them. A host before 1.6 never says
+it; every such host is a desktop window, which places them.
+
 Test a view without the app against the fake host in `@hivemind/view-sdk/testing`: it greets the
 view as the app does, checks what the view sends by the app's rules and says why it would refuse
 the rest.

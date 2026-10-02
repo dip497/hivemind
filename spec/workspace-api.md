@@ -1,4 +1,4 @@
-# Workspace API (0.14)
+# Workspace API (0.15)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -191,7 +191,7 @@ log.
 | `plan.decide` | `tile`, `requestId`, `"allow"` or `"deny"`, `feedback`? | `{answered, by}`: the first answer is the one the agent gets; a later one, or one about another tile's plan, answers nothing (`by`: who answered first) | target the agent's tile, detail the answer |
 | `view.list` | | `[{id, name, version, entry, page}]`: the community views installed on this device whose manifest says `"phone": true` (below, 0.12), and the page a screen loads to show each (0.14) | read |
 | `view.file` | `id`, `path` | `{data, type, csp}`: one of the view's files as the app serves its windows (below), `path` inside its package (a link out of it, or `..`, is `BAD_REQUEST`), its bytes base64, its type, and the policy to serve it under (0.14); 4 MiB at most | read |
-| `view.open` | `id`, `repo`, `screen`? | `{session}`: the view opened on the workspace for this caller, on its screen (below; `screen` 0.14) | — |
+| `view.open` | `id`, `repo`, `screen`?, `surfaces`? | `{session}`: the view opened on the workspace for this caller, on its screen (below; `screen` 0.14); `surfaces`: the screen places live surfaces itself (0.15) | — |
 | `view.close` | `session` | `{closed}`: the caller's session ended; false: it has none of that name | — |
 
 | `people.list` | `repo` | who is on the workspace's access list: `[{person, name, color, role, grantedAt, expires, devices, present}]`, `present` whether they are connected now; `[]` for a workspace that does not say whose it is yet | read |
@@ -308,16 +308,22 @@ caller's connection closes, or the host disables the view (`view.ended`, with wh
   from what this device holds: the board from the store, statuses and links from the control
   plane, a selection of the session's own; and the screen as its caller says it (`viewport`,
   `theme`, then `resize` and `theme`). `hello.device` is `{touch: true, compact: true}`; no
-  `visibility` follows, and no layout is kept. `features`: `agentStatus`.
+  `visibility` follows, and no layout is kept. `features`: `agentStatus`, and `surfaces` for a
+  screen that places its own (below).
 - **What the view may do** is what its manifest asks and its caller may call, both: a view on a
   remote screen may start agents (`workspace:spawn`) when its caller may call `agent.start`, close
   tiles (`workspace:close`) when it may call `agent.close`, and rename them (`workspace:edit`) when
   it may write the board (`store.setCore`, the owner's: a phone may not). A prompt a view writes
   and a past session it continues ask the person at this computer, so neither is served. What it
   starts and closes is recorded as the caller's, its detail `view <id>`.
-- **What a remote screen cannot do**: place a live surface (`surfaceRects`), pick a folder
-  (`openFolder`), share an image (`share` is not among its `features`), start any tile but an
-  agent's, or add a frame. A request for one is answered `UNSUPPORTED`; anything else is not acted
+- **A screen that places live surfaces itself** (0.15, `view.open`'s `surfaces`: a phone's app,
+  which draws its own terminal over the view's web view where the view's `surfaceRects` ask) is
+  said to in `hello.features` (`surfaces`, view protocol 1.6), and the rects are its own: nothing
+  here draws them, and one that reaches here is not acted on. `surfaces` is `true` or `false`;
+  anything else is `BAD_REQUEST`.
+- **What a remote screen cannot do**: place a live surface (`surfaceRects`) unless it says it
+  places its own (above), pick a folder (`openFolder`), share an image (`share` is not among its
+  `features`), start any tile but an agent's, or add a frame. A request for one is answered `UNSUPPORTED`; anything else is not acted
   on, and not counted against the view, which could not have known.
 
 ## A client that holds the layouts

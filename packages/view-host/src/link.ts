@@ -90,7 +90,9 @@ export const SHARE_DECLINES_MAX = 3;
 const ANNOUNCED_KEPT = 4096;
 export const PROMPT_DECLINES_MAX = 3;
 
-export function linkFeatures(s: LinkServices): ViewFeature[] {
+/** What `hello.features` says: each source the host wired (1.3), and (1.6) `surfaces` when it places
+ *  the live surfaces a view asks for. */
+export function linkFeatures(s: LinkServices, placesSurfaces = false): ViewFeature[] {
   const f: ViewFeature[] = [];
   if (s.sinceOf) f.push("since");
   if (s.events) f.push("events");
@@ -103,6 +105,7 @@ export function linkFeatures(s: LinkServices): ViewFeature[] {
   if (s.sessions) f.push("sessions");
   if (s.confirmPrompt && s.sendPrompt) f.push("prompt");
   if (s.participants) f.push("participants");
+  if (placesSurfaces) f.push("surfaces");
   return f;
 }
 
@@ -114,7 +117,8 @@ export interface LinkDeps {
   hasTile: (id: string) => boolean;
   hasFrame: (id: string) => boolean;
   onReady: () => void;
-  /** Where the view wants live surfaces; none: this host places none (a remote screen). */
+  /** Where the view wants live surfaces, said to it as the feature `surfaces` (1.6); none: this host
+   *  places none (a remote screen that does not place its own). */
   onSurfaceRects?: (rects: SurfaceRect[]) => void;
   onLayout: (data: unknown) => void;
   onFramesDrawn: (count: number) => void;
@@ -179,7 +183,7 @@ export class CommunityLink {
     this.now = deps.now ?? (() => performance.now());
     this.services = deps.services ?? {};
     this.schedule = deps.schedule ?? ((fn, ms) => setTimeout(fn, ms));
-    this.features = linkFeatures(this.services);
+    this.features = linkFeatures(this.services, deps.onSurfaceRects !== undefined);
     this.scope = {
       capabilities: deps.capabilities, features: this.features,
       hasTile: (id) => deps.hasTile(id), hasFrame: (id) => deps.hasFrame(id), announced: (id) => this.announced.has(id),

@@ -2,7 +2,9 @@
 //! §6.1; spec/workspace-api.md "Views on a remote screen", 0.14): its files come with the policy
 //! to serve them under, and one that comes with none is not served; opened on the device that
 //! holds its workspace, on the phone's screen; what it posts goes to its host there, but what is not
-//! JSON; what its host says comes back, in order; the screen told as it changes. Across a dropped
+//! JSON; what its host says comes back, in order; the screen told as it changes; and a screen that
+//! places the view's live surfaces itself says so, and takes the rects a page posts as the view
+//! SDK does (conformance/view-surfaces.json). Across a dropped
 //! connection and the background it is opened again on the newest screen, told to start again,
 //! and what the page of before posted until the view is ready again is dropped. It ends, told why
 //! once, when its host disables it, the device refuses it or holds its workspace no more; stopped,
@@ -20,7 +22,7 @@ use std::{
 use hive_phone::{
     connections::Connections,
     failure::Lost,
-    viewing::{asks_lock, Ended, Viewer, Viewing},
+    viewing::{asks_lock, surfaces, Ended, Viewer, Viewing},
     views::{self, Mode, Screen, Theme, ViewFile},
 };
 use serde_json::{json, Value};
@@ -112,6 +114,7 @@ async fn a_view_is_shown_on_the_phones_screen_its_posts_go_to_its_host_and_what_
         WORKSPACE,
         VIEW,
         screen(390, 844),
+        false,
         shown.clone(),
     );
     viewing.post(READY);
@@ -160,6 +163,7 @@ async fn across_the_background_a_view_is_opened_again_on_the_newest_screen_and_s
         WORKSPACE,
         VIEW,
         screen(390, 844),
+        false,
         shown.clone(),
     );
     viewing.post(READY);
@@ -242,6 +246,7 @@ async fn a_view_ends_told_why_once_when_its_host_disables_it_or_the_device_refus
             workspace,
             view,
             screen(390, 844),
+            false,
             shown.clone(),
         );
         if let Some(post) = post {
@@ -269,6 +274,7 @@ async fn a_view_stopped_tells_nothing_more_and_the_device_lets_go_of_it() {
         WORKSPACE,
         VIEW,
         screen(390, 844),
+        false,
         shown.clone(),
     );
     viewing.post(READY);
@@ -285,6 +291,48 @@ async fn a_view_stopped_tells_nothing_more_and_the_device_lets_go_of_it() {
     tokio::time::sleep(Duration::from_millis(300)).await;
     assert_eq!(shown.told(), [hello(390, 844)]);
     assert_eq!(desk.viewed().len(), 2, "{:?}", desk.viewed());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_phone_that_places_a_views_live_surfaces_itself_says_so_each_time_it_opens_it() {
+    let desk = Desk::start(65).await;
+    let phone = paired_with(&tmp("viewing-surfaces"), &desk);
+    let connections = Connections::new(phone.clone(), || {});
+    connections.foreground();
+    let shown = Arc::new(Shown::default());
+    let viewing = Viewing::start(
+        &connections,
+        &desk.id,
+        WORKSPACE,
+        VIEW,
+        screen(390, 844),
+        true,
+        shown.clone(),
+    );
+    viewing.post(READY);
+    assert!(
+        until(Duration::from_secs(10), || shown.told()
+            == [hello(390, 844)])
+        .await
+    );
+    // Opened again on the next connection, it says so again.
+    connections.background();
+    assert!(until(Duration::from_secs(10), || desk.closed.load(SeqCst) == 1).await);
+    connections.foreground();
+    let restarted = [hello(390, 844), Told::Ended(Ended::Restarting)];
+    assert!(
+        until(Duration::from_secs(10), || shown.told() == restarted).await,
+        "{:?}",
+        shown.told()
+    );
+    let opened: Vec<Value> = desk
+        .viewed()
+        .into_iter()
+        .filter(|m| m[0] == "view.open")
+        .collect();
+    let workspace = format!("hive://{WORKSPACE}");
+    let with_surfaces = json!(["view.open", [VIEW, workspace, sent(390, 844), true]]);
+    assert_eq!(opened, [with_surfaces.clone(), with_surfaces]);
 }
 
 #[test]
@@ -310,4 +358,31 @@ fn what_a_page_posts_asks_the_phones_lock_when_it_starts_or_closes_something_on_
             "{name}: {permission}"
         );
     }
+}
+
+#[test]
+fn the_surfaces_a_page_asks_for_are_taken_as_the_view_sdk_takes_them() {
+    let cases: Value =
+        serde_json::from_str(include_str!("../../../conformance/view-surfaces.json")).unwrap();
+    for case in cases["posted"].as_array().unwrap() {
+        let text = case["text"].as_str().unwrap();
+        let taken = surfaces(text).map(|placed| {
+            let placed = placed.into_iter().map(
+                |s| json!({ "tile": s.tile, "x": s.x, "y": s.y, "w": s.w, "h": s.h, "bar": s.bar }),
+            );
+            placed.collect::<Vec<_>>()
+        });
+        let expected = case["surfaces"].as_array().map(|all| all.to_vec());
+        assert_eq!(taken.map(normal), expected.map(normal), "{}", case["why"]);
+    }
+}
+
+/// Numbers as JSON has them: 12 and 12.0 alike.
+fn normal(surfaces: Vec<Value>) -> Vec<Value> {
+    let number = |v: &Value| json!(v.as_f64().unwrap());
+    let normal = surfaces.iter().map(|s| {
+        json!({ "tile": s["tile"], "x": number(&s["x"]), "y": number(&s["y"]),
+                "w": number(&s["w"]), "h": number(&s["h"]), "bar": s["bar"] })
+    });
+    normal.collect()
 }

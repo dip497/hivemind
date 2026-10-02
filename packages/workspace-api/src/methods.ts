@@ -113,8 +113,9 @@ export interface WorkspaceMethods {
   /** Open view `id` on the workspace at `repo` for this caller, a remote screen (`screen`: its size
    *  and look; none, 0 by 0 with no colours): its host runs here until `view.close`, the caller
    *  goes, or the host ends it (`view.ended`). What the view posts comes as `view.post`, and what
-   *  its host says goes back as `view.said`, to this caller alone. */
-  "view.open": (id: string, repo: string, screen?: ViewScreen) => { session: string };
+   *  its host says goes back as `view.said`, to this caller alone. `surfaces` (0.15): the screen
+   *  places the live surfaces the view asks for itself, and the view is told it does. */
+  "view.open": (id: string, repo: string, screen?: ViewScreen, surfaces?: boolean) => { session: string };
   /** Close the caller's view session `session`. `closed` false: it has none of that name. */
   "view.close": (session: string) => { closed: boolean };
   "people.list": (repo: string) => PersonHere[];

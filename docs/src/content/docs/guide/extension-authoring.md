@@ -65,8 +65,9 @@ hm.on("structure", ({ tiles }) => {
 For a complete view with live docking, name updates, status subscriptions, and saved
 layout, read `views/tiled` in [the published plugins](https://github.com/dip497/hivemind-plugins).
 
-`setSurfaceRects` places host-owned tools in your view; `onReveal` answers focus
-requests; `setLayout` saves up to 64 KB per repository. Canvas/WebGL views can use
+`setSurfaceRects` places host-owned tools in your view (a tile's live terminal, where the
+screen places them: `hm.supports("surfaces")`, protocol 1.6; a phone's app draws its own terminal
+over your view there); `onReveal` answers focus requests; `setLayout` saves up to 64 KB per repository. Canvas/WebGL views can use
 `createInvalidator` to coalesce drawing and pause while hidden.
 
 

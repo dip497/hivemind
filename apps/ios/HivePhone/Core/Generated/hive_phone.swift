@@ -535,6 +535,22 @@ fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterDouble: FfiConverterPrimitive {
+    typealias FfiType = Double
+    typealias SwiftType = Double
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Double {
+        return try lift(readDouble(&buf))
+    }
+
+    public static func write(_ value: Double, into buf: inout [UInt8]) {
+        writeDouble(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterBool : FfiConverter {
     typealias FfiType = Int8
     typealias SwiftType = Bool
@@ -1468,8 +1484,10 @@ public protocol PhoneProtocol: AnyObject, Sendable {
      * Show the view `view` on `workspace`, on `device`, on `screen`: what its page posts goes in
      * by `post`, and `listener` is told what its host says, and when it starts again or ends. It
      * goes on across the background, the foreground and the device's reconnects until stopped.
+     * `surfaces`: the app places the live surfaces the view asks for itself (`view_surfaces`),
+     * and the view is told it does.
      */
-    func openView(device: String, workspace: String, view: String, screen: Screen, listener: ViewListener)  -> ViewSession
+    func openView(device: String, workspace: String, view: String, screen: Screen, listener: ViewListener, surfaces: Bool)  -> ViewSession
     
     /**
      * The file at `path` in the view `view`, from `device`, which holds `workspace`: served to
@@ -1894,8 +1912,10 @@ open func readNotice(body: Data)async throws  -> Notice?  {
      * Show the view `view` on `workspace`, on `device`, on `screen`: what its page posts goes in
      * by `post`, and `listener` is told what its host says, and when it starts again or ends. It
      * goes on across the background, the foreground and the device's reconnects until stopped.
+     * `surfaces`: the app places the live surfaces the view asks for itself (`view_surfaces`),
+     * and the view is told it does.
      */
-open func openView(device: String, workspace: String, view: String, screen: Screen, listener: ViewListener) -> ViewSession  {
+open func openView(device: String, workspace: String, view: String, screen: Screen, listener: ViewListener, surfaces: Bool = false) -> ViewSession  {
     return try!  FfiConverterTypeViewSession_lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_hive_phone_ffi_fn_method_phone_open_view(
@@ -1904,7 +1924,8 @@ open func openView(device: String, workspace: String, view: String, screen: Scre
         FfiConverterString.lower(workspace),
         FfiConverterString.lower(view),
         FfiConverterTypeScreen_lower(screen),
-        FfiConverterTypeViewListener_lower(listener),uniffiCallStatus
+        FfiConverterTypeViewListener_lower(listener),
+        FfiConverterBool.lower(surfaces),uniffiCallStatus
     )
 })
 }
@@ -4650,6 +4671,81 @@ public func FfiConverterTypeViewInfo_lower(_ value: ViewInfo) -> RustBuffer {
 
 
 /**
+ * A live surface a view's page asks for: the tile whose terminal the app places there, and
+ * where, in the page's CSS pixels (points on iOS, dp on Android) from the web view's top left;
+ * `bar`: under a bar naming it.
+ */
+public struct ViewSurface: Equatable, Hashable {
+    public var tile: String
+    public var x: Double
+    public var y: Double
+    public var width: Double
+    public var height: Double
+    public var bar: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(tile: String, x: Double, y: Double, width: Double, height: Double, bar: Bool) {
+        self.tile = tile
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.bar = bar
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ViewSurface: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeViewSurface: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ViewSurface {
+        return
+            try ViewSurface(
+                tile: FfiConverterString.read(from: &buf), 
+                x: FfiConverterDouble.read(from: &buf), 
+                y: FfiConverterDouble.read(from: &buf), 
+                width: FfiConverterDouble.read(from: &buf), 
+                height: FfiConverterDouble.read(from: &buf), 
+                bar: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ViewSurface, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.tile, into: &buf)
+        FfiConverterDouble.write(value.x, into: &buf)
+        FfiConverterDouble.write(value.y, into: &buf)
+        FfiConverterDouble.write(value.width, into: &buf)
+        FfiConverterDouble.write(value.height, into: &buf)
+        FfiConverterBool.write(value.bar, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewSurface_lift(_ buf: RustBuffer) throws -> ViewSurface {
+    return try FfiConverterTypeViewSurface.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewSurface_lower(_ value: ViewSurface) -> RustBuffer {
+    return FfiConverterTypeViewSurface.lower(value)
+}
+
+
+/**
  * The look the app gives views, as the view protocol's `theme` has it: dark or light, its
  * colours by token (`bg`, `fg`, …, each `#rrggbb`), and when the app says them, its accent,
  * corner radius in pixels, fonts, panel surface and terminal background (`#rrggbb`), glass, and
@@ -6338,6 +6434,30 @@ fileprivate struct FfiConverterOptionTypeNotice: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionSequenceTypeViewSurface: FfiConverterRustBuffer {
+    typealias SwiftType = [ViewSurface]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceTypeViewSurface.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceTypeViewSurface.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]
 
@@ -6613,6 +6733,31 @@ fileprivate struct FfiConverterSequenceTypeViewInfo: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeViewSurface: FfiConverterRustBuffer {
+    typealias SwiftType = [ViewSurface]
+
+    public static func write(_ value: [ViewSurface], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeViewSurface.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ViewSurface] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ViewSurface]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeViewSurface.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeWorkspace: FfiConverterRustBuffer {
     typealias SwiftType = [Workspace]
 
@@ -6755,6 +6900,20 @@ public func viewBridge() -> String  {
     )
 })
 }
+/**
+ * The live surfaces `message`, which a view's page posted, asks for, when it is the view's
+ * surface rects (`setSurfaceRects`): the app places its own terminal at each, those it had and
+ * no longer asks for gone, and posts the message nowhere. None: any other message, posted as
+ * it is. Only for a view opened with `surfaces`.
+ */
+public func viewSurfaces(message: String) -> [ViewSurface]?  {
+    return try!  FfiConverterOptionSequenceTypeViewSurface.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_func_view_surfaces(
+        FfiConverterString.lower(message),uniffiCallStatus
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -6781,6 +6940,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_func_view_bridge() != 5070) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_func_view_surfaces() != 6426) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_conversation_stop() != 58626) {
@@ -6858,7 +7020,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_hive_phone_ffi_checksum_method_phone_read_notice() != 25086) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_hive_phone_ffi_checksum_method_phone_open_view() != 22111) {
+    if (uniffi_hive_phone_ffi_checksum_method_phone_open_view() != 40060) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_phone_view_file() != 29895) {

@@ -1,0 +1,263 @@
+{
+  "about": "What a view's page posts that asks for live surfaces (`surfaceRects`, view protocol), and the surfaces a screen that places its own takes from it (docs/design/phone-app-2026-10-02.md §6.1, P8 step 5): what the view SDK's parsePluginMessage takes as surfaceRects, and nothing it refuses, each surface its tile and rect in the page's CSS pixels, `bar` for chrome \"bar\". Written by hand from packages/hive-view-sdk/src/protocol.ts.",
+  "posted": [
+    {
+      "text": "{\"type\":\"surfaceRects\",\"rects\":[{\"tileId\":\"t1\",\"x\":12,\"y\":80,\"w\":366,\"h\":240}]}",
+      "surfaces": [
+        {
+          "tile": "t1",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        }
+      ],
+      "why": "one agent's terminal"
+    },
+    {
+      "text": "{\"type\":\"surfaceRects\",\"rects\":[{\"tileId\":\"t1\",\"x\":12,\"y\":80,\"w\":366,\"h\":240,\"chrome\":\"bar\"},{\"tileId\":\"t2\",\"x\":12,\"y\":340,\"w\":366,\"h\":240,\"chrome\":\"none\"}]}",
+      "surfaces": [
+        {
+          "tile": "t1",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": true
+        },
+        {
+          "tile": "t2",
+          "x": 12,
+          "y": 340,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        }
+      ],
+      "why": "two, one under a bar naming it"
+    },
+    {
+      "text": "{\"type\":\"surfaceRects\",\"rects\":[]}",
+      "surfaces": [],
+      "why": "none: every surface placed before goes"
+    },
+    {
+      "text": "{\"type\":\"surfaceRects\",\"rects\":[{\"tileId\":\"t1\",\"x\":10.5,\"y\":-40,\"w\":366,\"h\":240}]}",
+      "surfaces": [
+        {
+          "tile": "t1",
+          "x": 10.5,
+          "y": -40,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        }
+      ],
+      "why": "partly scrolled off the top, at a fraction of a pixel"
+    },
+    {
+      "text": "{\"type\":\"surfaceRects\",\"rects\":[{\"tileId\":\"t1\",\"x\":12,\"y\":80,\"w\":366,\"h\":240,\"extra\":1}]}",
+      "surfaces": [
+        {
+          "tile": "t1",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        }
+      ],
+      "why": "what the protocol does not have is dropped"
+    },
+    {
+      "text": "{\"type\":\"surfaceRects\",\"rects\":[{\"tileId\":\"t0\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t1\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t2\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t3\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t4\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t5\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t6\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t7\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t8\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t9\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t10\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t11\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t12\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t13\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t14\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t15\",\"x\":12,\"y\":80,\"w\":366,\"h\":240}]}",
+      "surfaces": [
+        {
+          "tile": "t0",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        },
+        {
+          "tile": "t1",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        },
+        {
+          "tile": "t2",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        },
+        {
+          "tile": "t3",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        },
+        {
+          "tile": "t4",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        },
+        {
+          "tile": "t5",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        },
+        {
+          "tile": "t6",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        },
+        {
+          "tile": "t7",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        },
+        {
+          "tile": "t8",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        },
+        {
+          "tile": "t9",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        },
+        {
+          "tile": "t10",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        },
+        {
+          "tile": "t11",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        },
+        {
+          "tile": "t12",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        },
+        {
+          "tile": "t13",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        },
+        {
+          "tile": "t14",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        },
+        {
+          "tile": "t15",
+          "x": 12,
+          "y": 80,
+          "w": 366,
+          "h": 240,
+          "bar": false
+        }
+      ],
+      "why": "as many as a view may ask for"
+    },
+    {
+      "text": "{\"type\":\"surfaceRects\",\"rects\":[{\"tileId\":\"t0\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t1\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t2\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t3\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t4\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t5\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t6\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t7\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t8\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t9\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t10\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t11\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t12\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t13\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t14\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t15\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t16\",\"x\":12,\"y\":80,\"w\":366,\"h\":240}]}",
+      "surfaces": null,
+      "why": "more than a view may ask for"
+    },
+    {
+      "text": "{\"type\":\"surfaceRects\",\"rects\":[{\"tileId\":\"t1\",\"x\":12,\"y\":80,\"w\":366,\"h\":240},{\"tileId\":\"t1\",\"x\":12,\"y\":340,\"w\":366,\"h\":240}]}",
+      "surfaces": null,
+      "why": "a tile twice"
+    },
+    {
+      "text": "{\"type\":\"surfaceRects\",\"rects\":[{\"tileId\":\"t1\",\"x\":12,\"y\":80,\"w\":366}]}",
+      "surfaces": null,
+      "why": "no height"
+    },
+    {
+      "text": "{\"type\":\"surfaceRects\",\"rects\":[{\"tileId\":\"t1\",\"x\":\"12\",\"y\":80,\"w\":366,\"h\":240}]}",
+      "surfaces": null,
+      "why": "a coordinate that is not a number"
+    },
+    {
+      "text": "{\"type\":\"surfaceRects\",\"rects\":[{\"tileId\":\"\",\"x\":12,\"y\":80,\"w\":366,\"h\":240}]}",
+      "surfaces": null,
+      "why": "no tile"
+    },
+    {
+      "text": "{\"type\":\"surfaceRects\",\"rects\":[{\"tileId\":\"ttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt\",\"x\":12,\"y\":80,\"w\":366,\"h\":240}]}",
+      "surfaces": null,
+      "why": "a tile id longer than the protocol's"
+    },
+    {
+      "text": "{\"type\":\"surfaceRects\",\"rects\":[{\"tileId\":\"t1\",\"x\":12,\"y\":80,\"w\":366,\"h\":240,\"chrome\":\"tab\"}]}",
+      "surfaces": null,
+      "why": "chrome the protocol does not have"
+    },
+    {
+      "text": "{\"type\":\"surfaceRects\",\"rects\":[{\"tileId\":\"t1\",\"x\":12,\"y\":80,\"w\":366,\"h\":240,\"chrome\":null}]}",
+      "surfaces": null,
+      "why": "chrome null"
+    },
+    {
+      "text": "{\"type\":\"surfaceRects\",\"rects\":{\"t1\":{\"tileId\":\"t1\",\"x\":12,\"y\":80,\"w\":366,\"h\":240}}}",
+      "surfaces": null,
+      "why": "rects not a list"
+    },
+    {
+      "text": "{\"type\":\"command\",\"name\":\"selectTile\",\"args\":[\"t1\"]}",
+      "surfaces": null,
+      "why": "not surface rects: posted as it is"
+    },
+    {
+      "text": "surfaceRects",
+      "surfaces": null,
+      "why": "not JSON"
+    }
+  ]
+}

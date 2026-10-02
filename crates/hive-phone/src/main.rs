@@ -62,10 +62,11 @@
 //!                               path, that file of the view as the device serves it, its bytes
 //!                               (with --json, `{type, data, csp}`: data base64, and the policy to
 //!                               serve it under)
-//!   hive-phone view <workspace> <view> [--size <w>x<h>]
+//!   hive-phone view <workspace> <view> [--size <w>x<h>] [--surfaces]
 //!                               open a view on the workspace, as the phone shows one, its host on
 //!                               that device, on a screen that size (in CSS pixels; none: 0 by 0)
-//!                               with no colours of its own: each message its host says, a JSON
+//!                               with no colours of its own, and with --surfaces one that places
+//!                               the view's live surfaces itself: each message its host says, a JSON
 //!                               line; each JSON line read here, posted to it; at the end of what
 //!                               is read, it is closed (with --json, `{"closed":true}` last), and
 //!                               when its host ends it, it says why
@@ -101,7 +102,7 @@ use hive_phone::{
 };
 use serde_json::{json, Value};
 
-const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | agents [--follow] | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--allow|--deny|--approve|--changes <what> | send <workspace> <tile> --text <line> | start <workspace> [<agent> [--frame <id>] [--prompt <text>] [--model <m>] [--mode <m>]] | stop <workspace> <tile> | close <workspace> <tile> | diff <workspace> <tile> | talk <workspace> <tile> [--follow] | agent <workspace> <tile> | views <workspace> [<view> <path>] | view <workspace> <view> [--size <w>x<h>] | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
+const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | agents [--follow] | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--allow|--deny|--approve|--changes <what> | send <workspace> <tile> --text <line> | start <workspace> [<agent> [--frame <id>] [--prompt <text>] [--model <m>] [--mode <m>]] | stop <workspace> <tile> | close <workspace> <tile> | diff <workspace> <tile> | talk <workspace> <tile> [--follow] | agent <workspace> <tile> | views <workspace> [<view> <path>] | view <workspace> <view> [--size <w>x<h>] [--surfaces] | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
 
 #[derive(Default)]
 struct Args {
@@ -129,8 +130,10 @@ struct Args {
     prompt: Option<String>,
     model: Option<String>,
     mode: Option<String>,
-    /// `view`'s: the size of the screen it is shown on, `<w>x<h>`.
+    /// `view`'s: the size of the screen it is shown on, `<w>x<h>`, and whether that screen places
+    /// the view's live surfaces itself.
     size: Option<String>,
+    surfaces: bool,
 }
 
 fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
@@ -155,6 +158,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
             "--model" => args.model = Some(argv.next().context("--model needs a value")?),
             "--mode" => args.mode = Some(argv.next().context("--mode needs a value")?),
             "--size" => args.size = Some(argv.next().context("--size needs a value")?),
+            "--surfaces" => args.surfaces = true,
             flag if flag.starts_with("--") => bail!("{flag} is not an option\n{USAGE}"),
             _ if args.command.is_empty() => args.command = arg,
             _ => args.rest.push(arg),
@@ -787,7 +791,8 @@ async fn run(args: Args) -> Result<()> {
             });
             let shown = async {
                 let connection = workspace::holder(&endpoint, &devices, ws).await?;
-                let session = views::Session::open(&connection, ws, view, &screen).await?;
+                let session =
+                    views::Session::open(&connection, ws, view, &screen, args.surfaces).await?;
                 // Its screen stays as it is.
                 let (_sized, mut screen) = tokio::sync::watch::channel(screen);
                 let mut posts = posts;

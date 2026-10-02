@@ -177,17 +177,21 @@ pub struct Session {
 
 impl Session {
     /// Open the view `view` on `workspace`, on `connection` to the device that holds it, shown on
-    /// `screen`.
+    /// `screen`; `surfaces`: the phone places the live surfaces the view asks for itself, and the
+    /// view is told it does (workspace API 0.15; a device before it is told nothing of it).
     pub async fn open(
         connection: &Connection,
         workspace: &str,
         view: &str,
         screen: &Screen,
+        surfaces: bool,
     ) -> Result<Self> {
         let mut w = Workspace::open(connection, workspace).await?;
-        let opened = w
-            .call("view.open", json!([view, named(workspace), screen]))
-            .await?;
+        let params = match surfaces {
+            true => json!([view, named(workspace), screen, true]),
+            false => json!([view, named(workspace), screen]),
+        };
+        let opened = w.call("view.open", params).await?;
         let id = opened
             .get("session")
             .and_then(Value::as_str)

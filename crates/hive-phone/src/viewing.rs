@@ -45,6 +45,66 @@ const STARTS_OR_CLOSES: [&str; 6] = [
     "spawnAgent",
 ];
 
+/// How many live surfaces a page may ask for at once, and the longest tile id: the view SDK's
+/// (`MAX_SURFACE_RECTS`, `ID_MAX`, in UTF-16 units as a page counts them).
+const SURFACES_MAX: usize = 16;
+const ID_MAX: usize = 256;
+
+/// A live surface a view's page asks for (`surfaceRects`, view protocol): the tile whose terminal
+/// the phone places there, and where, in the page's CSS pixels; `bar`, under a bar naming it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Surface {
+    pub tile: String,
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+    pub bar: bool,
+}
+
+/// The surfaces `message`, as a view's page posts it, asks for, when it is `surfaceRects` as the
+/// view SDK takes it (`parsePluginMessage`): the phone places them itself, and posts the message
+/// nowhere. None for any other message, and for one the device would refuse.
+pub fn surfaces(message: &str) -> Option<Vec<Surface>> {
+    let Ok(Value::Object(message)) = serde_json::from_str(message) else {
+        return None;
+    };
+    if message.get("type").and_then(Value::as_str) != Some("surfaceRects") {
+        return None;
+    }
+    let rects = message.get("rects")?.as_array()?;
+    if rects.len() > SURFACES_MAX {
+        return None;
+    }
+    let mut placed: Vec<Surface> = Vec::with_capacity(rects.len());
+    for rect in rects {
+        let rect = rect.as_object()?;
+        let tile = rect.get("tileId")?.as_str()?;
+        let length = tile.encode_utf16().count();
+        if length == 0 || length > ID_MAX || placed.iter().any(|s| s.tile == tile) {
+            return None;
+        }
+        let at = |key: &str| rect.get(key).and_then(Value::as_f64);
+        let bar = match rect.get("chrome") {
+            None => false,
+            Some(chrome) => match chrome.as_str()? {
+                "bar" => true,
+                "none" => false,
+                _ => return None,
+            },
+        };
+        placed.push(Surface {
+            tile: tile.to_string(),
+            x: at("x")?,
+            y: at("y")?,
+            w: at("w")?,
+            h: at("h")?,
+            bar,
+        });
+    }
+    Some(placed)
+}
+
 /// Whether `message`, as a view's page posts it, starts or closes something on the board: the
 /// phone's lock is asked before it goes, as before the app's own Start and Close (design §4).
 pub fn asks_lock(message: &str) -> bool {
@@ -107,14 +167,15 @@ impl Telling {
 }
 
 impl Viewing {
-    /// Show the view `view` on `workspace`, on `device`, on `screen`. Called in the runtime the
-    /// connections run on.
+    /// Show the view `view` on `workspace`, on `device`, on `screen`; `surfaces`: the phone places
+    /// the live surfaces the view asks for itself. Called in the runtime the connections run on.
     pub fn start(
         connections: &Connections,
         device: &str,
         workspace: &str,
         view: &str,
         screen: Screen,
+        surfaces: bool,
         viewer: Arc<dyn Viewer>,
     ) -> Self {
         let (posts, mut posted) = mpsc::channel(POSTS_WAITING);
@@ -135,18 +196,19 @@ impl Viewing {
                     Err(lost) => break Ended::Lost(lost),
                 };
                 let newest = shown.borrow_and_update().clone();
-                let relayed = match Session::open(&connection, &workspace, &view, &newest).await {
-                    Ok(session) => {
-                        // Open again: the view starts again in this one, from its page.
-                        let again = std::mem::replace(&mut opened, true);
-                        if again {
-                            telling.ended(Ended::Restarting);
+                let relayed =
+                    match Session::open(&connection, &workspace, &view, &newest, surfaces).await {
+                        Ok(session) => {
+                            // Open again: the view starts again in this one, from its page.
+                            let again = std::mem::replace(&mut opened, true);
+                            if again {
+                                telling.ended(Ended::Restarting);
+                            }
+                            let said = |message| telling.said(message);
+                            session.relay(&mut posted, &mut shown, again, said).await
                         }
-                        let said = |message| telling.said(message);
-                        session.relay(&mut posted, &mut shown, again, said).await
-                    }
-                    Err(e) => Err(e),
-                };
+                        Err(e) => Err(e),
+                    };
                 match relayed {
                     Ok(views::Ended::Host(why)) => break Ended::Disabled(why),
                     // Never closed from here: what it posts ends only with it.

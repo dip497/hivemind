@@ -209,9 +209,9 @@ function fakeActivity() {
 
 test("1.3: hello features list only what is wired; status carries since", () => {
   const bare = harness();
-  assert.deepEqual(bare.link.features, []);
+  assert.deepEqual(bare.link.features, ["surfaces"]);
   const h = harness([], ["t1"], { sinceOf: (id) => (id === "t1" ? { since: 42, exact: false } : undefined), history: async () => ({}) as never });
-  assert.deepEqual(h.link.features, ["since", "history"]);
+  assert.deepEqual(h.link.features, ["since", "history", "surfaces"]);
   h.link.handle({ type: "ready", v: 1 });
   h.link.handle({ type: "subscribeStatus", tileId: "t1" });
   h.statusCbs.get("t1")!("question", {});
@@ -305,7 +305,7 @@ test("1.4: features; a status carries the agent's own, and a change in it alone 
   let push: (s: unknown) => void = () => {};
   const h = harness([], ["t1"], { agentStatus: (_id, cb) => { push = cb as never; cb({ state: "working", subagents: 0, background: 0, compacting: false, source: "hooks" }); return () => {}; } });
   h.link.handle({ type: "ready", v: 1 });
-  assert.deepEqual(h.link.features, ["agentStatus"]);
+  assert.deepEqual(h.link.features, ["agentStatus", "surfaces"]);
   h.link.handle({ type: "subscribeStatus", tileId: "t1" });
   h.statusCbs.get("t1")!("working", {});
   push({ state: "waiting", waitingFor: "permission", subagents: 0, background: 0, compacting: false, source: "hooks" });
@@ -437,6 +437,7 @@ test("1.5: a rect for a tile the view was told of and that has closed since is d
 test("what a host cannot do at all (a remote screen: no surfaces, no folder picker, no tiles but agents' to start) is refused without being held against the view", () => {
   const lacks = ["surfaceRects", "spawnTile", "spawnVis", "addFrame", "openFolder"];
   const h = harness(["workspace:spawn", "workspace:edit"], ["t1"], undefined, lacks);
+  assert.ok(!h.link.features.includes("surfaces"), "a host that places no surfaces does not say it does");
   h.link.handle({ type: "ready", v: 1 });
   for (let i = 0; i < LIMITS.malformed; i++) {
     h.link.handle({ type: "surfaceRects", rects: [{ tileId: "t1", x: 0, y: 0, w: 10, h: 10 }] });

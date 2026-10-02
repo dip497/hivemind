@@ -344,10 +344,11 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
         if (data.length > FILE_MAX) throw new ApiError("BAD_REQUEST", `${rel} is larger than 4 MiB`);
         return { data: data.toString("base64"), type: file.type, csp: file.csp };
       },
-      "view.open": async (from, id, workspace, screen) => {
+      "view.open": async (from, id, workspace, screen, surfaces) => {
         const view = await viewNamed(id);
         const repo = text(workspace, "workspace");
         const shown = screen == null ? UNSAID : screenOf(screen);
+        if (surfaces != null && typeof surfaces !== "boolean") throw new ApiError("BAD_REQUEST", "surfaces is true or false");
         if (!o.store().getCore(repo)) throw new ApiError("BAD_REQUEST", "no such workspace here");
         if (view.manifest.protocol > PROTOCOL_VERSION) {
           throw new ApiError("BAD_REQUEST", `${view.id} speaks view protocol ${view.manifest.protocol}, and this device ${PROTOCOL_VERSION}`);
@@ -367,6 +368,9 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
           hasTile: (tile) => s.tiles.has(tile),
           hasFrame: (frame) => s.frames.has(frame),
           onReady: () => hello(s),
+          // A screen that places live surfaces itself (0.15: a phone's app, over the view's web
+          // view) is said to; the rects are its own, and nothing here draws them.
+          ...(surfaces === true ? { onSurfaceRects: () => {} } : {}),
           // A remote screen keeps no layout here, and its frames are its own.
           onLayout: () => {},
           onFramesDrawn: () => {},

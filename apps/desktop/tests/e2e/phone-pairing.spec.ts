@@ -18,7 +18,8 @@
 // 0.14): offered when it says it works on a phone, with the page to load, its files read as the
 // computer serves its own windows (the SDK the app serves among them, each under the policy every
 // view gets), opened on the phone's screen, told it is on a phone, that screen and what the board
-// holds, doing there only what the phone may, and closed. And an agent as the phone's Agent screen
+// holds, doing there only what the phone may, and closed; a screen that places the view's live
+// surfaces itself says so, and the view is told it may ask for them (0.15). And an agent as the phone's Agent screen
 // follows it, on its one connection to the computer: its terminal, its conversation and what the
 // person sends it, each on a stream of its own, none taking another's.
 import { test, expect, type ElectronApplication } from "@playwright/test";
@@ -538,7 +539,18 @@ test("a community view that says it works on a phone is offered there with its f
   await expect.poll(structures, { timeout: 30_000 }).toEqual([[probe]]);
   expect(told[0]).toMatchObject({
     type: "hello", pluginId: "priya-board", capabilities: ["workspace:spawn"], device: { touch: true, compact: true }, viewport: { w: 390, h: 844 }, theme: { colors: {} },
+    features: ["agentStatus"],
   });
+  // A screen that places the view's live surfaces itself (as the phone's app does over its web
+  // view) says so, and the view is told it may ask for them (workspace API 0.15, view protocol 1.6).
+  const placing = spawn(HIVE_PHONE, ["view", workspace, "priya-board", "--surfaces", "--identity", phone, "--json"]);
+  procs.push(placing);
+  let placed = "";
+  placing.stdout!.on("data", (b: Buffer) => { placed += b.toString(); });
+  placing.stdin!.write(`${JSON.stringify({ type: "ready", v: 1 })}\n`);
+  const placingHello = () => placed.split("\n").filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>).find((m) => m.type === "hello");
+  await expect.poll(() => placingHello()?.features, { timeout: 30_000 }).toEqual(["agentStatus", "surfaces"]);
+  placing.stdin!.end();
 
   // What it may not do is refused: the rename never reaches the board. What it may, it does, as the
   // phone: the agent it starts appears, after the rename would have.

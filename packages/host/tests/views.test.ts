@@ -193,6 +193,21 @@ test("a view opened on a workspace here is told, once ready, where it is (a phon
   assert.deepEqual(told[2]!.links, { pipes: [{ src: "t1", dst: "t2" }], spawns: [] });
 });
 
+test("a screen that places live surfaces itself says so, and its view is told it may ask for them; a screen that does not is not, and `surfaces` is true or false", async () => {
+  const c = computer();
+  installed("priya-board", { name: "Priya's board", phone: true });
+  const phone = c.caller();
+  const features = async (...surfaces: unknown[]) => {
+    const { session } = (await c.call("view.open", ["priya-board", c.repo, null, ...surfaces], phone)) as { session: string };
+    c.post(phone, session, { type: "ready", v: 1 });
+    return (c.said(phone, session).find((m) => m.type === "hello") as { features: string[] }).features;
+  };
+  assert.deepEqual(await features(true), ["agentStatus", "surfaces"]);
+  assert.deepEqual(await features(false), ["agentStatus"]);
+  assert.deepEqual(await features(), ["agentStatus"]);
+  assert.equal(await code(c.call("view.open", ["priya-board", c.repo, null, "yes"], phone)), "BAD_REQUEST");
+});
+
 test("a view is shown on its caller's screen: told its size and look once ready, the newest, and after only what of them changes; a screen not as the protocol has it is refused", async () => {
   const c = computer();
   installed("priya-board", { name: "Priya's board", phone: true });

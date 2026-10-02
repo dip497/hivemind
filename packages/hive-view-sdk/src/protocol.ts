@@ -101,7 +101,7 @@ export interface ViewTheme {
 
 /** What a host implements beyond 1.2, sent in `hello.features`. A host that predates 1.3 sends
  *  none, so read the field (`hm.hello.features ?? []`), never probe for a client method. */
-export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants"] as const;
+export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces"] as const;
 export type ViewFeature = (typeof VIEW_FEATURES)[number];
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
@@ -199,6 +199,12 @@ export interface ViewHistoryDay {
 
 export type RequestErrorCode = "UNSUPPORTED" | "BAD_REQUEST" | "BUSY" | "DECLINED" | "INTERNAL";
 export type ShareOutcome = "copied" | "saved" | "cancelled";
+
+// ── protocol 1.6 (additive) ─────────────────────────────────────────────────
+// `surfaces` in `hello.features`: this host places the live surfaces a view asks for with
+// `surfaceRects` (a tile's terminal in the hole the view leaves). A desktop window places them; a
+// phone's app does over the view's web view, when it says so. A host before 1.6 does not say it:
+// every such host is a desktop window, which places them.
 
 // ── protocol 1.5 (additive) ─────────────────────────────────────────────────
 

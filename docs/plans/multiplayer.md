@@ -751,3 +751,11 @@ guest who may edit the board could start a command on the host (see the log).
   push server's VAPID key, tells refusals apart from devices away and reads a notice within 3 s; a device is
   "Asking desk…" until it has said what waits there, and Android clears a wait's notification only after that;
   p256 0.14.
+- 2026-10-02 — P8 steps 4 and 5, the core's part: the bridge a view's page runs on the phone (`view_bridge`: the SDK
+  handed its port once the page has loaded, relayed as JSON text; tested with the SDK's own `connect`) and what asks the
+  phone's lock (`view_asks_lock`: a command needing `workspace:spawn` or `workspace:close`, conformance/view-commands.json);
+  a view's live terminals placed by the phone itself: the view protocol's `surfaces` feature (1.6), said by a host that
+  places them (the desktop's windows, and a remote screen that says so: `view.open … surfaces`, workspace API 0.15), and
+  the core telling which page messages are surface rects (`view_surfaces`, conformance/view-surfaces.json, held to the
+  SDK's parser). The terminal-follow fix (both apps follow the cursor's line or the last line written) is in, its Android
+  tests shown failing on the old rule and on cursor-first; base64 0.23.

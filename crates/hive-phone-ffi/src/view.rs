@@ -202,6 +202,37 @@ pub fn view_asks_lock(message: String) -> bool {
     viewing::asks_lock(&message)
 }
 
+/// A live surface a view's page asks for: the tile whose terminal the app places there, and
+/// where, in the page's CSS pixels (points on iOS, dp on Android) from the web view's top left;
+/// `bar`: under a bar naming it.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ViewSurface {
+    pub tile: String,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub bar: bool,
+}
+
+/// The live surfaces `message`, which a view's page posted, asks for, when it is the view's
+/// surface rects (`setSurfaceRects`): the app places its own terminal at each, those it had and
+/// no longer asks for gone, and posts the message nowhere. None: any other message, posted as
+/// it is. Only for a view opened with `surfaces`.
+#[uniffi::export]
+pub fn view_surfaces(message: String) -> Option<Vec<ViewSurface>> {
+    let surfaces = viewing::surfaces(&message)?;
+    let placed = surfaces.into_iter().map(|s| ViewSurface {
+        tile: s.tile,
+        x: s.x,
+        y: s.y,
+        width: s.w,
+        height: s.h,
+        bar: s.bar,
+    });
+    Some(placed.collect())
+}
+
 #[uniffi::export]
 impl Phone {
     /// The community views `device` offers a phone, for `workspace`, which it holds.
@@ -250,6 +281,9 @@ impl Phone {
     /// Show the view `view` on `workspace`, on `device`, on `screen`: what its page posts goes in
     /// by `post`, and `listener` is told what its host says, and when it starts again or ends. It
     /// goes on across the background, the foreground and the device's reconnects until stopped.
+    /// `surfaces`: the app places the live surfaces the view asks for itself (`view_surfaces`),
+    /// and the view is told it does.
+    #[uniffi::method(default(surfaces = false))]
     pub fn open_view(
         &self,
         device: String,
@@ -257,11 +291,20 @@ impl Phone {
         view: String,
         screen: Screen,
         listener: Arc<dyn ViewListener>,
+        surfaces: bool,
     ) -> Arc<ViewSession> {
         let _runtime = RUNTIME.enter();
         let listening = Arc::new(Listening(listener));
         let (connections, screen) = (&self.connections, screen.into());
-        let viewing = Viewing::start(connections, &device, &workspace, &view, screen, listening);
+        let viewing = Viewing::start(
+            connections,
+            &device,
+            &workspace,
+            &view,
+            screen,
+            surfaces,
+            listening,
+        );
         Arc::new(ViewSession(viewing))
     }
 }

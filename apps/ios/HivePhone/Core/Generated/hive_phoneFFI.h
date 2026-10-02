@@ -531,7 +531,7 @@ uint64_t uniffi_hive_phone_ffi_fn_method_phone_read_notice(uint64_t ptr, RustBuf
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_OPEN_VIEW
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_OPEN_VIEW
-uint64_t uniffi_hive_phone_ffi_fn_method_phone_open_view(uint64_t ptr, RustBuffer device, RustBuffer workspace, RustBuffer view, RustBuffer screen, uint64_t listener, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_hive_phone_ffi_fn_method_phone_open_view(uint64_t ptr, RustBuffer device, RustBuffer workspace, RustBuffer view, RustBuffer screen, uint64_t listener, int8_t surfaces, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_VIEW_FILE
@@ -674,6 +674,11 @@ int8_t uniffi_hive_phone_ffi_fn_func_view_asks_lock(RustBuffer message, RustCall
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_VIEW_BRIDGE
 RustBuffer uniffi_hive_phone_ffi_fn_func_view_bridge(RustCallStatus *_Nonnull out_status
     
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_VIEW_SURFACES
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_VIEW_SURFACES
+RustBuffer uniffi_hive_phone_ffi_fn_func_view_surfaces(RustBuffer message, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_FFI_HIVE_PHONE_FFI_RUSTBUFFER_ALLOC
@@ -957,6 +962,12 @@ uint16_t uniffi_hive_phone_ffi_checksum_func_view_asks_lock(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_VIEW_BRIDGE
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_VIEW_BRIDGE
 uint16_t uniffi_hive_phone_ffi_checksum_func_view_bridge(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_VIEW_SURFACES
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_VIEW_SURFACES
+uint16_t uniffi_hive_phone_ffi_checksum_func_view_surfaces(void
     
 );
 #endif
