@@ -6,7 +6,7 @@ import XCTest
 /// in its place among them.
 final class ViewRelayTests: XCTestCase {
     @MainActor
-    func testEveryMessageReachesThePageInOrderWithStartingAgainInItsPlace() {
+    func testEveryMessageIsTakenOnTheMainThreadInOrderWithStartingAgainInItsPlace() {
         let taken = Taken()
         let relay = ViewRelay { told in taken.passes.append(told) }
         // Said on a thread of the core's while the main thread waits, not yet free to take any.

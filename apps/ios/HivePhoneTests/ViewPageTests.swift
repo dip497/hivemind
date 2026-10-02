@@ -18,7 +18,7 @@ final class ViewPageTests: XCTestCase {
         XCTAssertEqual(ViewPost(ready, view: "Priya's phone board", device: "desk"), .now)
     }
 
-    func testStartingAgainLoadsThePageAnewAndAnyOtherEndSaysWhyInTheAppsWords() {
+    func testStartingAgainGoesOnAndAnyOtherEndSaysWhyInTheAppsWords() {
         let cases: [(ViewEnded, ViewEnd)] = [
             (.restarting, .again),
             (.disabled(why: "message flood: >200 messages in one second"),
