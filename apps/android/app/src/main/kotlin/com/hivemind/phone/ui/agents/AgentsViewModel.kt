@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.hivemind.phone.core.Agent
 import com.hivemind.phone.core.Overview
 import com.hivemind.phone.core.Phone
-import com.hivemind.phone.live.OverviewFeed
 import com.hivemind.phone.ui.common.CoreCalls
 import com.hivemind.phone.ui.common.Notice
 import kotlinx.coroutines.flow.SharingStarted
@@ -39,9 +38,9 @@ data class AgentsState(val devices: List<DeviceAgents>) {
     }
 }
 
-class AgentsViewModel(private val phone: Phone, feed: OverviewFeed) : ViewModel() {
-    val state: StateFlow<AgentsState> = feed.overview.map(AgentsState::of)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, AgentsState.of(feed.overview.value))
+class AgentsViewModel(private val phone: Phone, overview: StateFlow<Overview>) : ViewModel() {
+    val state: StateFlow<AgentsState> = overview.map(AgentsState::of)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AgentsState.of(overview.value))
 
     val calls = CoreCalls(viewModelScope)
 

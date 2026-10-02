@@ -41,7 +41,10 @@ fun QrScanner(onCode: (String) -> Unit, modifier: Modifier = Modifier) {
     DisposableEffect(owner) {
         val main = ContextCompat.getMainExecutor(context)
         val providing = ProcessCameraProvider.getInstance(context)
+        var gone = false
         providing.addListener({
+            // The screen left before the camera was ready: CameraX refuses a lifecycle that ended.
+            if (gone) return@addListener
             val provider = providing.get()
             val shown = Preview.Builder().build().also { it.surfaceProvider = preview.surfaceProvider }
             val analysis = ImageAnalysis.Builder()
@@ -57,6 +60,7 @@ fun QrScanner(onCode: (String) -> Unit, modifier: Modifier = Modifier) {
             provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, shown, analysis)
         }, main)
         onDispose {
+            gone = true
             if (providing.isDone) providing.get().unbindAll()
             reading.shutdown()
         }

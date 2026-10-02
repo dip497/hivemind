@@ -79,7 +79,7 @@ fun Notice.text(): String = when (this) {
     Notice.NotRunning -> stringResource(R.string.notice_not_running)
     Notice.NotStopped -> stringResource(R.string.notice_not_stopped)
     Notice.AlreadyClosed -> stringResource(R.string.notice_already_closed)
-    Notice.AlreadyUnpaired -> stringResource(R.string.notice_already_unpaired)
+    is Notice.NotTold -> stringResource(R.string.notice_not_told, device)
     Notice.NoLock -> stringResource(R.string.notice_no_lock)
 }
 

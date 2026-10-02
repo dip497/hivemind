@@ -61,23 +61,36 @@ composeCompiler {
 }
 
 // The phone's Rust core for the app's two ABIs, and its Kotlin bindings. Cargo decides what is
-// stale, so the task always runs; `-PskipCore` reuses what the last run wrote.
+// stale, so the task always runs; `-PskipCore` reuses what the last run wrote, and
+// `-PcoreAbis=x86_64` builds fewer ABIs, for a quicker build on one's own machine.
 val buildCore = tasks.register<Exec>("buildCore") {
     description = "Builds crates/hive-phone-ffi for arm64-v8a and x86_64 and generates its Kotlin bindings."
     group = "build"
     val skip = providers.gradleProperty("skipCore").isPresent
+    val abis = providers.gradleProperty("coreAbis").orNull
     // The NDK AGP resolved for `ndkVersion`, so cargo-ndk links with the one the app is built with.
     val ndk = androidComponents.sdkComponents.ndkDirectory
     workingDir(rootProject.layout.projectDirectory.dir("../.."))
     commandLine("bash", "scripts/phone/build-android.sh", core.asFile.path)
     onlyIf("not -PskipCore") { !skip }
-    doFirst { environment("ANDROID_NDK_HOME", ndk.get().asFile.path) }
+    doFirst {
+        environment("ANDROID_NDK_HOME", ndk.get().asFile.path)
+        if (abis != null) environment("PHONE_ABIS", abis.replace(',', ' '))
+    }
 }
 tasks.named("preBuild") { dependsOn(buildCore) }
 
 tasks.withType<Test>().configureEach {
-    // Robolectric's Android 16 reaches into the JDK's file descriptors.
-    jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED", "--add-opens=java.base/java.io=ALL-UNNAMED")
+    // Robolectric's Android 16 reaches into the JDK's file descriptors, and its SystemCleaner (which
+    // the bindings use from API 34) into the JDK's cleaner.
+    jvmArgs(
+        "--add-exports=java.base/jdk.internal.access=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+    )
+    // The core built for this machine (scripts/phone/build-android.sh), which JNA loads in the
+    // tests that run it, as it loads the app's own on a phone.
+    systemProperty("jna.library.path", core.dir("host").asFile.path)
 }
 
 dependencies {
@@ -111,6 +124,8 @@ dependencies {
     // Debug builds count their frames (FrameMeter, design §3.8).
     debugImplementation(libs.androidx.metrics.performance)
 
+    // JNA as a jar: its dispatch library for this machine, which the AAR has not.
+    testImplementation(libs.jna)
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)

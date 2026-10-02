@@ -7,7 +7,6 @@ import com.hivemind.phone.core.Answer
 import com.hivemind.phone.core.Device
 import com.hivemind.phone.core.Overview
 import com.hivemind.phone.core.Phone
-import com.hivemind.phone.live.OverviewFeed
 import com.hivemind.phone.ui.common.CoreCalls
 import com.hivemind.phone.ui.common.Notice
 import kotlinx.coroutines.flow.SharingStarted
@@ -36,9 +35,9 @@ data class NeedsState(
     }
 }
 
-class NeedsViewModel(private val phone: Phone, feed: OverviewFeed) : ViewModel() {
-    val state: StateFlow<NeedsState> = feed.overview.map(NeedsState::of)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, NeedsState.of(feed.overview.value))
+class NeedsViewModel(private val phone: Phone, overview: StateFlow<Overview>) : ViewModel() {
+    val state: StateFlow<NeedsState> = overview.map(NeedsState::of)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, NeedsState.of(overview.value))
 
     val calls = CoreCalls(viewModelScope)
 

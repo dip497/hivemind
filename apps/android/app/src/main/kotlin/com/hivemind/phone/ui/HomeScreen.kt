@@ -50,9 +50,9 @@ private enum class Tab { NEEDS, AGENTS, DEVICES }
 @Composable
 fun HomeScreen(core: PhoneCore, onOpen: (AgentRef) -> Unit, onStart: () -> Unit, onPair: () -> Unit) {
     var tab by rememberSaveable { mutableStateOf(Tab.NEEDS) }
-    val needs = viewModel { NeedsViewModel(core.phone, core.feed) }
-    val agents = viewModel { AgentsViewModel(core.phone, core.feed) }
-    val devices = viewModel { DevicesViewModel(core.phone, core.feed) }
+    val needs = viewModel { NeedsViewModel(core.phone, core.feed.overview) }
+    val agents = viewModel { AgentsViewModel(core.phone, core.feed.overview) }
+    val devices = viewModel { DevicesViewModel(core.phone, core.feed.overview) }
     val needsState by needs.state.collectAsStateWithLifecycle()
     val now = rememberNow()
     val lock = LocalPhoneLock.current

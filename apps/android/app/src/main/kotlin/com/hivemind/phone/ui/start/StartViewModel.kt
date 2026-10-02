@@ -13,7 +13,6 @@ import com.hivemind.phone.core.PhoneException
 import com.hivemind.phone.core.Start
 import com.hivemind.phone.core.StartProgram
 import com.hivemind.phone.core.Startable
-import com.hivemind.phone.live.OverviewFeed
 import com.hivemind.phone.ui.common.CoreCalls
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharingStarted
@@ -41,9 +40,9 @@ sealed interface Choices {
 }
 
 /** Starting an agent (design §6.6): device, workspace, folder, agent with its options, prompt. */
-class StartViewModel(private val phone: Phone, feed: OverviewFeed) : ViewModel() {
-    val places: StateFlow<List<Place>> = feed.overview.map(::placesOf)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, placesOf(feed.overview.value))
+class StartViewModel(private val phone: Phone, overview: StateFlow<Overview>) : ViewModel() {
+    val places: StateFlow<List<Place>> = overview.map(::placesOf)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, placesOf(overview.value))
 
     /** The device chosen, by its id. */
     var device: String? by mutableStateOf(null)

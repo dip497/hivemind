@@ -30,6 +30,18 @@ class TerminalTest {
     }
 
     @Test
+    fun `a watch the core resumed, from a fresh screen, replaces what was drawn`() {
+        val terminal = Terminal()
+        terminal.apply(update(50, first = 10, count = 40, lines = (10L until 40L).map { line(it, "before $it") }))
+        // Lines numbered afresh, every one sent, the revisions begun again.
+        terminal.apply(update(3, first = 0, count = 3, lines = (0L until 3L).map { line(it, "after $it") }))
+
+        assertEquals(listOf("after 0", "after 1", "after 2"), terminal.texts())
+        assertEquals(0L, terminal.firstLine)
+        assertEquals(3uL, terminal.revision)
+    }
+
+    @Test
     fun `the cursor is on one line at a time, and on none while hidden`() {
         val terminal = Terminal()
         val lines = (0L..2L).map { line(it, "$") }

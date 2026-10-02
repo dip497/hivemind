@@ -24,8 +24,8 @@ sealed interface Notice {
     /** A close for an agent already gone. */
     data object AlreadyClosed : Notice
 
-    /** An unpair from a device that had already forgotten this phone. */
-    data object AlreadyUnpaired : Notice
+    /** This phone forgot the device, which was not told: it still lists the phone until unpaired there. */
+    data class NotTold(val device: String) : Notice
 
     /** Starting or closing an agent asks the phone's lock, and this phone has none set. */
     data object NoLock : Notice

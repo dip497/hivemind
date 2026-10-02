@@ -8,10 +8,9 @@ import androidx.lifecycle.viewModelScope
 import com.hivemind.phone.core.Agent
 import com.hivemind.phone.core.AgentRef
 import com.hivemind.phone.core.Answer
+import com.hivemind.phone.core.Overview
 import com.hivemind.phone.core.Phone
-import com.hivemind.phone.live.OverviewFeed
 import com.hivemind.phone.live.ScreenFeed
-import com.hivemind.phone.terminal.Terminal
 import com.hivemind.phone.ui.common.CoreCalls
 import com.hivemind.phone.ui.common.Notice
 import kotlinx.coroutines.flow.SharingStarted
@@ -32,12 +31,12 @@ fun typing(before: String, after: String): Typing {
 }
 
 /** One agent (design §6.4): its live terminal, what it waits on, and what the person can do to it. */
-class AgentViewModel(private val phone: Phone, feed: OverviewFeed, val ref: AgentRef) : ViewModel() {
-    val agent: StateFlow<Agent?> = feed.overview.map { overview -> overview.agents.firstOrNull { it.at == ref } }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, feed.overview.value.agents.firstOrNull { it.at == ref })
+class AgentViewModel(private val phone: Phone, overview: StateFlow<Overview>, val ref: AgentRef) : ViewModel() {
+    val agent: StateFlow<Agent?> = overview.map { it.agents.firstOrNull { agent -> agent.at == ref } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, overview.value.agents.firstOrNull { it.at == ref })
 
     /** The terminal, watched for as long as this screen is in the back stack. */
-    val screen = ScreenFeed(phone, ref, Terminal())
+    val screen = ScreenFeed(phone, ref)
 
     val calls = CoreCalls(viewModelScope)
 

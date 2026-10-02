@@ -16,23 +16,28 @@ sealed interface Ended {
     /** The session ended, with its exit code. */
     data class Exited(val code: Long) : Ended
 
-    /** The connection to the device holding it went. */
+    /** The watch ended without the session: its device is gone. */
     data object Lost : Ended
 }
 
 /**
  * One agent's terminal, watched (design §5.3). The core tells of a new frame from its own thread,
  * at most one per 16 ms; the terminal pulls what changed since the revision it last drew, in one
- * call, once on the main thread's next frame, however many frames came meanwhile.
+ * call, once on the main thread's next frame, however many frames came meanwhile. When the core
+ * resumes the watch after the app was away, it starts from a fresh screen, which the update that
+ * follows carries whole.
  *
  * Made on the main thread; [stop] it when the screen showing it goes.
  */
-class ScreenFeed(phone: Phone, agent: AgentRef, val terminal: Terminal) : ScreenListener {
+class ScreenFeed(phone: Phone, agent: AgentRef) {
+    /** The terminal as drawn. */
+    val terminal = Terminal()
+
     /** Who holds the session's keyboard; null while the person's own devices do. */
     var keyboard: String? by mutableStateOf(null)
         private set
 
-    /** How the session ended, once it has. */
+    /** How the watch ended, once it has. */
     var ended: Ended? by mutableStateOf(null)
         private set
 
@@ -41,21 +46,24 @@ class ScreenFeed(phone: Phone, agent: AgentRef, val terminal: Terminal) : Screen
     // Before watching: the core may tell of a frame as soon as the watch begins.
     private val pull = FramePull { terminal.apply(watch.update(terminal.revision)) }
 
-    private val watch: Watch = phone.watch(agent, this)
+    // What the core tells, from its threads: kept apart from what the screen calls.
+    private val told = object : ScreenListener {
+        override fun frameReady(revision: ULong) = pull.request()
+
+        override fun keyboard(holder: String?) {
+            main.post { keyboard = holder }
+        }
+
+        override fun ended(code: Long?) {
+            main.post { ended = if (code == null) Ended.Lost else Ended.Exited(code) }
+        }
+    }
+
+    private val watch: Watch = phone.watch(agent, told)
 
     init {
         // What the core has already, drawn at once rather than at its next frame.
         pull.request()
-    }
-
-    override fun frameReady(revision: ULong) = pull.request()
-
-    override fun keyboard(holder: String?) {
-        main.post { keyboard = holder }
-    }
-
-    override fun ended(code: Long?) {
-        main.post { ended = if (code == null) Ended.Lost else Ended.Exited(code) }
     }
 
     /** Types [text] into the session as it is, as the person. */

@@ -6,14 +6,17 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hivemind.phone.core.Paired
+import com.hivemind.phone.core.PairsWith
 import com.hivemind.phone.core.Phone
 import com.hivemind.phone.core.PhoneException
+import com.hivemind.phone.core.pairsWith
 import kotlinx.coroutines.launch
 
 sealed interface PairState {
     data object Ready : PairState
 
-    data object Pairing : PairState
+    /** Pairing, with the device the link names (none for one that names none: the core says why). */
+    data class Pairing(val with: PairsWith?) : PairState
 
     /** Paired: with which device, and whose the phone is now. */
     data class Done(val paired: Paired) : PairState
@@ -31,20 +34,24 @@ class PairViewModel(private val phone: Phone) : ViewModel() {
 
     /** Pairs with the link, as pasted: tried each time it is asked. */
     fun pair(link: String) {
-        if (state == PairState.Pairing) return
-        state = PairState.Pairing
+        if (state is PairState.Pairing) return
+        val text = link.trim()
+        state = PairState.Pairing(pairsWith(text))
         viewModelScope.launch {
             state = try {
-                PairState.Done(phone.pair(link.trim()))
+                PairState.Done(phone.pair(text))
             } catch (e: PhoneException) {
                 PairState.Failed(e.message.orEmpty())
             }
         }
     }
 
-    /** A code the camera read. It reads the same one many times a second: each is tried once. */
+    /**
+     * A code the camera read. It reads the same one many times a second, each tried once; and a
+     * code that is no pairing link (a menu, a parcel) is none of its business.
+     */
     fun scanned(text: String) {
-        if (text == scanned) return
+        if (text == scanned || pairsWith(text) == null) return
         scanned = text
         pair(text)
     }

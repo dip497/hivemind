@@ -82,7 +82,7 @@ fun PhoneNav(core: PhoneCore) {
             }
             entry<Route.Agent> { route ->
                 AgentScreen(
-                    viewModel { AgentViewModel(core.phone, core.feed, route.ref) },
+                    viewModel { AgentViewModel(core.phone, core.feed.overview, route.ref) },
                     onBack = { stack.removeLastOrNull() },
                     onDiff = { stack.add(Route.Diff(route.device, route.workspace, route.tile)) },
                     onClosed = { stack.removeLastOrNull() },
@@ -93,7 +93,7 @@ fun PhoneNav(core: PhoneCore) {
             }
             entry<Route.Start> {
                 StartScreen(
-                    viewModel { StartViewModel(core.phone, core.feed) },
+                    viewModel { StartViewModel(core.phone, core.feed.overview) },
                     onBack = { stack.removeLastOrNull() },
                     onStarted = { agent ->
                         stack.removeLastOrNull()

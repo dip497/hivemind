@@ -69,7 +69,7 @@
     <string name="type_hint">Typed into its terminal as you</string>
     <string name="keyboard_held">%s has its keyboard.</string>
     <string name="ended_code">The session ended (%d).</string>
-    <string name="ended_lost">The connection to its device went.</string>
+    <string name="ended_lost">Its device is gone: this terminal is not watched any more.</string>
     <string name="agent_gone">This agent is no longer on its board.</string>
     <string name="terminal_newest">To the newest line</string>
 
@@ -117,6 +117,7 @@
     <string name="action_paste">Paste</string>
     <string name="action_pair">Pair</string>
     <string name="pair_pairing">Pairing…</string>
+    <string name="pair_pairing_with">Pairing with %s…</string>
     <string name="pair_whose">This phone is %s\'s now.</string>
     <string name="pair_with">Paired with %s.</string>
     <string name="action_continue">Continue</string>
@@ -127,7 +128,7 @@
     <string name="notice_not_running">No agent runs there now.</string>
     <string name="notice_not_stopped">It was not in a turn.</string>
     <string name="notice_already_closed">It was already closed.</string>
-    <string name="notice_already_unpaired">It had already forgotten this phone.</string>
+    <string name="notice_not_told">%s was not told: unpair this phone on it too.</string>
     <string name="notice_no_lock">Set a screen lock on this phone to start or close agents.</string>
 
     <string name="core_broken">hivemind could not open what this phone keeps: %s</string>

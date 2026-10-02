@@ -6,7 +6,6 @@ import com.hivemind.phone.core.Device
 import com.hivemind.phone.core.Overview
 import com.hivemind.phone.core.Person
 import com.hivemind.phone.core.Phone
-import com.hivemind.phone.live.OverviewFeed
 import com.hivemind.phone.ui.common.CoreCalls
 import com.hivemind.phone.ui.common.Notice
 import kotlinx.coroutines.flow.SharingStarted
@@ -21,14 +20,14 @@ data class DevicesState(val person: Person?, val devices: List<Device>) {
     }
 }
 
-class DevicesViewModel(private val phone: Phone, feed: OverviewFeed) : ViewModel() {
-    val state: StateFlow<DevicesState> = feed.overview.map(DevicesState::of)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, DevicesState.of(feed.overview.value))
+class DevicesViewModel(private val phone: Phone, overview: StateFlow<Overview>) : ViewModel() {
+    val state: StateFlow<DevicesState> = overview.map(DevicesState::of)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, DevicesState.of(overview.value))
 
     val calls = CoreCalls(viewModelScope)
 
     /** Unpairs from [device]: each forgets the other (spec/pairing.md, "Unpairing"). */
     fun unpair(device: Device) = calls.launch(device.id, { phone.unpair(device.id) }) { unpaired ->
-        if (!unpaired) calls.tell(Notice.AlreadyUnpaired)
+        if (!unpaired) calls.tell(Notice.NotTold(device.name))
     }
 }

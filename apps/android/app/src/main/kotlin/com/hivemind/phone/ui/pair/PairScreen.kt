@@ -88,7 +88,7 @@ private fun Pairing(vm: PairViewModel, state: PairState) {
     var link by rememberSaveable { mutableStateOf("") }
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
-    val pairing = state == PairState.Pairing
+    val pairing = state is PairState.Pairing
 
     Text(stringResource(R.string.pair_how), style = MaterialTheme.typography.bodyMedium)
     if (camera) {
@@ -124,9 +124,10 @@ private fun Pairing(vm: PairViewModel, state: PairState) {
         modifier = Modifier.fillMaxWidth().testTag("pair-button"),
     ) { Text(stringResource(R.string.action_pair)) }
     when (state) {
-        PairState.Pairing -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        is PairState.Pairing -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-            Text(stringResource(R.string.pair_pairing))
+            val with = state.with
+            Text(if (with != null) stringResource(R.string.pair_pairing_with, with.name) else stringResource(R.string.pair_pairing))
         }
         is PairState.Failed -> Text(
             state.message.ifEmpty { stringResource(R.string.notice_failed) },
