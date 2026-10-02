@@ -32,3 +32,10 @@ impl fmt::Display for Failure {
 }
 
 impl std::error::Error for Failure {}
+
+impl Failure {
+    /// Whether `e` is the device refusing: asking again gets the same answer.
+    pub fn refused(e: &anyhow::Error) -> bool {
+        matches!(e.downcast_ref::<Failure>(), Some(Failure::Refused { .. }))
+    }
+}

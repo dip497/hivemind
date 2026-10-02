@@ -11,9 +11,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::{
+    agents::{Agent, Listed, Waiting},
     devices::{self, ANSWER_WITHIN},
     identity::{write_private, Identity},
     pairing::PairedWith,
+    workspace::Held,
 };
 
 /// What an agent can wait on the person for.
@@ -124,8 +126,84 @@ pub async fn ask_on(connection: &Connection, from: &str) -> Result<Answer> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Heard {
     pub at: u64,
+    /// What waits on the person there, and how many agents are at work: as it answered, or as
+    /// its list of agents says.
     #[serde(flatten)]
     pub answer: Answer,
+    /// Every agent there, as it last listed them (spec/agents.md "Following"): none from a device
+    /// that does not list them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agents: Option<Vec<Agent>>,
+    /// The workspaces it holds.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub workspaces: Vec<Held>,
+}
+
+impl Heard {
+    /// Every agent the device `device` told of: as it listed them, or, from a device that does not
+    /// list them, those that waited on the person.
+    pub fn listed(&self, device: &str) -> Listed {
+        let agents = match &self.agents {
+            Some(agents) => agents
+                .iter()
+                .map(|agent| Agent {
+                    device: device.to_string(),
+                    ..agent.clone()
+                })
+                .collect(),
+            None => self
+                .answer
+                .needs
+                .iter()
+                .map(|n| agent_of(n, device))
+                .collect(),
+        };
+        Listed {
+            agents,
+            working: self.answer.working,
+        }
+    }
+}
+
+/// An agent that waits on the person, as a device that does not list its agents says it.
+fn agent_of(need: &Need, device: &str) -> Agent {
+    Agent {
+        workspace: need.workspace.clone(),
+        name: need.name.clone(),
+        tile: need.tile.clone(),
+        agent: need.agent.clone(),
+        program: None,
+        state: "waiting".into(),
+        since: need.since,
+        machine: need.machine.clone().unwrap_or_default(),
+        waiting: Some(Waiting {
+            kind: need.kind.clone(),
+            since: need.since,
+            plan: need.plan.clone(),
+            decide: need.decide,
+        }),
+        interrupt: false,
+        device: device.to_string(),
+    }
+}
+
+/// What waits on the person of an agent that does, as a list of agents says it.
+fn need_of(agent: &Agent) -> Option<Need> {
+    let waiting = agent
+        .waiting
+        .as_ref()
+        .filter(|_| agent.waits_on_the_person())?;
+    Some(Need {
+        workspace: agent.workspace.clone(),
+        name: agent.name.clone(),
+        tile: agent.tile.clone(),
+        agent: agent.agent.clone(),
+        kind: waiting.kind.clone(),
+        since: waiting.since,
+        plan: waiting.plan.clone(),
+        machine: Some(agent.machine.clone()),
+        decide: waiting.decide,
+    })
 }
 
 const HEARD: &str = "heard.json";
@@ -141,23 +219,56 @@ impl Identity {
             .unwrap_or_default()
     }
 
-    /// Keep what each device of `answers` answered, at `at`, in place of what it said before:
-    /// none of them is away.
+    /// Keep what each device of `answers` answered, at `at`, in place of what it said before of
+    /// what waits on the person, and of its agents: none of them is away.
     pub fn hear(&self, answers: &[(String, Answer)], at: u64) -> Result<()> {
+        let devices: Vec<&str> = answers.iter().map(|(d, _)| d.as_str()).collect();
+        self.heard_from(&devices, at, |device, heard| {
+            let answered = answers.iter().rev().find(|(d, _)| d.as_str() == device);
+            heard.answer = answered.expect("one of those answering").1.clone();
+            heard.agents = None;
+        })
+    }
+
+    /// Keep the agents `device` listed at `at` (spec/agents.md "Following"), and what waits on the
+    /// person among them, in place of what it said before: it is not away.
+    pub fn hear_agents(&self, device: &str, listed: &Listed, at: u64) -> Result<()> {
+        self.heard_from(&[device], at, |_, heard| {
+            heard.answer = Answer {
+                needs: listed.agents.iter().filter_map(need_of).collect(),
+                working: listed.working,
+            };
+            heard.agents = Some(listed.agents.clone());
+        })
+    }
+
+    /// Keep the workspaces `device` said at `at` it holds: it is not away.
+    pub fn hear_workspaces(&self, device: &str, held: &[Held], at: u64) -> Result<()> {
+        self.heard_from(&[device], at, |_, heard| heard.workspaces = held.to_vec())
+    }
+
+    /// Change what each of `devices` said, as heard at `at`: none of them is away.
+    fn heard_from(
+        &self,
+        devices: &[&str],
+        at: u64,
+        mut said: impl FnMut(&str, &mut Heard),
+    ) -> Result<()> {
         let mut heard = self.heard();
-        for (device, answer) in answers {
-            heard.insert(
-                device.clone(),
-                Heard {
-                    at,
-                    answer: answer.clone(),
-                },
-            );
+        for device in devices {
+            let kept = heard.entry(device.to_string()).or_insert_with(|| Heard {
+                at,
+                answer: Answer::default(),
+                agents: None,
+                workspaces: vec![],
+            });
+            kept.at = at;
+            said(device, kept);
         }
         write_heard(self, &heard)?;
         let mut away = self.away();
         let before = away.len();
-        away.retain(|device, _| !answers.iter().any(|(d, _)| d == device));
+        away.retain(|device, _| !devices.contains(&device.as_str()));
         if away.len() == before {
             return Ok(());
         }

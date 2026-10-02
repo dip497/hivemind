@@ -10,6 +10,7 @@ use iroh::{
     endpoint::{Connection, RecvStream, SendStream},
     Endpoint,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use tokio::sync::mpsc::Receiver;
@@ -20,14 +21,32 @@ use crate::{devices, failure::Failure, pairing::PairedWith};
 const COLS: u32 = 80;
 const ROWS: u32 = 24;
 
-/// Whether the device on `connection` holds `workspace`, as it says on its `device` stream.
-pub(crate) async fn holds(connection: &Connection, workspace: &str) -> Result<bool> {
+/// A workspace a device holds, as it says: its id, its name, and its folder there.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Held {
+    pub workspace: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default, rename = "repo", skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+}
+
+/// The workspaces the device on `connection` holds, as it says on its `device` stream: each that
+/// names its id.
+pub(crate) async fn held(connection: &Connection) -> Result<Vec<Held>> {
     let answer = devices::ask(connection, &json!({ "t": "workspaces" })).await?;
     let held = answer.get("workspaces").and_then(Value::as_array);
-    Ok(held.is_some_and(|held| {
-        held.iter()
-            .any(|w| w.get("workspace").and_then(Value::as_str) == Some(workspace))
-    }))
+    Ok(held
+        .into_iter()
+        .flatten()
+        .filter_map(|w| serde_json::from_value(w.clone()).ok())
+        .collect())
+}
+
+/// Whether the device on `connection` holds `workspace`, as it says.
+pub(crate) async fn holds(connection: &Connection, workspace: &str) -> Result<bool> {
+    let held = held(connection).await?;
+    Ok(held.iter().any(|w| w.workspace == workspace))
 }
 
 /// A connection to the one of `devices` that holds `workspace`.
@@ -116,10 +135,10 @@ pub(crate) fn result_of(answer: Value) -> Result<Value> {
     Ok(answer.get("result").cloned().unwrap_or(Value::Null))
 }
 
-/// How a watched session ended.
+/// How a watched session ended: its code; none when it had ended before it was watched.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ended {
-    pub code: i64,
+    pub code: Option<i64>,
 }
 
 /// What happens in a watched terminal: a piece of its output, the size it took, or its keyboard
@@ -190,7 +209,10 @@ pub async fn watch(
             let events = match serde_json::from_slice::<Value>(&frame)? {
                 Value::Array(events) => events,
                 m if m.get("id").and_then(Value::as_u64) == Some(opened) => {
-                    result_of(m)?;
+                    // Attached to no session: there is none.
+                    if result_of(m)?.get("pid").and_then(Value::as_i64) == Some(-1) {
+                        return Ok(Some(Ended { code: None }));
+                    }
                     continue;
                 }
                 m => vec![m],
@@ -226,7 +248,7 @@ pub async fn watch(
                             .and_then(|i| i.get("code"))
                             .and_then(Value::as_i64)
                             .unwrap_or(0);
-                        return Ok(Some(Ended { code }));
+                        return Ok(Some(Ended { code: Some(code) }));
                     }
                     _ => {}
                 }

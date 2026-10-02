@@ -438,6 +438,13 @@ impl LiveScreen {
         let _ = self.fed.send(Fed::Output(bytes.to_vec()));
     }
 
+    /// The session's screen sent again whole, as it is sent on each connection that shows it:
+    /// drawn in place of what was shown, from a reset, as the desktop draws a session it attaches
+    /// to again.
+    pub fn redraw(&self, bytes: &[u8]) {
+        let _ = self.fed.send(Fed::Output([RESET, bytes].concat()));
+    }
+
     /// The size the session took.
     pub fn size(&self, cols: u16, rows: u16) {
         let _ = self.fed.send(Fed::Size(cols, rows));

@@ -4,21 +4,25 @@
 //! that person, the first one's devices forgotten. Only an entry whose certificate verifies, names
 //! its device and is the phone's person's is listed; a certificate that does not name the phone is
 //! not its own. What each device last answered is kept, and forgotten with the device
-//! (spec/needs.md "Asking", spec/pairing.md "Unpairing"); the computers and hosts an app tells of,
-//! kept as it told of them while an app that did lists them (spec/pairing.md 0.7), and whose they
-//! are as the app paired with first says (0.8); a device found away is shown back once, when it
-//! says it is back since then (spec/push.md 0.2); and the network an app gives, which the phone
-//! reaches the person's devices through (spec/pairing.md 0.5).
+//! (spec/needs.md "Asking", spec/pairing.md "Unpairing"): its agents as it listed them, what waits
+//! on the person among them, and the workspaces it holds (spec/agents.md "Following"), or what
+//! waits on the person, as a device that does not list them answers; the computers and hosts an
+//! app tells of, kept as it told of them while an app that did lists them (spec/pairing.md 0.7),
+//! and whose they are as the app paired with first says (0.8); a device found away is shown back
+//! once, when it says it is back since then (spec/push.md 0.2); and the network an app gives,
+//! which the phone reaches the person's devices through (spec/pairing.md 0.5).
 
 use std::{fs, path::PathBuf};
 
 use hive_net::net::Reach;
 use hive_phone::{
+    agents::{Agent, Listed, Waiting},
     devices::PairedDevice,
     identity::{DeviceCertificate, Identity},
     needs::{Answer, Heard, Need},
     pairing::{Paired, PairedWith},
     person::Person,
+    workspace::Held,
 };
 use iroh::SecretKey;
 use serde_json::json;
@@ -227,14 +231,18 @@ fn what_each_device_last_answered_is_kept_until_it_is_forgotten_and_another_pers
         heard[&from_a],
         Heard {
             at: 6,
-            answer: said(vec![waiting], 3)
+            answer: said(vec![waiting], 3),
+            agents: None,
+            workspaces: vec![],
         }
     );
     assert_eq!(
         heard[&from_b],
         Heard {
             at: 5,
-            answer: said(vec![], 2)
+            answer: said(vec![], 2),
+            agents: None,
+            workspaces: vec![],
         }
     );
     #[cfg(unix)]
@@ -256,6 +264,114 @@ fn what_each_device_last_answered_is_kept_until_it_is_forgotten_and_another_pers
     // Another person's device: what the first person's devices said goes with them.
     phone.keep(&paired(&phone, 20, &sam), 7).unwrap();
     assert!(phone.heard().is_empty());
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn what_a_device_lists_is_kept_whole_with_what_waits_on_the_person_among_it_and_the_workspaces_it_holds_until_it_answers_otherwise(
+) {
+    let dir = tmp("listed");
+    let phone = Identity::open(&dir.join("id")).unwrap();
+    let a = paired(&phone, 10, &key(1));
+    phone.keep(&a, 1).unwrap();
+    let device = a.with.device.clone();
+    let agent = |tile: &str, state: &str, waiting: Option<Waiting>| Agent {
+        workspace: "w1".into(),
+        name: "api".into(),
+        tile: tile.into(),
+        agent: format!("agent of {tile}"),
+        program: None,
+        state: state.into(),
+        since: 4,
+        machine: "app 10".into(),
+        waiting,
+        interrupt: false,
+        device: device.clone(),
+    };
+    let waits = |kind: &str| {
+        Some(Waiting {
+            kind: kind.into(),
+            since: 4,
+            plan: None,
+            decide: kind == "permission",
+        })
+    };
+    let listed = Listed {
+        agents: vec![
+            agent("t1", "working", None),
+            agent("t2", "waiting", waits("permission")),
+            agent("t3", "waiting", waits("approval")),
+        ],
+        working: 1,
+    };
+    let held = [Held {
+        workspace: "w1".into(),
+        name: "api".into(),
+        folder: Some("/home/priya/api".into()),
+    }];
+    phone.hear_workspaces(&device, &held, 2).unwrap();
+    phone.mark_away(std::slice::from_ref(&device), 2).unwrap();
+    phone.hear_agents(&device, &listed, 3).unwrap();
+    let heard = phone.heard().remove(&device).unwrap();
+    assert_eq!(heard.at, 3);
+    assert_eq!(heard.listed(&device), listed);
+    assert_eq!(heard.workspaces, held);
+    // What waits on the person among them: not what waits on the agent supervising it.
+    let permission = Need {
+        workspace: "w1".into(),
+        name: "api".into(),
+        tile: "t2".into(),
+        agent: "agent of t2".into(),
+        kind: "permission".into(),
+        since: 4,
+        plan: None,
+        machine: Some("app 10".into()),
+        decide: true,
+    };
+    assert_eq!(
+        heard.answer,
+        Answer {
+            needs: vec![permission.clone()],
+            working: 1
+        }
+    );
+    assert!(phone.away().is_empty(), "it listed them since");
+
+    // Answering what waits on the person instead, as a device that does not list its agents: those
+    // are its agents now.
+    let plan = Need {
+        tile: "t4".into(),
+        agent: "agent of t4".into(),
+        kind: "plan".into(),
+        plan: Some("do it".into()),
+        decide: false,
+        ..permission
+    };
+    let answer = Answer {
+        needs: vec![plan],
+        working: 0,
+    };
+    phone.hear(&[(device.clone(), answer)], 5).unwrap();
+    let heard = phone.heard().remove(&device).unwrap();
+    assert_eq!(heard.agents, None);
+    assert_eq!(heard.workspaces, held);
+    let plan = agent(
+        "t4",
+        "waiting",
+        Some(Waiting {
+            kind: "plan".into(),
+            since: 4,
+            plan: Some("do it".into()),
+            decide: false,
+        }),
+    );
+    assert_eq!(
+        heard.listed(&device),
+        Listed {
+            agents: vec![plan],
+            working: 0
+        }
+    );
     fs::remove_dir_all(&dir).unwrap();
 }
 

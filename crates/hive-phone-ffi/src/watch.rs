@@ -1,5 +1,7 @@
 //! An agent's terminal, as the apps draw it (docs/design/phone-app-2026-10-02.md §5.3): told only
 //! a frame's revision, the app asks once a frame for the lines changed since the one it drew last.
+//! It is watched across the background, the foreground and the device's reconnects until the
+//! session ends.
 
 use std::sync::Arc;
 
@@ -17,7 +19,9 @@ pub trait ScreenListener: Send + Sync {
     fn frame_ready(&self, revision: u64);
     /// Who holds its keyboard, by name; none while the person's devices do.
     fn keyboard(&self, holder: Option<String>);
-    /// The session ended, with its code; or the connection went (none).
+    /// The session ended, with its code; or there is none to watch now (none): it ended unseen,
+    /// its workspace is not on that device now, or the device refused it. Told once, last: a
+    /// connection that goes is no end, the watch goes on on the next one.
     fn ended(&self, code: Option<i64>);
 }
 

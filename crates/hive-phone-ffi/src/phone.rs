@@ -153,7 +153,9 @@ impl Phone {
         .await
     }
 
-    /// Watch `agent`'s terminal: `listener` is told of each frame, its keyboard and its end.
+    /// Watch `agent`'s terminal: `listener` is told of each frame, its keyboard and its end. It is
+    /// watched across the background, the foreground and the device's reconnects, until the
+    /// session ends or the watch is stopped.
     pub fn watch(&self, agent: AgentRef, listener: Arc<dyn ScreenListener>) -> Arc<Watch> {
         let _runtime = RUNTIME.enter();
         Arc::new(Watch::start(
