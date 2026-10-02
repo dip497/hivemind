@@ -4,10 +4,12 @@
 //! that person, the first one's devices forgotten. Only an entry whose certificate verifies, names
 //! its device and is the phone's person's is listed; a certificate that does not name the phone is
 //! not its own. What each device last answered is kept, and forgotten with the device
-//! (spec/needs.md "Asking", spec/pairing.md "Unpairing").
+//! (spec/needs.md "Asking", spec/pairing.md "Unpairing"); and the network an app gives, which the
+//! phone reaches the person's devices through (spec/pairing.md 0.5).
 
 use std::{fs, path::PathBuf};
 
+use hive_net::net::Reach;
 use hive_phone::{
     devices::PairedDevice,
     identity::{DeviceCertificate, Identity},
@@ -47,6 +49,7 @@ fn paired(phone: &Identity, app: u8, person: &SecretKey) -> Paired {
             relay: None,
         },
         certificate: certify(person, &phone.id()),
+        network: None,
     }
 }
 /// A folder of the test `name`'s own, empty.
@@ -244,5 +247,56 @@ fn what_each_device_last_answered_is_kept_until_it_is_forgotten_and_another_pers
     // Another person's device: what the first person's devices said goes with them.
     phone.keep(&paired(&phone, 20, &sam), 7).unwrap();
     assert!(phone.heard().is_empty());
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn the_network_an_app_gives_is_kept_and_reached_through_until_another_persons_app_gives_its_own_or_none(
+) {
+    let dir = tmp("network");
+    let phone = Identity::open(&dir.join("id")).unwrap();
+    let (priya, sam) = (key(1), key(2));
+    assert!(phone.network().is_none());
+    assert_eq!(phone.reach(), Reach::local());
+    let profiles: serde_json::Value =
+        serde_json::from_str(include_str!("../../../conformance/network-profile.json")).unwrap();
+    let corp = profiles["valid"][0]["file"].to_string();
+
+    let mut first = paired(&phone, 10, &priya);
+    first.network = Some(corp);
+    phone.keep(&first, 1).unwrap();
+    assert_eq!(phone.network().unwrap().profile.name, "Example Corp");
+    let reach = phone.reach();
+    assert_eq!(
+        reach
+            .relays
+            .iter()
+            .map(|r| r.to_string())
+            .collect::<Vec<_>>(),
+        ["https://relay.hive.example.com/"]
+    );
+    assert!(reach.mdns, "and the local network too");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let file = dir.join("id").join("network.json");
+        assert_eq!(
+            fs::metadata(file).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+
+    // The same person's app on no network of its own: the phone stays on theirs.
+    phone.keep(&paired(&phone, 11, &priya), 2).unwrap();
+    assert_eq!(phone.network().unwrap().profile.name, "Example Corp");
+
+    // Another person's app: its network, or the local one alone.
+    let mut theirs = paired(&phone, 20, &sam);
+    theirs.network = Some("hosted".into());
+    phone.keep(&theirs, 3).unwrap();
+    assert_eq!(phone.network().unwrap().builtin, Some("hosted"));
+    phone.keep(&paired(&phone, 30, &key(3)), 4).unwrap();
+    assert!(phone.network().is_none());
+    assert_eq!(phone.reach(), Reach::local());
     fs::remove_dir_all(&dir).unwrap();
 }

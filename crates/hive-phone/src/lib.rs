@@ -6,6 +6,7 @@
 pub mod devices;
 pub mod identity;
 pub mod needs;
+pub mod network;
 pub mod pairing;
 pub mod push;
 pub mod workspace;

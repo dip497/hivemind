@@ -52,8 +52,8 @@ impl Identity {
     }
 
     /// Keep what pairing gave, at `now` (ms since the epoch): the certificate as this phone's
-    /// own, and the device paired with among the person's. A phone is the person it paired with
-    /// last: another person's devices are forgotten.
+    /// own, the device paired with among the person's, and the network it is on. A phone is the
+    /// person it paired with last: another person's devices, and their network, are forgotten.
     pub fn keep(&self, paired: &Paired, now: u64) -> Result<()> {
         let same = self
             .certificate()
@@ -67,6 +67,10 @@ impl Identity {
         self.certify(&paired.certificate)?;
         if !same {
             needs::forget_heard(self, None)?;
+        }
+        // The network the app is on; the same person's app that gives none leaves it as it was.
+        if paired.network.is_some() || !same {
+            self.keep_network(paired.network.as_deref())?;
         }
         self.write_devices(&devices)
     }

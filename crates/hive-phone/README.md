@@ -8,6 +8,7 @@ terminal what the phone does, so it can be tried and tested without one. A phone
 hive-phone id                         # this phone's id (its device key, made the first time)
 hive-phone pair 'hivemind://pair/…'   # the link under Settings → Devices on your computer
 hive-phone devices                    # the person's devices this phone paired with
+hive-phone network                    # the network it reaches them through (the app's), if any
 hive-phone unpair <device>            # unpair from one (its id or name): each forgets the other
 hive-phone needs                      # what waits on you on them, the one waiting longest first,
                                       # how many agents are at work, and of a device that is
@@ -25,8 +26,10 @@ Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's d
 A phone pairs with the app on one of your computers (`spec/pairing.md` 0.3): it scans the link,
 proves it holds the code, and is given a certificate naming it as yours, signed by your person key.
 It never holds that key, so a lost phone gives none away; unpair it on the computer, or unpair the
-computer from the phone (`spec/pairing.md`, "Unpairing"). It pairs on the local network for now:
-the link says where the app is. What each device last answered is kept beside its keys
+computer from the phone (`spec/pairing.md`, "Unpairing"). It pairs on the local network (the link
+says where the app is), and takes the network the app is on, if it is on one: from then on it
+reaches the person's devices through that network's relays and lookup server too, wherever it is
+(`network.json`; on an open network it registers itself, on a closed one the app lets it in). What each device last answered is kept beside its keys
 (`heard.json`), to show while that device is away.
 
 A phone is told what happens while you are away (`spec/push.md`): it gives each device it paired

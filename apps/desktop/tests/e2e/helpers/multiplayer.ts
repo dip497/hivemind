@@ -1,12 +1,34 @@
 // Two app instances on one network, as two people (M1): each its own profile and data folder, each
 // with hive-net's daemon (crates/hive-net's debug build). And the steps of sharing and joining.
 import { expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
 export const HIVE_NET = path.resolve("../../crates/hive-net/target/debug/hive-net");
 export const hiveNetBuilt = (): boolean => fs.existsSync(HIVE_NET);
+
+/** A network of its own: a relay, a lookup server and an access service admitting by `policy`,
+ *  run by an admin key kept in `root`; its link (with an enrolment voucher for one device), and
+ *  where each serves. The server joins `procs`, to be stopped with the test. */
+export async function ownNetwork(root: string, procs: ChildProcess[], policy: "closed" | "open-pow" = "closed"): Promise<{ relay: string; lookup: string; access: string; link: string; data: string }> {
+  const admin = path.join(root, "admin.key");
+  fs.writeFileSync(admin, `${"cd".repeat(32)}\n`);
+  const voucher = (kind: string) => execFileSync(HIVE_NET, ["access", "voucher", "--kind", kind, "--admin", admin], { encoding: "utf8" }).trim();
+  const adminId = (JSON.parse(voucher("enrol")) as { by: string }).by;
+  const data = path.join(root, "network");
+  const server = spawn(HIVE_NET, ["serve", "--relay", "--lookup", "--access", "--admin-id", adminId, "--policy", policy, "--pow-bits", "8", "--data", data, "--bind", "127.0.0.1:0"], { stdio: ["ignore", "pipe", "ignore"] });
+  procs.push(server);
+  const lines: string[] = [];
+  await new Promise<void>((resolve) => server.stdout!.on("data", (d: Buffer) => { lines.push(...d.toString().trim().split("\n")); if (lines.length >= 3) resolve(); }));
+  const serving = (role: string) => lines.find((l) => l.startsWith(`${role} serving on `))!.replace(`${role} serving on `, "");
+  const [relay, lookup, access] = [serving("relay"), serving("lookup"), serving("access")];
+  const text = path.join(root, "profile.json");
+  fs.writeFileSync(text, JSON.stringify({ v: 1, name: "Example Corp", relays: [{ url: relay }], lookup, access: { url: access, policy }, admin: adminId, local: { mdns: true } }));
+  const signed = JSON.parse(execFileSync(HIVE_NET, ["profile", "sign", text, "--admin", admin], { encoding: "utf8" })) as object;
+  const link = `hivemind://network/${Buffer.from(JSON.stringify({ ...signed, enrol: JSON.parse(voucher("enrol")) })).toString("base64url")}`;
+  return { relay, lookup, access, link, data };
+}
 
 /** Start the app as person `name` (their data under `root/name`), with `cwd` as its project, and
  *  `more` in its environment. */

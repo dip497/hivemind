@@ -39,6 +39,9 @@ export interface PairingDevice extends Reached {
   /** People know it as its person: it let someone into a workspace of its own, or was let into
    *  someone else's. It must not take another. */
   shares?: boolean;
+  /** The network it is on, which a phone pairing with it takes (spec/pairing.md 0.5): a built-in's
+   *  name or a signed profile, as `network-profile.md` has it; none on the local network. */
+  network?: string;
 }
 
 /** The other device, once paired. */
@@ -214,7 +217,8 @@ export class PairingOffer {
       const yours = certifyDevice(me.person, peer);
       this.over = true;
       this.settled({ with: { device: peer, name, kind: "phone", certificate: yours, ...reachedOf(h) }, person: null });
-      return { ...mine, yours };
+      // And the network this app is on, which the phone reaches the person's devices through.
+      return { ...mine, yours, ...(me.network ? { network: me.network } : {}) };
     }
     if (!certificateVerifies(h.certificate)) return fail("malformed");
     if (h.certificate.device !== peer) return fail("not-this-device");

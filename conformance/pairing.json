@@ -1,5 +1,5 @@
 {
- "about": "Cases every pairing implementation must pass (spec/pairing.md 0.3): proofs, codes, links, and a phone pairing with an app, message by message. Made with Python's hmac, hashlib and base64 and the OpenSSL command line's Ed25519, apart from the TypeScript and the Rust they test. Seeds are 32-byte Ed25519 secrets in hex, ids public keys in lowercase hex; a code's words are spec/pairing-words.json's.",
+ "about": "Cases every pairing implementation must pass (spec/pairing.md 0.5): proofs, codes, links, and a phone pairing with an app, message by message. Made with Python's hmac, hashlib and base64 and the OpenSSL command line's Ed25519, apart from the TypeScript and the Rust they test. Seeds are 32-byte Ed25519 secrets in hex, ids public keys in lowercase hex; a code's words are spec/pairing-words.json's.",
  "proof": [
   {
    "code": "amber-cellar-helmet-lemon-salmon-zipper",
@@ -676,6 +676,23 @@
      }
     }
    }
-  ]
+  ],
+  "networks": {
+   "about": "What an app's answer may carry as its network (0.5), beside a good answer: a network the phone takes, kept as given, and ones it does not take (the pairing goes on, on the local network). The signed profiles are network-profile.json's.",
+   "taken": [
+    "hosted",
+    "{\"profile\":\"{\\\"v\\\":1,\\\"name\\\":\\\"Example Corp\\\",\\\"relays\\\":[{\\\"url\\\":\\\"https://relay.hive.example.com\\\"}],\\\"lookup\\\":null,\\\"access\\\":{\\\"url\\\":\\\"https://access.hive.example.com\\\",\\\"policy\\\":\\\"closed\\\"},\\\"push\\\":null,\\\"admin\\\":\\\"3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c\\\",\\\"local\\\":{\\\"mdns\\\":true},\\\"issuedAt\\\":1790000000000}\",\"signature\":\"9c241c050aacb029f4ea611d025757ce5730a4d9face39ebe9db77148d8913cb3161536847c8887419d25d2b4de74dbac13bfcc0ed4b4a647060ae3c6f583504\"}"
+   ],
+   "notTaken": [
+    "{\"profile\":\"{\\\"v\\\":1,\\\"name\\\":\\\"Example Crop\\\",\\\"relays\\\":[{\\\"url\\\":\\\"https://relay.hive.example.com\\\"}],\\\"lookup\\\":null,\\\"access\\\":{\\\"url\\\":\\\"https://access.hive.example.com\\\",\\\"policy\\\":\\\"closed\\\"},\\\"push\\\":null,\\\"admin\\\":\\\"3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c\\\",\\\"local\\\":{\\\"mdns\\\":true},\\\"issuedAt\\\":1790000000000}\",\"signature\":\"9c241c050aacb029f4ea611d025757ce5730a4d9face39ebe9db77148d8913cb3161536847c8887419d25d2b4de74dbac13bfcc0ed4b4a647060ae3c6f583504\"}",
+    "{\"profile\":\"{\\\"v\\\":1,\\\"name\\\":\\\"Example Corp\\\",\\\"relays\\\":[{\\\"url\\\":\\\"https://relay.hive.example.com\\\"}],\\\"lookup\\\":null,\\\"access\\\":{\\\"url\\\":\\\"https://access.hive.example.com\\\",\\\"policy\\\":\\\"closed\\\"},\\\"push\\\":null,\\\"admin\\\":\\\"d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a\\\",\\\"local\\\":{\\\"mdns\\\":true},\\\"issuedAt\\\":1790000000000}\",\"signature\":\"87b9b00e847e27b1bf2569cee67958240c74791b7dc42ecb1f34464e361d34d5dfe3fecab567cc6893761753b44d78819ab9778244b992e209b56bcc8df81800\"}",
+    "{\"profile\":\"{\\\"v\\\":1,\\\"name\\\":\\\"Example Corp\\\",\\\"relays\\\":[{\\\"url\\\":\\\"https://relay.hive.example.com\\\"}],\\\"lookup\\\":null,\\\"access\\\":{\\\"url\\\":\\\"https://access.hive.example.com\\\",\\\"policy\\\":\\\"closed\\\"},\\\"push\\\":null,\\\"admin\\\":null,\\\"local\\\":{\\\"mdns\\\":true},\\\"issuedAt\\\":1790000000000}\",\"signature\":\"944ce2f16d70a7171246246329fcfbb1504dd3cbf0da3c7ba4301244404b41e8079627ca09a341a8d64e4ab5348aa0816ab9eddd1cc341f60d017d1a54e1710c\"}",
+    "{\"profile\":\"{\\\"v\\\":1,\\\"name\\\":\\\"Example Corp\\\",\\\"relays\\\":[{\\\"url\\\":\\\"https://relay.hive.example.com\\\"}],\\\"lookup\\\":null,\\\"access\\\":{\\\"url\\\":\\\"https://access.hive.example.com\\\",\\\"policy\\\":\\\"closed\\\"},\\\"push\\\":null,\\\"admin\\\":\\\"3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c\\\",\\\"local\\\":{\\\"mdns\\\":true},\\\"issuedAt\\\":1790000000000}\",\"signature\":\"3918f8f6f69141f5e2ad1216e112c1a0de619f0b8f42cd0bb8247bd101bb0016f62948c1e753e0e840258102da86ff03048ee570a9ac77ee08dab0daf947cf01\"}",
+    "{\"profile\":\"{\\\"v\\\":2,\\\"name\\\":\\\"Example Corp\\\",\\\"relays\\\":[{\\\"url\\\":\\\"https://relay.hive.example.com\\\"}],\\\"lookup\\\":null,\\\"access\\\":{\\\"url\\\":\\\"https://access.hive.example.com\\\",\\\"policy\\\":\\\"closed\\\"},\\\"push\\\":null,\\\"admin\\\":\\\"3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c\\\",\\\"local\\\":{\\\"mdns\\\":true},\\\"issuedAt\\\":1790000000000}\",\"signature\":\"994153b95790f3333b1b6bc0df4cc4b8983da7a2563a34ba7604823f50b7c1f00e17a6adb15090579433f3f127fdbf3f1c0736ca5a71fd601d5baeadc4ae8001\"}",
+    "nowhere",
+    7,
+    null
+   ]
+  }
  }
 }

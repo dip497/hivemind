@@ -5,46 +5,26 @@
 // network joins with it: their device is let onto the host's network, the host vouches for it once
 // they are let in (for weeks, not only as long as the invite), and they work in the workspace.
 import { test, expect, type ElectronApplication } from "@playwright/test";
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HIVE_NET, hiveNetBuilt, join, person, share, tiles } from "./helpers/multiplayer";
+import { HIVE_NET, hiveNetBuilt, join, ownNetwork, person, share, tiles } from "./helpers/multiplayer";
 
 let root: string;
 const apps: ElectronApplication[] = [];
-let server: ChildProcess | undefined;
+/** The network's server, stopped after each test. */
+const procs: ChildProcess[] = [];
 test.beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-networks-")); });
 test.afterEach(async () => {
   for (const a of apps.splice(0)) await a.close().catch(() => {});
-  server?.kill();
-  server = undefined;
+  for (const p of procs.splice(0)) p.kill();
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-/** A closed network: a relay, a lookup server and its access service, run by `admin.key`; its
- *  link, with an enrolment voucher for one device. */
-async function closedNetwork(): Promise<{ relay: string; lookup: string; access: string; link: string; data: string }> {
-  const admin = path.join(root, "admin.key");
-  fs.writeFileSync(admin, `${"cd".repeat(32)}\n`);
-  const voucher = (kind: string) => execFileSync(HIVE_NET, ["access", "voucher", "--kind", kind, "--admin", admin], { encoding: "utf8" }).trim();
-  const adminId = (JSON.parse(voucher("enrol")) as { by: string }).by;
-  const data = path.join(root, "network");
-  server = spawn(HIVE_NET, ["serve", "--relay", "--lookup", "--access", "--admin-id", adminId, "--policy", "closed", "--data", data, "--bind", "127.0.0.1:0"], { stdio: ["ignore", "pipe", "ignore"] });
-  const lines: string[] = [];
-  await new Promise<void>((resolve) => server!.stdout!.on("data", (d: Buffer) => { lines.push(...d.toString().trim().split("\n")); if (lines.length >= 3) resolve(); }));
-  const serving = (role: string) => lines.find((l) => l.startsWith(`${role} serving on `))!.replace(`${role} serving on `, "");
-  const [relay, lookup, access] = [serving("relay"), serving("lookup"), serving("access")];
-  const text = path.join(root, "profile.json");
-  fs.writeFileSync(text, JSON.stringify({ v: 1, name: "Example Corp", relays: [{ url: relay }], lookup, access: { url: access, policy: "closed" }, admin: adminId, local: { mdns: true } }));
-  const signed = JSON.parse(execFileSync(HIVE_NET, ["profile", "sign", text, "--admin", admin], { encoding: "utf8" })) as object;
-  const link = `hivemind://network/${Buffer.from(JSON.stringify({ ...signed, enrol: JSON.parse(voucher("enrol")) })).toString("base64url")}`;
-  return { relay, lookup, access, link, data };
-}
-
 test("a guest on another network joins with the invite's voucher, is vouched for once let in, and works in the workspace", async () => {
   test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
-  const net = await closedNetwork();
+  const net = await ownNetwork(root, procs);
   const repo = path.join(root, "api");
   fs.mkdirSync(repo);
   execFileSync("git", ["init", "-q"], { cwd: repo });

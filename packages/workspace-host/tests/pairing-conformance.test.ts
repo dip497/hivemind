@@ -21,6 +21,7 @@ interface Cases {
     link: string;
     prove: Record<string, unknown>;
     answer: Record<string, unknown> & { certificate: DeviceCertificate; yours: DeviceCertificate };
+    networks: { taken: string[]; notTaken: unknown[] };
   };
 }
 const cases = JSON.parse(fs.readFileSync(path.join(import.meta.dir, "../../../conformance/pairing.json"), "utf8")) as Cases;
@@ -70,4 +71,13 @@ test("an app answers a phone that proves it holds the code with its own certific
   expect(settled).toEqual([{ with: { device: phone.device, name: phone.name, kind: "phone", certificate: yours, addrs: phone.addrs, relay: phone.relay }, person: null }]);
   // Used: the code lets nobody else in.
   expect(offer.answer(phone.device, proved)).toEqual({ ok: false, error: "expired" });
+});
+
+test("an app on a network gives it to a phone, as it has it, in its answer", () => {
+  const { app, phone, prove, answer, networks } = cases.phone;
+  for (const network of networks.taken) {
+    const offer = new PairingOffer({ device: app.device, name: app.name, kind: "app", certificate: answer.certificate, person: seed(app.personSeed), addrs: app.addrs, relay: app.relay, network }, () => {});
+    const got = offer.answer(phone.device, { ...prove, proof: pairProof(offer.code, "entering", app.device, phone.device) }) as Record<string, unknown>;
+    expect(got.network).toBe(network);
+  }
 });

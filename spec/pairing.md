@@ -1,4 +1,4 @@
-# Pairing (0.4)
+# Pairing (0.5)
 
 Two devices become one person's (R14 and §5.2 in `docs/design/multiplayer-2026-09-28.md`): the
 device being added receives the person key and certifies itself with it (`identity.md`), or, a
@@ -96,7 +96,9 @@ is good only between those two devices.
    ```
 
    and, when it is the giver, also `"person": "<the person seed, hex>"`, or, to a phone, in its
-   place `"yours": { … }`: a device certificate naming the phone, signed by the person key. The
+   place `"yours": { … }`: a device certificate naming the phone, signed by the person key; and
+   to a phone, when the app is on a network other than the local one (0.5), `"network"`: that
+   network, as `network-profile.md` has it (a built-in's name, or its signed profile). The
    entering device checks that proof, and that the person given is the one that signed the giver's
    certificate (a phone: that `yours` verifies, names the phone itself and that same person),
    before it uses anything in the answer. From here each knows the other holds the code.
@@ -125,6 +127,12 @@ taking another person would make that workspace no longer its owner's.
   (`network-access.md`).
 - A phone is listed as one of the person's devices, and is never a place to run a frame, to host a
   workspace or to move one to.
+- A phone given a network that verifies keeps it, and reaches the person's devices through it
+  from then on: its relays and its lookup server, as well as the local network. On a `closed`
+  network the app vouches for the phone as it pairs (`network-access.md`), as it does for any of
+  the person's devices that reaches it; on an `open-pow` one the phone registers itself. A network
+  that does not verify is not taken. Pairing again with the same person's app keeps the network
+  when that app gives none; with another person's, the phone takes that one's network, or none.
 
 ## Unpairing
 

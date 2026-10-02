@@ -172,6 +172,8 @@ pub struct PairedWith {
 pub struct Paired {
     pub with: PairedWith,
     pub certificate: DeviceCertificate,
+    /// The network the app is on (0.5), as it gave it, when that verifies; none: the local one.
+    pub network: Option<String>,
 }
 
 /// Why the app said no, as the phone's person is told.
@@ -219,6 +221,12 @@ pub fn accept(me: &str, link: &PairLink, answer: &Value) -> Result<Paired> {
         .filter(|c| c.device == me && c.person == theirs.person)
         .ok_or_else(malformed)?;
     let (addrs, relay) = reached_of(a);
+    // Its network, taken only when it verifies.
+    let network = a
+        .get("network")
+        .and_then(Value::as_str)
+        .filter(|n| crate::network::verified(n).is_some())
+        .map(str::to_string);
     Ok(Paired {
         with: PairedWith {
             device: link.device.clone(),
@@ -229,6 +237,7 @@ pub fn accept(me: &str, link: &PairLink, answer: &Value) -> Result<Paired> {
             relay,
         },
         certificate: yours,
+        network,
     })
 }
 

@@ -281,6 +281,9 @@ export function stopNetwork(): void {
   current = null;
 }
 
+/** When the network file was last changed from this app, which restarted the daemon on it then. */
+let changedHere = 0;
+
 /** The network in use changed: a running daemon starts again on it. Connections drop and come
  *  back by themselves (shared-workspaces.ts). */
 function restartNetwork(): void {
@@ -343,20 +346,27 @@ function joinedStatus(workspace: string): ({ names: { workspace: string; host: s
 /** A code this app offers for one of the person's hosts to enter (Settings → Devices). */
 let offered: PairingOffer | null = null;
 
-/** This app, as pairing needs it: it gives the person it holds. */
+/** This app, as pairing needs it: it gives the person it holds, and a phone the network it is on. */
 async function pairingMe(): Promise<PairingDevice> {
   const hn = await network();
   const { deviceId, certificate, person } = machineIdentity();
-  return { device: deviceId, name: os.hostname(), kind: "app", certificate, person, addrs: hn.ready.addrs, relay: hn.ready.relay };
+  const using = networkProfiles().arg();
+  const on = using === "local" ? "local" : fs.readFileSync(using, "utf8").trim();
+  return {
+    device: deviceId, name: os.hostname(), kind: "app", certificate, person, addrs: hn.ready.addrs, relay: hn.ready.relay,
+    ...(on === "local" ? {} : { network: on }),
+  };
 }
 
 /** A device, as Settings lists it. */
 const summary = (d: PairedDevice) => ({ device: d.device, name: d.name, kind: d.kind, pairedAt: d.pairedAt });
 
-/** Keep a device just paired with, let it in, and tell the windows. */
+/** Keep a device just paired with, let it in (onto this network's relays too), and tell the
+ *  windows. */
 function keepPaired(device: PairedDevice): void {
   pairedDevices().add(device);
   admitNow();
+  void vouchFor(device.device);
   broadcast("net:devices-changed");
 }
 
@@ -438,9 +448,12 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     onWarn: (m) => console.warn(`[push] ${m}`),
   });
   onStatus((change) => notices.changed(change));
-  // The network in use, changed here or by `hive network use`: the daemon starts again on it.
+  // The network in use, changed by `hive network use`: the daemon starts again on it. A change
+  // made here has done that already (below).
   try {
-    fs.watchFile(networkProfiles().file, { interval: 2_000 }, (now, before) => { if (now.mtimeMs !== before.mtimeMs) restartNetwork(); });
+    fs.watchFile(networkProfiles().file, { interval: 2_000 }, (now, before) => {
+      if (now.mtimeMs !== before.mtimeMs && now.mtimeMs !== changedHere) restartNetwork();
+    });
   } catch { /* hive-net is not installed: there is no network to change */ }
 
   // This device's network (Settings → Network): which it is, whether its servers answer, and
@@ -449,8 +462,12 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
   handle("net:network-health", () => networkProfiles().health());
   handleEffect("net:use-network", (given: unknown) => ({ detail: typeof given === "string" ? given.slice(0, 40) : undefined }), async (_e, given: unknown) => {
     if (typeof given !== "string" || !given.trim()) throw new Error("network: which one?");
-    // The file changes, and the daemon starts again on it (watched above).
-    return networkProfiles().use(given);
+    // The daemon starts again on it now: what is offered or dialled next waits for it, and no
+    // restart comes after to cut that off.
+    const used = await networkProfiles().use(given);
+    changedHere = fs.statSync(networkProfiles().file).mtimeMs;
+    restartNetwork();
+    return used;
   });
 
   // Something is shared from here already: be where the people let in can reach it.

@@ -8,7 +8,8 @@
 // (spec/needs.md, spec/push.md): told when an agent on the computer begins waiting on the person,
 // it lists, watches and answers it, and counts the agents at work; unpaired on the computer, it is
 // told nothing more. And the computer away: the phone shows what it last said, and unpaired from
-// the phone then, only the phone forgets.
+// the phone then, only the phone forgets. And the computer on a network of its own: the phone takes
+// that network and is let onto it (spec/pairing.md 0.5).
 import { test, expect, type ElectronApplication } from "@playwright/test";
 import { execFile, execSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -18,7 +19,7 @@ import { promisify } from "node:util";
 import { HiveNet } from "@hivemind/workspace-host/hive-net";
 import { parsePairLink } from "@hivemind/workspace-host/pairing";
 import { heldWorkspaces } from "@hivemind/host/peer-links";
-import { HIVE_NET, hiveNetBuilt, person } from "./helpers/multiplayer";
+import { HIVE_NET, hiveNetBuilt, ownNetwork, person } from "./helpers/multiplayer";
 
 const HIVE_PHONE = path.resolve("../../crates/hive-phone/target/debug/hive-phone");
 const run = promisify(execFile);
@@ -251,3 +252,21 @@ test("a computer away is shown with what it last said needed the person, and whe
   expect(unpaired).toEqual({ device: d.me.deviceId, name: os.hostname(), told: false });
   expect(JSON.parse((await run(HIVE_PHONE, ["devices", "--identity", phone, "--json"])).stdout)).toEqual([]);
 });
+
+for (const [policy, admission] of [["closed", "vouched for by the app"], ["open-pow", "registered"]] as const) {
+  test(`a phone paired with a computer on a network takes that network and is let onto it (${policy}: ${admission}), and reaches the computer`, async () => {
+    test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
+    test.setTimeout(120_000);
+    const net = await ownNetwork(root, procs, policy);
+    const d = await desktopWith();
+    expect(await d.desktop.evaluate((l) => window.hive.useNetwork(l), net.link)).toMatchObject({ admission: policy === "closed" ? "enrolled" : "registered" });
+    const allowed = async (device: string) => (await fetch(`${net.access}/allowed/${device}`)).text();
+
+    const { phone, paired, phoneId } = await pairPhone(d);
+    expect(paired).toMatchObject({ network: "Example Corp", admission });
+    await expect.poll(() => allowed(phoneId)).toBe("true");
+    const on = JSON.parse((await run(HIVE_PHONE, ["network", "--identity", phone, "--json"])).stdout) as { profile: { name: string; relays: Array<{ url: string }> } };
+    expect([on.profile.name, on.profile.relays.map((r) => r.url)]).toEqual(["Example Corp", [net.relay]]);
+    expect(await needsOf(phone)).toEqual({ needs: [], working: 0, away: [] });
+  });
+}

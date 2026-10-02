@@ -102,3 +102,26 @@ fn a_phone_refuses_every_answer_that_does_not_check_out() {
     let other = SecretKey::from_bytes(&[7u8; 32]).public().to_string();
     assert!(accept(&other, &link, &p["answer"]).is_err());
 }
+
+#[test]
+fn a_phone_takes_the_network_an_app_gives_when_it_verifies_and_pairs_all_the_same_when_it_does_not()
+{
+    let cases = cases();
+    let p = &cases["phone"];
+    let me = text(&p["phone"]["device"]);
+    let link = parse_link(text(&p["link"])).unwrap();
+    let given = |network: &Value| {
+        let mut answer = p["answer"].clone();
+        answer["network"] = network.clone();
+        accept(me, &link, &answer).unwrap().network
+    };
+    let n = &p["networks"];
+    for network in n["taken"].as_array().unwrap() {
+        assert_eq!(given(network).as_deref(), network.as_str());
+    }
+    for network in n["notTaken"].as_array().unwrap() {
+        assert_eq!(given(network), None, "{network}");
+    }
+    // An answer with none: the local network.
+    assert_eq!(accept(me, &link, &p["answer"]).unwrap().network, None);
+}

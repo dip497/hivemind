@@ -4,6 +4,8 @@
 //!   hive-phone pair <link>      pair with the app that shows this link (Settings → Devices on a
 //!                               computer): this phone is that app's person from then on
 //!   hive-phone devices          the person's devices this phone paired with
+//!   hive-phone network          the network it reaches them through: the one the app it paired
+//!                               with is on, or the local network alone
 //!   hive-phone unpair <device>  unpair from one of them (by its id or its name): it forgets
 //!                               this phone, and this phone forgets it
 //!   hive-phone needs            what waits on the person: each agent waiting on them, on the
@@ -25,12 +27,12 @@
 //!
 //! Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),
 //! `--name <name>` (pair: what the app lists this phone as; default `Phone`), `--json` (pair,
-//! devices, unpair, needs, answer, push: as JSON, a notice a line).
+//! devices, network, unpair, needs, answer, push: as JSON, a notice a line).
 
 use std::{path::PathBuf, process::ExitCode, sync::Arc, time::SystemTime};
 
 use anyhow::{bail, Context, Result};
-use hive_net::net::{self, Reach};
+use hive_net::net;
 use hive_phone::{
     identity::Identity,
     needs::{self, Need},
@@ -40,7 +42,7 @@ use hive_phone::{
 };
 use serde_json::{json, Value};
 
-const USAGE: &str = "usage: hive-phone id | pair <link> | devices | unpair <device> | needs | watch <workspace> <tile> | answer <workspace> <tile> <since> --text <line>|--approve|--changes <what> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
+const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | watch <workspace> <tile> | answer <workspace> <tile> <since> --text <line>|--approve|--changes <what> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
 
 #[derive(Default)]
 struct Args {
@@ -163,19 +165,25 @@ async fn run(args: Args) -> Result<()> {
             let link = pairing::parse_link(text).context(
                 "that is not a pairing link: it is the one under Settings → Devices on your computer",
             )?;
-            // On the local network; the link says where the app is.
-            let endpoint = net::endpoint(phone.key().clone(), &Reach::local(), vec![]).await?;
+            // The link says where the app is.
+            let endpoint = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
             let paired =
                 pairing::pair(&endpoint, args.name.as_deref().unwrap_or("Phone"), &link).await;
             endpoint.close().await;
             let paired = paired?;
             phone.keep(&paired, now_ms())?;
+            // Onto the network the app is on, where the phone does that itself.
+            let admission = match phone.admit().await {
+                Ok(how) => how.to_string(),
+                Err(e) => format!("not admitted: {e:#}"),
+            };
+            let network = phone.network().map(|n| n.profile.name);
             let person = &paired.certificate.person;
             if args.json {
                 let w = &paired.with;
                 println!(
                     "{}",
-                    json!({ "device": w.device, "name": w.name, "kind": w.kind, "person": person })
+                    json!({ "device": w.device, "name": w.name, "kind": w.kind, "person": person, "network": network, "admission": admission })
                 );
             } else {
                 println!(
@@ -183,6 +191,20 @@ async fn run(args: Args) -> Result<()> {
                     paired.with.name,
                     &person[..8]
                 );
+                if let Some(network) = network {
+                    println!("on the network {network} ({admission})");
+                }
+            }
+        }
+        "network" => {
+            let network = phone.network();
+            if args.json {
+                println!("{}", network.map_or(Value::Null, |n| n.describe()));
+            } else if let Some(n) = network {
+                let relays: Vec<_> = n.profile.relays.iter().map(|r| r.url.as_str()).collect();
+                println!("{}: relays {}", n.profile.name, relays.join(", "));
+            } else {
+                println!("the local network alone");
             }
         }
         "devices" => {
@@ -203,7 +225,7 @@ async fn run(args: Args) -> Result<()> {
                 bail!("this phone is paired with nothing yet: `hive-phone pair <link>`");
             }
             // Each asked at once: one away holds up none of the others.
-            let endpoint = net::endpoint(phone.key().clone(), &Reach::local(), vec![]).await?;
+            let endpoint = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
             let mut asking = tokio::task::JoinSet::new();
             for d in devices {
                 let endpoint = endpoint.clone();
@@ -262,7 +284,7 @@ async fn run(args: Args) -> Result<()> {
                 }
                 None => bail!("{which} is not a device this phone is paired with"),
             };
-            let endpoint = net::endpoint(phone.key().clone(), &Reach::local(), vec![]).await?;
+            let endpoint = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
             let told = phone.unpair(&endpoint, device).await?;
             endpoint.close().await;
             if args.json {
@@ -287,7 +309,7 @@ async fn run(args: Args) -> Result<()> {
                 bail!("watch: which workspace and tile? (`hive-phone needs --json` names them)");
             };
             let devices: Vec<_> = phone.devices().into_iter().map(|d| d.with).collect();
-            let endpoint = net::endpoint(phone.key().clone(), &Reach::local(), vec![]).await?;
+            let endpoint = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
             let watched = async {
                 let connection = workspace::holder(&endpoint, &devices, ws).await?;
                 let mut stdout = std::io::stdout();
@@ -317,7 +339,7 @@ async fn run(args: Args) -> Result<()> {
                 _ => bail!("answer: --text <line>, --approve or --changes <what>, one of them"),
             };
             let devices: Vec<_> = phone.devices().into_iter().map(|d| d.with).collect();
-            let endpoint = net::endpoint(phone.key().clone(), &Reach::local(), vec![]).await?;
+            let endpoint = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
             let answered = async {
                 let connection = workspace::holder(&endpoint, &devices, ws).await?;
                 workspace::answer(&connection, ws, tile, since, answer).await
@@ -343,7 +365,7 @@ async fn run(args: Args) -> Result<()> {
             if devices.is_empty() {
                 bail!("this phone is paired with nothing yet: `hive-phone pair <link>`");
             }
-            let net = net::endpoint(phone.key().clone(), &Reach::local(), vec![]).await?;
+            let net = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
             let (mut told, mut away) = (vec![], vec![]);
             for d in &devices {
                 let given = async {
