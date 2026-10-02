@@ -1,5 +1,5 @@
 {
-  "name": "@hivemind/workspace-api",
+  "name": "@hivemind/view-host",
   "version": "2026.9.8",
   "private": true,
   "type": "module",
@@ -12,16 +12,13 @@
   },
   "dependencies": {
     "@hivemind/agent-host": "workspace:*",
-    "@hivemind/core": "workspace:*",
     "@hivemind/view-sdk": "workspace:*",
-    "@hivemind/workspace-doc": "workspace:*",
-    "@hivemind/workspace-host": "workspace:*"
+    "@hivemind/workspace-doc": "workspace:*"
   },
   "devDependencies": {
     "@hivemind/tsconfig": "workspace:*",
-    "@types/node": "catalog:",
     "typescript": "catalog:"
   },
-  "description": "The workspace API: what a workspace's host is asked for, by a window, a peer or another device, over any transport.",
+  "description": "The host end of a community view: the link that checks everything a view sends and answers it, and what the view is told of the workspace. No DOM and no Node, so the window and a device serving a remote screen run the same host.",
   "license": "MIT"
 }

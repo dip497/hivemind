@@ -1,12 +1,11 @@
 /**
- * The pure part of serving a community view package (no Electron): which file
- * a request may read, the CSP every plugin document gets, and the generated
- * bootstrap page for a `.js` entry. Unit-tested (view-package-files.test.ts);
- * view-packages.ts wires it to the `hm-view://` protocol handler.
+ * The pure part of serving a community view package (no Electron): the CSP every
+ * plugin document gets, and the generated bootstrap page for a `.js` entry; which
+ * file a request may read, and its type, are `@hivemind/core/view-files`'.
+ * Unit-tested (view-package-files.test.ts); view-packages.ts wires it to the
+ * `hm-view://` protocol handler.
  */
-import path from "node:path";
 import { randomBytes } from "node:crypto";
-import { existsSync, realpathSync, statSync } from "node:fs";
 import { viewHost } from "@hivemind/view-sdk/manifest";
 
 export const VIEW_SCHEME = "hm-view";
@@ -37,18 +36,6 @@ export function newNonce(): string {
   return randomBytes(16).toString("base64");
 }
 
-export const MIME: Record<string, string> = {
-  ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8", ".json": "application/json", ".wasm": "application/wasm",
-  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
-  ".woff": "font/woff", ".woff2": "font/woff2", ".ttf": "font/ttf", ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".mp4": "video/mp4", ".webm": "video/webm",
-  ".glb": "model/gltf-binary", ".gltf": "model/gltf+json", ".txt": "text/plain; charset=utf-8",
-};
-
-export function mimeFor(file: string): string {
-  return MIME[path.extname(file).toLowerCase()] ?? "application/octet-stream";
-}
-
 /** A `.html` entry is loaded as-is; a `.js` entry through a generated page. The host is the
  *  view's own origin: its id, or `owner--name` for `@owner/name`, which a hostname cannot hold. */
 export function entryUrl(id: string, entry: string): string {
@@ -74,22 +61,4 @@ export function withImportMap(html: string, nonce: string): string {
 export function entryPage(js: string, nonce: string): string | null {
   if (!/^[\w.-]+(?:\/[\w.-]+)*\.js$/.test(js) || js.split("/").includes("..")) return null;
   return `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;height:100%;overflow:hidden;background:transparent}</style></head><body><script type="module" nonce="${nonce}" src="./${js}"></script></body></html>`;
-}
-
-export type FileResolution = { status: 200; abs: string } | { status: 403 | 404 };
-
-/** The file a request for `rel` inside package `dir` may read. Containment is
- *  checked on the RESOLVED path (symlinks followed): a link inside a
- *  downloaded package that points outside it is a 403, not a read. */
-export function resolvePackageFile(dir: string, rel: string): FileResolution {
-  let root: string;
-  try { root = realpathSync(dir); } catch { return { status: 404 }; }
-  const abs = path.resolve(root, rel);
-  if (abs !== root && !abs.startsWith(root + path.sep)) return { status: 403 };
-  if (!existsSync(abs)) return { status: 404 };
-  let real: string;
-  try { real = realpathSync(abs); } catch { return { status: 404 }; }
-  if (real !== root && !real.startsWith(root + path.sep)) return { status: 403 };
-  if (!statSync(real).isFile()) return { status: 404 };
-  return { status: 200, abs: real };
 }

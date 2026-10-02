@@ -60,6 +60,14 @@ const LEAST: Record<string, Role> = {
   "agent.close": "agents",
   "terminal.open": "agents",
   "terminal.close": "agents",
+  // A community view on a remote screen (P8): listing them, their files, opening one on the
+  // workspace and talking to it is anyone's with access; what the view may do there is what the
+  // caller may (`view.open`).
+  "view.list": "view",
+  "view.file": "view",
+  "view.open": "view",
+  "view.post": "view",
+  "view.close": "view",
 };
 
 /** Whether someone with `access` may call `method`. */

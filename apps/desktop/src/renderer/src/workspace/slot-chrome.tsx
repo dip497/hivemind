@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 import { ArrowUpRight, X } from "lucide-react";
 import { Button } from "../components/ui/button";
 import type { TileStatusKind } from "../agent-status-bus";
-import { bucketTileStatus, type TileStatusBucket } from "./tile-status-bucket";
+import { bucketTileStatus, type TileStatusBucket } from "@hivemind/view-host/status";
 import { setViewMode } from "./view-mode-store";
 import type { WorkspaceCommands } from "./workspace-view";
 

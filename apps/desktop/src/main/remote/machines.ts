@@ -14,7 +14,7 @@ import {
   PUBLISHED_PLATFORMS, installCopyCommand, installFetchCommand, localPlatform, machinesPath, newMachineId,
   releaseAssetUrl, validateLabel, validateTarget, type Machine, type ProbeResult,
 } from "@hivemind/core";
-import { machineHostId, parseRemote, sshUri, type RemoteTarget } from "@hivemind/core/remote-uri";
+import { machineHostId, parseDeviceUri, parseMachineUri, parseRemote, sshUri, type RemoteTarget } from "@hivemind/core/remote-uri";
 import type { MachineAddRequest, MachineAddResult, MachineInfo, MachineProbe, MachineState, MachineStatus, MachinesSnapshot, SessionSummary } from "../../shared/ipc.js";
 import type { SessionInfo } from "@hivemind/agent-host/pty-protocol";
 import { remoteConns } from "@hivemind/host/remote/conn";
@@ -80,6 +80,20 @@ function setStatus(hostId: string, state: MachineState, detail?: string): void {
  *  beside the machines' as `device:<id>`. */
 export function deviceStatus(device: string, state: MachineState, detail?: string): void {
   setStatus(`device:${device}`, state, detail);
+}
+
+/** How the link to the machine the remote folder `folder` is on is doing, as a window says it of a
+ *  frame there (`frameMachine`): one of the person's devices, a saved machine, or an ssh host; a
+ *  machine no longer saved is offline. For a view on a remote screen (P8). */
+export function linkState(folder: string): MachineState {
+  const device = parseDeviceUri(folder)?.device;
+  if (device) return status.get(`device:${device}`)?.state ?? "idle";
+  const at = parseMachineUri(folder);
+  if (at) {
+    const machine = catalog.list.find((m) => m.id === at.machineId);
+    return machine ? status.get(machineHostId(machine.target))?.state ?? "idle" : "offline";
+  }
+  try { return status.get(parseRemote(folder).hostId)?.state ?? "idle"; } catch { return "offline"; }
 }
 
 function pingAll(): void {

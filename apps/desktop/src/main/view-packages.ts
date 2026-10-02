@@ -18,7 +18,8 @@ import { handle, handleEffect } from "./app-ipc.js";
 import { appWindowOf } from "./windows.js";
 import { pathToFileURL } from "node:url";
 import { listInstalledViews, readViewPackage, installView, removeView, type InstalledView } from "@hivemind/core/views";
-import { ENTRY_PAGE, SDK_PATH, VIEW_SCHEME, entryPage, entryUrl, withImportMap, mimeFor, newNonce, pluginCsp, resolvePackageFile } from "./view-package-files.js";
+import { ENTRY_PAGE, SDK_PATH, VIEW_SCHEME, entryPage, entryUrl, withImportMap, newNonce, pluginCsp } from "./view-package-files.js";
+import { mimeFor, resolvePackageFile } from "@hivemind/core/view-files";
 import { viewHost } from "@hivemind/view-sdk/manifest";
 
 export { VIEW_SCHEME, entryUrl } from "./view-package-files.js";

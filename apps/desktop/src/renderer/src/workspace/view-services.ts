@@ -3,17 +3,17 @@
  * session statuses, the activity and presence stores main updates, and the LinkServices a community view's
  * host link reads. Started once; it runs whatever view is active.
  */
-import type { ActivityLevel, ShareOutcome, TurnOutcome, ViewAgent, ViewAgentStatus, ViewParticipant, ViewPresence } from "@hivemind/view-sdk/protocol";
+import type { ActivityLevel, ShareOutcome, TurnOutcome, ViewAgent, ViewParticipant, ViewPresence } from "@hivemind/view-sdk/protocol";
 import type { Participant } from "@hivemind/workspace-host/presence";
 import { canListSessions, defaultAgent, spawnableAgents, agentById as catalogAgentById } from "@hivemind/agents";
-import type { SessionStatus } from "@hivemind/agent-host/status-store";
+import type { LinkServices } from "@hivemind/view-host/link";
+import { viewAgentStatus } from "@hivemind/view-host/status";
 import { subscribeHostedStatus, subscribeStatus } from "../agent-status-bus";
 import { agentMissing } from "../agent-plugins";
 import { AGENT_TILE_KIND } from "../tile-kinds";
 import { watchPeopleHere } from "../multiplayer/presence";
 import { colorOf } from "../multiplayer/people";
 import { ViewEventHub } from "./view-events";
-import type { LinkServices } from "./views/community/host-link";
 import type { HcpStatusEvent } from "../../../shared/ipc";
 
 const TURN_ENDS = new Set(["done", "failed", "interrupted", "limited"]);
@@ -100,18 +100,6 @@ export function startViewHost(): void {
   window.hive.onPtyActivity((levels) => viewActivity.apply(levels));
   window.hive.onPresence((p) => viewPresence.set(p));
   window.hive.presenceNow().then((p) => viewPresence.set(p), () => {});
-}
-
-/** A session's status as views see it: fixed words and counts, never a subagent's name. */
-export function viewAgentStatus(s: SessionStatus): ViewAgentStatus {
-  return {
-    state: s.state,
-    ...(s.state === "waiting" && s.kind ? { waitingFor: s.kind } : {}),
-    subagents: s.subagents.length,
-    background: s.background,
-    compacting: s.compacting,
-    ...(s.source ? { source: s.source } : {}),
-  };
 }
 
 /** The agents a view may start: installed, enabled, and what each supports. */

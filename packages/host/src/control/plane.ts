@@ -141,11 +141,12 @@ export class ControlPlane {
     return this.dispatcher.labelOf(tileId);
   }
 
-  /** Start `program` in the workspace at `repo` for the person, from another of their devices
-   *  (spec/agents.md "Starting"), as `tile.spawn_agent` starts one: with its gates, and their
-   *  saved options for it with these on top, never its unattended mode unless `mode` says so. Its
-   *  tile. The caller records it. */
-  async start(repo: string, start: { program: string; frame?: string; prompt?: string; model?: string; mode?: string }): Promise<string> {
+  /** Start `program` (none: the person's default) in the workspace at `repo` for the person, from
+   *  another of their devices (spec/agents.md "Starting") or a view on one (P8), as
+   *  `tile.spawn_agent` starts one: with its gates, and their saved options for it with these on
+   *  top, never its unattended mode unless `mode` says so; `name`, its tile's. Its tile. The caller
+   *  records it. */
+  async start(repo: string, start: { program?: string; frame?: string; prompt?: string; model?: string; mode?: string; name?: string }): Promise<string> {
     await this.o.ready?.();
     const { program, ...rest } = start;
     return this.dispatcher.spawn({ agent: program, ...rest, repo, attended: true });

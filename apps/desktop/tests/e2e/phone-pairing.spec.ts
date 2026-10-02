@@ -14,8 +14,11 @@
 // and the phone takes the network and is let onto it (spec/pairing.md 0.5, 0.6); with a push
 // server there, the phone registers at it, naming the computer, and is told through it, which
 // keeps nothing of what it passes on; unpaired, the computer is named no more (spec/push.md 0.3).
+// And a community view on the phone, its host on the computer (P8, spec/workspace-api.md 0.12):
+// offered when it says it works on a phone, its files read, opened, told it is on a phone and what
+// the board holds, doing there only what the phone may, and closed.
 import { test, expect, type ElectronApplication } from "@playwright/test";
-import { execFile, execSync, spawn, type ChildProcess } from "node:child_process";
+import { execFile, execSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -26,6 +29,7 @@ import { heldWorkspaces } from "@hivemind/host/peer-links";
 import { HIVE_NET, hiveNetBuilt, ownNetwork, person } from "./helpers/multiplayer";
 
 const HIVE_PHONE = path.resolve("../../crates/hive-phone/target/debug/hive-phone");
+const CLI = path.resolve("../cli/src/index.ts");
 const run = promisify(execFile);
 
 let root: string;
@@ -458,6 +462,78 @@ test("the phone follows what an agent and the person say to each other, as the a
   const since = () => pieces.filter((p) => p.session !== first).flatMap((p) => p.entries).map((e) => [e.who, e.text]);
   await expect.poll(since, { timeout: 30_000 }).toEqual([["person", "a fresh start"], ["agent", "You said a fresh start"]]);
   expect(pieces.at(-1)!.session).toBe(`${first}-2`);
+});
+
+test("a community view that says it works on a phone is offered there with its files; opened, its host on the computer tells it it is on a phone and what the board holds; it does only what the phone may, as the phone; and closed, it ends", async () => {
+  test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
+  test.setTimeout(120_000);
+  const env = probeAgent();
+  scribeAgent();
+  const d = await desktopWith(env);
+  // Two views installed on the computer, as `hive views install` installs one: one says it works on
+  // a phone, the other says nothing of it.
+  const install = (id: string, manifest: object) => {
+    const dir = path.join(root, "views", id);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "hivemind-view.json"), JSON.stringify({ id, version: "1.0.0", entry: "index.html", protocol: 1, ...manifest }));
+    fs.writeFileSync(path.join(dir, "index.html"), `<!doctype html><title>${id}</title><script type="module" src="./main.js"></script>`);
+    fs.writeFileSync(path.join(dir, "main.js"), `import { connect } from "@hivemind/view-sdk";\nawait connect();\n`);
+    const installed = spawnSync("bun", [CLI, "views", "install", dir, "--json"], { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: path.join(root, "desktop") } });
+    expect(installed.status, installed.stdout + installed.stderr).toBe(0);
+    return dir;
+  };
+  const board = install("priya-board", { name: "Priya's board", phone: true, permissions: ["workspace:spawn", "workspace:edit"] });
+  install("desk-only", { name: "Desk only" });
+  const { phone, phoneId } = await pairPhone(d);
+  await d.desktop.keyboard.press("Escape");
+  const probe = await startProbe(d);
+  const phoneCli = async (...args: string[]) => JSON.parse((await run(HIVE_PHONE, [...args, "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as unknown;
+  let listed: Array<Record<string, unknown>> = [];
+  await expect.poll(async () => (listed = ((await phoneCli("agents")) as { agents: typeof listed }).agents).length, { timeout: 30_000 }).toBe(1);
+  const workspace = listed[0]!.workspace as string;
+
+  // Offered on the phone: the view that says it works there, and its files, read from the computer.
+  expect(await phoneCli("views", workspace)).toEqual([{ id: "priya-board", name: "Priya's board", version: "1.0.0", entry: "index.html" }]);
+  expect(await phoneCli("views", workspace, "priya-board", "index.html")).toEqual({
+    type: "text/html; charset=utf-8", data: fs.readFileSync(path.join(board, "index.html")).toString("base64"),
+  });
+  await expect(run(HIVE_PHONE, ["views", workspace, "priya-board", "../desk-only/index.html", "--identity", phone])).rejects.toThrow(/not inside priya-board/);
+  await expect(run(HIVE_PHONE, ["views", workspace, "desk-only", "index.html", "--identity", phone])).rejects.toThrow(/no view desk-only here works on a phone/);
+
+  // Opened: once it says it is ready, it is told it is on a phone, may start agents and not rename
+  // tiles (a phone may not edit the board), and what the board holds.
+  const shown = spawn(HIVE_PHONE, ["view", workspace, "priya-board", "--identity", phone, "--json"]);
+  procs.push(shown);
+  const told: Array<Record<string, unknown>> = [];
+  let line = "";
+  shown.stdout!.on("data", (b: Buffer) => {
+    const lines = (line + b.toString()).split("\n");
+    line = lines.pop()!;
+    for (const l of lines) told.push(JSON.parse(l) as Record<string, unknown>);
+  });
+  const ended = new Promise<number | null>((r) => shown.on("exit", (code) => r(code)));
+  const post = (message: object) => shown.stdin!.write(`${JSON.stringify(message)}\n`);
+  const structures = () => told.filter((m) => m.type === "structure").map((m) => (m.tiles as Array<{ id: string }>).map((t) => t.id));
+  post({ type: "ready", v: 1 });
+  await expect.poll(structures, { timeout: 30_000 }).toEqual([[probe]]);
+  expect(told[0]).toMatchObject({ type: "hello", pluginId: "priya-board", capabilities: ["workspace:spawn"], device: { touch: true, compact: true } });
+
+  // What it may not do is refused: the rename never reaches the board. What it may, it does, as the
+  // phone: the agent it starts appears, after the rename would have.
+  post({ type: "command", name: "renameTile", args: [probe, "Priya's probe"] });
+  post({ type: "command", name: "spawnAgent", args: ["scribe", null] });
+  await expect.poll(() => structures().at(-1)?.length, { timeout: 30_000 }).toBe(2);
+  const scribe = structures().at(-1)!.find((id) => id !== probe)!;
+  expect(told.filter((m) => m.type === "names").map((m) => (m.names as Record<string, string>)[probe])).not.toContain("Priya's probe");
+  const audit = () => fs.readFileSync(path.join(root, "desktop", "hivemind-dev", "audit.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>);
+  await expect.poll(audit, { timeout: 10_000 }).toContainEqual(expect.objectContaining({
+    verb: "agent.start", target: scribe, detail: "view priya-board", outcome: "ok", actor: { kind: "peer", person: d.me.personId, device: phoneId, access: "owner" },
+  }));
+
+  // Closed at the end of what the phone sends: the computer says it is, and the view is gone.
+  shown.stdin!.end();
+  expect(await ended).toBe(0);
+  expect(told.at(-1)).toEqual({ closed: true });
 });
 
 test("what an agent asks, its computer can allow or deny, and says so in the list and the notice; the phone denies it with the agent's own keys, and it is told no and asks again; allows it, and it works; the same answer again does nothing", async () => {

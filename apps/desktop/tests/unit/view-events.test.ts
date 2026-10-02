@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { REPLAY_MAX, RING_MAX, RING_MAX_AGE_MS, ViewEventHub, type HubTile, type LedgerLine } from "../../src/renderer/src/workspace/view-events";
 import type { ViewEvent } from "@hivemind/view-sdk/protocol";
+import { CommunityLink } from "@hivemind/view-host/link";
 
 function harness() {
   let clock = 1_000_000;
@@ -126,4 +127,36 @@ test("ledger: lines are batched with the workspace key; a transient workspace re
   assert.equal(h.lines.length, 0); // not flushed yet
   h.runTimers();
   assert.deepEqual(h.lines.map((l) => `${l.k}:${l.e}`), ["ws:i", "ws:s", "ws:t", "ws:u"]);
+});
+
+test("a view's link hears the hub: events filtered by kind and name, batched per task, and replayed on request", async () => {
+  const hub = new ViewEventHub();
+  hub.onHookTurn("t1");
+  hub.emitCustom("ci.build", { ok: true }, "shell");
+  const sent: Array<Record<string, unknown>> = [];
+  const link = new CommunityLink({
+    pluginId: "p", capabilities: [], commands: {} as never, hasTile: (id) => id === "t1", hasFrame: () => false,
+    onReady: () => {}, onLayout: () => {}, onFramesDrawn: () => {}, onError: () => {}, onDisable: () => {},
+    services: { events: { subscribe: (l) => hub.subscribe(l), replay: (s, a, v) => hub.replay(s, a, v) } },
+  });
+  link.attach({ postMessage: (m) => sent.push(m as Record<string, unknown>), onmessage: null });
+  const batches = () => sent.filter((m) => m.type === "events");
+  link.handle({ type: "ready", v: 1 });
+  link.handle({ type: "subscribeEvents", kinds: ["custom"], custom: ["ci.*"], replaySince: 0 });
+  const replay = batches();
+  assert.equal(replay.length, 1);
+  assert.equal(replay[0]!.replay, true);
+  assert.deepEqual((replay[0]!.events as Array<{ kind: string }>).map((e) => e.kind), ["custom"]);
+  assert.equal(hub.emitCustom("deploy.done", null, "shell").delivered, false);
+  assert.equal(hub.emitCustom("ci.test", null, { tileId: "t1" }).delivered, true);
+  hub.onHookTurn("t1");
+  hub.emitCustom("ci.lint", null, "shell");
+  await new Promise((r) => setTimeout(r, 0));
+  const live = batches().slice(1);
+  assert.equal(live.length, 1);
+  assert.deepEqual((live[0]!.events as Array<{ name: string }>).map((e) => e.name), ["ci.test", "ci.lint"]);
+  assert.equal(hub.emitCustom("ci.y", null, "shell", "someone-else").delivered, false);
+  assert.equal(hub.emitCustom("ci.y", null, "shell", "p").delivered, true);
+  link.handle({ type: "unsubscribeEvents" });
+  assert.equal(hub.emitCustom("ci.x", null, "shell").delivered, false);
 });
