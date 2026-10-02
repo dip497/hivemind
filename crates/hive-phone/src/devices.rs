@@ -14,10 +14,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::{
+    failure::Failure,
     identity::{write_private, Identity},
     needs,
     pairing::{Paired, PairedWith},
-    person,
+    person, push,
 };
 
 /// How long a device has to answer the phone before it is said to be away.
@@ -217,11 +218,48 @@ impl Identity {
         )
     }
 
-    /// Unpair this phone from `device` (spec/pairing.md, "Unpairing"): told on `endpoint`, the
-    /// device forgets the phone, and the phone forgets the device whether it could tell it or not,
-    /// and the devices it learned of from it alone. Whether the device was told: one that was not
-    /// still lists the phone.
-    pub async fn unpair(&self, endpoint: &Endpoint, device: &PairedWith) -> Result<bool> {
+    /// Unpair this phone from `device`, its id, one it paired with itself (spec/pairing.md,
+    /// "Unpairing"): told on `endpoint`, the device forgets the phone, and the phone forgets the
+    /// device whether it could tell it or not, and the devices it learned of from it alone; the push
+    /// server it registered at, if any, lets that device tell it nothing more. One it learned of
+    /// from an app is unpaired there.
+    pub async fn unpair_from(&self, endpoint: &Endpoint, device: &str) -> Result<Unpaired> {
+        let all = self.devices();
+        let Some(paired) = all.iter().find(|d| d.with.device == device) else {
+            let failure = if all.is_empty() {
+                Failure::NotPaired
+            } else {
+                Failure::Invalid(format!(
+                    "{device} is not a device this phone is paired with"
+                ))
+            };
+            return Err(failure.into());
+        };
+        if !paired.via.is_empty() {
+            let through: Vec<_> = all
+                .iter()
+                .filter(|a| paired.via.contains(&a.with.device))
+                .map(|a| a.with.name.as_str())
+                .collect();
+            let (name, through) = (&paired.with.name, through.join(", "));
+            return Err(Failure::Invalid(format!(
+                "{name} knows this phone through {through}: unpair from that"
+            ))
+            .into());
+        }
+        let told = self.unpair(endpoint, &paired.with).await?;
+        let registered =
+            async { push::register_again(self.dir(), self.key(), &push::senders(self)?).await };
+        Ok(Unpaired {
+            told,
+            still_told: registered.await.err(),
+        })
+    }
+
+    /// Unpair this phone from `device`: told on `endpoint`, it forgets the phone, and the phone
+    /// forgets it whether it could tell it or not, and the devices it learned of from it alone.
+    /// Whether it was told: one that was not still lists the phone.
+    async fn unpair(&self, endpoint: &Endpoint, device: &PairedWith) -> Result<bool> {
         let told = async {
             let at = hive_net::net::addr_of(&device.device, &device.addrs, &device.relay)?;
             let connection = endpoint.connect(at, hive_net::ws::ALPN).await?;
@@ -237,6 +275,15 @@ impl Identity {
         self.learn(&device.device, &[], 0)?;
         Ok(told)
     }
+}
+
+/// What unpairing a device came to.
+#[derive(Debug)]
+pub struct Unpaired {
+    /// Whether the device was told: one that was not still lists the phone.
+    pub told: bool,
+    /// Why the push server this phone registered at still lets the device tell it, when it does.
+    pub still_told: Option<anyhow::Error>,
 }
 
 /// Ask the device on `connection` `message` on its `device` stream: its answer, the first it

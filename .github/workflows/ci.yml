@@ -114,9 +114,10 @@ jobs:
           sudo HIVE_NET_BIN="$PWD/target/debug/hive-net" bash ../../scripts/traffic-test.sh
 
   hive-phone:
-    # The phone's Rust core (M5): conformance/pairing.json from the phone's side, and what it keeps.
+    # The phone's Rust core (M5): conformance/pairing.json from the phone's side, and what it keeps;
+    # the facade the apps link (crates/hive-phone-ffi), and the Swift generated from it, committed.
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     defaults:
       run:
         working-directory: crates/hive-phone
@@ -132,7 +133,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             crates/hive-phone/target
-          key: hive-phone-${{ runner.os }}-${{ hashFiles('crates/hive-phone/Cargo.lock') }}
+            crates/hive-phone-ffi/target
+          key: hive-phone-${{ runner.os }}-${{ hashFiles('crates/hive-phone/Cargo.lock', 'crates/hive-phone-ffi/Cargo.lock') }}
 
       - name: Test
         run: cargo test --locked
@@ -143,6 +145,19 @@ jobs:
           if cargo tree --locked -e normal --prefix none | grep -E '^(iroh-dns-server|tokio-rustls-acme) '; then
             echo "the phone links hive-net's server roles"; exit 1
           fi
+
+      - name: Test the facade
+        working-directory: crates/hive-phone-ffi
+        run: cargo test --locked
+
+      - name: The Swift committed is what the facade generates
+        # Generated unformatted, so any machine generates the same; the Kotlin is the Android
+        # build's own.
+        working-directory: .
+        run: |
+          scripts/phone/bindings.sh
+          git diff --exit-code -- apps/ios/HivePhone/Core/Generated
+          test -z "$(git status --porcelain -- apps/ios/HivePhone/Core/Generated)"
 
   compose:
     # R13: the stack self-hosters run (infra/compose.yml), built from this commit, and its checks:

@@ -13,7 +13,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use sha2::Sha256;
 
-use crate::identity::{is_hex, DeviceCertificate};
+use crate::{
+    failure::Failure,
+    identity::{is_hex, DeviceCertificate, Identity},
+    now_ms,
+};
 
 /// The 256 words a code is made of (spec/pairing-words.json).
 static WORDS: LazyLock<Vec<String>> = LazyLock::new(|| {
@@ -222,7 +226,12 @@ fn refusal(error: Option<&str>) -> String {
 pub fn accept(me: &str, link: &PairLink, answer: &Value) -> Result<Paired> {
     let a = answer.as_object().context("the computer did not answer")?;
     if a.get("ok").and_then(Value::as_bool) != Some(true) {
-        bail!(refusal(a.get("error").and_then(Value::as_str)));
+        let message = refusal(a.get("error").and_then(Value::as_str));
+        return Err(Failure::Refused {
+            code: None,
+            message,
+        }
+        .into());
     }
     let proof = a.get("proof").and_then(Value::as_str);
     if !proven(proof, &link.code, "offering", &link.device, me) {
@@ -286,9 +295,48 @@ pub async fn pair(endpoint: &Endpoint, name: &str, link: &PairLink) -> Result<Pa
     let answer = tokio::time::timeout(ANSWER_WITHIN, hive_net::pair::ask(endpoint, at, &hello))
         .await
         .map_err(|_| {
-            anyhow::anyhow!(
+            Failure::Unreachable(
                 "the computer did not answer: is it on this network, still showing the code?"
+                    .into(),
             )
         })??;
     accept(&me, link, &answer)
+}
+
+/// What pairing came to: what the app gave, and how the phone got onto its network.
+pub struct Pairing {
+    pub paired: Paired,
+    /// `vouched for by the app`, `registered`, or `none needed`.
+    pub admission: &'static str,
+}
+
+impl Identity {
+    /// Pair this phone, called `name`, with the app whose `link` was scanned, and keep what it
+    /// gave: onto the app's network first, as its link says, to reach it from anywhere; then to the
+    /// app, where the link says it is; then whose devices these are, and which others it may
+    /// reach, as the app says now (asked again whenever this phone dials it, so one that does not
+    /// answer now is told later).
+    pub async fn pair_with(&self, name: &str, link: &PairLink) -> Result<Pairing> {
+        let admission = match &link.admission {
+            Some(admission) => self
+                .let_in(admission)
+                .await
+                .context("not let onto the app's network")?,
+            None => "none needed",
+        };
+        let reach = self.reach_through(link.relay.as_deref());
+        let endpoint = hive_net::net::endpoint(self.key().clone(), &reach, vec![]).await?;
+        let paired = async {
+            let paired = pair(&endpoint, name, link).await?;
+            self.keep(&paired, now_ms())?;
+            let _ = self.learn_from(&endpoint, now_ms()).await;
+            Ok::<_, anyhow::Error>(paired)
+        }
+        .await;
+        endpoint.close().await;
+        Ok(Pairing {
+            paired: paired?,
+            admission,
+        })
+    }
 }

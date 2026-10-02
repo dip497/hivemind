@@ -1,0 +1,42 @@
+[package]
+name = "hive-phone-ffi"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT"
+rust-version = "1.91"
+description = "The phone's core as the iOS and Android apps call it (docs/design/phone-app-2026-10-02.md §5): a UniFFI facade over hive-phone, Swift and Kotlin generated from it."
+
+[lib]
+name = "hive_phone_ffi"
+# A static library for iOS, a shared one for Android and for generating the bindings.
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+# The bindings generator, which the apps' builds run on the host: never in an app.
+bindgen = ["uniffi/cli", "uniffi/cargo-metadata"]
+
+[dependencies]
+anyhow = "1"
+hive-phone = { path = "../hive-phone" }
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"] }
+uniffi = { version = "0.32", default-features = false }
+
+# Debug app builds: optimised, as fast to link as release can be.
+[profile.mobile]
+inherits = "release"
+lto = false
+debug = false
+
+# Store builds: as small and fast as it gets.
+[profile.mobile-dist]
+inherits = "release"
+lto = "thin"
+codegen-units = 1
+strip = true

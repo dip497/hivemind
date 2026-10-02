@@ -14,14 +14,14 @@ use serde_json::{json, Value};
 
 use tokio::sync::mpsc::Receiver;
 
-use crate::{devices, pairing::PairedWith};
+use crate::{devices, failure::Failure, pairing::PairedWith};
 
 /// The size a phone watches at: a viewer's never changes the session's.
 const COLS: u32 = 80;
 const ROWS: u32 = 24;
 
 /// Whether the device on `connection` holds `workspace`, as it says on its `device` stream.
-async fn holds(connection: &Connection, workspace: &str) -> Result<bool> {
+pub(crate) async fn holds(connection: &Connection, workspace: &str) -> Result<bool> {
     let answer = devices::ask(connection, &json!({ "t": "workspaces" })).await?;
     let held = answer.get("workspaces").and_then(Value::as_array);
     Ok(held.is_some_and(|held| {
@@ -106,13 +106,12 @@ impl Workspace {
 /// An answer's result, or why it was refused.
 fn result_of(answer: Value) -> Result<Value> {
     if let Some(error) = answer.get("error") {
-        bail!(
-            "{}",
-            error
-                .get("message")
-                .and_then(Value::as_str)
-                .unwrap_or("the device refused")
-        );
+        let said = |key: &str| error.get(key).and_then(Value::as_str);
+        return Err(Failure::Refused {
+            code: said("code").map(str::to_string),
+            message: said("message").unwrap_or("the device refused").to_string(),
+        }
+        .into());
     }
     Ok(answer.get("result").cloned().unwrap_or(Value::Null))
 }
@@ -249,18 +248,50 @@ pub async fn watch(
     watched
 }
 
+/// What the person answers an agent that waits on them (spec/needs.md, "Answering").
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Reply {
+    /// A line, typed into its terminal, Enter after it.
+    Text(String),
+    /// A permission its device can decide, allowed or denied with the agent's own keys.
+    Decide { allow: bool },
+    /// A plan, approved, or sent back with what to change in it.
+    Plan {
+        approve: bool,
+        feedback: Option<String>,
+    },
+}
+
+impl Reply {
+    /// As `agent.answer` takes it: `{text}`, or `{decision, feedback?}`.
+    fn said(&self) -> Value {
+        let decision = |yes: bool| if yes { "allow" } else { "deny" };
+        match self {
+            Reply::Text(text) => json!({ "text": text }),
+            Reply::Decide { allow } => json!({ "decision": decision(*allow) }),
+            Reply::Plan {
+                approve,
+                feedback: Some(feedback),
+            } => json!({ "decision": decision(*approve), "feedback": feedback }),
+            Reply::Plan { approve, .. } => json!({ "decision": decision(*approve) }),
+        }
+    }
+}
+
 /// Answer what the agent of `tile` in `workspace` waits on the person for, the wait that began at
-/// `since`, with `answer` (`{text}`, a line typed into its terminal; or `{decision, feedback?}`, a
-/// plan's). Whether it landed: not when the agent waits on that no more, or it was answered.
+/// `since`, with `reply`. Whether it landed: not when the agent waits on that no more, or it was
+/// answered.
 pub async fn answer(
     connection: &Connection,
     workspace: &str,
     tile: &str,
     since: u64,
-    answer: Value,
+    reply: &Reply,
 ) -> Result<bool> {
     let mut w = Workspace::open(connection, workspace).await?;
-    let result = w.call("agent.answer", json!([tile, since, answer])).await?;
+    let result = w
+        .call("agent.answer", json!([tile, since, reply.said()]))
+        .await?;
     Ok(result.get("answered").and_then(Value::as_bool) == Some(true))
 }
 
