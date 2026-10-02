@@ -36,9 +36,13 @@ test("a request is answered from the test's answers, and one it gave none for is
   const codex = { id: "codex", label: "Codex", default: true, turns: true, resumes: false, sessions: false };
   const host = fakeHost({ answers: { agents: () => ({ agents: [codex] }), history: () => { throw Object.assign(new Error("busy"), { code: "BUSY" }); } } });
   const hm = await host.connect();
-  expect(await hm.agents()).toEqual([codex]);
-  await expect(hm.history("2026-09-30")).rejects.toMatchObject({ code: "BUSY" });
-  await expect(hm.share(new ArrayBuffer(4))).rejects.toMatchObject({ code: "UNSUPPORTED" });
+  // Settled with a plain await, not `expect(...).rejects`: from Bun 1.3.14 until oven-sh/bun#37189 is
+  // fixed, that waits by running the event loop in place, and the loop delivers nothing to a port
+  // that is still dispatching a message, as the client's is when a test resumes after an answer.
+  const [agents, history, share] = await Promise.allSettled([hm.agents(), hm.history("2026-09-30"), hm.share(new ArrayBuffer(4))]);
+  expect(agents).toEqual({ status: "fulfilled", value: [codex] });
+  expect(history).toMatchObject({ status: "rejected", reason: { code: "BUSY" } });
+  expect(share).toMatchObject({ status: "rejected", reason: { code: "UNSUPPORTED" } });
 });
 
 test("the host asks the view where a tile is, and hears its answer", async () => {

@@ -184,8 +184,13 @@ describe("view-sdk client", () => {
     expect(png.byteLength).toBe(0); // transferred, not copied
     send({ type: "response", requestId: reqs[0]!.requestId, ok: true, result: { day: "2026-09-23" } });
     send({ type: "response", requestId: reqs[1]!.requestId, ok: false, error: { code: "DECLINED", message: "no" } });
-    expect(await h).toEqual({ day: "2026-09-23" } as never);
-    await expect(s).rejects.toMatchObject({ code: "DECLINED" });
+    // Settled with a plain await, not `expect(s).rejects`: from Bun 1.3.14 until oven-sh/bun#37189 is
+    // fixed, that waits by running the event loop in place, and the loop delivers nothing to a port
+    // that is still dispatching a message. After `await h` this test runs inside the client port's
+    // dispatch of h's answer, so s's answer would never arrive.
+    const [history, share] = await Promise.allSettled([h, s]);
+    expect(history).toEqual({ status: "fulfilled", value: { day: "2026-09-23" } } as never);
+    expect(share).toMatchObject({ status: "rejected", reason: { code: "DECLINED" } });
   });
 
   test("1.4: agent status rides on status; sessions and prompt check permissions and features locally", async () => {
