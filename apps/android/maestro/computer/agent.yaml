@@ -67,8 +67,10 @@ name: Pair with a computer, and drive its agent
     visible: ${PAIR_HEARD}
     timeout: 60000
 
-# The community view the computer offers the phone: back to the tabs, by the agent screen's Back.
-- tapOn: "Back"
+# The community view the computer offers the phone: back to the tabs, by the agent screen's Back (by
+# its tag: the system's own Back is "Back" too, and with the keyboard up it only closes that).
+- tapOn:
+    id: "agent-back"
 - tapOn: "Views"
 - extendedWaitUntil:
     visible: ${PAIR_VIEW}
