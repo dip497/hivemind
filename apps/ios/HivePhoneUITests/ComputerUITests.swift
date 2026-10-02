@@ -119,7 +119,7 @@ final class ComputerUITests: XCTestCase {
         let start = app.webViews.buttons["Start an agent"]
         XCTAssertTrue(start.waitForExistence(timeout: 30), "the view offers Start an agent")
         start.tap()
-        let notice = app.staticTexts["view.notice"]
+        let notice = app.descendants(matching: .any)["view.notice"]
         XCTAssertTrue(notice.waitForExistence(timeout: 30), "the phone's lock was asked first")
         XCTAssertTrue(notice.label.contains("passcode"), "the app says why: \(notice.label)")
     }
