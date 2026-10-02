@@ -50,6 +50,8 @@ test("the bootstrap page carries the response nonce, is laid out at its screen's
   const html = entryPage("dist/view.js", nonce)!;
   expect(html).toMatch(new RegExp(`<script type="module" nonce="${escape(nonce)}" src="\\./dist/view\\.js"></script>`));
   expect(html).toContain(`<meta name="viewport" content="width=device-width, initial-scale=1">`);
+  // A body an Android web view gives no height must not hide the view's content.
+  expect(html).not.toContain("overflow:hidden");
   expect(entryPage("../x.js", nonce)).toBeNull();
   expect(entryPage("/abs/x.js", nonce)).toBeNull();
   expect(entryPage("x.html", nonce)).toBeNull();

@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: script-entry community views on Android no longer clip their content and controls when the web view resolves a zero page height.
 - Fixed: the Share dialog keeps a long invite link inside it, its dropdowns follow the theme instead of showing white, and its buttons line up on the left.
 - New: the phone apps have a Views tab: the community views your computers offer the phone, each shown full screen, served by your computer, in your phone's look; anything a view would start or close asks your phone's lock first.
 - New: a view can tell whether the screen it is on places the live terminals it asks for (`hm.supports("surfaces")`, view protocol 1.6): your computer's windows do, and a phone will, drawing its own terminal over the view (workspace API 0.15: `view.open … surfaces`; `hive-phone view --surfaces`).

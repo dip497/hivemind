@@ -21,7 +21,13 @@ said("connected", JSON.stringify(hm.device), size());
 // The page's first frames (Chromium drops a page's input while it holds those back), and any touch
 // that reaches the page, and where: a tap that never comes is told apart from one that misses.
 requestAnimationFrame(() => requestAnimationFrame(() => said("drawn", size())));
-addEventListener("pointerdown", (e) => said("pointerdown", e.clientX, e.clientY, e.target.tagName), true);
+addEventListener("pointerdown", (e) => said(
+  "pointerdown", e.clientX, e.clientY, e.target.tagName,
+  "elementFromPoint", document.elementFromPoint(e.clientX, e.clientY)?.tagName,
+  "htmlClientHeight", document.documentElement.clientHeight,
+  "bodyHeight", getComputedStyle(document.body).height,
+  "selectRect", JSON.stringify(select.getBoundingClientRect()),
+), true);
 
 document.head.append(Object.assign(document.createElement("style"), {
   textContent: `

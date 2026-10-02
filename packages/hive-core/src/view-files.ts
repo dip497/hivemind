@@ -102,7 +102,8 @@ export function withImportMap(html: string, nonce: string): string {
  *  that says nothing of it out 980 pixels wide). Null when `js` is not a plain relative `.js` path. */
 export function entryPage(js: string, nonce: string): string | null {
   if (!/^[\w.-]+(?:\/[\w.-]+)*\.js$/.test(js) || js.split("/").includes("..")) return null;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;height:100%;overflow:hidden;background:transparent}</style></head><body><script type="module" nonce="${nonce}" src="./${js}"></script></body></html>`;
+  // No overflow:hidden: an Android web view can give the body no height, which would clip the page.
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;height:100%;background:transparent}</style></head><body><script type="module" nonce="${nonce}" src="./${js}"></script></body></html>`;
 }
 
 /** What a request for a view's file is served, under `csp`, the policy the response carries: text
