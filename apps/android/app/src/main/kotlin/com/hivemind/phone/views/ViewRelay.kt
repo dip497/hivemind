@@ -137,7 +137,8 @@ class ViewRelay(
     }
 
     private fun say(message: String) {
-        reply?.invoke(message) ?: held.addLast(message)
+        val page = reply
+        if (page == null) held.addLast(message) else page(message)
     }
 
     private fun heard(why: ViewEnded) {
