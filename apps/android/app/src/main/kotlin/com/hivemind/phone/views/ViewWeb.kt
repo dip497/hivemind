@@ -141,7 +141,9 @@ private suspend fun startWebView(context: Context): WebViewHere = suspendCancell
  * how [relay] knows it: shown, it loads [page]; [lock] asks the phone's lock; [gone] is told when
  * its renderer went, and it cannot be used again.
  */
-@SuppressLint("SetJavaScriptEnabled")
+// The web message listener and the document-start script are checked for once the web view has
+// started (startWebView): a view's web view is made only where both are.
+@SuppressLint("SetJavaScriptEnabled", "RequiresFeature")
 private fun viewWebView(
     context: Context,
     site: ViewSite,
@@ -170,24 +172,7 @@ private fun viewWebView(
     }
     val shown = ViewRelay.Shown(load = { web.loadUrl(site.url(page)) }, lock = lock)
     web.tag = shown
-    web.webViewClient = object : WebViewClient() {
-        // Off the main thread: waiting on the core here waits only for this file.
-        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse =
-            answer(request, site, files)
-
-        // The view goes nowhere: the app loads its page, and nothing else.
-        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = true
-
-        override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
-            if (url?.startsWith(site.origin + "/") == true) relay.started(shown)
-        }
-
-        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-            relay.hide(shown)
-            gone()
-            return true
-        }
-    }
+    web.webViewClient = ViewClient(site, files, relay, shown, gone)
     WebViewCompat.addWebMessageListener(web, "hive", setOf(site.origin)) { _, message, origin, mainFrame, proxy ->
         if (message.type == WebMessageCompat.TYPE_STRING && site.isTheView(origin, mainFrame)) {
             message.data?.let { text -> relay.posted(shown, text) { proxy.postMessage(it) } }
@@ -195,4 +180,35 @@ private fun viewWebView(
     }
     WebViewCompat.addDocumentStartJavaScript(web, viewBridge(), setOf(site.origin))
     return web
+}
+
+/** What the web view showing the view at [site] as [shown] asks the app, as [viewWebView] made it. */
+// androidx.webkit 1.17's check takes the call to WebViewClient's constructor here for a client that
+// leaves onRenderProcessGone out; this one handles it, below.
+@SuppressLint("MissingOnRenderProcessGone")
+private class ViewClient(
+    private val site: ViewSite,
+    private val files: (path: String) -> ViewFile,
+    private val relay: ViewRelay,
+    private val shown: ViewRelay.Shown,
+    private val gone: () -> Unit,
+) : WebViewClient() {
+    // Off the main thread: waiting on the core here waits only for this file.
+    override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse =
+        answer(request, site, files)
+
+    // The view goes nowhere: the app loads its page, and nothing else.
+    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = true
+
+    override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+        if (url?.startsWith(site.origin + "/") == true) relay.started(shown)
+    }
+
+    // The renderer went (it crashed, or the system took its memory): this web view cannot be used
+    // again, so the screen makes another, with a session of its own.
+    override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+        relay.hide(shown)
+        gone()
+        return true
+    }
 }
