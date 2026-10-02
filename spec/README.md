@@ -20,7 +20,7 @@ these; the cases in `../conformance/` decide whether they do. Design:
 | `host-record.md` | Which device hosts a workspace now, signed by the workspace's key | 0.1 |
 | `hosting.md` | Moving a workspace's hosting between the owner's devices, and who follows it | 0.4 |
 | `needs.md` | What waits on the person, how their phone asks for it and answers it | 0.2 |
-| `push.md` | What a phone is told while the person is away, encrypted to it | 0.1 |
+| `push.md` | What a phone is told while the person is away, encrypted to it, and that a device it found away is back | 0.2 |
 
 Versions are `major.minor`: a minor adds optional fields or enum values a reader may ignore; a
 major changes or removes something. Until 1.0 anything may change.

@@ -1,10 +1,10 @@
-# Push (0.1)
+# Push (0.2)
 
 What happens while the person is away, told to their phone (M5, design §9.2 "Push notification"):
-an agent on one of their devices begins waiting on them, finishes or fails. The device that runs
-the agent tells each phone that gave it where to, encrypted to that phone, so that whatever
-carries the message reads nothing of it. The cases in `../conformance/push.json` decide whether an
-implementation encrypts and decrypts as this says.
+an agent on one of their devices begins waiting on them, finishes or fails; and a device the phone
+found away is back (0.2). The device tells each phone that gave it where to, encrypted to that
+phone, so that whatever carries the message reads nothing of it. The cases in
+`../conformance/push.json` decide whether an implementation encrypts and decrypts as this says.
 
 ## Subscribing
 
@@ -52,6 +52,23 @@ by its user alone, and forgets it when that phone is unpaired there.
 
 A phone told of the same `workspace`, `tile` and `since` twice, by two devices, shows it once.
 
+## Back
+
+A device that starts, or wakes from sleep, tells each phone subscribed there that it is back (0.2):
+
+```json
+{ "v": 1, "t": "back", "device": "<its key, hex>", "name": "<what it is called>", "since": 1790000000000 }
+```
+
+once it is on its network: as it starts, when it has any of the person's other devices (or
+anything shared from it) to be reached by, and as it wakes, once it is online again. `since` is
+when it was back. It is sent as a notice is, with `Urgency: normal`.
+
+A phone shows it only for a device it found away (`needs.md`, "Asking") at or before `since`, and
+does not count that device away from then on. One it did not find away, or found away again after
+`since` (a push service keeps a message for as long as its `TTL`, and gives it late), it does not
+show.
+
 ## Sending
 
 The notice, as JSON in UTF-8, is encrypted to the phone as RFC 8291 says, over RFC 8188's
@@ -67,7 +84,7 @@ and is posted to the endpoint:
 ```
 POST <endpoint>
 TTL: 86400
-Urgency: high                    (normal for finished and failed)
+Urgency: high                    (normal for finished, failed and back)
 Content-Encoding: aes128gcm
 Content-Type: application/octet-stream
 ```
@@ -81,4 +98,4 @@ VAPID header (RFC 8292) is sent.
 The phone decrypts each body with its push key and secret. It refuses one of more than one record
 (a record size under 18, or a record longer than it), one that is not for it or was changed on its
 way (the record does not decrypt), and one cut short (its record's delimiter is not 2). What it
-decrypts is a notice as above, in version `v`.
+decrypts is a notice, or a device back, as above, in version `v`.

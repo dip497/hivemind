@@ -63,3 +63,5 @@ A phone shows the lists of the devices that answered as one, and how many agents
 them together; an answer that does not say how many, or says it as anything but a whole number of
 none or more, counts none. A device that does not answer within a few seconds, or cannot be
 reached, is said to be away, with what it last answered the phone and when, if it ever did (0.2).
+The phone keeps which devices it found away, and when it last did, until each answers again or
+says it is back (`push.md` 0.2).

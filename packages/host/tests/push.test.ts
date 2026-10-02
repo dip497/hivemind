@@ -3,8 +3,8 @@
 // again, another state, an agent first seen as this device starts, one waiting on its supervisor);
 // each phone subscribed is posted the notice encrypted to it alone, urgently when it waits on them;
 // one its push service no longer knows is dropped; an agent not yet on a board here is told of
-// once it is, by at most 200 characters of its name; and the subscriptions are kept one per phone,
-// readable by this user alone.
+// once it is, by at most 200 characters of its name; a device back tells each phone so; and the
+// subscriptions are kept one per phone, readable by this user alone.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { createDecipheriv, createECDH, createHmac, type ECDH } from "node:crypto";
@@ -120,6 +120,31 @@ test("an agent on no board here yet is told of once its window saves its tile, b
   await save("t2");
   await save("t3");
   assert.deepEqual(posted, [{ v: 1, t: "needs", workspace: W, name: "api", tile: "t2", agent: "🐝".repeat(AGENT_MAX), kind: "permission", since: T }]);
+});
+
+test("a device back tells each phone subscribed, encrypted to it, by its id and what it is called, plainly", async () => {
+  const [a, b] = [phone("https://push.example/a"), phone("https://push.example/b")];
+  const subscriptions = new PushSubscriptions(path.join(tmp, `push-${made++}.json`));
+  subscriptions.set("a".repeat(64), a.sub);
+  subscriptions.set("b".repeat(64), b.sub);
+  const posted: Array<{ endpoint: string; body: Buffer; urgency: string }> = [];
+  const notices = new PushNotices({
+    me: () => ({ device: "d".repeat(64), name: "desk" }),
+    boards: () => held,
+    changes: () => () => {},
+    subscriptions,
+    post: async (endpoint, body, urgency) => { posted.push({ endpoint, body, urgency }); return 201; },
+  });
+  const before = Date.now();
+  notices.back();
+  await new Promise((r) => setImmediate(r));
+  const sent = Object.fromEntries(posted.map((p) => [p.endpoint, p]));
+  for (const [to, endpoint] of [[a, "https://push.example/a"], [b, "https://push.example/b"]] as const) {
+    const back = read(sent[endpoint]!.body, to.key, to.auth) as { since: number };
+    assert.deepEqual({ ...back, since: 0 }, { v: 1, t: "back", device: "d".repeat(64), name: "desk", since: 0 });
+    assert.ok(back.since >= before && back.since <= Date.now());
+  }
+  assert.deepEqual(posted.map((p) => p.urgency), ["normal", "normal"]);
 });
 
 test("subscriptions are kept one per phone, readable by this user alone; anything malformed is not one", () => {

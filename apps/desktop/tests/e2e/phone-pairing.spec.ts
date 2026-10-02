@@ -7,10 +7,11 @@
 // nothing); and unpaired from the phone, each forgets the other. Then the phone at work
 // (spec/needs.md, spec/push.md): told when an agent on the computer begins waiting on the person,
 // it lists, watches and answers it, and counts the agents at work; unpaired on the computer, it is
-// told nothing more. And the computer away: the phone shows what it last said, and unpaired from
-// the phone then, only the phone forgets. And the computer on a network of its own: its link says
-// how to get onto that network from elsewhere, and the phone takes the network and is let onto it
-// (spec/pairing.md 0.5, 0.6).
+// told nothing more. And the computer away: the phone shows what it last said; back, as it starts
+// or wakes, it tells the phone, which shows it once it found it away (spec/push.md 0.2); and
+// unpaired from the phone while away, only the phone forgets. And the computer on a network of its
+// own: its link says how to get onto that network from elsewhere, and the phone takes the network
+// and is let onto it (spec/pairing.md 0.5, 0.6).
 import { test, expect, type ElectronApplication } from "@playwright/test";
 import { execFile, execSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -108,6 +109,21 @@ async function startProbe(d: Awaited<ReturnType<typeof desktopWith>>): Promise<s
   return (await terminal.getAttribute("data-id"))!;
 }
 
+/** The phone gives the computer an address of its own to be told at, and takes each notice
+ *  there: what it shows, as it comes. */
+function listen(phone: string): Array<Record<string, unknown>> {
+  const pushed = spawn(HIVE_PHONE, ["push", "--listen", "127.0.0.1:0", "--identity", phone, "--json"]);
+  procs.push(pushed);
+  const told: Array<Record<string, unknown>> = [];
+  let line = "";
+  pushed.stdout!.on("data", (b: Buffer) => {
+    const lines = (line + b.toString()).split("\n");
+    line = lines.pop()!;
+    for (const l of lines) told.push(JSON.parse(l) as Record<string, unknown>);
+  });
+  return told;
+}
+
 /** What `phone` is told waits on the person, and of a computer away, what it last said. */
 async function needsOf(phone: string) {
   return JSON.parse((await run(HIVE_PHONE, ["needs", "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as {
@@ -176,16 +192,7 @@ test("the phone is told when an agent on the computer begins waiting on the pers
   const d = await desktopWith(probeAgent());
   const { phone, phoneId } = await pairPhone(d);
   await d.desktop.keyboard.press("Escape");
-  // The phone gives the computer an address of its own to be told at, and takes each notice there.
-  const pushed = spawn(HIVE_PHONE, ["push", "--listen", "127.0.0.1:0", "--identity", phone, "--json"]);
-  procs.push(pushed);
-  const told: Array<Record<string, unknown>> = [];
-  let line = "";
-  pushed.stdout!.on("data", (b: Buffer) => {
-    const lines = (line + b.toString()).split("\n");
-    line = lines.pop()!;
-    for (const l of lines) told.push(JSON.parse(l) as Record<string, unknown>);
-  });
+  const told = listen(phone);
   await expect.poll(() => told[0], { timeout: 30_000 }).toMatchObject({ told: [os.hostname()], away: [] });
   const needs = () => needsOf(phone);
   expect(await needs()).toEqual({ needs: [], working: 0, away: [] });
@@ -231,16 +238,26 @@ test("the phone is told when an agent on the computer begins waiting on the pers
   expect(told).toHaveLength(2);
 });
 
-test("a computer away is shown with what it last said needed the person, and when; unpaired from the phone then, only the phone forgets it", async () => {
+test("a computer away is shown with what it last said needed the person, and when; back, as it starts or wakes, it tells the phone, which shows it only after finding it away; unpaired from the phone while away, only the phone forgets it", async () => {
   test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
-  test.setTimeout(120_000);
-  const d = await desktopWith(probeAgent());
+  test.setTimeout(180_000);
+  const env = probeAgent();
+  const d = await desktopWith(env);
   const { phone } = await pairPhone(d);
   await d.desktop.keyboard.press("Escape");
+  const told = listen(phone);
+  await expect.poll(() => told[0], { timeout: 30_000 }).toMatchObject({ told: [os.hostname()], away: [] });
+  const backs = () => told.filter((t) => t.t === "back");
+  const wake = () => apps.at(-1)!.evaluate(({ powerMonitor }) => { powerMonitor.emit("resume"); });
   const tile = await startProbe(d);
   let waiting: Record<string, unknown> | undefined;
   await expect.poll(async () => (waiting = (await needsOf(phone)).needs[0])?.tile, { timeout: 30_000 }).toBe(tile);
   const asked = Date.now();
+
+  // The computer wakes, never found away: the phone shows nothing of it.
+  await wake();
+  await new Promise((r) => setTimeout(r, 3_000));
+  expect(backs()).toEqual([]);
 
   // The computer goes away: what it said last is shown, and when.
   await closeApp(apps.pop()!);
@@ -248,7 +265,26 @@ test("a computer away is shown with what it last said needed the person, and whe
   expect(away).toMatchObject({ needs: [], working: 0, away: [{ device: d.me.deviceId, name: os.hostname(), heard: { needs: [waiting], working: 0 } }] });
   expect(Math.abs((away.away[0]!.heard as { at: number }).at - asked)).toBeLessThan(15_000);
 
+  // It starts again: on its network at once, for the phone paired with it, which it tells it is
+  // back; the phone shows it, and finds it there.
+  const started = Date.now();
+  await person(root, "desktop", d.repo, apps, { HIVEMIND_PTY_DAEMON: "1", ...env });
+  await expect.poll(backs, { timeout: 30_000 }).toEqual([{ v: 1, t: "back", device: d.me.deviceId, name: os.hostname(), since: expect.any(Number) }]);
+  expect(backs()[0]!.since).toBeGreaterThanOrEqual(started);
+  expect((await needsOf(phone)).away).toEqual([]);
+
+  // Its network gone, as while it sleeps, the phone finds it away; it wakes, back on its network,
+  // and the phone is told so.
+  execSync(`pkill -f "hive-net[ ]daemon .*--identity ${root}/desktop/"`);
+  await expect.poll(async () => (await needsOf(phone)).away.map((a) => a.device), { timeout: 30_000 }).toEqual([d.me.deviceId]);
+  const woke = Date.now();
+  await wake();
+  await expect.poll(() => backs().length, { timeout: 30_000 }).toBe(2);
+  expect(backs()[1]!.since).toBeGreaterThanOrEqual(woke);
+  expect((await needsOf(phone)).away).toEqual([]);
+
   // Unpaired from the phone while away: the phone forgets it, and says the computer was not told.
+  await closeApp(apps.pop()!);
   const unpaired = JSON.parse((await run(HIVE_PHONE, ["unpair", os.hostname(), "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as unknown;
   expect(unpaired).toEqual({ device: d.me.deviceId, name: os.hostname(), told: false });
   expect(JSON.parse((await run(HIVE_PHONE, ["devices", "--identity", phone, "--json"])).stdout)).toEqual([]);

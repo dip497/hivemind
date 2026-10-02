@@ -244,8 +244,10 @@ async fn run(args: Args) -> Result<()> {
             }
             endpoint.close().await;
             let now = now_ms();
-            // What each device answered is kept, for when it is away.
+            // What each device answered is kept, for when it is away; and which are away.
             phone.hear(&answers, now)?;
+            let gone: Vec<String> = away.iter().map(|d| d.device.clone()).collect();
+            phone.mark_away(&gone, now)?;
             let heard = phone.heard();
             let all = needs::as_one(answers.into_iter().map(|(_, a)| a).collect());
             if args.json {
@@ -396,7 +398,7 @@ async fn run(args: Args) -> Result<()> {
                     println!("{name} is away: it is not told where to reach this phone");
                 }
             }
-            notices(listener, keys, args.json).await?;
+            notices(listener, keys, Arc::new(phone), args.json).await?;
         }
         "" => bail!("{USAGE}"),
         other => bail!("{other}: not a command\n{USAGE}"),
@@ -405,16 +407,22 @@ async fn run(args: Args) -> Result<()> {
 }
 
 /// Take the notices posted to this phone's endpoint, each decrypted and printed as it comes, until
-/// stopped. One not for this phone, or changed on its way, is refused (400).
-async fn notices(listener: tokio::net::TcpListener, keys: Arc<PushKeys>, json: bool) -> Result<()> {
+/// stopped: a device back only when this phone had found it away. One not for this phone, or
+/// changed on its way, is refused (400).
+async fn notices(
+    listener: tokio::net::TcpListener,
+    keys: Arc<PushKeys>,
+    phone: Arc<Identity>,
+    json: bool,
+) -> Result<()> {
     use http_body_util::{BodyExt, Empty};
     use hyper::{body::Bytes, server::conn::http1, service::service_fn, Response, StatusCode};
     loop {
         let (stream, _) = listener.accept().await?;
-        let keys = keys.clone();
+        let (keys, phone) = (keys.clone(), phone.clone());
         tokio::spawn(async move {
             let service = service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
-                let keys = keys.clone();
+                let (keys, phone) = (keys.clone(), phone.clone());
                 async move {
                     let body = req.into_body().collect().await?.to_bytes();
                     let status = match keys
@@ -423,10 +431,20 @@ async fn notices(listener: tokio::net::TcpListener, keys: Arc<PushKeys>, json: b
                         .and_then(|n| serde_json::from_slice::<Value>(&n).ok())
                     {
                         Some(notice) => {
-                            if json {
+                            let s = |k: &str| notice[k].as_str().unwrap_or("").to_string();
+                            // A device back is shown when this phone had found it away.
+                            let shown = notice["t"] != "back"
+                                || phone
+                                    .back(&s("device"), notice["since"].as_u64().unwrap_or(0))
+                                    .unwrap_or_else(|e| {
+                                        eprintln!("hive-phone: {e:#}");
+                                        false
+                                    });
+                            if shown && json {
                                 println!("{notice}");
-                            } else {
-                                let s = |k: &str| notice[k].as_str().unwrap_or("").to_string();
+                            } else if shown && notice["t"] == "back" {
+                                println!("{} is back", s("name"));
+                            } else if shown {
                                 println!("{} · {} — {}", s("agent"), s("name"), s("t"));
                             }
                             StatusCode::CREATED

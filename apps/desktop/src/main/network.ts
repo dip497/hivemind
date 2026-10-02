@@ -7,7 +7,7 @@
  * person's other devices this app paired with (hosts, and other computers), which this app lets in
  * as the owner of everything here, and whose workspaces it opens as this person's.
  */
-import { app } from "electron";
+import { app, net, powerMonitor } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -281,6 +281,12 @@ export function stopNetwork(): void {
   current = null;
 }
 
+/** Resolves once this computer is online, or after a minute: one waking takes a moment to join
+ *  its network again. */
+async function online(): Promise<void> {
+  for (let waited = 0; !net.isOnline() && waited < 60_000; waited += 1_000) await new Promise((r) => setTimeout(r, 1_000));
+}
+
 /** When the network file was last changed from this app, which restarted the daemon on it then. */
 let changedHere = 0;
 
@@ -441,6 +447,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
   });
   // The person's phones are told what happens here, encrypted to each (M5).
   const notices = new PushNotices({
+    me: () => ({ device: machineIdentity().deviceId, name: os.hostname() }),
     boards: () => heldBoards(workspaceStore()),
     changes: onWorkspaceChange,
     subscriptions: pushSubscriptions(),
@@ -448,6 +455,15 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     onWarn: (m) => console.warn(`[push] ${m}`),
   });
   onStatus((change) => notices.changed(change));
+  // Be where the people let in, and the person's other devices, reach this computer, when anything
+  // is shared from here or the person has other devices: as this app starts (below), and as the
+  // computer wakes, once it is online again. Then each phone is told it is back, and shows it if
+  // it found this computer away (spec/push.md).
+  const reachable = () => {
+    if (!accessLists().workspaces().some((ws) => accessLists().people(ws).length > 0) && pairedDevices().list().length === 0) return;
+    void network().then(() => notices.back(), (e: unknown) => console.warn(`[network] ${e instanceof Error ? e.message : String(e)}`));
+  };
+  powerMonitor.on("resume", () => void online().then(reachable));
   // The network in use, changed by `hive network use`: the daemon starts again on it. A change
   // made here has done that already (below).
   try {
@@ -470,10 +486,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     return used;
   });
 
-  // Something is shared from here already: be where the people let in can reach it.
-  if (accessLists().workspaces().some((ws) => accessLists().people(ws).length > 0)) {
-    void network().catch((e: unknown) => console.warn(`[network] ${e instanceof Error ? e.message : String(e)}`));
-  }
+  reachable();
   // The person's workspaces hosted on another of their devices: their documents and lists are kept
   // in step while this app is online, whether a window shows them or not (M3, design §5.8), so
   // the one taken over carries what was done meanwhile and who was let in.

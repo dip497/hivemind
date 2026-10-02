@@ -1120,8 +1120,12 @@ agents.
    last known state is shown with its age.
 
    *As built (M5 step 6):* the phone keeps what each device last answered, and when
-   (`heard.json`), and shows it for a device that is away. Not built: the notification when it is
-   back.
+   (`heard.json`), and shows it for a device that is away. *As built (M5 step 9, `spec/push.md`
+   0.2):* the notification when it is back. A computer that starts, or wakes, tells each phone
+   subscribed there `{t:"back", device, name, since}` once it is on its network (the app starts
+   its network at launch when the person has other devices, and again as it wakes, once it is
+   online); the phone keeps which devices it found away (`away.json`) and shows a back only for
+   one it found away before it, so one the push service gives late is not shown.
 9. **Unpair.** Settings on the phone or on the desktop → the phone → Unpair.
 
    *As built (M5 step 6, `spec/pairing.md` "Unpairing"):* from the desktop, as for any device,

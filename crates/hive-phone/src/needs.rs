@@ -100,6 +100,7 @@ pub struct Heard {
 }
 
 const HEARD: &str = "heard.json";
+const AWAY: &str = "away.json";
 
 impl Identity {
     /// What each of the person's devices last answered this phone, by device: kept in
@@ -111,7 +112,8 @@ impl Identity {
             .unwrap_or_default()
     }
 
-    /// Keep what each device of `answers` answered, at `at`, in place of what it said before.
+    /// Keep what each device of `answers` answered, at `at`, in place of what it said before:
+    /// none of them is away.
     pub fn hear(&self, answers: &[(String, Answer)], at: u64) -> Result<()> {
         let mut heard = self.heard();
         for (device, answer) in answers {
@@ -123,20 +125,79 @@ impl Identity {
                 },
             );
         }
-        write_heard(self, &heard)
+        write_heard(self, &heard)?;
+        let mut away = self.away();
+        let before = away.len();
+        away.retain(|device, _| !answers.iter().any(|(d, _)| d == device));
+        if away.len() == before {
+            return Ok(());
+        }
+        write_away(self, &away)
+    }
+
+    /// The person's devices this phone found away, and when it last did: each until it answers
+    /// again, or says it is back since then (spec/push.md).
+    pub fn away(&self) -> BTreeMap<String, u64> {
+        fs::read_to_string(self.dir().join(AWAY))
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default()
+    }
+
+    /// `devices` did not answer at `at`: found away then.
+    pub fn mark_away(&self, devices: &[String], at: u64) -> Result<()> {
+        if devices.is_empty() {
+            return Ok(());
+        }
+        let mut away = self.away();
+        for device in devices {
+            away.insert(device.clone(), at);
+        }
+        write_away(self, &away)
+    }
+
+    /// `device` says it is back since `since`: whether this phone had found it away before then,
+    /// and so shows it. It is not away from then on; one it found away after is, as a notice can
+    /// come late.
+    pub fn back(&self, device: &str, since: u64) -> Result<bool> {
+        let mut away = self.away();
+        if away.get(device).is_none_or(|&at| at > since) {
+            return Ok(false);
+        }
+        away.remove(device);
+        write_away(self, &away)?;
+        Ok(true)
     }
 }
 
-/// Forget what `device` said, or what every device said.
+fn write_away(identity: &Identity, away: &BTreeMap<String, u64>) -> Result<()> {
+    write_private(
+        &identity.dir().join(AWAY),
+        &format!("{}\n", serde_json::to_string(away)?),
+    )
+}
+
+/// Forget what `device` said, and that it was away; or that of every device.
 pub(crate) fn forget_heard(identity: &Identity, device: Option<&str>) -> Result<()> {
-    let mut heard = identity.heard();
+    let (mut heard, mut away) = (identity.heard(), identity.away());
+    let (had_heard, had_away) = (heard.len(), away.len());
     match device {
-        Some(device) if heard.remove(device).is_none() => return Ok(()),
-        Some(_) => {}
-        None if heard.is_empty() => return Ok(()),
-        None => heard.clear(),
+        Some(device) => {
+            heard.remove(device);
+            away.remove(device);
+        }
+        None => {
+            heard.clear();
+            away.clear();
+        }
     }
-    write_heard(identity, &heard)
+    if heard.len() != had_heard {
+        write_heard(identity, &heard)?;
+    }
+    if away.len() != had_away {
+        write_away(identity, &away)?;
+    }
+    Ok(())
 }
 
 fn write_heard(identity: &Identity, heard: &BTreeMap<String, Heard>) -> Result<()> {

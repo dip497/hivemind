@@ -27,6 +27,16 @@ export interface Notice {
   since: number;
 }
 
+/** What a phone is told when one of the person's devices is back: it started, or woke. */
+export interface Back {
+  v: 1;
+  t: "back";
+  /** The device: its id, and what it is called. */
+  device: string;
+  name: string;
+  since: number;
+}
+
 type Status = WaitingStatus["status"];
 
 /** How much of an agent's name a notice carries, in characters: a task can be a whole prompt,
@@ -85,6 +95,8 @@ export class PushSubscriptions {
 }
 
 export interface PushOptions {
+  /** This device: its id, and what it is called. */
+  me(): { device: string; name: string };
   /** The workspaces held here, with their boards, and each change to them. */
   boards(): HeldBoard[];
   changes: Changes;
@@ -134,6 +146,12 @@ export class PushNotices {
     else this.unplaced.set(tile, { t, change });
   }
 
+  /** This device is back (it started, or woke): each phone is told, and shows it when it found
+   *  this device away. */
+  back(): void {
+    this.send({ v: 1, t: "back", ...this.o.me(), since: Date.now() }, "normal");
+  }
+
   /** The boards changed: each agent now on one is told of. */
   private placed(): void {
     if (this.unplaced.size === 0) return;
@@ -146,12 +164,17 @@ export class PushNotices {
     }
   }
 
-  /** Post `notice` to each phone subscribed, encrypted to it. */
+  /** Tell the phones `notice`, urgently when it waits on them. */
   private tell(notice: Notice): void {
-    const plaintext = Buffer.from(JSON.stringify(notice));
+    this.send(notice, notice.t === "needs" ? "high" : "normal");
+  }
+
+  /** Post `message` to each phone subscribed, encrypted to it. */
+  private send(message: Notice | Back, urgency: "high" | "normal"): void {
+    const plaintext = Buffer.from(JSON.stringify(message));
     for (const sub of this.o.subscriptions.list()) {
       // A subscription the push service no longer knows is dropped (RFC 8030 §7.3).
-      void this.o.post(sub.endpoint, encrypt(plaintext, sub), notice.t === "needs" ? "high" : "normal").then(
+      void this.o.post(sub.endpoint, encrypt(plaintext, sub), urgency).then(
         (status) => { if (status === 404 || status === 410) this.o.subscriptions.remove(sub.device); },
         (e: unknown) => this.o.onWarn?.(`push to ${sub.device.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`),
       );

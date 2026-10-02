@@ -4,7 +4,8 @@
 //! that person, the first one's devices forgotten. Only an entry whose certificate verifies, names
 //! its device and is the phone's person's is listed; a certificate that does not name the phone is
 //! not its own. What each device last answered is kept, and forgotten with the device
-//! (spec/needs.md "Asking", spec/pairing.md "Unpairing"); and the network an app gives, which the
+//! (spec/needs.md "Asking", spec/pairing.md "Unpairing"); a device found away is shown back once,
+//! when it says it is back since then (spec/push.md 0.2); and the network an app gives, which the
 //! phone reaches the person's devices through (spec/pairing.md 0.5).
 
 use std::{fs, path::PathBuf};
@@ -247,6 +248,64 @@ fn what_each_device_last_answered_is_kept_until_it_is_forgotten_and_another_pers
     // Another person's device: what the first person's devices said goes with them.
     phone.keep(&paired(&phone, 20, &sam), 7).unwrap();
     assert!(phone.heard().is_empty());
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_device_found_away_is_shown_back_once_when_it_says_so_since_then_and_answering_again_or_forgotten_it_is_not_away(
+) {
+    let dir = tmp("away");
+    let phone = Identity::open(&dir.join("id")).unwrap();
+    let (priya, sam) = (key(1), key(2));
+    let (a, b) = (paired(&phone, 10, &priya), paired(&phone, 11, &priya));
+    phone.keep(&a, 1).unwrap();
+    phone.keep(&b, 2).unwrap();
+    let (a, b) = (a.with.device, b.with.device);
+    let since = |away: &[(&String, u64)]| {
+        away.iter()
+            .map(|&(d, at)| (d.clone(), at))
+            .collect::<std::collections::BTreeMap<_, _>>()
+    };
+    // Neither answered at 10.
+    phone.mark_away(&[a.clone(), b.clone()], 10).unwrap();
+    assert_eq!(phone.away(), since(&[(&a, 10), (&b, 10)]));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let file = dir.join("id").join("away.json");
+        assert_eq!(
+            fs::metadata(file).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+
+    // Back since before the phone found it away: a notice that came late, not shown.
+    assert!(!phone.back(&a, 9).unwrap());
+    // Back since then: shown, once.
+    assert!(phone.back(&a, 12).unwrap());
+    assert!(!phone.back(&a, 13).unwrap(), "not away any more");
+    assert_eq!(phone.away(), since(&[(&b, 10)]));
+    // One never found away, or not one of the person's devices, is not shown back.
+    assert!(!phone.back(&key(12).public().to_string(), 14).unwrap());
+
+    // Found away again, later: back since between the two is late.
+    phone.mark_away(std::slice::from_ref(&b), 20).unwrap();
+    assert!(!phone.back(&b, 15).unwrap());
+    // Answering, it is not away.
+    let said = Answer {
+        needs: vec![],
+        working: 0,
+    };
+    phone.hear(&[(b.clone(), said)], 21).unwrap();
+    assert!(phone.away().is_empty());
+    assert!(!phone.back(&b, 22).unwrap());
+
+    // Forgotten, it is not away; nor are the first person's devices once the phone is another's.
+    phone.mark_away(&[a.clone(), b.clone()], 23).unwrap();
+    assert!(phone.forget(&a).unwrap());
+    assert_eq!(phone.away(), since(&[(&b, 23)]));
+    phone.keep(&paired(&phone, 20, &sam), 24).unwrap();
+    assert!(phone.away().is_empty());
     fs::remove_dir_all(&dir).unwrap();
 }
 
