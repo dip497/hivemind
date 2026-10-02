@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.hivemind.phone.R
 import com.hivemind.phone.core.Paired
+import com.hivemind.phone.ui.common.AllowNotifications
 import com.hivemind.phone.ui.theme.personColor
 import kotlinx.coroutines.launch
 
@@ -90,14 +91,21 @@ private fun Pairing(vm: PairViewModel, state: PairState) {
     val scope = rememberCoroutineScope()
     val pairing = state is PairState.Pairing
 
-    Text(stringResource(R.string.pair_how), style = MaterialTheme.typography.bodyMedium)
-    if (camera) {
-        QrScanner(
+    // The camera is optional (an emulator, a Chromebook, some tablets have none): without one, or
+    // with one that cannot be opened, the link is pasted.
+    val hasCamera = remember { context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY) }
+    var cameraFailed by rememberSaveable { mutableStateOf(false) }
+
+    Text(stringResource(if (hasCamera) R.string.pair_how else R.string.pair_how_paste), style = MaterialTheme.typography.bodyMedium)
+    when {
+        !hasCamera -> Unit
+        cameraFailed -> Text(stringResource(R.string.pair_camera_unavailable), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        camera -> QrScanner(
             onCode = vm::scanned,
-            modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(MaterialTheme.shapes.large),
+            onUnavailable = { cameraFailed = true },
+            modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(MaterialTheme.shapes.large).testTag("pair-camera"),
         )
-    } else {
-        OutlinedButton(onClick = { askCamera.launch(Manifest.permission.CAMERA) }, modifier = Modifier.fillMaxWidth()) {
+        else -> OutlinedButton(onClick = { askCamera.launch(Manifest.permission.CAMERA) }, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.action_allow_camera))
         }
     }
@@ -149,5 +157,7 @@ private fun Paired(paired: Paired, onDone: () -> Unit) {
         )
     }
     if (person != null) Text(stringResource(R.string.pair_with, paired.name), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    // Paired, the phone has someone to be told by: the moment to ask.
+    AllowNotifications()
     Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.action_continue)) }
 }

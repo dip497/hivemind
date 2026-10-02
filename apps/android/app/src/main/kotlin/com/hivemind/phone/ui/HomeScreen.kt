@@ -1,5 +1,6 @@
 package com.hivemind.phone.ui
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -134,7 +135,19 @@ fun HomeScreen(core: PhoneCore, onOpen: (AgentRef) -> Unit, onStart: () -> Unit,
             }
             Tab.DEVICES -> {
                 val state by devices.state.collectAsStateWithLifecycle()
-                DevicesList(state, devices.calls.busy, now, onUnpair = devices::unpair, onPair = onPair, modifier = inside)
+                val push by core.push.state.collectAsStateWithLifecycle()
+                val activity = LocalActivity.current
+                DevicesList(
+                    state,
+                    devices.calls.busy,
+                    now,
+                    onUnpair = devices::unpair,
+                    onPair = onPair,
+                    push = push,
+                    onChoosePush = { activity?.let(core.push::choose) },
+                    onPushAgain = core.push::again,
+                    modifier = inside,
+                )
             }
         }
     }

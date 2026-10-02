@@ -1,6 +1,7 @@
 package com.hivemind.phone.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -19,6 +20,7 @@ import com.hivemind.phone.ui.pair.PairScreen
 import com.hivemind.phone.ui.pair.PairViewModel
 import com.hivemind.phone.ui.start.StartScreen
 import com.hivemind.phone.ui.start.StartViewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 
 /** The screens, as entries of the back stack: saved with it, so a restored app opens where it was. */
@@ -48,12 +50,19 @@ private fun AgentRef.agent() = Route.Agent(device, workspace, tile)
 
 /**
  * The app's screens. Each entry keeps its own view models, so leaving an agent's screen stops
- * watching its terminal. A phone paired with nothing opens on Pair.
+ * watching its terminal. A phone paired with nothing opens on Pair; a notification about an agent,
+ * [opens], on its screen, over the rest.
  */
 @Composable
-fun PhoneNav(core: PhoneCore) {
+fun PhoneNav(core: PhoneCore, opens: Flow<AgentRef>) {
     val first: Route = if (core.feed.overview.value.devices.isEmpty()) Route.Pair else Route.Home
     val stack = rememberNavBackStack(first)
+    LaunchedEffect(opens) {
+        opens.collect { agent ->
+            val route = agent.agent()
+            if (stack.lastOrNull() != route) stack.add(route)
+        }
+    }
     NavDisplay(
         backStack = stack,
         onBack = { stack.removeLastOrNull() },

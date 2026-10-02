@@ -30,11 +30,15 @@ import androidx.compose.ui.unit.dp
 import com.hivemind.phone.R
 import com.hivemind.phone.core.Device
 import com.hivemind.phone.core.DeviceKind
+import com.hivemind.phone.push.PushState
 import com.hivemind.phone.ui.common.sinceText
 import com.hivemind.phone.ui.theme.LocalStateColors
 import com.hivemind.phone.ui.theme.personColor
 
-/** Whose the phone is; each device, reachable or away; unpair one; pair another (design §6.7). */
+/**
+ * Whose the phone is; each device, reachable or away; unpair one; pair another (design §6.7); and
+ * how the devices tell the phone while the app is away, [push] (P6).
+ */
 @Composable
 fun DevicesList(
     state: DevicesState,
@@ -42,6 +46,9 @@ fun DevicesList(
     now: Long,
     onUnpair: (Device) -> Unit,
     onPair: () -> Unit,
+    push: PushState,
+    onChoosePush: () -> Unit,
+    onPushAgain: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var unpairing by rememberSaveable { mutableStateOf<String?>(null) }
@@ -65,6 +72,9 @@ fun DevicesList(
             OutlinedButton(onClick = onPair, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.action_pair_another))
             }
+        }
+        item(key = "push") {
+            PushCard(push, onChoose = onChoosePush, onAgain = onPushAgain, modifier = Modifier.padding(top = 12.dp))
         }
     }
     val device = state.devices.firstOrNull { it.id == unpairing }

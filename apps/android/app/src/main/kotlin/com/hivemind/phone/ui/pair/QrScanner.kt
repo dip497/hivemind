@@ -1,6 +1,7 @@
 package com.hivemind.phone.ui.pair
 
 import android.util.Size
+import androidx.camera.core.CameraInfoUnavailableException
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -24,17 +25,21 @@ import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.ReaderException
 import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeReader
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 
 /**
- * The back camera, reading QR codes: each code's text goes to [onCode], on the main thread. CameraX
- * and ZXing alone, no Play services.
+ * A camera, reading QR codes: the back one, else the front one (a Chromebook's, some tablets'); each
+ * code's text goes to [onCode], on the main thread. A camera that cannot be opened, CameraX finding
+ * none or failing to start, is told to [onUnavailable] instead. CameraX and ZXing alone, no Play
+ * services.
  */
 @Composable
-fun QrScanner(onCode: (String) -> Unit, modifier: Modifier = Modifier) {
+fun QrScanner(onCode: (String) -> Unit, onUnavailable: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     val latest by rememberUpdatedState(onCode)
+    val unavailable by rememberUpdatedState(onUnavailable)
     val reading = remember { Executors.newSingleThreadExecutor() }
     val preview = remember { PreviewView(context) }
 
@@ -42,26 +47,44 @@ fun QrScanner(onCode: (String) -> Unit, modifier: Modifier = Modifier) {
         val main = ContextCompat.getMainExecutor(context)
         val providing = ProcessCameraProvider.getInstance(context)
         var gone = false
+        // The provider got, once it is: the only one to unbind as the screen goes.
+        var got: ProcessCameraProvider? = null
         providing.addListener({
             // The screen left before the camera was ready: CameraX refuses a lifecycle that ended.
             if (gone) return@addListener
-            val provider = providing.get()
-            val shown = Preview.Builder().build().also { it.surfaceProvider = preview.surfaceProvider }
-            val analysis = ImageAnalysis.Builder()
-                .setResolutionSelector(
-                    ResolutionSelector.Builder()
-                        .setResolutionStrategy(ResolutionStrategy(Size(1280, 720), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
-                        .build(),
-                )
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
-            analysis.setAnalyzer(reading, QrReader { text -> main.execute { latest(text) } })
-            provider.unbindAll()
-            provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, shown, analysis)
+            try {
+                val provider = providing.get().also { got = it }
+                val camera = listOf(CameraSelector.DEFAULT_BACK_CAMERA, CameraSelector.DEFAULT_FRONT_CAMERA)
+                    .firstOrNull(provider::hasCamera)
+                if (camera == null) {
+                    unavailable()
+                    return@addListener
+                }
+                val shown = Preview.Builder().build().also { it.surfaceProvider = preview.surfaceProvider }
+                val analysis = ImageAnalysis.Builder()
+                    .setResolutionSelector(
+                        ResolutionSelector.Builder()
+                            .setResolutionStrategy(ResolutionStrategy(Size(1280, 720), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
+                            .build(),
+                    )
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+                analysis.setAnalyzer(reading, QrReader { text -> main.execute { latest(text) } })
+                provider.unbindAll()
+                provider.bindToLifecycle(owner, camera, shown, analysis)
+            } catch (e: Exception) {
+                // CameraX could not start (no camera, a camera service gone), or found no camera to
+                // bind: the link can still be pasted.
+                when (e) {
+                    is ExecutionException, is IllegalArgumentException, is IllegalStateException, is CameraInfoUnavailableException ->
+                        unavailable()
+                    else -> throw e
+                }
+            }
         }, main)
         onDispose {
             gone = true
-            if (providing.isDone) providing.get().unbindAll()
+            got?.unbindAll()
             reading.shutdown()
         }
     }
