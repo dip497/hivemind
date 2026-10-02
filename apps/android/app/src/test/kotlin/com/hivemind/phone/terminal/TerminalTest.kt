@@ -58,10 +58,10 @@ class TerminalTest {
     fun `the view follows the newest line until the person scrolls up`() {
         val terminal = Terminal()
         terminal.apply(update(1, first = 0, count = 30, lines = (0L until 30L).map { line(it, "$it") }))
-        assertEquals(29, terminal.list.firstVisibleItemIndex)
+        assertEquals(29, terminal.follow.list.firstVisibleItemIndex)
 
-        terminal.following = false
+        terminal.follow.on = false
         terminal.apply(update(2, first = 0, count = 40, lines = (30L until 40L).map { line(it, "$it") }))
-        assertEquals(29, terminal.list.firstVisibleItemIndex)
+        assertEquals(29, terminal.follow.list.firstVisibleItemIndex)
     }
 }

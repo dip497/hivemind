@@ -103,38 +103,21 @@ jobs:
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
-      - uses: actions/cache@v4
-        id: avd
-        with:
-          path: |
-            ~/.android/avd/*
-            ~/.android/adb*
-          key: phone-android-avd-35-x86_64
-
-      - name: An emulator snapshot, made once and cached
-        if: steps.avd.outputs.cache-hit != 'true'
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          force-avd-creation: false
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          disable-animations: false
-          script: echo "snapshot made"
-
+      # Booted cold, not from a snapshot: an emulator restored from one dropped off adb as Maestro
+      # started its driver ("device offline", runs 36987502508 and 36989241234).
       - name: Smoke flow
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          MAESTRO_CLI_NO_ANALYTICS: "1"
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: "120000"
         with:
           api-level: 35
           target: google_apis
           arch: x86_64
-          force-avd-creation: false
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: |
-            adb install -r app-debug.apk
-            maestro test apps/android/maestro --format junit --output maestro-report.xml
+          # One line: the runner runs each line of a script on its own.
+          script: bash scripts/phone/emulator-smoke.sh app-debug.apk maestro-report.xml
 
       - name: What Maestro said
         if: always()
@@ -143,5 +126,6 @@ jobs:
           name: maestro-report
           path: |
             maestro-report.xml
+            maestro-report-logcat.txt
             ~/.maestro/tests/
           if-no-files-found: ignore

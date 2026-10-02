@@ -1,5 +1,6 @@
 package com.hivemind.phone.ui.agent
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -43,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hivemind.phone.R
+import com.hivemind.phone.chat.ChatView
 import com.hivemind.phone.core.Agent
 import com.hivemind.phone.core.Answer
 import com.hivemind.phone.core.Waiting
@@ -59,6 +64,12 @@ import com.hivemind.phone.ui.common.sinceText
 import com.hivemind.phone.ui.common.stoppable
 import com.hivemind.phone.ui.theme.LocalStateColors
 
+/** What the screen shows of the agent: what it says, or its terminal. */
+private enum class Shown(@StringRes val label: Int) {
+    CHAT(R.string.view_chat),
+    TERMINAL(R.string.view_terminal),
+}
+
 /** The keys of the Type row, as shown and as `type_keys` takes them. */
 private val Keys = listOf(
     "Esc" to "escape", "Tab" to "tab", "↑" to "up", "↓" to "down", "←" to "left", "→" to "right",
@@ -66,9 +77,10 @@ private val Keys = listOf(
 )
 
 /**
- * One agent (design §6.4): its live terminal, fitted to the width; what it waits on, as a banner
- * with its answers; a reply box, and Type, which types into its terminal as the person. Stop, Diff
- * and Close at the top; closing asks the phone's lock.
+ * One agent (design §6.4): its live terminal, fitted to the width, or what it and the person say to
+ * each other as a chat (P7); what it waits on, as a banner with its answers; a reply box, and Type,
+ * which types into its terminal as the person. Stop, Diff and Close at the top; closing asks the
+ * phone's lock.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,6 +89,7 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
     val lock = LocalPhoneLock.current
     val snackbar = remember { SnackbarHostState() }
     NoticeEffect(vm.calls, snackbar)
+    var shown by rememberSaveable { mutableStateOf(Shown.TERMINAL) }
     var typing by rememberSaveable { mutableStateOf(false) }
     val busy = vm.calls.busy.isNotEmpty()
     val closeTitle = stringResource(R.string.lock_close_title, agent?.name.orEmpty())
@@ -109,27 +122,45 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Shown.entries.forEachIndexed { i, view ->
+                    SegmentedButton(
+                        selected = shown == view,
+                        onClick = { shown = view },
+                        shape = SegmentedButtonDefaults.itemShape(i, Shown.entries.size),
+                    ) { Text(stringResource(view.label)) }
+                }
+            }
             // Closed elsewhere, or its device no longer lists it: what its terminal last showed stays.
             if (agent == null) Note(stringResource(R.string.agent_gone))
             agent?.waiting?.let { WaitingBanner(it, busy, vm::answer) }
-            vm.screen.keyboard?.let { holder ->
-                Note(stringResource(R.string.keyboard_held, holder))
-            }
-            vm.screen.ended?.let { ended ->
-                Note(
-                    when (ended) {
-                        is Ended.Exited -> stringResource(R.string.ended_code, ended.code)
-                        Ended.Lost -> stringResource(R.string.ended_lost)
-                    },
-                )
-            }
-            TerminalView(vm.screen.terminal, Modifier.weight(1f).fillMaxWidth())
-            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = !typing, onClick = { typing = false }, label = { Text(stringResource(R.string.mode_message)) })
-                    FilterChip(selected = typing, onClick = { typing = true }, label = { Text(stringResource(R.string.mode_type)) })
+            when (shown) {
+                Shown.CHAT -> ChatView(vm.chat.chat, Modifier.weight(1f).fillMaxWidth())
+                Shown.TERMINAL -> {
+                    vm.screen.keyboard?.let { holder ->
+                        Note(stringResource(R.string.keyboard_held, holder))
+                    }
+                    vm.screen.ended?.let { ended ->
+                        Note(
+                            when (ended) {
+                                is Ended.Exited -> stringResource(R.string.ended_code, ended.code)
+                                Ended.NothingToWatch -> stringResource(R.string.ended_none)
+                            },
+                        )
+                    }
+                    TerminalView(vm.screen.terminal, Modifier.weight(1f).fillMaxWidth())
                 }
-                if (typing) {
+            }
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Typing is into the terminal: the chat only sends messages.
+                val typingShown = typing && shown == Shown.TERMINAL
+                if (shown == Shown.TERMINAL) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = !typing, onClick = { typing = false }, label = { Text(stringResource(R.string.mode_message)) })
+                        FilterChip(selected = typing, onClick = { typing = true }, label = { Text(stringResource(R.string.mode_type)) })
+                    }
+                }
+                if (typingShown) {
                     TypeBox(vm.typed, enabled = vm.screen.keyboard == null && vm.screen.ended == null, onType = vm::type, onKey = vm::press)
                 } else {
                     ReplyBox(stringResource(R.string.message_hint, agent?.name.orEmpty()), busy, onSend = vm::send)

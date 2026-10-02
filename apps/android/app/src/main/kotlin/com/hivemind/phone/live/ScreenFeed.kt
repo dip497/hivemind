@@ -16,8 +16,8 @@ sealed interface Ended {
     /** The session ended, with its exit code. */
     data class Exited(val code: Long) : Ended
 
-    /** The watch ended without the session: its device is gone. */
-    data object Lost : Ended
+    /** There is none to watch now: it ended unseen, its workspace is not on that device now, or the device refused it. */
+    data object NothingToWatch : Ended
 }
 
 /**
@@ -55,7 +55,7 @@ class ScreenFeed(phone: Phone, agent: AgentRef) {
         }
 
         override fun ended(code: Long?) {
-            main.post { ended = if (code == null) Ended.Lost else Ended.Exited(code) }
+            main.post { ended = if (code == null) Ended.NothingToWatch else Ended.Exited(code) }
         }
     }
 
