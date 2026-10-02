@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.hivemind.phone.R
 import com.hivemind.phone.core.Paired
+import com.hivemind.phone.ui.common.AllowNotifications
 import com.hivemind.phone.ui.theme.personColor
 import kotlinx.coroutines.launch
 
@@ -156,5 +157,7 @@ private fun Paired(paired: Paired, onDone: () -> Unit) {
         )
     }
     if (person != null) Text(stringResource(R.string.pair_with, paired.name), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    // Paired, the phone has someone to be told by: the moment to ask.
+    AllowNotifications()
     Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.action_continue)) }
 }

@@ -143,4 +143,51 @@
     <string name="notice_no_lock">Set a screen lock on this phone to start or close agents.</string>
 
     <string name="core_broken">hivemind could not open what this phone keeps: %s</string>
+
+    <!-- Told while the app is away (P6): the notifications -->
+    <string name="channel_needs">Needs you</string>
+    <string name="channel_needs_about">An agent waits on you: a permission, a question, a plan.</string>
+    <string name="channel_ended">Finished or failed</string>
+    <string name="channel_ended_about">An agent finished its work, or failed.</string>
+    <string name="channel_back">Devices back</string>
+    <string name="channel_back_about">One of your devices that was away is back.</string>
+    <string name="notify_waits">%1$s · %2$s</string>
+    <string name="notify_kind_permission">Asks your permission</string>
+    <string name="notify_kind_question">Asks you a question</string>
+    <string name="notify_kind_plan">Has a plan for you to read</string>
+    <string name="notify_kind_other">Waits on you</string>
+    <string name="notify_finished">Finished · %s</string>
+    <string name="notify_failed">Failed · %s</string>
+    <string name="notify_back">%s is back</string>
+    <string name="notify_allowing">Allowing…</string>
+    <string name="notify_denying">Denying…</string>
+    <string name="notify_allowed">Allowed</string>
+    <string name="notify_denied">Denied</string>
+    <string name="notify_already">Already answered</string>
+    <string name="notify_not_answered">Not answered: %s</string>
+    <string name="notify_answering">Answering from a notification</string>
+    <string name="notify_ask">Be told when an agent needs you, even with the app closed.</string>
+    <string name="notify_refused">Notifications are off for hivemind: turn them on in the system\'s settings.</string>
+    <string name="action_allow_notifications">Allow notifications</string>
+    <string name="action_open_settings">Open settings</string>
+
+    <!-- Told while the app is away (P6): where the devices tell the phone, in Devices -->
+    <string name="push_title">Notifications</string>
+    <string name="push_none">No UnifiedPush distributor on this phone: install one (ntfy, for instance) to be told what needs you while the app is closed.</string>
+    <string name="push_to_choose">Several push services are on this phone: choose the one to be told through.</string>
+    <string name="action_push_choose">Choose</string>
+    <string name="push_registering">Asking %s where this phone is told…</string>
+    <string name="push_failed_network">Your push service could not be reached.</string>
+    <string name="push_failed_action">Your push service needs you: open it.</string>
+    <string name="push_failed_vapid">Your push service asks for a key hivemind does not give it.</string>
+    <string name="push_failed_internal">Your push service could not register this phone.</string>
+    <string name="push_dropped">Your push service no longer tells this phone.</string>
+    <string name="push_not_told">Your devices were not told where to reach this phone: %s</string>
+    <string name="push_via">Told through %s.</string>
+    <string name="push_direct">Told directly by your devices.</string>
+    <string name="push_server_refused">Your network\'s push server would not take this phone (%s): your devices tell it directly.</string>
+    <string name="push_told_nobody">None of your devices has been told yet.</string>
+    <string name="push_told">%s will tell this phone what needs you.</string>
+    <string name="push_away">%s: away, told when the app next opens.</string>
+    <string name="action_try_again">Try again</string>
 </resources>

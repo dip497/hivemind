@@ -119,6 +119,10 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.zxing.core)
+    // Told while the app is away (P6): UnifiedPush, through the distributor the person has (no
+    // Google services); an answer from a notification, by WorkManager, the app left closed.
+    implementation(libs.unifiedpush.connector)
+    implementation(libs.androidx.work.runtime)
     // The generated bindings call the core through JNA; its AAR carries the Android dispatch libraries.
     implementation(variantOf(libs.jna) { artifactType("aar") })
     // Debug builds count their frames (FrameMeter, design §3.8).

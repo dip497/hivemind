@@ -16,6 +16,8 @@ jna = "5.19.1"
 coroutines = "1.11.0"
 serialization = "1.11.0"
 metrics = "1.0.0"
+unifiedpush = "3.3.5"
+work = "2.12.0"
 materialIcons = "1.7.8"
 junit = "4.13.2"
 robolectric = "4.17"
@@ -39,6 +41,8 @@ androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.r
 androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
 androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
 androidx-metrics-performance = { module = "androidx.metrics:metrics-performance", version.ref = "metrics" }
+androidx-work-runtime = { module = "androidx.work:work-runtime", version.ref = "work" }
+unifiedpush-connector = { module = "org.unifiedpush.android:connector", version.ref = "unifiedpush" }
 
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
 compose-ui = { module = "androidx.compose.ui:ui" }

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- The core talks to the person's devices: directly, through relays, and finds those on the
          same network by mDNS, which Wi-Fi drops unless the app holds a multicast lock. -->
@@ -8,6 +9,8 @@
     <!-- Pairing reads the QR code on the computer; pasting the link works without a camera. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <!-- What needs the person while the app is away (P6): asked for in Devices and once paired. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".PhoneApp"
@@ -17,14 +20,43 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.Hivemind">
+        <!-- singleTop: a notification about an agent opens it in the activity there is, not another. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- What the UnifiedPush distributor tells the app, through the connector's receiver. -->
+        <service
+            android:name=".push.HivePushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Allow and Deny on a wait's notification: sent by the app's own notifications alone. -->
+        <receiver
+            android:name=".push.AnswerReceiver"
+            android:exported="false" />
+
+        <!-- WorkManager starts when an answer is enqueued (PhoneApp is its Configuration.Provider),
+             not with every process; the provider stays for the other libraries' initializers. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
     </application>
 </manifest>
