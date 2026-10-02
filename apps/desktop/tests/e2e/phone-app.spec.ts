@@ -123,7 +123,7 @@ test("the phone app pairs with the computer by the link it shows, finds it and i
   expect(hiveNetBuilt(), "hive-net built: cargo build in crates/hive-net").toBe(true);
   if (platform === "ios") expect([process.env.PHONE_SIMULATOR, process.env.PHONE_DERIVED_DATA], "PHONE_SIMULATOR and PHONE_DERIVED_DATA").not.toContain(undefined);
   test.setTimeout(20 * 60_000);
-  root = fs.mkdtempSync("/tmp/hm-phone-app-");
+  root = fs.realpathSync(fs.mkdtempSync("/tmp/hm-phone-app-"));
 
   // The person's computer, Priya's: the workspace `api`, its terminals in a daemon as outside tests
   // (a phone watches them there), and the talker on its board, its conversation kept under `home`.
