@@ -558,6 +558,9 @@ importers:
       '@hivemind/core':
         specifier: workspace:*
         version: link:../hive-core
+      '@hivemind/view-host':
+        specifier: workspace:*
+        version: link:../view-host
       '@hivemind/view-sdk':
         specifier: workspace:*
         version: link:../hive-view-sdk
@@ -616,6 +619,9 @@ importers:
       '@hivemind/core':
         specifier: workspace:*
         version: link:../hive-core
+      '@hivemind/view-sdk':
+        specifier: workspace:*
+        version: link:../hive-view-sdk
       '@hivemind/workspace-doc':
         specifier: workspace:*
         version: link:../workspace-doc

@@ -10,6 +10,8 @@ import type { AgentAnswer, AgentChanges, ConversationEntry, Links, PipeChange, S
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
 import type { Answerer, PlanDecided, PlanReview } from "./plans.js";
 import type { JoinQuestion, PersonHere } from "./people.js";
+import type { ViewFile, ViewListing } from "./views.js";
+import type { HostMessage, PluginMessage } from "@hivemind/view-sdk/protocol";
 import type { LinkRole, Role } from "@hivemind/workspace-host/access";
 import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
@@ -103,6 +105,16 @@ export interface WorkspaceMethods {
    *  and the session; then each `agent.said` as it is written, from the start of each session it
    *  begins since, until the connection goes. `session` is left out for an agent with none. */
   "agent.conversation": (tile: string, cursor?: number, session?: string) => { entries: ConversationEntry[]; cursor: number; session?: string };
+  /** The views installed on this device whose manifest says they work on a phone (P8). */
+  "view.list": () => ViewListing[];
+  /** One of view `id`'s files, at `path` inside its package, 4 MiB at most. */
+  "view.file": (id: string, path: string) => ViewFile;
+  /** Open view `id` on the workspace at `repo` for this caller, a remote screen: its host runs here
+   *  until `view.close`, the caller goes, or the host ends it (`view.ended`). What the view posts
+   *  comes as `view.post`, and what its host says goes back as `view.said`, to this caller alone. */
+  "view.open": (id: string, repo: string) => { session: string };
+  /** Close the caller's view session `session`. `closed` false: it has none of that name. */
+  "view.close": (session: string) => { closed: boolean };
   "people.list": (repo: string) => PersonHere[];
   "people.role": (repo: string, person: string, role: Role) => void;
   "people.remove": (repo: string, person: string) => void;
@@ -156,6 +168,8 @@ export interface WorkspaceNotices {
   /** Where the client's person is in the workspace `repo`: their pointer and selection; null:
    *  they left it. */
   "presence.set": (repo: string, state: PresenceState | null) => void;
+  /** What the view of the caller's session `session` posts to its host (P8). */
+  "view.post": (session: string, message: PluginMessage) => void;
 }
 
 /** What a host sends each client it holds a connection to, unasked. */
@@ -196,6 +210,10 @@ export interface WorkspaceEvents {
   "people.asked": (repo: string, question: JoinQuestion) => void;
   /** The question `req` about `repo` was answered, or nobody answered it in time. */
   "people.answered": (repo: string, req: number) => void;
+  /** What the host of the caller's view session `session` says to the view (P8). */
+  "view.said": (session: string, message: HostMessage) => void;
+  /** The host ended the caller's view session `session`, and why: it disabled the view. */
+  "view.ended": (session: string, why: string) => void;
 }
 
 export type Method = keyof WorkspaceMethods;

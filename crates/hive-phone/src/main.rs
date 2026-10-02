@@ -48,6 +48,16 @@
 //!                               what an agent and you said to each other, as its session file
 //!                               keeps it: the last of it, then, with --follow, what is said
 //!                               next as it comes, until Ctrl+C
+//!   hive-phone views <workspace> [<view> <path>]
+//!                               the community views the device that holds the workspace offers
+//!                               a phone; with a view and a path, that file of the view, its bytes
+//!                               (with --json, `{type, data}`, data base64)
+//!   hive-phone view <workspace> <view>
+//!                               open a view on the workspace, as the phone shows one, its host on
+//!                               that device: each message its host says, a JSON line; each JSON
+//!                               line read here, posted to it; at the end of what is read, it is
+//!                               closed (with --json, `{"closed":true}` last), and when its host
+//!                               ends it, it says why
 //!   hive-phone push --listen <ip:port>
 //!                               be told what happens on the devices this phone paired with (an
 //!                               agent begins waiting on you, finishes, fails): they post to this
@@ -58,8 +68,8 @@
 //!
 //! Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),
 //! `--name <name>` (pair: what the app lists this phone as; default `Phone`), `--json` (pair,
-//! devices, network, unpair, needs, agents, answer, send, start, stop, close, diff, talk, push: as
-//! JSON, a notice, a list or a piece of a conversation a line).
+//! devices, network, unpair, needs, agents, answer, send, start, stop, close, diff, talk, push,
+//! views, view: as JSON, a notice, a list or a piece of a conversation a line).
 
 use std::{path::PathBuf, process::ExitCode, sync::Arc};
 
@@ -75,11 +85,12 @@ use hive_phone::{
     now_ms,
     pairing::{self, Pairing},
     push::{self, PushKeys},
+    views,
     workspace::{self, Reply, Watched},
 };
 use serde_json::{json, Value};
 
-const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | agents [--follow] | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--allow|--deny|--approve|--changes <what> | send <workspace> <tile> --text <line> | start <workspace> [<agent> [--frame <id>] [--prompt <text>] [--model <m>] [--mode <m>]] | stop <workspace> <tile> | close <workspace> <tile> | diff <workspace> <tile> | talk <workspace> <tile> [--follow] | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
+const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | agents [--follow] | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--allow|--deny|--approve|--changes <what> | send <workspace> <tile> --text <line> | start <workspace> [<agent> [--frame <id>] [--prompt <text>] [--model <m>] [--mode <m>]] | stop <workspace> <tile> | close <workspace> <tile> | diff <workspace> <tile> | talk <workspace> <tile> [--follow] | views <workspace> [<view> <path>] | view <workspace> <view> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
 
 #[derive(Default)]
 struct Args {
@@ -592,6 +603,87 @@ async fn run(args: Args) -> Result<()> {
             let talked = talked.await;
             endpoint.close().await;
             talked?;
+        }
+        "views" => {
+            let Some((ws, rest)) = args.rest.split_first() else {
+                bail!("views: which workspace? (`hive-phone agents --json` names them)");
+            };
+            let (endpoint, devices) = reaching(&phone).await?;
+            let done = async {
+                let connection = workspace::holder(&endpoint, &devices, ws).await?;
+                match rest {
+                    [] => {
+                        let offered = views::list(&connection, ws).await?;
+                        if args.json {
+                            println!("{}", serde_json::to_value(&offered)?);
+                        } else if offered.is_empty() {
+                            println!("no view there says it works on a phone");
+                        }
+                        for v in offered.iter().filter(|_| !args.json) {
+                            println!("{}  {}  {}  {}", v.id, v.name, v.version, v.entry);
+                        }
+                    }
+                    [view, path] => {
+                        let file = views::file(&connection, ws, view, path).await?;
+                        if args.json {
+                            use base64::Engine;
+                            let data =
+                                base64::engine::general_purpose::STANDARD.encode(&file.bytes);
+                            println!("{}", json!({ "type": file.mime, "data": data }));
+                        } else {
+                            std::io::Write::write_all(&mut std::io::stdout(), &file.bytes)?;
+                        }
+                    }
+                    _ => bail!("views: a view and one of its files, or neither\n{USAGE}"),
+                }
+                Ok::<_, anyhow::Error>(())
+            };
+            let done = done.await;
+            endpoint.close().await;
+            done?;
+        }
+        "view" => {
+            let [ws, view] = &args.rest[..] else {
+                bail!(
+                    "view: which workspace and view? (`hive-phone views <workspace>` names them)"
+                );
+            };
+            let (endpoint, devices) = reaching(&phone).await?;
+            // Each line read here, as JSON, is posted to the view; the end of them closes it.
+            let (lines, posts) = tokio::sync::mpsc::channel(16);
+            tokio::spawn(async move {
+                use tokio::io::AsyncBufReadExt;
+                let mut stdin = tokio::io::BufReader::new(tokio::io::stdin()).lines();
+                while let Ok(Some(line)) = stdin.next_line().await {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    let message = match serde_json::from_str::<Value>(&line) {
+                        Ok(message) => message,
+                        Err(e) => {
+                            eprintln!("hive-phone: not posted, not JSON: {e}");
+                            continue;
+                        }
+                    };
+                    if lines.send(message).await.is_err() {
+                        return;
+                    }
+                }
+            });
+            let shown = async {
+                let connection = workspace::holder(&endpoint, &devices, ws).await?;
+                views::open(&connection, ws, view, posts, |message| {
+                    println!("{message}")
+                })
+                .await
+            };
+            let ended = shown.await;
+            endpoint.close().await;
+            match ended? {
+                views::Ended::Closed if args.json => println!("{}", json!({ "closed": true })),
+                views::Ended::Closed => eprintln!("hive-phone: closed"),
+                views::Ended::Host(why) => bail!("its host ended the view: {why}"),
+            }
         }
         "unpair" => {
             let which = args

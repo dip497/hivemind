@@ -48,6 +48,8 @@ const refused = (message: string): Answer => ({ error: { code: "FORBIDDEN", mess
 const BY_TILE = /^(terminal\.(write|show|resize|flow|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.(answer|send|interrupt|close|diff|conversation))$/;
 /** Methods and notices whose first param names the workspace, or a place in it (its `.hivemind`). */
 const BY_WORKSPACE = /^(store|git|worktree|file|issue|review|people)\.|^(plan\.list|presence\.set|agent\.(startable|start))$/;
+/** Methods whose second param names the workspace, after what they open there (a view, P8). */
+const BY_WORKSPACE_SECOND = /^view\.open$/;
 
 /** Whether `place`, as the host reads a param, is the workspace's repo `repo` or inside it: a
  *  peer names the workspace by its id, and nothing else on the host, no other folder and no other
@@ -150,6 +152,8 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
   };
   const connection: Connection = {
     actor: peer.actor,
+    // What a view it opens may do is what the peer may (P8): its role, and what its device asks.
+    may: (method) => (!peer.allows || peer.allows(method, [])) && mayCall(peer.actor.access, method),
     send: (event) => {
       const out = outbound(event);
       if (!out) return;
@@ -174,7 +178,8 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     if (BY_TILE.test(method) && !peer.holds(String(params[0]))) return `${String(params[0])} is not a tile of this workspace`;
     // A guest names this workspace, by its id, and nothing else on the host. The person's own
     // devices are the owner, there as here.
-    if (BY_WORKSPACE.test(method) && peer.actor.access !== "owner" && params[0] != null && !(typeof params[0] === "string" && inWorkspace(peer.repo, params[0]))) {
+    const place = BY_WORKSPACE.test(method) ? params[0] : BY_WORKSPACE_SECOND.test(method) ? params[1] : null;
+    if (peer.actor.access !== "owner" && place != null && !(typeof place === "string" && inWorkspace(peer.repo, place))) {
       return "name this workspace by its id: nothing else of the host's is open to you";
     }
     if (method === "terminal.watchActivity" && Array.isArray(params[0]) && !params[0].every((t) => peer.holds(String(t)))) return "a tile there is not of this workspace";

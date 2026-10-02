@@ -16,3 +16,14 @@ describe("provenance the package claims about itself", () => {
     }
   });
 });
+
+describe("the screens a view says it works on", () => {
+  const base = { id: "view", name: "V", version: "1.0.0", entry: "index.html", protocol: 1, permissions: [] };
+  it("keeps `phone` as it says, says nothing of it when the view does not, and refuses anything but true or false", () => {
+    const phone = (extra: object) => { const r = validateViewManifest({ ...base, ...extra }); return r.ok ? r.manifest.phone : r.errors; };
+    expect(phone({ phone: true })).toBe(true);
+    expect(phone({ phone: false })).toBe(false);
+    expect(phone({})).toBeUndefined();
+    expect(phone({ phone: "yes" })).toEqual(['"phone" must be true or false']);
+  });
+});

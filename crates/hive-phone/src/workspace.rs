@@ -72,9 +72,10 @@ pub async fn holder(
 
 /// A workspace opened on a connection: calls go out, and answers and events come back.
 pub struct Workspace {
-    send: SendStream,
+    pub(crate) send: SendStream,
     pub(crate) recv: RecvStream,
-    next: u64,
+    /// The id the next call takes.
+    pub(crate) next: u64,
 }
 
 impl Workspace {

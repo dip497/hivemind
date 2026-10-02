@@ -1,4 +1,4 @@
-# Workspace API (0.11)
+# Workspace API (0.12)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -60,7 +60,7 @@ after a minute without it, and never what was typed.
 A peer names the workspace by its id, `hive://<workspaceId>`, wherever a call takes a repo (or a
 `cwd` inside it); the host reads that as its repo. A guest's call or notice about a workspace
 (`store.*`, `git.*`, `worktree.*`, `file.*`, `issue.*`, `review.*`, `people.*`, `plan.list`,
-`presence.set`, `agent.startable`, `agent.start`) names this one, or a place in it, and nothing else on the host: another folder, a
+`presence.set`, `agent.startable`, `agent.start`, and `view.open`, whose second param names it) names this one, or a place in it, and nothing else on the host: another folder, a
 path out of it (`..`), another workspace or a machine is `FORBIDDEN` (a notice is dropped). The
 person's own devices are the owner, there as here. What the host answers of every agent it runs
 (`status.all`, `link.list`) a peer is answered for the workspace's own agents alone, as it hears
@@ -72,10 +72,11 @@ then its output), `terminal.write` and `terminal.keyboard.ask` (it types into on
 and asks for its keyboard while someone else holds it, 0.10), `agent.answer` (it answers what an
 agent waits on the person for), `agent.send` (it sends one a message, 0.10), and `agent.startable`,
 `agent.start`, `agent.interrupt`, `agent.close` and `agent.diff` (it starts an agent, interrupts its
-turn, closes it and reads what it changed, `agents.md`, 0.11): it never starts a terminal but by
+turn, closes it and reads what it changed, `agents.md`, 0.11), and the `view.*` calls (it shows the
+community views here that work on a phone, 0.12): it never starts a terminal but by
 starting an agent, never sizes one, nor gives or takes a keyboard (M5). Each call and notice is checked against the
 peer's role on the workspace (design §6) before it runs, and one the role does not allow is
-`FORBIDDEN` (a notice is dropped): reads and watching terminals are anyone's with access; typing
+`FORBIDDEN` (a notice is dropped): reads, watching terminals and showing a community view are anyone's with access; typing
 into and resizing a terminal, and asking for its keyboard or handing it on, *Can use terminals*;
 handing a branch of one's own to the host (`git.handOff`, M4), *Can edit board*;
 answering an agent's plan or what it waits on (`agent.answer`), sending one a message
@@ -185,6 +186,10 @@ log.
 | `agent.close` | `tile` | `{closed}`: its session ended and its tile taken off its board, as `hive ctl close` (`agents.md`, 0.11) | target the agent's tile |
 | `agent.diff` | `tile` | `{files, patch, truncated}`: what it changed in the folder it runs in, against its last commit (`agents.md`, "Changes", 0.11) | — |
 | `plan.decide` | `tile`, `requestId`, `"allow"` or `"deny"`, `feedback`? | `{answered, by}`: the first answer is the one the agent gets; a later one, or one about another tile's plan, answers nothing (`by`: who answered first) | target the agent's tile, detail the answer |
+| `view.list` | | `[{id, name, version, entry}]`: the community views installed on this device whose manifest says `"phone": true` (below, 0.12) | read |
+| `view.file` | `id`, `path` | `{data, type}`: one of the view's files, `path` inside its package (a link out of it, or `..`, is `BAD_REQUEST`), its bytes base64 and its type; 4 MiB at most | read |
+| `view.open` | `id`, `repo` | `{session}`: the view opened on the workspace for this caller (below) | — |
+| `view.close` | `session` | `{closed}`: the caller's session ended; false: it has none of that name | — |
 
 | `people.list` | `repo` | who is on the workspace's access list: `[{person, name, color, role, grantedAt, expires, devices, present}]`, `present` whether they are connected now; `[]` for a workspace that does not say whose it is yet | read |
 | `people.role` | `repo`, `person`, `role` | `null`: their connections close, so they work under the new role at once; *Can drive agents* is given only to someone connected now | target `repo`, detail the person and the role |
@@ -233,6 +238,7 @@ layout the store cannot hold is `BAD_REQUEST`.
 | `terminal.detach` | `tile` | the client shows it no more; a session no client shows is let go of (a daemon keeps it running, one the host runs itself ends) |
 | `terminal.watchActivity` | `tiles` | the terminals whose activity the client is sent (`terminal.activity`), at most 1024 |
 | `store.shown` | `repo` or null, `frame` or null | the workspace the client shows now, and the frame its user is in there (the control plane opens a tile there) |
+| `view.post` | `session`, `message` | what the view of the caller's session posts to its host, a view protocol message (below) |
 | `presence.set` | `repo`, `{name, color, cursor, over, selection}` or null | where the client's person is in the workspace: `cursor` `{x, y}` in board coordinates (null: off the board), `over` the id of the tile, frame or board object under it (null: none), `selection` the ids they have selected (at most 100); null: they left it. Never stored: it lasts until the connection closes, they leave, or a minute passes without another |
 
 A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch", "base"?,
@@ -261,6 +267,35 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `presence.changed` | `repo`, `[{id, person, name, color, cursor, over, selection}]` | to every client, as someone in the workspace moves, selects, arrives or leaves (at once after a quiet spell, and at most every 50 ms): everyone there now, one per connection (`id`), `person` their key |
 | `people.asked` | `repo`, `{req, workspace, profile, role}` | to the owner's clients, as someone asks to join with a link: `workspace` the workspace's name, `profile` `{name, color}` as they gave it, `role` the link's |
 | `people.answered` | `repo`, `req` | to the owner's clients, as the question `req` is answered, or nobody answered it in time |
+| `view.said` | `session`, `message` | to the caller of a view session alone, each view protocol message its host says to the view |
+| `view.ended` | `session`, `why` | to the caller of a view session, as its host disables the view (it flooded, or sent what it may not, past the limits): the session is over |
+
+## Views on a remote screen
+
+A community view (`@hivemind/view-sdk`, view protocol 1.5) that says in its manifest it works on a
+phone (`"phone": true`, laid out from `hello.device`) is shown on another device's screen, the
+person's phone first, while its host runs here (0.12; design: `docs/design/phone-app-2026-10-02.md`
+§6.1). The other device reads the views offered (`view.list`) and their files (`view.file`), and
+opens one on a workspace here (`view.open`). Its session is the caller's alone: what the view posts
+goes in as `view.post`, checked here as the window checks a view in its iframe, and what its host
+says comes back as `view.said`, until the caller closes it (`view.close`), the caller's connection
+closes, or the host disables the view (`view.ended`, with why).
+
+- **Its host says** what the window's says (`hello`, `structure`, `names`, `selection`, `status`),
+  from what this device holds: the board from the store, statuses and links from the control
+  plane, a selection of the session's own. `hello.device` is `{touch: true, compact: true}`; the
+  screen's look and size are its own, so `theme` has no colours, `viewport` is 0 by 0 and no
+  `resize`, `theme` or `visibility` follows; no layout is kept. `features`: `agentStatus`.
+- **What the view may do** is what its manifest asks and its caller may call, both: a view on a
+  remote screen may start agents (`workspace:spawn`) when its caller may call `agent.start`, close
+  tiles (`workspace:close`) when it may call `agent.close`, and rename them (`workspace:edit`) when
+  it may write the board (`store.setCore`, the owner's: a phone may not). A prompt a view writes
+  and a past session it continues ask the person at this computer, so neither is served. What it
+  starts and closes is recorded as the caller's, its detail `view <id>`.
+- **What a remote screen cannot do**: place a live surface (`surfaceRects`), pick a folder
+  (`openFolder`), share an image (`share` is not among its `features`), start any tile but an
+  agent's, or add a frame. A request for one is answered `UNSUPPORTED`; anything else is not acted
+  on, and not counted against the view, which could not have known.
 
 ## A client that holds the layouts
 
@@ -287,5 +322,7 @@ TypeScript: `StoreReplica` (`packages/workspace-api/src/store-replica.ts`).
 TypeScript: `packages/workspace-api` (the methods' types, a client over any transport, and the
 server that answers them, and a replica of the store for a client over a stream); the host's
 domains in `packages/host` (git and worktrees, files, issues, reviews, agents, terminals, plans,
-presence, people, the store), which the app's main process, the dev-bridge and `hive host` serve,
-each over its own way of running a session and its own store.
+presence, people, the store, community views on a remote screen), which the app's main process,
+the dev-bridge and `hive host` serve, each over its own way of running a session and its own
+store. A view's host is `packages/view-host`, the window's and a remote screen's both. Rust: the
+phone's core, `crates/hive-phone` (`views.rs` for the views).

@@ -72,6 +72,8 @@ function computer() {
   const keyed: Array<{ what: string; by: Actor; tile: unknown }> = [];
   /** What starting, interrupting, closing an agent or reading its changes reached, and by whom. */
   const driven: Array<{ what: string; by: Actor; at: unknown }> = [];
+  /** What showing a community view reached, by whom, and what a view opened may do there. */
+  const viewed: Array<{ what: string; by: Actor; at: unknown[]; may?: string[] }> = [];
   /** Where each device is told what happens here; each device forgotten; the phones each device
    *  said it paired with. */
   const subscribed: Array<{ device: string; sub: unknown }> = [];
@@ -89,9 +91,17 @@ function computer() {
       ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff"].map((what) => [
         what, (from: Connection, at: unknown) => { driven.push({ what, by: from.actor, at }); return {}; },
       ])),
+      ...Object.fromEntries(["view.list", "view.file", "view.close"].map((what) => [
+        what, (from: Connection, ...at: unknown[]) => { viewed.push({ what, by: from.actor, at }); return {}; },
+      ])),
+      "view.open": (from: Connection, ...at: unknown[]) => {
+        viewed.push({ what: "view.open", by: from.actor, at, may: ["agent.start", "agent.close", "store.setCore"].filter((m) => from.may?.(m)) });
+        return { session: "s1" };
+      },
     },
     effects: {},
     notices: {
+      "view.post": (from: Connection, ...at: unknown[]) => { viewed.push({ what: "view.post", by: from.actor, at }); },
       "terminal.write": (from: Connection, tile: unknown) => { typed.push({ by: from.actor, tile }); },
       ...Object.fromEntries(["terminal.resize", "terminal.keyboard.ask", "terminal.keyboard.give", "terminal.keyboard.take"].map((what) => [
         what, (from: Connection, tile: unknown) => { keyed.push({ what, by: from.actor, tile }); },
@@ -144,7 +154,7 @@ function computer() {
     }
     return { heard, send: (stream: string, m: unknown) => deviceEnd.send(stream, JSON.stringify(m)), closed: computerEnd.closed, hangUp: () => deviceEnd.close("done") };
   };
-  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, sent, keyed, driven, subscribed, unpaired, introduced, forgot, host, connect, statusChanged };
+  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, sent, keyed, driven, viewed, subscribed, unpaired, introduced, forgot, host, connect, statusChanged };
 }
 const until = async (done: () => boolean) => { for (let t = 0; t < 5_000 && !done(); t += 20) await wait(20); };
 
@@ -242,6 +252,28 @@ test("a phone drives the workspace's agents as the owner's device: sees what may
     { what: "agent.interrupt", by: asPhone, at: "t2" },
     { what: "agent.diff", by: asPhone, at: "t2" },
     { what: "agent.close", by: asPhone, at: "t2" },
+  ]);
+});
+
+test("a phone shows the workspace's community views as the owner's device: lists them, reads their files, opens one there and talks to it; the view may do there what a phone may", async () => {
+  const c = computer();
+  const phone = c.connect(c.phone);
+  phone.send("api", { t: "open", workspace: c.workspace });
+  phone.send("api", { id: 1, method: "view.list", params: [] });
+  phone.send("api", { id: 2, method: "view.file", params: ["priya-board", "index.html"] });
+  phone.send("api", { id: 3, method: "view.open", params: ["priya-board", `hive://${c.workspace}`] });
+  phone.send("api", { method: "view.post", params: ["s1", { type: "ready", v: 1 }] });
+  phone.send("api", { id: 4, method: "view.close", params: ["s1"] });
+  await until(() => phone.heard.get("api")!.length >= 4);
+  const answers = phone.heard.get("api")!.map((m) => JSON.parse(m) as { id: number; error?: unknown });
+  assert.deepEqual(answers.map((a) => [a.id, a.error]), [[1, undefined], [2, undefined], [3, undefined], [4, undefined]]);
+  const asPhone = { kind: "peer", person: c.person, device: c.phone, access: "owner" };
+  assert.deepEqual(c.viewed, [
+    { what: "view.list", by: asPhone, at: [] },
+    { what: "view.file", by: asPhone, at: ["priya-board", "index.html"] },
+    { what: "view.open", by: asPhone, at: ["priya-board", c.repo], may: ["agent.start", "agent.close"] },
+    { what: "view.post", by: asPhone, at: ["s1", { type: "ready", v: 1 }] },
+    { what: "view.close", by: asPhone, at: ["s1"] },
   ]);
 });
 

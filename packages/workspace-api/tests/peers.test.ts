@@ -47,6 +47,11 @@ const domain = {
     ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.conversation"].map((what) => [
       what, (from: Connection, at: unknown) => { ran.push({ what, by: from.actor, args: [at] }); return {}; },
     ])),
+    // A view opened for the caller: what it is let do there is what the caller may call.
+    "view.open": (from: Connection, id: unknown, repo: unknown) => {
+      ran.push({ what: "view.open", by: from.actor, args: [id, repo, ["agent.start", "agent.close", "store.setCore"].filter((m) => from.may?.(m))] });
+      return { session: "s1" };
+    },
   },
   effects: { "git.commit": () => ({}), "terminal.open": () => ({}) },
   notices: {
@@ -161,6 +166,22 @@ test("a guest names this workspace, by its id, and nothing else on the host: ano
 
   const mine = connect("owner");
   expect(await mine.client.call("file.read", "/elsewhere", "a.ts")).toBe("a.ts in /elsewhere");
+});
+
+test("a view opened on a remote screen names the workspace after the view, a guest this one alone; what the view may do there is what the peer may, as its role and its device allow", async () => {
+  const viewer = connect("view");
+  for (const elsewhere of ["/work/other", `hive://${"f".repeat(32)}`, `${workspaceUrl(W)}/../../etc`]) {
+    expect(await code(viewer.client.call("view.open", "board", elsewhere))).toBe("FORBIDDEN");
+  }
+  await viewer.client.call("view.open", "board", workspaceUrl(W));
+  expect(ran).toEqual([{ what: "view.open", by: viewer.actor, args: ["board", REPO, []] }]);
+  const driver = connect("agents");
+  await driver.client.call("view.open", "board", workspaceUrl(W));
+  expect(ran.map((r) => r.args[2])).toEqual([["agent.start", "agent.close"]]);
+  // The person's own device, held to some calls (as their phone is): those alone.
+  const phone = connect("owner", (method) => method.startsWith("view.") || method === "agent.close");
+  await phone.client.call("view.open", "board", workspaceUrl(W));
+  expect(ran.map((r) => r.args[2])).toEqual([["agent.close"]]);
 });
 
 test("a peer hears only the events about its workspace, and is refused a tile outside it", async () => {

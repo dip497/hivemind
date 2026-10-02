@@ -15,6 +15,9 @@ export interface Connection {
   send(event: EventMessage): void;
   /** Aborts when the client goes. */
   readonly closed: AbortSignal;
+  /** Whether the client may call `method`, as its transport checks each of its calls: a peer's
+   *  role, and what its device may ask. None: anything (the host's own windows). */
+  may?(method: string): boolean;
 }
 
 /** Send one client `event`. */

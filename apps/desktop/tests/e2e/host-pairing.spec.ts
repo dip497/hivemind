@@ -7,7 +7,8 @@
 // shells run in the host's daemon, and go on after the app has quit; and its files and git are the
 // host's folder's, read there (M4). And a phone paired with the app is the person's at the host too
 // (spec/pairing.md 0.7): the host lets it in, as a phone, and tells it what waits on the person
-// there; unpaired on the app, the host forgets it.
+// there, and shows it a community view installed there (P8); unpaired on the app, the host forgets
+// it.
 import { test, expect, type ElectronApplication } from "@playwright/test";
 import { execFile, execSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -200,7 +201,7 @@ test("a frame of the app's own workspace runs on the paired host: placed on one 
   await expect.poll(() => read(path.join(builds, "after.txt")), { timeout: 30_000 }).toBe("finished");
 });
 
-test("a phone paired with the app is the person's at the host too: the host lets it in, as a phone, answers what waits on the person there and tells it when an agent there begins to, and lets it allow what the agent asks; unpaired on the app, the host forgets it", async () => {
+test("a phone paired with the app is the person's at the host too: the host lets it in, as a phone, answers what waits on the person there and tells it when an agent there begins to, lets it allow what the agent asks, and shows it a community view installed there; unpaired on the app, the host forgets it", async () => {
   test.skip(!hiveNetBuilt() || !hostable || !fs.existsSync(HIVE_PHONE), "needs hive-net and hive-phone (cargo build in crates/hive-net and crates/hive-phone) and a current apps/cli/dist/hive");
   test.setTimeout(180_000);
   // A stand-in agent the host runs, read from its screen: it asks to edit a file until answered,
@@ -310,6 +311,27 @@ test("a phone paired with the app is the person's at the host too: the host lets
   const allowed = await run(HIVE_PHONE, ["answer", waiting!.workspace as string, waiting!.tile as string, String(waiting!.since), "--allow", "--identity", phone, "--json"], { timeout: 30_000 });
   expect(JSON.parse(allowed.stdout)).toEqual({ answered: true });
   await expect.poll(() => read(answered), { timeout: 20_000 }).toBe("y");
+
+  // A community view installed on the host that works on a phone is offered there, and opened, its
+  // host the host's: told it is on a phone, and what the board holds; closed at the end.
+  const board = path.join(root, "priya-board");
+  fs.mkdirSync(board);
+  fs.writeFileSync(path.join(board, "hivemind-view.json"), JSON.stringify({ id: "priya-board", name: "Priya's board", version: "1.0.0", entry: "index.html", protocol: 1, phone: true }));
+  fs.writeFileSync(path.join(board, "index.html"), "<!doctype html><title>Priya's board</title>");
+  const installed = spawnSync(HIVE, ["views", "install", board, "--json"], { env: onHost, encoding: "utf8", timeout: 60_000 });
+  expect(installed.status, installed.stdout + installed.stderr).toBe(0);
+  const workspace = waiting!.workspace as string;
+  expect(JSON.parse((await run(HIVE_PHONE, ["views", workspace, "--identity", phone, "--json"], { timeout: 30_000 })).stdout))
+    .toEqual([{ id: "priya-board", name: "Priya's board", version: "1.0.0", entry: "index.html" }]);
+  const shown = spawn(HIVE_PHONE, ["view", workspace, "priya-board", "--identity", phone, "--json"]);
+  procs.push(shown);
+  const heard = lines(shown.stdout!);
+  const ended = new Promise<number | null>((r) => shown.on("exit", (code) => r(code)));
+  shown.stdin!.write(`${JSON.stringify({ type: "ready", v: 1 })}\n`);
+  expect(JSON.parse(await heard())).toMatchObject({ type: "hello", pluginId: "priya-board", device: { touch: true, compact: true } });
+  expect((JSON.parse(await heard()) as { tiles: Array<{ id: string }> }).tiles.map((t) => t.id)).toEqual([waiting!.tile]);
+  shown.stdin!.end();
+  expect(await ended).toBe(0);
 
   // Unpaired on the laptop: the host forgets it.
   await devices();

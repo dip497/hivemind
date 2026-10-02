@@ -35,6 +35,9 @@ export interface ViewManifest {
    *  paints an opaque scene of its own sets it to false: nothing would show through, and the
    *  wallpaper's animation and blur would still cost every frame. */
   wallpaper?: boolean;
+  /** It lays itself out for a phone (`hello.device.compact`, protocol 1.5): only a view that says
+   *  so is offered on the person's phone. */
+  phone?: boolean;
 }
 
 // A bare name is built in or installed from a folder; `@owner/name` came from HiveHub. `--` is
@@ -115,13 +118,18 @@ export function validateViewManifest(raw: unknown): ManifestResult {
     if (typeof m.wallpaper !== "boolean") errors.push(`"wallpaper" must be true or false`);
     else wallpaper = m.wallpaper;
   }
+  let phone: boolean | undefined;
+  if (m.phone !== undefined) {
+    if (typeof m.phone !== "boolean") errors.push(`"phone" must be true or false`);
+    else phone = m.phone;
+  }
   let assets: string | undefined;
   if (m.assets !== undefined) {
     if (typeof m.assets !== "string" || !isSafeRelativePath(m.assets)) errors.push(`"assets" must be a relative path inside the package`);
     else assets = m.assets;
   }
-  for (const k of Object.keys(m)) if (!["id", "name", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "author", "homepage", "license"].includes(k)) errors.push(`unknown field "${k}"`);
+  for (const k of Object.keys(m)) if (!["id", "name", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "phone", "author", "homepage", "license"].includes(k)) errors.push(`unknown field "${k}"`);
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, manifest: { id: id!, name: name!, version: version!, entry: entry!, protocol, permissions, ...(assets ? { assets } : {}), ...(wallpaper === undefined ? {} : { wallpaper }),
-    ...(author ? { author } : {}), ...(homepage ? { homepage } : {}), ...(license ? { license } : {}) } };
+    ...(phone === undefined ? {} : { phone }), ...(author ? { author } : {}), ...(homepage ? { homepage } : {}), ...(license ? { license } : {}) } };
 }

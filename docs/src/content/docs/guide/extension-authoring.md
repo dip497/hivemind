@@ -156,6 +156,12 @@ if (hm.device.compact) { /* a phone's screen: one column */ }
 if (hm.device.touch) { /* a finger: give what it taps room */ }
 ```
 
+A view that lays itself out for a phone says so in its manifest, `"phone": true`: only those are
+offered on the person's phone. There its host runs on their computer, and the view may do what
+the phone may: start and close agents, but not rename tiles. A phone's screen has no live terminal
+surfaces, folder picker or share sheet, and starts no tile but an agent's: what asks for them is
+refused (`UNSUPPORTED`).
+
 `cursor` is the tile someone's pointer is over, `selection` what they selected, both only of the
 view's own tiles and frames; the person at the view is never in the list. A view tests without the
 app against `fakeHost()` from `@hivemind/view-sdk/testing` (it comes with `hive views new`): it

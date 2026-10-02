@@ -34,7 +34,7 @@ import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
 import { isRemote, parseDeviceUri } from "@hivemind/core/remote-uri";
 import { savedAuth } from "./remote/saved-hosts.js";
-import { addMachine, checkMachine, deviceStatus, editMachine, initMachines, installOnMachine, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
+import { addMachine, checkMachine, deviceStatus, editMachine, initMachines, installOnMachine, linkState, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
 import { deviceSessions } from "@hivemind/host/device-sessions";
 import { remoteTarget } from "@hivemind/host/remote/targets";
 import {
@@ -93,6 +93,8 @@ import { Plans } from "@hivemind/host/plans";
 import { answers } from "@hivemind/host/answers";
 import { heldBoards, manifestOf, permissionKeys, runsIn } from "@hivemind/host/needs";
 import { agentControl } from "@hivemind/host/agent-control";
+import { views } from "@hivemind/host/views";
+import { listInstalledViews } from "@hivemind/core/views";
 import { conversations, transcriptOf } from "@hivemind/host/conversations";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
@@ -1232,6 +1234,20 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   // What an agent here and the person say to each other, from its session file, as it is written
   // (M5, spec/agents.md "Conversation").
   conversations({ transcriptOf: (bare) => transcriptOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)) }),
+  // The community views here on the person's phone, their host run here (P8).
+  views({
+    installed: () => listInstalledViews(),
+    store: workspaceStore,
+    server: () => workspaceServer,
+    status: (bare) => control.status.get(bare),
+    links: () => control.links(),
+    start: (repo, start) => control.start(repo, start),
+    close: (bare) => control.close(bare),
+    machines: knownMachines,
+    linkState,
+    intents: hostIntents(),
+    onWarn: (m) => console.warn(`[views] ${m}`),
+  }),
   presence(() => workspaceServer, () => machineIdentity().personId),
   peopleHere.domain,
   // A participant's branch, handed off from their machine (M4).

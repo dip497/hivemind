@@ -211,7 +211,7 @@ export interface Dispatcher {
   /** What the control plane's messages call a tile (names.ts). */
   labelOf: (tileId: string) => string;
   /** Spawn an agent, as `tile.spawn_agent` does, without recording it: the caller has (M5). */
-  spawn: (opts: { agent: string; frame?: string; prompt?: string; model?: string; mode?: string; repo: string; attended: true }) => Promise<string>;
+  spawn: (opts: { agent?: string; frame?: string; prompt?: string; model?: string; mode?: string; name?: string; repo: string; attended: true }) => Promise<string>;
   /** Close a tile, as `tile.close` does, without recording it: the caller has (M5). */
   close: (tileId: string) => Promise<unknown>;
 }
