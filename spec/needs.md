@@ -1,4 +1,4 @@
-# Needs you (0.3)
+# Needs you (0.4)
 
 What waits on the person (M5, design §9.2 "Home: Needs you"): each agent waiting on them, in the
 workspaces one of their devices holds, as their phone lists it. The device that runs the agents
@@ -57,6 +57,17 @@ and once: an answer for a wait that is over, or one answered already, does nothi
 
 Anything else is `BAD_REQUEST`. One may answer who may drive the workspace's agents, and the
 person's own devices, a phone among them.
+
+## Sending
+
+`agent.send(tile, text)` (0.4), a method of the workspace API, sends the agent of `tile` a
+message, whatever it is doing: `text` is one line of at most 1000 characters with no control
+characters (else `BAD_REQUEST`), typed into its terminal as its next prompt once it is at its
+prompt (held while it is in a turn, as `hive ctl send` holds one), Enter after it. It answers
+`{ "sent": true }`, or `{ "sent": false }` when no agent runs there. One may send who may drive
+the workspace's agents, and the person's own devices, a phone among them. A phone may also type
+into a terminal it watches, as the person, asking for its keyboard while someone else holds it
+(`workspace-api.md`, "Peers").
 
 ## Asking
 

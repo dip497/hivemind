@@ -4,7 +4,8 @@
  * list gives it): an answer lands only while the agent still waits on that wait, and once, so one
  * that comes late, or again, does nothing and says so. A plan is decided as the person at the
  * desktop decides one; anything else is one line typed into the agent's terminal, Enter after it.
- * Electron-free.
+ * And sending an agent a message, whatever it is doing (spec/needs.md "Sending"): one line, handed
+ * to it as `hive ctl send` hands one, as its next prompt once it is at its prompt. Electron-free.
  */
 import type { InputKind } from "@hivemind/agents";
 import { ApiError, oneOf, text, written } from "@hivemind/workspace-api/protocol";
@@ -18,6 +19,9 @@ export interface AnswersOptions {
   status(tile: string): { state: string; kind?: InputKind; since: number } | undefined;
   /** Type `data` into the terminal of `tile` now; false when it has none. */
   type(tile: string, data: string): boolean;
+  /** Hand `text` to the agent of `tile` as a message: typed in, Enter after it, once it is at its
+   *  prompt; false when it has no terminal. */
+  deliver(tile: string, text: string): boolean;
   /** The plans agents hand off, decided here as at the desktop. */
   plans: Plans;
 }
@@ -27,15 +31,15 @@ export const ANSWER_MAX = 1000;
 /** Waits answered lately: one answered again is told it was. */
 const ANSWERED_KEPT = 256;
 
-/** A line to type: text on one line, no control characters, not too long. */
-function line(value: unknown): string {
-  const t = written(value, "answer.text");
+/** A line to type, `name`: text on one line, no control characters, not too long. */
+function line(value: unknown, name: string): string {
+  const t = written(value, name);
   // eslint-disable-next-line no-control-regex
-  if (!t || t.length > ANSWER_MAX || /[\u0000-\u001f\u007f]/.test(t)) throw new ApiError("BAD_REQUEST", `answer.text is one line of at most ${ANSWER_MAX} characters`);
+  if (!t || t.length > ANSWER_MAX || /[\u0000-\u001f\u007f]/.test(t)) throw new ApiError("BAD_REQUEST", `${name} is one line of at most ${ANSWER_MAX} characters`);
   return t;
 }
 
-export function answers(o: AnswersOptions): Domain<"agent.answer"> {
+export function answers(o: AnswersOptions): Domain<"agent.answer" | "agent.send"> {
   const answered = new Set<string>();
   return {
     answers: {
@@ -54,7 +58,7 @@ export function answers(o: AnswersOptions): Domain<"agent.answer"> {
           const review = o.plans.reviews().find((r) => toBareId(r.tileId) === bare);
           done = !!review && o.plans.decide(from, bare, review.requestId, decision, feedback).answered;
         } else {
-          done = o.type(bare, `${line(a.text)}\r`);
+          done = o.type(bare, `${line(a.text, "answer.text")}\r`);
         }
         if (done) {
           answered.add(wait);
@@ -62,9 +66,11 @@ export function answers(o: AnswersOptions): Domain<"agent.answer"> {
         }
         return { answered: done };
       },
+      "agent.send": (_from, tile, message) => ({ sent: o.deliver(toBareId(text(tile, "tile")), line(message, "text")) }),
     },
     effects: {
       "agent.answer": (tile) => ({ target: typeof tile === "string" ? toBareId(tile) : undefined }),
+      "agent.send": (tile) => ({ target: typeof tile === "string" ? toBareId(tile) : undefined }),
     },
   };
 }

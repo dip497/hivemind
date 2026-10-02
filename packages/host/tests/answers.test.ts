@@ -3,7 +3,8 @@
 // is decided as at the desktop, only while the agent still waits on that wait (its tile, and when
 // it began) and once: an answer that comes late, or again, does nothing and says so. One waiting
 // on its supervisor, or on nothing, is not answered; and an answer is one line of text, or a plan's
-// decision.
+// decision. And a message to an agent, whatever it is doing: one line, handed to it as its next
+// prompt (spec/needs.md "Sending").
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Connection } from "@hivemind/workspace-api/server";
@@ -26,9 +27,17 @@ function computer(status: { state: string; kind?: "permission" | "question" | "p
     who: () => ({ person: "p".repeat(64), name: "Priya" }) as never,
     repoOf: () => "/work/api",
   });
-  const domain = answers({ status: (tile) => statuses.get(tile), type: (tile, data) => { typed.push(`${tile}:${JSON.stringify(data)}`); return tile === "t1"; }, plans });
+  /** Each message handed to an agent, as its next prompt. */
+  const delivered: string[] = [];
+  const domain = answers({
+    status: (tile) => statuses.get(tile),
+    type: (tile, data) => { typed.push(`${tile}:${JSON.stringify(data)}`); return tile === "t1"; },
+    deliver: (tile, text) => { delivered.push(`${tile}:${text}`); return tile === "t1"; },
+    plans,
+  });
   const answer = (tile: string, since: number, a: unknown) => domain.answers["agent.answer"]!(phone, tile, since, a) as { answered: boolean };
-  return { statuses, typed, decided, plans, answer };
+  const send = (tile: string, text: unknown) => domain.answers["agent.send"]!(phone, tile, text) as { sent: boolean };
+  return { statuses, typed, delivered, decided, plans, answer, send, effect: domain.effects!["agent.send"]! };
 }
 const code = (f: () => unknown): string => { try { f(); return "ok"; } catch (e) { return e instanceof ApiError ? e.code : "thrown"; } };
 
@@ -82,4 +91,22 @@ test("an answer is one line of text, or a plan's decision; anything else is a ba
   assert.deepEqual(c.typed, []);
   const plan = computer({ state: "waiting", kind: "plan", since: T });
   assert.equal(code(() => plan.answer("t1", T, { text: "ok" })), "BAD_REQUEST");
+});
+
+test("a message is handed to the agent as its next prompt, whatever it is doing, to be typed once it is at its prompt; to no agent, it is not sent", () => {
+  const c = computer({ state: "working", since: T });
+  assert.deepEqual(c.send("hm:t1", "also add tests"), { sent: true });
+  assert.deepEqual(c.send("t2", "hello"), { sent: false }, "no such agent");
+  assert.deepEqual(c.delivered, ["t1:also add tests", "t2:hello"]);
+  assert.deepEqual(c.typed, [], "nothing typed past the agent's prompt");
+  // Recorded against the agent it went to.
+  assert.deepEqual(c.effect("hm:t1", "also add tests"), { target: "t1" });
+});
+
+test("a message is one line of text: anything else is a bad request, and nothing is handed on", () => {
+  const c = computer({ state: "idle", since: T });
+  for (const text of ["two\nlines", "\u001b[2J", "", "x".repeat(ANSWER_MAX + 1), null, 7]) {
+    assert.equal(code(() => c.send("t1", text)), "BAD_REQUEST", JSON.stringify(text));
+  }
+  assert.deepEqual(c.delivered, []);
 });

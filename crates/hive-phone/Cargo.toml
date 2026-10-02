@@ -23,7 +23,7 @@ rand = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "net", "signal"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "net", "signal", "sync", "io-std", "io-util"] }
 
 [profile.release]
 strip = true

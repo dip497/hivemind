@@ -12,13 +12,18 @@
 //!                               devices this phone paired with, the one waiting longest first,
 //!                               and how many are at work; of a device that is away, what it last
 //!                               answered and when
-//!   hive-phone watch <workspace> <tile>
-//!                               an agent's terminal, read-only: its screen, then its output as
-//!                               it comes, until it ends (or Ctrl+C)
+//!   hive-phone watch <workspace> <tile> [--type]
+//!                               an agent's terminal: its screen, then its output as it comes,
+//!                               until it ends (or Ctrl+C); with --type, each line read here is
+//!                               typed into it, Enter after it, as you (its keyboard asked for:
+//!                               one someone else holds waits until they give it)
 //!   hive-phone answer <workspace> <tile> <since> --text <line> | --approve | --changes <what>
 //!                               answer what an agent waits on you for (`needs --json` names the
 //!                               wait): a line typed into its terminal, or its plan approved or
 //!                               sent back; only while it still waits on that, and once
+//!   hive-phone send <workspace> <tile> --text <line>
+//!                               send an agent a message, whatever it is doing: it goes in as its
+//!                               next prompt
 //!   hive-phone push --listen <ip:port>
 //!                               be told what happens on the devices this phone paired with (an
 //!                               agent begins waiting on you, finishes, fails): they post to this
@@ -27,7 +32,7 @@
 //!
 //! Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),
 //! `--name <name>` (pair: what the app lists this phone as; default `Phone`), `--json` (pair,
-//! devices, network, unpair, needs, answer, push: as JSON, a notice a line).
+//! devices, network, unpair, needs, answer, send, push: as JSON, a notice a line).
 
 use std::{path::PathBuf, process::ExitCode, sync::Arc, time::SystemTime};
 
@@ -38,11 +43,11 @@ use hive_phone::{
     needs::{self, Need},
     pairing,
     push::{self, PushKeys},
-    workspace,
+    workspace::{self, Watched},
 };
 use serde_json::{json, Value};
 
-const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | watch <workspace> <tile> | answer <workspace> <tile> <since> --text <line>|--approve|--changes <what> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
+const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--approve|--changes <what> | send <workspace> <tile> --text <line> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
 
 #[derive(Default)]
 struct Args {
@@ -52,12 +57,14 @@ struct Args {
     identity: Option<PathBuf>,
     name: Option<String>,
     json: bool,
-    /// `answer`'s: a line to type, or a plan's decision and what to change.
+    /// `answer`'s: a line to type, or a plan's decision and what to change; `send`'s message.
     text: Option<String>,
     approve: bool,
     changes: Option<String>,
     /// `push`'s: where this phone listens for its notices.
     listen: Option<String>,
+    /// `watch`'s: each line read here is typed into the terminal.
+    typing: bool,
 }
 
 fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
@@ -73,6 +80,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
             "--approve" => args.approve = true,
             "--changes" => args.changes = Some(argv.next().context("--changes needs a value")?),
             "--listen" => args.listen = Some(argv.next().context("--listen needs a value")?),
+            "--type" => args.typing = true,
             flag if flag.starts_with("--") => bail!("{flag} is not an option\n{USAGE}"),
             _ if args.command.is_empty() => args.command = arg,
             _ => args.rest.push(arg),
@@ -319,12 +327,36 @@ async fn run(args: Args) -> Result<()> {
             };
             let devices: Vec<_> = phone.devices().into_iter().map(|d| d.with).collect();
             let endpoint = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
+            // Typing: each line read here goes into the terminal, Enter after it.
+            let typed = args.typing.then(|| {
+                let (lines, typed) = tokio::sync::mpsc::channel(16);
+                tokio::spawn(async move {
+                    use tokio::io::AsyncBufReadExt;
+                    let mut stdin = tokio::io::BufReader::new(tokio::io::stdin()).lines();
+                    while let Ok(Some(line)) = stdin.next_line().await {
+                        if lines.send(line).await.is_err() {
+                            return;
+                        }
+                    }
+                });
+                typed
+            });
+            let me = format!("peer:{}", phone.id());
             let watched = async {
                 let connection = workspace::holder(&endpoint, &devices, ws).await?;
                 let mut stdout = std::io::stdout();
-                workspace::watch(&connection, ws, tile, |data| {
-                    let _ = std::io::Write::write_all(&mut stdout, data.as_bytes());
-                    let _ = std::io::Write::flush(&mut stdout);
+                workspace::watch(&connection, ws, tile, typed, |watched| match watched {
+                    Watched::Output(data) => {
+                        let _ = std::io::Write::write_all(&mut stdout, data.as_bytes());
+                        let _ = std::io::Write::flush(&mut stdout);
+                    }
+                    // Someone else holds its keyboard: what is typed here waits until they give it.
+                    Watched::Keyboard(Some(holder)) if args.typing && holder["id"] != me.as_str() => {
+                        let name = holder["name"].as_str().filter(|n| !n.is_empty()).unwrap_or("someone");
+                        eprintln!("hive-phone: {name} has its keyboard: asked for it, and what you type goes in once it is given");
+                    }
+                    Watched::Keyboard(_) if args.typing => eprintln!("hive-phone: its keyboard is yours"),
+                    Watched::Keyboard(_) => {}
                 })
                 .await
             };
@@ -362,6 +394,28 @@ async fn run(args: Args) -> Result<()> {
                 println!("answered");
             } else {
                 println!("not answered: it waits on that no more, or it was answered already");
+            }
+        }
+        "send" => {
+            let [ws, tile] = &args.rest[..] else {
+                bail!("send: which workspace and tile? (`hive-phone needs --json` names them)");
+            };
+            let text = args.text.as_deref().context("send: --text <line>")?;
+            let devices: Vec<_> = phone.devices().into_iter().map(|d| d.with).collect();
+            let endpoint = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
+            let sent = async {
+                let connection = workspace::holder(&endpoint, &devices, ws).await?;
+                workspace::send(&connection, ws, tile, text).await
+            };
+            let sent = sent.await;
+            endpoint.close().await;
+            let sent = sent?;
+            if args.json {
+                println!("{}", json!({ "sent": sent }));
+            } else if sent {
+                println!("sent: it goes in as the agent's next prompt");
+            } else {
+                println!("not sent: no agent runs there");
             }
         }
         "push" => {

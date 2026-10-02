@@ -1117,6 +1117,15 @@ agents.
    `attachOnly` (it gets the screen, then the output as it comes). **Type** and the reply box come
    with step 4's answers.
 
+   *As built (M5 step 11, `spec/needs.md` 0.4 "Sending", workspace API 0.10):* the reply box is
+   `agent.send(tile, text)`: one line handed to the agent as `hive ctl send` hands one, through the
+   control plane's mailbox (typed at its prompt, held while it is in a turn, Enter after it), role
+   *Can drive agents*. **Type** is `terminal.write` from the phone, as the person: their devices
+   are the host's for the keyboard, so it types while none of the people let in holds it, and asks
+   for it (`terminal.keyboard.ask`) like a guest while one does. The phone never starts, sizes or
+   closes a terminal, nor gives or takes a keyboard. `hive-phone send` and `hive-phone watch
+   --type` do it from a terminal.
+
 7. **Views.** A tab bar: *Needs you* · *Working* · *Board* (a compact list of frames and
    tiles) · community views that declare phone support (R12 `hello.device.compact`).
 8. **Offline host.** "Desktop is asleep. You'll get a notification when it's back." The

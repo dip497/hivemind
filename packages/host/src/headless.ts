@@ -247,7 +247,12 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     // A participant's branch, handed off from their machine (M4).
     handOff({ who, place: (repo, tile, name) => { store.addTile(repo, tile, { name }, HANDED_OFF); } }),
     // What an agent here waits on the person for, answered from another of their devices (M5).
-    answers({ status: (bare) => control.status.get(bare), type: (bare, data) => writeTile(`hm:${bare}`, data), plans }),
+    answers({
+      status: (bare) => control.status.get(bare),
+      type: (bare, data) => writeTile(`hm:${bare}`, data),
+      deliver: (bare, message) => control.mailbox.deliver(`hm:${bare}`, message),
+      plans,
+    }),
   ], intents, o.onWarn);
 
   // The control plane (`hive ctl`): the verbs that need no window, for the agents here and for

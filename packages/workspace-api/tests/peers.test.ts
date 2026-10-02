@@ -43,6 +43,7 @@ const domain = {
     }),
     "plan.decide": (from: Connection, tile: unknown) => { ran.push({ what: "plan.decide", by: from.actor, args: [tile] }); return { answered: true, by: null }; },
     "agent.answer": (from: Connection, tile: unknown) => { ran.push({ what: "agent.answer", by: from.actor, args: [tile] }); return { answered: true }; },
+    "agent.send": (from: Connection, tile: unknown) => { ran.push({ what: "agent.send", by: from.actor, args: [tile] }); return { sent: true }; },
   },
   effects: { "git.commit": () => ({}), "terminal.open": () => ({}) },
   notices: {
@@ -101,12 +102,16 @@ test("a peer's calls run as the peer, with the workspace it names read as its re
   expect(ran).toEqual([{ what: "terminal.open", by: driver.actor, args: [{ tileId: "in-1", cwd: "/work/api/src" }] }]);
   // The owner's alone: not named for any role.
   expect(await code(driver.client.call("git.commit", workspaceUrl(W), "m"))).toBe("FORBIDDEN");
-  // Answering what an agent of the workspace waits on is driving agents.
+  // Answering what an agent of the workspace waits on, and sending one a message, is driving
+  // agents.
   ran.length = 0;
   expect(await code(editor.client.call("agent.answer", "in-1", 1, { text: "1" }))).toBe("FORBIDDEN");
   expect(await code(driver.client.call("agent.answer", "out-1", 1, { text: "1" }))).toBe("FORBIDDEN");
   await driver.client.call("agent.answer", "in-1", 1, { text: "1" });
-  expect(ran).toEqual([{ what: "agent.answer", by: driver.actor, args: ["in-1"] }]);
+  expect(await code(editor.client.call("agent.send", "in-1", "hi"))).toBe("FORBIDDEN");
+  expect(await code(driver.client.call("agent.send", "out-1", "hi"))).toBe("FORBIDDEN");
+  await driver.client.call("agent.send", "in-1", "hi");
+  expect(ran).toEqual([{ what: "agent.answer", by: driver.actor, args: ["in-1"] }, { what: "agent.send", by: driver.actor, args: ["in-1"] }]);
 });
 
 test("a guest names this workspace, by its id, and nothing else on the host: another folder, a way out of it, another workspace or a machine is refused and never runs; the person's own devices are the owner", async () => {

@@ -25,9 +25,9 @@
  * does: it may ask on the `device` stream which workspaces there are and what waits on the person
  * in them (`needs`, spec/needs.md), give where it is told what happens there (`push`,
  * spec/push.md) and unpair itself (spec/pairing.md), and open one workspace's API on the `api`
- * stream (its first frame `{t:"open", workspace}`), as the owner, to watch its terminals and
- * answer its agents (`phoneMay`), and nothing of the rest (no terminals started or typed into, no
- * workspace's board or files, no hosting).
+ * stream (its first frame `{t:"open", workspace}`), as the owner, to watch and type into its
+ * terminals and answer and message its agents (`phoneMay`), and nothing of the rest (no terminals
+ * started, sized or closed, no workspace's board or files, no hosting).
  */
 import { StringDecoder } from "node:string_decoder";
 import type { Duplex } from "node:stream";
@@ -53,10 +53,13 @@ import { linkDuplex } from "./device-sessions.js";
 const LET_GO_MS = 2_000;
 
 /** What a phone may ask of a workspace it opens (M5): to watch a terminal that runs there (its
- *  screen, then its output as it comes), and to answer what an agent there waits on the person
- *  for (`agent.answer`). Never to start or type into one. */
+ *  screen, then its output as it comes) and type into it, asking for its keyboard while someone
+ *  else holds it; to answer what an agent there waits on the person for (`agent.answer`), and to
+ *  send one a message (`agent.send`). Never to start, size or close one, or to give or take a
+ *  keyboard. */
+const PHONE_MAY = new Set(["agent.answer", "agent.send", "terminal.write", "terminal.keyboard.ask"]);
 export const phoneMay = (method: string, params: unknown[]): boolean =>
-  (method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true) || method === "agent.answer";
+  (method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true) || PHONE_MAY.has(method);
 
 /** The workspace a phone's `api` stream opens, as its first frame names it; null for anything else. */
 function opened(text: string): string | null {

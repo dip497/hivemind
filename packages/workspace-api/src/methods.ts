@@ -83,6 +83,9 @@ export interface WorkspaceMethods {
   /** Answer what the agent in `tile` waits on the person for, the wait that began at `since` (as
    *  the needs list says): only while it still waits on that, and once (M5). */
   "agent.answer": (tile: string, since: number, answer: AgentAnswer) => { answered: boolean };
+  /** A message for the agent in `tile`, one line: typed in as its next prompt once it is at its
+   *  prompt, Enter after it (M5). `sent` false: no agent runs there. */
+  "agent.send": (tile: string, text: string) => { sent: boolean };
   "people.list": (repo: string) => PersonHere[];
   "people.role": (repo: string, person: string, role: Role) => void;
   "people.remove": (repo: string, person: string) => void;

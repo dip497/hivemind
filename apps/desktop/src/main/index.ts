@@ -1201,7 +1201,12 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   terminals.domain,
   plans.domain,
   // What an agent here waits on the person for, answered from another of their devices (M5).
-  answers({ status: (bare) => control.status.get(bare), type: (bare, data) => writeTile(`hm:${bare}`, data), plans }),
+  answers({
+    status: (bare) => control.status.get(bare),
+    type: (bare, data) => writeTile(`hm:${bare}`, data),
+    deliver: (bare, message) => control.mailbox.deliver(`hm:${bare}`, message),
+    plans,
+  }),
   presence(() => workspaceServer, () => machineIdentity().personId),
   peopleHere.domain,
   // A participant's branch, handed off from their machine (M4).

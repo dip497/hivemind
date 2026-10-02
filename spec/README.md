@@ -12,14 +12,14 @@ these; the cases in `../conformance/` decide whether they do. Design:
 | `status.md` | How events and host facts fold into that status | 0.1 |
 | `hook-protocol.md` | What a hook sends the host, and the environment it gets | 0.2 |
 | `wire-protocol.md` | What any client speaks to the host (JSON-RPC 2.0) | 2 |
-| `workspace-api.md` | What a workspace's host is asked for, over any transport | 0.9 |
+| `workspace-api.md` | What a workspace's host is asked for, over any transport | 0.10 |
 | `identity.md` | Device, person and workspace keys, and device certificates | 0.1 |
 | `network-profile.md` | Where a network's servers are, signed by its admin | 0.1 |
 | `network-access.md` | Who may use a network's relays: enrolment, vouchers, registration | 0.1 |
 | `pairing.md` | Two devices of one person: the code (and the way onto its network), the proofs, the person key handed over (a phone: a certificate and its network), and unpairing | 0.6 |
 | `host-record.md` | Which device hosts a workspace now, signed by the workspace's key | 0.1 |
 | `hosting.md` | Moving a workspace's hosting between the owner's devices, and who follows it | 0.4 |
-| `needs.md` | What waits on the person, on which machine, how their phone asks for it and answers it | 0.3 |
+| `needs.md` | What waits on the person, on which machine, how their phone asks for it, answers it and sends an agent a message | 0.4 |
 | `push.md` | What a phone is told while the person is away, encrypted to it, and that a device it found away is back | 0.2 |
 
 Versions are `major.minor`: a minor adds optional fields or enum values a reader may ignore; a

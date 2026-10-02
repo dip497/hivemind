@@ -6,8 +6,8 @@
 // is served what a phone does and nothing more (what it sends to start a terminal there starts
 // nothing); and unpaired from the phone, each forgets the other. Then the phone at work
 // (spec/needs.md, spec/push.md): told when an agent on the computer begins waiting on the person,
-// it lists it, on that computer, watches and answers it, and counts the agents at work; unpaired
-// on the computer, it is told nothing more. And the computer away: the phone shows what it last
+// it lists it, on that computer, watches and answers it, sends it a message and types into it, and
+// counts the agents at work; unpaired on the computer, it is told nothing more. And the computer away: the phone shows what it last
 // said; back, as it starts or wakes, it tells the phone, which shows it once it found it away
 // (spec/push.md 0.2); and unpaired from the phone while away, only the phone forgets. And the
 // computer on a network of its own: its link says how to get onto that network from elsewhere,
@@ -76,8 +76,8 @@ async function pairPhone(d: Awaited<ReturnType<typeof desktopWith>>) {
 }
 
 /** A stand-in agent, read from its screen: it says what it is doing in its title, and asks to
- *  edit a file until it is answered, then draws its screen afresh, working. What the desktop's
- *  environment needs to run it. */
+ *  edit a file until it is answered, then draws its screen afresh, working, and says each line it
+ *  hears from then on. What the desktop's environment needs to run it. */
 function probeAgent(): Record<string, string> {
   const bin = path.join(root, "bin");
   fs.mkdirSync(bin);
@@ -86,7 +86,7 @@ function probeAgent(): Record<string, string> {
     "printf '\\033]0;Editing Nav.tsx\\007Allow edit to Nav.tsx? (y/n) '",
     "read -r answer",
     "printf '\\033[2J\\033[Hprobe is thinking\\n'",
-    "exec sleep 600",
+    "while read -r line; do printf 'heard: %s\\n' \"$line\"; done",
   ].join("\n"), { mode: 0o755 });
   const agent = path.join(root, "desktop", "hivemind", "agents", "probe");
   fs.mkdirSync(agent, { recursive: true });
@@ -186,7 +186,7 @@ test("a phone scans the computer's code and is certified as the person's: each l
   await expect.poll(audit).toContainEqual(expect.objectContaining({ verb: "net:unpair", actor: { kind: "peer", person: me.personId, device: phoneId, access: "owner" }, outcome: "ok" }));
 });
 
-test("the phone is told when an agent on the computer begins waiting on the person, and asks what needs them: the agent, by what it says it is doing, in its workspace, on that computer; watches its terminal, read-only; answers it, once; nothing waits once it works again, and it is at work; and unpaired, it is told nothing more", async () => {
+test("the phone is told when an agent on the computer begins waiting on the person, and asks what needs them: the agent, by what it says it is doing, in its workspace, on that computer; watches its terminal; answers it, once; nothing waits once it works again, and it is at work; sends it a message and types into it, as the person; and unpaired, it is told nothing more", async () => {
   test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
   test.setTimeout(120_000);
   const d = await desktopWith(probeAgent());
@@ -223,6 +223,19 @@ test("the phone is told when an agent on the computer begins waiting on the pers
   await expect.poll(() => seen, { timeout: 20_000 }).toContain("probe is thinking");
   await expect.poll(async () => { const n = await needs(); return [n.needs.length, n.working]; }, { timeout: 30_000 }).toEqual([0, 1]);
   expect(await answer()).toEqual({ answered: false });
+
+  // A message from the phone, whatever the agent is doing: it goes in as its next prompt.
+  const sent = JSON.parse((await run(HIVE_PHONE, ["send", waiting!.workspace as string, tile, "--text", "also add tests", "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as unknown;
+  expect(sent).toEqual({ sent: true });
+  await expect.poll(() => seen, { timeout: 20_000 }).toContain("heard: also add tests");
+  // Typed from the phone, as the person: each line goes into its terminal, Enter after it.
+  const typing = spawn(HIVE_PHONE, ["watch", waiting!.workspace as string, tile, "--type", "--identity", phone]);
+  procs.push(typing);
+  let shown = "";
+  typing.stdout!.on("data", (b: Buffer) => { shown += b.toString(); });
+  await expect.poll(() => shown, { timeout: 20_000 }).toContain("heard: also add tests");
+  typing.stdin!.write("run them\n");
+  await expect.poll(() => seen, { timeout: 20_000 }).toContain("heard: run them");
 
   // Unpaired on the computer: another agent there begins waiting on the person, and the phone is
   // told nothing of it.

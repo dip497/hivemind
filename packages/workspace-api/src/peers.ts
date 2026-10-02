@@ -36,15 +36,16 @@ export interface PeerOf {
   repo: string;
   /** Whether a tile is in the workspace. */
   holds(tile: string): boolean;
-  /** What this peer may ask at all, whatever its role: a phone watches the workspace's terminals and
-   *  answers its agents, and does nothing else there (M5). None: what its role allows. */
+  /** What this peer may ask at all, whatever its role: a phone watches and types into the
+   *  workspace's terminals and answers and messages its agents, and does nothing else there (M5).
+   *  None: what its role allows. */
   allows?(method: string, params: unknown[]): boolean;
 }
 
 const refused = (message: string): Answer => ({ error: { code: "FORBIDDEN", message } });
 
 /** Methods and notices whose first param names a tile. */
-const BY_TILE = /^(terminal\.(write|show|resize|flow|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.answer)$/;
+const BY_TILE = /^(terminal\.(write|show|resize|flow|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.(answer|send))$/;
 /** Methods and notices whose first param names the workspace, or a place in it (its `.hivemind`). */
 const BY_WORKSPACE = /^(store|git|worktree|file|issue|review|people)\.|^(plan\.list|presence\.set)$/;
 

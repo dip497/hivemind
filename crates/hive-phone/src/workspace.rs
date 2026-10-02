@@ -1,7 +1,8 @@
 //! One workspace's API, as a phone uses it on its own connection to the device that holds it
 //! (spec/workspace-api.md, "Peers": the `api` stream begins `{t:"open", workspace}`): to watch an
-//! agent's terminal, read-only (M5, design §9.2 "Watch"), and to answer what an agent waits on
-//! the person for (spec/needs.md, "Answering"). Nothing else is open to a phone there.
+//! agent's terminal and type into it (M5, design §9.2 "Watch"), to answer what an agent waits on
+//! the person for (spec/needs.md, "Answering") and to send one a message ("Sending"). Nothing else
+//! is open to a phone there.
 
 use anyhow::{bail, Context, Result};
 use hive_net::frames::{read_frame, write_frame};
@@ -10,6 +11,8 @@ use iroh::{
     Endpoint,
 };
 use serde_json::{json, Value};
+
+use tokio::sync::mpsc::Receiver;
 
 use crate::{devices, pairing::PairedWith};
 
@@ -68,6 +71,12 @@ impl Workspace {
         })
     }
 
+    /// Tell `method`, which is answered nothing.
+    async fn tell(&mut self, method: &str, params: Value) -> Result<()> {
+        let notice = json!({ "method": method, "params": params });
+        write_frame(&mut self.send, notice.to_string().as_bytes()).await
+    }
+
     /// Ask `method`; its answer comes later, after the events the call brings. Its id.
     async fn ask(&mut self, method: &str, params: Value) -> Result<u64> {
         let id = self.next;
@@ -120,14 +129,25 @@ pub struct Ended {
     pub code: i64,
 }
 
+/// What happens in a watched terminal: a piece of its output, or its keyboard changing hands.
+pub enum Watched<'a> {
+    Output(&'a str),
+    /// Who holds its keyboard now, `{id, person, name}`: `None` while the person's own devices
+    /// do, and the phone types into it as they do.
+    Keyboard(Option<&'a Value>),
+}
+
 /// Watch the terminal of `tile` in `workspace`, on `connection` to the device that holds it: `out`
-/// is handed its screen, then each piece of its output. How it ended; none when the connection
-/// went first.
+/// is handed its screen, then each piece of its output, and who holds its keyboard as it changes.
+/// With `typed`, each line the person types goes into it, Enter after it, once its keyboard is
+/// asked for: one someone else holds is asked of them, and keys wait on nobody (spec/workspace-
+/// api.md, "Peers"). How it ended; none when the connection went first.
 pub async fn watch(
     connection: &Connection,
     workspace: &str,
     tile: &str,
-    mut out: impl FnMut(&str),
+    typed: Option<Receiver<String>>,
+    mut out: impl FnMut(Watched<'_>),
 ) -> Result<Option<Ended>> {
     let session = format!("hm:{tile}");
     let mut w = Workspace::open(connection, workspace).await?;
@@ -140,41 +160,79 @@ pub async fn watch(
             }]),
         )
         .await?;
-    while let Some(message) = w.message().await? {
-        // A moment's events come as one frame.
-        let events = match message {
-            Value::Array(events) => events,
-            m if m.get("id").and_then(Value::as_u64) == Some(opened) => {
-                result_of(m)?;
-                continue;
-            }
-            m => vec![m],
-        };
-        for e in events {
-            let params = e.get("params").and_then(Value::as_array);
-            let about = params.and_then(|p| p.first()).and_then(Value::as_str);
-            if about != Some(session.as_str()) {
-                continue;
-            }
-            match e.get("event").and_then(Value::as_str) {
-                Some("terminal.data") => {
-                    if let Some(data) = params.and_then(|p| p.get(1)).and_then(Value::as_str) {
-                        out(data);
+    if typed.is_some() {
+        w.tell("terminal.keyboard.ask", json!([session])).await?;
+    }
+    // What is typed goes out on its own while the output comes in. The stream stays open until the
+    // watching ends: the device takes its end as the phone gone.
+    let Workspace {
+        mut send, mut recv, ..
+    } = w;
+    let typing = match typed {
+        Some(mut typed) => {
+            let session = session.clone();
+            tokio::spawn(async move {
+                while let Some(line) = typed.recv().await {
+                    let notice = json!({ "method": "terminal.write", "params": [session, format!("{line}\r")] });
+                    if write_frame(&mut send, notice.to_string().as_bytes())
+                        .await
+                        .is_err()
+                    {
+                        return;
                     }
                 }
-                Some("terminal.exit") => {
-                    let code = params
-                        .and_then(|p| p.get(1))
-                        .and_then(|i| i.get("code"))
-                        .and_then(Value::as_i64)
-                        .unwrap_or(0);
-                    return Ok(Some(Ended { code }));
+                std::future::pending::<()>().await;
+            })
+        }
+        None => tokio::spawn(async move {
+            let _open = send;
+            std::future::pending::<()>().await;
+        }),
+    };
+    let watched = async {
+        while let Some(frame) = read_frame(&mut recv).await? {
+            // A moment's events come as one frame.
+            let events = match serde_json::from_slice::<Value>(&frame)? {
+                Value::Array(events) => events,
+                m if m.get("id").and_then(Value::as_u64) == Some(opened) => {
+                    result_of(m)?;
+                    continue;
                 }
-                _ => {}
+                m => vec![m],
+            };
+            for e in events {
+                let params = e.get("params").and_then(Value::as_array);
+                let about = params.and_then(|p| p.first()).and_then(Value::as_str);
+                if about != Some(session.as_str()) {
+                    continue;
+                }
+                match e.get("event").and_then(Value::as_str) {
+                    Some("terminal.data") => {
+                        if let Some(data) = params.and_then(|p| p.get(1)).and_then(Value::as_str) {
+                            out(Watched::Output(data));
+                        }
+                    }
+                    Some("terminal.keyboard") => {
+                        let holder = params.and_then(|p| p.get(1)).filter(|h| h.is_object());
+                        out(Watched::Keyboard(holder));
+                    }
+                    Some("terminal.exit") => {
+                        let code = params
+                            .and_then(|p| p.get(1))
+                            .and_then(|i| i.get("code"))
+                            .and_then(Value::as_i64)
+                            .unwrap_or(0);
+                        return Ok(Some(Ended { code }));
+                    }
+                    _ => {}
+                }
             }
         }
+        Ok(None)
     }
-    Ok(None)
+    .await;
+    typing.abort();
+    watched
 }
 
 /// Answer what the agent of `tile` in `workspace` waits on the person for, the wait that began at
@@ -190,4 +248,18 @@ pub async fn answer(
     let mut w = Workspace::open(connection, workspace).await?;
     let result = w.call("agent.answer", json!([tile, since, answer])).await?;
     Ok(result.get("answered").and_then(Value::as_bool) == Some(true))
+}
+
+/// Send the agent of `tile` in `workspace` the message `text`, one line: it is typed in as its next
+/// prompt once it is at its prompt (spec/needs.md, "Sending"). Whether it went: not when no agent
+/// runs there.
+pub async fn send(
+    connection: &Connection,
+    workspace: &str,
+    tile: &str,
+    text: &str,
+) -> Result<bool> {
+    let mut w = Workspace::open(connection, workspace).await?;
+    let result = w.call("agent.send", json!([tile, text])).await?;
+    Ok(result.get("sent").and_then(Value::as_bool) == Some(true))
 }

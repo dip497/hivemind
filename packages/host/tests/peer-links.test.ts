@@ -1,9 +1,10 @@
 // One of the owner's phones on the links a device serves (peer-links.ts, spec/pairing.md 0.3): let
 // in as the person's device, it is answered which workspaces the device holds and what waits on
 // the person there (spec/needs.md), gives where it is told what happens there (spec/push.md),
-// unpairs itself (spec/pairing.md), and may open one workspace to watch its terminals and answer
-// its agents, as the owner's device; it is served nothing else the owner's computers are: no
-// terminals started or typed into, no workspace's board, files or other calls, no hosting. The
+// unpairs itself (spec/pairing.md), and may open one workspace to watch and type into its
+// terminals and answer and message its agents, as the owner's device; it is served nothing else
+// the owner's computers are: no terminals started or sized, no keyboards given or taken, no
+// workspace's board, files or other calls, no hosting. The
 // owner's laptop, on the same links, is served each of them, and is told nothing on a phone's
 // behalf, nor unpaired by asking.
 import { test, after } from "node:test";
@@ -61,9 +62,12 @@ function computer() {
   const lists = new AccessLists({ dir: path.join(dir, "access"), owner: person, devices: () => [certifyDevice(person, phone), certifyDevice(person, laptop)] });
   /** Each terminal a connection opened, and as whom: what the host's terminals would show. */
   const watched: Array<{ by: Actor; opts: unknown }> = [];
-  /** What was typed into a terminal, and by whom; each agent answered, and by whom. */
+  /** What was typed into a terminal, and by whom; each agent answered, and sent a message, and by
+   *  whom; and what else reached a terminal's keyboard or size. */
   const typed: Array<{ by: Actor; tile: unknown }> = [];
   const answered: Array<{ by: Actor; tile: unknown }> = [];
+  const sent: Array<{ by: Actor; tile: unknown }> = [];
+  const keyed: Array<{ what: string; by: Actor; tile: unknown }> = [];
   /** Where each device is told what happens here; each device forgotten. */
   const subscribed: Array<{ device: string; sub: unknown }> = [];
   const unpaired: string[] = [];
@@ -71,9 +75,15 @@ function computer() {
     answers: {
       "terminal.open": (from: Connection, opts: unknown) => { watched.push({ by: from.actor, opts }); return { pid: 1, joined: true }; },
       "agent.answer": (from: Connection, tile: unknown) => { answered.push({ by: from.actor, tile }); return { answered: true }; },
+      "agent.send": (from: Connection, tile: unknown) => { sent.push({ by: from.actor, tile }); return { sent: true }; },
     },
     effects: {},
-    notices: { "terminal.write": (from: Connection, tile: unknown) => { typed.push({ by: from.actor, tile }); } },
+    notices: {
+      "terminal.write": (from: Connection, tile: unknown) => { typed.push({ by: from.actor, tile }); },
+      ...Object.fromEntries(["terminal.resize", "terminal.keyboard.ask", "terminal.keyboard.give", "terminal.keyboard.take"].map((what) => [
+        what, (from: Connection, tile: unknown) => { keyed.push({ what, by: from.actor, tile }); },
+      ])),
+    },
   };
   const server = new WorkspaceServer([...workspaceDomains, terminals], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
   /** The connections made to this machine's terminal daemon: each echoes what it is sent. */
@@ -103,7 +113,7 @@ function computer() {
     }
     return { heard, send: (stream: string, m: unknown) => deviceEnd.send(stream, JSON.stringify(m)), closed: computerEnd.closed, hangUp: () => deviceEnd.close("done") };
   };
-  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, subscribed, unpaired, connect };
+  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, sent, keyed, subscribed, unpaired, connect };
 }
 const until = async (done: () => boolean) => { for (let t = 0; t < 5_000 && !done(); t += 20) await wait(20); };
 
@@ -137,7 +147,7 @@ test("a phone is answered which workspaces its computer holds and what waits on 
   assert.equal(c.daemons.length, 1, "no connection to the daemon for the phone");
 });
 
-test("a phone opens a workspace to watch its terminals and answer its agents, as the owner's device; anything else there, typing included, is refused, and one opened without naming a workspace here is closed", async () => {
+test("a phone opens a workspace to watch and type into its terminals and answer and message its agents, as the owner's device; anything else there (starting, sizing a terminal, giving or taking a keyboard) is refused, and one opened without naming a workspace here is closed", async () => {
   const c = computer();
   const phone = c.connect(c.phone);
   phone.send("api", { t: "open", workspace: c.workspace });
@@ -148,18 +158,29 @@ test("a phone opens a workspace to watch its terminals and answer its agents, as
   phone.send("api", { id: 4, method: "terminal.open", params: [{ ...watch, tileId: "hm:elsewhere", tile: "elsewhere" }] });
   phone.send("api", { id: 5, method: "agent.answer", params: ["t1", 1_790_000_000_000, { text: "1" }] });
   phone.send("api", { id: 6, method: "agent.answer", params: ["elsewhere", 1_790_000_000_000, { text: "1" }] });
-  // Typing is not among what a phone asks: it is dropped, as any notice it may not send.
-  phone.send("api", { method: "terminal.write", params: ["hm:t1", "rm -rf ~\n"] });
-  await until(() => phone.heard.get("api")!.length >= 6);
+  phone.send("api", { id: 7, method: "agent.send", params: ["t1", "also add tests"] });
+  phone.send("api", { id: 8, method: "agent.send", params: ["elsewhere", "also add tests"] });
+  // It types as the person, asking for the keyboard first; it never sizes a terminal, nor gives or
+  // takes its keyboard: those are dropped, as any notice it may not send.
+  phone.send("api", { method: "terminal.keyboard.ask", params: ["hm:t1"] });
+  phone.send("api", { method: "terminal.write", params: ["hm:t1", "y\r"] });
+  phone.send("api", { method: "terminal.write", params: ["hm:elsewhere", "y\r"] });
+  phone.send("api", { method: "terminal.resize", params: ["hm:t1", 40, 20] });
+  phone.send("api", { method: "terminal.keyboard.give", params: ["hm:t1", "window:1"] });
+  phone.send("api", { method: "terminal.keyboard.take", params: ["hm:t1"] });
+  await until(() => phone.heard.get("api")!.length >= 8);
   const answers = Object.fromEntries(phone.heard.get("api")!.map((m) => JSON.parse(m) as { id: number; result?: unknown; error?: { code: string } }).map((a) => [a.id, a]));
   assert.deepEqual(answers[1]!.result, { pid: 1, joined: true });
-  assert.deepEqual([2, 3, 4, 6].map((id) => answers[id]?.error?.code), ["FORBIDDEN", "FORBIDDEN", "FORBIDDEN", "FORBIDDEN"]);
+  assert.deepEqual([2, 3, 4, 6, 8].map((id) => answers[id]?.error?.code), ["FORBIDDEN", "FORBIDDEN", "FORBIDDEN", "FORBIDDEN", "FORBIDDEN"]);
   const asPhone = { kind: "peer", person: c.person, device: c.phone, access: "owner" };
   assert.deepEqual(c.watched, [{ by: asPhone, opts: { ...watch, cwd: c.repo } }]);
   assert.deepEqual(answers[5]!.result, { answered: true });
   assert.deepEqual(c.answered, [{ by: asPhone, tile: "t1" }]);
+  assert.deepEqual(answers[7]!.result, { sent: true });
+  assert.deepEqual(c.sent, [{ by: asPhone, tile: "t1" }]);
   await wait(100);
-  assert.deepEqual(c.typed, []);
+  assert.deepEqual(c.typed, [{ by: asPhone, tile: "hm:t1" }]);
+  assert.deepEqual(c.keyed, [{ what: "terminal.keyboard.ask", by: asPhone, tile: "hm:t1" }]);
 
   for (const first of [{ t: "open", workspace: "f".repeat(32) }, { id: 1, method: "terminal.open", params: [watch] }]) {
     const other = c.connect(c.phone);
