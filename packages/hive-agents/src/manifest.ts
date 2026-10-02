@@ -70,6 +70,9 @@ export interface AgentManifest {
    *  keys that deny it on its screen (a phone's Allow / Deny). Claim them only from the real
    *  binary: a wrong key answers the wrong way. */
   answer?: { permission?: { allow: string[]; deny: string[] } };
+  /** The keys that interrupt its turn, as the person stops it from another of their devices (a
+   *  phone's Stop). Claim them only from the real binary, as `answer`. */
+  interrupt?: string[];
   session?: unknown;
   assets?: unknown;
   launch?: unknown;
@@ -547,6 +550,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
       for (const k of ["allow", "deny"] as const) req(keyTokens(p[k]), `answer.permission.${k} must be 1-4 key tokens`);
     }
   }
+  req(m.interrupt === undefined || keyTokens(m.interrupt), "interrupt must be 1-4 key tokens");
 
   const aliases = m.aliases;
   req(aliases === undefined || (Array.isArray(aliases) && aliases.every((a) => typeof a === "string")),
@@ -594,6 +598,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     ...(m.spawn?.titles ? { titles: m.spawn.titles } : {}),
     ...(dismiss.length ? { dismiss } : {}),
     ...(m.answer?.permission ? { answer: { permission: { allow: m.answer.permission.allow, deny: m.answer.permission.deny } } } : {}),
+    ...(m.interrupt ? { interrupt: m.interrupt } : {}),
     enabled: m.enabled ?? false,
     caps: m.caps,
     ...(detect ? { detect } : {}),

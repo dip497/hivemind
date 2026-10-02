@@ -1,0 +1,864 @@
+{
+ "about": "Cases every implementation of following agents must pass (spec/agents.md \"Following\"): what a device answers ('computer': its boards, its agents' statuses and the plans they hand off, with the machines it knows ('known'), the program each tile's command starts by its manifest ('programs'), the tiles whose agents' permissions it can decide ('decides') and whose agents say which keys interrupt their turn ('interrupts'), in; every agent, and how many are at work, out), and what a phone shows of the answers it is given ('phone': each answer with the device it came from, in; every agent it reads, with that device, what waits on the person among them as device/tile in the order shown, and the agents at work, out). Written by hand from the spec.",
+ "known": {
+  "self": {
+   "device": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+   "name": "desk"
+  },
+  "mine": {
+   "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0": "build-box"
+  },
+  "whose": {},
+  "saved": {
+   "m_0a1b2c3d4e5f": "gpu"
+  }
+ },
+ "computer": [
+  {
+   "about": "every agent with a status whose tile is on a board here, whatever it is doing, in order of its workspace's id and then its tile; with the program its tile runs, when a manifest here names it, and whether its turn can be interrupted; a tile with no status, or a status for a tile on no board here, is no agent here",
+   "held": [
+    {
+     "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+     "name": "web",
+     "repo": "/home/p/web",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "t9",
+        "kind": "codex",
+        "label": "Codex"
+       }
+      ]
+     }
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "repo": "/home/p/api",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "t2",
+        "kind": "claude",
+        "label": "Claude",
+        "task": "fix the nav"
+       },
+       {
+        "id": "t1",
+        "kind": "agent",
+        "label": "Agent 1"
+       },
+       {
+        "id": "t3",
+        "kind": "shell",
+        "label": "Shell"
+       }
+      ],
+      "tileNames": {
+       "t2": "Nav fix"
+      }
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "hm:t2",
+     "status": {
+      "state": "working",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000001000,
+      "title": "Editing Nav.tsx"
+     }
+    },
+    {
+     "tileId": "t1",
+     "status": {
+      "state": "idle",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000002000
+     }
+    },
+    {
+     "tileId": "hm:t9",
+     "status": {
+      "state": "exited",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000003000
+     }
+    },
+    {
+     "tileId": "hm:gone",
+     "status": {
+      "state": "working",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000004000
+     }
+    }
+   ],
+   "plans": [],
+   "programs": {
+    "t2": {
+     "id": "claude",
+     "label": "Claude Code"
+    },
+    "t9": {
+     "id": "codex",
+     "label": "Codex"
+    }
+   },
+   "interrupts": [
+    "t2"
+   ],
+   "agents": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t1",
+     "agent": "Agent 1",
+     "state": "idle",
+     "since": 1790000002000,
+     "machine": "desk"
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t2",
+     "agent": "Nav fix",
+     "program": {
+      "id": "claude",
+      "label": "Claude Code"
+     },
+     "state": "working",
+     "since": 1790000001000,
+     "machine": "desk",
+     "interrupt": true
+    },
+    {
+     "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+     "name": "web",
+     "tile": "t9",
+     "agent": "Codex",
+     "program": {
+      "id": "codex",
+      "label": "Codex"
+     },
+     "state": "exited",
+     "since": 1790000003000,
+     "machine": "desk"
+    }
+   ],
+   "working": 1
+  },
+  {
+   "about": "an agent waiting says on what: on the person, with the plan it hands off and whether a permission can be allowed or denied from here, as the needs list says; on the agent supervising it, as an approval, which is not the person's to decide; a wait with no kind says nothing more than its state",
+   "held": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "repo": "/home/p/api",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "w1",
+        "kind": "claude",
+        "label": "Claude 1"
+       },
+       {
+        "id": "w2",
+        "kind": "claude",
+        "label": "Claude 2"
+       },
+       {
+        "id": "w3",
+        "kind": "claude",
+        "label": "Claude 3"
+       },
+       {
+        "id": "w4",
+        "kind": "claude",
+        "label": "Claude 4"
+       },
+       {
+        "id": "w5",
+        "kind": "claude",
+        "label": "Claude 5"
+       }
+      ]
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "hm:w1",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000005000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "hm:w2",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000006000,
+      "kind": "plan"
+     }
+    },
+    {
+     "tileId": "hm:w3",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000007000,
+      "kind": "approval"
+     }
+    },
+    {
+     "tileId": "hm:w4",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000008000,
+      "kind": "question"
+     }
+    },
+    {
+     "tileId": "hm:w5",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000009000
+     }
+    }
+   ],
+   "plans": [
+    {
+     "tileId": "hm:w2",
+     "requestId": "r1",
+     "plan": "1. Split the nav\n2. Test it",
+     "cwd": "/home/p/api"
+    }
+   ],
+   "programs": {
+    "w1": {
+     "id": "claude",
+     "label": "Claude Code"
+    },
+    "w2": {
+     "id": "claude",
+     "label": "Claude Code"
+    },
+    "w3": {
+     "id": "claude",
+     "label": "Claude Code"
+    },
+    "w4": {
+     "id": "claude",
+     "label": "Claude Code"
+    },
+    "w5": {
+     "id": "claude",
+     "label": "Claude Code"
+    }
+   },
+   "decides": [
+    "w1",
+    "w3",
+    "w4"
+   ],
+   "interrupts": [],
+   "agents": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "w1",
+     "agent": "Claude 1",
+     "program": {
+      "id": "claude",
+      "label": "Claude Code"
+     },
+     "state": "waiting",
+     "since": 1790000005000,
+     "machine": "desk",
+     "waiting": {
+      "kind": "permission",
+      "since": 1790000005000,
+      "decide": true
+     }
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "w2",
+     "agent": "Claude 2",
+     "program": {
+      "id": "claude",
+      "label": "Claude Code"
+     },
+     "state": "waiting",
+     "since": 1790000006000,
+     "machine": "desk",
+     "waiting": {
+      "kind": "plan",
+      "since": 1790000006000,
+      "plan": "1. Split the nav\n2. Test it"
+     }
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "w3",
+     "agent": "Claude 3",
+     "program": {
+      "id": "claude",
+      "label": "Claude Code"
+     },
+     "state": "waiting",
+     "since": 1790000007000,
+     "machine": "desk",
+     "waiting": {
+      "kind": "approval",
+      "since": 1790000007000
+     }
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "w4",
+     "agent": "Claude 4",
+     "program": {
+      "id": "claude",
+      "label": "Claude Code"
+     },
+     "state": "waiting",
+     "since": 1790000008000,
+     "machine": "desk",
+     "waiting": {
+      "kind": "question",
+      "since": 1790000008000
+     }
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "w5",
+     "agent": "Claude 5",
+     "program": {
+      "id": "claude",
+      "label": "Claude Code"
+     },
+     "state": "waiting",
+     "since": 1790000009000,
+     "machine": "desk"
+    }
+   ],
+   "working": 0
+  },
+  {
+   "about": "an agent runs on the machine its frame's folder is on, its worktree's before its frame's, else its workspace's; called what the person named its tile, else what it says it is doing, else what it was started to do, else its tile's label",
+   "held": [
+    {
+     "workspace": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+     "name": "infra",
+     "repo": "/home/p/infra",
+     "core": {
+      "frames": [
+       {
+        "id": "f-box",
+        "title": "box",
+        "workspacePath": "machine://b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0/srv/infra"
+       },
+       {
+        "id": "f-wt",
+        "title": "fix",
+        "branch": "fix",
+        "worktreePath": "machine://m_0a1b2c3d4e5f/srv/infra-fix",
+        "workspacePath": "/home/p/infra"
+       }
+      ],
+      "tiles": [
+       {
+        "id": "m1",
+        "kind": "claude",
+        "label": "Claude 1",
+        "task": "port the CLI"
+       },
+       {
+        "id": "m2",
+        "kind": "claude",
+        "label": "Claude 2"
+       },
+       {
+        "id": "m3",
+        "kind": "claude",
+        "label": "Claude 3"
+       }
+      ],
+      "frameOf": {
+       "m1": "f-box",
+       "m2": "f-wt"
+      }
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "hm:m1",
+     "status": {
+      "state": "working",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000001000
+     }
+    },
+    {
+     "tileId": "hm:m2",
+     "status": {
+      "state": "working",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000002000,
+      "title": "Running tests"
+     }
+    },
+    {
+     "tileId": "hm:m3",
+     "status": {
+      "state": "done",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000003000
+     }
+    }
+   ],
+   "plans": [],
+   "programs": {},
+   "interrupts": [],
+   "agents": [
+    {
+     "workspace": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+     "name": "infra",
+     "tile": "m1",
+     "agent": "port the CLI",
+     "state": "working",
+     "since": 1790000001000,
+     "machine": "build-box"
+    },
+    {
+     "workspace": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+     "name": "infra",
+     "tile": "m2",
+     "agent": "Running tests",
+     "state": "working",
+     "since": 1790000002000,
+     "machine": "gpu"
+    },
+    {
+     "workspace": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+     "name": "infra",
+     "tile": "m3",
+     "agent": "Claude 3",
+     "state": "done",
+     "since": 1790000003000,
+     "machine": "desk"
+    }
+   ],
+   "working": 2
+  }
+ ],
+ "phone": [
+  {
+   "about": "two of the person's devices answer: every agent of each, with the device it came from, in order of device as answered, then as each listed them; what waits on the person among them, the one waiting longest first and of two since the same moment the one whose tile comes first; an agent waiting on its supervisor is no need; and the agents at work added up",
+   "answers": [
+    {
+     "from": "desk",
+     "answer": {
+      "t": "agents",
+      "agents": [
+       {
+        "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "name": "api",
+        "tile": "t1",
+        "agent": "Nav fix",
+        "state": "waiting",
+        "since": 1790000002000,
+        "machine": "desk",
+        "program": {
+         "id": "claude",
+         "label": "Claude Code"
+        },
+        "waiting": {
+         "kind": "permission",
+         "since": 1790000002000,
+         "decide": true
+        },
+        "interrupt": true
+       },
+       {
+        "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "name": "api",
+        "tile": "t2",
+        "agent": "Docs",
+        "state": "working",
+        "since": 1790000001000,
+        "machine": "desk"
+       }
+      ],
+      "working": 1
+     }
+    },
+    {
+     "from": "build-box",
+     "answer": {
+      "t": "agents",
+      "agents": [
+       {
+        "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+        "name": "web",
+        "tile": "t0",
+        "agent": "Tests",
+        "state": "waiting",
+        "since": 1790000002000,
+        "machine": "build-box",
+        "waiting": {
+         "kind": "question",
+         "since": 1790000002000
+        }
+       },
+       {
+        "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+        "name": "web",
+        "tile": "t3",
+        "agent": "Review",
+        "state": "waiting",
+        "since": 1790000001000,
+        "machine": "build-box",
+        "waiting": {
+         "kind": "approval",
+         "since": 1790000001000
+        }
+       }
+      ],
+      "working": 2
+     }
+    }
+   ],
+   "agents": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t1",
+     "agent": "Nav fix",
+     "state": "waiting",
+     "since": 1790000002000,
+     "machine": "desk",
+     "program": {
+      "id": "claude",
+      "label": "Claude Code"
+     },
+     "waiting": {
+      "kind": "permission",
+      "since": 1790000002000,
+      "decide": true
+     },
+     "interrupt": true,
+     "device": "desk"
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t2",
+     "agent": "Docs",
+     "state": "working",
+     "since": 1790000001000,
+     "machine": "desk",
+     "device": "desk"
+    },
+    {
+     "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+     "name": "web",
+     "tile": "t0",
+     "agent": "Tests",
+     "state": "waiting",
+     "since": 1790000002000,
+     "machine": "build-box",
+     "waiting": {
+      "kind": "question",
+      "since": 1790000002000
+     },
+     "device": "build-box"
+    },
+    {
+     "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+     "name": "web",
+     "tile": "t3",
+     "agent": "Review",
+     "state": "waiting",
+     "since": 1790000001000,
+     "machine": "build-box",
+     "waiting": {
+      "kind": "approval",
+      "since": 1790000001000
+     },
+     "device": "build-box"
+    }
+   ],
+   "needs": [
+    "build-box/t0",
+    "desk/t1"
+   ],
+   "working": 3
+  },
+  {
+   "about": "an item that cannot be read is left out: a field it must have missing or of another type, a state or a wait's kind not in the spec, a wait without a time; a program that is no id and label, and a decide or interrupt that is not true, are taken as not there",
+   "answers": [
+    {
+     "from": "desk",
+     "answer": {
+      "t": "agents",
+      "agents": [
+       {
+        "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "name": "api",
+        "tile": "k1",
+        "agent": "No machine",
+        "state": "idle",
+        "since": 1790000001000
+       },
+       {
+        "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "name": "api",
+        "tile": "k2",
+        "agent": "Since as text",
+        "state": "idle",
+        "since": "yesterday",
+        "machine": "desk"
+       },
+       {
+        "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "name": "api",
+        "tile": "k3",
+        "agent": "Sleeping",
+        "state": "sleeping",
+        "since": 1790000001000,
+        "machine": "desk"
+       },
+       {
+        "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "name": "api",
+        "tile": "k4",
+        "agent": "Napping",
+        "state": "waiting",
+        "since": 1790000001000,
+        "machine": "desk",
+        "waiting": {
+         "kind": "nap",
+         "since": 1790000001000
+        }
+       },
+       {
+        "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "name": "api",
+        "tile": "k5",
+        "agent": "No wait time",
+        "state": "waiting",
+        "since": 1790000001000,
+        "machine": "desk",
+        "waiting": {
+         "kind": "question"
+        }
+       },
+       {
+        "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "name": "api",
+        "tile": 7,
+        "agent": "Tile as number",
+        "state": "idle",
+        "since": 1790000001000,
+        "machine": "desk"
+       },
+       {
+        "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "name": "api",
+        "tile": "k7",
+        "agent": "Lenient",
+        "state": "waiting",
+        "since": 1790000001000,
+        "machine": "desk",
+        "program": {
+         "id": "claude"
+        },
+        "waiting": {
+         "kind": "permission",
+         "since": 1790000001000,
+         "decide": "yes"
+        },
+        "interrupt": 1
+       },
+       "not an agent"
+      ],
+      "working": 0
+     }
+    }
+   ],
+   "agents": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "k7",
+     "agent": "Lenient",
+     "state": "waiting",
+     "since": 1790000001000,
+     "machine": "desk",
+     "waiting": {
+      "kind": "permission",
+      "since": 1790000001000
+     },
+     "device": "desk"
+    }
+   ],
+   "needs": [
+    "desk/k7"
+   ],
+   "working": 0
+  },
+  {
+   "about": "an answer that is not one says nothing: of another type, with no list, or a list that is not one; a working count that is not a whole number of none or more counts none",
+   "answers": [
+    {
+     "from": "desk",
+     "answer": {
+      "t": "needs",
+      "agents": [
+       {
+        "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "name": "api",
+        "tile": "t1",
+        "agent": "A",
+        "state": "idle",
+        "since": 1790000001000,
+        "machine": "desk"
+       }
+      ],
+      "working": 1
+     }
+    },
+    {
+     "from": "build-box",
+     "answer": {
+      "t": "agents",
+      "working": 2
+     }
+    },
+    {
+     "from": "gpu",
+     "answer": {
+      "t": "agents",
+      "agents": {
+       "t1": "x"
+      },
+      "working": 2
+     }
+    },
+    {
+     "from": "laptop",
+     "answer": {
+      "t": "agents",
+      "agents": [
+       {
+        "workspace": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+        "name": "infra",
+        "tile": "t5",
+        "agent": "E",
+        "state": "working",
+        "since": 1790000001000,
+        "machine": "laptop"
+       }
+      ],
+      "working": -1
+     }
+    },
+    {
+     "from": "mini",
+     "answer": {
+      "t": "agents",
+      "agents": [
+       {
+        "workspace": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+        "name": "infra",
+        "tile": "t6",
+        "agent": "F",
+        "state": "working",
+        "since": 1790000001000,
+        "machine": "mini"
+       }
+      ],
+      "working": 1.5
+     }
+    }
+   ],
+   "agents": [
+    {
+     "workspace": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+     "name": "infra",
+     "tile": "t5",
+     "agent": "E",
+     "state": "working",
+     "since": 1790000001000,
+     "machine": "laptop",
+     "device": "laptop"
+    },
+    {
+     "workspace": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+     "name": "infra",
+     "tile": "t6",
+     "agent": "F",
+     "state": "working",
+     "since": 1790000001000,
+     "machine": "mini",
+     "device": "mini"
+    }
+   ],
+   "needs": [],
+   "working": 0
+  }
+ ]
+}

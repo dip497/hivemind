@@ -335,6 +335,9 @@ export interface AgentProviderDef {
    *  devices (a phone's Allow / Deny): `permission`, the keys that allow what it asks and the
    *  keys that deny it. Tokens as `hive ctl keys` takes them. */
   answer?: { permission?: PermissionKeys };
+  /** The keys that interrupt its turn, typed from another of the person's devices (a phone's
+   *  Stop). Tokens as `hive ctl keys` takes them. */
+  interrupt?: readonly string[];
 }
 
 /** The keys that allow, and the keys that deny, a permission an agent asks on its screen. */

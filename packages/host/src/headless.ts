@@ -54,6 +54,7 @@ import { HANDED_OFF, handOff } from "./hand-off.js";
 import { answers } from "./answers.js";
 import { PeerLinks } from "./peer-links.js";
 import { heldBoards, participantNamed, permissionKeys } from "./needs.js";
+import { manifestFacts } from "./agent-list.js";
 import { PushNotices, PushSubscriptions, postNotice } from "./push.js";
 import { machines as savedMachines } from "./remote/catalog.js";
 import { People } from "./people.js";
@@ -345,7 +346,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     // permissions their phone may allow or deny.
     statuses: () => control.status.all(),
     plans: () => plans.reviews(),
-    decides: (tile) => !!permissionKeys(heldBoards(store), tile),
+    facts: manifestFacts,
     machines: {
       self: () => ({ device: keys.deviceId, name: deviceName() }),
       mine: (device) => devices.list().find((d) => d.device === device)?.name,

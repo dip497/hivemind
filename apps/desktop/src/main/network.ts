@@ -34,6 +34,7 @@ import { broadcast, userWindow } from "./windows.js";
 import { onWorkspaceChange, sharedStore, workspaceStore } from "./workspace-store-ipc.js";
 import { PeerLinks, type ShownMachine } from "@hivemind/host/peer-links";
 import { heldBoards, participantNamed, permissionKeys, type WaitingStatus } from "@hivemind/host/needs";
+import { manifestFacts } from "@hivemind/host/agent-list";
 import { machines as savedMachines } from "@hivemind/host/remote/catalog";
 import { PushNotices, PushSubscriptions, postNotice } from "@hivemind/host/push";
 import type { PlanReview } from "@hivemind/workspace-api/plans";
@@ -496,7 +497,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
   peers = new PeerLinks({
     store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), granted,
     phone: (device) => pairedDevices().list().some((d) => d.device === device && d.kind === "phone"),
-    statuses, plans, decides,
+    statuses, plans, facts: manifestFacts,
     machines: {
       self: thisComputer,
       mine: (device) => pairedDevices().list().find((d) => d.device === device)?.name,

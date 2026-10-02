@@ -218,6 +218,15 @@ describe("manifest validation refuses what it cannot back", () => {
     bad({ answer: { permission: { allow: [1], deny: ["n"] } } }, /answer.permission.allow must be 1-4 key tokens/);
   });
 
+  test("the keys that interrupt the agent's turn are carried as written, and a list that cannot be typed is refused at load", () => {
+    expect(defFromManifest({ ...base, interrupt: ["escape"] }).interrupt).toEqual(["escape"]);
+    expect(defFromManifest(base).interrupt).toBeUndefined();
+    bad({ interrupt: "escape" }, /interrupt must be 1-4 key tokens/);
+    bad({ interrupt: [] }, /interrupt must be 1-4 key tokens/);
+    bad({ interrupt: ["escape", "escape", "escape", "escape", "escape"] }, /interrupt must be 1-4 key tokens/);
+    bad({ interrupt: [27] }, /interrupt must be 1-4 key tokens/);
+  });
+
   test("an agent id is one name — an agent stands for one CLI, so there is no scope", () => {
     expect(defFromManifest({ ...base, id: "acme-two" }).id).toBe("acme-two");
     for (const id of ["@dip497/aider", "dip497/aider", "../aider", "Aider"]) bad({ id }, /id must be lowercase/);

@@ -48,6 +48,10 @@ answer:
     - '1'
     deny:
     - escape
+# The key that interrupts its turn, typed from your phone's Stop: claude 2.1.287 says "esc to
+# interrupt" while it works.
+interrupt:
+- escape
 options:
 - id: mode
   label: Permission mode

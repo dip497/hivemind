@@ -23,11 +23,13 @@ import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import { workspaceDomains } from "../src/domains.ts";
 import { PeerLinks } from "../src/peer-links.ts";
+import type { WaitingStatus } from "../src/needs.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-peer-links-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let made = 0;
+const T = 1_790_000_000_000;
 
 /** Two ends of one connection: frames arrive in order, a moment after they are sent, and what
  *  was sent before it closed arrives before the close, as on hive-net. */
@@ -92,19 +94,31 @@ function computer() {
     },
   };
   const server = new WorkspaceServer([...workspaceDomains, terminals], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
+  // The agent of t1 waits on the person; t2's works.
+  let statuses: WaitingStatus[] = [
+    { tileId: "t1", status: { state: "waiting", kind: "permission", since: T, title: "Editing Nav.tsx" } },
+    { tileId: "t2", status: { state: "working", since: T } },
+  ];
+  /** An agent's status changes, and the workspace API tells its clients so, as the control plane
+   *  does. */
+  const statusChanged = (tileId: string, status: WaitingStatus["status"]) => {
+    statuses = statuses.map((s) => (s.tileId === tileId ? { tileId, status } : s));
+    server.publish("status.changed", { tileId, ...status } as never);
+  };
   /** The connections made to this machine's terminal daemon: each echoes what it is sent. */
   const daemons: PassThrough[] = [];
   const links = new PeerLinks({
     store, changes: () => () => {}, lists, server,
     daemon: async () => { const d = new PassThrough(); daemons.push(d); return d; },
     phone: (device) => device === phone,
-    // The agent of t1 waits on the person; t2's works.
-    statuses: () => [
-      { tileId: "t1", status: { state: "waiting", kind: "permission", since: 1_790_000_000_000, title: "Editing Nav.tsx" } },
-      { tileId: "t2", status: { state: "working", since: 1_790_000_000_000 } },
-    ],
-    // The agent of t1 says which of its keys allow and deny what it asks.
-    decides: (tile) => tile === "t1",
+    statuses: () => statuses,
+    // The agent of t1 is Claude Code, and says which of its keys allow and deny what it asks; t2's
+    // says which interrupt its turn.
+    facts: () => ({
+      program: (tile) => (tile === "t1" ? { id: "claude", label: "Claude Code" } : undefined),
+      decides: (tile) => tile === "t1",
+      interrupts: (tile) => tile === "t2",
+    }),
     // Each agent here runs on this computer.
     machines: { self: () => ({ device: self, name: "desk" }), mine: () => undefined, whose: () => undefined, saved: () => undefined },
     subscribe: (device, sub) => subscribed.push({ device, sub }),
@@ -119,13 +133,13 @@ function computer() {
     const [computerEnd, deviceEnd] = linkPair(device, self);
     links.serve(computerEnd);
     const heard = new Map<string, string[]>();
-    for (const stream of ["device", "pty", "sync", "api", "files", "hosting"]) {
+    for (const stream of ["device", "pty", "sync", "api", "files", "hosting", "agents"]) {
       heard.set(stream, []);
       deviceEnd.on(stream, (t) => heard.get(stream)!.push(t));
     }
     return { heard, send: (stream: string, m: unknown) => deviceEnd.send(stream, JSON.stringify(m)), closed: computerEnd.closed, hangUp: () => deviceEnd.close("done") };
   };
-  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, sent, keyed, subscribed, unpaired, introduced, forgot, host, connect };
+  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, sent, keyed, subscribed, unpaired, introduced, forgot, host, connect, statusChanged };
 }
 const until = async (done: () => boolean) => { for (let t = 0; t < 5_000 && !done(); t += 20) await wait(20); };
 
@@ -143,8 +157,8 @@ test("a phone is answered which workspaces its computer holds and what waits on 
   // The owner's laptop is served each.
   const laptop = c.connect(c.laptop);
   askEverything(laptop);
-  await until(() => [...laptop.heard].every(([s, h]) => s === "api" || h.length > 0));
-  assert.deepEqual([...laptop.heard].filter(([s, h]) => s !== "api" && h.length === 0).map(([s]) => s), [], "the laptop hears on every stream");
+  await until(() => [...laptop.heard].every(([s, h]) => s === "api" || s === "agents" || h.length > 0));
+  assert.deepEqual([...laptop.heard].filter(([s, h]) => s !== "api" && s !== "agents" && h.length === 0).map(([s]) => s), [], "the laptop hears on every stream");
   assert.equal(c.daemons.length, 1);
 
   const phone = c.connect(c.phone);
@@ -280,4 +294,54 @@ test("the owner's laptop says which phones it paired with, and which it unpaired
   assert.deepEqual(phone.heard.get("device")!.map((m) => JSON.parse(m) as unknown), [{ t: "devices", devices: [c.host], profile: { name: "Priya", color: "#3b82f6" } }]);
   assert.deepEqual(c.introduced, [{ by: c.laptop, phones: [pixel] }], "a phone's word is no introduction");
   assert.equal(c.forgot.length, 2, "nor is it unpairing another");
+});
+
+test("the owner's devices follow every agent here: sent the list at once, and again as it changes, the first change at once and those in the next 100 ms together, never the same list twice, until they go; anyone else is cut off", async () => {
+  const c = computer();
+  const [phone, laptop] = [c.connect(c.phone), c.connect(c.laptop)];
+  const lists = (d: ReturnType<typeof c.connect>) => d.heard.get("agents")!.map((m) => JSON.parse(m) as unknown);
+  const agent = (tile: string, status: Record<string, unknown>) => ({ workspace: c.workspace, name: "api", tile, ...status, machine: "desk" });
+  const t1 = (status: Record<string, unknown>) => ({ ...agent("t1", status), program: { id: "claude", label: "Claude Code" } });
+  const t2 = (status: Record<string, unknown>) => ({ ...agent("t2", status), interrupt: true });
+  phone.send("agents", { t: "follow" });
+  laptop.send("agents", { t: "follow" });
+  await until(() => lists(phone).length === 1 && lists(laptop).length === 1);
+  const first = { t: "agents", agents: [
+    { ...t1({ agent: "Editing Nav.tsx", state: "waiting", since: T }), waiting: { kind: "permission", since: T, decide: true } },
+    t2({ agent: "Claude", state: "working", since: T }),
+  ], working: 1 };
+  assert.deepEqual(lists(phone), [first]);
+  assert.deepEqual(lists(laptop), [first]);
+
+  // Answered, t1 works again: told at once, with that, though two more changes come in the same
+  // moment; those two are told together once 100 ms have passed, as the last left it.
+  c.statusChanged("t1", { state: "working", since: T + 1, title: "Editing Nav.tsx" });
+  c.statusChanged("t2", { state: "idle", since: T + 2 });
+  c.statusChanged("t1", { state: "done", since: T + 3, title: "Nav fixed" });
+  await until(() => lists(phone).length === 3);
+  await wait(300);
+  assert.deepEqual(lists(phone).slice(1), [
+    { t: "agents", agents: [t1({ agent: "Editing Nav.tsx", state: "working", since: T + 1 }), t2({ agent: "Claude", state: "working", since: T })], working: 2 },
+    { t: "agents", agents: [t1({ agent: "Nav fixed", state: "done", since: T + 3 }), t2({ agent: "Claude", state: "idle", since: T + 2 })], working: 0 },
+  ]);
+  assert.deepEqual(lists(laptop), lists(phone));
+
+  // Told of a change that leaves the list as it was: nothing is sent.
+  c.statusChanged("t2", { state: "idle", since: T + 2 });
+  await wait(300);
+  assert.equal(lists(phone).length, 3);
+
+  // The phone goes: the laptop is still told, the phone no more.
+  phone.hangUp();
+  await phone.closed;
+  c.statusChanged("t2", { state: "working", since: T + 4 });
+  await until(() => lists(laptop).length === 4);
+  await wait(200);
+  assert.equal(lists(phone).length, 3);
+
+  // Someone else's device asking to follow is cut off, and told nothing.
+  const stranger = c.connect(idOf(newSeed()));
+  stranger.send("agents", { t: "follow" });
+  assert.equal(await Promise.race([stranger.closed, wait(2_000).then(() => "still open")]), "removed");
+  assert.deepEqual(lists(stranger), []);
 });

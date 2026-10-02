@@ -21,6 +21,9 @@
  * them through it, as `shownFrom` gives them, and never dials that machine. It says there what its
  * person lets the people here do on it (`Grant`), as they change it.
  *
+ * Any of the owner's devices, a phone among them, may follow every agent here on the `agents`
+ * stream (spec/agents.md): it is sent the list now and again as it changes.
+ *
  * The owner's other devices say on the `device` stream which phones paired with them, and ask to
  * forget one unpaired elsewhere (spec/pairing.md 0.7). One of the owner's phones (0.3) is let in,
  * as their device, for what a phone does: it may ask on the `device` stream which workspaces there
@@ -45,7 +48,8 @@ import type { Moved } from "@hivemind/workspace-host/doc-sync";
 import type { Hosting } from "./hosting.js";
 import { MACHINE_OFFER, grantOf, type Grant } from "./machine-share.js";
 import { serveFiles } from "./device-files.js";
-import { heldBoards, needsOf, workingIn, type Need, type WaitingStatus } from "./needs.js";
+import { heldBoards, needsOf, workingIn, type HeldBoard, type Need, type WaitingStatus } from "./needs.js";
+import { agentsOf, type AgentFacts, type AgentItem } from "./agent-list.js";
 import type { PlanReview } from "@hivemind/workspace-api/plans";
 import type { KnownMachines } from "@hivemind/core/remote-uri";
 import type { PairedWith } from "@hivemind/workspace-host/pairing";
@@ -54,6 +58,12 @@ import { linkDuplex } from "./device-sessions.js";
 
 /** How long a phone that unpaired itself has to hang up before it is let go. */
 const LET_GO_MS = 2_000;
+/** The person's devices following the agents here are sent the list again at most this often: the
+ *  first change at once, the changes in the next 100 ms together at its end (spec/agents.md). */
+const FOLLOW_MS = 100;
+/** What the workspace API tells its clients that changes the list of agents here. */
+const LIST_EVENTS = new Set(["status.changed", "plan.review", "plan.decided"]);
+const NO_FACTS: AgentFacts = { program: () => undefined, decides: () => false, interrupts: () => false };
 
 /** What a phone may ask of a workspace it opens (M5): to watch a terminal that runs there (its
  *  screen, then its output as it comes) and type into it, asking for its keyboard while someone
@@ -103,9 +113,10 @@ export interface PeerLinksOptions {
    *  told waits on the person here. None: nothing does. */
   statuses?(): WaitingStatus[];
   plans?(): PlanReview[];
-  /** Whether a permission the agent of `tile` asks can be allowed or denied from here (its agent
-   *  says which of its keys do, spec/needs.md 0.5). None: none can. */
-  decides?(tile: string): boolean;
+  /** What this device's manifests say of the agent each tile of `held` runs: its program, whether
+   *  a permission it asks can be allowed or denied from here (spec/needs.md 0.5), whether its turn
+   *  can be interrupted (spec/agents.md). None: nothing. */
+  facts?(held: HeldBoard[]): AgentFacts;
   /** The machines this device knows, by what each is called: where each agent waiting runs. */
   machines: KnownMachines;
   /** One of the owner's phones gives where it is told what happens here (its push subscription,
@@ -250,13 +261,24 @@ export class PeerLinks {
   /** The links whose app shows its machine's sessions here (M4), the workspace each is for, and
    *  what its person lets the people here do on it. */
   private readonly machines = new Map<Link, { workspace: string; grant: Grant }>();
+  /** The owner's devices following every agent here (spec/agents.md), and the list each was last
+   *  sent. */
+  private readonly following = new Map<Link, string>();
+  /** While the list went out within the last 100 ms: whether it changed since. */
+  private held: { changed: boolean } | null = null;
 
-  constructor(private readonly o: PeerLinksOptions) {}
+  constructor(private readonly o: PeerLinksOptions) {
+    // The list changes with the boards here, and with each status and plan the workspace API
+    // tells its clients of: heard as one of them, which never calls.
+    o.changes(() => this.agentsChanged());
+    o.server.connect({ actor: { kind: "person" }, send: (e) => { if (LIST_EVENTS.has(e.event)) this.agentsChanged(); }, closed: new AbortController().signal });
+  }
 
   /** Serve the device on `link` the workspace it names, if its person may reach it. */
   serve(link: Link): void {
     const { store, lists, server, hosting } = this.o;
     // A phone runs nothing and holds nothing here: it is answered what it asks, and watches.
+    link.on("agents", (text) => this.follow(link, text));
     if (this.o.phone?.(link.peer)) {
       link.on("device", (text) => this.answerDevice(link, text, true));
       const off = link.on("api", (text) => {
@@ -338,6 +360,51 @@ export class PeerLinks {
     });
   }
 
+  /** One of the owner's devices follows every agent here on the `agents` stream (spec/agents.md
+   *  "Following"): sent the list now, and again as it changes, until it goes. */
+  private follow(link: Link, text: string): void {
+    if (!this.o.lists.ownersDevice(link.peer)) return link.close("removed");
+    let asked: { t?: unknown } | null;
+    try { asked = JSON.parse(text) as { t?: unknown } | null; } catch { return; }
+    if (asked?.t !== "follow" || this.following.has(link)) return;
+    const list = JSON.stringify(this.agentList());
+    this.following.set(link, list);
+    link.send("agents", list);
+    void link.closed.then(() => this.following.delete(link));
+  }
+
+  /** The agents here changed: those following them are sent the list again, at once unless it went
+   *  out within the last 100 ms, then at the end of that. */
+  private agentsChanged(): void {
+    if (this.following.size === 0) return;
+    if (this.held) {
+      this.held.changed = true;
+      return;
+    }
+    const list = JSON.stringify(this.agentList());
+    let sent = false;
+    for (const [link, last] of this.following) {
+      if (last === list) continue;
+      this.following.set(link, list);
+      link.send("agents", list);
+      sent = true;
+    }
+    if (!sent) return;
+    const held = (this.held = { changed: false });
+    setTimeout(() => {
+      this.held = null;
+      if (held.changed) this.agentsChanged();
+    }, FOLLOW_MS);
+  }
+
+  /** Every agent here, and how many are at work (spec/agents.md). */
+  private agentList(): { t: "agents"; agents: AgentItem[]; working: number } {
+    const held = heldBoards(this.o.store);
+    const statuses = this.o.statuses?.() ?? [];
+    const agents = agentsOf(held, statuses, this.o.plans?.() ?? [], this.o.machines, this.o.facts?.(held) ?? NO_FACTS);
+    return { t: "agents", agents, working: workingIn(held, statuses) };
+  }
+
   /** Answer one of the owner's devices asking on the `device` stream which workspaces are here, or
    *  what waits on the person in them; take where a phone, `phone`, is told what happens here; and
    *  let a phone unpair itself. */
@@ -347,7 +414,8 @@ export class PeerLinks {
     const asked = parseDevice(text);
     if (asked?.t === "needs") {
       const [held, statuses] = [heldBoards(store), this.o.statuses?.() ?? []];
-      const needs = needsOf(held, statuses, this.o.plans?.() ?? [], this.o.machines, (tile) => this.o.decides?.(tile) ?? false);
+      const facts = this.o.facts?.(held) ?? NO_FACTS;
+      const needs = needsOf(held, statuses, this.o.plans?.() ?? [], this.o.machines, (tile) => facts.decides(tile));
       return link.send("device", JSON.stringify({ t: "needs", needs, working: workingIn(held, statuses) } satisfies DeviceMessage));
     }
     // Only a phone is told what happens here: a computer of the person's shows it.

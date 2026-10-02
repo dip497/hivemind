@@ -4,7 +4,7 @@
  * device's documents, its agents' statuses and the plans they hand off in, the list out.
  */
 import path from "node:path";
-import { agentForCmd, type InputKind, type PermissionKeys } from "@hivemind/agents";
+import { agentForCmd, type AgentProviderDef, type InputKind, type PermissionKeys } from "@hivemind/agents";
 import { machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
 import type { AccessLists } from "@hivemind/workspace-host/access";
 import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
@@ -68,17 +68,23 @@ export function agentOf(held: HeldBoard[], tileId: string, title?: string): { wo
   return { workspace: board.workspace, name: board.name, tile, agent: board.core?.tileNames?.[tile] || title || record.task || record.label };
 }
 
+/** The manifest of the agent the tile `tile` of `held` runs; undefined for a tile on none of
+ *  them, and for a command no manifest here names. */
+export function manifestOf(held: HeldBoard[], tile: string): AgentProviderDef | undefined {
+  const bare = toBareId(tile);
+  const record = held.flatMap((h) => h.core?.tiles ?? []).find((t) => t.id === bare);
+  return agentForCmd(record?.cmd);
+}
+
 /** The keys that allow and deny a permission the agent of `tile` asks, as its manifest says
  *  (`answer.permission`); undefined for an agent that says none, and for a tile on none of `held`. */
 export function permissionKeys(held: HeldBoard[], tile: string): PermissionKeys | undefined {
-  const bare = toBareId(tile);
-  const record = held.flatMap((h) => h.core?.tiles ?? []).find((t) => t.id === bare);
-  return agentForCmd(record?.cmd)?.answer?.permission;
+  return manifestOf(held, tile)?.answer?.permission;
 }
 
 /** The folder the agent of `tile` runs in on `board`: its frame's worktree's, else its frame's,
  *  else its workspace's. */
-function folderOf(board: HeldBoard, tile: string): string {
+export function folderOf(board: HeldBoard, tile: string): string {
   const id = board.core?.frameOf?.[tile];
   const frame = id === undefined ? undefined : board.core?.frames.find((f) => f.id === id);
   return frame?.worktreePath ?? frame?.workspacePath ?? board.repo;
