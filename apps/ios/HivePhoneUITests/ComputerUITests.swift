@@ -3,7 +3,8 @@ import XCTest
 /// The app against a real computer (design §7): it pastes the link the computer's Settings → Devices
 /// → Pair a phone shows, pairs, and is the person's; finds the computer and its agent among the
 /// agents; opens the agent and reads its line in its terminal, then what it and the person said in
-/// its chat; and sends it a message from the reply box, which it answers. Run by
+/// its chat; and sends it a message from the reply box, which it answers in the chat and in its
+/// terminal, still followed. Run by
 /// apps/desktop/tests/e2e/phone-app.spec.ts (PHONE_APP=ios), which hands it the link and what to find
 /// there: xcodebuild gives the test runner each `TEST_RUNNER_<NAME>` it was given as `<NAME>`.
 /// Without a link it skips itself, so the app's own UI test run is unchanged. A computer's network,
@@ -30,6 +31,7 @@ final class ComputerUITests: XCTestCase {
         let said = try given("PAIR_SAID")
         let message = try given("PAIR_MESSAGE")
         let answer = try given("PAIR_ANSWER")
+        let heard = try given("PAIR_HEARD")
 
         let app = XCUIApplication()
         app.launch()
@@ -60,8 +62,7 @@ final class ComputerUITests: XCTestCase {
         terminalTab.tap()
         let terminal = app.descendants(matching: .any)["agent.terminal"]
         XCTAssertTrue(terminal.waitForExistence(timeout: 30), "its terminal is shown")
-        let printed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", line), object: terminal)
-        XCTAssertEqual(XCTWaiter.wait(for: [printed], timeout: 60), .completed, "its terminal shows \(line)")
+        XCTAssertEqual(shows(line, terminal), .completed, "its terminal shows \(line)")
 
         // What it and the person said to each other.
         app.segmentedControls.buttons["Chat"].tap()
@@ -74,6 +75,17 @@ final class ComputerUITests: XCTestCase {
         reply.typeText(message)
         app.buttons["Send"].tap()
         XCTAssertTrue(showing(answer, in: app).waitForExistence(timeout: 60), "the agent answered: \(answer)")
+
+        // Its terminal, followed all the while the chat was: what it printed on hearing it.
+        terminalTab.tap()
+        XCTAssertEqual(shows(heard, terminal), .completed, "its terminal shows \(heard)")
+    }
+
+    /// Waits a minute at most for `terminal` to show `line` among the lines in sight.
+    @MainActor
+    private func shows(_ line: String, _ terminal: XCUIElement) -> XCTWaiter.Result {
+        let shown = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", line), object: terminal)
+        return XCTWaiter.wait(for: [shown], timeout: 60)
     }
 
     /// The first element whose label has `text` in it, whatever kind it is: a row's text may be its

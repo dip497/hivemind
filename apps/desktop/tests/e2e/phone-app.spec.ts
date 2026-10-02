@@ -22,7 +22,7 @@ const platform = process.env.PHONE_APP === "android" || process.env.PHONE_APP ==
 /** What the phone's UI test is told: the link, and what it should find and say there. The same
  *  names on both platforms: Maestro takes each as `-e NAME=…`, the XCUITest as xcodebuild hands its
  *  runner each `TEST_RUNNER_NAME` it is given. */
-type Told = Record<"PAIR_LINK" | "PAIR_PERSON" | "PAIR_COMPUTER" | "PAIR_AGENT" | "PAIR_LINE" | "PAIR_SAID" | "PAIR_MESSAGE" | "PAIR_ANSWER", string>;
+type Told = Record<"PAIR_LINK" | "PAIR_PERSON" | "PAIR_COMPUTER" | "PAIR_AGENT" | "PAIR_LINE" | "PAIR_SAID" | "PAIR_MESSAGE" | "PAIR_ANSWER" | "PAIR_HEARD", string>;
 
 let root: string | undefined;
 const apps: ElectronApplication[] = [];
@@ -151,6 +151,7 @@ test("the phone app pairs with the computer by the link it shows, finds it and i
     PAIR_SAID: "You said fix the nav",
     PAIR_MESSAGE: "Priya says ship it",
     PAIR_ANSWER: "You said Priya says ship it",
+    PAIR_HEARD: "heard: Priya says ship it",
   };
   const ran = await runPhoneTest(platform!, told, testInfo);
   expect(ran.code, `the phone's UI test (its output: ${testInfo.outputPath(platform!)}):\n${ran.tail}`).toBe(0);
