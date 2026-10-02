@@ -1,4 +1,4 @@
-# Workspace API (0.12)
+# Workspace API (0.13)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -38,7 +38,7 @@ for it.
 | Electron IPC | the app's windows | the window, from when it opens until it closes | `invoke("workspace", method, params)` → the answer | `send("workspace:notice", method, params)` | `workspace:event`, one `{event, params}` each |
 | HTTP | the dev-bridge's page | its event stream: `GET /workspace/events?token=…`, whose first event, `connection`, carries `{id}` | `POST /workspace`, body `{"method", "params"}` → 200 with the answer | `POST /workspace/notice`, same body → 204 | the stream's `data:` lines, one `{event, params}` each |
 
-| hive-net | a peer on another device, reaching a workspace shared from here (M1) | its `hive/ws/1` connection | a frame on the `api` stream, `{"id", "method", "params"}` → a frame `{"id", "result"}` or `{"id", "error"}` | a frame without `id` | frames `{event, params}` on the same stream |
+| hive-net | a peer on another device, reaching a workspace shared from here (M1) | an `api` stream of its `hive/ws/1` connection: a connection may carry several, each a connection of its own (0.13) | a frame on that stream, `{"id", "method", "params"}` → a frame `{"id", "result"}` or `{"id", "error"}` on it | a frame without `id` | frames `{event, params}` on the same stream |
 
 Over Electron only the main frame of an app window is heard; anything else is rejected. Over HTTP
 every request carries the token (`x-hive-token`, or `token` on the stream) and a call or notice
@@ -64,9 +64,12 @@ A peer names the workspace by its id, `hive://<workspaceId>`, wherever a call ta
 path out of it (`..`), another workspace or a machine is `FORBIDDEN` (a notice is dropped). The
 person's own devices are the owner, there as here. What the host answers of every agent it runs
 (`status.all`, `link.list`) a peer is answered for the workspace's own agents alone, as it hears
-only their events. One of the owner's phones (`pairing.md` 0.3) opens a workspace's API on its own
-connection, the `api` stream's first frame naming it (`{ "t": "open", "workspace": "<id>" }`; any
-other first frame, or a workspace not held there, closes the connection), as the owner, and may
+only their events. One of the owner's phones (`pairing.md` 0.3) opens a workspace's API on an `api`
+stream of its own connection, the stream's first frame naming it (`{ "t": "open", "workspace":
+"<id>" }`; any other first frame, or a workspace not held there, closes the connection), as the
+owner. It opens one for each thing it does at once (a terminal watched, a conversation followed, a
+call), on that one connection: each is a connection of its own, for the workspace it names, its
+answers and events on it alone, until it ends (0.13). It may
 call nothing there but `terminal.open` with `attachOnly` (it watches a terminal, its screen and
 then its output), `terminal.write` and `terminal.keyboard.ask` (it types into one as the owner,
 and asks for its keyboard while someone else holds it, 0.10), `agent.answer` (it answers what an

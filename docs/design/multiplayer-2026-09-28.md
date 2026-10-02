@@ -993,7 +993,11 @@ workspaces a device holds), `pty` (the PTY daemon's protocol, for the owner's de
 (the workspace API's calls about a device's own folders, for the owner's devices), `hosting`
 (moving a workspace), and `machine` (a participant's sessions on their own machine, shown to the
 host through a filter of the same daemon protocol; the participant opens it, so the host never
-dials a participant).
+dials a participant). A connection carries as many streams of one name as the side that dialled
+opens, each its own: a phone, on its one connection to a device, opens an `api` stream for each
+terminal it watches, conversation it follows and call it makes, and a `device` stream for each
+question, each answered on itself (2026-10-02: hive-net's daemon tells the app of each stream by an
+id, its local protocol 2).
 
 ---
 
