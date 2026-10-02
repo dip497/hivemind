@@ -8,7 +8,7 @@
  */
 import type { JsonValue, NeedsInputReason, TurnOutcome, ViewEvent, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { StatusEvent, TileStatusKind } from "../agent-status-bus";
-import { bucketTileStatus } from "./tile-status-bucket";
+import { bucketTileStatus } from "@hivemind/view-host/status";
 
 export interface HubTile {
   id: string;

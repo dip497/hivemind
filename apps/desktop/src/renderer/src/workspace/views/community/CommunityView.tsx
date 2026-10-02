@@ -2,7 +2,7 @@
  * CommunityView — the host side of an isolated community view: a sandboxed
  * iframe (its own `hm-view://<id>` origin, no `allow-same-origin`, strict CSP
  * stamped by main/view-packages.ts, no preload → no `window.hive`, no node),
- * one MessagePort to it (host-link.ts), and an overlay of real `<TileSlot>`s
+ * one MessagePort to it (`@hivemind/view-host/link`), and an overlay of real `<TileSlot>`s
  * positioned wherever the plugin punches a hole (`surfaceRects`).
  *
  * The plugin never receives the model: it gets a projection — frames + tiles +
@@ -15,7 +15,9 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, type HostMessage, type SurfaceRect, type ViewFrameFolder, type ViewFrameMachine, type ViewPermission, type ViewTheme } from "@hivemind/view-sdk/protocol";
+import { PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, type HostMessage, type SurfaceRect, type ViewPermission, type ViewTheme } from "@hivemind/view-sdk/protocol";
+import { CommunityLink } from "@hivemind/view-host/link";
+import { viewStructure } from "@hivemind/view-host/structure";
 import { frameMachine, useMachines } from "../../../machines/store";
 import { useMachineOwners } from "../../../machines/owners";
 import { useShown } from "../../../multiplayer/shown";
@@ -27,7 +29,6 @@ import { Wallpaper } from "../../../Wallpaper";
 import { ACCENTS, effectiveGlass, getTheme, useSurfacePolicy } from "../../../theme-store";
 import { loadViewLayout, saveViewLayout, type ViewLayoutSpec } from "../../view-layout-store";
 import { cssColorToHexString } from "../../css-color";
-import { CommunityLink } from "./host-link";
 import { ShareDialog, type ShareChoice } from "./ShareDialog";
 import { PromptDialog, type PromptAsk } from "./PromptDialog";
 import { isRemote } from "@hivemind/core/remote-uri";
@@ -73,13 +74,6 @@ function layoutSpec(pluginId: string): ViewLayoutSpec<unknown> {
 
 /** The host for one package. Rendered through the lazy wrapper in registry.ts
  *  (`pkg` is fixed per registered view; the props are the view contract). */
-const baseName = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
-function folderOf(worktreePath?: string, workspacePath?: string): { folder?: ViewFrameFolder } {
-  if (worktreePath) return { folder: { name: baseName(worktreePath), kind: "worktree" } };
-  if (workspacePath) return { folder: { name: baseName(workspacePath), kind: "folder" } };
-  return {};
-}
-
 export function CommunityViewHost({ pkg, model, commands }: WorkspaceViewProps & { pkg: ViewPackageInfo }) {
   const manifest = pkg.manifest!;
   const url = pkg.url!;
@@ -226,10 +220,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     // A frame bound to a machine carries that machine's name and link state; a local one carries nothing.
     const machines = useMachines();
     const owners = useMachineOwners(useShown().repo);
-    const machineOf = useCallback((workspacePath?: string): { machine?: ViewFrameMachine } => {
-      const machine = frameMachine(machines, workspacePath, owners);
-      return machine ? { machine } : {};
-    }, [machines, owners]);
+    const machineOf = useCallback((workspacePath?: string) => frameMachine(machines, workspacePath, owners), [machines, owners]);
 
     // Structure: frames / tiles / membership (+ current names). Colours resolved.
     const nameOf = useMemo(() => new Map(layerTiles.map((t) => [t.id, t.name])), [layerTiles]);
@@ -238,20 +229,14 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     const agentOf = useMemo(() => new Map(layerTiles.flatMap((t) => (t.agent ? [[t.id, t.agent] as const] : []))), [layerTiles]);
     useEffect(() => {
       if (!ready) return;
-      send({
-        type: "structure",
-        frames: frames.map((f) => ({
-          id: f.id, title: f.title, color: cssColorToHexString(f.color), ...machineOf(f.workspacePath),
-          ...(f.parentFrameId ? { parentId: f.parentFrameId } : {}),
-          ...(f.branch ? { branch: f.branch } : {}),
-          ...folderOf(f.worktreePath, f.workspacePath),
-        })),
-        tiles: tiles.map((t) => {
-          const agent = agentOf.get(t.id);
-          return { id: t.id, frameId: frameOf[t.id] ?? null, kind: t.kind, name: nameRef.current.get(t.id) ?? t.label, ...(agent ? { agent } : {}) };
-        }),
-        links: { pipes: links.pipes.map(({ src, dst }) => ({ src, dst })), spawns: links.spawnLinks.map(({ parent, child }) => ({ parent, child })) },
-      });
+      send(viewStructure({
+        frames, tiles, frameOf,
+        name: (t) => nameRef.current.get(t.id),
+        agent: (t) => agentOf.get(t.id),
+        links: { pipes: links.pipes, spawns: links.spawnLinks },
+        color: (f) => cssColorToHexString(f.color),
+        machine: (f) => machineOf(f.workspacePath),
+      }));
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ready, frames, tiles, frameOf, machineOf, agentOf, links]);
     // Names on their own — a title tick must not look structural to the plugin.

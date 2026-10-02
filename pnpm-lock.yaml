@@ -239,6 +239,9 @@ importers:
       '@hivemind/host':
         specifier: workspace:*
         version: link:../../packages/host
+      '@hivemind/view-host':
+        specifier: workspace:*
+        version: link:../../packages/view-host
       '@hivemind/view-sdk':
         specifier: workspace:*
         version: link:../../packages/hive-view-sdk
@@ -585,6 +588,25 @@ importers:
         version: 5.9.3
 
   packages/tsconfig: {}
+
+  packages/view-host:
+    dependencies:
+      '@hivemind/agent-host':
+        specifier: workspace:*
+        version: link:../agent-host
+      '@hivemind/view-sdk':
+        specifier: workspace:*
+        version: link:../hive-view-sdk
+      '@hivemind/workspace-doc':
+        specifier: workspace:*
+        version: link:../workspace-doc
+    devDependencies:
+      '@hivemind/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
 
   packages/workspace-api:
     dependencies:

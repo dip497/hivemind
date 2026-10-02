@@ -1,9 +1,10 @@
 /**
- * host-link — the host end of one community view's MessagePort. Pure logic:
- * validates every inbound message (protocol.ts), enforces the permission the
- * manifest was granted, counts what it refuses, and disables the plugin past a
- * threshold. No DOM, no React — CommunityView.tsx owns those; this file is what
- * the unit tests drive with a fake port.
+ * The host end of one community view's channel. Pure logic: validates every inbound message
+ * (protocol.ts), enforces the permission the manifest was granted, counts what it refuses, and
+ * disables the view past a threshold. No DOM and no Node: the window runs it for the view in its
+ * iframe (CommunityView.tsx owns the DOM there), and a device runs it for a view on a remote
+ * screen, its messages carried over the workspace API (`@hivemind/host/views`); the unit tests
+ * drive it with a fake port.
  *
  * Disable rules (any one trips it, `onDisable(reason)` fires once):
  *   • ≥ LIMITS.malformed refused messages (malformed, unknown, before `ready`,
@@ -13,6 +14,10 @@
  *   • > LIMITS.longTaskMsPerWindow ms of main-thread long tasks attributed to
  *     the plugin's iframe within LIMITS.windowMs (a runaway render loop). The
  *     component feeds these in from a PerformanceObserver.
+ *
+ * What a host cannot do at all is not held against a view, which could not have known: a remote
+ * screen has no live surfaces to place (`surfaceRects`), no folder picker (`openFolder`) and no
+ * tiles but agents' to start. Those are refused as UNSUPPORTED and not counted.
  */
 import {
   ACTIVITY_MIN_INTERVAL_MS, EVENT_REPLAY_MAX, PROTOCOL_VERSION, customNameMatches, parsePluginMessage, refusal,
@@ -20,12 +25,34 @@ import {
   type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect,
   type ViewAgent, type ViewAgentStatus, type ViewSession, type ViewStatus,
 } from "@hivemind/view-sdk/protocol";
-import type { WorkspaceCommands } from "../../workspace-view";
-import { AGENT_TILE_KIND, type TileKind } from "../../../tile-kinds";
-import { bucketTileStatus } from "../../tile-status-bucket";
+import { AGENT_TILE_KIND, type TileKind } from "@hivemind/workspace-doc/shapes";
+import type { TileStatusKind } from "@hivemind/agent-host/tile-status";
+import { bucketTileStatus } from "./status.js";
 
 /** Kinds a plugin may spawn (no planReview: that is opened by the control plane). */
 const SPAWNABLE: readonly string[] = [AGENT_TILE_KIND, "shell", "editor", "diff", "issues", "browser", "workbench"];
+
+/** What the link asks of the workspace it shows: the protocol's commands, and each tile's status.
+ *  A host leaves out what it cannot do (a remote screen: tiles other than agents', frames, folder
+ *  pickers), and a view asking for it is told UNSUPPORTED. */
+export interface LinkCommands {
+  selectTile: (id: string | null) => void;
+  selectFrame: (id: string | null) => void;
+  focusTile: (id: string, opts?: { exact?: boolean }) => void;
+  closeTile: (id: string) => void;
+  spawnTile?: (kind: TileKind, frameId: string | null) => unknown;
+  spawnVis?: (which: "tree" | "shell" | "diff" | "issues") => void;
+  /** Starts the person's default agent, whichever that is. */
+  spawnClaude: () => void;
+  addFrame?: () => void;
+  /** Start an agent by catalog id (null = the person's default); false when no such agent is installed. */
+  spawnAgent: (agent: string | null, frameId: string | null, opts?: { prompt?: string; name?: string; resume?: string }) => boolean;
+  /** Rename a tile; "" goes back to its own name. */
+  renameTile: (id: string, name: string) => void;
+  openFolder?: (frameId: string) => void;
+  /** A tile's status: the last known one now, then each change, until the returned function is called. */
+  subscribeTileStatus: (tileId: string, cb: (status: TileStatusKind) => void) => () => void;
+}
 
 export const LIMITS = {
   malformed: 8,
@@ -82,12 +109,13 @@ export function linkFeatures(s: LinkServices): ViewFeature[] {
 export interface LinkDeps {
   pluginId: string;
   capabilities: ViewPermission[];
-  commands: WorkspaceCommands;
+  commands: LinkCommands;
   /** Ids the plugin may name in commands (the current tiles). */
   hasTile: (id: string) => boolean;
   hasFrame: (id: string) => boolean;
   onReady: () => void;
-  onSurfaceRects: (rects: SurfaceRect[]) => void;
+  /** Where the view wants live surfaces; none: this host places none (a remote screen). */
+  onSurfaceRects?: (rects: SurfaceRect[]) => void;
   onLayout: (data: unknown) => void;
   onFramesDrawn: (count: number) => void;
   onError: (message: string) => void;
@@ -106,7 +134,9 @@ export interface LinkStats {
   statusSubscriptions: number;
 }
 
-interface PortLike { postMessage(msg: unknown): void; onmessage: ((e: MessageEvent) => void) | null; start?: () => void; close?: () => void }
+/** The link's end of the channel to the view: a MessagePort in the window, a session's relay on a
+ *  device (which hands what the view posts to `handle`). */
+export interface PortLike { postMessage(msg: unknown): void; onmessage: ((e: MessageEvent) => void) | null; start?: () => void; close?: () => void }
 
 export class CommunityLink {
   readonly stats: LinkStats = { received: 0, refused: 0, ready: false, disabled: null, framesDrawn: 0, statusSubscriptions: 0 };
@@ -142,6 +172,8 @@ export class CommunityLink {
   private participantsUnsub: (() => void) | null = null;
   private people: ViewParticipant[] | null = null;
   private lastParticipants = "";
+  /** What this host cannot do that the view asked for, said once each. */
+  private unsupportedSaid = new Set<string>();
 
   constructor(private deps: LinkDeps) {
     this.now = deps.now ?? (() => performance.now());
@@ -227,7 +259,15 @@ export class CommunityLink {
     if (this.stats.refused >= LIMITS.malformed) this.disable(`${this.stats.refused} malformed or unauthorised messages (last: ${why})`);
   }
 
-  /** Public for tests; the port handler routes here. */
+  /** What this host cannot do at all: refused, but not counted against the view. */
+  private unsupported(what: string) {
+    if (this.unsupportedSaid.has(what)) return;
+    this.unsupportedSaid.add(what);
+    console.warn(`[hivemind] view "${this.deps.pluginId}": ${what} is UNSUPPORTED here`);
+  }
+
+  /** What the view sent: the port handler routes here, and so does a device for a view on a
+   *  remote screen. */
   handle(raw: unknown): void {
     if (this.stats.disabled) return;
     this.stats.received++;
@@ -278,7 +318,12 @@ export class CommunityLink {
         this.stats.statusSubscriptions = this.statusUnsubs.size;
         return;
       }
-      case "surfaceRects": this.deps.onSurfaceRects(m.rects.filter((r) => this.deps.hasTile(r.tileId))); return;
+      case "surfaceRects": {
+        const place = this.deps.onSurfaceRects;
+        if (!place) { this.unsupported("surfaceRects"); return; }
+        place(m.rects.filter((r) => this.deps.hasTile(r.tileId)));
+        return;
+      }
       case "revealed": {
         const cb = this.reveals.get(m.requestId);
         if (!cb) { this.refuse(`revealed: unknown requestId ${m.requestId}`); return; }
@@ -470,11 +515,18 @@ export class CommunityLink {
       case "closeTile": c.closeTile(args[0] as string); return;
       case "spawnTile":
         if (!SPAWNABLE.includes(args[0] as string)) { this.refuse(`spawnTile: unknown kind ${String(args[0])}`); return; }
+        if (!c.spawnTile) { this.unsupported("spawnTile"); return; }
         c.spawnTile(args[0] as TileKind, args[1] as string | null);
         return;
-      case "spawnVis": c.spawnVis(args[0] as "tree" | "shell" | "diff" | "issues"); return;
+      case "spawnVis":
+        if (!c.spawnVis) { this.unsupported("spawnVis"); return; }
+        c.spawnVis(args[0] as "tree" | "shell" | "diff" | "issues");
+        return;
       case "spawnClaude": c.spawnClaude(); return;
-      case "addFrame": c.addFrame(); return;
+      case "addFrame":
+        if (!c.addFrame) { this.unsupported("addFrame"); return; }
+        c.addFrame();
+        return;
       case "spawnAgent": {
         const opts = args[2] as { prompt?: string; name?: string; resume?: string } | undefined;
         const go = () => {
@@ -493,7 +545,10 @@ export class CommunityLink {
         return;
       }
       case "renameTile": c.renameTile(args[0] as string, args[1] as string); return;
-      case "openFolder": c.openFolder(args[0] as string); return;
+      case "openFolder":
+        if (!c.openFolder) { this.unsupported("openFolder"); return; }
+        c.openFolder(args[0] as string);
+        return;
     }
   }
 }

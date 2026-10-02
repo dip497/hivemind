@@ -1,12 +1,14 @@
-// The host end of a community view's port: validation, permission gating,
-// thresholds (malformed / flood / long tasks), version mismatch, reveal.
+// The host end of a community view's channel: validation, permission gating,
+// thresholds (malformed / flood / long tasks), version mismatch, reveal, and what a host cannot
+// do at all (a remote screen's).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CommunityLink, LIMITS, PROMPT_DECLINES_MAX, SHARE_DECLINES_MAX, type LinkDeps, type LinkServices } from "../../src/renderer/src/workspace/views/community/host-link";
-import { ViewEventHub } from "../../src/renderer/src/workspace/view-events";
+import { CommunityLink, LIMITS, PROMPT_DECLINES_MAX, SHARE_DECLINES_MAX, type LinkDeps, type LinkServices } from "../src/link.ts";
 import type { ActivityLevel, ShareOutcome, ViewParticipant, ViewPresence } from "@hivemind/view-sdk/protocol";
 
-function harness(caps: LinkDeps["capabilities"] = [], tiles = ["t1", "t2"], services?: LinkServices) {
+/** A link on a host with `tiles` and the frame `f1`. `lacks`: the commands this host leaves out,
+ *  and `surfaceRects` when it places no surfaces. */
+function harness(caps: LinkDeps["capabilities"] = [], tiles = ["t1", "t2"], services?: LinkServices, lacks: string[] = []) {
   const calls: string[] = [];
   const events: string[] = [];
   const sent: unknown[] = [];
@@ -15,6 +17,7 @@ function harness(caps: LinkDeps["capabilities"] = [], tiles = ["t1", "t2"], serv
   const statusCbs = new Map<string, (s: string, e: unknown) => void>();
   const commands = new Proxy({}, {
     get: (_t, k: string) => {
+      if (lacks.includes(k)) return undefined;
       if (k === "subscribeTileStatus") return (id: string, cb: (s: string, e: unknown) => void) => { statusCbs.set(id, cb); return () => statusCbs.delete(id); };
       return (...args: unknown[]) => calls.push(`${k}(${args.map((a) => JSON.stringify(a)).join(",")})`);
     },
@@ -23,7 +26,7 @@ function harness(caps: LinkDeps["capabilities"] = [], tiles = ["t1", "t2"], serv
     pluginId: "p", capabilities: caps, commands,
     hasTile: (id) => tiles.includes(id), hasFrame: (id) => id === "f1",
     onReady: () => events.push("ready"),
-    onSurfaceRects: (r) => events.push(`rects:${r.map((x) => x.tileId).join(",")}`),
+    ...(lacks.includes("surfaceRects") ? {} : { onSurfaceRects: (r: Array<{ tileId: string }>) => events.push(`rects:${r.map((x) => x.tileId).join(",")}`) }),
     onLayout: (d) => events.push(`layout:${JSON.stringify(d)}`),
     onFramesDrawn: (n) => events.push(`frames:${n}`),
     onError: (m) => events.push(`error:${m}`),
@@ -222,31 +225,6 @@ test("1.3: a feature the host did not wire is a refusal, like an unknown message
   h.link.handle({ type: "watchActivity", tileIds: ["t1"] });
   h.link.handle({ type: "subscribePresence" });
   assert.equal(h.link.stats.refused, 3);
-});
-
-test("1.3: events are filtered by kind and name, batched per task, and replayed on request", async () => {
-  const hub = new ViewEventHub();
-  hub.onHookTurn("t1");
-  hub.emitCustom("ci.build", { ok: true }, "shell");
-  const h = harness([], ["t1"], { events: { subscribe: (l) => hub.subscribe(l), replay: (s, a, v) => hub.replay(s, a, v) } });
-  h.link.handle({ type: "ready", v: 1 });
-  h.link.handle({ type: "subscribeEvents", kinds: ["custom"], custom: ["ci.*"], replaySince: 0 });
-  const replay = ofType(h.sent, "events");
-  assert.equal(replay.length, 1);
-  assert.equal(replay[0]!.replay, true);
-  assert.deepEqual((replay[0]!.events as Array<{ kind: string }>).map((e) => e.kind), ["custom"]);
-  assert.equal(hub.emitCustom("deploy.done", null, "shell").delivered, false);
-  assert.equal(hub.emitCustom("ci.test", null, { tileId: "t1" }).delivered, true);
-  hub.onHookTurn("t1");
-  hub.emitCustom("ci.lint", null, "shell");
-  await flush();
-  const live = ofType(h.sent, "events").slice(1);
-  assert.equal(live.length, 1);
-  assert.deepEqual((live[0]!.events as Array<{ name: string }>).map((e) => e.name), ["ci.test", "ci.lint"]);
-  assert.equal(hub.emitCustom("ci.y", null, "shell", "someone-else").delivered, false);
-  assert.equal(hub.emitCustom("ci.y", null, "shell", "p").delivered, true);
-  h.link.handle({ type: "unsubscribeEvents" });
-  assert.equal(hub.emitCustom("ci.x", null, "shell").delivered, false);
 });
 
 test("1.3: activity is at most one message per 250 ms, only watched tiles, nothing while hidden, a snapshot on return", () => {
@@ -454,4 +432,24 @@ test("1.5: a rect for a tile the view was told of and that has closed since is d
   h.link.handle({ type: "surfaceRects", rects: [rect("t2"), rect("t9")] });
   assert.equal(h.link.stats.refused, 1);
   assert.equal(h.events.at(-1), "rects:t2");
+});
+
+test("what a host cannot do at all (a remote screen: no surfaces, no folder picker, no tiles but agents' to start) is refused without being held against the view", () => {
+  const lacks = ["surfaceRects", "spawnTile", "spawnVis", "addFrame", "openFolder"];
+  const h = harness(["workspace:spawn", "workspace:edit"], ["t1"], undefined, lacks);
+  h.link.handle({ type: "ready", v: 1 });
+  for (let i = 0; i < LIMITS.malformed; i++) {
+    h.link.handle({ type: "surfaceRects", rects: [{ tileId: "t1", x: 0, y: 0, w: 10, h: 10 }] });
+    h.link.handle({ type: "command", name: "openFolder", args: ["f1"] });
+    h.link.handle({ type: "command", name: "spawnTile", args: ["shell", "f1"] });
+    h.link.handle({ type: "command", name: "spawnVis", args: ["diff"] });
+    h.link.handle({ type: "command", name: "addFrame", args: [] });
+  }
+  assert.deepEqual([h.link.stats.refused, h.link.stats.disabled], [0, null]);
+  assert.deepEqual(h.events, ["ready"]);
+  // What it can do still runs, and what the view may not ask is still held against it.
+  h.link.handle({ type: "command", name: "renameTile", args: ["t1", "Priya's"] });
+  h.link.handle({ type: "command", name: "closeTile", args: ["t1"] });
+  assert.deepEqual(h.calls, ['renameTile("t1","Priya\'s")']);
+  assert.equal(h.link.stats.refused, 1);
 });

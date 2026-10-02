@@ -1,0 +1,24 @@
+{
+  "name": "@hivemind/view-host",
+  "version": "2026.9.8",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@hivemind/agent-host": "workspace:*",
+    "@hivemind/view-sdk": "workspace:*",
+    "@hivemind/workspace-doc": "workspace:*"
+  },
+  "devDependencies": {
+    "@hivemind/tsconfig": "workspace:*",
+    "typescript": "catalog:"
+  },
+  "description": "The host end of a community view: the link that checks everything a view sends and answers it, and what the view is told of the workspace. No DOM and no Node, so the window and a device serving a remote screen run the same host.",
+  "license": "MIT"
+}
