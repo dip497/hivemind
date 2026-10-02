@@ -1,12 +1,12 @@
 # The app against a real computer (docs/design/phone-app-2026-10-02.md §7): it pastes the link the
 # computer's Settings → Devices → Pair a phone shows, pairs, and is the person's; finds the computer
 # and its agent among the agents; opens the agent and reads its line in its terminal, then what it
-# and the person said in its chat; and sends it a message from the reply box, which it answers.
-# Run by apps/desktop/tests/e2e/phone-app.spec.ts (PHONE_APP=android), which hands it the link and
-# what to find (PAIR_LINK, PAIR_PERSON, PAIR_COMPUTER, PAIR_AGENT, PAIR_LINE, PAIR_SAID,
-# PAIR_MESSAGE, PAIR_ANSWER); in a folder of its own, so the smoke run of apps/android/maestro
-# leaves it out. A computer's network, a terminal and a conversation over it are slow on a CI
-# emulator: every wait is long.
+# and the person said in its chat; and sends it a message from the reply box, which it answers in
+# the chat and in its terminal, still followed. Run by apps/desktop/tests/e2e/phone-app.spec.ts
+# (PHONE_APP=android), which hands it the link and what to find (PAIR_LINK, PAIR_PERSON,
+# PAIR_COMPUTER, PAIR_AGENT, PAIR_LINE, PAIR_SAID, PAIR_MESSAGE, PAIR_ANSWER, PAIR_HEARD); in a
+# folder of its own, so the smoke run of apps/android/maestro leaves it out. A computer's network,
+# a terminal and a conversation over it are slow on a CI emulator: every wait is long.
 appId: com.hivemind.phone
 name: Pair with a computer, and drive its agent
 ---
@@ -50,7 +50,15 @@ name: Pair with a computer, and drive its agent
 - tapOn:
     id: "reply"
 - inputText: ${PAIR_MESSAGE}
-- tapOn: "Send"
+# The app's Send, by its tag: the keyboard's action key sends too (the reply box's ImeAction.Send),
+# and a tap by "Send" could find either.
+- tapOn:
+    id: "reply-send"
 - extendedWaitUntil:
     visible: ${PAIR_ANSWER}
+    timeout: 60000
+# Its terminal, followed all the while the chat was: what it printed on hearing it.
+- tapOn: "Terminal"
+- extendedWaitUntil:
+    visible: ${PAIR_HEARD}
     timeout: 60000
