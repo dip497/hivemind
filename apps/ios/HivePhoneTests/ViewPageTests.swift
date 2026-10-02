@@ -10,12 +10,12 @@ final class ViewPageTests: XCTestCase {
         let select = #"{"type":"command","name":"selectTile","args":["t1"]}"#
         let ready = #"{"type":"ready","v":1}"#
 
-        guard case .afterLock(let reason) = ViewPost(start, view: "Priya's phone board", device: "desk") else {
+        guard case .afterLock(let reason) = ViewPost(start, view: "Priya's phone board") else {
             return XCTFail("starting an agent from a view asks the phone's lock first")
         }
         XCTAssertTrue(reason.contains("Priya's phone board"), reason)
-        XCTAssertEqual(ViewPost(select, view: "Priya's phone board", device: "desk"), .now)
-        XCTAssertEqual(ViewPost(ready, view: "Priya's phone board", device: "desk"), .now)
+        XCTAssertEqual(ViewPost(select, view: "Priya's phone board"), .now)
+        XCTAssertEqual(ViewPost(ready, view: "Priya's phone board"), .now)
     }
 
     func testStartingAgainGoesOnAndAnyOtherEndSaysWhyInTheAppsWords() {

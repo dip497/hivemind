@@ -24,12 +24,17 @@ struct OfferedView: Hashable, Identifiable {
     var id: String { device + "\n" + workspace + "\n" + info.id }
 }
 
-/// One row of the Views tab: a view, dimmed while its computer is away.
+/// One row of the Views tab: a view, dimmed and not opened while its computer is away.
 struct ShelfRow: Identifiable {
     let view: OfferedView
     let away: Bool
 
     var id: String { view.id }
+
+    /// What its row says under its name: its workspace and computer, and that the computer is away.
+    var place: String {
+        "\(view.workspaceName) · " + (away ? "\(view.deviceName) is away" : view.deviceName)
+    }
 }
 
 /// The Views tab's list (design §6 screen 9, §6.1), the index of what the phone may show: the
@@ -45,7 +50,7 @@ struct ViewShelf {
 
     /// The rows: the workspaces in the overview's order, each with the views its computer said it
     /// offers, in the order it listed them; a workspace no computer holds now offers none. The
-    /// rows of a computer away are dimmed.
+    /// rows of a computer away say so.
     func rows(workspaces: [Workspace], devices: [Device]) -> [ShelfRow] {
         let away = Set(NeedsSummary.away(devices).map(\.id))
         return workspaces.flatMap { workspace -> [ShelfRow] in

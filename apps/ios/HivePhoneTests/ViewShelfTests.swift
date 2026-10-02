@@ -2,12 +2,13 @@ import XCTest
 @testable import HivePhone
 
 /// The Views tab's list (design §6 screen 9, §6.1): what each computer last said it offers for each
-/// workspace it holds, in the overview's order, the rows of a computer away dimmed.
+/// workspace it holds, in the overview's order, the rows of a computer away saying so (as the
+/// Android app's do).
 final class ViewShelfTests: XCTestCase {
     private let board = ViewInfo(id: "@priya/phone-board", name: "Priya's phone board", version: "1.0.0", page: "index.html")
     private let notes = ViewInfo(id: "notes", name: "Notes", version: "0.2.0", page: "__entry.html")
 
-    func testEachWorkspaceOffersWhatItsComputerLastSaidAndAComputerAwayKeepsItsRowsDimmed() {
+    func testEachWorkspaceOffersWhatItsComputerLastSaidAndAComputerAwayKeepsItsRowsSayingSo() {
         let api = Workspace(device: "d1", id: "w1", name: "api", folder: nil)
         // The same workspace id on another computer is another workspace.
         let site = Workspace(device: "d2", id: "w1", name: "site", folder: nil)
@@ -22,10 +23,10 @@ final class ViewShelfTests: XCTestCase {
 
         let rows = shelf.rows(workspaces: [api, site], devices: devices)
 
-        XCTAssertEqual(rows.map { "\($0.view.info.name) · \($0.view.workspaceName) · \($0.view.deviceName)" }, [
-            "Priya's phone board · api · desk",
-            "Priya's phone board · site · laptop",
-            "Notes · site · laptop",
+        XCTAssertEqual(rows.map { "\($0.view.info.name) — \($0.place)" }, [
+            "Priya's phone board — api · desk",
+            "Priya's phone board — site · laptop is away",
+            "Notes — site · laptop is away",
         ])
         XCTAssertEqual(rows.map(\.away), [false, true, true])
         // A workspace its computer holds no more offers nothing.

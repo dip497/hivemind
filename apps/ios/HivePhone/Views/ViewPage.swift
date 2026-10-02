@@ -86,7 +86,7 @@ final class ViewPage {
     /// person. Nothing from a page before the one the session waits for.
     func posted(_ text: String) {
         guard let session, !fresh else { return }
-        switch ViewPost(text, view: offered.info.name, device: offered.deviceName) {
+        switch ViewPost(text, view: offered.info.name) {
         case .now:
             session.post(message: text)
         case .afterLock(let reason):
@@ -188,9 +188,9 @@ enum ViewPost: Equatable {
     /// Once the lock is opened, asked with this reason.
     case afterLock(reason: String)
 
-    init(_ message: String, view: String, device: String) {
+    init(_ message: String, view: String) {
         if viewAsksLock(message: message) {
-            self = .afterLock(reason: "\(view) asks to start or close something on \(device)")
+            self = .afterLock(reason: "Start or close an agent: \(view) asks. It runs on your computer.")
         } else {
             self = .now
         }
