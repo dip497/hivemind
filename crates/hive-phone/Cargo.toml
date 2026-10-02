@@ -12,7 +12,7 @@ aes-gcm = "0.10"
 # The VT emulator a watched terminal's bytes run through (Zed's): its grid, without its pty.
 alacritty_terminal = { version = "0.26", default-features = false }
 anyhow = "1"
-base64 = "0.22"
+base64 = "0.23"
 hex = "0.4"
 # Its own side of the network alone: none of the server roles, which a phone never runs.
 hive-net = { path = "../hive-net", default-features = false }

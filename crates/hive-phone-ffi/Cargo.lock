@@ -1208,7 +1208,7 @@ name = "hive-net"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
+ "base64 0.23.1",
  "bytes",
  "hex",
  "hkdf",
@@ -1235,7 +1235,7 @@ dependencies = [
  "aes-gcm",
  "alacritty_terminal",
  "anyhow",
- "base64 0.22.1",
+ "base64 0.23.1",
  "hex",
  "hive-net",
  "hmac",

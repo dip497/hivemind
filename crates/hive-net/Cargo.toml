@@ -9,7 +9,7 @@ description = "hivemind's network: an iroh endpoint on this machine's device key
 
 [dependencies]
 anyhow = "1"
-base64 = "0.22"
+base64 = "0.23"
 bytes = "1"
 hex = "0.4"
 hkdf = "0.13"
