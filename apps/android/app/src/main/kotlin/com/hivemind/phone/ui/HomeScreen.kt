@@ -20,6 +20,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -43,17 +45,27 @@ import com.hivemind.phone.ui.devices.DevicesList
 import com.hivemind.phone.ui.devices.DevicesViewModel
 import com.hivemind.phone.ui.needs.NeedsList
 import com.hivemind.phone.ui.needs.NeedsViewModel
+import com.hivemind.phone.ui.views.ViewRow
+import com.hivemind.phone.ui.views.ViewsList
+import com.hivemind.phone.ui.views.ViewsViewModel
 
-private enum class Tab { NEEDS, AGENTS, DEVICES }
+private enum class Tab { NEEDS, AGENTS, VIEWS, DEVICES }
 
-/** The three tabs: Needs you (home), Agents, Devices (design §6.2, §6.3, §6.7). */
+/** The four tabs: Needs you (home), Agents, Views, Devices (design §6.2, §6.3, §6.9, §6.7). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(core: PhoneCore, onOpen: (AgentRef) -> Unit, onStart: () -> Unit, onPair: () -> Unit) {
+fun HomeScreen(
+    core: PhoneCore,
+    onOpen: (AgentRef) -> Unit,
+    onStart: () -> Unit,
+    onPair: () -> Unit,
+    onOpenView: (ViewRow) -> Unit,
+) {
     var tab by rememberSaveable { mutableStateOf(Tab.NEEDS) }
     val needs = viewModel { NeedsViewModel(core.phone, core.feed.overview) }
     val agents = viewModel { AgentsViewModel(core.phone, core.feed.overview) }
     val devices = viewModel { DevicesViewModel(core.phone, core.feed.overview) }
+    val views = viewModel { ViewsViewModel(core.phone, core.feed.overview) }
     val needsState by needs.state.collectAsStateWithLifecycle()
     val now = rememberNow()
     val lock = LocalPhoneLock.current
@@ -62,6 +74,7 @@ fun HomeScreen(core: PhoneCore, onOpen: (AgentRef) -> Unit, onStart: () -> Unit,
     NoticeEffect(agents.calls, snackbar)
     NoticeEffect(devices.calls, snackbar)
     val resources = LocalResources.current
+    LaunchedEffect(tab) { if (tab == Tab.VIEWS) views.again() }
 
     Scaffold(
         topBar = {
@@ -72,6 +85,7 @@ fun HomeScreen(core: PhoneCore, onOpen: (AgentRef) -> Unit, onStart: () -> Unit,
                             when (tab) {
                                 Tab.NEEDS -> R.string.tab_needs
                                 Tab.AGENTS -> R.string.tab_agents
+                                Tab.VIEWS -> R.string.tab_views
                                 Tab.DEVICES -> R.string.tab_devices
                             },
                         ),
@@ -96,6 +110,12 @@ fun HomeScreen(core: PhoneCore, onOpen: (AgentRef) -> Unit, onStart: () -> Unit,
                     onClick = { tab = Tab.AGENTS },
                     icon = { Icon(Icons.AutoMirrored.Filled.List, null) },
                     label = { Text(stringResource(R.string.tab_agents)) },
+                )
+                NavigationBarItem(
+                    selected = tab == Tab.VIEWS,
+                    onClick = { tab = Tab.VIEWS },
+                    icon = { Icon(painterResource(R.drawable.ic_views), null) },
+                    label = { Text(stringResource(R.string.tab_views)) },
                 )
                 NavigationBarItem(
                     selected = tab == Tab.DEVICES,
@@ -132,6 +152,10 @@ fun HomeScreen(core: PhoneCore, onOpen: (AgentRef) -> Unit, onStart: () -> Unit,
                     },
                     modifier = inside,
                 )
+            }
+            Tab.VIEWS -> {
+                val rows by views.rows.collectAsStateWithLifecycle()
+                ViewsList(rows, views.refreshing, onRefresh = views::refresh, onOpen = onOpenView, modifier = inside)
             }
             Tab.DEVICES -> {
                 val state by devices.state.collectAsStateWithLifecycle()

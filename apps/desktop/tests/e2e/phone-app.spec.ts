@@ -5,7 +5,13 @@
 // computer; the link; the platform's own UI test, run with the link and told what to find there
 // (apps/android/maestro/computer, or HivePhoneUITests/ComputerUITests); and what the computer shows
 // once the phone is done: the phone among the person's devices, and its message heard by the agent,
-// once. The phone workflows run it once an emulator or a simulator is up: phone-android.yml with
+// once. And a community view the computer offers the phone (P8): installed there before the phone
+// pairs, its page shown in the app's web view, served from the computer and joined to its host there:
+// the phone's UI test finds it under Views, sees it is told it is on a phone and what the board holds,
+// selects the agent there (the host's answer shown), and asks it to start an agent, which the app
+// holds back for the phone's lock (the emulator and the simulator have none); the computer shows
+// afterwards that nothing was started and nothing renamed (a phone may not edit the board).
+// The phone workflows run it once an emulator or a simulator is up: phone-android.yml with
 // PHONE_APP=android (the app installed, Maestro on the PATH), phone-ios.yml with PHONE_APP=ios,
 // PHONE_SIMULATOR and PHONE_DERIVED_DATA (where the app and its UI tests were built for testing).
 // Skipped without PHONE_APP.
@@ -22,7 +28,16 @@ const platform = process.env.PHONE_APP === "android" || process.env.PHONE_APP ==
 /** What the phone's UI test is told: the link, and what it should find and say there. The same
  *  names on both platforms: Maestro takes each as `-e NAME=…`, the XCUITest as xcodebuild hands its
  *  runner each `TEST_RUNNER_NAME` it is given. */
-type Told = Record<"PAIR_LINK" | "PAIR_PERSON" | "PAIR_COMPUTER" | "PAIR_AGENT" | "PAIR_LINE" | "PAIR_SAID" | "PAIR_MESSAGE" | "PAIR_ANSWER" | "PAIR_HEARD", string>;
+type Told = Record<
+  | "PAIR_LINK" | "PAIR_PERSON" | "PAIR_COMPUTER" | "PAIR_AGENT" | "PAIR_LINE" | "PAIR_SAID" | "PAIR_MESSAGE" | "PAIR_ANSWER" | "PAIR_HEARD"
+  | "PAIR_VIEW" | "PAIR_VIEW_AGENT" | "PAIR_VIEW_SELECTED",
+  string
+>;
+
+const CLI = path.resolve("../cli/src/index.ts");
+/** The community view the phone shows: `phone`, with a script for its entry, asking to start agents
+ *  and to rename tiles (fixtures/views/phone-probe/main.js says what its page does). */
+const VIEW = path.resolve("tests/e2e/fixtures/views/phone-probe");
 
 let root: string | undefined;
 const apps: ElectronApplication[] = [];
@@ -103,7 +118,7 @@ async function runPhoneTest(on: "android" | "ios", told: Told, testInfo: TestInf
   return { code, tail };
 }
 
-test("the phone app pairs with the computer by the link it shows, finds it and its agent, reads the agent's terminal and what it and the person said, and sends it a message from the reply box, which the agent hears once and answers; the computer lists the phone among the person's devices", async ({}, testInfo) => {
+test("the phone app pairs with the computer by the link it shows, finds it and its agent, reads the agent's terminal and what it and the person said, and sends it a message from the reply box, which the agent hears once and answers; shows the computer's community view, selects there, and starts nothing without the phone's lock; the computer lists the phone among the person's devices", async ({}, testInfo) => {
   test.skip(!platform, "the phone apps against the desktop: PHONE_APP=android|ios, with an emulator or a simulator up (phone-android.yml, phone-ios.yml)");
   expect(hiveNetBuilt(), "hive-net built: cargo build in crates/hive-net").toBe(true);
   if (platform === "ios") expect([process.env.PHONE_SIMULATOR, process.env.PHONE_DERIVED_DATA], "PHONE_SIMULATOR and PHONE_DERIVED_DATA").not.toContain(undefined);
@@ -141,6 +156,11 @@ test("the phone app pairs with the computer by the link it shows, finds it and i
     return said(home);
   }, { timeout: 30_000, intervals: [2_000] }).toEqual(expect.arrayContaining([["person", "fix the nav"], ["agent", "You said fix the nav"]]));
 
+  // A community view that works on a phone, installed on the computer as `hive views install`
+  // installs one, before the phone pairs.
+  const installed = spawnSync("bun", [CLI, "views", "install", VIEW, "--json"], { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: path.join(root, "desktop") } });
+  expect(installed.status, installed.stdout + installed.stderr).toBe(0);
+
   // Pair a phone: the link, and the phone's own UI test with it, told what it should find there.
   const told: Told = {
     PAIR_LINK: await offerPhonePairing(desktop),
@@ -152,6 +172,10 @@ test("the phone app pairs with the computer by the link it shows, finds it and i
     PAIR_MESSAGE: "Priya says ship it",
     PAIR_ANSWER: "You said Priya says ship it",
     PAIR_HEARD: "heard: Priya says ship it",
+    PAIR_VIEW: "Priya's phone board",
+    // The agent's tile as the view's page lists it: its name on the board.
+    PAIR_VIEW_AGENT: "Talker #1",
+    PAIR_VIEW_SELECTED: "Selected: Talker #1",
   };
   const ran = await runPhoneTest(platform!, told, testInfo);
   expect(ran.code, `the phone's UI test (its output: ${testInfo.outputPath(platform!)}):\n${ran.tail}`).toBe(0);
@@ -162,4 +186,10 @@ test("the phone app pairs with the computer by the link it shows, finds it and i
   // What the phone sent is what the agent heard, as the person's, once; and it answered.
   await expect.poll(() => said(home), { timeout: 30_000 }).toContainEqual(["agent", told.PAIR_ANSWER]);
   expect(said(home).filter(([who, text]) => who === "person" && text === told.PAIR_MESSAGE)).toHaveLength(1);
+  // The view's Start an agent never reached the computer without the phone's lock, and the view
+  // renamed nothing: still the one agent, as it was called.
+  await new Promise((r) => setTimeout(r, 2_000));
+  const board = await desktop.evaluate((r) => window.hive.workspaceCoreSync(r), repo);
+  expect([board?.tiles.map((t) => t.id), board?.tileNames?.[tile]]).toEqual([[tile], undefined]);
+  await expect(terminal).toHaveCount(1);
 });

@@ -2,11 +2,15 @@
 # computer's Settings → Devices → Pair a phone shows, pairs, and is the person's; finds the computer
 # and its agent among the agents; opens the agent and reads its line in its terminal, then what it
 # and the person said in its chat; and sends it a message from the reply box, which it answers in
-# the chat and in its terminal, still followed. Run by apps/desktop/tests/e2e/phone-app.spec.ts
+# the chat and in its terminal, still followed. Then the community view the computer offers the
+# phone (P8): listed under Views, shown in the app's web view, told it is on a phone and what the
+# board holds; Select is answered by its host on the computer, and Start an agent asks the phone's
+# lock first, which this emulator has none of. Run by apps/desktop/tests/e2e/phone-app.spec.ts
 # (PHONE_APP=android), which hands it the link and what to find (PAIR_LINK, PAIR_PERSON,
-# PAIR_COMPUTER, PAIR_AGENT, PAIR_LINE, PAIR_SAID, PAIR_MESSAGE, PAIR_ANSWER, PAIR_HEARD); in a
-# folder of its own, so the smoke run of apps/android/maestro leaves it out. A computer's network,
-# a terminal and a conversation over it are slow on a CI emulator: every wait is long.
+# PAIR_COMPUTER, PAIR_AGENT, PAIR_LINE, PAIR_SAID, PAIR_MESSAGE, PAIR_ANSWER, PAIR_HEARD, PAIR_VIEW,
+# PAIR_VIEW_AGENT, PAIR_VIEW_SELECTED); in a folder of its own, so the smoke run of
+# apps/android/maestro leaves it out. A computer's network, a terminal and a conversation over it
+# are slow on a CI emulator: every wait is long.
 appId: com.hivemind.phone
 name: Pair with a computer, and drive its agent
 ---
@@ -62,3 +66,32 @@ name: Pair with a computer, and drive its agent
 - extendedWaitUntil:
     visible: ${PAIR_HEARD}
     timeout: 60000
+
+# The community view the computer offers the phone: back to the tabs, by the agent screen's Back (by
+# its tag: the system's own Back is "Back" too, and with the keyboard up it only closes that).
+- tapOn:
+    id: "agent-back"
+- tapOn: "Views"
+- extendedWaitUntil:
+    visible: ${PAIR_VIEW}
+    timeout: 60000
+- tapOn: ${PAIR_VIEW}
+# Its page, from the computer, in the app's web view (read through accessibility, as any screen):
+# told by its host that it is on a phone, and what the board holds.
+- extendedWaitUntil:
+    visible: "On a phone"
+    timeout: 60000
+- extendedWaitUntil:
+    visible: ${PAIR_VIEW_AGENT}
+    timeout: 30000
+# Selected on the page; what the page shows is its host's answer, from the computer.
+- tapOn: "Select"
+- extendedWaitUntil:
+    visible: ${PAIR_VIEW_SELECTED}
+    timeout: 30000
+# Starting an agent asks the phone's lock first; with none set, the app says to set one, and posts
+# nothing (the spec finds nothing started on the computer).
+- tapOn: "Start an agent"
+- extendedWaitUntil:
+    visible: "Set a screen lock on this phone to start or close agents."
+    timeout: 30000
