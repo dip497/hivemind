@@ -159,9 +159,13 @@ if (hm.device.touch) { /* a finger: give what it taps room */ }
 
 A view that lays itself out for a phone says so in its manifest, `"phone": true`: only those are
 offered on the person's phone. There its host runs on their computer, and the view may do what
-the phone may: start and close agents, but not rename tiles. A phone's screen has no live terminal
-surfaces, folder picker or share sheet, and starts no tile but an agent's: what asks for them is
-refused (`UNSUPPORTED`).
+the phone may: start and close agents (the phone asks its own lock first), but not rename tiles. A
+phone's screen places live terminal surfaces only where it says it does (`hm.supports("surfaces")`),
+and has no folder picker or share sheet, and starts no tile but an agent's: what asks for them is
+refused (`UNSUPPORTED`). Give a page of your own `<meta name="viewport" content="width=device-width,
+initial-scale=1">` (the page made for a script entry has it): without one, iOS lays the page out
+980 pixels wide. On iOS a view's page is not a secure context (it is served on the app's own
+scheme), so `crypto.subtle` and `crypto.randomUUID` are not there; the SDK needs neither.
 
 `cursor` is the tile someone's pointer is over, `selection` what they selected, both only of the
 view's own tiles and frames; the person at the view is never in the list. A view tests without the

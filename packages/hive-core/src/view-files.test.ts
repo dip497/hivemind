@@ -43,12 +43,13 @@ test("a file's type is its extension's, and anything else is bytes", () => {
   expect(mimeFor("/x/y.bin")).toBe("application/octet-stream");
 });
 
-test("the bootstrap page carries the response nonce and refuses odd entries; the CSP has no unsafe-inline for scripts", () => {
+test("the bootstrap page carries the response nonce, is laid out at its screen's width, and refuses odd entries; the CSP has no unsafe-inline for scripts", () => {
   const nonce = newNonce();
   expect(nonce).toMatch(/^[A-Za-z0-9+/]+=*$/);
   expect(nonce).not.toBe(newNonce());
   const html = entryPage("dist/view.js", nonce)!;
   expect(html).toMatch(new RegExp(`<script type="module" nonce="${escape(nonce)}" src="\\./dist/view\\.js"></script>`));
+  expect(html).toContain(`<meta name="viewport" content="width=device-width, initial-scale=1">`);
   expect(entryPage("../x.js", nonce)).toBeNull();
   expect(entryPage("/abs/x.js", nonce)).toBeNull();
   expect(entryPage("x.html", nonce)).toBeNull();
