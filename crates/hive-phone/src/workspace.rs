@@ -144,7 +144,7 @@ pub async fn watch(
     connection: &Connection,
     workspace: &str,
     tile: &str,
-    typed: Option<Receiver<String>>,
+    mut typed: Option<Receiver<String>>,
     mut out: impl FnMut(Watched<'_>),
 ) -> Result<Option<Ended>> {
     let session = format!("hm:{tile}");
@@ -158,40 +158,31 @@ pub async fn watch(
             }]),
         )
         .await?;
-    // What is typed goes out on its own while the output comes in. The stream stays open until the
-    // watching ends: the device takes its end as the phone gone.
+    // What is typed goes out while the output comes in. The stream stays open until the watching
+    // ends, and goes with it: the device takes its end as the phone gone.
     let Workspace {
         mut send, mut recv, ..
     } = w;
-    let typing = match typed {
-        Some(mut typed) => {
-            let session = session.clone();
-            tokio::spawn(async move {
-                let mut asked = false;
-                while let Some(data) = typed.recv().await {
-                    let mut notices = vec![];
-                    if !std::mem::replace(&mut asked, true) {
-                        notices.push(
-                            json!({ "method": "terminal.keyboard.ask", "params": [session] }),
-                        );
-                    }
-                    notices.push(json!({ "method": "terminal.write", "params": [session, data] }));
-                    for notice in notices {
-                        if write_frame(&mut send, notice.to_string().as_bytes())
-                            .await
-                            .is_err()
-                        {
-                            return;
-                        }
+    let typing = async {
+        if let Some(typed) = typed.as_mut() {
+            let mut asked = false;
+            'typing: while let Some(data) = typed.recv().await {
+                let mut notices = vec![];
+                if !std::mem::replace(&mut asked, true) {
+                    notices.push(json!({ "method": "terminal.keyboard.ask", "params": [session] }));
+                }
+                notices.push(json!({ "method": "terminal.write", "params": [session, data] }));
+                for notice in notices {
+                    if write_frame(&mut send, notice.to_string().as_bytes())
+                        .await
+                        .is_err()
+                    {
+                        break 'typing;
                     }
                 }
-                std::future::pending::<()>().await;
-            })
+            }
         }
-        None => tokio::spawn(async move {
-            let _open = send;
-            std::future::pending::<()>().await;
-        }),
+        std::future::pending::<Result<Option<Ended>>>().await
     };
     let watched = async {
         while let Some(frame) = read_frame(&mut recv).await? {
@@ -242,10 +233,11 @@ pub async fn watch(
             }
         }
         Ok(None)
+    };
+    tokio::select! {
+        watched = watched => watched,
+        never = typing => never,
     }
-    .await;
-    typing.abort();
-    watched
 }
 
 /// What the person answers an agent that waits on them (spec/needs.md, "Answering").

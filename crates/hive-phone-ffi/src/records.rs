@@ -161,8 +161,8 @@ impl From<Answer> for Reply {
 
 /// The overview at `revision`, from what the phone knows of the person's devices (`seen`) and
 /// whose they are: what waits on the person, as each device last said, the one waiting longest
-/// first; how many agents are at work; and each device. Every agent is listed as its device
-/// follows them (spec/agents.md), which the phone does not yet.
+/// first; how many agents are at work; and each device. Every agent is what the devices' `agents`
+/// streams send (spec/agents.md): none until the phone follows them.
 pub fn overview(revision: u64, seen: &[Seen], person: Option<person::Person>) -> Overview {
     // A workspace is held by one device: the one whose answer lists it.
     let mut holders: BTreeMap<&str, &PairedWith> = BTreeMap::new();

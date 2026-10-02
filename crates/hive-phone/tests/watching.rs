@@ -2,11 +2,12 @@
 //! 2026-10-02.md §5.3): its screen drawn by the core at the size the session took; who holds its
 //! keyboard told by name, and none once this phone holds it; what the person types goes in as it
 //! is, in order, the keyboard asked for first and keys a moment apart; its end told with its code.
+//! A watch stopped lets go of the terminal.
 
 mod support;
 
 use std::{
-    sync::{Arc, Mutex},
+    sync::{atomic::Ordering::SeqCst, Arc, Mutex},
     time::Duration,
 };
 
@@ -72,7 +73,8 @@ async fn a_watched_terminal_is_drawn_at_its_size_and_typed_into_as_the_person_in
     );
 
     watching.type_text("ls -la".into());
-    watching.type_keys(vec!["Enter".into(), "ctrl-c".into()]);
+    let keys = ["Enter", "down", "down", "ctrl-c"];
+    watching.type_keys(keys.map(String::from).to_vec());
     let ended = || told.ended.lock().unwrap().is_some();
     assert!(until(Duration::from_secs(10), ended).await);
     assert_eq!(*told.ended.lock().unwrap(), Some(Some(3)));
@@ -84,9 +86,12 @@ async fn a_watched_terminal_is_drawn_at_its_size_and_typed_into_as_the_person_in
             json!({ "method": "terminal.keyboard.ask", "params": [session] }),
             write("ls -la"),
             write("\r"),
+            write("\x1b[B"),
+            write("\x1b[B"),
             write("\x03"),
         ]
     );
+    // Three gaps of 40 ms between the four keys, give or take how late each one came.
     let told_at: Vec<_> = desk
         .told
         .lock()
@@ -94,7 +99,30 @@ async fn a_watched_terminal_is_drawn_at_its_size_and_typed_into_as_the_person_in
         .iter()
         .map(|(at, _)| *at)
         .collect();
-    assert!(told_at[3] - told_at[2] >= Duration::from_millis(40));
+    assert!(told_at[5] - told_at[2] >= Duration::from_millis(60));
     // Given to this phone, its keyboard is the person's own.
     assert_eq!(told.keyboards.lock().unwrap().last(), Some(&None));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_watch_stopped_lets_go_of_the_terminal_even_once_the_person_typed() {
+    let desk = Desk::start(32).await;
+    let phone = paired_with(&tmp("stopped"), &desk);
+    let connections = Connections::new(phone.clone(), || {});
+    connections.foreground();
+    let told = Arc::new(Told::default());
+    let watching = Watching::start(
+        &connections,
+        &phone.id(),
+        &desk.id,
+        WORKSPACE,
+        TILE,
+        told.clone(),
+    );
+    watching.type_text("y".into());
+    assert!(until(Duration::from_secs(10), || desk.notices().len() == 2).await);
+    watching.stop();
+    assert!(until(Duration::from_secs(5), || desk.left.load(SeqCst) == 1).await);
+    // Its connection is the phone's still, for all else.
+    assert!(connections.seen()[0].reachable);
 }

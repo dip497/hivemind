@@ -1007,7 +1007,7 @@ public protocol PhoneProtocol: AnyObject, Sendable {
     
     /**
      * Unpair from `device`, by its id: whether it was told; one that was not still lists the
-     * phone, and is unpaired on it.
+     * phone, and is to be unpaired there too.
      */
     func unpair(device: String) async throws  -> Bool
     
@@ -1218,7 +1218,7 @@ open func send(agent: AgentRef, text: String)async throws  -> Bool  {
     
     /**
      * Unpair from `device`, by its id: whether it was told; one that was not still lists the
-     * phone, and is unpaired on it.
+     * phone, and is to be unpaired there too.
      */
 open func unpair(device: String)async throws  -> Bool  {
     return
@@ -3384,7 +3384,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_hive_phone_ffi_checksum_method_phone_send() != 29120) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_hive_phone_ffi_checksum_method_phone_unpair() != 16376) {
+    if (uniffi_hive_phone_ffi_checksum_method_phone_unpair() != 13834) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_phone_watch() != 15558) {

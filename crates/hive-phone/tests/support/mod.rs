@@ -91,6 +91,8 @@ pub struct Desk {
     pub closed: Arc<AtomicUsize>,
     /// How many times it told the phone what waits on the person.
     pub answered: Arc<AtomicUsize>,
+    /// How many `api` streams the phone let go of.
+    pub left: Arc<AtomicUsize>,
 }
 
 impl Desk {
@@ -120,19 +122,23 @@ impl Desk {
             dialled: Arc::default(),
             closed: Arc::default(),
             answered: Arc::default(),
+            left: Arc::default(),
         };
         let (told, dialled, closed) =
             (desk.told.clone(), desk.dialled.clone(), desk.closed.clone());
-        let answered = desk.answered.clone();
+        let counts = Counts {
+            answered: desk.answered.clone(),
+            left: desk.left.clone(),
+        };
         tokio::spawn(async move {
             while let Some(incoming) = endpoint.accept().await {
                 let Ok(connection) = incoming.await else {
                     continue;
                 };
                 dialled.fetch_add(1, Ordering::SeqCst);
-                let (told, closed, answered) = (told.clone(), closed.clone(), answered.clone());
+                let (told, closed, counts) = (told.clone(), closed.clone(), counts.clone());
                 tokio::spawn(async move {
-                    serve(&connection, told, answered).await;
+                    serve(&connection, told, counts).await;
                     connection.closed().await;
                     closed.fetch_add(1, Ordering::SeqCst);
                 });
@@ -153,19 +159,25 @@ impl Desk {
     }
 }
 
-/// Answer each stream the phone opens on `connection`, until it closes.
-async fn serve(
-    connection: &Connection,
-    told: Arc<Mutex<Vec<(Instant, Value)>>>,
+/// What the computer counts of what the phone does.
+#[derive(Clone)]
+struct Counts {
     answered: Arc<AtomicUsize>,
-) {
+    left: Arc<AtomicUsize>,
+}
+
+/// Answer each stream the phone opens on `connection`, until it closes.
+async fn serve(connection: &Connection, told: Arc<Mutex<Vec<(Instant, Value)>>>, counts: Counts) {
     let phone = format!("peer:{}", connection.remote_id());
     while let Ok((send, mut recv)) = connection.accept_bi().await {
-        let (told, phone, answered) = (told.clone(), phone.clone(), answered.clone());
+        let (told, phone, counts) = (told.clone(), phone.clone(), counts.clone());
         tokio::spawn(async move {
             match read_frame(&mut recv).await.ok().flatten().as_deref() {
-                Some(b"device") => device(send, recv, answered).await,
-                Some(b"api") => api(send, recv, &phone, told).await,
+                Some(b"device") => device(send, recv, counts.answered).await,
+                Some(b"api") => {
+                    api(send, recv, &phone, told).await;
+                    counts.left.fetch_add(1, Ordering::SeqCst);
+                }
                 _ => {}
             }
         });
@@ -186,6 +198,7 @@ async fn device(mut send: SendStream, mut recv: RecvStream, answered: Arc<Atomic
             }
             Some("devices") => json!({ "t": "devices", "devices": [],
                 "profile": { "name": "Priya", "color": "#aa3366" } }),
+            Some("unpair") => json!({ "t": "unpair", "ok": true }),
             _ => continue,
         };
         let _ = write_frame(&mut send, answer.to_string().as_bytes()).await;

@@ -3,7 +3,7 @@
 //! 16 ms; who holds its keyboard, and its end, are told as they come; and what the person types
 //! goes in as them, in the order they typed it, keys a moment apart.
 
-use std::sync::Arc;
+use std::{convert::Infallible, sync::Arc};
 
 use serde_json::Value;
 use tokio::{sync::mpsc, task::JoinHandle};
@@ -60,20 +60,21 @@ impl Watching {
             device.to_string(),
         );
         let (workspace, tile, fed) = (workspace.to_string(), tile.to_string(), screen.clone());
+        // Everything the watch does is one task: stopped, all of it goes, its streams with it.
         let watching = tokio::spawn(async move {
             let ended = async {
                 let connection = connections.holding(&device, &workspace).await?;
                 let (keyed, written) = mpsc::channel(64);
-                let typist = tokio::spawn(type_in(typing, keyed));
-                let ended =
+                let watched =
                     workspace::watch(&connection, &workspace, &tile, Some(written), |w| match w {
                         Watched::Output(data) => fed.output(data.as_bytes()),
                         Watched::Size(cols, rows) => fed.size(cols, rows),
                         Watched::Keyboard(holder) => watcher.keyboard(holder_of(holder, &me)),
-                    })
-                    .await;
-                typist.abort();
-                ended
+                    });
+                tokio::select! {
+                    ended = watched => ended,
+                    never = type_in(typing, keyed) => match never {},
+                }
             };
             let code = ended.await.ok().flatten().map(|ended| ended.code);
             watcher.ended(code);
@@ -120,8 +121,12 @@ fn holder_of(holder: Option<&Value>, me: &str) -> Option<String> {
     Some(name.unwrap_or("someone").to_string())
 }
 
-/// What the person types, in order: text as it is, keys as their bytes a moment apart.
-async fn type_in(mut typed: mpsc::UnboundedReceiver<Typed>, written: mpsc::Sender<String>) {
+/// What the person types, in order, for as long as the watch goes on: text as it is, keys as their
+/// bytes a moment apart.
+async fn type_in(
+    mut typed: mpsc::UnboundedReceiver<Typed>,
+    written: mpsc::Sender<String>,
+) -> Infallible {
     while let Some(typed) = typed.recv().await {
         let writes = match typed {
             Typed::Text(text) => vec![text],
@@ -131,9 +136,8 @@ async fn type_in(mut typed: mpsc::UnboundedReceiver<Typed>, written: mpsc::Sende
             if i > 0 {
                 tokio::time::sleep(keys::GAP).await;
             }
-            if written.send(write).await.is_err() {
-                return;
-            }
+            let _ = written.send(write).await;
         }
     }
+    std::future::pending().await
 }
