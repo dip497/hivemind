@@ -765,10 +765,9 @@ public protocol ConversationListener: AnyObject, Sendable {
     func said(entries: [Entry], anew: Bool) 
     
     /**
-     * It is told no more, and why: the device refused it, its workspace is not on that device
-     * now, or the device is no longer one of the person's. Told once, last.
+     * It is told no more, and why. Told once, last.
      */
-    func ended(why: String) 
+    func ended(why: ConversationEnded) 
     
 }
 /**
@@ -844,14 +843,13 @@ open func said(entries: [Entry], anew: Bool)  {try! rustCall() {
 }
     
     /**
-     * It is told no more, and why: the device refused it, its workspace is not on that device
-     * now, or the device is no longer one of the person's. Told once, last.
+     * It is told no more, and why. Told once, last.
      */
-open func ended(why: String)  {try! rustCall() {
+open func ended(why: ConversationEnded)  {try! rustCall() {
         uniffiCallStatus in
     uniffi_hive_phone_ffi_fn_method_conversationlistener_ended(
             self.uniffiCloneHandle(),
-        FfiConverterString.lower(why),uniffiCallStatus
+        FfiConverterTypeConversationEnded_lower(why),uniffiCallStatus
     )
 }
 }
@@ -922,7 +920,7 @@ fileprivate struct UniffiCallbackInterfaceConversationListener {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return uniffiObj.ended(
-                     why: try FfiConverterString.lift(why)
+                     why: try FfiConverterTypeConversationEnded_lift(why)
                 )
             }
 
@@ -1450,11 +1448,39 @@ public protocol PhoneProtocol: AnyObject, Sendable {
     func pushTo(at: PushAt) async throws  -> PushTold
     
     /**
+     * The VAPID key (RFC 8292, base64url) of the push server on the person's network that tells
+     * phones through UnifiedPush: for the app to give its distributor as it registers (Android's
+     * `UnifiedPush.register(…, vapid)`), so one that asks for a key takes what that server posts.
+     * None on a network without such a server.
+     */
+    func pushVapid()  -> String?
+    
+    /**
      * What `body`, a notice the app's push service handed it, says: none for one not to show (a
      * device back the phone did not find away, or a kind it does not know). Its agent's device is
-     * the one that holds its workspace, as last heard, else as asked now.
+     * the one that holds its workspace, as last heard, else as the devices say when asked now, all
+     * at once and for three seconds at most, so it is read within a push handler's few seconds:
+     * none ("") when none said by then.
      */
     func readNotice(body: Data) async throws  -> Notice?
+    
+    /**
+     * Show the view `view` on `workspace`, on `device`, on `screen`: what its page posts goes in
+     * by `post`, and `listener` is told what its host says, and when it starts again or ends. It
+     * goes on across the background, the foreground and the device's reconnects until stopped.
+     */
+    func openView(device: String, workspace: String, view: String, screen: Screen, listener: ViewListener)  -> ViewSession
+    
+    /**
+     * The file at `path` in the view `view`, from `device`, which holds `workspace`: served to
+     * the view's web view as it comes, under its policy.
+     */
+    func viewFile(device: String, workspace: String, view: String, path: String) async throws  -> ViewFile
+    
+    /**
+     * The community views `device` offers a phone, for `workspace`, which it holds.
+     */
+    func views(device: String, workspace: String) async throws  -> [ViewInfo]
     
 }
 open class Phone: PhoneProtocol, @unchecked Sendable {
@@ -1827,9 +1853,26 @@ open func pushTo(at: PushAt)async throws  -> PushTold  {
 }
     
     /**
+     * The VAPID key (RFC 8292, base64url) of the push server on the person's network that tells
+     * phones through UnifiedPush: for the app to give its distributor as it registers (Android's
+     * `UnifiedPush.register(…, vapid)`), so one that asks for a key takes what that server posts.
+     * None on a network without such a server.
+     */
+open func pushVapid() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_method_phone_push_vapid(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
      * What `body`, a notice the app's push service handed it, says: none for one not to show (a
      * device back the phone did not find away, or a kind it does not know). Its agent's device is
-     * the one that holds its workspace, as last heard, else as asked now.
+     * the one that holds its workspace, as last heard, else as the devices say when asked now, all
+     * at once and for three seconds at most, so it is read within a push handler's few seconds:
+     * none ("") when none said by then.
      */
 open func readNotice(body: Data)async throws  -> Notice?  {
     return
@@ -1843,6 +1886,64 @@ open func readNotice(body: Data)async throws  -> Notice?  {
             completeFunc: ffi_hive_phone_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_hive_phone_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterOptionTypeNotice.lift,
+            errorHandler: FfiConverterTypePhoneError_lift
+        )
+}
+    
+    /**
+     * Show the view `view` on `workspace`, on `device`, on `screen`: what its page posts goes in
+     * by `post`, and `listener` is told what its host says, and when it starts again or ends. It
+     * goes on across the background, the foreground and the device's reconnects until stopped.
+     */
+open func openView(device: String, workspace: String, view: String, screen: Screen, listener: ViewListener) -> ViewSession  {
+    return try!  FfiConverterTypeViewSession_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_method_phone_open_view(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(device),
+        FfiConverterString.lower(workspace),
+        FfiConverterString.lower(view),
+        FfiConverterTypeScreen_lower(screen),
+        FfiConverterTypeViewListener_lower(listener),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The file at `path` in the view `view`, from `device`, which holds `workspace`: served to
+     * the view's web view as it comes, under its policy.
+     */
+open func viewFile(device: String, workspace: String, view: String, path: String)async throws  -> ViewFile  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_hive_phone_ffi_fn_method_phone_view_file(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(device),FfiConverterString.lower(workspace),FfiConverterString.lower(view),FfiConverterString.lower(path)
+                )
+            },
+            pollFunc: ffi_hive_phone_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_hive_phone_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_hive_phone_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeViewFile_lift,
+            errorHandler: FfiConverterTypePhoneError_lift
+        )
+}
+    
+    /**
+     * The community views `device` offers a phone, for `workspace`, which it holds.
+     */
+open func views(device: String, workspace: String)async throws  -> [ViewInfo]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_hive_phone_ffi_fn_method_phone_views(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(device),FfiConverterString.lower(workspace)
+                )
+            },
+            pollFunc: ffi_hive_phone_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_hive_phone_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_hive_phone_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeViewInfo.lift,
             errorHandler: FfiConverterTypePhoneError_lift
         )
 }
@@ -1913,11 +2014,10 @@ public protocol ScreenListener: AnyObject, Sendable {
     func keyboard(holder: String?) 
     
     /**
-     * The session ended, with its code; or there is none to watch now (none): it ended unseen,
-     * its workspace is not on that device now, or the device refused it. Told once, last: a
-     * connection that goes is no end, the watch goes on on the next one.
+     * How the watch ended. Told once, last: a connection that goes is no end, the watch goes on
+     * on the next one.
      */
-    func ended(code: Int64?) 
+    func ended(why: ScreenEnded) 
     
 }
 /**
@@ -2001,15 +2101,14 @@ open func keyboard(holder: String?)  {try! rustCall() {
 }
     
     /**
-     * The session ended, with its code; or there is none to watch now (none): it ended unseen,
-     * its workspace is not on that device now, or the device refused it. Told once, last: a
-     * connection that goes is no end, the watch goes on on the next one.
+     * How the watch ended. Told once, last: a connection that goes is no end, the watch goes on
+     * on the next one.
      */
-open func ended(code: Int64?)  {try! rustCall() {
+open func ended(why: ScreenEnded)  {try! rustCall() {
         uniffiCallStatus in
     uniffi_hive_phone_ffi_fn_method_screenlistener_ended(
             self.uniffiCloneHandle(),
-        FfiConverterOptionInt64.lower(code),uniffiCallStatus
+        FfiConverterTypeScreenEnded_lower(why),uniffiCallStatus
     )
 }
 }
@@ -2092,7 +2191,7 @@ fileprivate struct UniffiCallbackInterfaceScreenListener {
         },
         ended: { (
             uniffiHandle: UInt64,
-            code: RustBuffer,
+            why: RustBuffer,
             uniffiOutReturn: UnsafeMutableRawPointer,
             uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
         ) in
@@ -2102,7 +2201,7 @@ fileprivate struct UniffiCallbackInterfaceScreenListener {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return uniffiObj.ended(
-                     code: try FfiConverterOptionInt64.lift(code)
+                     why: try FfiConverterTypeScreenEnded_lift(why)
                 )
             }
 
@@ -2186,6 +2285,427 @@ public func FfiConverterTypeScreenListener_lift(_ handle: UInt64) throws -> Scre
 #endif
 public func FfiConverterTypeScreenListener_lower(_ value: ScreenListener) -> UInt64 {
     return FfiConverterTypeScreenListener.lower(value)
+}
+
+
+
+
+
+
+/**
+ * What a view shown tells the app, from a thread of the core's: the app hops to its own, in the
+ * order told.
+ */
+public protocol ViewListener: AnyObject, Sendable {
+    
+    /**
+     * Its host said `message` to the view: a view protocol message, as JSON, for the app to hand
+     * the page as it is.
+     */
+    func said(message: String) 
+    
+    /**
+     * It starts again (`Restarting`), or is told no more: then once, last.
+     */
+    func ended(why: ViewEnded) 
+    
+}
+/**
+ * What a view shown tells the app, from a thread of the core's: the app hops to its own, in the
+ * order told.
+ */
+open class ViewListenerImpl: ViewListener, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_hive_phone_ffi_fn_clone_viewlistener(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_hive_phone_ffi_fn_free_viewlistener(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * Its host said `message` to the view: a view protocol message, as JSON, for the app to hand
+     * the page as it is.
+     */
+open func said(message: String)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_method_viewlistener_said(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(message),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * It starts again (`Restarting`), or is told no more: then once, last.
+     */
+open func ended(why: ViewEnded)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_method_viewlistener_ended(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeViewEnded_lower(why),uniffiCallStatus
+    )
+}
+}
+    
+
+    
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceViewListener {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceViewListener = UniffiVTableCallbackInterfaceViewListener(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterTypeViewListener.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface ViewListener: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterTypeViewListener.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface ViewListener: handle missing in uniffiClone")
+            }
+        },
+        said: { (
+            uniffiHandle: UInt64,
+            message: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeViewListener.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.said(
+                     message: try FfiConverterString.lift(message)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        ended: { (
+            uniffiHandle: UInt64,
+            why: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeViewListener.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.ended(
+                     why: try FfiConverterTypeViewEnded_lift(why)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    //
+    // `nonisolated(unsafe)` is needed under Swift 6 strict concurrency.
+    // This is safe because the pointee is initialized once during static init
+    // and never mutated by either side of the FFI.  Its fields are C function pointers.
+    nonisolated(unsafe) static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceViewListener> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceViewListener>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
+}
+
+private func uniffiCallbackInitViewListener() {
+    uniffi_hive_phone_ffi_fn_init_callback_vtable_viewlistener(UniffiCallbackInterfaceViewListener.vtablePtr)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeViewListener: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<ViewListener>()
+
+    typealias FfiType = UInt64
+    typealias SwiftType = ViewListener
+
+    public static func lift(_ handle: UInt64) throws -> ViewListener {
+        if ((handle & 1) == 0) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return ViewListenerImpl(unsafeFromHandle: handle)
+        } else {
+            // Swift-generated handle, get the object from the handle map
+            return try handleMap.remove(handle: handle)
+        }
+    }
+
+    public static func lower(_ value: ViewListener) -> UInt64 {
+         if let rustImpl = value as? ViewListenerImpl {
+             // Rust-implemented object.  Clone the handle and return it
+            return rustImpl.uniffiCloneHandle()
+         } else {
+            // Swift object, generate a new vtable handle and return that.
+            return handleMap.insert(obj: value)
+         }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ViewListener {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ViewListener, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewListener_lift(_ handle: UInt64) throws -> ViewListener {
+    return try FfiConverterTypeViewListener.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewListener_lower(_ value: ViewListener) -> UInt64 {
+    return FfiConverterTypeViewListener.lower(value)
+}
+
+
+
+
+
+
+/**
+ * A view shown on the phone, until stopped.
+ */
+public protocol ViewSessionProtocol: AnyObject, Sendable {
+    
+    /**
+     * What the view posted, as JSON, for its host: dropped when it is not JSON, or while the view
+     * posts faster than its host takes it.
+     */
+    func post(message: String) 
+    
+    /**
+     * The view is shown on `screen` now (the phone turned, the keyboard came up, the look
+     * changed): its host tells it what of that changed.
+     */
+    func screen(screen: Screen) 
+    
+    /**
+     * It is shown no more: nothing is told after, and its device lets go of it.
+     */
+    func stop() 
+    
+}
+/**
+ * A view shown on the phone, until stopped.
+ */
+open class ViewSession: ViewSessionProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_hive_phone_ffi_fn_clone_viewsession(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_hive_phone_ffi_fn_free_viewsession(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * What the view posted, as JSON, for its host: dropped when it is not JSON, or while the view
+     * posts faster than its host takes it.
+     */
+open func post(message: String)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_method_viewsession_post(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(message),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * The view is shown on `screen` now (the phone turned, the keyboard came up, the look
+     * changed): its host tells it what of that changed.
+     */
+open func screen(screen: Screen)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_method_viewsession_screen(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeScreen_lower(screen),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * It is shown no more: nothing is told after, and its device lets go of it.
+     */
+open func stop()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_method_viewsession_stop(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeViewSession: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = ViewSession
+
+    public static func lift(_ handle: UInt64) throws -> ViewSession {
+        return ViewSession(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: ViewSession) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ViewSession {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ViewSession, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewSession_lift(_ handle: UInt64) throws -> ViewSession {
+    return try FfiConverterTypeViewSession.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewSession_lower(_ value: ViewSession) -> UInt64 {
+    return FfiConverterTypeViewSession.lower(value)
 }
 
 
@@ -2382,6 +2902,11 @@ public struct Agent: Equatable, Hashable {
     public var since: UInt64?
     public var waiting: Waiting?
     public var canInterrupt: Bool
+    /**
+     * It keeps a conversation its device can read (`Phone::conversation`): its manifest maps its
+     * session file. Without one, only its terminal is there to show.
+     */
+    public var hasConversation: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -2391,7 +2916,11 @@ public struct Agent: Equatable, Hashable {
          */machine: String, program: Program?, state: AgentState, 
         /**
          * When it entered its state.
-         */since: UInt64?, waiting: Waiting?, canInterrupt: Bool) {
+         */since: UInt64?, waiting: Waiting?, canInterrupt: Bool, 
+        /**
+         * It keeps a conversation its device can read (`Phone::conversation`): its manifest maps its
+         * session file. Without one, only its terminal is there to show.
+         */hasConversation: Bool = false) {
         self.at = at
         self.name = name
         self.workspaceName = workspaceName
@@ -2402,6 +2931,7 @@ public struct Agent: Equatable, Hashable {
         self.since = since
         self.waiting = waiting
         self.canInterrupt = canInterrupt
+        self.hasConversation = hasConversation
     }
 
     
@@ -2429,7 +2959,8 @@ public struct FfiConverterTypeAgent: FfiConverterRustBuffer {
                 state: FfiConverterTypeAgentState.read(from: &buf), 
                 since: FfiConverterOptionUInt64.read(from: &buf), 
                 waiting: FfiConverterOptionTypeWaiting.read(from: &buf), 
-                canInterrupt: FfiConverterBool.read(from: &buf)
+                canInterrupt: FfiConverterBool.read(from: &buf), 
+                hasConversation: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -2444,6 +2975,7 @@ public struct FfiConverterTypeAgent: FfiConverterRustBuffer {
         FfiConverterOptionUInt64.write(value.since, into: &buf)
         FfiConverterOptionTypeWaiting.write(value.waiting, into: &buf)
         FfiConverterBool.write(value.canInterrupt, into: &buf)
+        FfiConverterBool.write(value.hasConversation, into: &buf)
     }
 }
 
@@ -2525,8 +3057,8 @@ public func FfiConverterTypeAgentRef_lower(_ value: AgentRef) -> RustBuffer {
 
 
 /**
- * One of the person's devices: whether it is connected now, when it was found away, and when it
- * last answered.
+ * One of the person's devices: whether it is connected now, when it was found away, when it last
+ * told anything, and when it last said what waits on the person there.
  */
 public struct Device: Equatable, Hashable {
     public var id: String
@@ -2535,16 +3067,28 @@ public struct Device: Equatable, Hashable {
     public var reachable: Bool
     public var awaySince: UInt64?
     public var heardAt: UInt64?
+    /**
+     * When it last said what waits on the person there and how many agents are at work (as it
+     * answered, or as its list of agents says): none before it has, when that is not known yet,
+     * and nothing of it is in the overview ("Asking desk…", not "Nothing needs you").
+     */
+    public var answeredAt: UInt64?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, name: String, kind: DeviceKind, reachable: Bool, awaySince: UInt64?, heardAt: UInt64?) {
+    public init(id: String, name: String, kind: DeviceKind, reachable: Bool, awaySince: UInt64?, heardAt: UInt64?, 
+        /**
+         * When it last said what waits on the person there and how many agents are at work (as it
+         * answered, or as its list of agents says): none before it has, when that is not known yet,
+         * and nothing of it is in the overview ("Asking desk…", not "Nothing needs you").
+         */answeredAt: UInt64? = nil) {
         self.id = id
         self.name = name
         self.kind = kind
         self.reachable = reachable
         self.awaySince = awaySince
         self.heardAt = heardAt
+        self.answeredAt = answeredAt
     }
 
     
@@ -2568,7 +3112,8 @@ public struct FfiConverterTypeDevice: FfiConverterRustBuffer {
                 kind: FfiConverterTypeDeviceKind.read(from: &buf), 
                 reachable: FfiConverterBool.read(from: &buf), 
                 awaySince: FfiConverterOptionUInt64.read(from: &buf), 
-                heardAt: FfiConverterOptionUInt64.read(from: &buf)
+                heardAt: FfiConverterOptionUInt64.read(from: &buf), 
+                answeredAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
 
@@ -2579,6 +3124,7 @@ public struct FfiConverterTypeDevice: FfiConverterRustBuffer {
         FfiConverterBool.write(value.reachable, into: &buf)
         FfiConverterOptionUInt64.write(value.awaySince, into: &buf)
         FfiConverterOptionUInt64.write(value.heardAt, into: &buf)
+        FfiConverterOptionUInt64.write(value.answeredAt, into: &buf)
     }
 }
 
@@ -2727,26 +3273,19 @@ public func FfiConverterTypeDiffFile_lower(_ value: DiffFile) -> RustBuffer {
 
 
 /**
- * One thing said, when (ms since the epoch), by whom: the person's text; the agent's text, in
- * markdown, or a tool it used; or what a tool gave back.
+ * One thing said, when (ms since the epoch), and what.
  */
 public struct Entry: Equatable, Hashable {
     public var id: String
     public var at: UInt64
-    public var who: Who
-    public var text: String?
-    public var tool: Tool?
-    public var result: ToolResult?
+    public var said: Said
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, at: UInt64, who: Who, text: String?, tool: Tool?, result: ToolResult?) {
+    public init(id: String, at: UInt64, said: Said) {
         self.id = id
         self.at = at
-        self.who = who
-        self.text = text
-        self.tool = tool
-        self.result = result
+        self.said = said
     }
 
     
@@ -2767,20 +3306,14 @@ public struct FfiConverterTypeEntry: FfiConverterRustBuffer {
             try Entry(
                 id: FfiConverterString.read(from: &buf), 
                 at: FfiConverterUInt64.read(from: &buf), 
-                who: FfiConverterTypeWho.read(from: &buf), 
-                text: FfiConverterOptionString.read(from: &buf), 
-                tool: FfiConverterOptionTypeTool.read(from: &buf), 
-                result: FfiConverterOptionTypeToolResult.read(from: &buf)
+                said: FfiConverterTypeSaid.read(from: &buf)
         )
     }
 
     public static func write(_ value: Entry, into buf: inout [UInt8]) {
         FfiConverterString.write(value.id, into: &buf)
         FfiConverterUInt64.write(value.at, into: &buf)
-        FfiConverterTypeWho.write(value.who, into: &buf)
-        FfiConverterOptionString.write(value.text, into: &buf)
-        FfiConverterOptionTypeTool.write(value.tool, into: &buf)
-        FfiConverterOptionTypeToolResult.write(value.result, into: &buf)
+        FfiConverterTypeSaid.write(value.said, into: &buf)
     }
 }
 
@@ -3197,22 +3730,82 @@ public func FfiConverterTypeProgram_lower(_ value: Program) -> RustBuffer {
 
 
 /**
+ * A device that would not take where the phone is told: by name, and why, in its words.
+ */
+public struct PushRefused: Equatable, Hashable {
+    public var device: String
+    public var why: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(device: String, why: String) {
+        self.device = device
+        self.why = why
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PushRefused: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePushRefused: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PushRefused {
+        return
+            try PushRefused(
+                device: FfiConverterString.read(from: &buf), 
+                why: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PushRefused, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.device, into: &buf)
+        FfiConverterString.write(value.why, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePushRefused_lift(_ buf: RustBuffer) throws -> PushRefused {
+    return try FfiConverterTypePushRefused.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePushRefused_lower(_ value: PushRefused) -> RustBuffer {
+    return FfiConverterTypePushRefused.lower(value)
+}
+
+
+/**
  * Where the phone is told now: through the push server `via`, when it is; the devices that took
- * it, and those away, by name (call again as the app comes to the foreground, and an away one
- * takes it then); and, when the push server would not take the endpoint, why.
+ * it, by name; those away, not reached or not answering in time (call again as the app comes to
+ * the foreground, and an away one takes it then); those that said no, and why; and, when the push
+ * server would not take the endpoint, why.
  */
 public struct PushTold: Equatable, Hashable {
     public var via: String?
     public var told: [String]
     public var away: [String]
+    public var refused: [PushRefused]
     public var unregistered: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(via: String?, told: [String], away: [String], unregistered: String?) {
+    public init(via: String?, told: [String], away: [String], refused: [PushRefused] = [], unregistered: String?) {
         self.via = via
         self.told = told
         self.away = away
+        self.refused = refused
         self.unregistered = unregistered
     }
 
@@ -3235,6 +3828,7 @@ public struct FfiConverterTypePushTold: FfiConverterRustBuffer {
                 via: FfiConverterOptionString.read(from: &buf), 
                 told: FfiConverterSequenceString.read(from: &buf), 
                 away: FfiConverterSequenceString.read(from: &buf), 
+                refused: FfiConverterSequenceTypePushRefused.read(from: &buf), 
                 unregistered: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -3243,6 +3837,7 @@ public struct FfiConverterTypePushTold: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.via, into: &buf)
         FfiConverterSequenceString.write(value.told, into: &buf)
         FfiConverterSequenceString.write(value.away, into: &buf)
+        FfiConverterSequenceTypePushRefused.write(value.refused, into: &buf)
         FfiConverterOptionString.write(value.unregistered, into: &buf)
     }
 }
@@ -3260,6 +3855,68 @@ public func FfiConverterTypePushTold_lift(_ buf: RustBuffer) throws -> PushTold 
 #endif
 public func FfiConverterTypePushTold_lower(_ value: PushTold) -> RustBuffer {
     return FfiConverterTypePushTold.lower(value)
+}
+
+
+/**
+ * The screen a view is shown on: the size of its web view, in CSS pixels (points on iOS, dp on
+ * Android), and the look the app gives views.
+ */
+public struct Screen: Equatable, Hashable {
+    public var width: UInt32
+    public var height: UInt32
+    public var theme: ViewTheme
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(width: UInt32, height: UInt32, theme: ViewTheme) {
+        self.width = width
+        self.height = height
+        self.theme = theme
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension Screen: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeScreen: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Screen {
+        return
+            try Screen(
+                width: FfiConverterUInt32.read(from: &buf), 
+                height: FfiConverterUInt32.read(from: &buf), 
+                theme: FfiConverterTypeViewTheme.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Screen, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.width, into: &buf)
+        FfiConverterUInt32.write(value.height, into: &buf)
+        FfiConverterTypeViewTheme.write(value.theme, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScreen_lift(_ buf: RustBuffer) throws -> Screen {
+    return try FfiConverterTypeScreen.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScreen_lower(_ value: Screen) -> RustBuffer {
+    return FfiConverterTypeScreen.lower(value)
 }
 
 
@@ -3808,6 +4465,280 @@ public func FfiConverterTypeToolResult_lower(_ value: ToolResult) -> RustBuffer 
 
 
 /**
+ * One of a view's files, as the device serves it to its own windows: its bytes, its type, and
+ * the Content-Security-Policy the app serves it under (whose nonce a page made for it carries).
+ */
+public struct ViewFile: Equatable, Hashable {
+    public var data: Data
+    public var mime: String
+    public var csp: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(data: Data, mime: String, csp: String) {
+        self.data = data
+        self.mime = mime
+        self.csp = csp
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ViewFile: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeViewFile: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ViewFile {
+        return
+            try ViewFile(
+                data: FfiConverterData.read(from: &buf), 
+                mime: FfiConverterString.read(from: &buf), 
+                csp: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ViewFile, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.data, into: &buf)
+        FfiConverterString.write(value.mime, into: &buf)
+        FfiConverterString.write(value.csp, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewFile_lift(_ buf: RustBuffer) throws -> ViewFile {
+    return try FfiConverterTypeViewFile.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewFile_lower(_ value: ViewFile) -> RustBuffer {
+    return FfiConverterTypeViewFile.lower(value)
+}
+
+
+/**
+ * A view's fonts, by their families: for its words, and for code.
+ */
+public struct ViewFonts: Equatable, Hashable {
+    public var ui: String
+    public var mono: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(ui: String, mono: String) {
+        self.ui = ui
+        self.mono = mono
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ViewFonts: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeViewFonts: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ViewFonts {
+        return
+            try ViewFonts(
+                ui: FfiConverterString.read(from: &buf), 
+                mono: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ViewFonts, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.ui, into: &buf)
+        FfiConverterString.write(value.mono, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewFonts_lift(_ buf: RustBuffer) throws -> ViewFonts {
+    return try FfiConverterTypeViewFonts.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewFonts_lower(_ value: ViewFonts) -> RustBuffer {
+    return FfiConverterTypeViewFonts.lower(value)
+}
+
+
+/**
+ * A community view installed on a device that says it works on a phone: its id, name and
+ * version, and the page to load to show it, served by `view_file`.
+ */
+public struct ViewInfo: Equatable, Hashable {
+    public var id: String
+    public var name: String
+    public var version: String
+    public var page: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, name: String, version: String, page: String) {
+        self.id = id
+        self.name = name
+        self.version = version
+        self.page = page
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ViewInfo: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeViewInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ViewInfo {
+        return
+            try ViewInfo(
+                id: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                version: FfiConverterString.read(from: &buf), 
+                page: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ViewInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.version, into: &buf)
+        FfiConverterString.write(value.page, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewInfo_lift(_ buf: RustBuffer) throws -> ViewInfo {
+    return try FfiConverterTypeViewInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewInfo_lower(_ value: ViewInfo) -> RustBuffer {
+    return FfiConverterTypeViewInfo.lower(value)
+}
+
+
+/**
+ * The look the app gives views, as the view protocol's `theme` has it: dark or light, its
+ * colours by token (`bg`, `fg`, …, each `#rrggbb`), and when the app says them, its accent,
+ * corner radius in pixels, fonts, panel surface and terminal background (`#rrggbb`), glass, and
+ * a colour for each status tone (`working`, `attention`, `done`, `idle`, `exited`, `failed`).
+ * The device refuses a screen with a colour, a token or a font it does not take.
+ */
+public struct ViewTheme: Equatable, Hashable {
+    public var mode: ThemeMode
+    public var colors: [String: String]
+    public var accent: String?
+    public var radius: UInt32?
+    public var fonts: ViewFonts?
+    public var surface: String?
+    public var terminalBackground: String?
+    public var glass: Bool?
+    public var status: [String: String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(mode: ThemeMode, colors: [String: String], accent: String? = nil, radius: UInt32? = nil, fonts: ViewFonts? = nil, surface: String? = nil, terminalBackground: String? = nil, glass: Bool? = nil, status: [String: String] = [:]) {
+        self.mode = mode
+        self.colors = colors
+        self.accent = accent
+        self.radius = radius
+        self.fonts = fonts
+        self.surface = surface
+        self.terminalBackground = terminalBackground
+        self.glass = glass
+        self.status = status
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ViewTheme: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeViewTheme: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ViewTheme {
+        return
+            try ViewTheme(
+                mode: FfiConverterTypeThemeMode.read(from: &buf), 
+                colors: FfiConverterDictionaryStringString.read(from: &buf), 
+                accent: FfiConverterOptionString.read(from: &buf), 
+                radius: FfiConverterOptionUInt32.read(from: &buf), 
+                fonts: FfiConverterOptionTypeViewFonts.read(from: &buf), 
+                surface: FfiConverterOptionString.read(from: &buf), 
+                terminalBackground: FfiConverterOptionString.read(from: &buf), 
+                glass: FfiConverterOptionBool.read(from: &buf), 
+                status: FfiConverterDictionaryStringString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ViewTheme, into buf: inout [UInt8]) {
+        FfiConverterTypeThemeMode.write(value.mode, into: &buf)
+        FfiConverterDictionaryStringString.write(value.colors, into: &buf)
+        FfiConverterOptionString.write(value.accent, into: &buf)
+        FfiConverterOptionUInt32.write(value.radius, into: &buf)
+        FfiConverterOptionTypeViewFonts.write(value.fonts, into: &buf)
+        FfiConverterOptionString.write(value.surface, into: &buf)
+        FfiConverterOptionString.write(value.terminalBackground, into: &buf)
+        FfiConverterOptionBool.write(value.glass, into: &buf)
+        FfiConverterDictionaryStringString.write(value.status, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewTheme_lift(_ buf: RustBuffer) throws -> ViewTheme {
+    return try FfiConverterTypeViewTheme.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewTheme_lower(_ value: ViewTheme) -> RustBuffer {
+    return FfiConverterTypeViewTheme.lower(value)
+}
+
+
+/**
  * An agent's wait: what for, since when (which names the wait), its plan, and whether its device
  * can allow or deny it.
  */
@@ -4141,6 +5072,94 @@ public func FfiConverterTypeAnswer_lift(_ buf: RustBuffer) throws -> Answer {
 #endif
 public func FfiConverterTypeAnswer_lower(_ value: Answer) -> RustBuffer {
     return FfiConverterTypeAnswer.lower(value)
+}
+
+
+
+/**
+ * Why a conversation followed is told no more, as the app tells the person.
+ */
+
+public enum ConversationEnded: Equatable, Hashable {
+    
+    /**
+     * The device said no, in its words: no agent runs there, …
+     */
+    case refused(why: String
+    )
+    /**
+     * Its workspace is not on that device now.
+     */
+    case notHeld
+    /**
+     * That device is not one of the person's now.
+     */
+    case unpaired
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ConversationEnded: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConversationEnded: FfiConverterRustBuffer {
+    typealias SwiftType = ConversationEnded
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConversationEnded {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .refused(why: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .notHeld
+        
+        case 3: return .unpaired
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ConversationEnded, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .refused(why):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(why, into: &buf)
+            
+        
+        case .notHeld:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .unpaired:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConversationEnded_lift(_ buf: RustBuffer) throws -> ConversationEnded {
+    return try FfiConverterTypeConversationEnded.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConversationEnded_lower(_ value: ConversationEnded) -> RustBuffer {
+    return FfiConverterTypeConversationEnded.lower(value)
 }
 
 
@@ -4598,6 +5617,403 @@ public func FfiConverterTypePushAt_lower(_ value: PushAt) -> RustBuffer {
 
 
 /**
+ * What an entry says, and who said it.
+ */
+
+public enum Said: Equatable, Hashable {
+    
+    /**
+     * The person's words.
+     */
+    case person(text: String
+    )
+    /**
+     * The agent's words, in markdown.
+     */
+    case agent(text: String
+    )
+    /**
+     * A tool the agent used.
+     */
+    case toolUse(tool: Tool
+    )
+    /**
+     * What a tool gave back.
+     */
+    case toolOutput(result: ToolResult
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension Said: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSaid: FfiConverterRustBuffer {
+    typealias SwiftType = Said
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Said {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .person(text: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .agent(text: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 3: return .toolUse(tool: try FfiConverterTypeTool.read(from: &buf)
+        )
+        
+        case 4: return .toolOutput(result: try FfiConverterTypeToolResult.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Said, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .person(text):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(text, into: &buf)
+            
+        
+        case let .agent(text):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(text, into: &buf)
+            
+        
+        case let .toolUse(tool):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeTool.write(tool, into: &buf)
+            
+        
+        case let .toolOutput(result):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeToolResult.write(result, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSaid_lift(_ buf: RustBuffer) throws -> Said {
+    return try FfiConverterTypeSaid.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSaid_lower(_ value: Said) -> RustBuffer {
+    return FfiConverterTypeSaid.lower(value)
+}
+
+
+
+/**
+ * How a watched terminal ended, as the app tells the person.
+ */
+
+public enum ScreenEnded: Equatable, Hashable {
+    
+    /**
+     * The session ended, with its exit code.
+     */
+    case exited(code: Int64
+    )
+    /**
+     * There was no session to watch: it had ended before the watch began.
+     */
+    case noSession
+    /**
+     * The device said no, in its words.
+     */
+    case refused(why: String
+    )
+    /**
+     * Its workspace is not on that device now.
+     */
+    case notHeld
+    /**
+     * That device is not one of the person's now.
+     */
+    case unpaired
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ScreenEnded: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeScreenEnded: FfiConverterRustBuffer {
+    typealias SwiftType = ScreenEnded
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ScreenEnded {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .exited(code: try FfiConverterInt64.read(from: &buf)
+        )
+        
+        case 2: return .noSession
+        
+        case 3: return .refused(why: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 4: return .notHeld
+        
+        case 5: return .unpaired
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ScreenEnded, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .exited(code):
+            writeInt(&buf, Int32(1))
+            FfiConverterInt64.write(code, into: &buf)
+            
+        
+        case .noSession:
+            writeInt(&buf, Int32(2))
+        
+        
+        case let .refused(why):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(why, into: &buf)
+            
+        
+        case .notHeld:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .unpaired:
+            writeInt(&buf, Int32(5))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScreenEnded_lift(_ buf: RustBuffer) throws -> ScreenEnded {
+    return try FfiConverterTypeScreenEnded.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScreenEnded_lower(_ value: ScreenEnded) -> RustBuffer {
+    return FfiConverterTypeScreenEnded.lower(value)
+}
+
+
+
+
+public enum ThemeMode: Equatable, Hashable {
+    
+    case dark
+    case light
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ThemeMode: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeThemeMode: FfiConverterRustBuffer {
+    typealias SwiftType = ThemeMode
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ThemeMode {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .dark
+        
+        case 2: return .light
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ThemeMode, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .dark:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .light:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeThemeMode_lift(_ buf: RustBuffer) throws -> ThemeMode {
+    return try FfiConverterTypeThemeMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeThemeMode_lower(_ value: ThemeMode) -> RustBuffer {
+    return FfiConverterTypeThemeMode.lower(value)
+}
+
+
+
+/**
+ * Why a view shown is told no more, or starts again.
+ */
+
+public enum ViewEnded: Equatable, Hashable {
+    
+    /**
+     * The connection to its device went, and the view has a session there again: load its page
+     * anew, so it starts again in this one. Not the last thing told; what its page of before
+     * posts until the page loaded anew says it is ready is dropped.
+     */
+    case restarting
+    /**
+     * The device's host turned the view off, in its words: it flooded, or sent what it may not.
+     */
+    case disabled(why: String
+    )
+    /**
+     * The device said no, in its words: it offers no such view now, …
+     */
+    case refused(why: String
+    )
+    /**
+     * Its workspace is not on that device now.
+     */
+    case notHeld
+    /**
+     * That device is not one of the person's now.
+     */
+    case unpaired
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ViewEnded: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeViewEnded: FfiConverterRustBuffer {
+    typealias SwiftType = ViewEnded
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ViewEnded {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .restarting
+        
+        case 2: return .disabled(why: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 3: return .refused(why: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 4: return .notHeld
+        
+        case 5: return .unpaired
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ViewEnded, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .restarting:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .disabled(why):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(why, into: &buf)
+            
+        
+        case let .refused(why):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(why, into: &buf)
+            
+        
+        case .notHeld:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .unpaired:
+            writeInt(&buf, Int32(5))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewEnded_lift(_ buf: RustBuffer) throws -> ViewEnded {
+    return try FfiConverterTypeViewEnded.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewEnded_lower(_ value: ViewEnded) -> RustBuffer {
+    return FfiConverterTypeViewEnded.lower(value)
+}
+
+
+
+/**
  * What an agent waits on the person for.
  */
 
@@ -4679,84 +6095,29 @@ public func FfiConverterTypeWaitKind_lower(_ value: WaitKind) -> RustBuffer {
 }
 
 
-
-/**
- * Who said an entry.
- */
-
-public enum Who: Equatable, Hashable {
-    
-    case person
-    case agent
-    /**
-     * A tool the agent used, giving back what it found or did.
-     */
-    case tool
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension Who: Sendable {}
-#endif
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeWho: FfiConverterRustBuffer {
-    typealias SwiftType = Who
+fileprivate struct FfiConverterOptionUInt32: FfiConverterRustBuffer {
+    typealias SwiftType = UInt32?
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Who {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .person
-        
-        case 2: return .agent
-        
-        case 3: return .tool
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
         }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt32.write(value, into: &buf)
     }
 
-    public static func write(_ value: Who, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .person:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .agent:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .tool:
-            writeInt(&buf, Int32(3))
-        
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt32.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
 }
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWho_lift(_ buf: RustBuffer) throws -> Who {
-    return try FfiConverterTypeWho.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWho_lower(_ value: Who) -> RustBuffer {
-    return FfiConverterTypeWho.lower(value)
-}
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -4785,8 +6146,8 @@ fileprivate struct FfiConverterOptionUInt64: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionInt64: FfiConverterRustBuffer {
-    typealias SwiftType = Int64?
+fileprivate struct FfiConverterOptionBool: FfiConverterRustBuffer {
+    typealias SwiftType = Bool?
 
     public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
         guard let value = value else {
@@ -4794,13 +6155,13 @@ fileprivate struct FfiConverterOptionInt64: FfiConverterRustBuffer {
             return
         }
         writeInt(&buf, Int8(1))
-        FfiConverterInt64.write(value, into: &buf)
+        FfiConverterBool.write(value, into: &buf)
     }
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
-        case 1: return try FfiConverterInt64.read(from: &buf)
+        case 1: return try FfiConverterBool.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -4905,8 +6266,8 @@ fileprivate struct FfiConverterOptionTypeProgram: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeTool: FfiConverterRustBuffer {
-    typealias SwiftType = Tool?
+fileprivate struct FfiConverterOptionTypeViewFonts: FfiConverterRustBuffer {
+    typealias SwiftType = ViewFonts?
 
     public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
         guard let value = value else {
@@ -4914,37 +6275,13 @@ fileprivate struct FfiConverterOptionTypeTool: FfiConverterRustBuffer {
             return
         }
         writeInt(&buf, Int8(1))
-        FfiConverterTypeTool.write(value, into: &buf)
+        FfiConverterTypeViewFonts.write(value, into: &buf)
     }
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
-        case 1: return try FfiConverterTypeTool.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterOptionTypeToolResult: FfiConverterRustBuffer {
-    typealias SwiftType = ToolResult?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeToolResult.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeToolResult.read(from: &buf)
+        case 1: return try FfiConverterTypeViewFonts.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -5151,6 +6488,31 @@ fileprivate struct FfiConverterSequenceTypeFrame: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypePushRefused: FfiConverterRustBuffer {
+    typealias SwiftType = [PushRefused]
+
+    public static func write(_ value: [PushRefused], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePushRefused.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [PushRefused] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [PushRefused]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePushRefused.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeScreenLine: FfiConverterRustBuffer {
     typealias SwiftType = [ScreenLine]
 
@@ -5226,6 +6588,31 @@ fileprivate struct FfiConverterSequenceTypeStartProgram: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeViewInfo: FfiConverterRustBuffer {
+    typealias SwiftType = [ViewInfo]
+
+    public static func write(_ value: [ViewInfo], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeViewInfo.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ViewInfo] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ViewInfo]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeViewInfo.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeWorkspace: FfiConverterRustBuffer {
     typealias SwiftType = [Workspace]
 
@@ -5245,6 +6632,32 @@ fileprivate struct FfiConverterSequenceTypeWorkspace: FfiConverterRustBuffer {
             seq.append(try FfiConverterTypeWorkspace.read(from: &buf))
         }
         return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterDictionaryStringString: FfiConverterRustBuffer {
+    public static func write(_ value: [String: String], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for (key, value) in value {
+            FfiConverterString.write(key, into: &buf)
+            FfiConverterString.write(value, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String: String] {
+        let len: Int32 = try readInt(&buf)
+        var dict = [String: String]()
+        dict.reserveCapacity(Int(len))
+        for _ in 0..<len {
+            let key = try FfiConverterString.read(from: &buf)
+            let value = try FfiConverterString.read(from: &buf)
+            dict[key] = value
+        }
+        return dict
     }
 }
 private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
@@ -5344,7 +6757,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_hive_phone_ffi_checksum_method_conversationlistener_said() != 25321) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_hive_phone_ffi_checksum_method_conversationlistener_ended() != 41614) {
+    if (uniffi_hive_phone_ffi_checksum_method_conversationlistener_ended() != 20241) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_following_stop() != 34156) {
@@ -5407,7 +6820,34 @@ private let initializationResult: InitializationResult = {
     if (uniffi_hive_phone_ffi_checksum_method_phone_push_to() != 61669) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_hive_phone_ffi_checksum_method_phone_read_notice() != 45931) {
+    if (uniffi_hive_phone_ffi_checksum_method_phone_push_vapid() != 16554) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_phone_read_notice() != 25086) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_phone_open_view() != 22111) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_phone_view_file() != 29895) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_phone_views() != 29525) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_viewlistener_said() != 10527) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_viewlistener_ended() != 2896) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_viewsession_post() != 62516) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_viewsession_screen() != 41013) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_viewsession_stop() != 4694) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_screenlistener_frame_ready() != 30455) {
@@ -5416,7 +6856,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_hive_phone_ffi_checksum_method_screenlistener_keyboard() != 61941) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_hive_phone_ffi_checksum_method_screenlistener_ended() != 48354) {
+    if (uniffi_hive_phone_ffi_checksum_method_screenlistener_ended() != 19695) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_watch_stop() != 16582) {
@@ -5438,6 +6878,7 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitConversationListener()
     uniffiCallbackInitOverviewListener()
     uniffiCallbackInitScreenListener()
+    uniffiCallbackInitViewListener()
     return InitializationResult.ok
 }()
 

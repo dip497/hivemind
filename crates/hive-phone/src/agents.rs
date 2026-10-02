@@ -80,6 +80,13 @@ pub struct Agent {
         skip_serializing_if = "Not::not"
     )]
     pub interrupt: bool,
+    /// It keeps a conversation its device can read (`agent.conversation`, spec/agents.md 0.4).
+    #[serde(
+        default,
+        deserialize_with = "only_true",
+        skip_serializing_if = "Not::not"
+    )]
+    pub conversation: bool,
     /// The device that told of it: the phone's own word, never the device's.
     #[serde(default)]
     pub device: String,

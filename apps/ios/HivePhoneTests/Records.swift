@@ -12,7 +12,8 @@ func anAgent(
     workspaceName: String = "hivemind",
     state: AgentState = .working,
     waiting: Waiting? = nil,
-    canInterrupt: Bool = true
+    canInterrupt: Bool = true,
+    hasConversation: Bool = false
 ) -> Agent {
     Agent(
         at: AgentRef(device: device, workspace: workspace, tile: tile),
@@ -24,7 +25,8 @@ func anAgent(
         state: state,
         since: nil,
         waiting: waiting,
-        canInterrupt: canInterrupt)
+        canInterrupt: canInterrupt,
+        hasConversation: hasConversation)
 }
 
 func aWait(_ kind: WaitKind, decide: Bool = false) -> Waiting {
@@ -52,17 +54,17 @@ func anUpdate(revision: UInt64, cols: UInt16 = 80, first: UInt64, count: UInt64,
 // the agent's text or a tool it used, a tool's result.
 
 func personSays(_ id: String, _ text: String = "fix the nav") -> Entry {
-    Entry(id: id, at: 1_790_000_000_000, who: .person, text: text, tool: nil, result: nil)
+    Entry(id: id, at: 1_790_000_000_000, said: .person(text: text))
 }
 
 func agentSays(_ id: String, _ text: String = "On it.") -> Entry {
-    Entry(id: id, at: 1_790_000_000_000, who: .agent, text: text, tool: nil, result: nil)
+    Entry(id: id, at: 1_790_000_000_000, said: .agent(text: text))
 }
 
 func agentUses(_ id: String, tool: String, about: String? = "src/nav.ts") -> Entry {
-    Entry(id: id, at: 1_790_000_000_000, who: .agent, text: nil, tool: Tool(id: tool, name: "Edit", about: about), result: nil)
+    Entry(id: id, at: 1_790_000_000_000, said: .toolUse(tool: Tool(id: tool, name: "Edit", about: about)))
 }
 
 func toolGives(_ id: String, of tool: String, _ text: String = "done", error: Bool = false) -> Entry {
-    Entry(id: id, at: 1_790_000_000_000, who: .tool, text: nil, tool: nil, result: ToolResult(of: tool, text: text, error: error))
+    Entry(id: id, at: 1_790_000_000_000, said: .toolOutput(result: ToolResult(of: tool, text: text, error: error)))
 }

@@ -7,18 +7,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.hivemind.phone.core.AgentRef
 import com.hivemind.phone.core.Phone
+import com.hivemind.phone.core.ScreenEnded
 import com.hivemind.phone.core.ScreenListener
 import com.hivemind.phone.core.Watch
 import com.hivemind.phone.terminal.Terminal
-
-/** How a watched session ended. */
-sealed interface Ended {
-    /** The session ended, with its exit code. */
-    data class Exited(val code: Long) : Ended
-
-    /** There is none to watch now: it ended unseen, its workspace is not on that device now, or the device refused it. */
-    data object NothingToWatch : Ended
-}
 
 /**
  * One agent's terminal, watched (design §5.3). The core tells of a new frame from its own thread,
@@ -38,7 +30,7 @@ class ScreenFeed(phone: Phone, agent: AgentRef) {
         private set
 
     /** How the watch ended, once it has. */
-    var ended: Ended? by mutableStateOf(null)
+    var ended: ScreenEnded? by mutableStateOf(null)
         private set
 
     private val main = Handler(Looper.getMainLooper())
@@ -54,8 +46,8 @@ class ScreenFeed(phone: Phone, agent: AgentRef) {
             main.post { keyboard = holder }
         }
 
-        override fun ended(code: Long?) {
-            main.post { ended = if (code == null) Ended.NothingToWatch else Ended.Exited(code) }
+        override fun ended(why: ScreenEnded) {
+            main.post { ended = why }
         }
     }
 

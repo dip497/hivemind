@@ -9,18 +9,11 @@ import UIKit
 @MainActor
 @Observable
 final class TerminalSession {
-    enum End: Equatable {
-        /// The session ended, with its code.
-        case session(Int64)
-        /// There is no terminal to watch: it ended unseen, its workspace is not on that device now,
-        /// or the device refused it.
-        case nothing
-    }
-
     let agent: AgentRef
     /// Who holds its keyboard; nil while the person's own devices do.
     private(set) var holder: String? = nil
-    private(set) var end: End? = nil
+    /// How the watch ended, once it has.
+    private(set) var end: ScreenEnded? = nil
 
     @ObservationIgnored private var watch: Watch? = nil
     /// Which watch the listener's calls are about: one that was stopped may still be heard from.
@@ -46,9 +39,9 @@ final class TerminalSession {
                 guard let self, self.generation == current else { return }
                 self.holder = holder
             },
-            ended: { [weak self] code in
+            ended: { [weak self] why in
                 guard let self, self.generation == current else { return }
-                self.ended(code)
+                self.ended(why)
             })
         watch = phone.watch(agent: agent, listener: relay)
         view?.reset()
@@ -83,12 +76,8 @@ final class TerminalSession {
     }
 
     /// Told once, last.
-    private func ended(_ code: Int64?) {
-        if let code {
-            end = .session(code)
-        } else {
-            end = .nothing
-        }
+    private func ended(_ why: ScreenEnded) {
+        end = why
         _ = view?.resignFirstResponder()
         stop()
     }

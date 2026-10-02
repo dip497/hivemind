@@ -48,7 +48,7 @@ struct ChatLog {
 
     private(set) var rows: [ChatRow] = []
     /// Why it is told no more, once it is.
-    private(set) var ended: String? = nil
+    private(set) var ended: ConversationEnded? = nil
     private var shown: Set<String> = []
     /// Each tool use's row, by the use's id.
     private var uses: [String: Int] = [:]
@@ -64,24 +64,21 @@ struct ChatLog {
         }
         let start = rows.count
         for entry in entries where shown.insert(entry.id).inserted {
-            if let result = entry.result, let row = uses[result.of], case .tool(let tool, nil) = rows[row].said {
+            if case .toolOutput(let result) = entry.said, let row = uses[result.of], case .tool(let tool, nil) = rows[row].said {
                 rows[row].said = .tool(tool, result: result)
                 if row < start && !change.updated.contains(row) { change.updated.append(row) }
                 continue
             }
             let said: ChatRow.Said
-            switch entry.who {
-            case .person:
-                said = .person(entry.text ?? "")
-            case .agent:
-                if let tool = entry.tool {
-                    uses[tool.id] = rows.count
-                    said = .tool(tool, result: nil)
-                } else {
-                    said = .agent(ChatMarkdown.parts(entry.text ?? ""))
-                }
-            case .tool:
-                guard let result = entry.result else { continue }
+            switch entry.said {
+            case .person(let text):
+                said = .person(text)
+            case .agent(let text):
+                said = .agent(ChatMarkdown.parts(text))
+            case .toolUse(let tool):
+                uses[tool.id] = rows.count
+                said = .tool(tool, result: nil)
+            case .toolOutput(let result):
                 said = .result(result)
             }
             rows.append(ChatRow(id: entry.id, at: entry.at, said: said))
@@ -91,9 +88,21 @@ struct ChatLog {
     }
 
     /// Told once, last: whether this is the first time.
-    mutating func end(_ why: String) -> Bool {
+    mutating func end(_ why: ConversationEnded) -> Bool {
         guard ended == nil else { return false }
         ended = why
         return true
+    }
+
+    /// Why a conversation is told no more, in words.
+    static func words(_ ended: ConversationEnded) -> String {
+        switch ended {
+        case .refused(let why):
+            return "Not followed any more: \(why)"
+        case .notHeld:
+            return "Not followed any more: its workspace is not on its device now."
+        case .unpaired:
+            return "Not followed any more: its device is not one of yours now."
+        }
     }
 }

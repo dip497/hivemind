@@ -33,4 +33,20 @@ final class NeedsTests: XCTestCase {
         XCTAssertEqual(away.map(\.id), ["d1"])
         XCTAssertEqual(NeedsSummary.awayLine(away[0], now: now), "desk is away · last heard 5 min ago")
     }
+
+    func testADeviceThatHasNotSaidWhatWaitsThereIsAskedAndNothingIsSaidToWaitUntilItHas() {
+        let heard: UInt64 = 1_700_000_000_000
+        // Reached: it told the workspaces it holds, and not yet what waits there.
+        let desk = Device(id: "d1", name: "desk", kind: .computer, reachable: true, awaySince: nil, heardAt: heard, answeredAt: nil)
+        let laptop = Device(id: "d2", name: "laptop", kind: .computer, reachable: true, awaySince: nil, heardAt: heard, answeredAt: heard)
+        // Found away before it said: its own line says so.
+        let box = Device(id: "d3", name: "box", kind: .host, reachable: false, awaySince: heard, heardAt: nil, answeredAt: nil)
+
+        let asking = NeedsSummary.asking([desk, laptop, box])
+
+        XCTAssertEqual(asking.map(\.id), ["d1"])
+        XCTAssertEqual(NeedsSummary.askingLine(asking[0]), "Asking desk…")
+        XCTAssertNil(NeedsSummary.nothing(working: 0, asking: asking))
+        XCTAssertEqual(NeedsSummary.nothing(working: 2, asking: []), "Nothing needs you. 2 agents working.")
+    }
 }

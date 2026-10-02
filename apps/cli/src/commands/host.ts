@@ -29,6 +29,7 @@ import { appRunning, askHost, controlSocket, HostNotRunning, serveControl } from
 import { defaultSocket } from "../pty-client.js";
 import { checkSocketPath, daemonUnsupported, ensureDaemon, selfArgv } from "./daemon.js";
 import { install, uninstall } from "../host-service.js";
+import { viewSdk } from "../view-sdk.js";
 
 /** What `hive host status` reports of a running host. */
 interface HostStatus {
@@ -86,6 +87,7 @@ const runCmd = defineCommand({
       dir,
       daemon: async () => { await ensureDaemon(daemonSock); return connectTo(daemonSock); },
       hiveNet: hiveNetBin(),
+      viewSdk,
       onWarn: (m) => process.stderr.write(`[host] ${m}\n`),
     };
     const running = (): HeadlessHost => { if (!host) throw new Error("hive host is starting"); return host; };

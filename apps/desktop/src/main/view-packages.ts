@@ -18,11 +18,10 @@ import { handle, handleEffect } from "./app-ipc.js";
 import { appWindowOf } from "./windows.js";
 import { pathToFileURL } from "node:url";
 import { listInstalledViews, readViewPackage, installView, removeView, type InstalledView } from "@hivemind/core/views";
-import { ENTRY_PAGE, SDK_PATH, VIEW_SCHEME, entryPage, entryUrl, withImportMap, newNonce, pluginCsp } from "./view-package-files.js";
-import { mimeFor, resolvePackageFile } from "@hivemind/core/view-files";
+import { VIEW_SCHEME, entryUrl, newNonce, serveViewFile } from "@hivemind/core/view-files";
 import { viewHost } from "@hivemind/view-sdk/manifest";
 
-export { VIEW_SCHEME, entryUrl } from "./view-package-files.js";
+export { VIEW_SCHEME, entryUrl } from "@hivemind/core/view-files";
 
 export interface ViewPackageInfo extends InstalledView {
   /** Where the iframe loads from (null when the package will not load). */
@@ -61,6 +60,12 @@ export function registerViewScheme(): void {
 
 let sdk: string | undefined;
 
+/** The view SDK this app serves every view (`__sdk.js`), in its windows and on the person's phone:
+ *  its own build, beside main. */
+export async function viewSdk(): Promise<string> {
+  return (sdk ??= await readFile(new URL("./view-sdk.js", import.meta.url), "utf8"));
+}
+
 /** Call after app ready. */
 export function handleViewProtocol(): void {
   protocol.handle(VIEW_SCHEME, async (request) => {
@@ -69,28 +74,15 @@ export function handleViewProtocol(): void {
       const dir = served.get(u.host)?.dir;
       if (!dir) return new Response("unknown view", { status: 404 });
       const rel = decodeURIComponent(u.pathname.replace(/^\/+/, ""));
-      const nonce = newNonce();
+      const file = await serveViewFile(dir, rel, { js: u.searchParams.get("js"), sdk: viewSdk });
+      if (file.status !== 200) return new Response(file.status === 400 ? "bad entry" : file.status === 403 ? "forbidden" : "not found", { status: file.status });
       // The files are the view's published code; who may run them is the CSP's call.
-      const headers = { "Content-Security-Policy": pluginCsp(nonce), "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" };
-      if (rel === ENTRY_PAGE) {
-        const html = entryPage(u.searchParams.get("js") ?? "", nonce);
-        if (!html) return new Response("bad entry", { status: 400 });
-        return new Response(withImportMap(html, nonce), { status: 200, headers: { ...headers, "Content-Type": mimeFor(ENTRY_PAGE) } });
-      }
-      if (rel === SDK_PATH) {
-        sdk ??= await readFile(new URL("./view-sdk.js", import.meta.url), "utf8");
-        return new Response(sdk, { status: 200, headers: { ...headers, "Content-Type": mimeFor(SDK_PATH) } });
-      }
-      const file = resolvePackageFile(dir, rel);
-      if (file.status !== 200) return new Response(file.status === 403 ? "forbidden" : "not found", { status: file.status });
-      if (/\.html?$/i.test(file.abs)) {
-        const html = withImportMap(await readFile(file.abs, "utf8"), nonce);
-        return new Response(html, { status: 200, headers: { ...headers, "Content-Type": mimeFor(ENTRY_PAGE) } });
-      }
-      const res = await net.fetch(pathToFileURL(file.abs).toString(), { headers: request.headers });
+      const headers = { "Content-Security-Policy": file.csp, "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" };
+      if ("text" in file) return new Response(file.text, { status: 200, headers: { ...headers, "Content-Type": file.type } });
+      const res = await net.fetch(pathToFileURL(file.file).toString(), { headers: request.headers });
       const out = new Headers(res.headers);
       for (const [k, v] of Object.entries(headers)) out.set(k, v);
-      out.set("Content-Type", mimeFor(file.abs));
+      out.set("Content-Type", file.type);
       return new Response(res.body, { status: res.status, headers: out });
     } catch {
       return new Response("bad request", { status: 400 });

@@ -12,14 +12,14 @@ final class ConversationRelayTests: XCTestCase {
         DispatchQueue.global().sync {
             relay.said(entries: [personSays("e1")], anew: true)
             relay.said(entries: [agentSays("e2")], anew: false)
-            relay.ended(why: "the device refused it")
+            relay.ended(why: .refused(why: "no agent runs there"))
         }
         drainMain()
 
         XCTAssertEqual(taken.passes, [[
             .said([personSays("e1")], anew: true),
             .said([agentSays("e2")], anew: false),
-            .ended("the device refused it"),
+            .ended(.refused(why: "no agent runs there")),
         ]])
     }
 }

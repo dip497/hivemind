@@ -75,4 +75,13 @@ class NeedsListTest {
         compose.onNodeWithText("Nothing needs you. 4 agents working.").assertIsDisplayed()
         compose.onNodeWithText("desk is away · last heard 5 min ago").assertIsDisplayed()
     }
+
+    @Test
+    fun `a device reached that has not said what waits there is being asked, and nothing is said to wait until it has`() {
+        // It told the workspaces it holds a moment ago, and not yet what waits there.
+        show(NeedsState.of(overview(working = 0, devices = listOf(device(DESK, "desk", heardAt = now - 1_000, answeredAt = null)))))
+
+        compose.onNodeWithText("Asking desk…").assertIsDisplayed()
+        compose.onNodeWithText("Nothing needs you.").assertDoesNotExist()
+    }
 }

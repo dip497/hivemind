@@ -8,13 +8,13 @@ import com.hivemind.phone.core.DeviceKind
 import com.hivemind.phone.core.Entry
 import com.hivemind.phone.core.Overview
 import com.hivemind.phone.core.Person
+import com.hivemind.phone.core.Said
 import com.hivemind.phone.core.ScreenLine
 import com.hivemind.phone.core.ScreenUpdate
 import com.hivemind.phone.core.Tool
 import com.hivemind.phone.core.ToolResult
 import com.hivemind.phone.core.WaitKind
 import com.hivemind.phone.core.Waiting
-import com.hivemind.phone.core.Who
 import com.hivemind.phone.core.Workspace
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -36,6 +36,7 @@ fun agent(
     waiting: Waiting? = null,
     canInterrupt: Boolean = true,
     since: Long? = null,
+    hasConversation: Boolean = false,
 ) = Agent(
     at = AgentRef(device, workspace, tile),
     name = name,
@@ -47,18 +48,27 @@ fun agent(
     since = since?.toULong(),
     waiting = waiting,
     canInterrupt = canInterrupt,
+    hasConversation = hasConversation,
 )
 
 fun waiting(kind: WaitKind, since: Long, decide: Boolean = false, plan: String? = null) =
     Waiting(kind = kind, since = since.toULong(), plan = plan, decide = decide)
 
-fun device(id: String, name: String, reachable: Boolean = true, awaySince: Long? = null, heardAt: Long? = null) = Device(
+fun device(
+    id: String,
+    name: String,
+    reachable: Boolean = true,
+    awaySince: Long? = null,
+    heardAt: Long? = null,
+    answeredAt: Long? = heardAt,
+) = Device(
     id = id,
     name = name,
     kind = DeviceKind.COMPUTER,
     reachable = reachable,
     awaySince = awaySince?.toULong(),
     heardAt = heardAt?.toULong(),
+    answeredAt = answeredAt?.toULong(),
 )
 
 fun workspace(id: String, name: String, device: String = DESK, folder: String? = null) =
@@ -68,7 +78,7 @@ fun overview(
     agents: List<Agent> = emptyList(),
     needs: List<Agent> = emptyList(),
     working: Int = 0,
-    devices: List<Device> = listOf(device(DESK, "desk")),
+    devices: List<Device> = listOf(device(DESK, "desk", heardAt = 0)),
     workspaces: List<Workspace> = emptyList(),
 ) = Overview(
     revision = 1u,
@@ -81,15 +91,15 @@ fun overview(
 )
 
 // What is said (§5.4): by the person; by the agent, its text or a tool it used; by a tool.
-fun person(id: String, text: String) = Entry(id = id, at = 0u, who = Who.PERSON, text = text, tool = null, result = null)
+fun person(id: String, text: String) = Entry(id = id, at = 0u, said = Said.Person(text))
 
-fun agentSaid(id: String, text: String) = Entry(id = id, at = 0u, who = Who.AGENT, text = text, tool = null, result = null)
+fun agentSaid(id: String, text: String) = Entry(id = id, at = 0u, said = Said.Agent(text))
 
 fun toolUse(id: String, use: String, name: String, about: String? = null) =
-    Entry(id = id, at = 0u, who = Who.AGENT, text = null, tool = Tool(use, name, about), result = null)
+    Entry(id = id, at = 0u, said = Said.ToolUse(Tool(use, name, about)))
 
 fun toolResult(id: String, use: String, text: String, error: Boolean = false) =
-    Entry(id = id, at = 0u, who = Who.TOOL, text = null, tool = null, result = ToolResult(use, text, error))
+    Entry(id = id, at = 0u, said = Said.ToolOutput(ToolResult(use, text, error)))
 
 /** One style run as §5.3 packs it: 16 bytes, little-endian. */
 fun run(start: Int, len: Int, col: Int, flags: Int = 0, fg: Int = 0, bg: Int = 0): ByteArray =

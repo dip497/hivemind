@@ -2,6 +2,7 @@ package com.hivemind.phone.live
 
 import com.hivemind.phone.chat.Chat
 import com.hivemind.phone.core.AgentRef
+import com.hivemind.phone.core.ConversationEnded
 import com.hivemind.phone.core.ConversationListener
 import com.hivemind.phone.core.Entry
 import com.hivemind.phone.core.Phone
@@ -20,7 +21,7 @@ class ChatFeed(phone: Phone, agent: AgentRef) {
     private sealed interface Told {
         class Said(val entries: List<Entry>, val anew: Boolean) : Told
 
-        class Ended(val why: String) : Told
+        class Ended(val why: ConversationEnded) : Told
     }
 
     private val told = ConcurrentLinkedQueue<Told>()
@@ -41,7 +42,7 @@ class ChatFeed(phone: Phone, agent: AgentRef) {
             pull.request()
         }
 
-        override fun ended(why: String) {
+        override fun ended(why: ConversationEnded) {
             told += Told.Ended(why)
             pull.request()
         }

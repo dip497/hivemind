@@ -10,6 +10,12 @@ struct AgentScreen: View {
     enum Showing {
         case chat
         case terminal
+
+        /// What may be shown of `agent`, as offered: the chat only when it keeps a conversation
+        /// its device can read (its manifest maps its session file), and its terminal.
+        static func offered(for agent: Agent?) -> [Showing] {
+            agent?.hasConversation == true ? [.chat, .terminal] : [.terminal]
+        }
     }
 
     let model: PhoneModel
@@ -34,6 +40,11 @@ struct AgentScreen: View {
         model.overview.agents.first { $0.at == ref }
     }
 
+    /// What is shown: as the person chose, when this agent offers it; else its terminal.
+    private var shown: Showing {
+        Showing.offered(for: agent).contains(showing) ? showing : .terminal
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if let agent, let waiting = agent.waiting {
@@ -43,14 +54,16 @@ struct AgentScreen: View {
                     typeIntoTerminal()
                 }
             }
-            Picker("Show", selection: $showing) {
-                Text("Chat").tag(Showing.chat)
-                Text("Terminal").tag(Showing.terminal)
+            if Showing.offered(for: agent).count > 1 {
+                Picker("Show", selection: $showing) {
+                    Text("Chat").tag(Showing.chat)
+                    Text("Terminal").tag(Showing.terminal)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
             }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            if showing == .terminal, let note {
+            if shown == .terminal, let note {
                 Text(note)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -59,10 +72,10 @@ struct AgentScreen: View {
                     .background(.bar)
             }
             ZStack {
-                ChatScreen(session: chat, shown: showing == .chat)
-                    .accessibilityHidden(showing != .chat)
-                TerminalScreen(session: session, shown: showing == .terminal)
-                    .accessibilityHidden(showing != .terminal)
+                ChatScreen(session: chat, shown: shown == .chat)
+                    .accessibilityHidden(shown != .chat)
+                TerminalScreen(session: session, shown: shown == .terminal)
+                    .accessibilityHidden(shown != .terminal)
             }
             replyBar
         }
@@ -112,11 +125,18 @@ struct AgentScreen: View {
 
     /// What stands between the person and the terminal, if anything.
     private var note: String? {
+        let device = agent?.deviceName ?? "its device"
         switch session.end {
-        case .session(let code)?:
+        case .exited(let code)?:
             return code == 0 ? "Its session ended." : "Its session ended (code \(code))."
-        case .nothing?:
-            return "There is no terminal to watch: it ended unseen, or its workspace is not on \(agent?.deviceName ?? "its device") now."
+        case .noSession?:
+            return "There is no terminal to watch: its session ended before it was watched."
+        case .refused(let why)?:
+            return "\(device) said no: \(why)"
+        case .notHeld?:
+            return "Its workspace is not on \(device) now."
+        case .unpaired?:
+            return "\(device) is not one of your devices now."
         case nil:
             break
         }

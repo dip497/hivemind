@@ -17,8 +17,15 @@ struct NeedsTab: View {
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
-                    if model.overview.needs.isEmpty {
-                        Text(NeedsSummary.nothing(working: model.overview.working))
+                    let asking = NeedsSummary.asking(model.overview.devices)
+                    ForEach(asking, id: \.id) { device in
+                        Label(NeedsSummary.askingLine(device), systemImage: "ellipsis")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    if model.overview.needs.isEmpty,
+                       let nothing = NeedsSummary.nothing(working: model.overview.working, asking: asking) {
+                        Text(nothing)
                             .foregroundStyle(.secondary)
                     }
                     ForEach(model.overview.needs, id: \.at) { agent in

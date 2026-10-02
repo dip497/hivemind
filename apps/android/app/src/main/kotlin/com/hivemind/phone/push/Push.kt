@@ -78,8 +78,9 @@ class Push(
                 when {
                     devices.isEmpty() -> now.value = PushState.Unpaired
                     // As the app starts, and once paired: the distributor asked again, as UnifiedPush
-                    // would have it, and it answers with where. A device paired or unpaired since: told.
-                    !started || kept.getString(ENDPOINT, null) == null -> register()
+                    // would have it, and it answers with where. Asked again too when the network's
+                    // push server is another (paired anew). A device paired or unpaired since: told.
+                    !started || kept.getString(ENDPOINT, null) == null || kept.getString(VAPID, null) != phone.pushVapid() -> register()
                     else -> tell()
                 }
                 started = true
@@ -95,7 +96,10 @@ class Push(
             ResolvedDistributor.NoneAvailable -> return run { now.value = PushState.NoDistributor }
         }
         if (kept.getString(ENDPOINT, null) == null) now.value = PushState.Registering(label(distributor))
-        UnifiedPush.register(context, messageForDistributor = context.getString(R.string.app_name))
+        // The key of the push server on the person's network, for a distributor that asks for one.
+        val vapid = phone.pushVapid()
+        kept.edit { putString(VAPID, vapid) }
+        UnifiedPush.register(context, messageForDistributor = context.getString(R.string.app_name), vapid = vapid)
     }
 
     /** Tried again, from Devices: the devices told again when they were not, else the distributor asked again. */
@@ -144,5 +148,8 @@ class Push(
 
     private companion object {
         const val ENDPOINT = "endpoint"
+
+        /** The push server's VAPID key the distributor was last given; none: none was. */
+        const val VAPID = "vapid"
     }
 }

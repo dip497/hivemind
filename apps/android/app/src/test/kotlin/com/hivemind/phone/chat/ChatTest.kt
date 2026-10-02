@@ -1,6 +1,7 @@
 package com.hivemind.phone.chat
 
 import com.hivemind.phone.agentSaid
+import com.hivemind.phone.core.ConversationEnded
 import com.hivemind.phone.person
 import com.hivemind.phone.toolResult
 import com.hivemind.phone.toolUse
@@ -50,13 +51,13 @@ class ChatTest {
     @Test
     fun `why it ended is the last item, and is heard though nothing was said`() {
         val ended = Chat()
-        ended.end("this phone is paired with nothing yet")
+        ended.end(ConversationEnded.Unpaired)
         assertTrue(ended.heard)
         assertEquals(0, ended.last)
 
         val chat = Chat()
         chat.said(listOf(agentSaid("e1", "Done.")), anew = true)
-        chat.end("Desk does not hold that workspace now")
+        chat.end(ConversationEnded.NotHeld)
         assertEquals(1, chat.last)
     }
 
@@ -71,7 +72,7 @@ class ChatTest {
         assertEquals(29, chat.follow.list.firstVisibleItemIndex)
 
         chat.follow.newest(chat.last)
-        chat.end("Desk does not hold that workspace now")
+        chat.end(ConversationEnded.NotHeld)
         assertEquals(31, chat.follow.list.firstVisibleItemIndex)
     }
 }

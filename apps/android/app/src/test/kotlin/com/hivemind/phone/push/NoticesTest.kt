@@ -87,13 +87,17 @@ class NoticesTest {
     }
 
     @Test
-    fun `a wait goes once its device, heard since, no longer lists it, and stays while it is not heard since`() {
+    fun `a wait goes once its device, having said since what waits there, no longer lists it, and stays until it has`() {
         notices.show(waits(WaitKind.PERMISSION, decide = true))
         val posted = manager.activeNotifications.single().postTime
         val listed = agent("t1", state = AgentState.WAITING, waiting = waiting(WaitKind.PERMISSION, since = since))
 
         // What the core kept from before the notice: it says nothing of a newer wait.
         notices.cleared(overview(devices = listOf(device(DESK, "desk", heardAt = posted - 1))))
+        assertTrue(isShown("ws-1/t1/$since", Notices.WAITS))
+
+        // Reached since, it told the workspaces it holds, and not yet what waits there.
+        notices.cleared(overview(devices = listOf(device(DESK, "desk", heardAt = posted + 1, answeredAt = posted - 1))))
         assertTrue(isShown("ws-1/t1/$since", Notices.WAITS))
 
         // Heard since, still waiting.

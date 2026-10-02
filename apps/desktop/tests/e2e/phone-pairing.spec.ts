@@ -14,11 +14,13 @@
 // and the phone takes the network and is let onto it (spec/pairing.md 0.5, 0.6); with a push
 // server there, the phone registers at it, naming the computer, and is told through it, which
 // keeps nothing of what it passes on; unpaired, the computer is named no more (spec/push.md 0.3).
-// And a community view on the phone, its host on the computer (P8, spec/workspace-api.md 0.12):
-// offered when it says it works on a phone, its files read, opened, told it is on a phone and what
-// the board holds, doing there only what the phone may, and closed. And an agent as the phone's
-// Agent screen follows it, on its one connection to the computer: its terminal, its conversation
-// and what the person sends it, each on a stream of its own, none taking another's.
+// And a community view on the phone, its host on the computer (P8, spec/workspace-api.md 0.12,
+// 0.14): offered when it says it works on a phone, with the page to load, its files read as the
+// computer serves its own windows (the SDK the app serves among them, each under the policy every
+// view gets), opened on the phone's screen, told it is on a phone, that screen and what the board
+// holds, doing there only what the phone may, and closed. And an agent as the phone's Agent screen
+// follows it, on its one connection to the computer: its terminal, its conversation and what the
+// person sends it, each on a stream of its own, none taking another's.
 import { test, expect, type ElectronApplication } from "@playwright/test";
 import { execFile, execSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -28,6 +30,7 @@ import { promisify } from "node:util";
 import { HiveNet } from "@hivemind/workspace-host/hive-net";
 import { parsePairLink } from "@hivemind/workspace-host/pairing";
 import { heldWorkspaces } from "@hivemind/host/peer-links";
+import { pluginCsp, withImportMap } from "@hivemind/core/view-files";
 import { HIVE_NET, hiveNetBuilt, ownNetwork, person } from "./helpers/multiplayer";
 import { offerPhonePairing, talkerAgent } from "./helpers/phone";
 
@@ -336,6 +339,8 @@ test("the phone drives the person's agents in full: it follows every agent there
   await expect(d.desktop.locator(`.react-flow__node-terminal[data-id="${scribe}"]`)).toHaveCount(1, { timeout: 20_000 });
   await expect.poll(() => agent(scribe)?.state, { timeout: 30_000 }).toBe("working");
   expect(agent(scribe)).toMatchObject({ workspace, program: { id: "scribe", label: "Scribe" }, interrupt: true });
+  // Its manifest maps no session file: it keeps no conversation the phone can read.
+  expect(agent(scribe)!.conversation).toBeUndefined();
 
   // What it changed, in the folder it runs in: a new file, shown whole.
   const changes = await phoneCli("diff", workspace, scribe);
@@ -382,6 +387,8 @@ test("the phone follows what an agent and the person say to each other, as the a
   let listed: Array<Record<string, unknown>> = [];
   await expect.poll(async () => (listed = (await phoneCli("agents")).agents as typeof listed).length, { timeout: 30_000 }).toBe(1);
   const workspace = listed[0]!.workspace as string;
+  // Its manifest maps its session file: the phone is told it keeps a conversation (spec/agents.md 0.4).
+  expect(listed[0]).toMatchObject({ tile, program: { id: "talker" }, conversation: true });
   expect(await phoneCli("send", workspace, tile, "--text", "fix the nav")).toEqual({ sent: true });
   await expect.poll(() => fs.existsSync(path.join(home, "talk")) && fs.readdirSync(path.join(home, "talk")).length, { timeout: 20_000 }).toBe(1);
 
@@ -495,17 +502,27 @@ test("a community view that says it works on a phone is offered there with its f
   await expect.poll(async () => (listed = ((await phoneCli("agents")) as { agents: typeof listed }).agents).length, { timeout: 30_000 }).toBe(1);
   const workspace = listed[0]!.workspace as string;
 
-  // Offered on the phone: the view that says it works there, and its files, read from the computer.
-  expect(await phoneCli("views", workspace)).toEqual([{ id: "priya-board", name: "Priya's board", version: "1.0.0", entry: "index.html" }]);
-  expect(await phoneCli("views", workspace, "priya-board", "index.html")).toEqual({
-    type: "text/html; charset=utf-8", data: fs.readFileSync(path.join(board, "index.html")).toString("base64"),
-  });
+  // Offered on the phone: the view that says it works there, with the page to load, and its files
+  // as the computer serves its own windows, read from it: its page with the SDK's import map first,
+  // and the SDK the app serves its views, each under the policy every view gets.
+  expect(await phoneCli("views", workspace)).toEqual([{ id: "priya-board", name: "Priya's board", version: "1.0.0", entry: "index.html", page: "index.html" }]);
+  const served = async (at: string) => {
+    const file = (await phoneCli("views", workspace, "priya-board", at)) as { type: string; data: string; csp: string };
+    const nonce = file.csp.match(/'nonce-([^']+)'/)![1]!;
+    expect(file.csp).toBe(pluginCsp(nonce));
+    return { type: file.type, text: Buffer.from(file.data, "base64").toString(), nonce };
+  };
+  const page = await served("index.html");
+  expect([page.type, page.text]).toEqual(["text/html; charset=utf-8", withImportMap(fs.readFileSync(path.join(board, "index.html"), "utf8"), page.nonce)]);
+  const sdk = await served("__sdk.js");
+  expect([sdk.type, sdk.text]).toEqual(["text/javascript; charset=utf-8", fs.readFileSync(path.resolve("out/main/view-sdk.js"), "utf8")]);
   await expect(run(HIVE_PHONE, ["views", workspace, "priya-board", "../desk-only/index.html", "--identity", phone])).rejects.toThrow(/not inside priya-board/);
   await expect(run(HIVE_PHONE, ["views", workspace, "desk-only", "index.html", "--identity", phone])).rejects.toThrow(/no view desk-only here works on a phone/);
 
-  // Opened: once it says it is ready, it is told it is on a phone, may start agents and not rename
-  // tiles (a phone may not edit the board), and what the board holds.
-  const shown = spawn(HIVE_PHONE, ["view", workspace, "priya-board", "--identity", phone, "--json"]);
+  // Opened on the phone's screen: once it says it is ready, it is told it is on a phone, that
+  // screen, that it may start agents and not rename tiles (a phone may not edit the board), and
+  // what the board holds.
+  const shown = spawn(HIVE_PHONE, ["view", workspace, "priya-board", "--size", "390x844", "--identity", phone, "--json"]);
   procs.push(shown);
   const told: Array<Record<string, unknown>> = [];
   let line = "";
@@ -519,7 +536,9 @@ test("a community view that says it works on a phone is offered there with its f
   const structures = () => told.filter((m) => m.type === "structure").map((m) => (m.tiles as Array<{ id: string }>).map((t) => t.id));
   post({ type: "ready", v: 1 });
   await expect.poll(structures, { timeout: 30_000 }).toEqual([[probe]]);
-  expect(told[0]).toMatchObject({ type: "hello", pluginId: "priya-board", capabilities: ["workspace:spawn"], device: { touch: true, compact: true } });
+  expect(told[0]).toMatchObject({
+    type: "hello", pluginId: "priya-board", capabilities: ["workspace:spawn"], device: { touch: true, compact: true }, viewport: { w: 390, h: 844 }, theme: { colors: {} },
+  });
 
   // What it may not do is refused: the rename never reaches the board. What it may, it does, as the
   // phone: the agent it starts appears, after the rename would have.

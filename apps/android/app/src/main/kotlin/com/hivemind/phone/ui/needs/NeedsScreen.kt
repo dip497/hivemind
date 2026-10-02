@@ -49,7 +49,9 @@ fun NeedsList(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items(state.away, key = { "away:${it.id}" }) { device -> AwayNote(device, now) }
-        if (state.needs.isEmpty()) {
+        items(state.asking, key = { "asking:${it.id}" }) { device -> AskingNote(device) }
+        // Nothing waits only once every device not away has said so.
+        if (state.needs.isEmpty() && state.asking.isEmpty()) {
             item(key = "none") {
                 Text(
                     if (state.working == 0) {
@@ -67,6 +69,15 @@ fun NeedsList(
             NeedRow(agent, state.lastHeard(agent), agent.at in busy, now, onOpen, onAnswer)
         }
     }
+}
+
+@Composable
+private fun AskingNote(device: Device) {
+    Text(
+        stringResource(R.string.needs_asking, device.name),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable

@@ -14,7 +14,7 @@ use tokio::task::JoinHandle;
 use crate::{
     connections::Connections,
     conversation::{self, Entry, Piece},
-    failure::Failure,
+    failure::Lost,
     pacing::{self, Paced},
 };
 
@@ -24,15 +24,15 @@ pub trait Listener: Send + Sync {
     /// the first telling is, and each after the agent began another session; then it may tell
     /// nothing yet.
     fn said(&self, entries: Vec<Entry>, anew: bool);
-    /// It is told no more, and why: the device refused it, its workspace is not on that device
-    /// now, or the device is no longer one of the person's. Told once, last.
-    fn ended(&self, why: String);
+    /// It is told no more, and why: the device refused it, holds its workspace no more, or is no
+    /// longer one of the person's. Told once, last.
+    fn ended(&self, why: Lost);
 }
 
 /// What the telling thread is handed: what was said, anew or not; or why it ended.
 enum Told {
     Said(Vec<Entry>, bool),
-    Ended(String),
+    Ended(Lost),
 }
 
 /// What is told, gathered between two tellings: what each session said, in order, and why it
@@ -40,7 +40,7 @@ enum Told {
 struct Telling {
     listener: Arc<dyn Listener>,
     said: Vec<(Vec<Entry>, bool)>,
-    ended: Option<String>,
+    ended: Option<Lost>,
     stopped: Arc<AtomicBool>,
 }
 
@@ -105,7 +105,7 @@ impl Talking {
             let why = loop {
                 let connection = match connections.kept_for(&device, &workspace).await {
                     Ok(connection) => connection,
-                    Err(why) => break why,
+                    Err(lost) => break lost,
                 };
                 let last = from.clone();
                 let resume = last.as_ref().map(|(session, at)| (session.as_str(), *at));
@@ -116,12 +116,13 @@ impl Talking {
                     }
                     from = Some((piece.session, piece.cursor));
                 };
-                match conversation::follow(&connection, &workspace, &tile, resume, said).await {
-                    Err(why) if Failure::refused(&why) => break why,
-                    _ => Connections::again(&connection).await,
+                let followed = conversation::follow(&connection, &workspace, &tile, resume, said);
+                if let Some(lost) = followed.await.err().as_ref().and_then(Lost::refusal) {
+                    break lost;
                 }
+                Connections::again(&connection).await;
             };
-            let _ = told.send(Told::Ended(why.to_string()));
+            let _ = told.send(Told::Ended(why));
         });
         Self { following, stopped }
     }

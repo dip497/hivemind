@@ -19,6 +19,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.hivemind.phone.agentSaid
+import com.hivemind.phone.core.ConversationEnded
 import com.hivemind.phone.person
 import com.hivemind.phone.toolResult
 import com.hivemind.phone.toolUse
@@ -95,10 +96,10 @@ class ChatViewTest {
     fun `why it ended is a note after the last entry`() {
         val chat = Chat()
         chat.said(listOf(agentSaid("e1", "Done.")), anew = true)
-        chat.end("Desk does not hold that workspace now")
+        chat.end(ConversationEnded.Refused("no agent runs there"))
         show(chat)
 
-        val note = compose.onNodeWithText("Not followed any more: Desk does not hold that workspace now")
+        val note = compose.onNodeWithText("Not followed any more: no agent runs there")
         note.assertIsDisplayed()
         assertTrue(note.getUnclippedBoundsInRoot().top > compose.onNodeWithText("Done.").getUnclippedBoundsInRoot().bottom)
     }

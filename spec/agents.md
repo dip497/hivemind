@@ -1,4 +1,4 @@
-# Agents (0.3)
+# Agents (0.4)
 
 The person's agents, as their phone sees and drives them (M5, `docs/design/phone-app-2026-10-02.md`
 §4): every agent in the workspaces one of their devices holds, live; and starting one, stopping
@@ -30,7 +30,7 @@ holds:
   "agent": "<what it is called>", "program": { "id": "claude", "label": "Claude Code" },
   "state": "waiting", "since": 1790000000000, "machine": "<the machine it runs on>",
   "waiting": { "kind": "permission", "since": 1790000000000, "plan": "<markdown>", "decide": true },
-  "interrupt": true }
+  "interrupt": true, "conversation": true }
 ```
 
 - `agent` and `machine` are as `needs.md` gives them (0.3).
@@ -42,6 +42,9 @@ holds:
   `decide` as `needs.md` gives them for a wait on the person.
 - `interrupt` is `true` when its manifest says which keys interrupt its turn (`interrupt`), so
   `agent.interrupt` stops it; left out otherwise.
+- `conversation` is `true` when its manifest maps its session file's records (`session.transcript`),
+  so `agent.conversation` can say what it and the person said to each other ("Conversation"); left
+  out otherwise (0.4).
 
 Agents are in order of their workspace's id, then their tile (by its characters' codes).
 
@@ -49,11 +52,11 @@ A phone keeps each device's list as it last answered, and shows them one device 
 what waits on the person among them (a `waiting` whose kind is not `approval`) it shows as one list,
 as `needs.md` orders it, and the agents at work it adds up. An answer with no list of agents says
 nothing; a `working` that is not a whole number of none or more counts none. An item it cannot read
-is left out: one that is not an object, has a field it must have (`program`, `waiting` and
-`interrupt` may be missing) missing or of another type, a `state` not listed above, or a `waiting`
-that is no object, has a kind not listed or no `since`. A `program` that is not an `id` and a
-`label`, a `decide` or `interrupt` that is not `true`, and a `decide` on anything but a permission,
-are taken as not there.
+is left out: one that is not an object, has a field it must have (`program`, `waiting`,
+`interrupt` and `conversation` may be missing) missing or of another type, a `state` not listed
+above, or a `waiting` that is no object, has a kind not listed or no `since`. A `program` that is
+not an `id` and a `label`, a `decide`, `interrupt` or `conversation` that is not `true`, and a
+`decide` on anything but a permission, are taken as not there.
 
 ## Starting
 

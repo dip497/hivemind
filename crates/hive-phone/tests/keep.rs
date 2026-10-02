@@ -6,11 +6,13 @@
 //! not its own. What each device last answered is kept, and forgotten with the device
 //! (spec/needs.md "Asking", spec/pairing.md "Unpairing"): its agents as it listed them, what waits
 //! on the person among them, and the workspaces it holds (spec/agents.md "Following"), or what
-//! waits on the person, as a device that does not list them answers; the computers and hosts an
-//! app tells of, kept as it told of them while an app that did lists them (spec/pairing.md 0.7),
-//! and whose they are as the app paired with first says (0.8); a device found away is shown back
-//! once, when it says it is back since then (spec/push.md 0.2); and the network an app gives,
-//! which the phone reaches the person's devices through (spec/pairing.md 0.5).
+//! waits on the person, as a device that does not list them answers; nothing of what waits there
+//! until it has said, though it told the workspaces it holds, and when it said it; the computers
+//! and hosts an app tells of, kept as it told of them while an app that did lists them
+//! (spec/pairing.md 0.7), and whose they are as the app paired with first says (0.8); a device
+//! found away is shown back once, when it says it is back since then (spec/push.md 0.2); and the
+//! network an app gives, which the phone reaches the person's devices through (spec/pairing.md
+//! 0.5).
 
 use std::{fs, path::PathBuf};
 
@@ -231,7 +233,8 @@ fn what_each_device_last_answered_is_kept_until_it_is_forgotten_and_another_pers
         heard[&from_a],
         Heard {
             at: 6,
-            answer: said(vec![waiting], 3),
+            answer: Some(said(vec![waiting], 3)),
+            answered: Some(6),
             agents: None,
             workspaces: vec![],
         }
@@ -240,7 +243,8 @@ fn what_each_device_last_answered_is_kept_until_it_is_forgotten_and_another_pers
         heard[&from_b],
         Heard {
             at: 5,
-            answer: said(vec![], 2),
+            answer: Some(said(vec![], 2)),
+            answered: Some(5),
             agents: None,
             workspaces: vec![],
         }
@@ -286,6 +290,7 @@ fn what_a_device_lists_is_kept_whole_with_what_waits_on_the_person_among_it_and_
         machine: "app 10".into(),
         waiting,
         interrupt: false,
+        conversation: false,
         device: device.clone(),
     };
     let waits = |kind: &str| {
@@ -314,7 +319,7 @@ fn what_a_device_lists_is_kept_whole_with_what_waits_on_the_person_among_it_and_
     phone.hear_agents(&device, &listed, 3).unwrap();
     let heard = phone.heard().remove(&device).unwrap();
     assert_eq!(heard.at, 3);
-    assert_eq!(heard.listed(&device), listed);
+    assert_eq!(heard.listed(&device), Some(listed));
     assert_eq!(heard.workspaces, held);
     // What waits on the person among them: not what waits on the agent supervising it.
     let permission = Need {
@@ -330,10 +335,10 @@ fn what_a_device_lists_is_kept_whole_with_what_waits_on_the_person_among_it_and_
     };
     assert_eq!(
         heard.answer,
-        Answer {
+        Some(Answer {
             needs: vec![permission.clone()],
             working: 1
-        }
+        })
     );
     assert!(phone.away().is_empty(), "it listed them since");
 
@@ -367,11 +372,74 @@ fn what_a_device_lists_is_kept_whole_with_what_waits_on_the_person_among_it_and_
     );
     assert_eq!(
         heard.listed(&device),
-        Listed {
+        Some(Listed {
             agents: vec![plan],
             working: 0
-        }
+        })
     );
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_device_that_told_only_the_workspaces_it_holds_has_said_nothing_of_what_waits_there_until_it_answers(
+) {
+    let dir = tmp("asking");
+    let phone = Identity::open(&dir.join("id")).unwrap();
+    let a = paired(&phone, 10, &key(1));
+    phone.keep(&a, 1).unwrap();
+    let device = a.with.device.clone();
+    let held = [Held {
+        workspace: "w1".into(),
+        name: "api".into(),
+        folder: None,
+    }];
+    // Reached, a device tells the workspaces it holds before what waits there: not that nothing
+    // does, nor that no agent is at work.
+    phone.hear_workspaces(&device, &held, 2).unwrap();
+    let heard = phone.heard().remove(&device).unwrap();
+    assert_eq!(heard.workspaces, held);
+    assert_eq!(heard.answer, None);
+    assert_eq!(heard.answered, None);
+    assert_eq!(heard.listed(&device), None);
+
+    // Answered, it is known from then on, and when it said it, whatever it tells after.
+    let answer = Answer {
+        needs: vec![],
+        working: 2,
+    };
+    phone.hear(&[(device.clone(), answer.clone())], 3).unwrap();
+    phone.hear_workspaces(&device, &held, 4).unwrap();
+    let heard = phone.heard().remove(&device).unwrap();
+    assert_eq!(
+        (heard.at, heard.answer, heard.answered),
+        (4, Some(answer), Some(3))
+    );
+    // Its list of agents says it again, as of then.
+    let listed = Listed {
+        agents: vec![],
+        working: 1,
+    };
+    phone.hear_agents(&device, &listed, 5).unwrap();
+    assert_eq!(phone.heard()[&device].answered, Some(5));
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn what_a_phone_of_before_kept_of_a_device_is_its_answer_said_when_it_last_told_anything() {
+    let dir = tmp("before");
+    let phone = Identity::open(&dir.join("id")).unwrap();
+    let a = paired(&phone, 10, &key(1));
+    phone.keep(&a, 1).unwrap();
+    let device = a.with.device.clone();
+    // As heard.json was written before a device's answer and when it said it were kept apart.
+    let kept = json!({ device.clone(): { "at": 7, "needs": [], "working": 1 } });
+    fs::write(dir.join("id").join("heard.json"), kept.to_string()).unwrap();
+    let heard = phone.heard().remove(&device).unwrap();
+    let answer = Answer {
+        needs: vec![],
+        working: 1,
+    };
+    assert_eq!((heard.answer, heard.answered), (Some(answer), Some(7)));
     fs::remove_dir_all(&dir).unwrap();
 }
 

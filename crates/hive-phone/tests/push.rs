@@ -3,16 +3,25 @@
 //! sent to another phone, cut short, of more than one record or from a key not given whole is
 //! refused. A device's side
 //! (encrypting) is held to the same file in packages/host. And where a phone with no push server
-//! is told, and which notices it shows; through a push server, push_server.rs and the e2e.
+//! is told, and which notices it shows; through a push server, push_server.rs and the e2e. And the
+//! VAPID key a phone gives its distributor: its network's push server's, when that server tells
+//! phones through UnifiedPush. Each device told where takes it, says no in its words, or is away.
 
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use hive_phone::{
+    connections::Connections,
     identity::Identity,
-    push::{self, Platform, PushAt, PushKeys},
+    push::{self, Platform, PushAt, PushKeys, Took},
 };
 use serde_json::{json, Value};
+use support::{paired_with, Desk};
+
+mod support;
 
 /// A phone whose push key and secret are `key` and `auth`, kept as a phone keeps its own.
 fn phone_with(name: &str, key: &[u8], auth: &[u8]) -> PushKeys {
@@ -24,6 +33,23 @@ fn phone_with(name: &str, key: &[u8], auth: &[u8]) -> PushKeys {
     let keys = PushKeys::kept_or_made(&dir).unwrap();
     fs::remove_dir_all(&dir).unwrap();
     keys
+}
+
+/// A phone on the network whose push server is `push` (none: no push server), as pairing with an
+/// app on that network keeps it: its profile, signed by the network's admin.
+fn on_network(dir: &Path, push: Option<Value>) -> Identity {
+    let _ = fs::remove_dir_all(dir);
+    fs::create_dir_all(dir).unwrap();
+    let admin = iroh::SecretKey::from_bytes(&[7; 32]);
+    let mut profile =
+        json!({ "v": 1, "name": "Priya's network", "admin": admin.public().to_string() });
+    if let Some(push) = push {
+        profile["push"] = push;
+    }
+    let signed = hive_net::profile::sign(&profile.to_string(), &admin).unwrap();
+    let kept = serde_json::to_string(&serde_json::to_string(&signed).unwrap()).unwrap();
+    fs::write(dir.join("network.json"), kept).unwrap();
+    Identity::open(dir).unwrap()
 }
 
 fn b64(v: &Value) -> Vec<u8> {
@@ -101,4 +127,47 @@ async fn a_phone_with_no_push_server_is_told_at_its_endpoint_itself_with_its_own
     let back = json!({ "v": 1, "t": "back", "device": "d1", "name": "desk", "since": 5 });
     assert!(!push::shown(&phone, &back).unwrap());
     fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_phone_gives_its_distributor_the_vapid_key_of_its_networks_push_server_that_tells_phones_through_unifiedpush(
+) {
+    let dir = std::env::temp_dir().join(format!("hive-phone-push-{}-vapid", std::process::id()));
+    let vapid =
+        "BOn2qVXAHmvWFAFd8BxBH2DFcZ3HfWdS7z3UzmkvylbP1zUiYvsZNRxvn6IBLE4TZwwH0ZE3yPrsJMn1YrlLJSs";
+    let server = |kinds: Value| json!({ "url": "https://hive.example.com/push", "kinds": kinds, "vapid": vapid });
+    let cases = [
+        (
+            Some(server(json!(["apns", "unifiedpush"]))),
+            Some(vapid.to_string()),
+        ),
+        // It tells phones through Apple's service alone: not the distributor's to check.
+        (Some(server(json!(["apns"]))), None),
+        (None, None),
+    ];
+    for (push, given) in cases {
+        let phone = on_network(&dir, push.clone());
+        assert_eq!(push::vapid(&phone), given, "{push:?}");
+    }
+    // On no network but the local one.
+    let _ = fs::remove_dir_all(&dir);
+    assert_eq!(push::vapid(&Identity::open(&dir).unwrap()), None);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_device_takes_where_the_phone_is_told_or_says_no_in_its_words_and_one_not_reached_is_away(
+) {
+    let desk = Desk::start(71).await;
+    let dir = support::tmp("telling");
+    let phone = paired_with(&dir, &desk);
+    let connections = Connections::new(phone.clone(), || {});
+    let keys = PushKeys::kept_or_made(&dir).unwrap();
+    let subscription = keys.subscription("https://up.example/up1", false);
+    let tell = |subscription| push::tell(connections.to(&desk.id), subscription);
+    assert_eq!(tell(&subscription).await, Took::Yes);
+    let refused = Took::Refused("not a push subscription".into());
+    assert_eq!(tell(&json!({ "endpoint": 7 })).await, refused);
+    let unreached = push::tell(connections.to("d9"), &subscription).await;
+    assert_eq!(unreached, Took::Away);
 }

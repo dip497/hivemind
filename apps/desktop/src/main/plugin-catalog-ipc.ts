@@ -11,7 +11,7 @@ import { findBin, verifyAgent } from "@hivemind/agents/discover";
 import { getSettings, patchSettingsPath } from "./settings-store.js";
 import { existsSync } from "node:fs";
 import { agentDisclosures, isGenericRuntime } from "@hivemind/agents";
-import { newNonce } from "./view-package-files.js";
+import { newNonce } from "@hivemind/core/view-files";
 import { reviewViewDir } from "./view-packages.js";
 import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
 

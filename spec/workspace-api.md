@@ -1,4 +1,4 @@
-# Workspace API (0.13)
+# Workspace API (0.14)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -189,9 +189,9 @@ log.
 | `agent.close` | `tile` | `{closed}`: its session ended and its tile taken off its board, as `hive ctl close` (`agents.md`, 0.11) | target the agent's tile |
 | `agent.diff` | `tile` | `{files, patch, truncated}`: what it changed in the folder it runs in, against its last commit (`agents.md`, "Changes", 0.11) | — |
 | `plan.decide` | `tile`, `requestId`, `"allow"` or `"deny"`, `feedback`? | `{answered, by}`: the first answer is the one the agent gets; a later one, or one about another tile's plan, answers nothing (`by`: who answered first) | target the agent's tile, detail the answer |
-| `view.list` | | `[{id, name, version, entry}]`: the community views installed on this device whose manifest says `"phone": true` (below, 0.12) | read |
-| `view.file` | `id`, `path` | `{data, type}`: one of the view's files, `path` inside its package (a link out of it, or `..`, is `BAD_REQUEST`), its bytes base64 and its type; 4 MiB at most | read |
-| `view.open` | `id`, `repo` | `{session}`: the view opened on the workspace for this caller (below) | — |
+| `view.list` | | `[{id, name, version, entry, page}]`: the community views installed on this device whose manifest says `"phone": true` (below, 0.12), and the page a screen loads to show each (0.14) | read |
+| `view.file` | `id`, `path` | `{data, type, csp}`: one of the view's files as the app serves its windows (below), `path` inside its package (a link out of it, or `..`, is `BAD_REQUEST`), its bytes base64, its type, and the policy to serve it under (0.14); 4 MiB at most | read |
+| `view.open` | `id`, `repo`, `screen`? | `{session}`: the view opened on the workspace for this caller, on its screen (below; `screen` 0.14) | — |
 | `view.close` | `session` | `{closed}`: the caller's session ended; false: it has none of that name | — |
 
 | `people.list` | `repo` | who is on the workspace's access list: `[{person, name, color, role, grantedAt, expires, devices, present}]`, `present` whether they are connected now; `[]` for a workspace that does not say whose it is yet | read |
@@ -242,6 +242,7 @@ layout the store cannot hold is `BAD_REQUEST`.
 | `terminal.watchActivity` | `tiles` | the terminals whose activity the client is sent (`terminal.activity`), at most 1024 |
 | `store.shown` | `repo` or null, `frame` or null | the workspace the client shows now, and the frame its user is in there (the control plane opens a tile there) |
 | `view.post` | `session`, `message` | what the view of the caller's session posts to its host, a view protocol message (below) |
+| `view.screen` | `session`, `screen` | the screen the view of the caller's session is shown on now, its size and look: its host tells the view what of them changed (below, 0.14) |
 | `presence.set` | `repo`, `{name, color, cursor, over, selection}` or null | where the client's person is in the workspace: `cursor` `{x, y}` in board coordinates (null: off the board), `over` the id of the tile, frame or board object under it (null: none), `selection` the ids they have selected (at most 100); null: they left it. Never stored: it lasts until the connection closes, they leave, or a minute passes without another |
 
 A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch", "base"?,
@@ -279,16 +280,35 @@ A community view (`@hivemind/view-sdk`, view protocol 1.5) that says in its mani
 phone (`"phone": true`, laid out from `hello.device`) is shown on another device's screen, the
 person's phone first, while its host runs here (0.12; design: `docs/design/phone-app-2026-10-02.md`
 §6.1). The other device reads the views offered (`view.list`) and their files (`view.file`), and
-opens one on a workspace here (`view.open`). Its session is the caller's alone: what the view posts
-goes in as `view.post`, checked here as the window checks a view in its iframe, and what its host
-says comes back as `view.said`, until the caller closes it (`view.close`), the caller's connection
-closes, or the host disables the view (`view.ended`, with why).
+opens one on a workspace here (`view.open`), on its screen. Its session is the caller's alone: what
+the view posts goes in as `view.post`, checked here as the window checks a view in its iframe, and
+what its host says comes back as `view.said`, until the caller closes it (`view.close`), the
+caller's connection closes, or the host disables the view (`view.ended`, with why).
 
+- **Its files** are served as the app serves them to its windows (`hm-view:`), from one place
+  (`@hivemind/core/view-files`), 0.14: `page` is the file a screen loads to show the view, its
+  `entry` when that is a page, else `__entry.html`, a page made for it that runs the entry as a
+  module; `__sdk.js` is the view SDK this device serves its views, so a view never bundles its
+  own; and a page of the view's is served with the SDK's import map first (`@hivemind/view-sdk`
+  → `/__sdk.js`). Every file comes with `csp`, the Content-Security-Policy the screen serves it
+  under, the window's: no network (`connect-src 'none'`), no frames, forms or objects, scripts
+  only from the view's own origin (`'self'`, where the screen serves it, or `hm-view:`) or with
+  the nonce that only the page made here carries, so the view's own inline scripts do not run.
+  `__entry.html` of a view whose entry is a page is `BAD_REQUEST`.
+- **Its screen** (0.14) is `{w, h, theme}`: its size in whole CSS pixels (0 to 100,000), and the
+  look the app there gives views, as the view protocol's `theme` has it: `colors`, each `#rrggbb`
+  by its token (`[a-z0-9-]`, at most 40), and as the app says them, `mode` (`dark` or `light`),
+  `accent`, `radius` (0 to 100 pixels), `fonts` (`{ui, mono}`, font families), `surface`,
+  `terminalBackground`, `glass` and `status` (a colour for each status tone). Anything else is
+  `BAD_REQUEST`. A `view.open` that gives none shows it 0 by 0, with no colours. A screen given
+  again (`view.screen`) is told to a ready view as the window tells its iframe: `resize` when its
+  size changed, `theme` when its look did, nothing when neither did; a view not ready yet is told
+  the newest in `hello`.
 - **Its host says** what the window's says (`hello`, `structure`, `names`, `selection`, `status`),
   from what this device holds: the board from the store, statuses and links from the control
-  plane, a selection of the session's own. `hello.device` is `{touch: true, compact: true}`; the
-  screen's look and size are its own, so `theme` has no colours, `viewport` is 0 by 0 and no
-  `resize`, `theme` or `visibility` follows; no layout is kept. `features`: `agentStatus`.
+  plane, a selection of the session's own; and the screen as its caller says it (`viewport`,
+  `theme`, then `resize` and `theme`). `hello.device` is `{touch: true, compact: true}`; no
+  `visibility` follows, and no layout is kept. `features`: `agentStatus`.
 - **What the view may do** is what its manifest asks and its caller may call, both: a view on a
   remote screen may start agents (`workspace:spawn`) when its caller may call `agent.start`, close
   tiles (`workspace:close`) when it may call `agent.close`, and rename them (`workspace:edit`) when

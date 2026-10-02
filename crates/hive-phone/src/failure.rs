@@ -33,9 +33,36 @@ impl fmt::Display for Failure {
 
 impl std::error::Error for Failure {}
 
-impl Failure {
-    /// Whether `e` is the device refusing: asking again gets the same answer.
-    pub fn refused(e: &anyhow::Error) -> bool {
-        matches!(e.downcast_ref::<Failure>(), Some(Failure::Refused { .. }))
+/// Why what the phone follows on one of the person's devices (a terminal, a conversation, a view)
+/// is told no more, when it did not end of itself, told apart as the apps tell the person: each in
+/// words they can be shown.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Lost {
+    /// The device said no, in its words: asking again gets the same answer.
+    Refused(String),
+    /// The device does not hold its workspace now.
+    NotHeld(String),
+    /// The device is not one of the person's now, or the phone is paired with nothing.
+    Unpaired(String),
+}
+
+impl fmt::Display for Lost {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Refused(words) | Self::NotHeld(words) | Self::Unpaired(words) => {
+                f.write_str(words)
+            }
+        }
+    }
+}
+
+impl Lost {
+    /// `e`, which ended a stream, as a reason to follow no more: the device refusing. None for
+    /// anything else, as the connection going: followed on, on the next.
+    pub fn refusal(e: &anyhow::Error) -> Option<Self> {
+        match e.downcast_ref::<Failure>()? {
+            Failure::Refused { message, .. } => Some(Self::Refused(message.clone())),
+            _ => None,
+        }
     }
 }

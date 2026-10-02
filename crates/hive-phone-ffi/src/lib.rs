@@ -15,17 +15,24 @@ mod pairing;
 mod phone;
 mod push;
 mod records;
+mod view;
 mod watch;
 
 pub use control::{Diff, DiffFile, Frame, Start, StartOption, StartProgram, Startable};
-pub use conversation::{Conversation, ConversationListener, Entry, Tool, ToolResult, Who};
+pub use conversation::{
+    Conversation, ConversationEnded, ConversationListener, Entry, Said, Tool, ToolResult,
+};
 pub use error::PhoneError;
 pub use overview::{Following, OverviewListener};
 pub use pairing::{pairs_with, PairsWith};
 pub use phone::Phone;
-pub use push::{Notice, PushAt, PushTold};
+pub use push::{Notice, PushAt, PushRefused, PushTold};
 pub use records::*;
-pub use watch::{ScreenLine, ScreenListener, ScreenUpdate, Watch};
+pub use view::{
+    Screen, ThemeMode, ViewEnded, ViewFile, ViewFonts, ViewInfo, ViewListener, ViewSession,
+    ViewTheme,
+};
+pub use watch::{ScreenEnded, ScreenLine, ScreenListener, ScreenUpdate, Watch};
 
 uniffi::setup_scaffolding!("hive_phone");
 

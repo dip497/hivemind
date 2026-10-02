@@ -57,8 +57,8 @@ const domain = {
   notices: {
     "terminal.show": (from: Connection, tile: unknown) => { ran.push({ what: "terminal.show", by: from.actor, args: [tile] }); },
     "presence.set": (from: Connection, repo: unknown) => { ran.push({ what: "presence.set", by: from.actor, args: [repo] }); },
-    ...Object.fromEntries(["terminal.detach", "terminal.keyboard.ask", "terminal.keyboard.give", "terminal.keyboard.take"].map((what) => [
-      what, (from: Connection, tile: unknown) => { ran.push({ what, by: from.actor, args: [tile] }); },
+    ...Object.fromEntries(["terminal.detach", "terminal.keyboard.ask", "terminal.keyboard.give", "terminal.keyboard.take", "view.post", "view.screen"].map((what) => [
+      what, (from: Connection, at: unknown) => { ran.push({ what, by: from.actor, args: [at] }); },
     ])),
   },
   gone: (c: Connection) => gone.push(c),
@@ -175,6 +175,11 @@ test("a view opened on a remote screen names the workspace after the view, a gue
   }
   await viewer.client.call("view.open", "board", workspaceUrl(W));
   expect(ran).toEqual([{ what: "view.open", by: viewer.actor, args: ["board", REPO, []] }]);
+  // Talking to the view it opened, and saying what screen it is shown on, are the viewer's too.
+  viewer.client.notice("view.post", "s1", { type: "ready", v: 1 });
+  viewer.client.notice("view.screen", "s1", { w: 390, h: 844, theme: { colors: {} } });
+  await new Promise((r) => setTimeout(r, PEER_FRAME_MS * 2));
+  expect(ran.slice(1).map((r) => r.what)).toEqual(["view.post", "view.screen"]);
   const driver = connect("agents");
   await driver.client.call("view.open", "board", workspaceUrl(W));
   expect(ran.map((r) => r.args[2])).toEqual([["agent.start", "agent.close"]]);

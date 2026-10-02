@@ -41,6 +41,7 @@
     </plurals>
     <string name="needs_away">%s is away</string>
     <string name="needs_away_heard">%1$s is away · last heard %2$s ago</string>
+    <string name="needs_asking">Asking %s…</string>
     <string name="needs_as_last_heard">%s · as last heard</string>
 
     <!-- Answers -->
@@ -69,7 +70,11 @@
     <string name="type_hint">Typed into its terminal as you</string>
     <string name="keyboard_held">%s has its keyboard.</string>
     <string name="ended_code">The session ended (%d).</string>
-    <string name="ended_none">Nothing to watch: the session ended unseen, or its device no longer offers it.</string>
+    <string name="ended_none">Nothing to watch: the session ended before it was watched.</string>
+    <string name="ended_refused">%1$s said no: %2$s</string>
+    <string name="ended_not_held">Its workspace is not on %s now.</string>
+    <string name="ended_unpaired">%s is not one of your devices now.</string>
+    <string name="its_device">its device</string>
     <string name="agent_gone">This agent is no longer on its board.</string>
     <string name="list_newest">To the newest</string>
     <string name="view_chat">Chat</string>
@@ -78,6 +83,8 @@
     <!-- An agent's chat -->
     <string name="chat_nothing">Nothing said yet</string>
     <string name="chat_ended">Not followed any more: %s</string>
+    <string name="chat_ended_not_held">Not followed any more: its workspace is not on its device now.</string>
+    <string name="chat_ended_unpaired">Not followed any more: its device is not one of yours now.</string>
     <string name="chat_result">Result</string>
     <string name="chat_show_result">Show what it gave back</string>
     <string name="chat_hide_result">Hide what it gave back</string>
@@ -189,5 +196,6 @@
     <string name="push_told_nobody">None of your devices has been told yet.</string>
     <string name="push_told">%s will tell this phone what needs you.</string>
     <string name="push_away">%s: away, told when the app next opens.</string>
+    <string name="push_refused">%1$s said no: %2$s</string>
     <string name="action_try_again">Try again</string>
 </resources>

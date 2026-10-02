@@ -26,7 +26,7 @@ use tokio::{
 use crate::{
     agents,
     devices::{self, PairedDevice, ANSWER_WITHIN},
-    failure::Failure,
+    failure::{Failure, Lost},
     identity::Identity,
     needs::{self, Heard},
     now_ms,
@@ -193,10 +193,35 @@ impl Connections {
         Ok(connection)
     }
 
+    /// Which of the person's devices holds `workspace`, as they say when asked now, all at once:
+    /// the first that says it does within `within`, however long the others take; none when none
+    /// has by then.
+    pub async fn holder_of(&self, workspace: &str, within: Duration) -> Option<String> {
+        let mut asking = tokio::task::JoinSet::new();
+        for paired in self.0.identity.devices() {
+            let (connections, workspace) = (self.clone(), workspace.to_string());
+            asking.spawn(async move {
+                let device = paired.with.device;
+                let holds = connections.holding(&device, &workspace).await.is_ok();
+                holds.then_some(device)
+            });
+        }
+        let first = async {
+            while let Some(asked) = asking.join_next().await {
+                if let Ok(Some(device)) = asked {
+                    return Some(device);
+                }
+            }
+            None
+        };
+        // Those not done by then are let go of with the set.
+        tokio::time::timeout(within, first).await.ok().flatten()
+    }
+
     /// The connection kept to `device`, once there is one: in the foreground, as its dialling
     /// makes it, and never one of its own, so a stream on it lives no longer than the app is in
-    /// front. Fails for a device that is not one of the person's.
-    pub async fn kept(&self, device: &str) -> Result<Connection> {
+    /// front. Lost for a device that is not one of the person's.
+    pub async fn kept(&self, device: &str) -> Result<Connection, Lost> {
         let open = |c: &Option<Connection>| c.as_ref().is_some_and(|c| c.close_reason().is_none());
         loop {
             let link = lock(&self.0.links)
@@ -211,11 +236,11 @@ impl Connections {
             }
             let devices = self.0.identity.devices();
             if devices.is_empty() {
-                return Err(Failure::NotPaired.into());
+                return Err(Lost::Unpaired(Failure::NotPaired.to_string()));
             }
             if !devices.iter().any(|d| d.with.device == device) {
-                let failure = Failure::Invalid(format!("{device} is not one of your devices"));
-                return Err(failure.into());
+                let gone = format!("{device} is not one of your devices");
+                return Err(Lost::Unpaired(gone));
             }
             // None is dialled before the foreground; one just paired, a moment after.
             let mut foreground = self.0.foreground.subscribe();
@@ -226,8 +251,8 @@ impl Connections {
 
     /// The connection kept to `device`, for a stream in `workspace`, which it holds: waited for as
     /// `kept` waits for it, across the background, the foreground and the device's reconnects.
-    /// Fails when the device holds the workspace no more, or is no longer one of the person's.
-    pub async fn kept_for(&self, device: &str, workspace: &str) -> Result<Connection> {
+    /// Lost when the device holds the workspace no more, or is no longer one of the person's.
+    pub async fn kept_for(&self, device: &str, workspace: &str) -> Result<Connection, Lost> {
         loop {
             let connection = self.kept(device).await?;
             let holds = workspace::holds(&connection, workspace);
@@ -235,8 +260,9 @@ impl Connections {
                 Ok(Ok(true)) => return Ok(connection),
                 Ok(Ok(false)) => {
                     let name = self.name(device);
-                    let gone = format!("{name} does not hold that workspace now");
-                    return Err(Failure::Unreachable(gone).into());
+                    return Err(Lost::NotHeld(format!(
+                        "{name} does not hold that workspace now"
+                    )));
                 }
                 // Not answered: asked again, on the next connection when this one went.
                 _ => Self::again(&connection).await,

@@ -4,7 +4,7 @@
 //! among them as one list, the one waiting longest first; and the agents at work counted together.
 //! A device's side is held to the same file in packages/host.
 
-use hive_phone::agents::{as_one, read_answer, Agent};
+use hive_phone::agents::{as_one, read_answer};
 use serde_json::Value;
 
 #[test]
@@ -23,8 +23,9 @@ fn each_devices_agents_are_shown_with_what_waits_on_the_person_among_them_the_on
                 .filter_map(|a| read_answer(&a["answer"], a["from"].as_str().unwrap()))
                 .collect(),
         );
-        let expected: Vec<Agent> = serde_json::from_value(c["agents"].clone()).unwrap();
-        assert_eq!(shown.agents, expected, "{}", c["about"]);
+        // As JSON, not read back as agents: a field the reading drops would be dropped from both.
+        let agents = serde_json::to_value(&shown.agents).unwrap();
+        assert_eq!(agents, c["agents"], "{}", c["about"]);
         let needs: Vec<String> = shown
             .needs
             .iter()

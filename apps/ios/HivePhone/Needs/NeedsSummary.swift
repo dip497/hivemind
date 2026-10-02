@@ -2,13 +2,25 @@ import Foundation
 
 /// The words of the Needs tab (design §6.2), from the overview's records.
 enum NeedsSummary {
-    /// When nothing waits: how many agents are at work.
-    static func nothing(working: UInt32) -> String {
+    /// When nothing waits: how many agents are at work. Nothing, while a device is still asked:
+    /// until each has said, that nothing waits is not known.
+    static func nothing(working: UInt32, asking: [Device]) -> String? {
+        guard asking.isEmpty else { return nil }
         switch working {
         case 0: return "Nothing needs you."
         case 1: return "Nothing needs you. 1 agent working."
         default: return "Nothing needs you. \(working) agents working."
         }
+    }
+
+    /// The devices not found away that have not said yet what waits there.
+    static func asking(_ devices: [Device]) -> [Device] {
+        devices.filter { $0.answeredAt == nil && $0.awaySince == nil }
+    }
+
+    /// "Asking desk…"
+    static func askingLine(_ device: Device) -> String {
+        "Asking \(device.name)…"
     }
 
     /// The devices the core found away. Not merely not connected: every device is that for a

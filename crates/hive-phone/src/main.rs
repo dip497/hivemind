@@ -58,14 +58,17 @@
 //!                               `{"terminal": <output>}`, `{"said": <piece>}`, `{"sent": <bool>}`
 //!   hive-phone views <workspace> [<view> <path>]
 //!                               the community views the device that holds the workspace offers
-//!                               a phone; with a view and a path, that file of the view, its bytes
-//!                               (with --json, `{type, data}`, data base64)
-//!   hive-phone view <workspace> <view>
+//!                               a phone, and the page to load to show each; with a view and a
+//!                               path, that file of the view as the device serves it, its bytes
+//!                               (with --json, `{type, data, csp}`: data base64, and the policy to
+//!                               serve it under)
+//!   hive-phone view <workspace> <view> [--size <w>x<h>]
 //!                               open a view on the workspace, as the phone shows one, its host on
-//!                               that device: each message its host says, a JSON line; each JSON
-//!                               line read here, posted to it; at the end of what is read, it is
-//!                               closed (with --json, `{"closed":true}` last), and when its host
-//!                               ends it, it says why
+//!                               that device, on a screen that size (in CSS pixels; none: 0 by 0)
+//!                               with no colours of its own: each message its host says, a JSON
+//!                               line; each JSON line read here, posted to it; at the end of what
+//!                               is read, it is closed (with --json, `{"closed":true}` last), and
+//!                               when its host ends it, it says why
 //!   hive-phone push --listen <ip:port>
 //!                               be told what happens on the devices this phone paired with (an
 //!                               agent begins waiting on you, finishes, fails): they post to this
@@ -98,7 +101,7 @@ use hive_phone::{
 };
 use serde_json::{json, Value};
 
-const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | agents [--follow] | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--allow|--deny|--approve|--changes <what> | send <workspace> <tile> --text <line> | start <workspace> [<agent> [--frame <id>] [--prompt <text>] [--model <m>] [--mode <m>]] | stop <workspace> <tile> | close <workspace> <tile> | diff <workspace> <tile> | talk <workspace> <tile> [--follow] | agent <workspace> <tile> | views <workspace> [<view> <path>] | view <workspace> <view> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
+const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | agents [--follow] | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--allow|--deny|--approve|--changes <what> | send <workspace> <tile> --text <line> | start <workspace> [<agent> [--frame <id>] [--prompt <text>] [--model <m>] [--mode <m>]] | stop <workspace> <tile> | close <workspace> <tile> | diff <workspace> <tile> | talk <workspace> <tile> [--follow] | agent <workspace> <tile> | views <workspace> [<view> <path>] | view <workspace> <view> [--size <w>x<h>] | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
 
 #[derive(Default)]
 struct Args {
@@ -126,6 +129,8 @@ struct Args {
     prompt: Option<String>,
     model: Option<String>,
     mode: Option<String>,
+    /// `view`'s: the size of the screen it is shown on, `<w>x<h>`.
+    size: Option<String>,
 }
 
 fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
@@ -149,6 +154,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
             "--prompt" => args.prompt = Some(argv.next().context("--prompt needs a value")?),
             "--model" => args.model = Some(argv.next().context("--model needs a value")?),
             "--mode" => args.mode = Some(argv.next().context("--mode needs a value")?),
+            "--size" => args.size = Some(argv.next().context("--size needs a value")?),
             flag if flag.starts_with("--") => bail!("{flag} is not an option\n{USAGE}"),
             _ if args.command.is_empty() => args.command = arg,
             _ => args.rest.push(arg),
@@ -166,6 +172,21 @@ fn identity_dir(args: &Args) -> Result<PathBuf> {
             .join("hivemind-phone")
             .join("identity")),
     }
+}
+
+/// A screen of `size`, `<w>x<h>` in CSS pixels, with no colours of its own.
+fn screen_of(size: &str) -> Result<views::Screen> {
+    let read = || {
+        let (w, h) = size.split_once('x')?;
+        Some((w.parse().ok()?, h.parse().ok()?))
+    };
+    let (w, h) =
+        read().with_context(|| format!("--size {size}: give it as <w>x<h>, as 390x844"))?;
+    Ok(views::Screen {
+        w,
+        h,
+        ..Default::default()
+    })
 }
 
 /// What an agent waits on the person for, in words.
@@ -400,12 +421,15 @@ async fn run(args: Args) -> Result<()> {
                     println!("{line}");
                 }
                 for d in &away {
-                    let Some(last) = heard.get(&d.device) else {
+                    let last = heard.get(&d.device);
+                    let Some((answer, at)) =
+                        last.and_then(|l| Some((l.answer.as_ref()?, l.answered?)))
+                    else {
                         println!("{} is away: what waits there is not known.", d.name);
                         continue;
                     };
-                    println!("{} is away. Last heard {}:", d.name, ago(last.at, now));
-                    for line in summary(&last.answer.needs, last.answer.working, now) {
+                    println!("{} is away. Last heard {}:", d.name, ago(at, now));
+                    for line in summary(&answer.needs, answer.working, now) {
                         println!("  {line}");
                     }
                 }
@@ -704,7 +728,7 @@ async fn run(args: Args) -> Result<()> {
                             println!("no view there says it works on a phone");
                         }
                         for v in offered.iter().filter(|_| !args.json) {
-                            println!("{}  {}  {}  {}", v.id, v.name, v.version, v.entry);
+                            println!("{}  {}  {}  {}", v.id, v.name, v.version, v.page);
                         }
                     }
                     [view, path] => {
@@ -713,7 +737,10 @@ async fn run(args: Args) -> Result<()> {
                             use base64::Engine;
                             let data =
                                 base64::engine::general_purpose::STANDARD.encode(&file.bytes);
-                            println!("{}", json!({ "type": file.mime, "data": data }));
+                            println!(
+                                "{}",
+                                json!({ "type": file.mime, "data": data, "csp": file.csp })
+                            );
                         } else {
                             std::io::Write::write_all(&mut std::io::stdout(), &file.bytes)?;
                         }
@@ -731,6 +758,10 @@ async fn run(args: Args) -> Result<()> {
                 bail!(
                     "view: which workspace and view? (`hive-phone views <workspace>` names them)"
                 );
+            };
+            let screen = match &args.size {
+                Some(size) => screen_of(size)?,
+                None => views::Screen::default(),
             };
             let (endpoint, devices) = reaching(&phone).await?;
             // Each line read here, as JSON, is posted to the view; the end of them closes it.
@@ -756,10 +787,12 @@ async fn run(args: Args) -> Result<()> {
             });
             let shown = async {
                 let connection = workspace::holder(&endpoint, &devices, ws).await?;
-                views::open(&connection, ws, view, posts, |message| {
-                    println!("{message}")
-                })
-                .await
+                let session = views::Session::open(&connection, ws, view, &screen).await?;
+                // Its screen stays as it is.
+                let (_sized, mut screen) = tokio::sync::watch::channel(screen);
+                let mut posts = posts;
+                let said = |message| println!("{message}");
+                session.relay(&mut posts, &mut screen, false, said).await
             };
             let ended = shown.await;
             endpoint.close().await;
@@ -935,26 +968,27 @@ async fn run(args: Args) -> Result<()> {
                 .as_str()
                 .unwrap_or_default()
                 .to_string();
-            let (mut told, mut away) = (vec![], vec![]);
+            let (mut told, mut away, mut refused) = (vec![], vec![], vec![]);
             for d in &devices {
-                let given = async {
+                let reaching = async {
                     let at = hive_net::net::addr_of(&d.device, &d.addrs, &d.relay)?;
-                    let connection = net.connect(at, hive_net::ws::ALPN).await?;
-                    push::subscribe(&connection, &subscription).await?;
-                    connection.close(0u32.into(), b"done");
-                    Ok::<_, anyhow::Error>(())
+                    Ok(net.connect(at, hive_net::ws::ALPN).await?)
                 };
-                match tokio::time::timeout(std::time::Duration::from_secs(10), given).await {
-                    Ok(Ok(())) => told.push(d.name.clone()),
-                    _ => away.push(d.name.clone()),
+                match push::tell(reaching, &subscription).await {
+                    push::Took::Yes => told.push(d.name.clone()),
+                    push::Took::Refused(why) => refused.push((d.name.clone(), why)),
+                    push::Took::Away => away.push(d.name.clone()),
                 }
             }
             net.close().await;
             if args.json {
-                println!(
-                    "{}",
-                    json!({ "endpoint": endpoint, "via": via, "told": told, "away": away })
-                );
+                let refused: Vec<Value> = refused
+                    .iter()
+                    .map(|(device, why)| json!({ "device": device, "why": why }))
+                    .collect();
+                let told = json!({ "endpoint": endpoint, "via": via, "told": told, "away": away,
+                    "refused": refused });
+                println!("{told}");
             } else {
                 if let Some(url) = &via {
                     println!("told through the push server {url}");
@@ -962,6 +996,9 @@ async fn run(args: Args) -> Result<()> {
                 println!("told at {endpoint}: {}", told.join(", "));
                 for name in &away {
                     println!("{name} is away: it is not told where to reach this phone");
+                }
+                for (name, why) in &refused {
+                    println!("{name} said no: {why}");
                 }
             }
             notices(listener, keys, Arc::new(phone), args.json).await?;

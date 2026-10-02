@@ -168,7 +168,9 @@ function computer() {
     },
     effects: {},
     notices: {
-      "view.post": (from: Connection, ...at: unknown[]) => { viewed.push({ what: "view.post", by: from.actor, at }); },
+      ...Object.fromEntries(["view.post", "view.screen"].map((what) => [
+        what, (from: Connection, ...at: unknown[]) => { viewed.push({ what, by: from.actor, at }); },
+      ])),
       "terminal.write": (from: Connection, tile: unknown) => { typed.push({ by: from.actor, tile }); },
       ...Object.fromEntries(["terminal.resize", "terminal.keyboard.ask", "terminal.keyboard.give", "terminal.keyboard.take"].map((what) => [
         what, (from: Connection, tile: unknown) => { keyed.push({ what, by: from.actor, tile }); },
@@ -209,6 +211,7 @@ function computer() {
       program: (tile) => (tile === "t1" ? { id: "claude", label: "Claude Code" } : undefined),
       decides: (tile) => tile === "t1",
       interrupts: (tile) => tile === "t2",
+      converses: () => false,
     }),
     // Each agent here runs on this computer.
     machines: { self: () => ({ device: self, name: "desk" }), mine: () => undefined, whose: () => undefined, saved: () => undefined },
@@ -411,14 +414,16 @@ test("a phone drives the workspace's agents as the owner's device: sees what may
   ]);
 });
 
-test("a phone shows the workspace's community views as the owner's device: lists them, reads their files, opens one there and talks to it; the view may do there what a phone may", async () => {
+test("a phone shows the workspace's community views as the owner's device: lists them, reads their files, opens one there on its screen and talks to it; the view may do there what a phone may", async () => {
   const c = computer();
   const phone = c.connect(c.phone);
+  const screen = { w: 390, h: 844, theme: { colors: {}, mode: "dark" } };
   phone.send("api", { t: "open", workspace: c.workspace });
   phone.send("api", { id: 1, method: "view.list", params: [] });
   phone.send("api", { id: 2, method: "view.file", params: ["priya-board", "index.html"] });
-  phone.send("api", { id: 3, method: "view.open", params: ["priya-board", `hive://${c.workspace}`] });
+  phone.send("api", { id: 3, method: "view.open", params: ["priya-board", `hive://${c.workspace}`, screen] });
   phone.send("api", { method: "view.post", params: ["s1", { type: "ready", v: 1 }] });
+  phone.send("api", { method: "view.screen", params: ["s1", { ...screen, w: 844, h: 390 }] });
   phone.send("api", { id: 4, method: "view.close", params: ["s1"] });
   await until(() => phone.heard.get("api")!.length >= 4);
   const answers = phone.heard.get("api")!.map((m) => JSON.parse(m) as { id: number; error?: unknown });
@@ -427,8 +432,9 @@ test("a phone shows the workspace's community views as the owner's device: lists
   assert.deepEqual(c.viewed, [
     { what: "view.list", by: asPhone, at: [] },
     { what: "view.file", by: asPhone, at: ["priya-board", "index.html"] },
-    { what: "view.open", by: asPhone, at: ["priya-board", c.repo], may: ["agent.start", "agent.close"] },
+    { what: "view.open", by: asPhone, at: ["priya-board", c.repo, screen], may: ["agent.start", "agent.close"] },
     { what: "view.post", by: asPhone, at: ["s1", { type: "ready", v: 1 }] },
+    { what: "view.screen", by: asPhone, at: ["s1", { ...screen, w: 844, h: 390 }] },
     { what: "view.close", by: asPhone, at: ["s1"] },
   ]);
 });
