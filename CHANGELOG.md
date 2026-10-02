@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: the phone apps have a Views tab: the community views your computers offer the phone, each shown full screen, served by your computer, in your phone's look; anything a view would start or close asks your phone's lock first.
 - New: a view can tell whether the screen it is on places the live terminals it asks for (`hm.supports("surfaces")`, view protocol 1.6): your computer's windows do, and a phone will, drawing its own terminal over the view (workspace API 0.15: `view.open … surfaces`; `hive-phone view --surfaces`).
 - Fixed: a phone, or a second device, can follow several things on a computer at once. An agent's terminal on your phone no longer stops when you open its chat, a message you send while watching it no longer takes the terminal's output, and a phone reaches more than one workspace on a computer. Each stream a device opens on its connection is now its own: the app and `hive-net` speak a new protocol between them (2) and must come from the same release, as `install.sh` installs them; a mismatched pair stops and says so. `hive-phone agent <workspace> <tile>` follows an agent's terminal and its conversation at once on one connection, and sends it each line you type.
 - Build `hive` with Bun 1.4.

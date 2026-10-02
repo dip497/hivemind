@@ -759,3 +759,14 @@ guest who may edit the board could start a command on the host (see the log).
   the core telling which page messages are surface rects (`view_surfaces`, conformance/view-surfaces.json, held to the
   SDK's parser). The terminal-follow fix (both apps follow the cursor's line or the last line written) is in, its Android
   tests shown failing on the old rule and on cursor-first; base64 0.23.
+- 2026-10-02 — P8 step 4, both apps: a Views tab and each community view full screen in the platform's web view.
+  Android (`apps/android/.../views/`: ViewSite, ViewRequests, ViewRelay, ViewWeb; `ui/views`; androidx.webkit 1.17.1)
+  serves a view's files on `https://<label>.views.hivemind.invalid` through `shouldInterceptRequest`, everything else
+  404; iOS (`apps/ios/HivePhone/Views/`, `Design/ViewLook.swift`) on `hm-view://<label>/` through `WKURLSchemeHandler`,
+  a stopped load never answered, and a default viewport for a page without one (iOS lays it out 980 pixels wide; the
+  computer's `__entry.html` carries one now). Each page load meets one session of its own (the computer refuses a second
+  `ready`): the core's after `Restarting`, a new one after the web view or its process goes. Android: 21 unit tests,
+  33 mutations, each red; iOS: 9 unit tests (6 shown red on a Linux Swift toolchain, the rest CI's). The real-computer
+  test installs the `phone-probe` view on the desktop and both apps open it: the agent shown, Select answered by the
+  computer, Start an agent held for the phone's lock, and nothing started or renamed on the board. A phone's view may
+  not rename (the phone may not edit the board): the test's Rename became Select.
