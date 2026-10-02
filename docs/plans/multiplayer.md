@@ -28,6 +28,9 @@ pnpm -F @hivemind/desktop test:unit             # desktop unit tests (tsx --test
 pnpm -F @hivemind/workspace-host test           # the workspace store (bun test)
 pnpm -F @hivemind/workspace-doc test            # the workspace document (bun test)
 pnpm -F @hivemind/host test                      # the host's domains (tsx --test, under Node)
+(cd crates/hive-net && cargo test && cargo check --no-default-features --all-targets)
+                                                # the network and its server roles; a device's side alone
+(cd crates/hive-phone && cargo test)            # the phone's core, held to conformance/
 git diff --check
 # e2e (needs Electron + xvfb; see apps/desktop/AGENTS.md and CLAUDE.md). Rebuild first:
 cd apps/desktop && pnpm exec electron-vite build
