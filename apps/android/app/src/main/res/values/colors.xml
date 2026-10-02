@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The desktop's default theme (Signal): graphite. -->
+    <color name="ic_launcher_background">#1A1C1F</color>
+    <!-- What the window shows before the first frame, as the app's own surface does. -->
+    <color name="window_light">#F7F7F8</color>
+    <color name="window_dark">#141518</color>
+</resources>

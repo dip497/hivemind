@@ -66,6 +66,14 @@ target/
 # The iOS app: XcodeGen makes the Xcode project from apps/ios/project.yml, and the core's static
 # library is built into build/ios-core by scripts/phone/build-ios.sh.
 apps/ios/*.xcodeproj
-build/
-DerivedData/
-*.a
+apps/ios/DerivedData/
+/build/ios-core/
+
+# The Android app (apps/android): Gradle's caches and outputs, the SDK path Android Studio writes,
+# and what scripts/phone/build-android.sh generates: the core's libraries (jniLibs) and its Kotlin
+# bindings.
+apps/android/**/build/
+apps/android/.gradle/
+apps/android/.kotlin/
+apps/android/local.properties
+apps/android/app/generated/

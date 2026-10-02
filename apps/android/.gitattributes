@@ -1,0 +1,4 @@
+# The Gradle wrapper's scripts: the shell one with LF, the Windows one with CRLF, whoever checks out.
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+*.jar binary

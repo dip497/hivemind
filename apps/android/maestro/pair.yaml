@@ -1,0 +1,18 @@
+# A phone paired with nothing opens on Pair, and a pasted link that is not one is refused with the
+# core's reason (docs/design/phone-app-2026-10-02.md §6.1). Run by .github/workflows/phone-android.yml.
+appId: com.hivemind.phone
+name: Pair, and a link that is not one
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Pair with hivemind"
+- tapOn:
+    id: "pair-link"
+- inputText: "not a link"
+- hideKeyboard
+- tapOn:
+    id: "pair-button"
+- extendedWaitUntil:
+    visible:
+      id: "pair-error"
+    timeout: 10000
