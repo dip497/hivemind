@@ -1086,7 +1086,10 @@ agents.
    owner's devices on the `device` stream; the phone asks each device it paired with, shows the
    lists as one, the one waiting longest first, and names a device that does not answer as away.
    Each device also says how many agents are at work there (M5 step 6), and the phone adds them
-   up for the empty state. Not yet: the machine column.
+   up for the empty state. The machine column (M5 step 10, `spec/needs.md` 0.3): each item says
+   the machine its agent runs on, the one its frame's folder is on, named as the device knows it
+   (itself, another of the person's devices, a participant's computer, a saved machine, an ssh
+   host); an item from an older device runs on the device that answered.
 4. **Push notification.** "*api · Fix nav overflow* needs permission: Edit Nav.tsx" with
    **Allow** / **Deny** actions on the notification itself; tap opens the item.
 

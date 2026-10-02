@@ -35,6 +35,10 @@ pub struct Need {
     /// A plan it waits on review of.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan: Option<String>,
+    /// What the machine it runs on is called (0.3): as the device that answered says, else that
+    /// device's name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<String>,
 }
 
 /// What a device answers: what waits on the person there, and how many agents are at work there.
@@ -44,11 +48,11 @@ pub struct Answer {
     pub working: u64,
 }
 
-/// What a device's `answer` says: what waits on the person, each item that says all it must, as
-/// the device ordered them, and how many agents are at work (none when it does not say, or says
-/// it as anything but a whole number of none or more). Anything that is not an answer says
-/// nothing.
-pub fn read_answer(answer: &Value) -> Answer {
+/// What the device called `from` answering `answer` says: what waits on the person, each item
+/// that says all it must, as the device ordered them, on the machine it says (else on `from`,
+/// a device of 0.2); and how many agents are at work (none when it does not say, or says it as
+/// anything but a whole number of none or more). Anything that is not an answer says nothing.
+pub fn read_answer(answer: &Value, from: &str) -> Answer {
     if answer.get("t").and_then(Value::as_str) != Some("needs") {
         return Answer::default();
     }
@@ -60,6 +64,10 @@ pub fn read_answer(answer: &Value) -> Answer {
             .iter()
             .filter_map(|item| serde_json::from_value::<Need>(item.clone()).ok())
             .filter(|need| KINDS.contains(&need.kind.as_str()))
+            .map(|need| Need {
+                machine: need.machine.or_else(|| Some(from.to_string())),
+                ..need
+            })
             .collect(),
         working: answer.get("working").and_then(Value::as_u64).unwrap_or(0),
     }
@@ -84,7 +92,7 @@ pub async fn ask(endpoint: &Endpoint, device: &PairedWith) -> Result<Answer> {
         let connection = endpoint.connect(at, hive_net::ws::ALPN).await?;
         let answer = devices::ask(&connection, &json!({ "t": "needs" })).await?;
         connection.close(0u32.into(), b"done");
-        Ok::<_, anyhow::Error>(read_answer(&answer))
+        Ok::<_, anyhow::Error>(read_answer(&answer, &device.name))
     };
     tokio::time::timeout(ANSWER_WITHIN, asked)
         .await

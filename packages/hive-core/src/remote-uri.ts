@@ -58,6 +58,41 @@ export function parseDeviceUri(uri: string): { device: string; path: string } | 
   return m && DEVICE_ID.test(m.machineId) ? { device: m.machineId, path: m.path } : null;
 }
 
+/** What a frame's machine is called when it is a saved machine no longer saved, or a device no
+ *  longer paired: in a window, and on the person's phone (spec/needs.md 0.3). */
+export const GONE_MACHINE = "a machine no longer saved";
+export const A_DEVICE = "a device not paired here";
+/** What a participant's computer is called (M4), by their name: "" when it is not known. */
+export const computerOf = (name: string): string => (name ? `${name}'s computer` : "someone's computer");
+
+/** The machines a device knows, by what each is called. */
+export interface KnownMachines {
+  /** This device: its id, and what it is called. */
+  self(): { device: string; name: string };
+  /** What one of the person's other devices is called; undefined for one that is none of theirs. */
+  mine(device: string): string | undefined;
+  /** Whose computer a participant's device is (M4): their name, "" when they gave none; undefined
+   *  for one that is no participant's. */
+  whose(device: string): string | undefined;
+  /** What a saved machine is called; undefined for one no longer saved. */
+  saved(id: string): string | undefined;
+}
+
+/** What the machine the folder `folder` is on is called, as `known` has it: this device's own name
+ *  for a folder here, else what it knows that machine by (spec/needs.md 0.3). */
+export function machineCalled(folder: string, known: KnownMachines): string {
+  if (!isRemote(folder)) return known.self().name;
+  const device = parseDeviceUri(folder)?.device;
+  if (device) {
+    if (device === known.self().device) return known.self().name;
+    const whose = known.whose(device);
+    return known.mine(device) ?? (whose === undefined ? A_DEVICE : computerOf(whose));
+  }
+  const saved = parseMachineUri(folder);
+  if (saved) return known.saved(saved.machineId) ?? GONE_MACHINE;
+  try { return parseRemote(folder).host; } catch { return GONE_MACHINE; }
+}
+
 /** `path` on the saved machine `machineId`. */
 export function machineUri(machineId: string, path = "/"): string {
   return `${MACHINE_SCHEME}${machineId}${path.startsWith("/") ? path : `/${path}`}`;

@@ -1,4 +1,4 @@
-# Needs you (0.2)
+# Needs you (0.3)
 
 What waits on the person (M5, design §9.2 "Home: Needs you"): each agent waiting on them, in the
 workspaces one of their devices holds, as their phone lists it. The device that runs the agents
@@ -16,7 +16,7 @@ holds is one item:
 ```json
 { "workspace": "<the workspace's id>", "name": "<the workspace's name>", "tile": "<the agent's tile>",
   "agent": "<what the agent is called>", "kind": "permission", "since": 1790000000000,
-  "plan": "<the plan, in markdown>" }
+  "plan": "<the plan, in markdown>", "machine": "<what the machine it runs on is called>" }
 ```
 
 - `since` is when it began waiting (ms since the epoch): with `tile`, it says which wait this is,
@@ -24,6 +24,13 @@ holds is one item:
 - `agent` is what the person named its tile; else what the agent says it is doing (its title);
   else what it was started to do (its task); else its tile's label.
 - `plan` is there for a `plan`, when the agent handed one off for review: its text.
+- `machine` (0.3) is the machine the agent runs on: the one its frame's folder is on (its
+  worktree's, when it has one), else its workspace's folder's when the frame names none or the
+  agent is in no frame. It is called as the device knows it: the device's own name for itself; one
+  of the person's other devices by its name; a participant's computer as `<their name>'s computer`
+  (`someone's computer` when their name is not known); a saved machine by its name; the host of an
+  `ssh://` folder; and one the device no longer knows as `a device not paired here` or `a machine
+  no longer saved`.
 
 A session is named `hm:<tile>` or by its tile; both are the tile. An agent in no workspace the
 device holds is not listed, nor is one doing anything else (working, done, failed, …).
@@ -31,8 +38,9 @@ device holds is not listed, nor is one doing anything else (working, done, faile
 Items are in order of how long they have waited, the longest first; of two waiting since the same
 moment, the one whose tile comes first (by its characters' codes). A phone that has the lists of
 several devices shows them as one, in the same order. An item is left out when it lacks a field
-above (`plan` may be missing), has one that is not text (`since`: not a number), or has a `kind`
-not listed here.
+above (`plan` and `machine` may be missing), has one that is not text (`since`: not a number), or
+has a `kind` not listed here. An item with no `machine` (from a device of 0.2) runs on the device
+that answered, and the phone shows it with that device's name.
 
 ## Answering
 

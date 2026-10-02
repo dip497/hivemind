@@ -109,7 +109,10 @@ fn summary(needs: &[Need], working: u64, now: u64) -> Vec<String> {
         .iter()
         .map(|n| {
             let waits = format!("{} · {}", what(n), waited(n.since, now));
-            format!("{} · {} — {waits}", n.agent, n.name)
+            match &n.machine {
+                Some(machine) => format!("{} · {} on {machine} — {waits}", n.agent, n.name),
+                None => format!("{} · {} — {waits}", n.agent, n.name),
+            }
         })
         .collect();
     let at_work = match working {

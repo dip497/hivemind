@@ -53,6 +53,8 @@ import { workspaceDomains } from "./domains.js";
 import { HANDED_OFF, handOff } from "./hand-off.js";
 import { answers } from "./answers.js";
 import { PeerLinks } from "./peer-links.js";
+import { participantNamed } from "./needs.js";
+import { machines as savedMachines } from "./remote/catalog.js";
 import { People } from "./people.js";
 import { Plans } from "./plans.js";
 import { presence } from "./presence.js";
@@ -330,9 +332,15 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     hosting,
     // A participant who lends their machine's keyboards, or keeps them again (M4).
     granted: (device) => terminals.machineChanged(`peer:${device}`),
-    // What waits on the person here, for their devices to ask (M5).
+    // What waits on the person here, for their devices to ask (M5), and on which machine.
     statuses: () => control.status.all(),
     plans: () => plans.reviews(),
+    machines: {
+      self: () => ({ device: keys.deviceId, name: deviceName() }),
+      mine: (device) => devices.list().find((d) => d.device === device)?.name,
+      whose: (device) => participantNamed(lists, device),
+      saved: (id) => savedMachines.list.find((m) => m.id === id)?.label,
+    },
     onWarn: o.onWarn,
   });
   /** The workspaces shared with someone that are hosted here, as their records are filed. */

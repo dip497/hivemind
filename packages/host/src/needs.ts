@@ -5,6 +5,8 @@
  */
 import path from "node:path";
 import type { InputKind } from "@hivemind/agents";
+import { machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
+import type { AccessLists } from "@hivemind/workspace-host/access";
 import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
 import type { PlanReview } from "@hivemind/workspace-api/plans";
@@ -32,17 +34,21 @@ export interface Need {
   since: number;
   /** A plan it waits on review of: the plan, in markdown. */
   plan?: string;
+  /** What the machine it runs on is called (0.3). */
+  machine: string;
 }
 
-/** A workspace this device holds: its id, its name, and its board as its document has it. */
+/** A workspace this device holds: its id, its name, its folder (here, or on the device it was
+ *  moved from, M3), and its board as its document has it. */
 export interface HeldBoard {
   workspace: string;
   name: string;
+  repo: string;
   core: CoreLayout | null;
 }
 
 /** The workspaces `store` holds, with their boards. */
-export function heldBoards(store: Pick<WorkspaceStore, "repos" | "ownership" | "getCore">): Array<HeldBoard & { repo: string }> {
+export function heldBoards(store: Pick<WorkspaceStore, "repos" | "ownership" | "getCore">): HeldBoard[] {
   return store.repos().flatMap((repo) => {
     const workspace = store.ownership(repo)?.workspaceId;
     return workspace ? [{ workspace, name: path.basename(repo), repo, core: store.getCore(repo) }] : [];
@@ -60,6 +66,24 @@ export function agentOf(held: HeldBoard[], tileId: string, title?: string): { wo
   return { workspace: board.workspace, name: board.name, tile, agent: board.core?.tileNames?.[tile] || title || record.task || record.label };
 }
 
+/** The folder the agent of `tile` runs in on `board`: its frame's worktree's, else its frame's,
+ *  else its workspace's. */
+function folderOf(board: HeldBoard, tile: string): string {
+  const id = board.core?.frameOf?.[tile];
+  const frame = id === undefined ? undefined : board.core?.frames.find((f) => f.id === id);
+  return frame?.worktreePath ?? frame?.workspacePath ?? board.repo;
+}
+
+/** Whose computer `device` is among the people let into a workspace here (M4): the name of the one
+ *  who showed a certificate for it ("" when they gave none); undefined for a device on no list. */
+export function participantNamed(lists: Pick<AccessLists, "workspaces" | "people">, device: string): string | undefined {
+  for (const workspace of lists.workspaces()) {
+    const person = lists.people(workspace).find((p) => p.devices.includes(device));
+    if (person) return person.name;
+  }
+  return undefined;
+}
+
 /** An agent's status, as much of it as says whether it waits on the person. */
 export interface WaitingStatus {
   tileId: string;
@@ -74,15 +98,17 @@ export function workingIn(held: HeldBoard[], statuses: WaitingStatus[]): number 
 /** The agents of `held` waiting on the person, the one waiting longest first (and of two waiting
  *  since the same moment, the one whose tile comes first). An agent is called what the person
  *  named its tile, else what it says it is doing, else what it was started to do, else its tile's
- *  label. */
-export function needsOf(held: HeldBoard[], statuses: WaitingStatus[], plans: PlanReview[]): Need[] {
+ *  label; and the machine it runs on, as this device knows it (`machines`). */
+export function needsOf(held: HeldBoard[], statuses: WaitingStatus[], plans: PlanReview[], machines: KnownMachines): Need[] {
   const needs: Need[] = [];
   for (const { tileId, status } of statuses) {
     if (!waitsOnThePerson(status) || !status.kind) continue;
     const at = agentOf(held, tileId, status.title);
     if (!at) continue;
     const plan = status.kind === "plan" ? plans.find((p) => toBareId(p.tileId) === at.tile)?.plan : undefined;
-    needs.push({ ...at, kind: status.kind, since: status.since, ...(plan === undefined ? {} : { plan }) });
+    const board = held.find((h) => h.workspace === at.workspace)!;
+    const machine = machineCalled(folderOf(board, at.tile), machines);
+    needs.push({ ...at, kind: status.kind, since: status.since, ...(plan === undefined ? {} : { plan }), machine });
   }
   return needs.sort((a, b) => a.since - b.since || (a.tile < b.tile ? -1 : a.tile > b.tile ? 1 : 0));
 }

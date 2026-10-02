@@ -6,12 +6,12 @@
 // is served what a phone does and nothing more (what it sends to start a terminal there starts
 // nothing); and unpaired from the phone, each forgets the other. Then the phone at work
 // (spec/needs.md, spec/push.md): told when an agent on the computer begins waiting on the person,
-// it lists, watches and answers it, and counts the agents at work; unpaired on the computer, it is
-// told nothing more. And the computer away: the phone shows what it last said; back, as it starts
-// or wakes, it tells the phone, which shows it once it found it away (spec/push.md 0.2); and
-// unpaired from the phone while away, only the phone forgets. And the computer on a network of its
-// own: its link says how to get onto that network from elsewhere, and the phone takes the network
-// and is let onto it (spec/pairing.md 0.5, 0.6).
+// it lists it, on that computer, watches and answers it, and counts the agents at work; unpaired
+// on the computer, it is told nothing more. And the computer away: the phone shows what it last
+// said; back, as it starts or wakes, it tells the phone, which shows it once it found it away
+// (spec/push.md 0.2); and unpaired from the phone while away, only the phone forgets. And the
+// computer on a network of its own: its link says how to get onto that network from elsewhere,
+// and the phone takes the network and is let onto it (spec/pairing.md 0.5, 0.6).
 import { test, expect, type ElectronApplication } from "@playwright/test";
 import { execFile, execSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -186,7 +186,7 @@ test("a phone scans the computer's code and is certified as the person's: each l
   await expect.poll(audit).toContainEqual(expect.objectContaining({ verb: "net:unpair", actor: { kind: "peer", person: me.personId, device: phoneId, access: "owner" }, outcome: "ok" }));
 });
 
-test("the phone is told when an agent on the computer begins waiting on the person, and asks what needs them: the agent, by what it says it is doing, in its workspace; watches its terminal, read-only; answers it, once; nothing waits once it works again, and it is at work; and unpaired, it is told nothing more", async () => {
+test("the phone is told when an agent on the computer begins waiting on the person, and asks what needs them: the agent, by what it says it is doing, in its workspace, on that computer; watches its terminal, read-only; answers it, once; nothing waits once it works again, and it is at work; and unpaired, it is told nothing more", async () => {
   test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
   test.setTimeout(120_000);
   const d = await desktopWith(probeAgent());
@@ -202,10 +202,11 @@ test("the phone is told when an agent on the computer begins waiting on the pers
   const terminal = d.desktop.locator(".react-flow__node-terminal");
   let waiting: Record<string, unknown> | undefined;
   await expect.poll(async () => (waiting = (await needs()).needs[0])?.kind, { timeout: 30_000 }).toBe("permission");
-  expect(waiting).toMatchObject({ name: "api", tile, agent: "Editing Nav.tsx", kind: "permission" });
+  expect(waiting).toMatchObject({ name: "api", tile, agent: "Editing Nav.tsx", kind: "permission", machine: os.hostname() });
   expect(Date.now() - (waiting!.since as number)).toBeLessThan(60_000);
   // Told as it began, encrypted to the phone and read by it alone.
-  await expect.poll(() => told.slice(1), { timeout: 10_000 }).toEqual([{ v: 1, t: "needs", ...waiting }]);
+  const { machine: _, ...notice } = waiting!;
+  await expect.poll(() => told.slice(1), { timeout: 10_000 }).toEqual([{ v: 1, t: "needs", ...notice }]);
 
   // Watched from the phone: its screen as it is, then what it prints as it comes.
   const watching = spawn(HIVE_PHONE, ["watch", waiting!.workspace as string, tile, "--identity", phone]);

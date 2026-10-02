@@ -45,6 +45,7 @@ import { MACHINE_OFFER, grantOf, type Grant } from "./machine-share.js";
 import { serveFiles } from "./device-files.js";
 import { heldBoards, needsOf, workingIn, type Need, type WaitingStatus } from "./needs.js";
 import type { PlanReview } from "@hivemind/workspace-api/plans";
+import type { KnownMachines } from "@hivemind/core/remote-uri";
 import { subscriptionOf, type Subscription } from "./web-push.js";
 import { linkDuplex } from "./device-sessions.js";
 
@@ -96,6 +97,8 @@ export interface PeerLinksOptions {
    *  told waits on the person here. None: nothing does. */
   statuses?(): WaitingStatus[];
   plans?(): PlanReview[];
+  /** The machines this device knows, by what each is called: where each agent waiting runs. */
+  machines: KnownMachines;
   /** One of the owner's phones gives where it is told what happens here (its push subscription,
    *  spec/push.md). None: nobody is told. */
   subscribe?(device: string, sub: Subscription): void;
@@ -272,7 +275,7 @@ export class PeerLinks {
     const asked = parseDevice(text);
     if (asked?.t === "needs") {
       const [held, statuses] = [heldBoards(store), this.o.statuses?.() ?? []];
-      const needs = needsOf(held, statuses, this.o.plans?.() ?? []);
+      const needs = needsOf(held, statuses, this.o.plans?.() ?? [], this.o.machines);
       return link.send("device", JSON.stringify({ t: "needs", needs, working: workingIn(held, statuses) } satisfies DeviceMessage));
     }
     // Only a phone is told what happens here: a computer of the person's shows it.

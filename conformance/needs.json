@@ -1,5 +1,21 @@
 {
- "about": "Cases every implementation of needs-you must pass (spec/needs.md): what a device answers waits on the person ('computer': its boards, its agents' statuses and the plans they hand off, in; the list, and how many agents are at work, out), and what a phone shows of the answers it is given ('phone'). Written by hand from the spec.",
+ "about": "Cases every implementation of needs-you must pass (spec/needs.md): what a device answers waits on the person ('computer': its boards, its agents' statuses and the plans they hand off, in, with the machines it knows ('known': itself, the person's other devices, participants' computers by whose they are, and saved machines); the list, each item with the machine its agent runs on, and how many agents are at work, out), and what a phone shows of the answers it is given ('phone': each from the device named in 'from'). Written by hand from the spec.",
+ "known": {
+  "self": {
+   "device": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+   "name": "desk"
+  },
+  "mine": {
+   "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0": "build-box"
+  },
+  "whose": {
+   "c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7": "Priya",
+   "c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8": ""
+  },
+  "saved": {
+   "m_0a1b2c3d4e5f": "gpu"
+  }
+ },
  "computer": [
   {
    "about": "an agent waiting on a permission, called what the person named its tile",
@@ -7,6 +23,7 @@
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
      "name": "api",
+     "repo": "/home/p/api",
      "core": {
       "frames": [],
       "tiles": [
@@ -46,7 +63,8 @@
      "tile": "t1",
      "agent": "Nav fix",
      "kind": "permission",
-     "since": 1790000000000
+     "since": 1790000000000,
+     "machine": "desk"
     }
    ],
    "working": 0
@@ -57,6 +75,7 @@
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
      "name": "api",
+     "repo": "/home/p/api",
      "core": {
       "frames": [],
       "tiles": [
@@ -129,7 +148,8 @@
      "tile": "t2",
      "agent": "Writing tests",
      "kind": "question",
-     "since": 1790000000000
+     "since": 1790000000000,
+     "machine": "desk"
     },
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -137,7 +157,8 @@
      "tile": "t3",
      "agent": "Refactor auth",
      "kind": "question",
-     "since": 1790000000001
+     "since": 1790000000001,
+     "machine": "desk"
     },
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -145,7 +166,8 @@
      "tile": "t4",
      "agent": "Codex",
      "kind": "other",
-     "since": 1790000000002
+     "since": 1790000000002,
+     "machine": "desk"
     }
    ],
    "working": 0
@@ -156,6 +178,7 @@
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
      "name": "api",
+     "repo": "/home/p/api",
      "core": {
       "frames": [],
       "tiles": [
@@ -220,7 +243,8 @@
      "agent": "Claude",
      "kind": "plan",
      "since": 1790000000000,
-     "plan": "1. Read the routes\n2. Split them"
+     "plan": "1. Read the routes\n2. Split them",
+     "machine": "desk"
     }
    ],
    "working": 1
@@ -231,6 +255,7 @@
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
      "name": "api",
+     "repo": "/home/p/api",
      "core": {
       "frames": [],
       "tiles": [
@@ -267,6 +292,7 @@
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
      "name": "api",
+     "repo": "/home/p/api",
      "core": {
       "frames": [],
       "tiles": [
@@ -382,6 +408,7 @@
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
      "name": "api",
+     "repo": "/home/p/api",
      "core": {
       "frames": [],
       "tiles": [
@@ -396,6 +423,7 @@
     {
      "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
      "name": "web",
+     "repo": "/home/p/web",
      "core": null
     }
    ],
@@ -423,6 +451,7 @@
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
      "name": "api",
+     "repo": "/home/p/api",
      "core": {
       "frames": [],
       "tiles": [
@@ -442,6 +471,7 @@
     {
      "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
      "name": "web",
+     "repo": "/home/p/web",
      "core": {
       "frames": [],
       "tiles": [
@@ -500,7 +530,8 @@
      "tile": "t10",
      "agent": "Claude",
      "kind": "other",
-     "since": 1790000001000
+     "since": 1790000001000,
+     "machine": "desk"
     },
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -508,7 +539,8 @@
      "tile": "t8",
      "agent": "Claude",
      "kind": "question",
-     "since": 1790000001000
+     "since": 1790000001000,
+     "machine": "desk"
     },
     {
      "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
@@ -516,7 +548,8 @@
      "tile": "t9",
      "agent": "Claude",
      "kind": "permission",
-     "since": 1790000003000
+     "since": 1790000003000,
+     "machine": "desk"
     }
    ],
    "working": 0
@@ -527,6 +560,7 @@
     {
      "workspace": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
      "name": "site",
+     "repo": "/home/p/site",
      "core": {
       "frames": [],
       "tiles": [
@@ -604,10 +638,450 @@
      "tile": "w3",
      "agent": "Claude",
      "kind": "question",
-     "since": 1790000002000
+     "since": 1790000002000,
+     "machine": "desk"
     }
    ],
    "working": 2
+  },
+  {
+   "about": "an agent runs on the machine its frame's folder is on (a worktree's before its frame's), or its workspace's when its frame has none or it is in no frame; called as the device knows that machine: itself, another of the person's devices, a participant's computer by whose it is, a saved machine, the host of an ssh folder; one it no longer knows, as that",
+   "held": [
+    {
+     "workspace": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+     "name": "infra",
+     "repo": "/home/p/infra",
+     "core": {
+      "frames": [
+       {
+        "id": "f-here",
+        "title": "here",
+        "workspacePath": "/home/p/infra"
+       },
+       {
+        "id": "f-self",
+        "title": "self",
+        "workspacePath": "machine://d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1/home/p/infra"
+       },
+       {
+        "id": "f-box",
+        "title": "box",
+        "workspacePath": "machine://b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0/srv/infra"
+       },
+       {
+        "id": "f-wt",
+        "title": "fix",
+        "branch": "fix",
+        "worktreePath": "machine://b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0/srv/infra-fix",
+        "workspacePath": "/home/p/infra"
+       },
+       {
+        "id": "f-priya",
+        "title": "priya",
+        "workspacePath": "machine://c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7/home/priya/infra"
+       },
+       {
+        "id": "f-someone",
+        "title": "someone",
+        "workspacePath": "machine://c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8/work"
+       },
+       {
+        "id": "f-gpu",
+        "title": "gpu",
+        "workspacePath": "machine://m_0a1b2c3d4e5f/work"
+       },
+       {
+        "id": "f-ssh",
+        "title": "ci",
+        "workspacePath": "ssh://dev@ci.example.com:2222/work"
+       },
+       {
+        "id": "f-gone",
+        "title": "gone",
+        "workspacePath": "machine://m_ffffffffffff/work"
+       },
+       {
+        "id": "f-stranger",
+        "title": "stranger",
+        "workspacePath": "machine://e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9/work"
+       },
+       {
+        "id": "f-bare",
+        "title": "bare"
+       }
+      ],
+      "tiles": [
+       {
+        "id": "m01",
+        "kind": "claude",
+        "label": "Agent 1"
+       },
+       {
+        "id": "m02",
+        "kind": "claude",
+        "label": "Agent 2"
+       },
+       {
+        "id": "m03",
+        "kind": "claude",
+        "label": "Agent 3"
+       },
+       {
+        "id": "m04",
+        "kind": "claude",
+        "label": "Agent 4"
+       },
+       {
+        "id": "m05",
+        "kind": "claude",
+        "label": "Agent 5"
+       },
+       {
+        "id": "m06",
+        "kind": "claude",
+        "label": "Agent 6"
+       },
+       {
+        "id": "m07",
+        "kind": "claude",
+        "label": "Agent 7"
+       },
+       {
+        "id": "m08",
+        "kind": "claude",
+        "label": "Agent 8"
+       },
+       {
+        "id": "m09",
+        "kind": "claude",
+        "label": "Agent 9"
+       },
+       {
+        "id": "m10",
+        "kind": "claude",
+        "label": "Agent 10"
+       },
+       {
+        "id": "m11",
+        "kind": "claude",
+        "label": "Agent 11"
+       },
+       {
+        "id": "m12",
+        "kind": "claude",
+        "label": "Agent 12"
+       }
+      ],
+      "frameOf": {
+       "m01": "f-here",
+       "m02": "f-self",
+       "m03": "f-box",
+       "m04": "f-wt",
+       "m05": "f-priya",
+       "m06": "f-someone",
+       "m07": "f-gpu",
+       "m08": "f-ssh",
+       "m09": "f-gone",
+       "m10": "f-stranger",
+       "m11": "f-bare"
+      }
+     }
+    },
+    {
+     "workspace": "f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6",
+     "name": "moved",
+     "repo": "machine://b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0/home/p/moved",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "n01",
+        "kind": "claude",
+        "label": "Agent n"
+       }
+      ]
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "hm:m01",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000001000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "hm:m02",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000002000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "hm:m03",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000003000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "hm:m04",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000004000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "hm:m05",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000005000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "hm:m06",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000006000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "hm:m07",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000007000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "hm:m08",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000008000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "hm:m09",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000009000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "hm:m10",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000010000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "hm:m11",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000011000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "hm:m12",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000012000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "hm:n01",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000020000,
+      "kind": "question"
+     }
+    }
+   ],
+   "plans": [],
+   "needs": [
+    {
+     "workspace": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+     "name": "infra",
+     "tile": "m01",
+     "agent": "Agent 1",
+     "kind": "permission",
+     "since": 1790000001000,
+     "machine": "desk"
+    },
+    {
+     "workspace": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+     "name": "infra",
+     "tile": "m02",
+     "agent": "Agent 2",
+     "kind": "permission",
+     "since": 1790000002000,
+     "machine": "desk"
+    },
+    {
+     "workspace": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+     "name": "infra",
+     "tile": "m03",
+     "agent": "Agent 3",
+     "kind": "permission",
+     "since": 1790000003000,
+     "machine": "build-box"
+    },
+    {
+     "workspace": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+     "name": "infra",
+     "tile": "m04",
+     "agent": "Agent 4",
+     "kind": "permission",
+     "since": 1790000004000,
+     "machine": "build-box"
+    },
+    {
+     "workspace": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+     "name": "infra",
+     "tile": "m05",
+     "agent": "Agent 5",
+     "kind": "permission",
+     "since": 1790000005000,
+     "machine": "Priya's computer"
+    },
+    {
+     "workspace": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+     "name": "infra",
+     "tile": "m06",
+     "agent": "Agent 6",
+     "kind": "permission",
+     "since": 1790000006000,
+     "machine": "someone's computer"
+    },
+    {
+     "workspace": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+     "name": "infra",
+     "tile": "m07",
+     "agent": "Agent 7",
+     "kind": "permission",
+     "since": 1790000007000,
+     "machine": "gpu"
+    },
+    {
+     "workspace": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+     "name": "infra",
+     "tile": "m08",
+     "agent": "Agent 8",
+     "kind": "permission",
+     "since": 1790000008000,
+     "machine": "ci.example.com"
+    },
+    {
+     "workspace": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+     "name": "infra",
+     "tile": "m09",
+     "agent": "Agent 9",
+     "kind": "permission",
+     "since": 1790000009000,
+     "machine": "a machine no longer saved"
+    },
+    {
+     "workspace": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+     "name": "infra",
+     "tile": "m10",
+     "agent": "Agent 10",
+     "kind": "permission",
+     "since": 1790000010000,
+     "machine": "a device not paired here"
+    },
+    {
+     "workspace": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+     "name": "infra",
+     "tile": "m11",
+     "agent": "Agent 11",
+     "kind": "permission",
+     "since": 1790000011000,
+     "machine": "desk"
+    },
+    {
+     "workspace": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+     "name": "infra",
+     "tile": "m12",
+     "agent": "Agent 12",
+     "kind": "permission",
+     "since": 1790000012000,
+     "machine": "desk"
+    },
+    {
+     "workspace": "f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6",
+     "name": "moved",
+     "tile": "n01",
+     "agent": "Agent n",
+     "kind": "question",
+     "since": 1790000020000,
+     "machine": "build-box"
+    }
+   ],
+   "working": 0
   }
  ],
  "phone": [
@@ -660,6 +1134,10 @@
      "working": 1
     }
    ],
+   "from": [
+    "desk",
+    "build-box"
+   ],
    "needs": [
     {
      "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
@@ -667,7 +1145,8 @@
      "tile": "t2",
      "agent": "Writing tests",
      "kind": "question",
-     "since": 1790000001000
+     "since": 1790000001000,
+     "machine": "build-box"
     },
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -675,7 +1154,8 @@
      "tile": "t0",
      "agent": "Docs",
      "kind": "question",
-     "since": 1790000002000
+     "since": 1790000002000,
+     "machine": "desk"
     },
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -683,7 +1163,8 @@
      "tile": "t1",
      "agent": "Nav fix",
      "kind": "permission",
-     "since": 1790000002000
+     "since": 1790000002000,
+     "machine": "desk"
     },
     {
      "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
@@ -692,13 +1173,91 @@
      "agent": "Codex",
      "kind": "plan",
      "since": 1790000003000,
-     "plan": "1. Split it"
+     "plan": "1. Split it",
+     "machine": "build-box"
     }
    ],
    "working": 3
   },
   {
-   "about": "an item missing what it must say, or with a kind not on the person, is left out",
+   "about": "an item is shown with the machine its agent runs on, as the device that answered says it; one that does not say (a device of 0.2) runs on that device, and is shown with its name",
+   "answers": [
+    {
+     "t": "needs",
+     "needs": [
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t1",
+       "agent": "Nav fix",
+       "kind": "permission",
+       "since": 1790000001000,
+       "machine": "build-box"
+      },
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t2",
+       "agent": "Docs",
+       "kind": "question",
+       "since": 1790000003000,
+       "machine": "desk"
+      }
+     ],
+     "working": 0
+    },
+    {
+     "t": "needs",
+     "needs": [
+      {
+       "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+       "name": "web",
+       "tile": "t3",
+       "agent": "Tests",
+       "kind": "question",
+       "since": 1790000002000
+      }
+     ],
+     "working": 1
+    }
+   ],
+   "from": [
+    "desk",
+    "old-box"
+   ],
+   "needs": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t1",
+     "agent": "Nav fix",
+     "kind": "permission",
+     "since": 1790000001000,
+     "machine": "build-box"
+    },
+    {
+     "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+     "name": "web",
+     "tile": "t3",
+     "agent": "Tests",
+     "kind": "question",
+     "since": 1790000002000,
+     "machine": "old-box"
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t2",
+     "agent": "Docs",
+     "kind": "question",
+     "since": 1790000003000,
+     "machine": "desk"
+    }
+   ],
+   "working": 1
+  },
+  {
+   "about": "an item missing what it must say, or with a kind not on the person, or a machine that is not a name, is left out",
    "answers": [
     {
      "t": "needs",
@@ -759,10 +1318,22 @@
        "since": 1790000002000,
        "plan": 9
       },
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t7",
+       "agent": "Nav fix",
+       "kind": "permission",
+       "since": 1790000002000,
+       "machine": 7
+      },
       "not an item"
      ],
      "working": 4
     }
+   ],
+   "from": [
+    "desk"
    ],
    "needs": [
     {
@@ -771,7 +1342,8 @@
      "tile": "t1",
      "agent": "Nav fix",
      "kind": "permission",
-     "since": 1790000002000
+     "since": 1790000002000,
+     "machine": "desk"
     }
    ],
    "working": 4
@@ -816,6 +1388,13 @@
      }
     ]
    ],
+   "from": [
+    "desk",
+    "build-box",
+    "web-box",
+    "spare",
+    "old-box"
+   ],
    "needs": [],
    "working": 0
   },
@@ -851,6 +1430,14 @@
      "needs": [],
      "working": 3
     }
+   ],
+   "from": [
+    "desk",
+    "build-box",
+    "web-box",
+    "spare",
+    "old-box",
+    "laptop"
    ],
    "needs": [],
    "working": 5

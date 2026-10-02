@@ -20,7 +20,7 @@ after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 let made = 0;
 const T = 1_790_000_000_000;
 const W = "ab".repeat(16);
-const held: HeldBoard[] = [{ workspace: W, name: "api", core: { frames: [], tiles: [{ id: "t1", kind: "claude", label: "Claude" }] } }];
+const held: HeldBoard[] = [{ workspace: W, name: "api", repo: "/home/p/api", core: { frames: [], tiles: [{ id: "t1", kind: "claude", label: "Claude" }] } }];
 type Status = WaitingStatus["status"];
 const st = (state: string, kind?: Status["kind"], since = T, title?: string): Status => ({ state, ...(kind ? { kind } : {}), since, ...(title ? { title } : {}) });
 const change = (status: Status, tileId = "hm:t1"): WaitingStatus => ({ tileId, status });
@@ -93,7 +93,7 @@ test("an agent on no board here yet is told of once its window saves its tile, b
   const subscriptions = new PushSubscriptions(path.join(tmp, `push-${made++}.json`));
   subscriptions.set("a".repeat(64), a.sub);
   const tiles = [{ id: "t1", kind: "claude", label: "Claude" }];
-  const boards = (): HeldBoard[] => [{ workspace: W, name: "api", core: { frames: [], tiles: [...tiles] } }];
+  const boards = (): HeldBoard[] => [{ workspace: W, name: "api", repo: "/home/p/api", core: { frames: [], tiles: [...tiles] } }];
   const heard = new Set<(change: WorkspaceChange) => void>();
   const posted: unknown[] = [];
   const notices = new PushNotices({

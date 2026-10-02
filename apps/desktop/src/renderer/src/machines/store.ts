@@ -1,7 +1,7 @@
 /** Live machines + per-host connection state, pushed from main; one subscription for the whole renderer. */
 import { useSyncExternalStore } from "react";
 import type { MachineInfo, MachineStatus, MachinesSnapshot, PairedDeviceSummary } from "../../../shared/ipc";
-import { isRemote, parseDeviceUri, parseMachineUri, parseRemote } from "@hivemind/core/remote-uri";
+import { A_DEVICE, computerOf, GONE_MACHINE, isRemote, parseDeviceUri, parseMachineUri, parseRemote } from "@hivemind/core/remote-uri";
 
 let snap: MachinesSnapshot = { machines: [], status: {} };
 const listeners = new Set<() => void>();
@@ -66,16 +66,15 @@ export function statusOf(s: MachinesSnapshot, hostId: string | null): MachineSta
   return (hostId && s.status[hostId]) || IDLE;
 }
 
-/** What a machine no longer saved is called where a frame ran on it. */
-export const GONE_MACHINE = "a machine no longer saved";
-/** What a device no longer paired with this one is called where a frame runs on it. */
-export const A_DEVICE = "a device not paired here";
+/** What a machine no longer saved, and a device no longer paired with this one, are called where a
+ *  frame runs on it. */
+export { A_DEVICE, GONE_MACHINE };
 
 /** The person whose computer a frame runs on when it is a participant's (M4), as a window knows
  *  them, and whether they are connected now. */
 export interface MachineOwner { name: string; here: boolean }
 /** What a participant's computer is called where a frame runs on it. */
-export const whoseComputer = (o: MachineOwner): string => (o.name ? `${o.name}'s computer` : "someone's computer");
+export const whoseComputer = (o: MachineOwner): string => computerOf(o.name);
 /** Whose computer the frame folder `uri` is on, when it is neither saved nor one of this person's
  *  devices, as `owners` knows them; null for any other. */
 export function ownerOf(place: Place, uri: string | null | undefined, owners?: (device: string) => MachineOwner | null): MachineOwner | null {
