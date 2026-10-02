@@ -2,12 +2,13 @@
 // two devices in one process. Someone asks to pair and the host's answer reaches them; a device
 // the host admits connects, and text passes both ways, each frame on the stream it was sent on; one
 // no longer admitted is cut off, and the host hears it go; a link closed saying why is read so on
-// the other side, and a device that stops is heard going at once.
+// the other side, and a device that stops is heard going at once. And a daemon of another release,
+// speaking another protocol, is refused, saying so.
 import { test, expect, afterEach } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HiveNet, type Link } from "../src/hive-net.ts";
+import { HiveNet, PROTOCOL, type Link } from "../src/hive-net.ts";
 
 const BIN = path.join(import.meta.dir, "../../../crates/hive-net/target/debug/hive-net");
 const built = fs.existsSync(BIN);
@@ -121,3 +122,26 @@ test.skipIf(!built)("a device announces what it wants found, and the devices nea
     fs.rmSync(root, { recursive: true, force: true });
   }
 }, 60_000);
+
+test("a daemon of an earlier release, whose ready says no protocol, is refused, saying which each speaks", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hn-old-"));
+  try {
+    // It connects where it is told to, and says it is ready as one of protocol 1 did.
+    fs.writeFileSync(path.join(root, "old-daemon.mjs"), [
+      "import net from 'node:net';",
+      "const s = net.connect(process.argv[process.argv.indexOf('--socket') + 1], () => {",
+      "  const body = Buffer.from(JSON.stringify({ t: 'ready', id: 'a'.repeat(64), addrs: [], relay: null, lookup: null }));",
+      "  const head = Buffer.alloc(4); head.writeUInt32BE(body.length);",
+      "  s.write(Buffer.concat([head, body]));",
+      "});",
+      "s.on('close', () => process.exit(0));",
+    ].join("\n"));
+    const bin = path.join(root, "hive-net");
+    fs.writeFileSync(bin, `#!/bin/sh\nexec "${process.execPath}" "${path.join(root, "old-daemon.mjs")}" "$@"\n`, { mode: 0o755 });
+    fs.mkdirSync(path.join(root, "identity"));
+    const started = HiveNet.start({ bin, identity: path.join(root, "identity"), socket: path.join(root, "net.sock"), onIncoming: () => {}, onPairRequest: async () => ({}) });
+    await expect(started).rejects.toThrow(`hive-net speaks the daemon's protocol 1, and this app ${PROTOCOL}`);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}, 30_000);

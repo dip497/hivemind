@@ -1,12 +1,15 @@
 //! `hive-net daemon`: this device on the network, for the app (R11, M1). Main listens on a local
 //! socket (0600; a named pipe on Windows), starts the daemon with its path, and the daemon
 //! connects there; when main goes, so does it. Both ways, each message is JSON in a frame
-//! (`frames.rs`), tagged by `t`:
+//! (`frames.rs`), tagged by `t`, in the daemon's protocol `PROTOCOL`: the daemon says which it
+//! speaks in `ready`, and main in `hello`, before anything else. The app and hive-net ship
+//! together; a daemon told another protocol, or anything before `hello`, stops, saying so.
 //!
-//! - main → daemon: `admit {devices}` (the devices the access lists let in, which the gate
-//!   enforces), `dial {req, peer, addrs, relay}` (a workspace's host, on `hive/ws/1`),
-//!   `send {conn, stream, data}`, `close {conn, reason?}`, `pair {req, peer, addrs, relay, hello}`
-//!   (first contact with a host), `pair-reply {req, reply}` (the answer to someone's
+//! - main → daemon: `hello {v}`, then `admit {devices}` (the devices the access lists let in, which
+//!   the gate enforces), `dial {req, peer, addrs, relay}` (a workspace's host, on `hive/ws/1`),
+//!   `open {conn, stream, name}` (a stream named `name` on a connection main dialled, by the id main
+//!   gives it), `send {conn, stream, data}`, `close {conn, reason?}`, `pair {req, peer, addrs,
+//!   relay, hello}` (first contact with a host), `pair-reply {req, reply}` (the answer to someone's
 //!   `pair-request`), `advertise {data}` (what this device announces to the devices nearby, by
 //!   mDNS; null for nothing), `nearby {req}` (the devices nearby, and what each announces),
 //!   `host-record {req, workspace, seq}` (this device hosts the person's workspace `workspace`:
@@ -16,15 +19,22 @@
 //!   naming `host`, signed here, to hand to another device in a move) and `verify-host {req, key,
 //!   packet}` (what a record handed over says, checked against the workspace's key). A host on
 //!   another network is dialled through the relay its link names.
-//! - daemon → main: `ready {id, addrs, relay, lookup}`, `incoming {conn, peer}`, `dialed {req, conn}`,
-//!   `failed {req, error}`, `recv {conn, stream, data}`, `closed {conn, reason}`,
-//!   `pair-request {req, peer, hello}`, `paired {req, reply}`, `nearby {req, devices}`,
-//!   `published {req}`, `signed {req, packet}` and `host {req, host, seq, packet}` (null for all
-//!   when no record is kept; `packet`, the record as one device hands it to another, only from a
-//!   lookup server).
+//! - daemon → main: `ready {v, id, addrs, relay, lookup}`, `incoming {conn, peer}`, `dialed {req,
+//!   conn}`, `failed {req, error}`, `opened {conn, stream, name}` (the other device opened a stream
+//!   named `name`, by the id the daemon gives it), `recv {conn, stream, data}`, `ended {conn,
+//!   stream}` (the other device finished the stream or stopped reading it, or it could not be
+//!   opened: nothing more goes either way on it), `closed {conn, reason}`, `pair-request {req,
+//!   peer, hello}`, `paired {req, reply}`, `nearby {req, devices}`, `published {req}`, `signed
+//!   {req, packet}` and `host {req, host, seq, packet}` (null for all when no record is kept;
+//!   `packet`, the record as one device hands it to another, only from a lookup server).
 //!
-//! A stream is named by its first frame and opened by the device that dialled; `data` is the
-//! frame's bytes as text, which is all main sends. What the frames mean is main's.
+//! A stream is named by its first frame and opened by the device that dialled, as many of one name
+//! as it likes: a phone opens an `api` stream for each terminal it watches, conversation it follows
+//! and call it makes, all on its one connection. Each is its own from its opening to its end, by
+//! its id: its frames go to it alone, both ways. The device that opens a connection's streams
+//! names them, so their ids never meet: main for a connection it dialled, the daemon for one it
+//! accepted. `data` is the frame's bytes as text, which is all main sends. What the frames mean is
+//! main's.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -37,7 +47,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use iroh::{
     endpoint::{Connection, RecvStream, SendStream},
     endpoint_info::UserData,
@@ -64,12 +74,20 @@ use crate::{
     ws,
 };
 
+/// The protocol main and the daemon speak. 2: a stream is known by its id, and a connection carries
+/// any number of streams of one name (1, before it, knew a stream by its name: one of each).
+pub const PROTOCOL: u32 = 2;
+
 /// How long a host's person has to answer someone asking to join.
 const PAIR_ANSWER_WITHIN: Duration = Duration::from_secs(180);
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "t", rename_all = "kebab-case")]
 enum FromMain {
+    /// The protocol main speaks: its first message.
+    Hello {
+        v: u32,
+    },
     Admit {
         devices: Vec<String>,
     },
@@ -81,9 +99,15 @@ enum FromMain {
         #[serde(default)]
         relay: Option<String>,
     },
+    /// A stream main opens, on a connection it dialled, by the id it gives it.
+    Open {
+        conn: u64,
+        stream: u64,
+        name: String,
+    },
     Send {
         conn: u64,
-        stream: String,
+        stream: u64,
         data: String,
     },
     Close {
@@ -140,6 +164,8 @@ enum FromMain {
 #[serde(tag = "t", rename_all = "kebab-case")]
 enum ToMain {
     Ready {
+        /// The protocol this daemon speaks.
+        v: u32,
         id: String,
         addrs: Vec<String>,
         relay: Option<String>,
@@ -159,10 +185,21 @@ enum ToMain {
         req: u64,
         error: String,
     },
+    /// The other device opened a stream, by the id the daemon gives it.
+    Opened {
+        conn: u64,
+        stream: u64,
+        name: String,
+    },
     Recv {
         conn: u64,
-        stream: String,
+        stream: u64,
         data: String,
+    },
+    /// Nothing more goes either way on a stream.
+    Ended {
+        conn: u64,
+        stream: u64,
     },
     Closed {
         conn: u64,
@@ -204,18 +241,26 @@ struct NearbyDevice {
     data: Option<String>,
 }
 
-/// One peer connection: what it is, and the queue its frames are written from, in order.
+/// One peer connection: the queue its frames are written from, in order, and who opens its
+/// streams.
 struct Link {
     out: mpsc::UnboundedSender<Out>,
+    /// Whether this device dialled it: then main opens its streams, and the other device never.
+    dialled: bool,
 }
 
 /// What goes out on a connection, in the order main said it.
 enum Out {
-    /// A frame on a named stream.
-    Frame(String, Vec<u8>),
+    /// A stream main opens, by the id it gives it, and its name.
+    Open(u64, String),
+    /// A frame on a stream, by its id.
+    Frame(u64, Vec<u8>),
     /// Close it, saying why, once everything before has reached the other side.
     Close(String),
 }
+
+/// A connection's open streams, by id: the half each one's frames go out on.
+type Streams = Arc<Mutex<HashMap<u64, SendStream>>>;
 
 /// How long a close waits for what went before it to be taken by the other side.
 const CLOSE_WAIT: Duration = Duration::from_secs(2);
@@ -242,29 +287,30 @@ impl Daemon {
         let _ = self.to_main.send(message);
     }
 
-    /// Keep `connection` as a link, and write its frames from a task of its own, in order. The
-    /// device that dialled opens each stream the first time main sends on it; the other side
-    /// writes only on streams the peer has opened.
-    fn register(
-        &self,
-        connection: Connection,
-        dialled: bool,
-    ) -> (u64, Arc<Mutex<HashMap<String, SendStream>>>) {
+    /// Keep `connection` as a link, and write its frames from a task of its own, in order: on the
+    /// streams main opens, when this device `dialled` it; else on those the other device opened.
+    fn register(&self, connection: Connection, dialled: bool) -> (u64, Streams) {
         let conn = self.next.fetch_add(1, Ordering::Relaxed);
-        let streams: Arc<Mutex<HashMap<String, SendStream>>> = Arc::default();
+        let streams: Streams = Arc::default();
         let (out, mut queue) = mpsc::unbounded_channel::<Out>();
-        self.links.lock().unwrap().insert(conn, Link { out });
+        self.links
+            .lock()
+            .unwrap()
+            .insert(conn, Link { out, dialled });
         let daemon = self.clone();
         let writers = streams.clone();
         tokio::spawn(async move {
             while let Some(first) = queue.recv().await {
                 // What main sent meanwhile goes in the same write, each stream's frames in order:
-                // one packet for a moment's frames, not one for each. A close ends it, after them.
-                let mut writes: Vec<(String, Vec<u8>)> = Vec::new();
+                // one packet for a moment's frames, not one for each. The streams main opened
+                // meanwhile open first; a close ends it, after them.
+                let mut opens: Vec<(u64, String)> = Vec::new();
+                let mut writes: Vec<(u64, Vec<u8>)> = Vec::new();
                 let mut closing = None;
                 let mut next = Some(first);
                 while let Some(item) = next.take() {
                     match item {
+                        Out::Open(stream, name) => opens.push((stream, name)),
                         Out::Frame(stream, bytes) => {
                             if let Ok(frame) = framed(&bytes) {
                                 match writes.iter_mut().find(|(s, _)| *s == stream) {
@@ -280,30 +326,18 @@ impl Daemon {
                     }
                     next = queue.try_recv().ok();
                 }
+                for (stream, name) in opens {
+                    daemon.open(conn, &connection, &writers, stream, name).await;
+                }
                 let mut open = writers.lock().await;
                 for (stream, bytes) in writes {
-                    if !open.contains_key(&stream) {
-                        if !dialled {
-                            eprintln!(
-                                "hive-net: no stream {stream} on connection {conn}; frame dropped"
-                            );
-                            continue;
-                        }
-                        match ws::open(&connection, &stream).await {
-                            Ok((send, recv)) => {
-                                open.insert(stream.clone(), send);
-                                let reader = daemon.clone();
-                                let name = stream.clone();
-                                tokio::spawn(
-                                    async move { reader.read_stream(conn, name, recv).await },
-                                );
-                            }
-                            Err(_) => continue,
-                        }
-                    }
-                    let send = open.get_mut(&stream).expect("opened above");
+                    // One that ended takes nothing more: main was told.
+                    let Some(send) = open.get_mut(&stream) else {
+                        continue;
+                    };
                     if send.write_all(&bytes).await.is_err() {
                         open.remove(&stream);
+                        daemon.ended(conn, &connection, stream);
                     }
                 }
                 if let Some(reason) = closing {
@@ -326,14 +360,86 @@ impl Daemon {
         (conn, streams)
     }
 
-    /// Hand main each frame that arrives on a stream.
-    async fn read_stream(&self, conn: u64, stream: String, mut recv: RecvStream) {
+    /// Open the stream `name` on `connection`, which this device dialled, as main's `stream`: its
+    /// frames go out on it, and the other device's come back to main. Main is told it ended when
+    /// it cannot be opened.
+    async fn open(
+        &self,
+        conn: u64,
+        connection: &Connection,
+        streams: &Streams,
+        stream: u64,
+        name: String,
+    ) {
+        // Only this connection's writer opens its streams, one after another.
+        if streams.lock().await.contains_key(&stream) {
+            eprintln!("hive-net: stream {stream} is open on connection {conn} already");
+            return;
+        }
+        match ws::open(connection, &name).await {
+            Ok((send, recv)) => {
+                streams.lock().await.insert(stream, send);
+                let (reader, streams, connection) =
+                    (self.clone(), streams.clone(), connection.clone());
+                tokio::spawn(async move {
+                    reader
+                        .read_stream(conn, &connection, &streams, stream, recv)
+                        .await
+                });
+            }
+            Err(_) => self.ended(conn, connection, stream),
+        }
+    }
+
+    /// A stream the other device opened on `connection`, which this device accepted: named by its
+    /// first frame, given an id that main is told with its name, and read until it ends.
+    async fn take_stream(
+        &self,
+        conn: u64,
+        connection: &Connection,
+        streams: &Streams,
+        send: SendStream,
+        mut recv: RecvStream,
+    ) {
+        let Ok(Some(name)) = read_frame(&mut recv).await else {
+            return;
+        };
+        let name = String::from_utf8_lossy(&name).into_owned();
+        let stream = self.next.fetch_add(1, Ordering::Relaxed);
+        streams.lock().await.insert(stream, send);
+        self.tell(ToMain::Opened { conn, stream, name });
+        self.read_stream(conn, connection, streams, stream, recv)
+            .await;
+    }
+
+    /// Hand main each frame that arrives on `stream`, until the other device finishes it or it
+    /// fails: then it ends, both ways.
+    async fn read_stream(
+        &self,
+        conn: u64,
+        connection: &Connection,
+        streams: &Streams,
+        stream: u64,
+        mut recv: RecvStream,
+    ) {
         while let Ok(Some(frame)) = read_frame(&mut recv).await {
             self.tell(ToMain::Recv {
                 conn,
-                stream: stream.clone(),
+                stream,
                 data: String::from_utf8_lossy(&frame).into_owned(),
             });
+        }
+        // Its other half, finished as it goes: nothing more is sent on it.
+        if streams.lock().await.remove(&stream).is_some() {
+            self.ended(conn, connection, stream);
+        }
+    }
+
+    /// `stream` ended, its half out let go: main is told, unless the connection is going, which
+    /// main is told of instead.
+    fn ended(&self, conn: u64, connection: &Connection, stream: u64) {
+        if connection.close_reason().is_none() {
+            self.tell(ToMain::Ended { conn, stream });
         }
     }
 
@@ -398,6 +504,23 @@ impl Daemon {
             } => {
                 let d = self.clone();
                 tokio::spawn(async move { d.dial(req, peer, addrs, relay).await });
+            }
+            // Said once, first: `run` read it.
+            FromMain::Hello { .. } => {}
+            FromMain::Open { conn, stream, name } => {
+                let links = self.links.lock().unwrap();
+                let Some(link) = links.get(&conn) else {
+                    return;
+                };
+                if link.dialled {
+                    let _ = link.out.send(Out::Open(stream, name));
+                } else {
+                    // The device that dialled opens the streams: this one only answers on them.
+                    eprintln!(
+                        "hive-net: connection {conn} was not dialled here; {name} not opened"
+                    );
+                    self.tell(ToMain::Ended { conn, stream });
+                }
             }
             FromMain::Send { conn, stream, data } => {
                 if let Some(link) = self.links.lock().unwrap().get(&conn) {
@@ -601,14 +724,12 @@ impl ProtocolHandler for WsHost {
         });
         loop {
             match connection.accept_bi().await {
-                Ok((send, mut recv)) => {
-                    let Ok(Some(name)) = read_frame(&mut recv).await else {
-                        continue;
-                    };
-                    let name = String::from_utf8_lossy(&name).into_owned();
-                    streams.lock().await.insert(name.clone(), send);
-                    let reader = d.clone();
-                    tokio::spawn(async move { reader.read_stream(conn, name, recv).await });
+                // Each stream on its own: one whose name is slow to come holds up no other.
+                Ok((send, recv)) => {
+                    let (d, connection, streams) = (d.clone(), connection.clone(), streams.clone());
+                    tokio::spawn(async move {
+                        d.take_stream(conn, &connection, &streams, send, recv).await
+                    });
                 }
                 Err(e) => {
                     d.forget(conn, e.to_string());
@@ -715,6 +836,7 @@ pub async fn run(socket: &Path, identity: &Path, key: SecretKey, reach: Reach) -
     }
     let here = endpoint.addr();
     daemon.tell(ToMain::Ready {
+        v: PROTOCOL,
         id: endpoint.id().to_string(),
         addrs: here
             .addrs
@@ -738,6 +860,16 @@ pub async fn run(socket: &Path, identity: &Path, key: SecretKey, reach: Reach) -
     });
 
     let mut reader = reader;
+    // Main says first which protocol it speaks. An app that says nothing of it speaks the first.
+    if let Ok(Some(first)) = read_frame(&mut reader).await {
+        let speaks = match serde_json::from_slice::<FromMain>(&first) {
+            Ok(FromMain::Hello { v }) => v,
+            _ => 1,
+        };
+        if speaks != PROTOCOL {
+            bail!("the app speaks the daemon's protocol {speaks}, and this hive-net {PROTOCOL}: install the app and hive-net from one release");
+        }
+    }
     while let Ok(Some(frame)) = read_frame(&mut reader).await {
         match serde_json::from_slice::<FromMain>(&frame) {
             Ok(message) => daemon.handle(message),

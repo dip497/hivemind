@@ -17,6 +17,9 @@ hive-phone needs                      # what waits on you on them, the one waiti
                                       # how many agents are at work, and of a device that is
                                       # away, what it last answered and when
 hive-phone watch <workspace> <tile>   # an agent's terminal, read-only, until it ends (or Ctrl+C)
+hive-phone agent <workspace> <tile>   # its terminal and what it and you say to each other, at
+                                      # once on one connection, as the phone's Agent screen has
+                                      # them; each line you type is sent to it
 hive-phone answer <workspace> <tile> <since> --text 1   # answer what it waits on (or --allow,
                                       # --deny for a permission `needs` says it can decide;
                                       # --approve, --changes '<what>' for a plan); once, while

@@ -16,7 +16,9 @@
 // keeps nothing of what it passes on; unpaired, the computer is named no more (spec/push.md 0.3).
 // And a community view on the phone, its host on the computer (P8, spec/workspace-api.md 0.12):
 // offered when it says it works on a phone, its files read, opened, told it is on a phone and what
-// the board holds, doing there only what the phone may, and closed.
+// the board holds, doing there only what the phone may, and closed. And an agent as the phone's
+// Agent screen follows it, on its one connection to the computer: its terminal, its conversation
+// and what the person sends it, each on a stream of its own, none taking another's.
 import { test, expect, type ElectronApplication } from "@playwright/test";
 import { execFile, execSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -410,6 +412,59 @@ test("the phone follows what an agent and the person say to each other, as the a
   const since = () => pieces.filter((p) => p.session !== first).flatMap((p) => p.entries).map((e) => [e.who, e.text]);
   await expect.poll(since, { timeout: 30_000 }).toEqual([["person", "a fresh start"], ["agent", "You said a fresh start"]]);
   expect(pieces.at(-1)!.session).toBe(`${first}-2`);
+});
+
+test("the phone follows an agent as its Agent screen does, on its one connection to the computer: the terminal keeps coming once the conversation opens beside it, and a line sent beside them goes in once, heard in both", async () => {
+  test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
+  test.setTimeout(120_000);
+  const env = talkerAgent(root);
+  const home = path.join(root, "home");
+  fs.mkdirSync(home);
+  const d = await desktopWith({ ...env, HOME: home });
+  const { phone } = await pairPhone(d);
+  await d.desktop.keyboard.press("Escape");
+  const phoneCli = async (...args: string[]) => JSON.parse((await run(HIVE_PHONE, [...args, "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as Record<string, unknown>;
+  await d.desktop.evaluate(() => window.hive.settingsSet("agents.defaultAgent", "talker"));
+  await d.desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:shortcut", { detail: "agent" })));
+  const terminal = d.desktop.locator(".react-flow__node-terminal");
+  await expect(terminal).toHaveCount(1, { timeout: 20_000 });
+  const tile = (await terminal.getAttribute("data-id"))!;
+  let listed: Array<Record<string, unknown>> = [];
+  await expect.poll(async () => (listed = (await phoneCli("agents")).agents as typeof listed).length, { timeout: 30_000 }).toBe(1);
+  const workspace = listed[0]!.workspace as string;
+  expect(await phoneCli("send", workspace, tile, "--text", "fix the nav")).toEqual({ sent: true });
+  await expect.poll(() => fs.existsSync(path.join(home, "talk")) && fs.readdirSync(path.join(home, "talk")).length, { timeout: 20_000 }).toBe(1);
+
+  // Its terminal and its conversation at once, and what is typed on the phone sent to it: each on a
+  // stream of its own, on the one connection.
+  const agent = spawn(HIVE_PHONE, ["agent", workspace, tile, "--identity", phone, "--json"]);
+  procs.push(agent);
+  let shown = "";
+  const said: Array<[unknown, unknown]> = [];
+  const sent: unknown[] = [];
+  let line = "";
+  agent.stdout!.on("data", (b: Buffer) => {
+    const lines = (line + b.toString()).split("\n");
+    line = lines.pop()!;
+    for (const l of lines) {
+      const m = JSON.parse(l) as { terminal?: string; said?: { entries: Array<{ who: unknown; text: unknown }> }; sent?: unknown };
+      if (m.terminal !== undefined) shown += m.terminal;
+      for (const e of m.said?.entries ?? []) said.push([e.who, e.text]);
+      if (m.sent !== undefined) sent.push(m.sent);
+    }
+  });
+  await expect.poll(() => said, { timeout: 30_000 }).toEqual([["person", "fix the nav"], ["agent", "You said fix the nav"]]);
+  await expect.poll(() => shown, { timeout: 20_000 }).toContain("heard: fix the nav");
+
+  // A line typed on the phone once the conversation is open: sent once, the agent hears it once,
+  // and both its terminal and its conversation, still followed, show it.
+  agent.stdin!.write("add tests\n");
+  await expect.poll(() => sent, { timeout: 20_000 }).toEqual([true]);
+  await expect.poll(() => shown, { timeout: 20_000 }).toContain("heard: add tests");
+  await expect.poll(() => said.slice(2), { timeout: 30_000 }).toEqual([["person", "add tests"], ["agent", "You said add tests"]]);
+  await new Promise((r) => setTimeout(r, 1_000));
+  expect(shown.split("heard: add tests").length - 1).toBe(1);
+  expect([sent, said.length]).toEqual([[true], 4]);
 });
 
 test("a community view that says it works on a phone is offered there with its files; opened, its host on the computer tells it it is on a phone and what the board holds; it does only what the phone may, as the phone; and closed, it ends", async () => {

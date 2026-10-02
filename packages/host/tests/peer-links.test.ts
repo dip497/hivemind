@@ -1,12 +1,12 @@
 // One of the owner's phones on the links a device serves (peer-links.ts, spec/pairing.md 0.3): let
 // in as the person's device, it is answered which workspaces the device holds and what waits on
 // the person there (spec/needs.md), gives where it is told what happens there (spec/push.md),
-// unpairs itself (spec/pairing.md), and may open one workspace to watch and type into its
-// terminals and answer and message its agents, as the owner's device; it is served nothing else
-// the owner's computers are: no terminals started or sized, no keyboards given or taken, no
-// workspace's board, files or other calls, no hosting. The
-// owner's laptop, on the same links, is served each of them, and is told nothing on a phone's
-// behalf, nor unpaired by asking.
+// unpairs itself (spec/pairing.md), and may open workspaces to watch and type into their
+// terminals and answer and message their agents, as the owner's device, each `api` stream it opens
+// on its one connection served as its own; it is served nothing else the owner's computers are: no
+// terminals started or sized, no keyboards given or taken, no workspace's board, files or other
+// calls, no hosting. The owner's laptop, on the same links, is served each of them, and is told
+// nothing on a phone's behalf, nor unpaired by asking.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { createECDH } from "node:crypto";
@@ -18,7 +18,7 @@ import { AccessLists } from "@hivemind/workspace-host/access";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { certifyDevice, idOf, newSeed } from "@hivemind/workspace-host/identity";
 import { Intents, type Actor } from "@hivemind/workspace-host/intents";
-import type { Link } from "@hivemind/workspace-host/hive-net";
+import type { Link, Stream } from "@hivemind/workspace-host/hive-net";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import { workspaceDomains } from "../src/domains.ts";
@@ -31,25 +31,90 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let made = 0;
 const T = 1_790_000_000_000;
 
-/** Two ends of one connection: frames arrive in order, a moment after they are sent, and what
- *  was sent before it closed arrives before the close, as on hive-net. */
-function linkPair(device: string, computer: string): [Link, Link] {
-  const heard = [new Map<string, Set<(t: string) => void>>(), new Map<string, Set<(t: string) => void>>()];
+/** Two ends of one connection, as on hive-net: the device dialled it, and opens its streams, as
+ *  many of a name as it likes. Frames arrive in order, a moment after they are sent; what was sent
+ *  before a stream ended, or the connection closed, arrives before that. The device sends on, and
+ *  hears, one stream of each name it sends on (as the app's daemon opens them), or a stream it opens
+ *  itself (`open`, as a phone does); the computer is told of each stream as it opens, hears each
+ *  by its name, and answers on each, or on the newest of a name. */
+function linkPair(device: string, computer: string) {
   let close!: (why: string) => void;
   const closed = new Promise<string>((r) => { close = r; });
-  const end = (i: number, peer: string): Link => ({
-    peer,
-    send: (stream, data) => void setImmediate(() => { for (const l of heard[1 - i]!.get(stream) ?? []) l(data); }),
-    on: (stream, l) => {
-      const set = heard[i]!.get(stream) ?? new Set();
-      heard[i]!.set(stream, set.add(l));
-      return () => { set.delete(l); };
-    },
-    close: (why = "closed") => void setImmediate(() => close(why)),
-    closed,
+  const later = (f: () => void) => void setImmediate(f);
+  /** A stream, as each end hears it. */
+  interface Both { name: string; open: boolean; atDevice: Set<(t: string) => void>; atComputer: Set<(t: string) => void>; end(why: string): void; closed: Promise<string> }
+  const all: Both[] = [];
+  const newest = new Map<string, Both>();
+  const named = new Map<string, Set<(t: string) => void>>();
+  const accepting = new Map<string, Set<(s: Stream) => void>>();
+  const listen = <T>(map: Map<string, Set<T>>, name: string, l: T) => {
+    const set = map.get(name) ?? new Set<T>();
+    map.set(name, set.add(l));
+    return () => { set.delete(l); };
+  };
+  const answering = (b: Both): Stream => ({
+    send: (data) => later(() => { if (b.open) for (const l of b.atDevice) l(data); }),
+    on: (l) => { b.atComputer.add(l); return () => { b.atComputer.delete(l); }; },
+    closed: b.closed,
   });
-  // The computer's end hears from the device, its peer, and the other way.
-  return [end(0, device), end(1, computer)];
+  /** The device opens a stream named `name`: told to the computer, then its frames. */
+  const opening = (name: string): Both => {
+    let end!: (why: string) => void;
+    const b: Both = { name, open: true, atDevice: new Set(), atComputer: new Set(), end: (why) => end(why), closed: new Promise((r) => { end = r; }) };
+    all.push(b);
+    later(() => {
+      newest.set(name, b);
+      const s = answering(b);
+      for (const l of accepting.get(name) ?? []) l(s);
+    });
+    return b;
+  };
+  const sendOn = (b: Both, data: string) => later(() => {
+    if (!b.open) return;
+    for (const l of b.atComputer) l(data);
+    for (const l of named.get(b.name) ?? []) l(data);
+  });
+  void closed.then((why) => { for (const b of all) { b.open = false; b.end(why); } });
+  /** The streams the device sends on by name, one of each, opened as it first sends. */
+  const own = new Map<string, Both>();
+  const heard = new Map<string, Set<(t: string) => void>>();
+  const ownStream = (name: string): Both => {
+    let b = own.get(name);
+    if (!b) {
+      own.set(name, (b = opening(name)));
+      b.atDevice.add((t) => { for (const l of heard.get(name) ?? []) l(t); });
+    }
+    return b;
+  };
+  const computerEnd: Link = {
+    peer: device,
+    send: (name, data) => { const b = newest.get(name); if (b) answering(b).send(data); },
+    on: (name, l) => listen(named, name, l),
+    streams: (name, l) => listen(accepting, name, l),
+    close: (why = "closed") => later(() => close(why)),
+    closed,
+  };
+  const deviceEnd = {
+    peer: computer,
+    send: (name: string, data: string) => sendOn(ownStream(name), data),
+    on: (name: string, l: (t: string) => void) => listen(heard, name, l),
+    /** A stream of its own, named `name`: what is sent on it, what it hears, and its end. */
+    open: (name: string) => {
+      const b = opening(name);
+      return {
+        send: (data: string) => sendOn(b, data),
+        on: (l: (t: string) => void) => { b.atDevice.add(l); },
+        end: () => later(() => {
+          b.open = false;
+          if (newest.get(name) === b) newest.delete(name);
+          b.end("ended");
+        }),
+      };
+    },
+    close: (why = "closed") => later(() => close(why)),
+    closed,
+  };
+  return [computerEnd, deviceEnd] as const;
 }
 
 /** The person's computer, holding the workspace `api`, with their phone and laptop paired. */
@@ -62,8 +127,10 @@ function computer() {
   const workspace = store.ownership(repo)!.workspaceId as string;
   const [phone, laptop, self] = [idOf(newSeed()), idOf(newSeed()), idOf(newSeed())];
   const lists = new AccessLists({ dir: path.join(dir, "access"), owner: person, devices: () => [certifyDevice(person, phone), certifyDevice(person, laptop)] });
-  /** Each terminal a connection opened, and as whom: what the host's terminals would show. */
+  /** Each terminal a connection opened, and as whom: what the host's terminals would show; and the
+   *  connections that opened one. */
   const watched: Array<{ by: Actor; opts: unknown }> = [];
+  const watching: Connection[] = [];
   /** What was typed into a terminal, and by whom; each agent answered, and sent a message, and by
    *  whom; and what else reached a terminal's keyboard or size. */
   const typed: Array<{ by: Actor; tile: unknown }> = [];
@@ -85,7 +152,7 @@ function computer() {
   const host = { device: box, name: "build-box", kind: "host" as const, certificate: certifyDevice(person, box), addrs: ["10.0.0.5:4433"], relay: null };
   const terminals = {
     answers: {
-      "terminal.open": (from: Connection, opts: unknown) => { watched.push({ by: from.actor, opts }); return { pid: 1, joined: true }; },
+      "terminal.open": (from: Connection, opts: unknown) => { watched.push({ by: from.actor, opts }); watching.push(from); return { pid: 1, joined: true }; },
       "agent.answer": (from: Connection, tile: unknown) => { answered.push({ by: from.actor, tile }); return { answered: true }; },
       "agent.send": (from: Connection, tile: unknown) => { sent.push({ by: from.actor, tile }); return { sent: true }; },
       ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff"].map((what) => [
@@ -116,6 +183,15 @@ function computer() {
   ];
   /** An agent's status changes, and the workspace API tells its clients so, as the control plane
    *  does. */
+  /** The terminal of `tile` prints `data`: sent to the connections that opened a terminal, as the
+   *  host's terminals send a session's output to those that show it. */
+  const output = (tile: string, data: string) => server.publishTo((to) => watching.includes(to), "terminal.data", tile, data);
+  /** Another workspace on this computer, `name`, with agents in `tiles`. */
+  const another = (name: string, tiles: string[]) => {
+    const at = path.join(dir, name);
+    store.setCore(at, { v: 1, frames: [], tiles: tiles.map((id) => ({ id, kind: "claude", label: "Claude" })) });
+    return { repo: at, workspace: store.ownership(at)!.workspaceId as string };
+  };
   const statusChanged = (tileId: string, status: WaitingStatus["status"]) => {
     statuses = statuses.map((s) => (s.tileId === tileId ? { tileId, status } : s));
     server.publish("status.changed", { tileId, ...status } as never);
@@ -143,7 +219,8 @@ function computer() {
     devices: () => [host],
     profile: async () => ({ name: "Priya", color: "#3b82f6" }),
   });
-  /** `device` connects: what it hears on each stream, and its end of the link. */
+  /** `device` connects: what it hears on each stream, and its end of the link; and a stream of its
+   *  own, opened beside them (`open`): what is sent on it, what it hears, and its end. */
   const connect = (device: string) => {
     const [computerEnd, deviceEnd] = linkPair(device, self);
     links.serve(computerEnd);
@@ -152,9 +229,15 @@ function computer() {
       heard.set(stream, []);
       deviceEnd.on(stream, (t) => heard.get(stream)!.push(t));
     }
-    return { heard, send: (stream: string, m: unknown) => deviceEnd.send(stream, JSON.stringify(m)), closed: computerEnd.closed, hangUp: () => deviceEnd.close("done") };
+    const open = (name: string) => {
+      const s = deviceEnd.open(name);
+      const said: string[] = [];
+      s.on((t) => said.push(t));
+      return { send: (m: unknown) => s.send(JSON.stringify(m)), heard: said, end: s.end };
+    };
+    return { heard, send: (stream: string, m: unknown) => deviceEnd.send(stream, JSON.stringify(m)), open, closed: computerEnd.closed, hangUp: () => deviceEnd.close("done") };
   };
-  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, sent, keyed, driven, viewed, subscribed, unpaired, introduced, forgot, host, connect, statusChanged };
+  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, sent, keyed, driven, viewed, subscribed, unpaired, introduced, forgot, host, connect, statusChanged, output, another };
 }
 const until = async (done: () => boolean) => { for (let t = 0; t < 5_000 && !done(); t += 20) await wait(20); };
 
@@ -228,6 +311,79 @@ test("a phone opens a workspace to watch and type into its terminals and answer 
     other.send("api", first);
     assert.equal(await Promise.race([other.closed, wait(2_000).then(() => "open")]), "removed", JSON.stringify(first));
   }
+});
+
+test("a phone follows several things at once on its one connection: each `api` stream it opens is a workspace's API of its own, for the workspace it names, answered on it alone, with that workspace's events; one it ends leaves the others served", async () => {
+  const c = computer();
+  const web = c.another("web", ["w1"]);
+  const phone = c.connect(c.phone);
+  // As its Agent screen: t1's terminal watched on one stream, t2 sent a message on another; and a
+  // stream for the workspace `web` beside them.
+  const watching = phone.open("api");
+  const talking = phone.open("api");
+  const elsewhere = phone.open("api");
+  watching.send({ t: "open", workspace: c.workspace });
+  talking.send({ t: "open", workspace: c.workspace });
+  elsewhere.send({ t: "open", workspace: web.workspace });
+  const watch = { tileId: "hm:t1", tile: "t1", cwd: `hive://${c.workspace}`, cmd: "", cols: 80, rows: 24, attachOnly: true };
+  watching.send({ id: 1, method: "terminal.open", params: [watch] });
+  talking.send({ id: 1, method: "agent.send", params: ["t2", "add tests"] });
+  elsewhere.send({ id: 1, method: "agent.send", params: ["w1", "fix the nav"] });
+  elsewhere.send({ id: 2, method: "agent.send", params: ["t2", "fix the nav"] });
+  const said = (s: { heard: string[] }) => s.heard.map((m) => JSON.parse(m) as unknown).flatMap((m) => (Array.isArray(m) ? m : [m])) as Array<Record<string, unknown>>;
+  const answers = (s: { heard: string[] }) => said(s).filter((m) => "id" in m).map(({ id, result, error }) => [id, result ?? (error as { code: string }).code]);
+  const events = (s: { heard: string[] }) => said(s).filter((m) => "event" in m).map(({ event, params }) => [event, (params as unknown[])[0]]);
+  await until(() => answers(watching).length + answers(talking).length + answers(elsewhere).length >= 4);
+  await wait(100);
+  // Each answered on its own stream, as the workspace it opened: t2 is none of `web`'s.
+  assert.deepEqual(answers(watching), [[1, { pid: 1, joined: true }]]);
+  assert.deepEqual(answers(talking), [[1, { sent: true }]]);
+  assert.deepEqual(answers(elsewhere), [[1, { sent: true }], [2, "FORBIDDEN"]]);
+  assert.deepEqual(c.sent.map((s) => s.tile), ["t2", "w1"]);
+
+  // What t1's terminal prints goes to the stream watching it; what each workspace's agents do, to
+  // that workspace's streams.
+  c.output("hm:t1", "Allow edit to Nav.tsx?");
+  c.statusChanged("t1", { state: "working", since: T + 1 });
+  c.statusChanged("w1", { state: "working", since: T + 1 });
+  await until(() => events(elsewhere).length > 0 && events(talking).length > 0 && events(watching).length > 1);
+  await wait(100);
+  assert.deepEqual(events(watching), [["terminal.data", "hm:t1"], ["status.changed", { tileId: "t1", state: "working", since: T + 1 }]]);
+  assert.deepEqual(events(talking), [["status.changed", { tileId: "t1", state: "working", since: T + 1 }]]);
+  assert.deepEqual(events(elsewhere), [["status.changed", { tileId: "w1", state: "working", since: T + 1 }]]);
+
+  // The message sent, its stream ends: the terminal is still watched, and its stream answered.
+  talking.end();
+  await wait(50);
+  c.output("hm:t1", "probe is thinking");
+  watching.send({ id: 2, method: "agent.answer", params: ["t1", T, { text: "y" }] });
+  await until(() => answers(watching).length > 1 && events(watching).length > 2);
+  assert.deepEqual(answers(watching), [[1, { pid: 1, joined: true }], [2, { answered: true }]]);
+  assert.deepEqual(events(watching).at(-1), ["terminal.data", "hm:t1"]);
+  assert.equal(events(talking).length, 1);
+});
+
+test("a phone asks on several `device` streams at once, and follows every agent on several `agents` streams: each answered on its own", async () => {
+  const c = computer();
+  const phone = c.connect(c.phone);
+  // Two questions at once, as the phone asks which workspaces a device holds before it watches a
+  // terminal there while it hears from the device.
+  const [holds, waits] = [phone.open("device"), phone.open("device")];
+  holds.send({ t: "workspaces" });
+  waits.send({ t: "needs" });
+  const [following, again] = [phone.open("agents"), phone.open("agents")];
+  following.send({ t: "follow" });
+  again.send({ t: "follow" });
+  const ts = (s: { heard: string[] }) => s.heard.map((m) => (JSON.parse(m) as { t: string }).t);
+  await until(() => [holds, waits, following, again].every((s) => s.heard.length > 0));
+  await wait(100);
+  assert.deepEqual([holds, waits, following, again].map(ts), [["workspaces"], ["needs"], ["agents"], ["agents"]]);
+  // One stops following: the other is still sent the list as it changes.
+  following.end();
+  await wait(50);
+  c.statusChanged("t1", { state: "working", since: T + 1 });
+  await until(() => again.heard.length > 1);
+  assert.deepEqual([ts(following), ts(again)], [["agents"], ["agents", "agents"]]);
 });
 
 test("a phone drives the workspace's agents as the owner's device: sees what may be started, starts one, interrupts its turn, closes it and reads what it changed; an agent of another workspace is refused", async () => {

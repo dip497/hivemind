@@ -48,6 +48,14 @@
 //!                               what an agent and you said to each other, as its session file
 //!                               keeps it: the last of it, then, with --follow, what is said
 //!                               next as it comes, until Ctrl+C
+//!   hive-phone agent <workspace> <tile>
+//!                               an agent as the phone's Agent screen has it, all on one
+//!                               connection to the device that holds it: its terminal as `watch`
+//!                               shows it and what it and you said to each other as `talk
+//!                               --follow` does, at once (the conversation on stderr), and each
+//!                               line read here sent to it as `send` sends one, until Ctrl+C or
+//!                               its session ends; with --json, a line each:
+//!                               `{"terminal": <output>}`, `{"said": <piece>}`, `{"sent": <bool>}`
 //!   hive-phone views <workspace> [<view> <path>]
 //!                               the community views the device that holds the workspace offers
 //!                               a phone; with a view and a path, that file of the view, its bytes
@@ -68,8 +76,8 @@
 //!
 //! Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),
 //! `--name <name>` (pair: what the app lists this phone as; default `Phone`), `--json` (pair,
-//! devices, network, unpair, needs, agents, answer, send, start, stop, close, diff, talk, push,
-//! views, view: as JSON, a notice, a list or a piece of a conversation a line).
+//! devices, network, unpair, needs, agents, answer, send, start, stop, close, diff, talk, agent,
+//! push, views, view: as JSON, a notice, a list or a piece of a conversation a line).
 
 use std::{path::PathBuf, process::ExitCode, sync::Arc};
 
@@ -90,7 +98,7 @@ use hive_phone::{
 };
 use serde_json::{json, Value};
 
-const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | agents [--follow] | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--allow|--deny|--approve|--changes <what> | send <workspace> <tile> --text <line> | start <workspace> [<agent> [--frame <id>] [--prompt <text>] [--model <m>] [--mode <m>]] | stop <workspace> <tile> | close <workspace> <tile> | diff <workspace> <tile> | talk <workspace> <tile> [--follow] | views <workspace> [<view> <path>] | view <workspace> <view> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
+const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | agents [--follow] | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--allow|--deny|--approve|--changes <what> | send <workspace> <tile> --text <line> | start <workspace> [<agent> [--frame <id>] [--prompt <text>] [--model <m>] [--mode <m>]] | stop <workspace> <tile> | close <workspace> <tile> | diff <workspace> <tile> | talk <workspace> <tile> [--follow] | agent <workspace> <tile> | views <workspace> [<view> <path>] | view <workspace> <view> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
 
 #[derive(Default)]
 struct Args {
@@ -603,6 +611,82 @@ async fn run(args: Args) -> Result<()> {
             let talked = talked.await;
             endpoint.close().await;
             talked?;
+        }
+        "agent" => {
+            let [ws, tile] = &args.rest[..] else {
+                bail!("agent: which workspace and tile? (`hive-phone agents --json` names them)");
+            };
+            let (endpoint, devices) = reaching(&phone).await?;
+            // Each line read here is a message to the agent.
+            let (lines, mut messages) = tokio::sync::mpsc::channel::<String>(16);
+            tokio::spawn(async move {
+                use tokio::io::AsyncBufReadExt;
+                let mut stdin = tokio::io::BufReader::new(tokio::io::stdin()).lines();
+                while let Ok(Some(line)) = stdin.next_line().await {
+                    if !line.trim().is_empty() && lines.send(line).await.is_err() {
+                        return;
+                    }
+                }
+            });
+            let json = args.json;
+            let shown = async {
+                // One connection, as the phone keeps one to each device: the terminal, the
+                // conversation and each message go on it at once, each on a stream of its own.
+                let connection = workspace::holder(&endpoint, &devices, ws).await?;
+                let mut stdout = std::io::stdout();
+                let watched = workspace::watch(&connection, ws, tile, None, |watched| {
+                    let Watched::Output(data) = watched else {
+                        return;
+                    };
+                    if json {
+                        println!("{}", json!({ "terminal": data }));
+                    } else {
+                        let _ = std::io::Write::write_all(&mut stdout, data.as_bytes());
+                        let _ = std::io::Write::flush(&mut stdout);
+                    }
+                });
+                let talked = conversation::follow(&connection, ws, tile, None, |piece| {
+                    if json {
+                        let Piece {
+                            entries,
+                            cursor,
+                            session,
+                        } = piece;
+                        let said =
+                            json!({ "entries": entries, "cursor": cursor, "session": session });
+                        println!("{}", json!({ "said": said }));
+                    } else {
+                        for e in &piece.entries {
+                            eprintln!("{}", spoken(e));
+                        }
+                    }
+                });
+                let sending = async {
+                    while let Some(text) = messages.recv().await {
+                        let sent = workspace::send(&connection, ws, tile, &text).await?;
+                        if json {
+                            println!("{}", json!({ "sent": sent }));
+                        } else if !sent {
+                            eprintln!("hive-phone: not sent: no agent runs there");
+                        }
+                    }
+                    // Nothing more to send: the rest is followed until Ctrl+C.
+                    std::future::pending::<Result<()>>().await
+                };
+                // Until the session ends, or the device closes what it follows.
+                tokio::select! {
+                    ended = watched => ended.map(|ended| ended.map(|e| e.code)),
+                    talked = talked => talked.map(|()| None),
+                    failed = sending => failed.map(|()| None),
+                }
+            };
+            let ended = shown.await;
+            endpoint.close().await;
+            match ended? {
+                Some(Some(code)) => eprintln!("\nhive-phone: the session ended ({code})"),
+                Some(None) => eprintln!("hive-phone: no session runs there"),
+                None => {}
+            }
         }
         "views" => {
             let Some((ws, rest)) = args.rest.split_first() else {

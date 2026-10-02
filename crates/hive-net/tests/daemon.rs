@@ -1,16 +1,19 @@
 // hive-net's daemon as main drives it (R11): each test plays main for two devices, a host and a
 // guest, over the local socket (`daemon.rs`). A device the host admits connects, and frames pass
-// both ways on named streams, in order; one it does not admit is refused, and one it stops
-// admitting loses its connection within a second and cannot come back; anyone may ask to pair,
-// and the host's main answers. A host says at its network's lookup server which workspaces it
-// hosts (M3), and a device on another network reads it there; a record one device signs naming
-// another, as a move hands it over, is checked against the workspace's key alone.
+// both ways on the streams main opens, in order; a device that opens many streams of one name on
+// its one connection, as a phone does, has each served as its own, and one it ends leaves the
+// others as they were; one the host does not admit is refused, and one it stops admitting loses
+// its connection within a second and cannot come back; anyone may ask to pair, and the host's main
+// answers. A host says at its network's lookup server which workspaces it hosts (M3), and a device
+// on another network reads it there; a record one device signs naming another, as a move hands it
+// over, is checked against the workspace's key alone. An app that speaks another protocol than the
+// daemon's is told so, and the daemon stops.
 #![cfg(unix)]
 
 mod support;
 
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     fs,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -20,7 +23,13 @@ use std::{
 use serde_json::{json, Value};
 use tokio::net::{UnixListener, UnixStream};
 
-use hive_net::frames::{read_frame, write_frame};
+use hive_net::{
+    daemon::PROTOCOL,
+    frames::{read_frame, write_frame},
+    net::{self, Reach},
+    ws,
+};
+use iroh::endpoint::{Connection, RecvStream};
 
 const BIN: &str = env!("CARGO_BIN_EXE_hive-net");
 
@@ -50,6 +59,14 @@ impl Main {
 
     /// A daemon started with `extra` arguments (a network profile).
     async fn start_with(root: &Path, name: &str, extra: &[&str]) -> Main {
+        let mut main = Self::launch(root, name, extra, Stdio::inherit()).await;
+        main.send(json!({ "t": "hello", "v": PROTOCOL })).await;
+        main
+    }
+
+    /// A daemon started with `extra` arguments, its errors to `stderr`, once it is ready, before
+    /// main says anything.
+    async fn launch(root: &Path, name: &str, extra: &[&str], stderr: Stdio) -> Main {
         let dir = root.join(name);
         fs::create_dir_all(dir.join("identity")).unwrap();
         let seed: String = (0..32)
@@ -68,7 +85,7 @@ impl Main {
             ])
             .args(extra)
             .stdout(Stdio::null())
-            .stderr(Stdio::inherit())
+            .stderr(stderr)
             .spawn()
             .unwrap();
         let (stream, _) = tokio::time::timeout(Duration::from_secs(30), listener.accept())
@@ -84,6 +101,7 @@ impl Main {
             lookup: None,
         };
         let ready = main.next("ready").await;
+        assert_eq!(ready["v"], PROTOCOL, "{ready}");
         main.id = ready["id"].as_str().unwrap().to_string();
         main.addrs = ready["addrs"]
             .as_array()
@@ -153,6 +171,19 @@ impl Main {
     fn addr_list(&self) -> Value {
         json!(self.addrs)
     }
+
+    /// Open the stream `name` as `stream` on `conn`, a connection this device dialled, and send
+    /// `data` on it.
+    async fn open(&mut self, conn: &Value, stream: u64, name: &str, data: &str) {
+        self.send(json!({ "t": "open", "conn": conn, "stream": stream, "name": name }))
+            .await;
+        self.send_on(conn, stream, data).await;
+    }
+
+    async fn send_on(&mut self, conn: &Value, stream: u64, data: &str) {
+        self.send(json!({ "t": "send", "conn": conn, "stream": stream, "data": data }))
+            .await;
+    }
 }
 
 fn temp() -> PathBuf {
@@ -181,28 +212,33 @@ async fn an_admitted_device_connects_frames_pass_both_ways_in_order_and_main_clo
     assert_eq!(dialed["req"], 1);
     let conn = dialed["conn"].clone();
 
-    for i in 0..100 {
-        guest
-            .send(
-                json!({ "t": "send", "conn": conn, "stream": "api", "data": format!("call {i}") }),
-            )
-            .await;
+    // Main opens each stream it sends on, by an id it gives it.
+    guest.open(&conn, 1, "api", "call 0").await;
+    for i in 1..100 {
+        guest.send_on(&conn, 1, &format!("call {i}")).await;
     }
-    guest
-        .send(json!({ "t": "send", "conn": conn, "stream": "sync", "data": "update" }))
-        .await;
+    guest.open(&conn, 2, "sync", "update").await;
     let incoming = host.next("incoming").await;
     assert_eq!(incoming["peer"], json!(guest.id));
     let host_conn = incoming["conn"].clone();
+    // The host's main is told of each as it opens: its name, and the id the daemon gives it there.
+    let mut named = HashMap::new();
+    for _ in 0..2 {
+        let opened = host.next("opened").await;
+        assert_eq!(opened["conn"], host_conn);
+        let name = opened["name"].as_str().unwrap().to_string();
+        named.insert(name, opened["stream"].as_u64().unwrap());
+    }
     let mut api = vec![];
     let mut sync = vec![];
     while api.len() < 100 || sync.is_empty() {
         let recv = host.next("recv").await;
         assert_eq!(recv["conn"], host_conn);
-        match recv["stream"].as_str().unwrap() {
-            "api" => api.push(recv["data"].as_str().unwrap().to_string()),
-            "sync" => sync.push(recv["data"].as_str().unwrap().to_string()),
-            other => panic!("a frame on {other}"),
+        let data = recv["data"].as_str().unwrap().to_string();
+        match recv["stream"].as_u64() {
+            s if s == Some(named["api"]) => api.push(data),
+            s if s == Some(named["sync"]) => sync.push(data),
+            other => panic!("a frame on {other:?}"),
         }
     }
     assert_eq!(
@@ -211,8 +247,7 @@ async fn an_admitted_device_connects_frames_pass_both_ways_in_order_and_main_clo
     );
     assert_eq!(sync, ["update"]);
 
-    host.send(json!({ "t": "send", "conn": host_conn, "stream": "api", "data": "answer" }))
-        .await;
+    host.send_on(&host_conn, named["api"], "answer").await;
     let back = guest.next("recv").await;
     assert_eq!(
         (
@@ -220,7 +255,7 @@ async fn an_admitted_device_connects_frames_pass_both_ways_in_order_and_main_clo
             back["stream"].clone(),
             back["data"].clone()
         ),
-        (conn.clone(), json!("api"), json!("answer"))
+        (conn.clone(), json!(1), json!("answer"))
     );
 
     // Main closes a connection saying why, and the other side reads it, after everything sent
@@ -228,7 +263,7 @@ async fn an_admitted_device_connects_frames_pass_both_ways_in_order_and_main_clo
     // out at once, so some of it is still on its way when main asks.
     let pad = "x".repeat(128 * 1024);
     for i in 0..50 {
-        host.send(json!({ "t": "send", "conn": host_conn, "stream": "sync", "data": format!("last {i:02} {pad}") }))
+        host.send_on(&host_conn, named["sync"], &format!("last {i:02} {pad}"))
             .await;
     }
     host.send(json!({ "t": "close", "conn": host_conn, "reason": "removed" }))
@@ -253,6 +288,132 @@ async fn an_admitted_device_connects_frames_pass_both_ways_in_order_and_main_clo
         closed["reason"].as_str().unwrap().contains("removed"),
         "{closed}"
     );
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// A phone, as `crates/hive-phone` is one: an endpoint of its own that the host admits, dialling the
+/// host on `hive/ws/1` and opening the streams on that connection itself.
+async fn phone_of(host: &mut Main) -> (iroh::Endpoint, Connection) {
+    let key = iroh::SecretKey::from_bytes(&rand::random::<[u8; 32]>());
+    host.send(json!({ "t": "admit", "devices": [key.public().to_string()] }))
+        .await;
+    let reach = Reach {
+        relays: vec![],
+        lookup: None,
+        mdns: false,
+    };
+    let endpoint = net::endpoint(key, &reach, vec![]).await.unwrap();
+    let at = net::addr_of(&host.id, &host.addrs, &None).unwrap();
+    let connection = endpoint.connect(at, ws::ALPN).await.unwrap();
+    (endpoint, connection)
+}
+
+/// The next frame on `recv`, as text: there within ten seconds, and not the stream's end.
+async fn frame_of(recv: &mut RecvStream) -> String {
+    let frame = tokio::time::timeout(Duration::from_secs(10), read_frame(recv))
+        .await
+        .expect("a frame in time")
+        .unwrap()
+        .expect("a frame, not the stream's end");
+    String::from_utf8(frame).unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_device_that_opens_many_streams_of_one_name_on_its_connection_has_each_as_its_own_and_one_it_ends_leaves_the_others(
+) {
+    let root = temp();
+    let mut host = Main::start(&root, "host").await;
+    let (_phone, connection) = phone_of(&mut host).await;
+
+    // On its one connection, the phone watches a terminal on an `api` stream and follows a
+    // conversation on another, as its Agent screen does: each told to main as it opens, by an id of
+    // its own, and each frame by that id.
+    let (mut watch_out, mut watch_in) = ws::open(&connection, "api").await.unwrap();
+    write_frame(&mut watch_out, b"watch t1").await.unwrap();
+    let (mut talk_out, mut talk_in) = ws::open(&connection, "api").await.unwrap();
+    write_frame(&mut talk_out, b"talk t1").await.unwrap();
+    let conn = host.next("incoming").await["conn"].clone();
+    let mut asked = HashMap::new();
+    for _ in 0..2 {
+        let recv = host.next("recv").await;
+        assert_eq!(recv["conn"], conn);
+        let data = recv["data"].as_str().unwrap().to_string();
+        asked.insert(data, recv["stream"].as_u64().unwrap());
+    }
+    let (watch, talk) = (asked["watch t1"], asked["talk t1"]);
+    assert_ne!(watch, talk);
+    let mut opened = vec![];
+    for _ in 0..2 {
+        let m = host.next("opened").await;
+        opened.push((m["conn"].clone(), m["stream"].clone(), m["name"].clone()));
+    }
+    opened.sort_by_key(|(_, stream, _)| stream.as_u64());
+    let mut both = [watch, talk];
+    both.sort();
+    assert_eq!(opened, both.map(|s| (conn.clone(), json!(s), json!("api"))));
+
+    // Main answers each on its own: neither hears the other's.
+    host.send_on(&conn, watch, "screen of t1").await;
+    host.send_on(&conn, talk, "what t1 said").await;
+    assert_eq!(frame_of(&mut watch_in).await, "screen of t1");
+    assert_eq!(frame_of(&mut talk_in).await, "what t1 said");
+
+    // A third, for one call, let go once it is answered: main is told it ended, and the other two
+    // carry on, both ways.
+    let (mut call_out, mut call_in) = ws::open(&connection, "api").await.unwrap();
+    write_frame(&mut call_out, b"send t1").await.unwrap();
+    let call = host.next("recv").await;
+    assert_eq!(call["data"], "send t1");
+    let call = call["stream"].as_u64().unwrap();
+    host.send_on(&conn, call, "sent").await;
+    assert_eq!(frame_of(&mut call_in).await, "sent");
+    drop((call_out, call_in));
+    let ended = host.next("ended").await;
+    assert_eq!(
+        (ended["conn"].clone(), ended["stream"].clone()),
+        (conn.clone(), json!(call))
+    );
+    host.send_on(&conn, watch, "more of t1").await;
+    host.send_on(&conn, talk, "more said").await;
+    assert_eq!(frame_of(&mut watch_in).await, "more of t1");
+    assert_eq!(frame_of(&mut talk_in).await, "more said");
+    write_frame(&mut talk_out, b"talk on").await.unwrap();
+    let recv = host.next("recv").await;
+    assert_eq!(
+        (recv["stream"].clone(), recv["data"].clone()),
+        (json!(talk), json!("talk on"))
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_app_that_speaks_another_protocol_is_told_so_and_the_daemon_stops() {
+    let root = temp();
+    // An app of an earlier release says nothing of its protocol: it admits devices first. One of a
+    // later release says it speaks another.
+    let firsts = [
+        (json!({ "t": "admit", "devices": [] }), 1),
+        (json!({ "t": "hello", "v": PROTOCOL + 1 }), PROTOCOL + 1),
+    ];
+    for (i, (first, speaks)) in firsts.into_iter().enumerate() {
+        let mut main = Main::launch(&root, &format!("app{i}"), &[], Stdio::piped()).await;
+        main.send(first).await;
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let status = loop {
+            if let Some(status) = main.daemon.try_wait().unwrap() {
+                break status;
+            }
+            assert!(Instant::now() < deadline, "the daemon kept running");
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        };
+        let mut said = String::new();
+        std::io::Read::read_to_string(&mut main.daemon.stderr.take().unwrap(), &mut said).unwrap();
+        assert!(!status.success());
+        assert!(
+            said.contains(&format!("protocol {speaks}, and this hive-net {PROTOCOL}")),
+            "{said}"
+        );
+    }
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -283,9 +444,7 @@ async fn a_device_not_admitted_is_refused_and_one_no_longer_admitted_is_cut_off_
         .send(json!({ "t": "dial", "req": 2, "peer": host.id, "addrs": host.addr_list() }))
         .await;
     let conn = guest.next("dialed").await["conn"].clone();
-    guest
-        .send(json!({ "t": "send", "conn": conn, "stream": "api", "data": "hello" }))
-        .await;
+    guest.open(&conn, 1, "api", "hello").await;
     assert_eq!(host.next("incoming").await["peer"], json!(guest.id));
     host.next("recv").await;
 
@@ -354,9 +513,7 @@ async fn when_main_goes_the_daemon_closes_its_connections_so_the_other_side_hear
         .send(json!({ "t": "dial", "req": 1, "peer": host.id, "addrs": host.addr_list() }))
         .await;
     let conn = guest.next("dialed").await["conn"].clone();
-    guest
-        .send(json!({ "t": "send", "conn": conn, "stream": "api", "data": "hello" }))
-        .await;
+    guest.open(&conn, 1, "api", "hello").await;
     host.next("recv").await;
 
     let gone = Instant::now();
@@ -432,9 +589,7 @@ async fn a_device_on_the_local_network_reaches_a_host_elsewhere_through_the_rela
         .await;
     let dialed = guest.next_of(&["dialed", "failed"]).await;
     assert_eq!(dialed["t"], "dialed", "{dialed}");
-    guest
-        .send(json!({ "t": "send", "conn": dialed["conn"], "stream": "api", "data": "hello" }))
-        .await;
+    guest.open(&dialed["conn"], 1, "api", "hello").await;
     assert_eq!(host.next("recv").await["data"], "hello");
     drop(relay);
     fs::remove_dir_all(root).unwrap();
