@@ -20,6 +20,9 @@ import com.hivemind.phone.ui.pair.PairScreen
 import com.hivemind.phone.ui.pair.PairViewModel
 import com.hivemind.phone.ui.start.StartScreen
 import com.hivemind.phone.ui.start.StartViewModel
+import com.hivemind.phone.ui.views.OpenView
+import com.hivemind.phone.ui.views.ViewScreen
+import com.hivemind.phone.ui.views.ViewViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 
@@ -44,6 +47,19 @@ sealed interface Route : NavKey {
 
     @Serializable
     data object Start : Route
+
+    /** A community view (§6.1), as Views offered it: its page, from its computer, on a workspace there. */
+    @Serializable
+    data class View(
+        val device: String,
+        val deviceName: String,
+        val workspace: String,
+        val id: String,
+        val name: String,
+        val page: String,
+    ) : Route {
+        val open get() = OpenView(device, deviceName, workspace, id, name, page)
+    }
 }
 
 private fun AgentRef.agent() = Route.Agent(device, workspace, tile)
@@ -77,6 +93,11 @@ fun PhoneNav(core: PhoneCore, opens: Flow<AgentRef>) {
                     onOpen = { stack.add(it.agent()) },
                     onStart = { stack.add(Route.Start) },
                     onPair = { stack.add(Route.Pair) },
+                    onOpenView = { row ->
+                        stack.add(
+                            Route.View(row.place.device, row.place.deviceName, row.place.workspace, row.view.id, row.view.name, row.view.page),
+                        )
+                    },
                 )
             }
             entry<Route.Pair> {
@@ -99,6 +120,9 @@ fun PhoneNav(core: PhoneCore, opens: Flow<AgentRef>) {
             }
             entry<Route.Diff> { route ->
                 DiffScreen(viewModel { DiffViewModel(core.phone, route.ref) }, onBack = { stack.removeLastOrNull() })
+            }
+            entry<Route.View> { route ->
+                ViewScreen(viewModel { ViewViewModel(core.phone, route.open) }, onBack = { stack.removeLastOrNull() })
             }
             entry<Route.Start> {
                 StartScreen(

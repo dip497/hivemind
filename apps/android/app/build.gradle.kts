@@ -123,6 +123,8 @@ dependencies {
     // Google services); an answer from a notification, by WorkManager, the app left closed.
     implementation(libs.unifiedpush.connector)
     implementation(libs.androidx.work.runtime)
+    // Community views (P8): each in a web view, its files served by the app, joined to the core.
+    implementation(libs.androidx.webkit)
     // The generated bindings call the core through JNA; its AAR carries the Android dispatch libraries.
     implementation(variantOf(libs.jna) { artifactType("aar") })
     // Debug builds count their frames (FrameMeter, design §3.8).

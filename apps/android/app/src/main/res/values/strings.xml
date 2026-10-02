@@ -6,6 +6,7 @@
     <string name="tab_needs">Needs you</string>
     <string name="tab_agents">Agents</string>
     <string name="tab_devices">Devices</string>
+    <string name="tab_views">Views</string>
 
     <!-- How long ago: in lists, beside a wait or a state -->
     <string name="ago_now">now</string>
@@ -93,6 +94,14 @@
     <string name="lock_start_title">Start %s</string>
     <string name="lock_close_title">Close %s</string>
     <string name="lock_subtitle">It runs on your computer.</string>
+
+    <!-- Views (P8): the community views the person's computers offer the phone, and one shown -->
+    <string name="views_none">No views yet. A community view that works on a phone, installed on your computer, shows here.</string>
+    <string name="view_too_old">This phone\'s WebView is too old to show views.</string>
+    <string name="view_no_webview">This phone\'s WebView could not be started.</string>
+    <string name="view_disabled">%1$s turned this view off: %2$s</string>
+    <string name="lock_view_title">Start or close an agent</string>
+    <string name="lock_view_subtitle">%s asks. It runs on your computer.</string>
 
     <!-- Diff -->
     <string name="diff_title">Changes</string>
