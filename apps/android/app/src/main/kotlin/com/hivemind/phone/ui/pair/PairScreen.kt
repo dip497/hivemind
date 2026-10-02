@@ -44,6 +44,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.hivemind.phone.R
@@ -115,7 +117,13 @@ private fun Pairing(vm: PairViewModel, state: PairState) {
         label = { Text(stringResource(R.string.pair_link)) },
         singleLine = true,
         enabled = !pairing,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+        // A link, as iOS's field takes it: nothing in it corrected or capitalized.
+        keyboardOptions = KeyboardOptions(
+            capitalization = KeyboardCapitalization.None,
+            autoCorrectEnabled = false,
+            keyboardType = KeyboardType.Uri,
+            imeAction = ImeAction.Go,
+        ),
         keyboardActions = KeyboardActions(onGo = { if (link.isNotBlank()) vm.pair(link) }),
         trailingIcon = {
             TextButton(onClick = {

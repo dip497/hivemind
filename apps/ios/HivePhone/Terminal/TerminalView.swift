@@ -61,6 +61,7 @@ final class TerminalView: UIScrollView, UIScrollViewDelegate, UIKeyInput {
         content.addSubview(caret)
         isAccessibilityElement = true
         accessibilityLabel = "Terminal"
+        accessibilityIdentifier = "agent.terminal"
         restyle()
         _ = registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: TerminalView, _: UITraitCollection) in
             view.restyle()
@@ -248,6 +249,24 @@ final class TerminalView: UIScrollView, UIScrollViewDelegate, UIKeyInput {
         for (index, view) in shown {
             view.show(lines[index], from: slice.x, metrics: metrics, palette: palette)
         }
+    }
+
+    // MARK: What accessibility reads
+
+    /// The lines in sight, as VoiceOver reads the terminal (and so the UI tests): read when it asks,
+    /// from the lines held, never per frame.
+    override var accessibilityValue: String? {
+        get {
+            let height = metrics.lineHeight
+            guard lines.count > 0, height > 0, bounds.height > 0 else { return nil }
+            let first = max(0, Int((contentOffset.y / height).rounded(.down)))
+            let last = min(lines.count - 1, Int(((contentOffset.y + bounds.height) / height).rounded(.up)) - 1)
+            guard first <= last else { return nil }
+            var shown = (first...last).map { lines[lines.origin + UInt64($0)]?.text ?? "" }
+            while shown.last?.isEmpty == true { shown.removeLast() }
+            return shown.isEmpty ? nil : shown.joined(separator: "\n")
+        }
+        set { super.accessibilityValue = newValue }
     }
 
     // MARK: Following the newest line

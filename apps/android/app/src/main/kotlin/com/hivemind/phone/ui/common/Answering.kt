@@ -23,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
@@ -119,7 +120,7 @@ fun ReplyBox(hint: String, busy: Boolean, onSend: (String) -> Unit, modifier: Mo
             enabled = !busy,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { send() }),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).testTag("reply"),
         )
         Button(onClick = send, enabled = !busy && text.isNotBlank(), modifier = Modifier.padding(start = 8.dp)) {
             Text(stringResource(R.string.action_send))

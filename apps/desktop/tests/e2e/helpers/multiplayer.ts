@@ -31,13 +31,13 @@ export async function ownNetwork(root: string, procs: ChildProcess[], policy: "c
   return { relay, lookup, access, push, link, data };
 }
 
-/** Start the app as person `name` (their data under `root/name`), with `cwd` as its project, and
- *  `more` in its environment. */
-export async function person(root: string, name: string, cwd: string, apps: ElectronApplication[], more: Record<string, string> = {}): Promise<Page> {
+/** Start the app as person `name` (their data under `root/name`), with `cwd` as its project, `more`
+ *  in its environment and `args` on its command line. */
+export async function person(root: string, name: string, cwd: string, apps: ElectronApplication[], more: Record<string, string> = {}, args: string[] = []): Promise<Page> {
   const config = path.join(root, name);
   const env = { ...process.env, XDG_CONFIG_HOME: config, HIVE_SETTINGS: path.join(config, "settings.json"), HIVEMIND_HIVE_NET: HIVE_NET, ...more } as Record<string, string>;
   delete env.ELECTRON_RUN_AS_NODE;
-  const app = await electron.launch({ args: [path.resolve("out/main/index.js"), "--no-sandbox"], cwd, env });
+  const app = await electron.launch({ args: [path.resolve("out/main/index.js"), "--no-sandbox", ...args], cwd, env });
   apps.push(app);
   const page = await app.firstWindow();
   await page.waitForSelector(".react-flow");

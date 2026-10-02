@@ -1,0 +1,56 @@
+# The app against a real computer (docs/design/phone-app-2026-10-02.md §7): it pastes the link the
+# computer's Settings → Devices → Pair a phone shows, pairs, and is the person's; finds the computer
+# and its agent among the agents; opens the agent and reads its line in its terminal, then what it
+# and the person said in its chat; and sends it a message from the reply box, which it answers.
+# Run by apps/desktop/tests/e2e/phone-app.spec.ts (PHONE_APP=android), which hands it the link and
+# what to find (PAIR_LINK, PAIR_PERSON, PAIR_COMPUTER, PAIR_AGENT, PAIR_LINE, PAIR_SAID,
+# PAIR_MESSAGE, PAIR_ANSWER); in a folder of its own, so the smoke run of apps/android/maestro
+# leaves it out. A computer's network, a terminal and a conversation over it are slow on a CI
+# emulator: every wait is long.
+appId: com.hivemind.phone
+name: Pair with a computer, and drive its agent
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: "pair-link"
+    timeout: 60000
+- tapOn:
+    id: "pair-link"
+- inputText: ${PAIR_LINK}
+- hideKeyboard
+- tapOn:
+    id: "pair-button"
+- extendedWaitUntil:
+    visible: "This phone is ${PAIR_PERSON}'s now."
+    timeout: 120000
+- tapOn: "Continue"
+
+# The computer, reachable, and its agent, among the agents.
+- tapOn: "Agents"
+- extendedWaitUntil:
+    visible: ${PAIR_COMPUTER}
+    timeout: 120000
+- extendedWaitUntil:
+    visible: ${PAIR_AGENT}
+    timeout: 120000
+- tapOn: ${PAIR_AGENT}
+
+# Its terminal first: the line the agent printed, as its screen has it.
+- extendedWaitUntil:
+    visible: ${PAIR_LINE}
+    timeout: 60000
+# What it and the person said to each other.
+- tapOn: "Chat"
+- extendedWaitUntil:
+    visible: ${PAIR_SAID}
+    timeout: 60000
+# A message from the reply box: the agent hears it, and answers.
+- tapOn:
+    id: "reply"
+- inputText: ${PAIR_MESSAGE}
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible: ${PAIR_ANSWER}
+    timeout: 60000
