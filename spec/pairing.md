@@ -1,4 +1,4 @@
-# Pairing (0.6)
+# Pairing (0.7)
 
 Two devices become one person's (R14 and §5.2 in `docs/design/multiplayer-2026-09-28.md`): the
 device being added receives the person key and certifies itself with it (`identity.md`), or, a
@@ -144,6 +144,34 @@ taking another person would make that workspace no longer its owner's.
   that does not verify is not taken. Pairing again with the same person's app keeps the network
   when that app gives none; with another person's, the phone takes that one's network, or none.
 
+## The person's other devices learn of a phone
+
+A phone pairs with an app alone; the person's other devices learn of it from that app (0.7). An
+app tells each of the person's other devices it paired with itself, apps and hosts, which phones
+paired with it, on the `device` stream (`needs.md`, "Asking"):
+
+```json
+{ "t": "phones", "phones": [ { "device": "<key hex>", "name": "…", "certificate": { … }, "addrs": [ … ], "relay": … } ] }
+```
+
+all of them each time: as a phone pairs with it or is forgotten there, as it pairs with another
+device, and as it starts and wakes, so that one away then hears it later. The device keeps each
+phone whose certificate verifies, names it and names the person whose devices both are, as one of
+the person's devices that app told of (a phone, whatever kind it is said to be), and forgets each
+that app told of before and lists no more, unless another app still lists it; it answers
+`{ "t": "phones", "ok": true }` (`false` from a device that keeps no phone). It takes this from one
+of the person's devices it paired with itself, never from a phone, and keeps a phone that paired
+with it itself as it is. It lets the phones it keeps in, serves them what a phone is served, and
+tells them what happens there (`push.md`).
+
+A phone asks each app it paired with which of the person's devices it may reach through it:
+`{ "t": "devices" }`, answered `{ "t": "devices", "devices": [ { "device", "name", "kind",
+"certificate", "addrs", "relay" }, … ] }`: the apps and hosts that app paired with itself. It keeps
+each whose certificate verifies, names it and names the phone's person, and that is no phone, as
+that app told of it; forgets each that app told of before and lists no more, unless another still
+lists it; and asks them as it asks the app (`needs.md`, `push.md`). An app that does not answer
+leaves what it told before.
+
 ## Unpairing
 
 A device forgets another when the person unpairs it there: it is no longer among the person's
@@ -154,6 +182,15 @@ up. The device forgets it once it has (forgetting it first would cut the connect
 with it), or lets it go after a few seconds and forgets it then. The phone forgets the device
 whether or not it could tell it; a device it could not tell still lists the phone until the phone
 is unpaired there too. Unpairing is recorded in the device's audit log, as whoever asked for it.
+
+A phone unpaired on the app it paired with is forgotten by the person's other devices as that app
+tells them (its next `phones`). One unpaired on another device, that learned of it from an app, is
+forgotten there, and that device asks the app to forget it too: `{ "t": "forget", "device": "<the
+phone's key hex>" }` on the `device` stream, answered `{ "t": "forget", "ok": true }` when the
+phone paired with that app (which then forgets it as above) and `false` otherwise; it is taken from
+one of the person's devices the app paired with itself, never from a phone. A phone does not unpair
+itself from a device it learned of from an app: it unpairs from the app, and forgets with it the
+devices that app alone told of.
 
 The cases in `../conformance/pairing.json` (proofs, codes, links, and a phone pairing with an app,
 message by message) decide whether an implementation follows this.

@@ -4,7 +4,9 @@
 //! that person, the first one's devices forgotten. Only an entry whose certificate verifies, names
 //! its device and is the phone's person's is listed; a certificate that does not name the phone is
 //! not its own. What each device last answered is kept, and forgotten with the device
-//! (spec/needs.md "Asking", spec/pairing.md "Unpairing"); a device found away is shown back once,
+//! (spec/needs.md "Asking", spec/pairing.md "Unpairing"); the computers and hosts an app tells of,
+//! kept as it told of them while an app that did lists them (spec/pairing.md 0.7); a device found
+//! away is shown back once,
 //! when it says it is back since then (spec/push.md 0.2); and the network an app gives, which the
 //! phone reaches the person's devices through (spec/pairing.md 0.5).
 
@@ -18,6 +20,7 @@ use hive_phone::{
     pairing::{Paired, PairedWith},
 };
 use iroh::SecretKey;
+use serde_json::json;
 
 fn key(n: u8) -> SecretKey {
     SecretKey::from_bytes(&[n; 32])
@@ -78,7 +81,8 @@ fn a_phone_keeps_the_app_it_paired_with_and_the_certificate_given_as_its_own() {
         phone.devices(),
         vec![PairedDevice {
             with: first.with.clone(),
-            paired_at: 1_000
+            paired_at: 1_000,
+            via: vec![],
         }]
     );
     // Kept as the app keeps its own: readable by this user alone, and read again as it was.
@@ -161,6 +165,7 @@ fn only_what_checks_out_is_listed_and_a_certificate_for_another_device_is_not_th
             serde_json::to_value(PairedDevice {
                 with: p.with,
                 paired_at: 1,
+                via: vec![],
             })
             .unwrap(),
         );
@@ -307,6 +312,90 @@ fn a_device_found_away_is_shown_back_once_when_it_says_so_since_then_and_answeri
     assert_eq!(phone.away(), since(&[(&b, 23)]));
     phone.keep(&paired(&phone, 20, &sam), 24).unwrap();
     assert!(phone.away().is_empty());
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn the_computers_and_hosts_an_app_tells_of_are_kept_as_it_told_of_them_until_no_app_that_told_of_them_lists_them(
+) {
+    let dir = tmp("learn");
+    let phone = Identity::open(&dir.join("id")).unwrap();
+    let (priya, sam) = (key(1), key(2));
+    let (desk, laptop) = (paired(&phone, 10, &priya), paired(&phone, 11, &priya));
+    phone.keep(&desk, 1).unwrap();
+    phone.keep(&laptop, 2).unwrap();
+    let (desk, laptop) = (desk.with.device, laptop.with.device);
+    // A host of Priya's, as an app names it.
+    let device = |n: u8, kind: &str, of: &SecretKey| {
+        let id = key(n).public().to_string();
+        PairedWith {
+            device: id.clone(),
+            name: format!("{kind} {n}"),
+            kind: kind.into(),
+            certificate: certify(of, &id),
+            addrs: vec![format!("10.0.0.{n}:4433")],
+            relay: None,
+        }
+    };
+    let told = |d: &PairedWith| serde_json::to_value(d).unwrap();
+    let (box_, mini) = (device(20, "host", &priya), device(21, "app", &priya));
+    let learned = |with: &PairedWith, at: u64, via: &[&String]| PairedDevice {
+        with: with.clone(),
+        paired_at: at,
+        via: via.iter().map(|v| v.to_string()).collect(),
+    };
+
+    phone.learn(&desk, &[told(&box_), told(&mini)], 5).unwrap();
+    assert_eq!(
+        phone.devices()[2..],
+        [learned(&box_, 5, &[&desk]), learned(&mini, 5, &[&desk])]
+    );
+    // Told of by the laptop too; named again as it is now, kept from when the phone learned of it.
+    let renamed = PairedWith {
+        name: "build box".into(),
+        ..box_.clone()
+    };
+    phone.learn(&laptop, &[told(&renamed)], 6).unwrap();
+    assert_eq!(
+        phone.devices()[2..],
+        [
+            learned(&renamed, 5, &[&desk, &laptop]),
+            learned(&mini, 5, &[&desk])
+        ]
+    );
+    // The desk lists neither any more: the mini goes, the box stays while the laptop lists it.
+    phone.learn(&desk, &[], 7).unwrap();
+    assert_eq!(phone.devices()[2..], [learned(&renamed, 5, &[&laptop])]);
+    phone.learn(&laptop, &[], 8).unwrap();
+    assert_eq!(names(&phone.devices()), ["app 10", "app 11"]);
+
+    // Not the person's, a phone, a certificate for another device, one the phone paired with
+    // itself: none is kept as told.
+    let mut moved = box_.clone();
+    moved.certificate = certify(&priya, &key(22).public().to_string());
+    let paired_itself = PairedWith {
+        name: "renamed".into(),
+        ..paired(&phone, 11, &priya).with
+    };
+    let none = [
+        told(&device(23, "host", &sam)),
+        told(&device(24, "phone", &priya)),
+        told(&moved),
+        told(&paired_itself),
+        json!("a host"),
+    ];
+    phone.learn(&desk, &none, 9).unwrap();
+    // As written, not only as read back.
+    let written: Vec<serde_json::Value> =
+        serde_json::from_str(&fs::read_to_string(dir.join("id").join("devices.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        written
+            .iter()
+            .map(|d| d["name"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["app 10", "app 11"]
+    );
     fs::remove_dir_all(&dir).unwrap();
 }
 

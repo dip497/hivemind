@@ -1060,6 +1060,12 @@ agents.
    Rust side is `crates/hive-phone` (`hive-phone pair <link>` in a terminal), held with the app to
    `conformance/pairing.json`. Name and colour do not carry over yet, and it pairs on the local
    network: the reach chooser (step 2 below) comes with the phone's shell.
+
+   *As built (M5 step 12, `spec/pairing.md` 0.7):* the person's other computers and hosts learn of
+   the phone from the app it paired with, which tells each of them its phones, all of them each
+   time (as one pairs or is forgotten, and as the app starts and wakes), so they let it in, serve it
+   as a phone and tell it what happens there; and the phone asks the app which of the person's
+   devices it may reach through it, so it asks them too.
 2. **Away from this network?** On the local network (the default) the phone works only on
    the same Wi-Fi and only while the app is open. The pairing sheet asks once:
    - *Use hivemind's servers* — reach your devices from anywhere; notifications through our
@@ -1201,6 +1207,12 @@ agents.
 - **Keys:** device key in the OS keychain (a 0600 file under `hive host`); losing a device
   → unpair it from any other device of yours, which adds its certificate to a revocation
   list in the owner-only document; hosts refuse it from then on.
+
+  *As built (M5 step 12), for a phone:* no revocation list. Each device keeps the phones the app
+  that paired them tells it of, and the app tells them all of its phones each time, so a phone
+  unpaired there is forgotten everywhere as they hear it; unpaired on another device, that device
+  asks the app to forget it (`forget`). A device away then hears it the next time the app starts
+  or wakes.
 - **Person key compromise** (a device holding it is stolen and not merely lost): rotate the
   person key from a remaining device. This re-signs your device certificates and access
   entries and derives new workspace keys, so existing invite links stop working and guests

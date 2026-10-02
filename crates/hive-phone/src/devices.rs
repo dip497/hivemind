@@ -1,10 +1,11 @@
 //! The person's devices, as the phone knows them (spec/pairing.md, "After"): one entry each, kept
 //! in `devices.json` beside its keys as the app keeps its own, written whole and readable by its
 //! user alone. They are the person's the phone's own certificate names; an entry whose certificate
-//! does not verify, or names someone else, is not one of them. What the phone asks one of them on
-//! its `device` stream, and unpairing (spec/pairing.md, "Unpairing").
+//! does not verify, or names someone else, is not one of them. The apps it paired with tell it of
+//! the person's other computers and hosts, which it reaches too (0.7). What the phone asks one of
+//! them on its `device` stream, and unpairing (spec/pairing.md, "Unpairing").
 
-use std::{fs, time::Duration};
+use std::{collections::BTreeMap, fs, time::Duration};
 
 use anyhow::{bail, Context, Result};
 use hive_net::frames::{read_frame, write_frame};
@@ -21,13 +22,16 @@ use crate::{
 /// How long a device has to answer the phone before it is said to be away.
 pub const ANSWER_WITHIN: Duration = Duration::from_secs(10);
 
-/// One of the person's devices, and when the phone paired with it.
+/// One of the person's devices, and when the phone paired with it, or learned of it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PairedDevice {
     #[serde(flatten)]
     pub with: PairedWith,
     pub paired_at: u64,
+    /// The apps that told this phone of it (spec/pairing.md 0.7): none for one it paired with.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub via: Vec<String>,
 }
 
 impl Identity {
@@ -63,6 +67,7 @@ impl Identity {
         devices.push(PairedDevice {
             with: paired.with.clone(),
             paired_at: now,
+            via: vec![],
         });
         self.certify(&paired.certificate)?;
         if !same {
@@ -89,6 +94,93 @@ impl Identity {
         Ok(true)
     }
 
+    /// The person's computers and hosts the app `by` paired with, as it says (`told`, spec/
+    /// pairing.md 0.7): each that is this phone's person's, and no phone, is kept as `by` told of
+    /// it, at `now` when it is new here; each that `by` told of before and lists no more is
+    /// forgotten, unless another app told of it too. One this phone paired with itself is left as
+    /// it is.
+    pub fn learn(&self, by: &str, told: &[Value], now: u64) -> Result<()> {
+        let Some(mine) = self.certificate() else {
+            return Ok(());
+        };
+        let mut listed: BTreeMap<String, PairedWith> = told
+            .iter()
+            .filter_map(|d| serde_json::from_value::<PairedWith>(d.clone()).ok())
+            .filter(|d| {
+                let c = &d.certificate;
+                d.kind != "phone" && c.verifies() && c.device == d.device && c.person == mine.person
+            })
+            .map(|d| (d.device.clone(), d))
+            .collect();
+        let before = self.devices();
+        let (mut kept, mut forgot) = (vec![], vec![]);
+        for d in &before {
+            let named = listed.remove(&d.with.device);
+            if d.via.is_empty() {
+                kept.push(d.clone());
+                continue;
+            }
+            let mut via: Vec<String> = d.via.iter().filter(|v| *v != by).cloned().collect();
+            match named {
+                Some(with) => {
+                    via.push(by.to_string());
+                    kept.push(PairedDevice {
+                        with,
+                        paired_at: d.paired_at,
+                        via,
+                    });
+                }
+                None if !via.is_empty() => kept.push(PairedDevice { via, ..d.clone() }),
+                None => forgot.push(d.with.device.clone()),
+            }
+        }
+        kept.extend(listed.into_values().map(|with| PairedDevice {
+            with,
+            paired_at: now,
+            via: vec![by.to_string()],
+        }));
+        if kept != before {
+            self.write_devices(&kept)?;
+        }
+        for device in forgot {
+            needs::forget_heard(self, Some(&device))?;
+        }
+        Ok(())
+    }
+
+    /// Ask each app this phone paired with, on `endpoint`, which of the person's computers and
+    /// hosts it may reach through it, and keep what they say at `now` (spec/pairing.md 0.7): one
+    /// that does not answer leaves what it said before.
+    pub async fn learn_from(&self, endpoint: &Endpoint, now: u64) -> Result<()> {
+        let mut asking = tokio::task::JoinSet::new();
+        for app in self.devices() {
+            if !app.via.is_empty() || app.with.kind != "app" {
+                continue;
+            }
+            let endpoint = endpoint.clone();
+            asking.spawn(async move {
+                let asked = async {
+                    let w = &app.with;
+                    let at = hive_net::net::addr_of(&w.device, &w.addrs, &w.relay)?;
+                    let connection = endpoint.connect(at, hive_net::ws::ALPN).await?;
+                    let answer = ask(&connection, &json!({ "t": "devices" })).await?;
+                    connection.close(0u32.into(), b"done");
+                    Ok::<_, anyhow::Error>(answer)
+                };
+                let answer = tokio::time::timeout(ANSWER_WITHIN, asked).await;
+                (app.with.device, answer)
+            });
+        }
+        while let Some(Ok((by, answer))) = asking.join_next().await {
+            if let Ok(Ok(answer)) = answer {
+                if let Some(told) = answer.get("devices").and_then(Value::as_array) {
+                    self.learn(&by, told, now)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn write_devices(&self, devices: &[PairedDevice]) -> Result<()> {
         write_private(
             &self.dir().join("devices.json"),
@@ -97,8 +189,9 @@ impl Identity {
     }
 
     /// Unpair this phone from `device` (spec/pairing.md, "Unpairing"): told on `endpoint`, the
-    /// device forgets the phone, and the phone forgets the device whether it could tell it or not.
-    /// Whether the device was told: one that was not still lists the phone.
+    /// device forgets the phone, and the phone forgets the device whether it could tell it or not,
+    /// and the devices it learned of from it alone. Whether the device was told: one that was not
+    /// still lists the phone.
     pub async fn unpair(&self, endpoint: &Endpoint, device: &PairedWith) -> Result<bool> {
         let told = async {
             let at = hive_net::net::addr_of(&device.device, &device.addrs, &device.relay)?;
@@ -112,6 +205,7 @@ impl Identity {
         };
         let told = matches!(tokio::time::timeout(ANSWER_WITHIN, told).await, Ok(Ok(())));
         self.forget(&device.device)?;
+        self.learn(&device.device, &[], 0)?;
         Ok(told)
     }
 }

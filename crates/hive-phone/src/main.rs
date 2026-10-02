@@ -235,16 +235,15 @@ async fn run(args: Args) -> Result<()> {
             }
         }
         "needs" => {
-            let devices = phone.devices();
-            if devices.is_empty() {
+            if phone.devices().is_empty() {
                 bail!("this phone is paired with nothing yet: `hive-phone pair <link>`");
             }
+            let (endpoint, devices) = reaching(&phone).await?;
             // Each asked at once: one away holds up none of the others.
-            let endpoint = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
             let mut asking = tokio::task::JoinSet::new();
             for d in devices {
                 let endpoint = endpoint.clone();
-                asking.spawn(async move { (needs::ask(&endpoint, &d.with).await, d.with) });
+                asking.spawn(async move { (needs::ask(&endpoint, &d).await, d) });
             }
             let (mut answers, mut away) = (vec![], vec![]);
             while let Some(Ok((answer, device))) = asking.join_next().await {
@@ -291,16 +290,33 @@ async fn run(args: Args) -> Result<()> {
                 .rest
                 .first()
                 .context("unpair: which device? `hive-phone devices` lists them")?;
-            let devices: Vec<_> = phone.devices().into_iter().map(|d| d.with).collect();
+            let all = phone.devices();
+            let devices: Vec<_> = all.iter().map(|d| &d.with).collect();
             let named: Vec<_> = devices.iter().filter(|d| d.name == *which).collect();
             let device = match devices.iter().find(|d| d.device == *which) {
-                Some(device) => device,
-                None if named.len() == 1 => named[0],
+                Some(device) => *device,
+                None if named.len() == 1 => *named[0],
                 None if named.len() > 1 => {
                     bail!("several devices are called {which}: name it by its id")
                 }
                 None => bail!("{which} is not a device this phone is paired with"),
             };
+            // One this phone learned of from an app is unpaired there: the app tells it.
+            if let Some(d) = all
+                .iter()
+                .find(|d| d.with.device == device.device && !d.via.is_empty())
+            {
+                let through: Vec<_> = all
+                    .iter()
+                    .filter(|a| d.via.contains(&a.with.device))
+                    .map(|a| a.with.name.as_str())
+                    .collect();
+                bail!(
+                    "{} knows this phone through {}: unpair from that",
+                    device.name,
+                    through.join(", ")
+                );
+            }
             let endpoint = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
             let told = phone.unpair(&endpoint, device).await?;
             endpoint.close().await;
@@ -325,8 +341,7 @@ async fn run(args: Args) -> Result<()> {
             let [ws, tile] = &args.rest[..] else {
                 bail!("watch: which workspace and tile? (`hive-phone needs --json` names them)");
             };
-            let devices: Vec<_> = phone.devices().into_iter().map(|d| d.with).collect();
-            let endpoint = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
+            let (endpoint, devices) = reaching(&phone).await?;
             // Typing: each line read here goes into the terminal, Enter after it.
             let typed = args.typing.then(|| {
                 let (lines, typed) = tokio::sync::mpsc::channel(16);
@@ -379,8 +394,7 @@ async fn run(args: Args) -> Result<()> {
                 (None, false, Some(changes)) => json!({ "decision": "deny", "feedback": changes }),
                 _ => bail!("answer: --text <line>, --approve or --changes <what>, one of them"),
             };
-            let devices: Vec<_> = phone.devices().into_iter().map(|d| d.with).collect();
-            let endpoint = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
+            let (endpoint, devices) = reaching(&phone).await?;
             let answered = async {
                 let connection = workspace::holder(&endpoint, &devices, ws).await?;
                 workspace::answer(&connection, ws, tile, since, answer).await
@@ -401,8 +415,7 @@ async fn run(args: Args) -> Result<()> {
                 bail!("send: which workspace and tile? (`hive-phone needs --json` names them)");
             };
             let text = args.text.as_deref().context("send: --text <line>")?;
-            let devices: Vec<_> = phone.devices().into_iter().map(|d| d.with).collect();
-            let endpoint = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
+            let (endpoint, devices) = reaching(&phone).await?;
             let sent = async {
                 let connection = workspace::holder(&endpoint, &devices, ws).await?;
                 workspace::send(&connection, ws, tile, text).await
@@ -424,11 +437,10 @@ async fn run(args: Args) -> Result<()> {
             let listener = tokio::net::TcpListener::bind(at).await?;
             let endpoint = format!("http://{}/push", listener.local_addr()?);
             let subscription = keys.subscription(&endpoint);
-            let devices: Vec<_> = phone.devices().into_iter().map(|d| d.with).collect();
-            if devices.is_empty() {
+            if phone.devices().is_empty() {
                 bail!("this phone is paired with nothing yet: `hive-phone pair <link>`");
             }
-            let net = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
+            let (net, devices) = reaching(&phone).await?;
             let (mut told, mut away) = (vec![], vec![]);
             for d in &devices {
                 let given = async {
@@ -461,6 +473,15 @@ async fn run(args: Args) -> Result<()> {
         other => bail!("{other}: not a command\n{USAGE}"),
     }
     Ok(())
+}
+
+/// This phone on the network, and the person's devices it reaches: those it paired with, and the
+/// computers and hosts the apps among them tell of as they are asked now (spec/pairing.md 0.7).
+async fn reaching(phone: &Identity) -> Result<(iroh::Endpoint, Vec<pairing::PairedWith>)> {
+    let endpoint = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
+    phone.learn_from(&endpoint, now_ms()).await?;
+    let devices = phone.devices().into_iter().map(|d| d.with).collect();
+    Ok((endpoint, devices))
 }
 
 /// Take the notices posted to this phone's endpoint, each decrypted and printed as it comes, until

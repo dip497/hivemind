@@ -21,10 +21,12 @@
  * them through it, as `shownFrom` gives them, and never dials that machine. It says there what its
  * person lets the people here do on it (`Grant`), as they change it.
  *
- * One of the owner's phones (spec/pairing.md 0.3) is let in, as their device, for what a phone
- * does: it may ask on the `device` stream which workspaces there are and what waits on the person
- * in them (`needs`, spec/needs.md), give where it is told what happens there (`push`,
- * spec/push.md) and unpair itself (spec/pairing.md), and open one workspace's API on the `api`
+ * The owner's other devices say on the `device` stream which phones paired with them, and ask to
+ * forget one unpaired elsewhere (spec/pairing.md 0.7). One of the owner's phones (0.3) is let in,
+ * as their device, for what a phone does: it may ask on the `device` stream which workspaces there
+ * are and what waits on the person in them (`needs`, spec/needs.md), which of the owner's devices
+ * it may reach through this one, give where it is told what happens there (`push`, spec/push.md)
+ * and unpair itself (spec/pairing.md), and open one workspace's API on the `api`
  * stream (its first frame `{t:"open", workspace}`), as the owner, to watch and type into its
  * terminals and answer and message its agents (`phoneMay`), and nothing of the rest (no terminals
  * started, sized or closed, no workspace's board or files, no hosting).
@@ -46,6 +48,7 @@ import { serveFiles } from "./device-files.js";
 import { heldBoards, needsOf, workingIn, type Need, type WaitingStatus } from "./needs.js";
 import type { PlanReview } from "@hivemind/workspace-api/plans";
 import type { KnownMachines } from "@hivemind/core/remote-uri";
+import type { PairedWith } from "@hivemind/workspace-host/pairing";
 import { subscriptionOf, type Subscription } from "./web-push.js";
 import { linkDuplex } from "./device-sessions.js";
 
@@ -108,6 +111,16 @@ export interface PeerLinksOptions {
   /** One of the owner's phones unpairs itself: it is forgotten here (spec/pairing.md,
    *  "Unpairing"). None: no phone is kept here to forget. */
   unpair?(device: string): void;
+  /** Another of the owner's devices, `by`, says which phones it paired with (`phones`, as it gives
+   *  them): they are the owner's devices here too (spec/pairing.md 0.7). None: this device takes
+   *  none. */
+  introduced?(by: string, phones: unknown[]): void;
+  /** Another of the owner's devices, `by`, unpaired the phone `device` that paired with this one:
+   *  whether this one forgot it (spec/pairing.md 0.7). None: no phone pairs with this device. */
+  forget?(by: string, device: string): boolean;
+  /** The owner's devices a phone may reach through this one: those it paired with, phones aside.
+   *  None: a phone is told of none. */
+  devices?(): PairedWith[];
   onWarn?(message: string): void;
 }
 
@@ -118,23 +131,37 @@ export interface HeldWorkspace { workspace: string; name: string; repo: string }
 
 /** What the `device` stream carries: a question (no list), and the host's answer: which workspaces
  *  it holds, or what waits on the person in them and how many agents are at work there; where a
- *  phone is told what happens here, and whether it was taken; and a phone unpairing itself. */
+ *  phone is told what happens here, and whether it was taken; a phone unpairing itself; the phones
+ *  another of the person's devices paired with, and whether they were taken; and the person's
+ *  devices a phone may reach through this one. */
 export type DeviceMessage =
   | { t: "workspaces"; workspaces?: HeldWorkspace[] }
   | { t: "needs"; needs?: Need[]; working?: number }
   | { t: "push"; sub: Subscription | null }
   | { t: "push"; ok: boolean; error?: string }
-  | { t: "unpair"; ok?: boolean; error?: string };
+  | { t: "unpair"; ok?: boolean; error?: string }
+  | { t: "phones"; phones: unknown[] }
+  | { t: "phones"; ok: boolean; error?: string }
+  | { t: "forget"; device: string }
+  | { t: "forget"; ok: boolean }
+  | { t: "devices"; devices?: PairedWith[] };
 
 function parseDevice(text: string): DeviceMessage | null {
   try {
-    const m = JSON.parse(text) as { t?: unknown; workspaces?: unknown; needs?: unknown; ok?: unknown };
+    const m = JSON.parse(text) as { t?: unknown; workspaces?: unknown; needs?: unknown; ok?: unknown; phones?: unknown; devices?: unknown; device?: unknown };
     // Asked what waits on the person; its answer is read by the person's phone (spec/needs.md).
     if (m.t === "needs" && m.needs === undefined) return { t: "needs" };
     // Given where to tell a phone what happens (spec/push.md).
     if (m.t === "push" && m.ok === undefined) return { t: "push", sub: subscriptionOf(m) };
     // A phone unpairing itself (spec/pairing.md).
     if (m.t === "unpair" && m.ok === undefined) return { t: "unpair" };
+    // The phones another of the person's devices paired with, and whether they were taken
+    // (spec/pairing.md 0.7).
+    if (m.t === "phones") return m.ok === undefined ? { t: "phones", phones: Array.isArray(m.phones) ? m.phones : [] } : { t: "phones", ok: m.ok === true };
+    // A phone another of the person's devices unpaired, for the one it paired with to forget.
+    if (m.t === "forget") return m.ok === undefined ? (typeof m.device === "string" ? { t: "forget", device: m.device } : null) : { t: "forget", ok: m.ok === true };
+    // A phone asking which of the person's devices it may reach through this one.
+    if (m.t === "devices" && m.devices === undefined) return { t: "devices" };
     if (m.t !== "workspaces") return null;
     if (!Array.isArray(m.workspaces)) return { t: "workspaces" };
     const workspaces = m.workspaces.filter((w): w is HeldWorkspace => {
@@ -161,6 +188,41 @@ export function heldWorkspaces(link: Link, timeoutMs = 10_000): Promise<HeldWork
     const timer = setTimeout(() => { off(); reject(new Error("the device did not say which workspaces it holds")); }, timeoutMs);
     void link.closed.then((why) => { clearTimeout(timer); off(); reject(new Error(`the device closed the connection: ${why}`)); });
     link.send("device", JSON.stringify({ t: "workspaces" } satisfies DeviceMessage));
+  });
+}
+
+/** Tell the device at the other end of `link`, another of the person's, which phones this one
+ *  paired with (spec/pairing.md 0.7): all of them, so it forgets one listed no more. Whether it
+ *  took them. */
+export function tellPhones(link: Link, phones: PairedWith[], timeoutMs = 10_000): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const off = link.on("device", (text) => {
+      const m = parseDevice(text);
+      if (m?.t !== "phones" || !("ok" in m)) return;
+      clearTimeout(timer);
+      off();
+      resolve(m.ok);
+    });
+    const timer = setTimeout(() => { off(); reject(new Error("the device did not say whether it took the phones")); }, timeoutMs);
+    void link.closed.then((why) => { clearTimeout(timer); off(); reject(new Error(`the device closed the connection: ${why}`)); });
+    link.send("device", JSON.stringify({ t: "phones", phones } satisfies DeviceMessage));
+  });
+}
+
+/** Ask the device at the other end of `link`, another of the person's, to forget the phone
+ *  `device` it paired with: it was unpaired here (spec/pairing.md 0.7). Whether it did. */
+export function askToForget(link: Link, device: string, timeoutMs = 10_000): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const off = link.on("device", (text) => {
+      const m = parseDevice(text);
+      if (m?.t !== "forget" || !("ok" in m)) return;
+      clearTimeout(timer);
+      off();
+      resolve(m.ok);
+    });
+    const timer = setTimeout(() => { off(); reject(new Error("the device did not say whether it forgot the phone")); }, timeoutMs);
+    void link.closed.then((why) => { clearTimeout(timer); off(); reject(new Error(`the device closed the connection: ${why}`)); });
+    link.send("device", JSON.stringify({ t: "forget", device } satisfies DeviceMessage));
   });
 }
 
@@ -301,6 +363,18 @@ export class PeerLinks {
         this.o.unpair!(link.peer);
       });
     }
+    // Another of the owner's devices says which phones it paired with: never a phone's word.
+    if (asked?.t === "phones" && "phones" in asked && !phone) {
+      if (!this.o.introduced) return link.send("device", JSON.stringify({ t: "phones", ok: false, error: "this device keeps no phone" } satisfies DeviceMessage));
+      this.o.introduced(link.peer, asked.phones);
+      return link.send("device", JSON.stringify({ t: "phones", ok: true } satisfies DeviceMessage));
+    }
+    // Another of the owner's devices unpaired a phone that paired with this one: never a phone's word.
+    if (asked?.t === "forget" && "device" in asked && !phone) {
+      return link.send("device", JSON.stringify({ t: "forget", ok: this.o.forget?.(link.peer, asked.device) ?? false } satisfies DeviceMessage));
+    }
+    // A phone asks which of the owner's devices it may reach through this one.
+    if (asked?.t === "devices" && phone) return link.send("device", JSON.stringify({ t: "devices", devices: this.o.devices?.() ?? [] } satisfies DeviceMessage));
     if (asked?.t !== "workspaces" || asked.workspaces) return;
     const workspaces = heldBoards(store).map(({ workspace, name, repo }) => ({ workspace, name, repo }));
     link.send("device", JSON.stringify({ t: "workspaces", workspaces } satisfies DeviceMessage));

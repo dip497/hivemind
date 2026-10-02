@@ -56,7 +56,7 @@ function statusOf(host: HeadlessHost): HostStatus {
 }
 
 /** A device, as the person reads it. */
-const named = (d: Pick<PairedDevice, "name" | "kind">) => `${d.name} (${d.kind === "app" ? "the app" : "a host"})`;
+const named = (d: Pick<PairedDevice, "name" | "kind">) => `${d.name} (${d.kind === "app" ? "the app" : d.kind === "phone" ? "a phone" : "a host"})`;
 /** How long a person has to enter a code; the host's offer expires first. */
 const PAIR_WAIT_MS = 6 * 60_000;
 

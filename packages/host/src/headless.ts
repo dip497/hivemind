@@ -53,7 +53,8 @@ import { workspaceDomains } from "./domains.js";
 import { HANDED_OFF, handOff } from "./hand-off.js";
 import { answers } from "./answers.js";
 import { PeerLinks } from "./peer-links.js";
-import { participantNamed } from "./needs.js";
+import { heldBoards, participantNamed } from "./needs.js";
+import { PushNotices, PushSubscriptions, postNotice } from "./push.js";
 import { machines as savedMachines } from "./remote/catalog.js";
 import { People } from "./people.js";
 import { Plans } from "./plans.js";
@@ -337,6 +338,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     hosting,
     // A participant who lends their machine's keyboards, or keeps them again (M4).
     granted: (device) => terminals.machineChanged(`peer:${device}`),
+    // One of the person's phones, which is served what a phone does alone (M5).
+    phone: (device) => devices.list().some((d) => d.device === device && d.kind === "phone"),
     // What waits on the person here, for their devices to ask (M5), and on which machine.
     statuses: () => control.status.all(),
     plans: () => plans.reviews(),
@@ -346,8 +349,30 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       whose: (device) => participantNamed(lists, device),
       saved: (id) => savedMachines.list.find((m) => m.id === id)?.label,
     },
+    // Where each of the person's phones is told what happens here.
+    subscribe: (device, sub) => pushSubscriptions.set(device, sub),
+    // The phones one of the person's computers paired with are the person's here too
+    // (spec/pairing.md 0.7): this host pairs with none itself.
+    introduced: (by, phones) => {
+      const from = devices.list().find((d) => d.device === by && d.kind !== "phone");
+      if (!from) return;
+      for (const gone of devices.introduce(by, phones, from.certificate.person, Date.now())) pushSubscriptions.remove(gone);
+      net?.admit(lists.admitted());
+    },
     onWarn: o.onWarn,
   });
+  // The person's phones are told what happens here, encrypted to each (M5), and that this host is
+  // back as its network starts.
+  const pushSubscriptions = new PushSubscriptions(path.join(identity, "push.json"));
+  const notices = new PushNotices({
+    me: () => ({ device: keys.deviceId, name: deviceName() }),
+    boards: () => heldBoards(store),
+    changes: (listener) => { heard.add(listener); return () => { heard.delete(listener); }; },
+    subscriptions: pushSubscriptions,
+    post: postNotice,
+    onWarn: (m) => o.onWarn(`push: ${m}`),
+  });
+  control.status.subscribe((change) => notices.changed(change));
   /** The workspaces shared with someone that are hosted here, as their records are filed. */
   const hostedHere = (): Hosted[] => lists.workspaces().flatMap((workspace) => {
     const h = lists.hosting(workspace);
@@ -393,6 +418,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
         onWarn: o.onWarn,
       });
       void records.start();
+      notices.back();
     } catch (e) {
       o.onWarn(`hive-net did not start: ${e instanceof Error ? e.message : String(e)}; trying again`);
       again = setTimeout(() => void startNet(), 5_000);

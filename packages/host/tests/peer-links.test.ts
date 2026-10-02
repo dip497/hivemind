@@ -68,9 +68,15 @@ function computer() {
   const answered: Array<{ by: Actor; tile: unknown }> = [];
   const sent: Array<{ by: Actor; tile: unknown }> = [];
   const keyed: Array<{ what: string; by: Actor; tile: unknown }> = [];
-  /** Where each device is told what happens here; each device forgotten. */
+  /** Where each device is told what happens here; each device forgotten; the phones each device
+   *  said it paired with. */
   const subscribed: Array<{ device: string; sub: unknown }> = [];
   const unpaired: string[] = [];
+  const introduced: Array<{ by: string; phones: unknown[] }> = [];
+  const forgot: Array<{ by: string; device: string }> = [];
+  /** The owner's devices a phone may reach through this one. */
+  const box = idOf(newSeed());
+  const host = { device: box, name: "build-box", kind: "host" as const, certificate: certifyDevice(person, box), addrs: ["10.0.0.5:4433"], relay: null };
   const terminals = {
     answers: {
       "terminal.open": (from: Connection, opts: unknown) => { watched.push({ by: from.actor, opts }); return { pid: 1, joined: true }; },
@@ -101,6 +107,9 @@ function computer() {
     machines: { self: () => ({ device: self, name: "desk" }), mine: () => undefined, whose: () => undefined, saved: () => undefined },
     subscribe: (device, sub) => subscribed.push({ device, sub }),
     unpair: (device) => unpaired.push(device),
+    introduced: (by, phones) => introduced.push({ by, phones }),
+    forget: (by, device) => { forgot.push({ by, device }); return device === phone; },
+    devices: () => [host],
   });
   /** `device` connects: what it hears on each stream, and its end of the link. */
   const connect = (device: string) => {
@@ -113,7 +122,7 @@ function computer() {
     }
     return { heard, send: (stream: string, m: unknown) => deviceEnd.send(stream, JSON.stringify(m)), closed: computerEnd.closed, hangUp: () => deviceEnd.close("done") };
   };
-  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, sent, keyed, subscribed, unpaired, connect };
+  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, sent, keyed, subscribed, unpaired, introduced, forgot, host, connect };
 }
 const until = async (done: () => boolean) => { for (let t = 0; t < 5_000 && !done(); t += 20) await wait(20); };
 
@@ -240,4 +249,32 @@ test("a phone unpairs itself: it is told so and forgotten once it hangs up, or l
   assert.equal(await Promise.race([again.closed, wait(4_000).then(() => "open")]), "removed");
   await until(() => c.unpaired.length > 1);
   assert.deepEqual(c.unpaired, [c.phone, c.phone]);
+});
+
+test("the owner's laptop says which phones it paired with, and which it unpaired that paired here, and is answered; a phone asks which of the owner's devices it may reach through this one, and is told; neither is answered the other's question", async () => {
+  const c = computer();
+  const pixel = { device: c.phone, name: "Pixel" };
+  const laptop = c.connect(c.laptop);
+  laptop.send("device", { t: "phones", phones: [pixel] });
+  laptop.send("device", { t: "forget", device: c.phone });
+  laptop.send("device", { t: "forget", device: c.laptop });
+  laptop.send("device", { t: "devices" });
+  laptop.send("device", { t: "workspaces" });
+  await until(() => laptop.heard.get("device")!.length >= 4);
+  await wait(100);
+  assert.deepEqual(laptop.heard.get("device")!.map((m) => (JSON.parse(m) as { t: string; ok?: boolean })).map(({ t, ok }) => ({ t, ok })), [
+    { t: "phones", ok: true }, { t: "forget", ok: true }, { t: "forget", ok: false }, { t: "workspaces", ok: undefined },
+  ]);
+  assert.deepEqual(c.introduced, [{ by: c.laptop, phones: [pixel] }]);
+  assert.deepEqual(c.forgot, [{ by: c.laptop, device: c.phone }, { by: c.laptop, device: c.laptop }]);
+
+  const phone = c.connect(c.phone);
+  phone.send("device", { t: "phones", phones: [] });
+  phone.send("device", { t: "forget", device: c.phone });
+  phone.send("device", { t: "devices" });
+  await until(() => phone.heard.get("device")!.length >= 1);
+  await wait(100);
+  assert.deepEqual(phone.heard.get("device")!.map((m) => JSON.parse(m) as unknown), [{ t: "devices", devices: [c.host] }]);
+  assert.deepEqual(c.introduced, [{ by: c.laptop, phones: [pixel] }], "a phone's word is no introduction");
+  assert.equal(c.forgot.length, 2, "nor is it unpairing another");
 });
