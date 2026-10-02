@@ -662,3 +662,15 @@ guest who may edit the board could start a command on the host (see the log).
   is per host, `PtyOutputBuffer`). `Terminals` now counts a viewer on another device as watching:
   output is batched as for a shown window while one is open (`terminals.test.ts`, 3 mutations
   caught).
+- 2026-10-02 — P7's wire: the conversation (`spec/agents.md` 0.2). `agent.conversation(tile, cursor?)`
+  reads the agent's session file (its manifest's `session.transcript`, `claude` alone so far;
+  `conversation.ts`), the last 200 entries of its last 1 MiB or what came after a cursor, whole
+  lines only, then sends the caller `agent.said` as it is written (`fs.watch` and a 1 s poll),
+  until the caller goes (`conversations.ts`); *Can view*, a phone included. The file is found for
+  the session last recorded for the tile, and the daemon now records the session an agent binds as
+  it starts (an agent without a tracker hook is known by its session too). The core's
+  `conversation` module and `hive-phone talk [--follow]`. `conformance/conversation.json` (4 cases
+  of Claude Code's records, 1 of the phone's reading); `conversation.test.ts` (5),
+  `session-exists.test.ts`, `peers.test.ts`, the e2e (a stand-in agent keeping its conversation as
+  Claude Code does: followed from the phone, the last of it, then each piece). Mutations caught: 16
+  TS, 5 Rust, 2 wiring.

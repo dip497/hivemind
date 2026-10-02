@@ -137,6 +137,39 @@ function scribeAgent(): void {
   ].join("\n"));
 }
 
+/** A third stand-in agent, one that keeps its conversation as Claude Code does: given
+ *  `--session-id <id>` as it starts (its manifest binds one), it writes each line it is given, and
+ *  its reply, as Claude Code's records to `<home>/talk/<id>.jsonl`, which its manifest names as its
+ *  session file. */
+function talkerAgent(): void {
+  fs.writeFileSync(path.join(root, "bin", "talker-agent"), [
+    "#!/bin/bash",
+    "id=''",
+    "while [ $# -gt 0 ]; do case \"$1\" in --session-id) id=\"$2\"; shift 2;; *) shift;; esac; done",
+    "mkdir -p \"$HOME/talk\"",
+    "f=\"$HOME/talk/$id.jsonl\"",
+    "printf 'talker> '",
+    "n=0",
+    "while read -r line; do",
+    "  n=$((n+1)); at=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)",
+    "  printf '{\"type\":\"user\",\"uuid\":\"p%s\",\"timestamp\":\"%s\",\"message\":{\"role\":\"user\",\"content\":\"%s\"}}\\n' \"$n\" \"$at\" \"$line\" >> \"$f\"",
+    "  printf '{\"type\":\"assistant\",\"uuid\":\"a%s\",\"timestamp\":\"%s\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"You said %s\"}]}}\\n' \"$n\" \"$at\" \"$line\" >> \"$f\"",
+    "  printf 'heard: %s\\n' \"$line\"",
+    "done",
+  ].join("\n"), { mode: 0o755 });
+  const agent = path.join(root, "desktop", "hivemind", "agents", "talker");
+  fs.mkdirSync(agent, { recursive: true });
+  fs.writeFileSync(path.join(agent, "agent.yaml"), [
+    "manifestVersion: 2", "id: talker", "label: Talker", "bin: talker-agent", "enabled: true",
+    "caps: { promptDelivery: typed, turnSignal: false, resume: tile, supervise: human, blockedDetection: false }",
+    "session:",
+    "  bind: { args: [--session-id, '{newId}'] }",
+    "  resume: { args: [--resume, '{id}'], from: { bound: --session-id }, exists: '{home}/talk/{id}.jsonl' }",
+    "  transcript: claude",
+    "detect: { default: idle, rules: [] }", "",
+  ].join("\n"));
+}
+
 /** The stand-in agent started on the board of `d`: its tile. */
 async function startProbe(d: Awaited<ReturnType<typeof desktopWith>>): Promise<string> {
   await d.desktop.evaluate(() => window.hive.settingsSet("agents.defaultAgent", "probe"));
@@ -356,6 +389,49 @@ test("the phone drives the person's agents in full: it follows every agent there
   for (const verb of ["agent.start", "agent.interrupt", "agent.close"]) {
     expect(audit()).toContainEqual(expect.objectContaining({ verb, target: scribe, actor: asPhone, outcome: "ok" }));
   }
+});
+
+test("the phone follows what an agent and the person say to each other, as the agent's session file keeps it: the last of it, then each piece as it is written", async () => {
+  test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
+  test.setTimeout(120_000);
+  const env = probeAgent();
+  talkerAgent();
+  const home = path.join(root, "home");
+  fs.mkdirSync(home);
+  const d = await desktopWith({ ...env, HOME: home });
+  const { phone } = await pairPhone(d);
+  await d.desktop.keyboard.press("Escape");
+  const phoneCli = async (...args: string[]) => JSON.parse((await run(HIVE_PHONE, [...args, "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as Record<string, unknown>;
+
+  // The talker starts on the desktop, and is told something from the phone.
+  await d.desktop.evaluate(() => window.hive.settingsSet("agents.defaultAgent", "talker"));
+  await d.desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:shortcut", { detail: "agent" })));
+  const terminal = d.desktop.locator(".react-flow__node-terminal");
+  await expect(terminal).toHaveCount(1, { timeout: 20_000 });
+  const tile = (await terminal.getAttribute("data-id"))!;
+  let listed: Array<Record<string, unknown>> = [];
+  await expect.poll(async () => (listed = (await phoneCli("agents")).agents as typeof listed).length, { timeout: 30_000 }).toBe(1);
+  const workspace = listed[0]!.workspace as string;
+  expect(await phoneCli("send", workspace, tile, "--text", "fix the nav")).toEqual({ sent: true });
+  await expect.poll(() => fs.existsSync(path.join(home, "talk")) && fs.readdirSync(path.join(home, "talk")).length, { timeout: 20_000 }).toBe(1);
+
+  // Followed from the phone: what is said so far, then each piece as it is written.
+  const following = spawn(HIVE_PHONE, ["talk", workspace, tile, "--follow", "--identity", phone, "--json"]);
+  procs.push(following);
+  const pieces: Array<{ entries: Array<Record<string, unknown>>; cursor: number }> = [];
+  let line = "";
+  following.stdout!.on("data", (b: Buffer) => {
+    const lines = (line + b.toString()).split("\n");
+    line = lines.pop()!;
+    for (const l of lines) pieces.push(JSON.parse(l) as (typeof pieces)[number]);
+  });
+  const said = () => pieces.flatMap((p) => p.entries).map((e) => [e.who, e.text]);
+  await expect.poll(said, { timeout: 30_000 }).toEqual([["person", "fix the nav"], ["agent", "You said fix the nav"]]);
+  expect(await phoneCli("send", workspace, tile, "--text", "add tests")).toEqual({ sent: true });
+  await expect.poll(said, { timeout: 30_000 }).toEqual([
+    ["person", "fix the nav"], ["agent", "You said fix the nav"], ["person", "add tests"], ["agent", "You said add tests"],
+  ]);
+  expect(pieces.length).toBeGreaterThan(1);
 });
 
 test("what an agent asks, its computer can allow or deny, and says so in the list and the notice; the phone denies it with the agent's own keys, and it is told no and asks again; allows it, and it works; the same answer again does nothing", async () => {

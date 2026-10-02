@@ -1,0 +1,315 @@
+{
+ "about": "Cases every reader of Claude Code's session file must pass (spec/agents.md \"Conversation\"): the file's lines (a record as JSON, or a line as it is), in; the entries the person's devices are sent, out; and what a phone reads of the entries a device sends it ('phone': an answer's entries, in; those it reads, out). Written by hand from the spec, the records shaped as Claude Code 2.1.287 writes them.",
+ "claude": [
+  {
+   "about": "the person's prompt, as text or a text block, is theirs; the agent's text block is its, in markdown; a meta record and a sidechain's say nothing",
+   "lines": [
+    "{\"type\": \"user\", \"uuid\": \"u1\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"user\", \"content\": \"fix the nav\"}}",
+    "{\"type\": \"user\", \"uuid\": \"u2\", \"timestamp\": \"2026-10-02T08:00:01.000Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"and add tests\"}]}}",
+    "{\"type\": \"user\", \"uuid\": \"u3\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"user\", \"content\": \"<local-command-stdout>ok</local-command-stdout>\"}, \"isMeta\": true}",
+    "{\"type\": \"assistant\", \"uuid\": \"a1\", \"timestamp\": \"2026-10-02T08:00:02.500Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"Fixing **Nav.tsx** now.\"}]}}",
+    "{\"type\": \"assistant\", \"uuid\": \"a2\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"sessionId\": \"s1\", \"isSidechain\": true, \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"a subagent's\"}]}}"
+   ],
+   "entries": [
+    {
+     "id": "u1",
+     "at": 1790928000000,
+     "who": "person",
+     "text": "fix the nav"
+    },
+    {
+     "id": "u2",
+     "at": 1790928001000,
+     "who": "person",
+     "text": "and add tests"
+    },
+    {
+     "id": "a1",
+     "at": 1790928002500,
+     "who": "agent",
+     "text": "Fixing **Nav.tsx** now."
+    }
+   ]
+  },
+  {
+   "about": "a tool the agent used, about the first of its input's file_path, path, command, pattern, url, query, description that is text, its first line, at most 120 characters; none of them, no about; a record of several blocks names each by its index; thinking says nothing",
+   "lines": [
+    "{\"type\": \"assistant\", \"uuid\": \"a3\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"thinking\", \"thinking\": \"hmm\", \"signature\": \"x\"}, {\"type\": \"tool_use\", \"id\": \"t1\", \"name\": \"Edit\", \"input\": {\"file_path\": \"src/Nav.tsx\", \"old_string\": \"a\", \"new_string\": \"b\"}}]}}",
+    "{\"type\": \"assistant\", \"uuid\": \"a4\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"t2\", \"name\": \"Bash\", \"input\": {\"description\": \"Run the tests\", \"command\": \"pnpm test\\n--watch\"}}]}}",
+    "{\"type\": \"assistant\", \"uuid\": \"a5\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"t3\", \"name\": \"Bash\", \"input\": {\"command\": \"yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\"}}]}}",
+    "{\"type\": \"assistant\", \"uuid\": \"a6\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"t4\", \"name\": \"TodoWrite\", \"input\": {\"todos\": []}}]}}",
+    "{\"type\": \"assistant\", \"uuid\": \"a7\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"t5\", \"name\": \"Grep\", \"input\": {\"pattern\": 7, \"path\": \"src\"}}]}}"
+   ],
+   "entries": [
+    {
+     "id": "a3/1",
+     "at": 1790928000000,
+     "who": "agent",
+     "tool": {
+      "id": "t1",
+      "name": "Edit",
+      "about": "src/Nav.tsx"
+     }
+    },
+    {
+     "id": "a4",
+     "at": 1790928000000,
+     "who": "agent",
+     "tool": {
+      "id": "t2",
+      "name": "Bash",
+      "about": "pnpm test"
+     }
+    },
+    {
+     "id": "a5",
+     "at": 1790928000000,
+     "who": "agent",
+     "tool": {
+      "id": "t3",
+      "name": "Bash",
+      "about": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+     }
+    },
+    {
+     "id": "a6",
+     "at": 1790928000000,
+     "who": "agent",
+     "tool": {
+      "id": "t4",
+      "name": "TodoWrite"
+     }
+    },
+    {
+     "id": "a7",
+     "at": 1790928000000,
+     "who": "agent",
+     "tool": {
+      "id": "t5",
+      "name": "Grep",
+      "about": "src"
+     }
+    }
+   ]
+  },
+  {
+   "about": "what a tool gave back: its text, or its text blocks joined, cut to 2,000 characters, an error said so",
+   "lines": [
+    "{\"type\": \"user\", \"uuid\": \"r1\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"user\", \"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"t1\", \"content\": \"The file src/Nav.tsx has been updated.\"}]}}",
+    "{\"type\": \"user\", \"uuid\": \"r2\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"user\", \"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"t2\", \"content\": [{\"type\": \"text\", \"text\": \"12 passed\"}, {\"type\": \"image\", \"source\": {}}, {\"type\": \"text\", \"text\": \"0 failed\"}]}]}}",
+    "{\"type\": \"user\", \"uuid\": \"r3\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"user\", \"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"t3\", \"content\": \"command not found\", \"is_error\": true}]}}",
+    "{\"type\": \"user\", \"uuid\": \"r4\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"user\", \"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"t4\", \"content\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"}]}}"
+   ],
+   "entries": [
+    {
+     "id": "r1",
+     "at": 1790928000000,
+     "who": "tool",
+     "result": {
+      "of": "t1",
+      "text": "The file src/Nav.tsx has been updated."
+     }
+    },
+    {
+     "id": "r2",
+     "at": 1790928000000,
+     "who": "tool",
+     "result": {
+      "of": "t2",
+      "text": "12 passed\n0 failed"
+     }
+    },
+    {
+     "id": "r3",
+     "at": 1790928000000,
+     "who": "tool",
+     "result": {
+      "of": "t3",
+      "text": "command not found",
+      "error": true
+     }
+    },
+    {
+     "id": "r4",
+     "at": 1790928000000,
+     "who": "tool",
+     "result": {
+      "of": "t4",
+      "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+     }
+    }
+   ]
+  },
+  {
+   "about": "a line that is not a record, a record of another type, one with no uuid or time, a block of another kind, or an assistant's content that is not a list of blocks, says nothing",
+   "lines": [
+    "not json",
+    "{\"type\": \"attachment\", \"uuid\": \"x1\", \"timestamp\": \"2026-10-02T08:00:00.000Z\"}",
+    "{\"type\": \"ai-title\", \"aiTitle\": \"Nav fix\"}",
+    "{\"type\": \"assistant\", \"uuid\": \"a8\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"redacted_thinking\", \"data\": \"\\u2026\"}]}}",
+    "{\"type\": \"user\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"message\": {\"role\": \"user\", \"content\": \"no uuid\"}}",
+    "{\"type\": \"user\", \"uuid\": \"u9\", \"message\": {\"role\": \"user\", \"content\": \"no time\"}}",
+    "{\"type\": \"user\", \"uuid\": \"u10\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"message\": {\"role\": \"user\", \"content\": 7}}",
+    "{\"type\": \"assistant\", \"uuid\": \"a9\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"message\": {\"role\": \"assistant\", \"content\": \"an assistant's text not in a block\"}}"
+   ],
+   "entries": []
+  }
+ ],
+ "phone": [
+  {
+   "about": "each entry the phone can read, in the order sent: the person's or the agent's text, a tool the agent used (about left out when not said), what a tool gave back (error only as true); one that is not an object, of another who, without what its who says, or with a field of another type, is left out",
+   "entries": [
+    {
+     "id": "u1",
+     "at": 1790000000000,
+     "who": "person",
+     "text": "fix the nav"
+    },
+    {
+     "id": "a1",
+     "at": 1790000000001,
+     "who": "agent",
+     "text": "On it."
+    },
+    {
+     "id": "a2",
+     "at": 1790000000002,
+     "who": "agent",
+     "tool": {
+      "id": "t1",
+      "name": "Edit",
+      "about": "src/Nav.tsx"
+     }
+    },
+    {
+     "id": "a3",
+     "at": 1790000000003,
+     "who": "agent",
+     "tool": {
+      "id": "t2",
+      "name": "TodoWrite"
+     }
+    },
+    {
+     "id": "r1",
+     "at": 1790000000004,
+     "who": "tool",
+     "result": {
+      "of": "t1",
+      "text": "updated",
+      "error": true
+     }
+    },
+    {
+     "id": "r2",
+     "at": 1790000000005,
+     "who": "tool",
+     "result": {
+      "of": "t2",
+      "text": "ok",
+      "error": "yes"
+     }
+    },
+    "not an entry",
+    {
+     "id": "x1",
+     "at": 1790000000000,
+     "who": "system",
+     "text": "?"
+    },
+    {
+     "id": "x2",
+     "at": 1790000000000,
+     "who": "person"
+    },
+    {
+     "id": "x3",
+     "at": "now",
+     "who": "agent",
+     "text": "?"
+    },
+    {
+     "id": "x4",
+     "at": 1790000000000,
+     "who": "tool",
+     "text": "no result"
+    },
+    {
+     "id": "x5",
+     "at": 1790000000000,
+     "who": "agent",
+     "tool": {
+      "name": "Edit"
+     }
+    },
+    {
+     "id": "x6",
+     "at": 1790000000000,
+     "who": "agent"
+    },
+    {
+     "id": "x7",
+     "at": 1790000000000,
+     "who": "agent",
+     "text": "both",
+     "tool": {
+      "id": "t9",
+      "name": "Edit"
+     }
+    }
+   ],
+   "read": [
+    {
+     "id": "u1",
+     "at": 1790000000000,
+     "who": "person",
+     "text": "fix the nav"
+    },
+    {
+     "id": "a1",
+     "at": 1790000000001,
+     "who": "agent",
+     "text": "On it."
+    },
+    {
+     "id": "a2",
+     "at": 1790000000002,
+     "who": "agent",
+     "tool": {
+      "id": "t1",
+      "name": "Edit",
+      "about": "src/Nav.tsx"
+     }
+    },
+    {
+     "id": "a3",
+     "at": 1790000000003,
+     "who": "agent",
+     "tool": {
+      "id": "t2",
+      "name": "TodoWrite"
+     }
+    },
+    {
+     "id": "r1",
+     "at": 1790000000004,
+     "who": "tool",
+     "result": {
+      "of": "t1",
+      "text": "updated",
+      "error": true
+     }
+    },
+    {
+     "id": "r2",
+     "at": 1790000000005,
+     "who": "tool",
+     "result": {
+      "of": "t2",
+      "text": "ok"
+     }
+    }
+   ]
+  }
+ ]
+}

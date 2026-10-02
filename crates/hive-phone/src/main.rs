@@ -44,6 +44,10 @@
 //!   hive-phone diff <workspace> <tile>
 //!                               what an agent changed in the folder it runs in, against its
 //!                               last commit: the files, then the patch
+//!   hive-phone talk <workspace> <tile> [--follow]
+//!                               what an agent and you said to each other, as its session file
+//!                               keeps it: the last of it, then, with --follow, what is said
+//!                               next as it comes, until Ctrl+C
 //!   hive-phone push --listen <ip:port>
 //!                               be told what happens on the devices this phone paired with (an
 //!                               agent begins waiting on you, finishes, fails): they post to this
@@ -54,8 +58,8 @@
 //!
 //! Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),
 //! `--name <name>` (pair: what the app lists this phone as; default `Phone`), `--json` (pair,
-//! devices, network, unpair, needs, agents, answer, send, start, stop, close, diff, push: as JSON,
-//! a notice or a list a line).
+//! devices, network, unpair, needs, agents, answer, send, start, stop, close, diff, talk, push: as
+//! JSON, a notice, a list or a piece of a conversation a line).
 
 use std::{path::PathBuf, process::ExitCode, sync::Arc, time::SystemTime};
 
@@ -64,6 +68,7 @@ use hive_net::{net, push::Platform};
 use hive_phone::{
     agents::{self, Agent, Listed},
     control::{self, Start},
+    conversation::{self, Entry},
     devices,
     identity::Identity,
     needs::{self, Need},
@@ -73,7 +78,7 @@ use hive_phone::{
 };
 use serde_json::{json, Value};
 
-const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | agents [--follow] | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--allow|--deny|--approve|--changes <what> | send <workspace> <tile> --text <line> | start <workspace> [<agent> [--frame <id>] [--prompt <text>] [--model <m>] [--mode <m>]] | stop <workspace> <tile> | close <workspace> <tile> | diff <workspace> <tile> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
+const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | agents [--follow] | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--allow|--deny|--approve|--changes <what> | send <workspace> <tile> --text <line> | start <workspace> [<agent> [--frame <id>] [--prompt <text>] [--model <m>] [--mode <m>]] | stop <workspace> <tile> | close <workspace> <tile> | diff <workspace> <tile> | talk <workspace> <tile> [--follow] | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
 
 #[derive(Default)]
 struct Args {
@@ -206,6 +211,22 @@ fn show_agents(last: &[Option<Listed>], devices: &[pairing::PairedWith], json: b
         0 => {}
         1 => println!("1 agent working."),
         n => println!("{n} agents working."),
+    }
+}
+
+/// One thing said, as a line.
+fn spoken(e: &Entry) -> String {
+    match (&e.text, &e.tool, &e.result) {
+        (Some(text), _, _) => format!("{}: {}", e.who, text),
+        (_, Some(tool), _) => match &tool.about {
+            Some(about) => format!("agent used {}: {about}", tool.name),
+            None => format!("agent used {}", tool.name),
+        },
+        (_, _, Some(r)) => {
+            let first = r.text.lines().next().unwrap_or("");
+            format!("tool{}: {first}", if r.error { " failed" } else { "" })
+        }
+        _ => String::new(),
     }
 }
 
@@ -545,6 +566,43 @@ async fn run(args: Args) -> Result<()> {
             let done = done.await;
             endpoint.close().await;
             done?;
+        }
+        "talk" => {
+            let [ws, tile] = &args.rest[..] else {
+                bail!("talk: which workspace and tile? (`hive-phone agents --json` names them)");
+            };
+            let (endpoint, devices) = reaching(&phone).await?;
+            let talked = async {
+                let connection = workspace::holder(&endpoint, &devices, ws).await?;
+                let (pieces, mut heard) = tokio::sync::mpsc::unbounded_channel();
+                let following = {
+                    let (ws, tile) = (ws.clone(), tile.clone());
+                    tokio::spawn(async move {
+                        conversation::follow(&connection, &ws, &tile, None, |entries, cursor| {
+                            let _ = pieces.send((entries, cursor));
+                        })
+                        .await
+                    })
+                };
+                // The last of it, then, following, each piece as it comes.
+                while let Some((entries, cursor)) = heard.recv().await {
+                    if args.json {
+                        println!("{}", json!({ "entries": entries, "cursor": cursor }));
+                    } else {
+                        for e in &entries {
+                            println!("{}", spoken(e));
+                        }
+                    }
+                    if !args.follow {
+                        break;
+                    }
+                }
+                following.abort();
+                Ok::<_, anyhow::Error>(())
+            };
+            let talked = talked.await;
+            endpoint.close().await;
+            talked?;
         }
         "unpair" => {
             let which = args

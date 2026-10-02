@@ -54,6 +54,7 @@ const LEAST: Record<string, Role> = {
   // turn and closing it is driving agents (spec/agents.md).
   "agent.startable": "view",
   "agent.diff": "view",
+  "agent.conversation": "view",
   "agent.start": "agents",
   "agent.interrupt": "agents",
   "agent.close": "agents",

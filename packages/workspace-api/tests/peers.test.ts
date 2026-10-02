@@ -44,7 +44,7 @@ const domain = {
     "plan.decide": (from: Connection, tile: unknown) => { ran.push({ what: "plan.decide", by: from.actor, args: [tile] }); return { answered: true, by: null }; },
     "agent.answer": (from: Connection, tile: unknown) => { ran.push({ what: "agent.answer", by: from.actor, args: [tile] }); return { answered: true }; },
     "agent.send": (from: Connection, tile: unknown) => { ran.push({ what: "agent.send", by: from.actor, args: [tile] }); return { sent: true }; },
-    ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff"].map((what) => [
+    ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.conversation"].map((what) => [
       what, (from: Connection, at: unknown) => { ran.push({ what, by: from.actor, args: [at] }); return {}; },
     ])),
   },
@@ -90,10 +90,16 @@ test("what may be started in its workspace and what an agent changed, anyone wit
   await viewer.client.call("agent.startable", workspaceUrl(W));
   await viewer.client.call("agent.diff", "in-1");
   expect(await code(viewer.client.call("agent.diff", "out-1"))).toBe("FORBIDDEN");
+  await viewer.client.call("agent.conversation", "in-1");
+  expect(await code(viewer.client.call("agent.conversation", "out-1"))).toBe("FORBIDDEN");
   for (const [method, at] of [["agent.start", workspaceUrl(W)], ["agent.interrupt", "in-1"], ["agent.close", "in-1"]] as const) {
     expect(await code(viewer.client.call(method as "agent.close", at))).toBe("FORBIDDEN");
   }
-  expect(ran).toEqual([{ what: "agent.startable", by: viewer.actor, args: [REPO] }, { what: "agent.diff", by: viewer.actor, args: ["in-1"] }]);
+  expect(ran).toEqual([
+    { what: "agent.startable", by: viewer.actor, args: [REPO] },
+    { what: "agent.diff", by: viewer.actor, args: ["in-1"] },
+    { what: "agent.conversation", by: viewer.actor, args: ["in-1"] },
+  ]);
 
   const driver = connect("agents");
   await driver.client.call("agent.start", workspaceUrl(W), { program: "claude" });
@@ -164,9 +170,13 @@ test("a peer hears only the events about its workspace, and is refused a tile ou
   client.on("file.changed", (repo) => heard.push(`changed ${repo}`));
   client.on("store.changed", () => heard.push("store"));
   client.on("presence.changed", (repo, people) => heard.push(`here ${repo}: ${people.map((p) => p.name).join()}`));
+  client.on("agent.said", (tile, entries) => heard.push(`${tile} said ${entries.length}`));
   await client.call("file.read", workspaceUrl(W), "a.ts"); // connected
   server.publish("terminal.data", "in-1", "hello");
   server.publish("terminal.data", "out-1", "secret");
+  const entry = { id: "u1", at: 1, who: "agent" as const, text: "hi" };
+  server.publish("agent.said", "in-1", [entry], 10);
+  server.publish("agent.said", "out-1", [entry, entry], 20);
   server.publish("file.changed", REPO, { paths: ["a.ts"] });
   server.publish("file.changed", "/work/other", { paths: [".env"] });
   server.publish("store.changed", { repo: REPO, part: "core" });
@@ -174,7 +184,7 @@ test("a peer hears only the events about its workspace, and is refused a tile ou
   server.publish("presence.changed", REPO, [someone("Ana")]);
   server.publish("presence.changed", "/work/other", [someone("Bo")]);
   await Bun.sleep(10);
-  expect(heard).toEqual(["in-1:hello", `changed ${workspaceUrl(W)}`, `here ${workspaceUrl(W)}: Ana`]);
+  expect(heard).toEqual(["in-1:hello", "in-1 said 1", `changed ${workspaceUrl(W)}`, `here ${workspaceUrl(W)}: Ana`]);
 
   ran.length = 0;
   client.notice("terminal.show", "out-1", true);

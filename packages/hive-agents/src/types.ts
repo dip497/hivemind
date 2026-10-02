@@ -170,6 +170,9 @@ export interface AgentSession {
      *  but ahead of what the launch adds, or last of all (the default). */
     position?: "before" | "beforeLaunch" | "after";
   };
+  /** The format of the session file `resume.exists` names, which Hivemind reads as the
+   *  conversation the person's phone shows (spec/agents.md "Conversation"). */
+  transcript?: "claude";
 }
 
 /** A file inside the overlay that Hivemind writes rather than links. */

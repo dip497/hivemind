@@ -374,6 +374,11 @@ function validateSession(raw: unknown): AgentSession {
     }
     out.list = list;
   }
+  if (m.transcript !== undefined) {
+    req(m.transcript === "claude", 'session.transcript must be "claude": the session file formats Hivemind reads');
+    req(isObj(m.resume) && typeof (m.resume as Record<string, unknown>).exists === "string", "session.transcript needs session.resume.exists: where the session file is");
+    out.transcript = "claude";
+  }
   if (m.resume === undefined) return out;
   req(isObj(m.resume), "session.resume must be a map");
   const r = m.resume as Record<string, unknown>;

@@ -19,7 +19,7 @@ these; the cases in `../conformance/` decide whether they do. Design:
 | `pairing.md` | Two devices of one person: the code (and the way onto its network), the proofs, the person key handed over (a phone: a certificate and its network), the person's other devices learning of a phone, whose a phone is (their name and colour), and unpairing | 0.8 |
 | `host-record.md` | Which device hosts a workspace now, signed by the workspace's key | 0.1 |
 | `hosting.md` | Moving a workspace's hosting between the owner's devices, and who follows it | 0.4 |
-| `agents.md` | Every agent of the person's, live, as their phone follows it; starting one from the phone, interrupting its turn with its agent's keys, closing it, and what it changed | 0.1 |
+| `agents.md` | Every agent of the person's, live, as their phone follows it; starting one from the phone, interrupting its turn with its agent's keys, closing it, what it changed, and what it and the person said to each other | 0.2 |
 | `needs.md` | What waits on the person, on which machine, how their phone asks for it, answers it (a permission allowed or denied with the agent's own keys) and sends an agent a message | 0.5 |
 | `push.md` | What a phone is told while the person is away, encrypted to it, a permission it may allow or deny said so; that a device it found away is back; and the network's push server, which passes on what the devices a phone named sign | 0.4 |
 

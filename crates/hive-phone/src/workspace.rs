@@ -54,7 +54,7 @@ pub async fn holder(
 /// A workspace opened on a connection: calls go out, and answers and events come back.
 pub struct Workspace {
     send: SendStream,
-    recv: RecvStream,
+    pub(crate) recv: RecvStream,
     next: u64,
 }
 
@@ -78,7 +78,7 @@ impl Workspace {
     }
 
     /// Ask `method`; its answer comes later, after the events the call brings. Its id.
-    async fn ask(&mut self, method: &str, params: Value) -> Result<u64> {
+    pub(crate) async fn ask(&mut self, method: &str, params: Value) -> Result<u64> {
         let id = self.next;
         self.next += 1;
         let call = json!({ "id": id, "method": method, "params": params });
@@ -110,7 +110,7 @@ impl Workspace {
 }
 
 /// An answer's result, or why it was refused.
-fn result_of(answer: Value) -> Result<Value> {
+pub(crate) fn result_of(answer: Value) -> Result<Value> {
     if let Some(error) = answer.get("error") {
         bail!(
             "{}",

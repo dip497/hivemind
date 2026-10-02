@@ -1,4 +1,4 @@
-# Agents (0.1)
+# Agents (0.2)
 
 The person's agents, as their phone sees and drives them (M5, `docs/design/phone-app-2026-10-02.md`
 §4): every agent in the workspaces one of their devices holds, live; and starting one, stopping
@@ -20,7 +20,7 @@ and answers again, with the whole list, each time it would answer otherwise, unt
 the connection closes: the first change at once, and the changes in the next 100 ms together at
 its end, so at most ten answers a second, none the same as the one before it. `working` is how
 many of them are at work (`needs.md` 0.2). Anything else sent on the stream is ignored. Who may
-follow is the person's own devices, a phone among them; anyone else's stream is closed.
+follow is the person's own devices, a phone among them; anyone else is cut off.
 
 Each agent is one with a status (`status.md`) whose tile is on the board of a workspace the device
 holds:
@@ -105,9 +105,47 @@ yet tracked as a new file (one over 64 KiB, or that is not text, is listed and n
 512 KiB at the end of a line, when `truncated` is `true`. A folder that is no git
 repository answers no files and an empty patch; one on another machine is `FAILED`, saying so.
 
+## Conversation
+
+`agent.conversation(tile, cursor?)` (0.2) answers what the agent of `tile` and the person said to
+each other, as the agent keeps it in its session file (its manifest's `session.transcript` names
+the format; `claude`, Claude Code's, is the one read), and then sends the caller what is said next,
+as it is written, until the call's connection goes:
+
+```json
+{ "entries": [ … ], "cursor": 52311 }
+```
+
+with the event `agent.said` (`[tile, entries, cursor]`) for each later piece. Each entry is one
+of
+
+```json
+{ "id": "<its id>", "at": 1790000000000, "who": "person", "text": "<what they asked>" }
+{ "id": "<its id>", "at": 1790000000000, "who": "agent", "text": "<what it said, in markdown>" }
+{ "id": "<its id>", "at": 1790000000000, "who": "agent", "tool": { "id": "<the use>", "name": "Edit", "about": "src/nav.ts" } }
+{ "id": "<its id>", "at": 1790000000000, "who": "tool", "result": { "of": "<the use>", "text": "<what it gave back>", "error": true } }
+```
+
+- In Claude Code's file, each line is a record; a `user` or `assistant` record's `message.content`
+  is text or a list of blocks. A user's text, or `text` block, is the person's; an assistant's
+  `text` block is the agent's; its `tool_use` block a tool it used, `about` the first of its
+  input's `file_path`, `path`, `command`, `pattern`, `url`, `query`, `description` that is text, its
+  first line, at most 120 characters (left out when none is); a user's `tool_result` block what a
+  tool gave back, its text (or its `text` blocks' joined) cut to 2,000 characters, `error` when
+  `is_error` is true (left out otherwise). `id` is the record's `uuid`, with `/` and the block's
+  index after it for a record of several blocks; `at` its `timestamp`, in ms since the epoch.
+  Thinking, records of a sidechain (`isSidechain`), meta records (`isMeta`), any other record or
+  block, and a line that is not one, say nothing.
+- `cursor` is how far into the file the entries go (in bytes, at the end of a line): given back, it
+  answers only what comes after it, as after a reconnect. Without one, it answers the last 200
+  entries of the last 1 MiB of the file.
+- An agent with no session file found, or whose manifest names no format, answers no entries and
+  cursor 0, and nothing more.
+
 ## Who may
 
-`agent.startable` and `agent.diff` may be called by who may view the workspace; `agent.start`,
+`agent.startable`, `agent.diff` and `agent.conversation` may be called by who may view the
+workspace; `agent.start`,
 `agent.interrupt` and `agent.close` by who may drive its agents (role `agents`); all of them by the
 person's own devices, a phone among them. Each of the last three is recorded in the device's audit
 log against its tile, as the device that called it.

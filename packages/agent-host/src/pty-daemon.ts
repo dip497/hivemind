@@ -371,7 +371,16 @@ const manager = new SessionManager(factory, {
   onSnapshotEvict: evictSnapshot,
   // Each agent's manifest says how it binds, tracks and resumes a session (hive-agents
   // runtime-manifest.ts); composed across every agent, each leaving specs it does not own alone.
-  transformSpecOnSpawn: (spec, id) => resume.transformSpecOnSpawn(spec, id),
+  // A session bound to an id as it starts is the tile's until its tracker says otherwise: kept
+  // now, so an agent with no tracker hook is known by its session too (its conversation, M5).
+  transformSpecOnSpawn: (spec, id) => {
+    const out = resume.transformSpecOnSpawn(spec, id);
+    const flag = agentForCmd(out.cmd)?.session?.resume?.from?.bound;
+    const at = flag ? (out.args ?? []).indexOf(flag) : -1;
+    const bound = at >= 0 ? out.args![at + 1] : undefined;
+    if (bound && !bound.startsWith("-")) try { writeTrackedSession(tileSessionsDir, id, bound); } catch { /* best-effort */ }
+    return out;
+  },
   // Strip the one-time HIVE_INITIAL_PROMPT before ANY provider sees the spec. A
   // restore re-execs from the persisted spec, so an un-stripped prompt is re-appended
   // as positional argv and the task RUNS AGAIN — for every agent that takes an argv

@@ -183,6 +183,22 @@ export function sessionExists(pattern: string, id: string, home: string = homedi
   }
 }
 
+/** The file of the session `id` where `pattern` (a manifest's `session.resume.exists`) says it is
+ *  kept, under `home`; null when it is not there, or cannot be looked for. */
+export function sessionFile(pattern: string, id: string, home: string = homedir()): string | null {
+  if (!/^[\w.-]{1,128}$/.test(id)) return null;
+  const full = pattern.replace("{home}", home).replace("{id}", id);
+  const isFile = (at: string) => { try { return statSync(at).isFile(); } catch { return false; } };
+  const star = full.indexOf("/*/");
+  if (star < 0) return isFile(full) ? full : null;
+  const dir = full.slice(0, star);
+  const rest = full.slice(star + 3);
+  let names: string[];
+  try { names = readdirSync(dir); } catch { return null; }
+  for (const n of names.slice(0, MAX_FILES)) if (isFile(join(dir, n, rest))) return join(dir, n, rest);
+  return null;
+}
+
 /** A listing command that hangs must not hold a restore or a caller for long. */
 const LIST_TIMEOUT_MS = 15_000;
 const LIST_MAX_BYTES = 32 * 1024 * 1024;

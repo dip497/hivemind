@@ -6,7 +6,7 @@ import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } 
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
-import type { AgentAnswer, AgentChanges, Links, PipeChange, SpawnChange, StartAgent, Startable, StatusChange, TileOpened } from "./agents.js";
+import type { AgentAnswer, AgentChanges, ConversationEntry, Links, PipeChange, SpawnChange, StartAgent, Startable, StatusChange, TileOpened } from "./agents.js";
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
 import type { Answerer, PlanDecided, PlanReview } from "./plans.js";
 import type { JoinQuestion, PersonHere } from "./people.js";
@@ -98,6 +98,10 @@ export interface WorkspaceMethods {
   "agent.close": (tile: string) => { closed: boolean };
   /** What the agent in `tile` changed in the folder it runs in, against its last commit. */
   "agent.diff": (tile: string) => AgentChanges;
+  /** What the agent in `tile` and the person said to each other, after `cursor` (none: the last
+   *  of it), and how far into its session file that goes; then each `agent.said` as it is written,
+   *  until the connection goes. */
+  "agent.conversation": (tile: string, cursor?: number) => { entries: ConversationEntry[]; cursor: number };
   "people.list": (repo: string) => PersonHere[];
   "people.role": (repo: string, person: string, role: Role) => void;
   "people.remove": (repo: string, person: string) => void;
@@ -161,6 +165,8 @@ export interface WorkspaceEvents {
   "tile.opened": (tile: TileOpened) => void;
   /** A terminal's output, to the clients that show it. */
   "terminal.data": (tile: string, data: string) => void;
+  /** What was said next in the conversation of the agent in `tile`, to whoever follows it. */
+  "agent.said": (tile: string, entries: ConversationEntry[], cursor: number) => void;
   /** A terminal's session ended, to the clients that showed it. */
   "terminal.exit": (tile: string, info: ExitInfo) => void;
   /** Changes in watched terminals' activity. */

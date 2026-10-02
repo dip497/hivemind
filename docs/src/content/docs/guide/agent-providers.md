@@ -210,6 +210,23 @@ program: Claude Code shows "esc to interrupt" while it works. Some CLIs quit on 
 Ctrl+C, so never guess. An agent whose file says nothing here has no Stop on your phone;
 you can still close it there.
 
+## The conversation on your phone
+
+Your phone can show what the agent and you say to each other as a conversation, rather than
+its terminal, if Hivemind can read the agent's own session file. Name its format under
+`session`, beside `resume.exists`, which says where the file is:
+
+```yaml
+session:
+  resume:
+    exists: '{home}/.claude/projects/*/{id}.jsonl'
+  transcript: claude      # the session file's format
+```
+
+`claude`, Claude Code's, is the one format read today. Hivemind finds the file for the
+session the agent's tile is in, reads its end, and sends your phone each new piece as it is
+written.
+
 ## Icons
 
 Draw the icon with shapes rather than SVG markup. Hivemind builds the markup from your

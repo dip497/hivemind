@@ -5,6 +5,7 @@
 
 pub mod agents;
 pub mod control;
+pub mod conversation;
 pub mod devices;
 pub mod identity;
 pub mod needs;

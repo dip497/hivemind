@@ -68,11 +68,11 @@ const NO_FACTS: AgentFacts = { program: () => undefined, decides: () => false, i
 /** What a phone may ask of a workspace it opens (M5): to watch a terminal that runs there (its
  *  screen, then its output as it comes) and type into it, asking for its keyboard while someone
  *  else holds it; to answer what an agent there waits on the person for (`agent.answer`), and to
- *  send one a message (`agent.send`); to start an agent, interrupt its turn, close it, and see what
- *  it changed (spec/agents.md). Never to size a terminal, or to give or take a keyboard. */
+ *  send one a message (`agent.send`); to start an agent, interrupt its turn, close it, see what it
+ *  changed and follow what it says (spec/agents.md). Never to size a terminal, or to give or take a keyboard. */
 const PHONE_MAY = new Set([
   "agent.answer", "agent.send", "terminal.write", "terminal.keyboard.ask",
-  "agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff",
+  "agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.conversation",
 ]);
 export const phoneMay = (method: string, params: unknown[]): boolean =>
   (method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true) || PHONE_MAY.has(method);

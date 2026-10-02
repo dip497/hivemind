@@ -57,6 +57,13 @@ export interface StartAgent {
   mode?: string;
 }
 
+/** One thing said in an agent's conversation (spec/agents.md "Conversation"): by the person, by
+ *  the agent (its text, in markdown, or a tool it used), or by a tool (what it gave back). */
+export type ConversationEntry =
+  | { id: string; at: number; who: "person" | "agent"; text: string }
+  | { id: string; at: number; who: "agent"; tool: { id: string; name: string; about?: string } }
+  | { id: string; at: number; who: "tool"; result: { of: string; text: string; error?: true } };
+
 /** What an agent changed in the folder it runs in, against its last commit (spec/agents.md
  *  "Changes"). */
 export interface AgentChanges {

@@ -239,6 +239,8 @@ session:
     fallback:
     - --continue
     exists: '{home}/.claude/projects/*/{id}.jsonl'
+  # The session file, read as the conversation your phone shows.
+  transcript: claude
 hooks:
   arg: --settings
   template: '{"hooks":{events}}'
