@@ -12,7 +12,7 @@ use anyhow::{bail, ensure, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use hmac::{Hmac, KeyInit as _, Mac};
 use iroh::endpoint::Connection;
-use p256::{elliptic_curve::sec1::ToEncodedPoint, PublicKey, SecretKey};
+use p256::{elliptic_curve::sec1::ToSec1Point, PublicKey, SecretKey};
 use serde_json::{json, Value};
 use sha2::Sha256;
 
@@ -74,7 +74,7 @@ impl PushKeys {
     pub fn public(&self) -> Vec<u8> {
         self.secret
             .public_key()
-            .to_encoded_point(false)
+            .to_sec1_point(false)
             .as_bytes()
             .to_vec()
     }
