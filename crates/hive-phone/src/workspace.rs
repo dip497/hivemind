@@ -71,12 +71,6 @@ impl Workspace {
         })
     }
 
-    /// Tell `method`, which is answered nothing.
-    async fn tell(&mut self, method: &str, params: Value) -> Result<()> {
-        let notice = json!({ "method": method, "params": params });
-        write_frame(&mut self.send, notice.to_string().as_bytes()).await
-    }
-
     /// Ask `method`; its answer comes later, after the events the call brings. Its id.
     async fn ask(&mut self, method: &str, params: Value) -> Result<u64> {
         let id = self.next;
@@ -129,19 +123,24 @@ pub struct Ended {
     pub code: i64,
 }
 
-/// What happens in a watched terminal: a piece of its output, or its keyboard changing hands.
+/// What happens in a watched terminal: a piece of its output, the size it took, or its keyboard
+/// changing hands.
 pub enum Watched<'a> {
     Output(&'a str),
+    /// The size its session took, its columns and rows: the phone draws it at that size, and never
+    /// sizes it.
+    Size(u16, u16),
     /// Who holds its keyboard now, `{id, person, name}`: `None` while the person's own devices
     /// do, and the phone types into it as they do.
     Keyboard(Option<&'a Value>),
 }
 
 /// Watch the terminal of `tile` in `workspace`, on `connection` to the device that holds it: `out`
-/// is handed its screen, then each piece of its output, and who holds its keyboard as it changes.
-/// With `typed`, each line the person types goes into it, Enter after it, once its keyboard is
-/// asked for: one someone else holds is asked of them, and keys wait on nobody (spec/workspace-
-/// api.md, "Peers"). How it ended; none when the connection went first.
+/// is handed its size and its screen, then each piece of its output, and its size and who holds
+/// its keyboard as they change. With `typed`, what the person types goes into it as it is, once
+/// its keyboard is asked for, as they first type: one someone else holds is asked of them, and
+/// keys wait on nobody (spec/workspace-api.md, "Peers"). How it ended; none when the connection
+/// went first.
 pub async fn watch(
     connection: &Connection,
     workspace: &str,
@@ -160,9 +159,6 @@ pub async fn watch(
             }]),
         )
         .await?;
-    if typed.is_some() {
-        w.tell("terminal.keyboard.ask", json!([session])).await?;
-    }
     // What is typed goes out on its own while the output comes in. The stream stays open until the
     // watching ends: the device takes its end as the phone gone.
     let Workspace {
@@ -172,13 +168,22 @@ pub async fn watch(
         Some(mut typed) => {
             let session = session.clone();
             tokio::spawn(async move {
-                while let Some(line) = typed.recv().await {
-                    let notice = json!({ "method": "terminal.write", "params": [session, format!("{line}\r")] });
-                    if write_frame(&mut send, notice.to_string().as_bytes())
-                        .await
-                        .is_err()
-                    {
-                        return;
+                let mut asked = false;
+                while let Some(data) = typed.recv().await {
+                    let mut notices = vec![];
+                    if !std::mem::replace(&mut asked, true) {
+                        notices.push(
+                            json!({ "method": "terminal.keyboard.ask", "params": [session] }),
+                        );
+                    }
+                    notices.push(json!({ "method": "terminal.write", "params": [session, data] }));
+                    for notice in notices {
+                        if write_frame(&mut send, notice.to_string().as_bytes())
+                            .await
+                            .is_err()
+                        {
+                            return;
+                        }
                     }
                 }
                 std::future::pending::<()>().await;
@@ -210,6 +215,15 @@ pub async fn watch(
                     Some("terminal.data") => {
                         if let Some(data) = params.and_then(|p| p.get(1)).and_then(Value::as_str) {
                             out(Watched::Output(data));
+                        }
+                    }
+                    Some("terminal.size") => {
+                        let size = |i| {
+                            let n = params.and_then(|p| p.get(i)).and_then(Value::as_u64)?;
+                            Some(u16::try_from(n).unwrap_or(u16::MAX))
+                        };
+                        if let (Some(cols), Some(rows)) = (size(1), size(2)) {
+                            out(Watched::Size(cols, rows));
                         }
                     }
                     Some("terminal.keyboard") => {

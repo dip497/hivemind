@@ -9,6 +9,8 @@ description = "hivemind's phone, its core in Rust (docs/design/multiplayer-2026-
 
 [dependencies]
 aes-gcm = "0.10"
+# The VT emulator a watched terminal's bytes run through (Zed's): its grid, without its pty.
+alacritty_terminal = { version = "0.26", default-features = false }
 anyhow = "1"
 base64 = "0.22"
 hex = "0.4"

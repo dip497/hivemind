@@ -390,7 +390,7 @@ async fn run(args: Args) -> Result<()> {
                     use tokio::io::AsyncBufReadExt;
                     let mut stdin = tokio::io::BufReader::new(tokio::io::stdin()).lines();
                     while let Ok(Some(line)) = stdin.next_line().await {
-                        if lines.send(line).await.is_err() {
+                        if lines.send(format!("{line}\r")).await.is_err() {
                             return;
                         }
                     }
@@ -406,13 +406,14 @@ async fn run(args: Args) -> Result<()> {
                         let _ = std::io::Write::write_all(&mut stdout, data.as_bytes());
                         let _ = std::io::Write::flush(&mut stdout);
                     }
-                    // Someone else holds its keyboard: what is typed here waits until they give it.
+                    // Someone else holds its keyboard: what is typed here asks for it, and waits until
+                    // they give it.
                     Watched::Keyboard(Some(holder)) if args.typing && holder["id"] != me.as_str() => {
                         let name = holder["name"].as_str().filter(|n| !n.is_empty()).unwrap_or("someone");
-                        eprintln!("hive-phone: {name} has its keyboard: asked for it, and what you type goes in once it is given");
+                        eprintln!("hive-phone: {name} has its keyboard: what you type asks for it, and goes in once it is given");
                     }
                     Watched::Keyboard(_) if args.typing => eprintln!("hive-phone: its keyboard is yours"),
-                    Watched::Keyboard(_) => {}
+                    Watched::Keyboard(_) | Watched::Size(..) => {}
                 })
                 .await
             };

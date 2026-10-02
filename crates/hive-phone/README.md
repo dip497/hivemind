@@ -49,5 +49,11 @@ notice on to the listener, as a UnifiedPush distributor's part. Where it registe
 
 ```bash
 cargo test --locked   # conformance/pairing.json, needs.json and push.json (the phone's side), what a phone keeps,
-                      # and registering again at a push server without a device unpaired
+                      # registering again at a push server without a device unpaired, and the screen a
+                      # watched terminal's output gives (its lines, their runs, a frame at most every 16 ms)
 ```
+
+A watched terminal is drawn by the app, not the terminal (`screen.rs`, design `phone-app-2026-10-02.md`
+§5.3): its output runs through alacritty's emulator on a thread of the watch's own, and the app is told
+only a frame's revision, then asks for the lines changed since the one it last drew, their style runs
+packed as bytes.
