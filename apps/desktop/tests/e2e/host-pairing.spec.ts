@@ -312,8 +312,9 @@ test("a phone paired with the app is the person's at the host too: the host lets
   expect(JSON.parse(allowed.stdout)).toEqual({ answered: true });
   await expect.poll(() => read(answered), { timeout: 20_000 }).toBe("y");
 
-  // A community view installed on the host that works on a phone is offered there, and opened, its
-  // host the host's: told it is on a phone, and what the board holds; closed at the end.
+  // A community view installed on the host that works on a phone is offered there, with the SDK
+  // the host serves its views, and opened, its host the host's: told it is on a phone, and what the
+  // board holds; closed at the end.
   const board = path.join(root, "priya-board");
   fs.mkdirSync(board);
   fs.writeFileSync(path.join(board, "hivemind-view.json"), JSON.stringify({ id: "priya-board", name: "Priya's board", version: "1.0.0", entry: "index.html", protocol: 1, phone: true }));
@@ -322,7 +323,9 @@ test("a phone paired with the app is the person's at the host too: the host lets
   expect(installed.status, installed.stdout + installed.stderr).toBe(0);
   const workspace = waiting!.workspace as string;
   expect(JSON.parse((await run(HIVE_PHONE, ["views", workspace, "--identity", phone, "--json"], { timeout: 30_000 })).stdout))
-    .toEqual([{ id: "priya-board", name: "Priya's board", version: "1.0.0", entry: "index.html" }]);
+    .toEqual([{ id: "priya-board", name: "Priya's board", version: "1.0.0", entry: "index.html", page: "index.html" }]);
+  const sdk = JSON.parse((await run(HIVE_PHONE, ["views", workspace, "priya-board", "__sdk.js", "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as { type: string; data: string };
+  expect([sdk.type, Buffer.from(sdk.data, "base64").toString()]).toEqual(["text/javascript; charset=utf-8", expect.stringContaining("hivemind-view:port")]);
   const shown = spawn(HIVE_PHONE, ["view", workspace, "priya-board", "--identity", phone, "--json"]);
   procs.push(shown);
   const heard = lines(shown.stdout!);

@@ -10,7 +10,7 @@ import type { AgentAnswer, AgentChanges, ConversationEntry, Links, PipeChange, S
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
 import type { Answerer, PlanDecided, PlanReview } from "./plans.js";
 import type { JoinQuestion, PersonHere } from "./people.js";
-import type { ViewFile, ViewListing } from "./views.js";
+import type { ViewFile, ViewListing, ViewScreen } from "./views.js";
 import type { HostMessage, PluginMessage } from "@hivemind/view-sdk/protocol";
 import type { LinkRole, Role } from "@hivemind/workspace-host/access";
 import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
@@ -107,12 +107,14 @@ export interface WorkspaceMethods {
   "agent.conversation": (tile: string, cursor?: number, session?: string) => { entries: ConversationEntry[]; cursor: number; session?: string };
   /** The views installed on this device whose manifest says they work on a phone (P8). */
   "view.list": () => ViewListing[];
-  /** One of view `id`'s files, at `path` inside its package, 4 MiB at most. */
+  /** One of view `id`'s files, at `path` inside its package, 4 MiB at most, and the policy to serve
+   *  it under; `__sdk.js` and `__entry.html` as the app serves them. */
   "view.file": (id: string, path: string) => ViewFile;
-  /** Open view `id` on the workspace at `repo` for this caller, a remote screen: its host runs here
-   *  until `view.close`, the caller goes, or the host ends it (`view.ended`). What the view posts
-   *  comes as `view.post`, and what its host says goes back as `view.said`, to this caller alone. */
-  "view.open": (id: string, repo: string) => { session: string };
+  /** Open view `id` on the workspace at `repo` for this caller, a remote screen (`screen`: its size
+   *  and look; none, 0 by 0 with no colours): its host runs here until `view.close`, the caller
+   *  goes, or the host ends it (`view.ended`). What the view posts comes as `view.post`, and what
+   *  its host says goes back as `view.said`, to this caller alone. */
+  "view.open": (id: string, repo: string, screen?: ViewScreen) => { session: string };
   /** Close the caller's view session `session`. `closed` false: it has none of that name. */
   "view.close": (session: string) => { closed: boolean };
   "people.list": (repo: string) => PersonHere[];
@@ -170,6 +172,9 @@ export interface WorkspaceNotices {
   "presence.set": (repo: string, state: PresenceState | null) => void;
   /** What the view of the caller's session `session` posts to its host (P8). */
   "view.post": (session: string, message: PluginMessage) => void;
+  /** The screen the view of the caller's session `session` is shown on now: its host tells the view
+   *  (`resize`, `theme`) what changed (0.14). */
+  "view.screen": (session: string, screen: ViewScreen) => void;
 }
 
 /** What a host sends each client it holds a connection to, unasked. */

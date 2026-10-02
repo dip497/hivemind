@@ -1,8 +1,11 @@
 //! Community views on the phone (docs/design/phone-app-2026-10-02.md §6.1, P8; spec/workspace-api.md
-//! "Views on a remote screen"): the views the device that holds a workspace offers a phone, their
-//! files, and a view opened there. Its host runs on that device: what the view posts goes to it, and
-//! what it says comes back, until the phone closes the view or the host ends it. The phone relays;
-//! the checks and the limits are the host's.
+//! "Views on a remote screen", 0.14): the views the device that holds a workspace offers a phone,
+//! their files as that device serves them to its own windows, and a view opened there, on the
+//! phone's screen. Its host runs on that device: what the view posts goes to it, and the screen as
+//! it changes, and what it says comes back, until the phone closes the view or the host ends it.
+//! The phone relays; the checks and the limits are the host's.
+
+use std::collections::BTreeMap;
 
 use anyhow::{bail, Context, Result};
 use base64::{engine::general_purpose::STANDARD, Engine};
@@ -10,24 +13,79 @@ use hive_net::frames::{read_frame, write_frame};
 use iroh::endpoint::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tokio::sync::mpsc::Receiver;
+use tokio::sync::{mpsc, watch};
 
 use crate::workspace::{result_of, Workspace};
 
-/// A view the device offers a phone: its id, its name, its version, and the file it starts from.
+/// A view the device offers a phone: its id, its name, its version, the file it starts from, and
+/// the page a screen loads to show it (0.14): that file when it is a page, else a page made to run
+/// it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Offered {
     pub id: String,
     pub name: String,
     pub version: String,
     pub entry: String,
+    pub page: String,
 }
 
-/// One of a view's files: its bytes, and its type (`text/html; charset=utf-8`, …).
+/// One of a view's files, as the device serves it to its own windows: its bytes, its type
+/// (`text/html; charset=utf-8`, …), and the Content-Security-Policy to serve it under, whose nonce
+/// a page made for it carries (0.14).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ViewFile {
     pub bytes: Vec<u8>,
     pub mime: String,
+    pub csp: String,
+}
+
+/// Dark or light.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Mode {
+    Dark,
+    Light,
+}
+
+/// A view's fonts, by their families: for its words, and for code.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Fonts {
+    pub ui: String,
+    pub mono: String,
+}
+
+/// The look the phone gives views, as the view protocol's `theme` has it: its colours by token
+/// (`bg`, `fg`, …, each `#rrggbb`), and, as the app says them, dark or light, its accent, corner
+/// radius in pixels, fonts, panel surface and terminal background, glass, and a colour for each
+/// status tone.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Theme {
+    pub colors: BTreeMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<Mode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accent: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub radius: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fonts: Option<Fonts>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub surface: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_background: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub glass: Option<bool>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub status: BTreeMap<String, String>,
+}
+
+/// The screen a view is shown on: its size in CSS pixels, and its look (0.14).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct Screen {
+    pub w: u32,
+    pub h: u32,
+    pub theme: Theme,
 }
 
 /// How a view's session ended.
@@ -61,17 +119,20 @@ pub async fn file(
 ) -> Result<ViewFile> {
     let mut w = Workspace::open(connection, workspace).await?;
     let answer = w.call("view.file", json!([view, path])).await?;
-    let data = answer
-        .get("data")
-        .and_then(Value::as_str)
-        .context("the device sent no file")?;
+    let said = |key: &str| answer.get(key).and_then(Value::as_str);
+    let data = said("data").context("the device sent no file")?;
     let bytes = STANDARD
         .decode(data)
         .context("the device sent a file that is not base64")?;
-    let mime = answer.get("type").and_then(Value::as_str);
     Ok(ViewFile {
         bytes,
-        mime: mime.unwrap_or("application/octet-stream").to_string(),
+        mime: said("type")
+            .unwrap_or("application/octet-stream")
+            .to_string(),
+        // Served under no policy, a file of a view could reach the network: none is served.
+        csp: said("csp")
+            .context("the device sent a file with no policy to serve it under")?
+            .to_string(),
     })
 }
 
@@ -108,58 +169,104 @@ fn heard(message: Value, session: &str) -> Vec<Heard> {
         .collect()
 }
 
-/// Open the view `view` on `workspace`, on `connection` to the device that holds it: `said` is
-/// handed each message its host says to it, and each message `posts` gives is posted to its host,
-/// until `posts` ends, when the phone closes it, or until its host ends it. How it ended; an error
-/// when the connection went first.
-pub async fn open(
-    connection: &Connection,
-    workspace: &str,
-    view: &str,
-    mut posts: Receiver<Value>,
-    mut said: impl FnMut(Value),
-) -> Result<Ended> {
-    let mut w = Workspace::open(connection, workspace).await?;
-    let opened = w.call("view.open", json!([view, named(workspace)])).await?;
-    let session = opened
-        .get("session")
-        .and_then(Value::as_str)
-        .context("the device did not name the view's session")?
-        .to_string();
-    // What the view posts goes out while what its host says comes in.
-    let Workspace {
-        mut send,
-        mut recv,
-        next: closing,
-    } = w;
-    let posting = async {
-        while let Some(message) = posts.recv().await {
-            let post = json!({ "method": "view.post", "params": [session, message] });
-            write_frame(&mut send, post.to_string().as_bytes()).await?;
-        }
-        let close = json!({ "id": closing, "method": "view.close", "params": [session] });
-        write_frame(&mut send, close.to_string().as_bytes()).await?;
-        std::future::pending::<Result<Ended>>().await
-    };
-    let hearing = async {
-        while let Some(frame) = read_frame(&mut recv).await? {
-            let message: Value = serde_json::from_slice(&frame)?;
-            if message.get("id").and_then(Value::as_u64) == Some(closing) {
-                result_of(message)?;
-                return Ok(Ended::Closed);
+/// A view opened on a workspace for this phone, its host on the device that holds the workspace.
+pub struct Session {
+    workspace: Workspace,
+    id: String,
+}
+
+impl Session {
+    /// Open the view `view` on `workspace`, on `connection` to the device that holds it, shown on
+    /// `screen`.
+    pub async fn open(
+        connection: &Connection,
+        workspace: &str,
+        view: &str,
+        screen: &Screen,
+    ) -> Result<Self> {
+        let mut w = Workspace::open(connection, workspace).await?;
+        let opened = w
+            .call("view.open", json!([view, named(workspace), screen]))
+            .await?;
+        let id = opened
+            .get("session")
+            .and_then(Value::as_str)
+            .context("the device did not name the view's session")?
+            .to_string();
+        Ok(Self { workspace: w, id })
+    }
+
+    /// Relay the session: each message `posts` gives is posted to its host, and each screen
+    /// `screen` changes to is told it; `said` is handed each message its host says to the view.
+    /// Until `posts` ends, when the phone closes it, or until its host ends it. `again`: the view
+    /// was shown on a session before this one, and starts again on this: until it says it is ready
+    /// (its page loaded anew), what is posted is the page of before's, and is dropped. How it
+    /// ended; an error when the connection went first.
+    pub async fn relay(
+        self,
+        posts: &mut mpsc::Receiver<Value>,
+        screen: &mut watch::Receiver<Screen>,
+        again: bool,
+        mut said: impl FnMut(Value),
+    ) -> Result<Ended> {
+        let Self {
+            workspace:
+                Workspace {
+                    mut send,
+                    mut recv,
+                    next: closing,
+                },
+            id: session,
+        } = self;
+        // What goes to its host goes out while what it says comes in.
+        let telling = async {
+            let mut before = again;
+            let mut sized = true;
+            loop {
+                let out = tokio::select! {
+                    post = posts.recv() => match post {
+                        Some(post) if before && post["type"] != "ready" => continue,
+                        Some(post) => {
+                            before = false;
+                            json!({ "method": "view.post", "params": [session, post] })
+                        }
+                        None => break,
+                    },
+                    changed = screen.changed(), if sized => {
+                        if changed.is_err() {
+                            sized = false;
+                            continue;
+                        }
+                        let now = screen.borrow_and_update().clone();
+                        json!({ "method": "view.screen", "params": [session, now] })
+                    }
+                };
+                write_frame(&mut send, out.to_string().as_bytes()).await?;
             }
-            for h in heard(message, &session) {
-                match h {
-                    Heard::Said(message) => said(message),
-                    Heard::Ended(why) => return Ok(Ended::Host(why)),
+            let close = json!({ "id": closing, "method": "view.close", "params": [session] });
+            write_frame(&mut send, close.to_string().as_bytes()).await?;
+            std::future::pending::<Result<Ended>>().await
+        };
+        let hearing = async {
+            while let Some(frame) = read_frame(&mut recv).await? {
+                let message: Value = serde_json::from_slice(&frame)?;
+                if message.get("id").and_then(Value::as_u64) == Some(closing) {
+                    result_of(message)?;
+                    return Ok(Ended::Closed);
+                }
+                for h in heard(message, &session) {
+                    match h {
+                        Heard::Said(message) => said(message),
+                        Heard::Ended(why) => return Ok(Ended::Host(why)),
+                    }
                 }
             }
+            bail!("the device closed the connection")
+        };
+        tokio::select! {
+            ended = hearing => ended,
+            failed = telling => failed,
         }
-        bail!("the device closed the connection")
-    };
-    tokio::select! {
-        ended = hearing => ended,
-        failed = posting => failed,
     }
 }
 

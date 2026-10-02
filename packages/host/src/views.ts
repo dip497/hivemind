@@ -1,10 +1,12 @@
 /**
  * Community views on a remote screen, the person's phone among them (P8,
  * docs/design/phone-app-2026-10-02.md §6.1; spec/workspace-api.md, "Views on a remote screen"): the
- * views installed here that say they work on a phone, their files, and a view opened on a workspace
- * here for one caller. Its host (`@hivemind/view-host/link`) runs here, as the window's runs there,
- * fed from what this device holds: the board from the store, statuses and links from the control
- * plane, a selection of its own. What the view posts comes in as `view.post`; what its host says
+ * views installed here that say they work on a phone, their files as the app serves them (the SDK
+ * and the page for a `.js` entry among them, each under its policy), and a view opened on a
+ * workspace here for one caller, on its screen. Its host (`@hivemind/view-host/link`) runs here, as
+ * the window's runs there, fed from what this device holds: the board from the store, statuses and
+ * links from the control plane, a selection of its own; the screen's size and look from the caller
+ * (`view.open`, `view.screen`). What the view posts comes in as `view.post`; what its host says
  * goes to that caller alone as `view.said`, until `view.close`, until the caller goes, or until the
  * host disables the view (`view.ended`, and why). The view may do what its manifest asks and its
  * caller may call (`Connection.may`): on a phone, what a phone may. A remote screen places no live
@@ -16,10 +18,10 @@ import { cleanName, spawnableAgents, agentForCmd } from "@hivemind/agents";
 import type { SessionStatus } from "@hivemind/agent-host/status-store";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
 import { isRemote, machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
-import { mimeFor, resolvePackageFile } from "@hivemind/core/view-files";
+import { pageOf, serveViewFile } from "@hivemind/core/view-files";
 import type { InstalledView } from "@hivemind/core/views";
 import type { ViewManifest } from "@hivemind/view-sdk/manifest";
-import { PROTOCOL_VERSION, type ViewFrameMachine, type ViewPermission } from "@hivemind/view-sdk/protocol";
+import { PROTOCOL_VERSION, STATUS_TONES, type ViewFrameMachine, type ViewPermission, type ViewTheme } from "@hivemind/view-sdk/protocol";
 import { CommunityLink, type LinkCommands } from "@hivemind/view-host/link";
 import { viewAgentStatus } from "@hivemind/view-host/status";
 import { viewStructure } from "@hivemind/view-host/structure";
@@ -28,14 +30,18 @@ import { tileName } from "@hivemind/workspace-doc/tile-list";
 import type { Links, StatusChange } from "@hivemind/workspace-api/agents";
 import { ApiError, text } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain, WorkspaceServer } from "@hivemind/workspace-api/server";
-import type { ViewFile, ViewListing } from "@hivemind/workspace-api/views";
+import type { ViewFile, ViewListing, ViewScreen } from "@hivemind/workspace-api/views";
 import type { Intent, Intents } from "@hivemind/workspace-host/intents";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
 
 /** The largest file of a view's a remote screen is sent. */
 const FILE_MAX = 4 * 1024 * 1024;
 /** What a remote screen is (`hello.device`, protocol 1.5): a finger on a phone's screen. */
-const SCREEN = { touch: true, compact: true };
+const DEVICE = { touch: true, compact: true };
+/** A screen its caller says nothing of (0.12): no size, and no look of its own to give the view. */
+const UNSAID: ViewScreen = { w: 0, h: 0, theme: { colors: {} } };
+/** The widest and tallest screen, in CSS pixels. */
+const SCREEN_MAX = 100_000;
 /** Who a view's renames are written as. */
 const WRITER = { writer: "view" };
 /** Each permission a view on a remote screen is served, and the call whose rules decide it for the
@@ -50,6 +56,8 @@ const SERVED: Partial<Record<ViewPermission, string>> = {
 export interface ViewsOptions {
   /** The views installed on this device. */
   installed(): Promise<InstalledView[]>;
+  /** The view SDK this device serves its views (`__sdk.js`), its windows' and a remote screen's. */
+  sdk(): Promise<string>;
   /** The workspaces here: the boards a view shows, where it renames a tile. */
   store(): Pick<WorkspaceStore, "getCore" | "renameTile">;
   /** Whose events say what changes: the boards, the agents' statuses and the links between them. */
@@ -87,6 +95,65 @@ interface Session {
   selection: { tileId: string | null; frameId: string | null };
   /** What the view was last told of its board, as sent. */
   told: { structure: string; names: string };
+  /** The screen it is shown on now, as its caller last said. */
+  screen: ViewScreen;
+}
+
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+const COLOR = /^#[0-9a-f]{6}$/i;
+const TOKEN = /^[a-z0-9-]{1,40}$/;
+
+/** The look a remote screen gives views, as its caller says it, checked here once and kept to what
+ *  the protocol's theme has: its colours (`#rrggbb`, by token), and, when said, its mode, accent,
+ *  corner radius, fonts, surface and terminal colours, glass, and a colour for each status tone. */
+function themeOf(raw: unknown): ViewTheme {
+  const bad = (why: string) => new ApiError("BAD_REQUEST", `screen.theme: ${why}`);
+  if (!isObject(raw)) throw bad("not an object");
+  const color = (v: unknown, what: string): string => {
+    if (typeof v !== "string" || !COLOR.test(v)) throw bad(`${what} is not a colour #rrggbb`);
+    return v.toLowerCase();
+  };
+  if (!isObject(raw.colors)) throw bad("colors is not an object");
+  const colors = Object.fromEntries(Object.entries(raw.colors).map(([token, v]) => {
+    if (!TOKEN.test(token)) throw bad(`${token} is not a colour token`);
+    return [token, color(v, `colors.${token}`)];
+  }));
+  const theme: ViewTheme = { colors };
+  if (raw.mode !== undefined) {
+    if (raw.mode !== "dark" && raw.mode !== "light") throw bad("mode is dark or light");
+    theme.mode = raw.mode;
+  }
+  if (raw.accent !== undefined) theme.accent = color(raw.accent, "accent");
+  if (raw.radius !== undefined) {
+    if (typeof raw.radius !== "number" || !(raw.radius >= 0 && raw.radius <= 100)) throw bad("radius is 0 to 100 pixels");
+    theme.radius = raw.radius;
+  }
+  if (raw.fonts !== undefined) {
+    const font = (v: unknown) => typeof v === "string" && v.length > 0 && v.length <= 200 && !/[;{}<>]/.test(v);
+    if (!isObject(raw.fonts) || !font(raw.fonts.ui) || !font(raw.fonts.mono)) throw bad("fonts are {ui, mono}, each a font family");
+    theme.fonts = { ui: raw.fonts.ui as string, mono: raw.fonts.mono as string };
+  }
+  if (raw.surface !== undefined) theme.surface = color(raw.surface, "surface");
+  if (raw.terminalBackground !== undefined) theme.terminalBackground = color(raw.terminalBackground, "terminalBackground");
+  if (raw.glass !== undefined) {
+    if (typeof raw.glass !== "boolean") throw bad("glass is true or false");
+    theme.glass = raw.glass;
+  }
+  if (raw.status !== undefined) {
+    if (!isObject(raw.status)) throw bad("status is not an object");
+    const status = raw.status;
+    theme.status = Object.fromEntries(STATUS_TONES.filter((tone) => status[tone] !== undefined).map((tone) => [tone, color(status[tone], `status.${tone}`)]));
+  }
+  return theme;
+}
+
+/** The screen a view is shown on, as its caller says it (`view.open`, `view.screen`): its size in
+ *  whole CSS pixels, and its look. Checked here once; anything else is refused. */
+function screenOf(raw: unknown): ViewScreen {
+  if (!isObject(raw)) throw new ApiError("BAD_REQUEST", "screen: not an object");
+  const size = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0 && v <= SCREEN_MAX;
+  if (!size(raw.w) || !size(raw.h)) throw new ApiError("BAD_REQUEST", "screen: w and h are whole numbers of pixels");
+  return { w: raw.w, h: raw.h, theme: themeOf(raw.theme) };
 }
 
 /** A frame's colour as `#rrggbb`, from what a window saves (frame-color.ts): `oklch(L C H)`, or the
@@ -120,7 +187,7 @@ function frameHex(css: unknown): string {
 /** The agent a tile runs, its catalog id, as the window reads it. */
 const agentOf = (t: TileRecord): string | undefined => (t.kind === AGENT_TILE_KIND ? agentForCmd(t.cmd)?.id : undefined);
 
-export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view.open" | "view.close", "view.post"> {
+export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view.open" | "view.close", "view.post" | "view.screen"> {
   /** Each caller's sessions, by id; and every session open, for what this device hears. */
   const opened = new WeakMap<Connection, Map<string, Session>>();
   const live = new Set<Session>();
@@ -217,10 +284,10 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
 
   /** The view is ready: tell it where it is, then all it shows. */
   const hello = (s: Session): void => {
-    // Its look and size are the screen's own: no colours, no size, no saved layout from here.
+    // Its look and size are the screen's, as its caller says them; no saved layout from here.
     s.link.send({
-      type: "hello", v: PROTOCOL_VERSION, pluginId: s.view, capabilities: s.capabilities, theme: { colors: {} },
-      layout: null, viewport: { w: 0, h: 0 }, visible: true, features: s.link.features, device: SCREEN,
+      type: "hello", v: PROTOCOL_VERSION, pluginId: s.view, capabilities: s.capabilities, theme: s.screen.theme,
+      layout: null, viewport: { w: s.screen.w, h: s.screen.h }, visible: true, features: s.link.features, device: DEVICE,
     });
     tell(s);
     s.link.send({ type: "selection", ...s.selection, fresh: false });
@@ -263,18 +330,24 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
   return {
     answers: {
       "view.list": async (): Promise<ViewListing[]> =>
-        (await phoneViews()).map(({ id, manifest: m }) => ({ id, name: m.name, version: m.version, entry: m.entry })),
+        (await phoneViews()).map(({ id, manifest: m }) => ({ id, name: m.name, version: m.version, entry: m.entry, page: pageOf(m.entry) })),
       "view.file": async (_from, id, at): Promise<ViewFile> => {
         const view = await viewNamed(id);
         const rel = text(at, "path");
-        const file = resolvePackageFile(view.dir, rel);
+        // As the app serves its windows, but for the page that runs a `.js` entry: that entry is the manifest's.
+        const entry = view.manifest.entry;
+        const file = await serveViewFile(view.dir, rel, { js: entry, sdk: o.sdk });
+        if (file.status === 400) throw new ApiError("BAD_REQUEST", `${view.id} has no ${rel}: its entry, ${entry}, is a page`);
         if (file.status !== 200) throw new ApiError("BAD_REQUEST", file.status === 403 ? `${rel} is not inside ${view.id}` : `${view.id} has no file ${rel}`);
-        if ((await stat(file.abs)).size > FILE_MAX) throw new ApiError("BAD_REQUEST", `${rel} is larger than 4 MiB`);
-        return { data: (await readFile(file.abs)).toString("base64"), type: mimeFor(file.abs) };
+        if ("file" in file && (await stat(file.file)).size > FILE_MAX) throw new ApiError("BAD_REQUEST", `${rel} is larger than 4 MiB`);
+        const data = "text" in file ? Buffer.from(file.text) : await readFile(file.file);
+        if (data.length > FILE_MAX) throw new ApiError("BAD_REQUEST", `${rel} is larger than 4 MiB`);
+        return { data: data.toString("base64"), type: file.type, csp: file.csp };
       },
-      "view.open": async (from, id, workspace) => {
+      "view.open": async (from, id, workspace, screen) => {
         const view = await viewNamed(id);
         const repo = text(workspace, "workspace");
+        const shown = screen == null ? UNSAID : screenOf(screen);
         if (!o.store().getCore(repo)) throw new ApiError("BAD_REQUEST", "no such workspace here");
         if (view.manifest.protocol > PROTOCOL_VERSION) {
           throw new ApiError("BAD_REQUEST", `${view.id} speaks view protocol ${view.manifest.protocol}, and this device ${PROTOCOL_VERSION}`);
@@ -285,7 +358,7 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
         });
         const s = {
           id: randomUUID(), view: view.id, repo, from, capabilities, tiles: new Set(), frames: new Set(), titles: {},
-          selection: { tileId: null, frameId: null }, told: { structure: "", names: "" },
+          selection: { tileId: null, frameId: null }, told: { structure: "", names: "" }, screen: shown,
         } as Omit<Session, "link"> as Session;
         s.link = new CommunityLink({
           pluginId: view.id,
@@ -322,6 +395,17 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
         const s = sessionOf(from, session);
         if (!s) throw new ApiError("BAD_REQUEST", "no such view session");
         s.link.handle(message);
+      },
+      // The screen changed: a ready view is told what did, as the window tells its iframe; one not
+      // ready yet is told it all in `hello`.
+      "view.screen": (from, session, screen) => {
+        const s = sessionOf(from, session);
+        if (!s) throw new ApiError("BAD_REQUEST", "no such view session");
+        const [was, now] = [s.screen, screenOf(screen)];
+        s.screen = now;
+        if (!s.link.stats.ready) return;
+        if (now.w !== was.w || now.h !== was.h) s.link.send({ type: "resize", w: now.w, h: now.h });
+        if (JSON.stringify(now.theme) !== JSON.stringify(was.theme)) s.link.send({ type: "theme", theme: now.theme });
       },
     },
     gone: (connection) => {

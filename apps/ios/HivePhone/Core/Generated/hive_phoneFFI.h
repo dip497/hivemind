@@ -264,6 +264,20 @@ typedef void (*UniffiCallbackInterfaceOverviewListenerMethod0)(uint64_t, uint64_
     );
 
 #endif
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_VIEW_LISTENER_METHOD0
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_VIEW_LISTENER_METHOD0
+typedef void (*UniffiCallbackInterfaceViewListenerMethod0)(uint64_t, RustBuffer, void* _Nonnull, 
+        RustCallStatus *_Nonnull uniffiCallStatus
+    );
+
+#endif
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_VIEW_LISTENER_METHOD1
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_VIEW_LISTENER_METHOD1
+typedef void (*UniffiCallbackInterfaceViewListenerMethod1)(uint64_t, RustBuffer, void* _Nonnull, 
+        RustCallStatus *_Nonnull uniffiCallStatus
+    );
+
+#endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_SCREEN_LISTENER_METHOD0
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_SCREEN_LISTENER_METHOD0
 typedef void (*UniffiCallbackInterfaceScreenListenerMethod0)(uint64_t, uint64_t, void* _Nonnull, 
@@ -302,6 +316,16 @@ typedef struct UniffiVTableCallbackInterfaceOverviewListener {
     UniffiCallbackInterfaceClone _Nonnull uniffiClone;
     UniffiCallbackInterfaceOverviewListenerMethod0 _Nonnull changed;
 } UniffiVTableCallbackInterfaceOverviewListener;
+
+#endif
+#ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_VIEW_LISTENER
+#define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_VIEW_LISTENER
+typedef struct UniffiVTableCallbackInterfaceViewListener {
+    UniffiCallbackInterfaceFree _Nonnull uniffiFree;
+    UniffiCallbackInterfaceClone _Nonnull uniffiClone;
+    UniffiCallbackInterfaceViewListenerMethod0 _Nonnull said;
+    UniffiCallbackInterfaceViewListenerMethod1 _Nonnull ended;
+} UniffiVTableCallbackInterfaceViewListener;
 
 #endif
 #ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_SCREEN_LISTENER
@@ -498,6 +522,71 @@ uint64_t uniffi_hive_phone_ffi_fn_method_phone_push_to(uint64_t ptr, RustBuffer 
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_READ_NOTICE
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_READ_NOTICE
 uint64_t uniffi_hive_phone_ffi_fn_method_phone_read_notice(uint64_t ptr, RustBuffer body
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_OPEN_VIEW
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_OPEN_VIEW
+uint64_t uniffi_hive_phone_ffi_fn_method_phone_open_view(uint64_t ptr, RustBuffer device, RustBuffer workspace, RustBuffer view, RustBuffer screen, uint64_t listener, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_VIEW_FILE
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_VIEW_FILE
+uint64_t uniffi_hive_phone_ffi_fn_method_phone_view_file(uint64_t ptr, RustBuffer device, RustBuffer workspace, RustBuffer view, RustBuffer path
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_VIEWS
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_VIEWS
+uint64_t uniffi_hive_phone_ffi_fn_method_phone_views(uint64_t ptr, RustBuffer device, RustBuffer workspace
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_CLONE_VIEWLISTENER
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_CLONE_VIEWLISTENER
+uint64_t uniffi_hive_phone_ffi_fn_clone_viewlistener(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FREE_VIEWLISTENER
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FREE_VIEWLISTENER
+void uniffi_hive_phone_ffi_fn_free_viewlistener(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_INIT_CALLBACK_VTABLE_VIEWLISTENER
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_INIT_CALLBACK_VTABLE_VIEWLISTENER
+void uniffi_hive_phone_ffi_fn_init_callback_vtable_viewlistener(const UniffiVTableCallbackInterfaceViewListener* _Nonnull vtable
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_VIEWLISTENER_SAID
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_VIEWLISTENER_SAID
+void uniffi_hive_phone_ffi_fn_method_viewlistener_said(uint64_t ptr, RustBuffer message, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_VIEWLISTENER_ENDED
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_VIEWLISTENER_ENDED
+void uniffi_hive_phone_ffi_fn_method_viewlistener_ended(uint64_t ptr, RustBuffer why, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_CLONE_VIEWSESSION
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_CLONE_VIEWSESSION
+uint64_t uniffi_hive_phone_ffi_fn_clone_viewsession(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FREE_VIEWSESSION
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FREE_VIEWSESSION
+void uniffi_hive_phone_ffi_fn_free_viewsession(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_VIEWSESSION_POST
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_VIEWSESSION_POST
+void uniffi_hive_phone_ffi_fn_method_viewsession_post(uint64_t ptr, RustBuffer message, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_VIEWSESSION_SCREEN
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_VIEWSESSION_SCREEN
+void uniffi_hive_phone_ffi_fn_method_viewsession_screen(uint64_t ptr, RustBuffer screen, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_VIEWSESSION_STOP
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_VIEWSESSION_STOP
+void uniffi_hive_phone_ffi_fn_method_viewsession_stop(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_CLONE_SCREENLISTENER
@@ -984,6 +1073,54 @@ uint16_t uniffi_hive_phone_ffi_checksum_method_phone_push_to(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_READ_NOTICE
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_READ_NOTICE
 uint16_t uniffi_hive_phone_ffi_checksum_method_phone_read_notice(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_OPEN_VIEW
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_OPEN_VIEW
+uint16_t uniffi_hive_phone_ffi_checksum_method_phone_open_view(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_VIEW_FILE
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_VIEW_FILE
+uint16_t uniffi_hive_phone_ffi_checksum_method_phone_view_file(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_VIEWS
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_VIEWS
+uint16_t uniffi_hive_phone_ffi_checksum_method_phone_views(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_VIEWLISTENER_SAID
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_VIEWLISTENER_SAID
+uint16_t uniffi_hive_phone_ffi_checksum_method_viewlistener_said(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_VIEWLISTENER_ENDED
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_VIEWLISTENER_ENDED
+uint16_t uniffi_hive_phone_ffi_checksum_method_viewlistener_ended(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_VIEWSESSION_POST
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_VIEWSESSION_POST
+uint16_t uniffi_hive_phone_ffi_checksum_method_viewsession_post(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_VIEWSESSION_SCREEN
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_VIEWSESSION_SCREEN
+uint16_t uniffi_hive_phone_ffi_checksum_method_viewsession_screen(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_VIEWSESSION_STOP
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_VIEWSESSION_STOP
+uint16_t uniffi_hive_phone_ffi_checksum_method_viewsession_stop(void
     
 );
 #endif

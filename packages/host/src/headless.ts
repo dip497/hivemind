@@ -78,6 +78,8 @@ export interface HeadlessHostOptions {
   daemon(): Promise<Duplex>;
   /** hive-net's executable; null keeps the host off the network (nobody else reaches it). */
   hiveNet: string | null;
+  /** The view SDK it serves the community views it shows on the person's phone (`__sdk.js`). */
+  viewSdk(): Promise<string>;
   onWarn(message: string): void;
 }
 
@@ -290,6 +292,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     // The community views installed here on the person's phone, their host run here (P8).
     views({
       installed: () => listInstalledViews(),
+      sdk: o.viewSdk,
       store: () => store,
       server: () => api,
       status: (bare) => control.status.get(bare),

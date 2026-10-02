@@ -67,6 +67,7 @@ const LEAST: Record<string, Role> = {
   "view.file": "view",
   "view.open": "view",
   "view.post": "view",
+  "view.screen": "view",
   "view.close": "view",
 };
 

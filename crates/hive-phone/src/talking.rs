@@ -14,7 +14,7 @@ use tokio::task::JoinHandle;
 use crate::{
     connections::Connections,
     conversation::{self, Entry, Piece},
-    failure::Failure,
+    failure::Lost,
     pacing::{self, Paced},
 };
 
@@ -105,7 +105,7 @@ impl Talking {
             let why = loop {
                 let connection = match connections.kept_for(&device, &workspace).await {
                     Ok(connection) => connection,
-                    Err(why) => break why,
+                    Err(lost) => break lost,
                 };
                 let last = from.clone();
                 let resume = last.as_ref().map(|(session, at)| (session.as_str(), *at));
@@ -116,10 +116,11 @@ impl Talking {
                     }
                     from = Some((piece.session, piece.cursor));
                 };
-                match conversation::follow(&connection, &workspace, &tile, resume, said).await {
-                    Err(why) if Failure::refused(&why) => break why,
-                    _ => Connections::again(&connection).await,
+                let followed = conversation::follow(&connection, &workspace, &tile, resume, said);
+                if let Some(lost) = followed.await.err().as_ref().and_then(Lost::refusal) {
+                    break lost;
                 }
+                Connections::again(&connection).await;
             };
             let _ = told.send(Told::Ended(why.to_string()));
         });

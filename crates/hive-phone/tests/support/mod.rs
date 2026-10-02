@@ -1,7 +1,8 @@
 //! What the tests of the phone's live connections share: a computer of the person's, reached over
 //! iroh on this machine, which answers the phone as the app does: on its `device` stream; on its
 //! `agents` stream, when it lists them; and on its `api` stream, where it shows one terminal, keeps
-//! what the phone types into it, and tells what its agent and the person say to each other.
+//! what the phone types into it, tells what its agent and the person say to each other, and hosts
+//! one community view.
 
 #![allow(dead_code)]
 
@@ -34,6 +35,13 @@ pub const WORKSPACE: &str = "w1";
 pub const TILE: &str = "t1";
 /// The agent's first session, as the computer names it.
 pub const SESSION: &str = "s1";
+/// The community view the computer offers a phone; any other it refuses.
+pub const VIEW: &str = "priya-board";
+/// Why its host disables a view that posts `{"type": "flood"}`.
+pub const FLOODED: &str = "8 malformed or unauthorised messages";
+/// The view's page, as it serves it, and the policy it is served under.
+pub const PAGE: &str = "<!doctype html><title>Priya's board</title>";
+pub const POLICY: &str = "default-src 'none'; script-src 'self' 'nonce-n0'";
 
 /// The session of the computer's agent now, and what it and the person said in it, as its file
 /// holds it: each entry with how far into the file it goes.
@@ -123,6 +131,8 @@ pub struct Desk {
     /// Where in the conversation the phone asked from each time, as it asked: the session, and
     /// how far into it.
     pub asked_from: Arc<Mutex<Vec<AskedFrom>>>,
+    /// What the phone told of the views it showed, `view.*`, as it came.
+    pub viewed: Arc<Mutex<Vec<Value>>>,
     /// The connections the phone made, while they last.
     connections: Arc<Mutex<Vec<Connection>>>,
 }
@@ -139,6 +149,7 @@ struct Serving {
     opened: Arc<AtomicUsize>,
     session: watch::Sender<Session>,
     asked_from: Arc<Mutex<Vec<AskedFrom>>>,
+    viewed: Arc<Mutex<Vec<Value>>>,
 }
 
 impl Desk {
@@ -179,6 +190,7 @@ impl Desk {
                 said: vec![],
             }),
             asked_from: Arc::default(),
+            viewed: Arc::default(),
             connections: Arc::default(),
         };
         let serving = Serving {
@@ -191,6 +203,7 @@ impl Desk {
             opened: desk.opened.clone(),
             session: desk.session.clone(),
             asked_from: desk.asked_from.clone(),
+            viewed: desk.viewed.clone(),
         };
         let (dialled, closed) = (desk.dialled.clone(), desk.closed.clone());
         let connections = desk.connections.clone();
@@ -241,6 +254,13 @@ impl Desk {
     pub fn notices(&self) -> Vec<Value> {
         let told = self.told.lock().unwrap();
         told.iter().map(|(_, notice)| notice.clone()).collect()
+    }
+
+    /// What the phone told of the views it showed, `view.*`, each as `[method, params]`.
+    pub fn viewed(&self) -> Vec<Value> {
+        let viewed = self.viewed.lock().unwrap();
+        let shown = viewed.iter().map(|m| json!([m["method"], m["params"]]));
+        shown.collect()
     }
 }
 
@@ -318,18 +338,31 @@ async fn agents(mut send: SendStream, mut recv: RecvStream, serving: &Serving) {
 /// The `api` stream of the workspace: its terminal's keyboard, size and screen as the phone opens
 /// it, or none when its session ended; its keyboard given to the phone, `phone`, as it asks; what
 /// the phone types kept; and the session's end once it types Ctrl-C. Or its agent's conversation.
+/// Or its community view, opened, posted to and shown on another screen (`view`).
 async fn api(mut send: SendStream, mut recv: RecvStream, phone: &str, serving: &Serving) {
     let session = format!("hm:{TILE}");
     let Ok(Some(_open)) = read_frame(&mut recv).await else {
         return;
     };
+    // The screen each view session opened on this stream is shown on.
+    let mut screens = std::collections::BTreeMap::new();
     while let Ok(Some(frame)) = read_frame(&mut recv).await {
         let message: Value = serde_json::from_slice(&frame).unwrap();
         if message["method"] == "agent.conversation" {
             return converse(send, recv, &message, serving).await;
         }
         let mut out = vec![];
-        if let Some(id) = message.get("id") {
+        if message["method"]
+            .as_str()
+            .is_some_and(|m| m.starts_with("view."))
+        {
+            let opened = {
+                let mut viewed = serving.viewed.lock().unwrap();
+                viewed.push(message.clone());
+                viewed.iter().filter(|m| m["method"] == "view.open").count()
+            };
+            out = view(&message, &mut screens, opened);
+        } else if let Some(id) = message.get("id") {
             let mut pid = 1;
             if message["method"] == "terminal.open" {
                 serving.opened.fetch_add(1, Ordering::SeqCst);
@@ -368,6 +401,72 @@ async fn api(mut send: SendStream, mut recv: RecvStream, phone: &str, serving: &
                 return;
             }
         }
+    }
+}
+
+/// What the computer's view host answers `message`, a `view.*` call or notice, and says of it: its
+/// page, with the policy to serve it under (`PAGE`, `POLICY`), or as a device of before served it,
+/// with none (`old.html`); the view opened, `VIEW` alone, its session named by how many were opened
+/// (`opened`, this one among them), and shown on the screen given (`screens`, each session's);
+/// told it is shown there once it posts that it is ready, and each change to it after; told back,
+/// in a message of its own, what else it posts; disabled once it posts `{"type": "flood"}`; and
+/// closed.
+fn view(
+    message: &Value,
+    screens: &mut std::collections::BTreeMap<String, Value>,
+    opened: usize,
+) -> Vec<Value> {
+    let (id, params) = (&message["id"], &message["params"]);
+    let said =
+        |session: &Value, what: Value| json!({ "event": "view.said", "params": [session, what] });
+    let hello = |session: &Value, screen: &Value| {
+        let viewport = json!({ "w": screen["w"], "h": screen["h"] });
+        said(
+            session,
+            json!({ "type": "hello", "viewport": viewport, "theme": screen["theme"] }),
+        )
+    };
+    let page = |policy: Option<&str>| {
+        use base64::Engine;
+        let data = base64::engine::general_purpose::STANDARD.encode(PAGE);
+        let mut file = json!({ "data": data, "type": "text/html; charset=utf-8" });
+        if let Some(policy) = policy {
+            file["csp"] = json!(policy);
+        }
+        json!({ "id": id, "result": file })
+    };
+    match message["method"].as_str().unwrap_or_default() {
+        "view.file" if params[1] == "old.html" => vec![page(None)],
+        "view.file" => vec![page(Some(POLICY))],
+        "view.open" if params[0] != VIEW => vec![json!({ "id": id, "error": {
+            "code": "BAD_REQUEST", "message": format!("no view {} here works on a phone", params[0].as_str().unwrap_or_default()),
+        } })],
+        "view.open" => {
+            let session = format!("v{opened}");
+            screens.insert(session.clone(), params[2].clone());
+            vec![json!({ "id": id, "result": { "session": session } })]
+        }
+        "view.post" if params[1]["type"] == "ready" => {
+            let screen = screens.get(params[0].as_str().unwrap_or_default());
+            vec![hello(&params[0], screen.unwrap_or(&Value::Null))]
+        }
+        "view.post" if params[1]["type"] == "flood" => {
+            vec![json!({ "event": "view.ended", "params": [params[0], FLOODED] })]
+        }
+        "view.post" => vec![said(&params[0], json!({ "type": "echo", "of": params[1] }))],
+        "view.screen" => {
+            screens.insert(
+                params[0].as_str().unwrap_or_default().into(),
+                params[1].clone(),
+            );
+            let (w, h) = (&params[1]["w"], &params[1]["h"]);
+            vec![said(
+                &params[0],
+                json!({ "type": "resize", "w": w, "h": h }),
+            )]
+        }
+        "view.close" => vec![json!({ "id": id, "result": { "closed": true } })],
+        _ => vec![],
     }
 }
 

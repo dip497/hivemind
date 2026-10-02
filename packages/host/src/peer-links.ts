@@ -75,7 +75,7 @@ const NO_FACTS: AgentFacts = { program: () => undefined, decides: () => false, i
 const PHONE_MAY = new Set([
   "agent.answer", "agent.send", "terminal.write", "terminal.keyboard.ask",
   "agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.conversation",
-  "view.list", "view.file", "view.open", "view.post", "view.close",
+  "view.list", "view.file", "view.open", "view.post", "view.screen", "view.close",
 ]);
 export const phoneMay = (method: string, params: unknown[]): boolean =>
   (method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true) || PHONE_MAY.has(method);

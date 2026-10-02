@@ -1,9 +1,12 @@
 // Community views on a remote screen (views.ts, spec/workspace-api.md "Views on a remote screen"):
-// the views installed here that say they work on a phone are offered, and their files, inside the
-// package and 4 MiB at most; a view opened on a workspace here is told, once it is ready, what the
-// window would tell it, as a phone's screen, to its caller alone; what it does is done on the board
-// as its caller, and recorded, and what its caller may not do is refused; its tiles' statuses follow
-// it; and its session ends when its caller closes it or goes, or when its host disables it, told why.
+// the views installed here that say they work on a phone are offered, with the page to load, and
+// their files as the app serves them (the SDK, the page that runs a `.js` entry, a page with the
+// SDK's import map), each under its policy, inside the package and 4 MiB at most; a view opened on
+// a workspace here is told, once it is ready, what the window would tell it, as a phone's screen of
+// the size and look its caller says, and what changes of that screen after, to its caller alone;
+// what it does is done on the board as its caller, and recorded, and what its caller may not do is
+// refused; its tiles' statuses follow it; and its session ends when its caller closes it or goes,
+// or when its host disables it, told why.
 import { test, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -12,6 +15,7 @@ import path from "node:path";
 import { setCatalog, type AgentProviderDef } from "@hivemind/agents";
 import { StatusStore, type SessionStatus } from "@hivemind/agent-host/status-store";
 import { listInstalledViews } from "@hivemind/core/views";
+import { pluginCsp, withImportMap } from "@hivemind/core/view-files";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { newSeed } from "@hivemind/workspace-host/identity";
 import { Intents } from "@hivemind/workspace-host/intents";
@@ -40,6 +44,9 @@ beforeEach(() => { process.env.XDG_CONFIG_HOME = path.join(tmp, `xdg-${made++}`)
 /** Priya's phone, her own device. */
 const PHONE = { kind: "peer", person: "p".repeat(64), device: "d".repeat(64), access: "owner" } as const;
 
+/** The SDK this device serves its views. */
+const SDK = "export const connect = async () => ({});";
+
 const priyaStatus = (more: Partial<SessionStatus> = {}): SessionStatus =>
   ({ state: "waiting", kind: "permission", subagents: [], background: 0, compacting: false, source: "hooks", since: 1, title: "Fixing the nav", ...more });
 
@@ -60,6 +67,7 @@ function computer() {
   });
   const server: WorkspaceServer = new WorkspaceServer([views({
     installed: () => listInstalledViews(),
+    sdk: async () => SDK,
     store: () => store,
     server: () => server,
     status: (tile) => status.get(tile),
@@ -101,30 +109,48 @@ function computer() {
     return answer.result;
   };
   const post = (from: Connection, session: string, message: unknown) => server.notice("view.post", [session, message], from);
+  const screen = (from: Connection, session: string, shown: unknown) => server.notice("view.screen", [session, shown], from);
   /** What a caller's view has been told in `session`, in order. */
   const said = (c: { got: EventMessage[] }, session: string) =>
     c.got.filter((e) => e.event === "view.said" && e.params[0] === session).map((e) => e.params[1] as Record<string, unknown>);
   const audit = () => fs.readFileSync(path.join(dir, "audit.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>);
-  return { dir, repo, store, status, started, closed, caller, call, post, said, audit, setLinks: (l: typeof links) => { links = l; server.publish("link.pipe", { src: "t1", dst: "t2", connected: true }); } };
+  return { dir, repo, store, status, started, closed, caller, call, post, screen, said, audit, setLinks: (l: typeof links) => { links = l; server.publish("link.pipe", { src: "t1", dst: "t2", connected: true }); } };
 }
 const code = async (p: Promise<unknown>) => { try { await p; return "ok"; } catch (e) { return (e as { code?: string }).code; } };
 
-test("the views here that say they work on a phone are offered, and their files: inside the package, 4 MiB at most, base64 with their type", async () => {
+test("the views here that say they work on a phone are offered with the page to load, and their files as the app serves them: inside the package, 4 MiB at most, base64 with their type and their policy", async () => {
   const c = computer();
-  const dir = installed("priya-board", { name: "Priya's board", phone: true }, { "main.js": "export {};", "big.bin": Buffer.alloc(4 * 1024 * 1024 + 1), "whole.bin": Buffer.alloc(4 * 1024 * 1024) });
+  const dir = installed("priya-board", { name: "Priya's board", phone: true }, { "main.js": "export {};", "big.bin": Buffer.alloc(4 * 1024 * 1024 + 1), "big.html": "<p>".padEnd(4 * 1024 * 1024 + 1, "x"), "whole.bin": Buffer.alloc(4 * 1024 * 1024) });
   fs.writeFileSync(path.join(tmp, "secret.txt"), "not the view's");
   fs.symlinkSync(path.join(tmp, "secret.txt"), path.join(dir, "leak.txt"));
+  // A view whose entry is its script: shown through the page that runs it.
+  installed("priya-queue", { name: "Priya's queue", phone: true, entry: "view.js" }, { "view.js": "export {};" });
   installed("desk-only", { name: "Desk only" });
   installed("bad", { name: "Bad", phone: "yes" });
   const phone = c.caller();
-  assert.deepEqual(await c.call("view.list", [], phone), [{ id: "priya-board", name: "Priya's board", version: "1.0.0", entry: "index.html" }]);
-  assert.deepEqual(await c.call("view.file", ["priya-board", "index.html"], phone), {
-    data: Buffer.from("<!doctype html><title>priya-board</title>").toString("base64"), type: "text/html; charset=utf-8",
-  });
-  assert.deepEqual(await c.call("view.file", ["priya-board", "main.js"], phone), { data: Buffer.from("export {};").toString("base64"), type: "text/javascript; charset=utf-8" });
+  assert.deepEqual(await c.call("view.list", [], phone), [
+    { id: "priya-board", name: "Priya's board", version: "1.0.0", entry: "index.html", page: "index.html" },
+    { id: "priya-queue", name: "Priya's queue", version: "1.0.0", entry: "view.js", page: "__entry.html" },
+  ]);
+  /** One of a view's files as served: its text and type, and the nonce its policy names, the
+   *  policy being the one every view document gets. */
+  const file = async (view: string, at: string) => {
+    const served = (await c.call("view.file", [view, at], phone)) as { data: string; type: string; csp: string };
+    const nonce = served.csp.match(/'nonce-([^']+)'/)![1]!;
+    assert.equal(served.csp, pluginCsp(nonce), `${view} ${at}`);
+    return { text: Buffer.from(served.data, "base64").toString(), type: served.type, nonce };
+  };
+  const page = await file("priya-board", "index.html");
+  assert.deepEqual([page.text, page.type], [withImportMap("<!doctype html><title>priya-board</title>", page.nonce), "text/html; charset=utf-8"]);
+  const script = await file("priya-board", "main.js");
+  assert.deepEqual([script.text, script.type], ["export {};", "text/javascript; charset=utf-8"]);
+  const sdk = await file("priya-board", "__sdk.js");
+  assert.deepEqual([sdk.text, sdk.type], [SDK, "text/javascript; charset=utf-8"]);
+  const entry = await file("priya-queue", "__entry.html");
+  assert.ok(entry.text.includes(`<script type="module" nonce="${entry.nonce}" src="./view.js"></script>`), entry.text);
   assert.equal(((await c.call("view.file", ["priya-board", "whole.bin"], phone)) as { data: string }).data.length, Math.ceil((4 * 1024 * 1024) / 3) * 4);
-  for (const [view, file] of [["priya-board", "../desk-only/index.html"], ["priya-board", "leak.txt"], ["priya-board", "big.bin"], ["priya-board", "gone.js"], ["desk-only", "index.html"], ["bad", "index.html"]]) {
-    assert.equal(await code(c.call("view.file", [view, file], phone)), "BAD_REQUEST", `${view} ${file}`);
+  for (const [view, at] of [["priya-board", "../desk-only/index.html"], ["priya-board", "leak.txt"], ["priya-board", "big.bin"], ["priya-board", "big.html"], ["priya-board", "gone.js"], ["priya-board", "__entry.html"], ["desk-only", "index.html"], ["bad", "index.html"]]) {
+    assert.equal(await code(c.call("view.file", [view, at], phone)), "BAD_REQUEST", `${view} ${at}`);
   }
 });
 
@@ -165,6 +191,31 @@ test("a view opened on a workspace here is told, once ready, where it is (a phon
   assert.deepEqual((told[0]!.tiles as Array<{ name: string }>).map((t) => t.name), ["Testing the nav", "Priya's shell"]);
   assert.deepEqual(told[1]!.names, { t1: "Testing the nav", t2: "Priya's shell" });
   assert.deepEqual(told[2]!.links, { pipes: [{ src: "t1", dst: "t2" }], spawns: [] });
+});
+
+test("a view is shown on its caller's screen: told its size and look once ready, the newest, and after only what of them changes; a screen not as the protocol has it is refused", async () => {
+  const c = computer();
+  installed("priya-board", { name: "Priya's board", phone: true });
+  const phone = c.caller();
+  const dark = { colors: { bg: "#101418", fg: "#E8EAED" }, mode: "dark", accent: "#3a7bd5", fonts: { ui: "system-ui", mono: "ui-monospace" }, status: { working: "#4caf50" } };
+  const light = { ...dark, mode: "light", colors: { bg: "#ffffff", fg: "#202124" } };
+  const { session } = (await c.call("view.open", ["priya-board", c.repo, { w: 390, h: 844, theme: dark }], phone)) as { session: string };
+  // The keyboard came up before it was ready: it is told the screen as it is by then.
+  c.screen(phone, session, { w: 390, h: 500, theme: dark });
+  c.post(phone, session, { type: "ready", v: 1 });
+  const hello = c.said(phone, session)[0]!;
+  assert.deepEqual([hello.type, hello.viewport, hello.theme], ["hello", { w: 390, h: 500 }, { ...dark, colors: { bg: "#101418", fg: "#e8eaed" } }]);
+  const before = c.said(phone, session).length;
+  c.screen(phone, session, { w: 844, h: 390, theme: dark });
+  c.screen(phone, session, { w: 844, h: 390, theme: light });
+  c.screen(phone, session, { w: 844, h: 390, theme: light });
+  c.screen(phone, session, { w: -844, h: 390, theme: light });
+  assert.deepEqual(c.said(phone, session).slice(before), [{ type: "resize", w: 844, h: 390 }, { type: "theme", theme: light }]);
+  const bad: unknown[] = [
+    { w: -1, h: 2, theme: dark }, { w: 1.5, h: 2, theme: dark }, { w: 1, h: 2 }, { w: 1, h: 2, theme: { colors: { bg: "red" } } },
+    { w: 1, h: 2, theme: { colors: {}, mode: "dim" } }, { w: 1, h: 2, theme: { colors: {}, fonts: { ui: "x;}", mono: "y" } } },
+  ];
+  for (const screen of bad) assert.equal(await code(c.call("view.open", ["priya-board", c.repo, screen], phone)), "BAD_REQUEST", JSON.stringify(screen));
 });
 
 test("what the view does is done on the board as its caller, and recorded; what its caller may not do, it may not either", async () => {

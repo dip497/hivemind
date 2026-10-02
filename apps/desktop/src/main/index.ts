@@ -70,7 +70,7 @@ import type { ReadScreen } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { hcpSockPath } from "@hivemind/agent-host/hooks/token";
 import { HcpError } from "@hivemind/host/control/protocol";
-import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog } from "./view-packages.js";
+import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog, viewSdk } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
@@ -1237,6 +1237,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   // The community views here on the person's phone, their host run here (P8).
   views({
     installed: () => listInstalledViews(),
+    sdk: viewSdk,
     store: workspaceStore,
     server: () => workspaceServer,
     status: (bare) => control.status.get(bare),

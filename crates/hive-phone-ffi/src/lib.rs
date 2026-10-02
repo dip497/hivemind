@@ -15,6 +15,7 @@ mod pairing;
 mod phone;
 mod push;
 mod records;
+mod view;
 mod watch;
 
 pub use control::{Diff, DiffFile, Frame, Start, StartOption, StartProgram, Startable};
@@ -25,6 +26,10 @@ pub use pairing::{pairs_with, PairsWith};
 pub use phone::Phone;
 pub use push::{Notice, PushAt, PushTold};
 pub use records::*;
+pub use view::{
+    Screen, ThemeMode, ViewEnded, ViewFile, ViewFonts, ViewInfo, ViewListener, ViewSession,
+    ViewTheme,
+};
 pub use watch::{ScreenLine, ScreenListener, ScreenUpdate, Watch};
 
 uniffi::setup_scaffolding!("hive_phone");
