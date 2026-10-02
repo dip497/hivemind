@@ -108,8 +108,8 @@ impl DeviceKind {
     }
 }
 
-/// One of the person's devices: whether it is connected now, when it was found away, and when it
-/// last answered.
+/// One of the person's devices: whether it is connected now, when it was found away, when it last
+/// told anything, and when it last said what waits on the person there.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Device {
     pub id: String,
@@ -118,6 +118,11 @@ pub struct Device {
     pub reachable: bool,
     pub away_since: Option<u64>,
     pub heard_at: Option<u64>,
+    /// When it last said what waits on the person there and how many agents are at work (as it
+    /// answered, or as its list of agents says): none before it has, when that is not known yet,
+    /// and nothing of it is in the overview ("Asking desk…", not "Nothing needs you").
+    #[uniffi(default)]
+    pub answered_at: Option<u64>,
 }
 
 /// A workspace one of the person's devices holds: its id and name, and the folder it is in there
@@ -190,10 +195,9 @@ pub fn overview(revision: u64, seen: &[Seen], person: Option<person::Person>) ->
         .iter()
         .map(|device| (device.with.device.as_str(), device.with.name.as_str()))
         .collect();
-    let lists = seen.iter().filter_map(|device| {
-        let heard = device.heard.as_ref()?;
-        Some(heard.listed(&device.with.device))
-    });
+    let lists = seen
+        .iter()
+        .filter_map(|device| device.heard.as_ref()?.listed(&device.with.device));
     let all = agents::as_one(lists.collect());
     let shown = |agents: Vec<agents::Agent>| {
         let shown = agents.into_iter().filter_map(|a| shown(a, &named));
@@ -213,6 +217,7 @@ pub fn overview(revision: u64, seen: &[Seen], person: Option<person::Person>) ->
                 reachable: device.reachable,
                 away_since: device.away_since,
                 heard_at: device.heard.as_ref().map(|heard| heard.at),
+                answered_at: device.heard.as_ref().and_then(|heard| heard.answered),
             })
             .collect(),
         workspaces: seen
@@ -391,12 +396,14 @@ mod tests {
                 with: device("d1", "desk", "app"),
                 reachable: true,
                 away_since: None,
+                // Its list said at 90, its workspaces told since.
                 heard: Some(Heard {
                     at: 100,
-                    answer: Said {
+                    answer: Some(Said {
                         needs: vec![],
                         working: 1,
-                    },
+                    }),
+                    answered: Some(90),
                     agents: Some(listed),
                     workspaces: vec![held("w1", "api", Some("/home/priya/api"))],
                 }),
@@ -407,10 +414,11 @@ mod tests {
                 away_since: Some(50),
                 heard: Some(Heard {
                     at: 40,
-                    answer: Said {
+                    answer: Some(Said {
                         needs: vec![plan],
                         working: 1,
-                    },
+                    }),
+                    answered: Some(40),
                     agents: None,
                     workspaces: vec![held("w2", "web", None)],
                 }),
@@ -420,6 +428,19 @@ mod tests {
                 reachable: false,
                 away_since: None,
                 heard: None,
+            },
+            // Reached: it told the workspaces it holds, and not yet what waits there.
+            Seen {
+                with: device("d4", "box", "host"),
+                reachable: true,
+                away_since: None,
+                heard: Some(Heard {
+                    at: 120,
+                    answer: None,
+                    answered: None,
+                    agents: None,
+                    workspaces: vec![held("w4", "infra", None)],
+                }),
             },
         ];
         let whose = person::Person {
@@ -516,13 +537,24 @@ mod tests {
             reachable,
             away_since,
             heard_at,
+            answered_at: None,
         };
+        let answered = |device: Device, at| Device {
+            answered_at: Some(at),
+            ..device
+        };
+        let computer = DeviceKind::Computer;
         assert_eq!(
             shown.devices,
             [
-                device("d1", "desk", DeviceKind::Computer, true, None, Some(100)),
-                device("d2", "server", DeviceKind::Host, false, Some(50), Some(40)),
-                device("d3", "laptop", DeviceKind::Computer, false, None, None),
+                answered(device("d1", "desk", computer, true, None, Some(100)), 90),
+                answered(
+                    device("d2", "server", DeviceKind::Host, false, Some(50), Some(40)),
+                    40
+                ),
+                device("d3", "laptop", computer, false, None, None),
+                // What waits there is not known yet: nothing of it in the overview.
+                device("d4", "box", DeviceKind::Host, true, None, Some(120)),
             ]
         );
         let workspace = |device: &str, id: &str, name: &str, folder: Option<&str>| Workspace {
@@ -536,6 +568,7 @@ mod tests {
             [
                 workspace("d1", "w1", "api", Some("/home/priya/api")),
                 workspace("d2", "w2", "web", None),
+                workspace("d4", "w4", "infra", None),
             ]
         );
         let priya = Person {

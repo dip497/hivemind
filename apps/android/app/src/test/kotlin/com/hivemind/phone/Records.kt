@@ -52,13 +52,21 @@ fun agent(
 fun waiting(kind: WaitKind, since: Long, decide: Boolean = false, plan: String? = null) =
     Waiting(kind = kind, since = since.toULong(), plan = plan, decide = decide)
 
-fun device(id: String, name: String, reachable: Boolean = true, awaySince: Long? = null, heardAt: Long? = null) = Device(
+fun device(
+    id: String,
+    name: String,
+    reachable: Boolean = true,
+    awaySince: Long? = null,
+    heardAt: Long? = null,
+    answeredAt: Long? = heardAt,
+) = Device(
     id = id,
     name = name,
     kind = DeviceKind.COMPUTER,
     reachable = reachable,
     awaySince = awaySince?.toULong(),
     heardAt = heardAt?.toULong(),
+    answeredAt = answeredAt?.toULong(),
 )
 
 fun workspace(id: String, name: String, device: String = DESK, folder: String? = null) =
@@ -68,7 +76,7 @@ fun overview(
     agents: List<Agent> = emptyList(),
     needs: List<Agent> = emptyList(),
     working: Int = 0,
-    devices: List<Device> = listOf(device(DESK, "desk")),
+    devices: List<Device> = listOf(device(DESK, "desk", heardAt = 0)),
     workspaces: List<Workspace> = emptyList(),
 ) = Overview(
     revision = 1u,

@@ -36,12 +36,13 @@ async fn a_device_is_kept_reached_in_the_foreground_closed_in_the_background_and
     assert!(!connections.seen()[0].reachable);
 
     connections.foreground();
+    // Once it said what waits there: it may tell the workspaces it holds first.
     let reached = || {
         let seen = &connections.seen()[0];
-        seen.reachable && seen.heard.is_some()
+        seen.reachable && seen.heard.as_ref().is_some_and(|h| h.answer.is_some())
     };
     assert!(until(Duration::from_secs(10), reached).await);
-    let heard = connections.seen().remove(0).heard.unwrap().answer;
+    let heard = connections.seen().remove(0).heard.unwrap().answer.unwrap();
     assert_eq!(
         (heard.working, heard.needs[0].agent.as_str()),
         (1, "Editing Nav.tsx")

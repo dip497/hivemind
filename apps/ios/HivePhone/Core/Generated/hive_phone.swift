@@ -2525,8 +2525,8 @@ public func FfiConverterTypeAgentRef_lower(_ value: AgentRef) -> RustBuffer {
 
 
 /**
- * One of the person's devices: whether it is connected now, when it was found away, and when it
- * last answered.
+ * One of the person's devices: whether it is connected now, when it was found away, when it last
+ * told anything, and when it last said what waits on the person there.
  */
 public struct Device: Equatable, Hashable {
     public var id: String
@@ -2535,16 +2535,28 @@ public struct Device: Equatable, Hashable {
     public var reachable: Bool
     public var awaySince: UInt64?
     public var heardAt: UInt64?
+    /**
+     * When it last said what waits on the person there and how many agents are at work (as it
+     * answered, or as its list of agents says): none before it has, when that is not known yet,
+     * and nothing of it is in the overview ("Asking desk…", not "Nothing needs you").
+     */
+    public var answeredAt: UInt64?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, name: String, kind: DeviceKind, reachable: Bool, awaySince: UInt64?, heardAt: UInt64?) {
+    public init(id: String, name: String, kind: DeviceKind, reachable: Bool, awaySince: UInt64?, heardAt: UInt64?, 
+        /**
+         * When it last said what waits on the person there and how many agents are at work (as it
+         * answered, or as its list of agents says): none before it has, when that is not known yet,
+         * and nothing of it is in the overview ("Asking desk…", not "Nothing needs you").
+         */answeredAt: UInt64? = nil) {
         self.id = id
         self.name = name
         self.kind = kind
         self.reachable = reachable
         self.awaySince = awaySince
         self.heardAt = heardAt
+        self.answeredAt = answeredAt
     }
 
     
@@ -2568,7 +2580,8 @@ public struct FfiConverterTypeDevice: FfiConverterRustBuffer {
                 kind: FfiConverterTypeDeviceKind.read(from: &buf), 
                 reachable: FfiConverterBool.read(from: &buf), 
                 awaySince: FfiConverterOptionUInt64.read(from: &buf), 
-                heardAt: FfiConverterOptionUInt64.read(from: &buf)
+                heardAt: FfiConverterOptionUInt64.read(from: &buf), 
+                answeredAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
 
@@ -2579,6 +2592,7 @@ public struct FfiConverterTypeDevice: FfiConverterRustBuffer {
         FfiConverterBool.write(value.reachable, into: &buf)
         FfiConverterOptionUInt64.write(value.awaySince, into: &buf)
         FfiConverterOptionUInt64.write(value.heardAt, into: &buf)
+        FfiConverterOptionUInt64.write(value.answeredAt, into: &buf)
     }
 }
 

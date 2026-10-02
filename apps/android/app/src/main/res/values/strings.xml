@@ -41,6 +41,7 @@
     </plurals>
     <string name="needs_away">%s is away</string>
     <string name="needs_away_heard">%1$s is away · last heard %2$s ago</string>
+    <string name="needs_asking">Asking %s…</string>
     <string name="needs_as_last_heard">%s · as last heard</string>
 
     <!-- Answers -->

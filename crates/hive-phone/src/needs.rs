@@ -122,14 +122,20 @@ pub async fn ask_on(connection: &Connection, from: &str) -> Result<Answer> {
     Ok(read_answer(&answer, from))
 }
 
-/// What a device last answered this phone, and when (ms since the epoch).
+/// What a device last told this phone, and when (ms since the epoch).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Heard {
+    /// When it last told anything: what waits on the person there, its agents, or the workspaces
+    /// it holds.
     pub at: u64,
     /// What waits on the person there, and how many agents are at work: as it answered, or as
-    /// its list of agents says.
+    /// its list of agents says. None until it has said: a device reached tells the workspaces it
+    /// holds first, which says nothing of what waits there.
     #[serde(flatten)]
-    pub answer: Answer,
+    pub answer: Option<Answer>,
+    /// When it said that: none until it has.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answered: Option<u64>,
     /// Every agent there, as it last listed them (spec/agents.md "Following"): none from a device
     /// that does not list them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -141,8 +147,9 @@ pub struct Heard {
 
 impl Heard {
     /// Every agent the device `device` told of: as it listed them, or, from a device that does not
-    /// list them, those that waited on the person.
-    pub fn listed(&self, device: &str) -> Listed {
+    /// list them, those that waited on the person. None until it has said.
+    pub fn listed(&self, device: &str) -> Option<Listed> {
+        let answer = self.answer.as_ref()?;
         let agents = match &self.agents {
             Some(agents) => agents
                 .iter()
@@ -151,17 +158,12 @@ impl Heard {
                     ..agent.clone()
                 })
                 .collect(),
-            None => self
-                .answer
-                .needs
-                .iter()
-                .map(|n| agent_of(n, device))
-                .collect(),
+            None => answer.needs.iter().map(|n| agent_of(n, device)).collect(),
         };
-        Listed {
+        Some(Listed {
             agents,
-            working: self.answer.working,
-        }
+            working: answer.working,
+        })
     }
 }
 
@@ -210,13 +212,20 @@ const HEARD: &str = "heard.json";
 const AWAY: &str = "away.json";
 
 impl Identity {
-    /// What each of the person's devices last answered this phone, by device: kept in
-    /// `heard.json` beside its keys, readable by this user alone.
+    /// What each of the person's devices last told this phone, by device: kept in `heard.json`
+    /// beside its keys, readable by this user alone. What a phone of before kept says when its
+    /// device answered as when it last told anything, which it did not keep apart.
     pub fn heard(&self) -> BTreeMap<String, Heard> {
-        fs::read_to_string(self.dir().join(HEARD))
+        let mut heard: BTreeMap<String, Heard> = fs::read_to_string(self.dir().join(HEARD))
             .ok()
             .and_then(|text| serde_json::from_str(&text).ok())
-            .unwrap_or_default()
+            .unwrap_or_default();
+        for kept in heard.values_mut() {
+            if kept.answer.is_some() && kept.answered.is_none() {
+                kept.answered = Some(kept.at);
+            }
+        }
+        heard
     }
 
     /// Keep what each device of `answers` answered, at `at`, in place of what it said before of
@@ -225,7 +234,8 @@ impl Identity {
         let devices: Vec<&str> = answers.iter().map(|(d, _)| d.as_str()).collect();
         self.heard_from(&devices, at, |device, heard| {
             let answered = answers.iter().rev().find(|(d, _)| d.as_str() == device);
-            heard.answer = answered.expect("one of those answering").1.clone();
+            heard.answer = Some(answered.expect("one of those answering").1.clone());
+            heard.answered = Some(at);
             heard.agents = None;
         })
     }
@@ -234,15 +244,17 @@ impl Identity {
     /// person among them, in place of what it said before: it is not away.
     pub fn hear_agents(&self, device: &str, listed: &Listed, at: u64) -> Result<()> {
         self.heard_from(&[device], at, |_, heard| {
-            heard.answer = Answer {
+            heard.answer = Some(Answer {
                 needs: listed.agents.iter().filter_map(need_of).collect(),
                 working: listed.working,
-            };
+            });
+            heard.answered = Some(at);
             heard.agents = Some(listed.agents.clone());
         })
     }
 
-    /// Keep the workspaces `device` said at `at` it holds: it is not away.
+    /// Keep the workspaces `device` said at `at` it holds: it is not away. What waits there it has
+    /// not said by this.
     pub fn hear_workspaces(&self, device: &str, held: &[Held], at: u64) -> Result<()> {
         self.heard_from(&[device], at, |_, heard| heard.workspaces = held.to_vec())
     }
@@ -258,7 +270,8 @@ impl Identity {
         for device in devices {
             let kept = heard.entry(device.to_string()).or_insert_with(|| Heard {
                 at,
-                answer: Answer::default(),
+                answer: None,
+                answered: None,
                 agents: None,
                 workspaces: vec![],
             });

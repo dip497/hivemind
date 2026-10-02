@@ -392,12 +392,15 @@ async fn run(args: Args) -> Result<()> {
                     println!("{line}");
                 }
                 for d in &away {
-                    let Some(last) = heard.get(&d.device) else {
+                    let last = heard.get(&d.device);
+                    let Some((answer, at)) =
+                        last.and_then(|l| Some((l.answer.as_ref()?, l.answered?)))
+                    else {
                         println!("{} is away: what waits there is not known.", d.name);
                         continue;
                     };
-                    println!("{} is away. Last heard {}:", d.name, ago(last.at, now));
-                    for line in summary(&last.answer.needs, last.answer.working, now) {
+                    println!("{} is away. Last heard {}:", d.name, ago(at, now));
+                    for line in summary(&answer.needs, answer.working, now) {
                         println!("  {line}");
                     }
                 }
