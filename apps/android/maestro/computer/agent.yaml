@@ -10,13 +10,9 @@
 # PAIR_COMPUTER, PAIR_AGENT, PAIR_LINE, PAIR_SAID, PAIR_MESSAGE, PAIR_ANSWER, PAIR_HEARD, PAIR_VIEW,
 # PAIR_VIEW_AGENT, PAIR_VIEW_SELECTED); in a folder of its own, so the smoke run of
 # apps/android/maestro leaves it out. A computer's network, a terminal and a conversation over it
-# are slow on a CI emulator: every wait is long. The view's page is read through Chrome's DevTools,
-# not the accessibility tree, which leaves out what a page changes after Maestro first reads it
-# (docs.maestro.dev known issues; the app's web view is debuggable in a debug build). On a WebView
-# 148 or later Maestro 2.11 cannot read it so (mobile-dev-inc/Maestro#3646): the emulator's is 145.
+# are slow on a CI emulator: every wait is long.
 appId: com.hivemind.phone
 name: Pair with a computer, and drive its agent
-androidWebViewHierarchy: devtools
 ---
 - launchApp:
     clearState: true

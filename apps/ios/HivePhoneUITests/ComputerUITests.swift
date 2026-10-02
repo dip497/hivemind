@@ -119,25 +119,17 @@ final class ComputerUITests: XCTestCase {
         XCTAssertTrue(start.waitForExistence(timeout: 30), "the view offers Start an agent")
         start.tap()
         // A simulator always has a passcode (it takes any), so the lock is asked as on a phone with
-        // one: the system's own prompt, over the app. Cancelled, nothing is started, which the
-        // computer checks on its board after.
-        let cancel = lockPrompt(app)
-        XCTAssertTrue(cancel.exists, "the phone's lock was asked first")
-        cancel.tap()
-        XCTAssertEqual(gone(cancel), .completed, "the lock's prompt went")
-    }
-
-    /// The Cancel of the system's prompt for the phone's lock, which the system shows over the app:
-    /// SpringBoard's, or the app's own when the prompt is shown in it. Waits a minute at most.
-    @MainActor
-    private func lockPrompt(_ app: XCUIApplication) -> XCUIElement {
+        // one: the system's passcode screen over the app, in SpringBoard, saying why with the app's
+        // reason. It has no Cancel button of its own: its keyboard's return key is "cancel" while
+        // nothing is typed. Cancelled, nothing is started, which the computer checks on its board
+        // after.
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        for _ in 0..<4 {
-            for place in [springboard, app] where place.buttons["Cancel"].waitForExistence(timeout: 7) {
-                return place.buttons["Cancel"]
-            }
-        }
-        return springboard.buttons["Cancel"]
+        let why = springboard.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "\(view) asks.")).firstMatch
+        XCTAssertTrue(why.waitForExistence(timeout: 60), "the phone's lock was asked first, for \(view)")
+        let cancel = springboard.keyboards.buttons.matching(NSPredicate(format: "label ==[c] %@", "cancel")).firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10), "the passcode screen can be cancelled")
+        cancel.tap()
+        XCTAssertEqual(gone(why), .completed, "the lock's prompt went")
     }
 
     /// Waits a minute at most for `terminal` to show `line` among the lines in sight.

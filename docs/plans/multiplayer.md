@@ -21,6 +21,33 @@ here**, then reads the design section for the current item.
    unit tests), then the checks below.
 4. Work on the item; when it moves, **update the table here in the same commit**.
 
+**Where the phone work stopped (2026-10-02, end of session; the log has the details).** P1–P7 and
+P9 are done; P6's iOS half waits on an Apple account; P8 (community views on the phone) is at:
+steps 1–3 ☑; step 4 (both apps' Views tab and web view host) merged, its real-computer CI round
+still being made green (see the newest log entry); step 5's core ☑ (the `surfaces` feature, view
+protocol 1.6, workspace API 0.15, `view_surfaces`). Next, in order:
+
+1. **P8 step 4 green in CI** (`phone-android.yml` `computer`, `phone-ios.yml` real-computer step):
+   the newest log entry says what the last run showed.
+2. **P8 step 5's apps** (design §6.1 step 5 (c)–(d)): each app opens a view with `surfaces`, takes
+   a page's `view_surfaces` and places the Agent screen's terminal (Android `ScreenFeed` +
+   `TerminalView`, iOS `TerminalSession` + `TerminalView`) at each rect; the `phone-probe` fixture
+   places its agent's terminal where `hm.supports("surfaces")`, and both real-computer flows read
+   the agent's line (`PAIR_LINE`) in it. One agent per platform, as step 4 was.
+3. **P6 on iOS, as far as it builds without an Apple account**: a notification service extension
+   that reads a notice with the core (`read_notice`) from an app group, Allow/Deny actions answered
+   through the core, registration (`push_to` with APNs). `xcrun simctl push` does not run a
+   service extension, so its logic is unit-tested and real delivery waits on APNs credentials.
+4. **Versions** (the maintainer asked for the newest of everything): Electron 39 → 44 first (39 has
+   had no fixes since 42.0; 40+ runs Node 24, then `@types/node` 24; 42 stops its postinstall
+   download; 44 makes the clipboard async), then TypeScript 6/7, Vite 7/8, tailwind-merge 3 (low
+   risk), zod 4, simple-git 4, citty 0.2, lucide 1.x, mermaid 12, shiki 4, sonner 2, chokidar 5
+   (the pnpm 12 merge's message and its agent's table have each one's risk); the Android NDK
+   (r28c → newest) and JDK 25 for the Android build; Swift 6 language mode for the iOS app.
+5. **Waiting on the maintainer**: a `ci.yml` dispatch and a build-only `release.yml` dispatch on this
+   branch (the first runs on pnpm 12); and whether two throwaway branches may be pushed to show the
+   terminal-follow fix's iOS tests failing (its Android tests were shown failing here).
+
 ## Checks
 
 ```bash
@@ -146,7 +173,20 @@ networked parts fit together, decided now so every step builds toward it:
 
 ### Known issues
 
-None open. Fixed on 2026-09-29 (see the log): a read of a gone tile waiting out its timeout, closed tiles leaving their processes running, agent pipes and
+Open (2026-10-02):
+- The e2e specs are typechecked by nothing: a tsconfig over `apps/desktop/tests/e2e` finds 141
+  errors, most of them `window.hive` untyped in a page callback.
+- Lint runs in no CI job: the Android app has two lint errors from before P8 (a `StateFlow.value`
+  read in composition, `MainActivity.kt:55` and the starting route in `PhoneNav.kt`); `pnpm lint`
+  has four (three `shadcn/no-restyle`, one `no-raw-colors`).
+- A user-data path over about 100 characters gives the app's control socket (`hcp.sock`) a
+  truncated name and `EADDRINUSE` (a Unix socket path is at most 108 bytes); found packaging with a
+  long scratch path.
+- Unused since some time: five catalog entries (`@modelcontextprotocol/sdk`, `better-sqlite3`,
+  `drizzle-orm`, `drizzle-kit`, `@xterm/addon-search`), `allowBuilds.better-sqlite3` and the
+  `undici@8.5.0` override.
+
+Closed before: none open until 2026-10-02. Fixed on 2026-09-29 (see the log): a read of a gone tile waiting out its timeout, closed tiles leaving their processes running, agent pipes and
 spawn wires not being drawn, and two issues found while verifying R1. Fixed on 2026-10-01: a
 guest who may edit the board could start a command on the host (see the log).
 
@@ -715,7 +755,7 @@ guest who may edit the board could start a command on the host (see the log).
 - 2026-10-02 — Versions: every GitHub Action on its Node 24 major (Node 20 left the runners
   2026-09-23), iOS CI on macos-26 with the newest stable Xcode (the App Store takes Xcode 26 builds
   only), the release's macOS builds off the deprecated macos-14 with a check that what they ship still
-  starts on macOS 14, Node 24, pnpm 10.34.6, Bun 1.4, Maestro 2.11, the emulator on Android 17 (with
+  starts on macOS 14, Node 24, pnpm 10.34.6 (12.8.1 since the pnpm 12 merge), Bun 1.4, Maestro 2.11, the emulator on Android 17 (with
   the newest SDK command-line tools: the image's cannot make its AVD). Two view SDK tests hung under
   Bun 1.3.14 and later, a Bun bug (oven-sh/bun#37189); they settle their requests another way and
   check the same outcomes. Running the packages on the new
@@ -770,3 +810,19 @@ guest who may edit the board could start a command on the host (see the log).
   test installs the `phone-probe` view on the desktop and both apps open it: the agent shown, Select answered by the
   computer, Start an agent held for the phone's lock, and nothing started or renamed on the board. A phone's view may
   not rename (the phone may not edit the board): the test's Rename became Select.
+- 2026-10-02 — P8 step 4's real-computer round, first runs (Android 37030428261, iOS 37030777631): both red at the
+  view's last steps, each read from its artifacts and the docs rather than retried. iOS: the passcode screen was up
+  (SpringBoard's hierarchy at the failure: "Enter iPhone Passcode for “Hivemind”", the app's reason "Start or close an
+  agent: Priya's phone board asks. …", a passcode field and its keyboard); the test looked for a Cancel button, which
+  that screen has none of: its keyboard's return key reads "cancel" while nothing is typed. The test now finds the
+  screen by the app's reason and cancels by that key. Android: the page loaded and met its host ("phone-probe:
+  connected" in the device log), the accessibility tree read all of it, Maestro tapped Select on its bounds, and the
+  page never heard it; the screenshot holds the page's top 40 px and nothing below. The emulator ran `-gpu
+  swiftshader_indirect`, deprecated since emulator 36.4.9 (developer.android.com/studio/run/emulator-acceleration),
+  which 37.2.12 runs as SwiftShader's GLES translator; web views drawn by the hardware renderer fail under it elsewhere
+  too (pyreon/pyreon#3745: a blank window in 5 boots of 10; BenItBuhner/Zenium#149: `swangle` draws what it lost), and
+  Chromium drops a page's input while it holds back the page's first frames (`WidgetInputHandlerManager`: main-frame
+  updates or commits deferred for the first contentful paint). Both emulator steps run `-gpu swangle` (ANGLE over
+  SwiftShader, a current software mode); the probe page logs its size, its first frames ("drawn") and every touch that
+  reaches it ("pointerdown"), so a run that fails again says which it was. The DevTools hierarchy of 9f51740 is gone:
+  Maestro never used it, and the accessibility tree had the page's later changes.

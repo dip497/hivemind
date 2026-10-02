@@ -119,7 +119,12 @@ jobs:
         run: bash scripts/phone/update-cmdline-tools.sh
 
       # Booted cold, not from a snapshot: an emulator restored from one dropped off adb as Maestro
-      # started its driver ("device offline", runs 36987502508 and 36989241234).
+      # started its driver ("device offline", runs 36987502508 and 36989241234). Drawn by SwiftShader
+      # through ANGLE (`-gpu swangle`), one of the emulator's software modes now
+      # (developer.android.com/studio/run/emulator-acceleration): `swiftshader_indirect`, deprecated
+      # since emulator 36.4.9, ran as SwiftShader's GLES translator, under which the app's web view
+      # drew the top 40 px of a view's page and nothing below, and no tap on it reached the page
+      # (run 37030428261).
       - name: Smoke flow
         uses: reactivecircus/android-emulator-runner@v2
         env:
@@ -131,7 +136,7 @@ jobs:
           api-level: "37.0"
           target: google_apis
           arch: x86_64
-          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-snapshot -no-window -gpu swangle -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           # One line: the runner runs each line of a script on its own.
           script: bash scripts/phone/emulator-smoke.sh app-debug.apk maestro-report.xml
@@ -220,7 +225,7 @@ jobs:
       - name: SDK command-line tools, the newest (the image's cannot make an Android 17 AVD)
         run: bash scripts/phone/update-cmdline-tools.sh
 
-      # Booted cold, as for the smoke flow.
+      # Booted cold, and drawn through ANGLE, as for the smoke flow.
       - name: The app paired with the desktop app, driving its agent
         uses: reactivecircus/android-emulator-runner@v2
         env:
@@ -230,7 +235,7 @@ jobs:
           api-level: "37.0"
           target: google_apis
           arch: x86_64
-          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-snapshot -no-window -gpu swangle -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           # One line: the runner runs each line of a script on its own.
           script: bash scripts/phone/emulator-computer.sh app-debug.apk logcat.txt
