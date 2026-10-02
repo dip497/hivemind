@@ -490,6 +490,16 @@ uint64_t uniffi_hive_phone_ffi_fn_method_phone_unpair(uint64_t ptr, RustBuffer d
 uint64_t uniffi_hive_phone_ffi_fn_method_phone_watch(uint64_t ptr, RustBuffer agent, uint64_t listener, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_PUSH_TO
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_PUSH_TO
+uint64_t uniffi_hive_phone_ffi_fn_method_phone_push_to(uint64_t ptr, RustBuffer at
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_READ_NOTICE
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_READ_NOTICE
+uint64_t uniffi_hive_phone_ffi_fn_method_phone_read_notice(uint64_t ptr, RustBuffer body
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_CLONE_SCREENLISTENER
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_CLONE_SCREENLISTENER
 uint64_t uniffi_hive_phone_ffi_fn_clone_screenlistener(uint64_t handle, RustCallStatus *_Nonnull out_status
@@ -962,6 +972,18 @@ uint16_t uniffi_hive_phone_ffi_checksum_method_phone_unpair(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_WATCH
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_WATCH
 uint16_t uniffi_hive_phone_ffi_checksum_method_phone_watch(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_PUSH_TO
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_PUSH_TO
+uint16_t uniffi_hive_phone_ffi_checksum_method_phone_push_to(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_READ_NOTICE
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_READ_NOTICE
+uint16_t uniffi_hive_phone_ffi_checksum_method_phone_read_notice(void
     
 );
 #endif

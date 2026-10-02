@@ -2,13 +2,17 @@
 //! which the phone decrypts to its message with its own key and secret; a body changed on its way,
 //! sent to another phone, cut short, of more than one record or from a key not given whole is
 //! refused. A device's side
-//! (encrypting) is held to the same file in packages/host.
+//! (encrypting) is held to the same file in packages/host. And where a phone with no push server
+//! is told, and which notices it shows; through a push server, push_server.rs and the e2e.
 
 use std::{fs, path::PathBuf};
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use hive_phone::push::PushKeys;
-use serde_json::Value;
+use hive_phone::{
+    identity::Identity,
+    push::{self, Platform, PushAt, PushKeys},
+};
+use serde_json::{json, Value};
 
 /// A phone whose push key and secret are `key` and `auth`, kept as a phone keeps its own.
 fn phone_with(name: &str, key: &[u8], auth: &[u8]) -> PushKeys {
@@ -62,4 +66,39 @@ fn a_phone_decrypts_what_it_is_sent_and_refuses_what_was_changed_cut_short_or_is
             case["about"]
         );
     }
+}
+
+#[tokio::test]
+async fn a_phone_with_no_push_server_is_told_at_its_endpoint_itself_with_its_own_keys_and_a_token_is_refused(
+) {
+    let dir: PathBuf =
+        std::env::temp_dir().join(format!("hive-phone-push-{}-direct", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let phone = Identity::open(&dir).unwrap();
+    let told = push::subscribing(&phone, PushAt::Endpoint("https://up.example/up1"))
+        .await
+        .unwrap();
+    let kept = PushKeys::kept_or_made(&dir).unwrap();
+    assert_eq!(
+        told.subscription,
+        kept.subscription("https://up.example/up1", false),
+        "unsigned, with the keys the phone reads its notices with"
+    );
+    assert_eq!((told.via, told.unregistered), (None, None));
+    let apns = PushAt::Token {
+        platform: Platform::Apns,
+        token: "ab12",
+        sandbox: false,
+    };
+    let refused = push::subscribing(&phone, apns).await.err().unwrap();
+    assert!(
+        format!("{refused:#}").contains("no push server that tells phones through \"apns\""),
+        "{refused:#}"
+    );
+    // A notice is shown; a device back is only when the phone found it away.
+    let needs = json!({ "v": 1, "t": "needs", "workspace": "w1", "tile": "t1", "since": 5 });
+    assert!(push::shown(&phone, &needs).unwrap());
+    let back = json!({ "v": 1, "t": "back", "device": "d1", "name": "desk", "since": 5 });
+    assert!(!push::shown(&phone, &back).unwrap());
+    fs::remove_dir_all(&dir).unwrap();
 }

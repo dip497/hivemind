@@ -1442,6 +1442,20 @@ public protocol PhoneProtocol: AnyObject, Sendable {
      */
     func watch(agent: AgentRef, listener: ScreenListener)  -> Watch
     
+    /**
+     * Be told at `at` what happens on the person's devices (spec/push.md): through the network's
+     * push server when it has one that tells phones there, else directly; each device is given
+     * where.
+     */
+    func pushTo(at: PushAt) async throws  -> PushTold
+    
+    /**
+     * What `body`, a notice the app's push service handed it, says: none for one not to show (a
+     * device back the phone did not find away, or a kind it does not know). Its agent's device is
+     * the one that holds its workspace, as last heard, else as asked now.
+     */
+    func readNotice(body: Data) async throws  -> Notice?
+    
 }
 open class Phone: PhoneProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1789,6 +1803,48 @@ open func watch(agent: AgentRef, listener: ScreenListener) -> Watch  {
         FfiConverterTypeScreenListener_lower(listener),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Be told at `at` what happens on the person's devices (spec/push.md): through the network's
+     * push server when it has one that tells phones there, else directly; each device is given
+     * where.
+     */
+open func pushTo(at: PushAt)async throws  -> PushTold  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_hive_phone_ffi_fn_method_phone_push_to(
+                        self.uniffiCloneHandle(),FfiConverterTypePushAt_lower(at)
+                )
+            },
+            pollFunc: ffi_hive_phone_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_hive_phone_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_hive_phone_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePushTold_lift,
+            errorHandler: FfiConverterTypePhoneError_lift
+        )
+}
+    
+    /**
+     * What `body`, a notice the app's push service handed it, says: none for one not to show (a
+     * device back the phone did not find away, or a kind it does not know). Its agent's device is
+     * the one that holds its workspace, as last heard, else as asked now.
+     */
+open func readNotice(body: Data)async throws  -> Notice?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_hive_phone_ffi_fn_method_phone_read_notice(
+                        self.uniffiCloneHandle(),FfiConverterData.lower(body)
+                )
+            },
+            pollFunc: ffi_hive_phone_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_hive_phone_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_hive_phone_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionTypeNotice.lift,
+            errorHandler: FfiConverterTypePhoneError_lift
+        )
 }
     
 
@@ -3141,6 +3197,73 @@ public func FfiConverterTypeProgram_lower(_ value: Program) -> RustBuffer {
 
 
 /**
+ * Where the phone is told now: through the push server `via`, when it is; the devices that took
+ * it, and those away, by name (call again as the app comes to the foreground, and an away one
+ * takes it then); and, when the push server would not take the endpoint, why.
+ */
+public struct PushTold: Equatable, Hashable {
+    public var via: String?
+    public var told: [String]
+    public var away: [String]
+    public var unregistered: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(via: String?, told: [String], away: [String], unregistered: String?) {
+        self.via = via
+        self.told = told
+        self.away = away
+        self.unregistered = unregistered
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PushTold: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePushTold: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PushTold {
+        return
+            try PushTold(
+                via: FfiConverterOptionString.read(from: &buf), 
+                told: FfiConverterSequenceString.read(from: &buf), 
+                away: FfiConverterSequenceString.read(from: &buf), 
+                unregistered: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PushTold, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.via, into: &buf)
+        FfiConverterSequenceString.write(value.told, into: &buf)
+        FfiConverterSequenceString.write(value.away, into: &buf)
+        FfiConverterOptionString.write(value.unregistered, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePushTold_lift(_ buf: RustBuffer) throws -> PushTold {
+    return try FfiConverterTypePushTold.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePushTold_lower(_ value: PushTold) -> RustBuffer {
+    return FfiConverterTypePushTold.lower(value)
+}
+
+
+/**
  * A line, numbered from when the watch began; its style runs packed 16 bytes each (§5.3).
  */
 public struct ScreenLine: Equatable, Hashable {
@@ -4154,6 +4277,121 @@ public func FfiConverterTypeDeviceKind_lower(_ value: DeviceKind) -> RustBuffer 
 
 
 
+/**
+ * What a notice says. The same agent, workspace and `since` told by two devices is one notice.
+ */
+
+public enum Notice: Equatable, Hashable {
+    
+    /**
+     * An agent began waiting on the person; `decide` when its device can allow or deny it from
+     * the notice itself.
+     */
+    case waits(agent: AgentRef, agentName: String, workspaceName: String, kind: WaitKind, since: UInt64, decide: Bool
+    )
+    case finished(agent: AgentRef, agentName: String, workspaceName: String, since: UInt64
+    )
+    case failed(agent: AgentRef, agentName: String, workspaceName: String, since: UInt64
+    )
+    /**
+     * One of the person's devices, found away, is back.
+     */
+    case back(device: String, name: String, since: UInt64
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension Notice: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNotice: FfiConverterRustBuffer {
+    typealias SwiftType = Notice
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Notice {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .waits(agent: try FfiConverterTypeAgentRef.read(from: &buf), agentName: try FfiConverterString.read(from: &buf), workspaceName: try FfiConverterString.read(from: &buf), kind: try FfiConverterTypeWaitKind.read(from: &buf), since: try FfiConverterUInt64.read(from: &buf), decide: try FfiConverterBool.read(from: &buf)
+        )
+        
+        case 2: return .finished(agent: try FfiConverterTypeAgentRef.read(from: &buf), agentName: try FfiConverterString.read(from: &buf), workspaceName: try FfiConverterString.read(from: &buf), since: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 3: return .failed(agent: try FfiConverterTypeAgentRef.read(from: &buf), agentName: try FfiConverterString.read(from: &buf), workspaceName: try FfiConverterString.read(from: &buf), since: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 4: return .back(device: try FfiConverterString.read(from: &buf), name: try FfiConverterString.read(from: &buf), since: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Notice, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .waits(agent,agentName,workspaceName,kind,since,decide):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeAgentRef.write(agent, into: &buf)
+            FfiConverterString.write(agentName, into: &buf)
+            FfiConverterString.write(workspaceName, into: &buf)
+            FfiConverterTypeWaitKind.write(kind, into: &buf)
+            FfiConverterUInt64.write(since, into: &buf)
+            FfiConverterBool.write(decide, into: &buf)
+            
+        
+        case let .finished(agent,agentName,workspaceName,since):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeAgentRef.write(agent, into: &buf)
+            FfiConverterString.write(agentName, into: &buf)
+            FfiConverterString.write(workspaceName, into: &buf)
+            FfiConverterUInt64.write(since, into: &buf)
+            
+        
+        case let .failed(agent,agentName,workspaceName,since):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeAgentRef.write(agent, into: &buf)
+            FfiConverterString.write(agentName, into: &buf)
+            FfiConverterString.write(workspaceName, into: &buf)
+            FfiConverterUInt64.write(since, into: &buf)
+            
+        
+        case let .back(device,name,since):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(device, into: &buf)
+            FfiConverterString.write(name, into: &buf)
+            FfiConverterUInt64.write(since, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNotice_lift(_ buf: RustBuffer) throws -> Notice {
+    return try FfiConverterTypeNotice.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNotice_lower(_ value: Notice) -> RustBuffer {
+    return FfiConverterTypeNotice.lower(value)
+}
+
+
+
 public 
 enum PhoneError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
@@ -4274,6 +4512,89 @@ public func FfiConverterTypePhoneError_lift(_ buf: RustBuffer) throws -> PhoneEr
 public func FfiConverterTypePhoneError_lower(_ value: PhoneError) -> RustBuffer {
     return FfiConverterTypePhoneError.lower(value)
 }
+
+
+/**
+ * Where the app's push service tells the phone.
+ */
+
+public enum PushAt: Equatable, Hashable {
+    
+    /**
+     * A UnifiedPush distributor's endpoint (Android).
+     */
+    case unifiedPush(endpoint: String
+    )
+    /**
+     * Apple's push service, by the app's device token in hex (iOS); `sandbox` for a development
+     * build. Only a push server on the person's network tells it there.
+     */
+    case apns(token: String, sandbox: Bool
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PushAt: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePushAt: FfiConverterRustBuffer {
+    typealias SwiftType = PushAt
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PushAt {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .unifiedPush(endpoint: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .apns(token: try FfiConverterString.read(from: &buf), sandbox: try FfiConverterBool.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PushAt, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .unifiedPush(endpoint):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(endpoint, into: &buf)
+            
+        
+        case let .apns(token,sandbox):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(token, into: &buf)
+            FfiConverterBool.write(sandbox, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePushAt_lift(_ buf: RustBuffer) throws -> PushAt {
+    return try FfiConverterTypePushAt.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePushAt_lower(_ value: PushAt) -> RustBuffer {
+    return FfiConverterTypePushAt.lower(value)
+}
+
 
 
 /**
@@ -4648,6 +4969,30 @@ fileprivate struct FfiConverterOptionTypeWaiting: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeWaiting.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeNotice: FfiConverterRustBuffer {
+    typealias SwiftType = Notice?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeNotice.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeNotice.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -5057,6 +5402,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_phone_watch() != 13121) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_phone_push_to() != 61669) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_phone_read_notice() != 45931) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_screenlistener_frame_ready() != 30455) {

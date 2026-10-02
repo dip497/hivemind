@@ -64,7 +64,7 @@
 use std::{path::PathBuf, process::ExitCode, sync::Arc};
 
 use anyhow::{bail, Context, Result};
-use hive_net::{net, push::Platform};
+use hive_net::net;
 use hive_phone::{
     agents::{self, Agent, Listed},
     control::{self, Start},
@@ -747,27 +747,18 @@ async fn run(args: Args) -> Result<()> {
             let (net, devices) = reaching(&phone).await?;
             // Through the network's push server, when it has one that passes notices on to a
             // distributor: this listener is this phone's.
-            let server = phone
-                .network()
-                .and_then(|n| n.profile.push)
-                .filter(|p| p.kinds.iter().any(|k| k == "unifiedpush"))
-                .map(|p| p.url);
-            let via = match &server {
-                Some(url) => {
-                    let to = (Platform::Unifiedpush, listening.as_str(), false);
-                    match push::register(&dir, phone.key(), url, to, &push::senders(&phone)?).await
-                    {
-                        Ok(endpoint) => Some((url.clone(), endpoint)),
-                        Err(e) => {
-                            eprintln!("hive-phone: {e:#}: the devices post here directly");
-                            None
-                        }
-                    }
-                }
-                None => None,
-            };
-            let endpoint = via.as_ref().map_or(listening.clone(), |(_, e)| e.clone());
-            let subscription = keys.subscription(&endpoint, via.is_some());
+            let push::Subscribing {
+                subscription,
+                via,
+                unregistered,
+            } = push::subscribing(&phone, push::PushAt::Endpoint(&listening)).await?;
+            if let Some(why) = unregistered {
+                eprintln!("hive-phone: {why}: the devices post here directly");
+            }
+            let endpoint = subscription["endpoint"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
             let (mut told, mut away) = (vec![], vec![]);
             for d in &devices {
                 let given = async {
@@ -786,10 +777,10 @@ async fn run(args: Args) -> Result<()> {
             if args.json {
                 println!(
                     "{}",
-                    json!({ "endpoint": endpoint, "via": via.map(|(url, _)| url), "told": told, "away": away })
+                    json!({ "endpoint": endpoint, "via": via, "told": told, "away": away })
                 );
             } else {
-                if let Some((url, _)) = &via {
+                if let Some(url) = &via {
                     println!("told through the push server {url}");
                 }
                 println!("told at {endpoint}: {}", told.join(", "));
@@ -833,21 +824,13 @@ async fn notices(
                 let (keys, phone) = (keys.clone(), phone.clone());
                 async move {
                     let body = req.into_body().collect().await?.to_bytes();
-                    let status = match keys
-                        .decrypt(&body)
-                        .ok()
-                        .and_then(|n| serde_json::from_slice::<Value>(&n).ok())
-                    {
+                    let status = match keys.read(&body).ok() {
                         Some(notice) => {
                             let s = |k: &str| notice[k].as_str().unwrap_or("").to_string();
-                            // A device back is shown when this phone had found it away.
-                            let shown = notice["t"] != "back"
-                                || phone
-                                    .back(&s("device"), notice["since"].as_u64().unwrap_or(0))
-                                    .unwrap_or_else(|e| {
-                                        eprintln!("hive-phone: {e:#}");
-                                        false
-                                    });
+                            let shown = push::shown(&phone, &notice).unwrap_or_else(|e| {
+                                eprintln!("hive-phone: {e:#}");
+                                false
+                            });
                             if shown && json {
                                 println!("{notice}");
                             } else if shown && notice["t"] == "back" {

@@ -13,6 +13,7 @@ mod error;
 mod overview;
 mod pairing;
 mod phone;
+mod push;
 mod records;
 mod watch;
 
@@ -22,6 +23,7 @@ pub use error::PhoneError;
 pub use overview::{Following, OverviewListener};
 pub use pairing::{pairs_with, PairsWith};
 pub use phone::Phone;
+pub use push::{Notice, PushAt, PushTold};
 pub use records::*;
 pub use watch::{ScreenLine, ScreenListener, ScreenUpdate, Watch};
 

@@ -16,7 +16,8 @@ use p256::{elliptic_curve::sec1::ToEncodedPoint, PublicKey, SecretKey};
 use serde_json::{json, Value};
 use sha2::Sha256;
 
-use hive_net::push::{client, Platform};
+use hive_net::push::client;
+pub use hive_net::push::Platform;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -92,6 +93,12 @@ impl PushKeys {
         subscription
     }
 
+    /// The notice `body` is, as the device that sent it wrote it: refused when it is not for this
+    /// phone, was changed on its way, or says nothing a notice says.
+    pub fn read(&self, body: &[u8]) -> Result<Value> {
+        serde_json::from_slice(&self.decrypt(body)?).context("what it says is not a notice")
+    }
+
     /// What `body`, sent to this phone, says (RFC 8291 §3.4, RFC 8188 §2): refused when it is not
     /// for this phone, or was changed on its way. A notice is one record (spec/push.md).
     pub fn decrypt(&self, body: &[u8]) -> Result<Vec<u8>> {
@@ -140,6 +147,86 @@ impl PushKeys {
         ensure!(plain[end] == 2, "a record that is not the last");
         Ok(plain[..end].to_vec())
     }
+}
+
+/// Where the person's devices are to tell this phone: an endpoint a notice is posted to as it is (a
+/// UnifiedPush distributor's, or the phone's own on the local network), or the phone's token at
+/// Apple's or Google's push service, which only a push server posts to.
+pub enum PushAt<'a> {
+    Endpoint(&'a str),
+    Token {
+        platform: Platform,
+        token: &'a str,
+        sandbox: bool,
+    },
+}
+
+/// What this phone gives the person's devices to be told (spec/push.md "Subscribing"): its
+/// subscription; the push server it is told through, when it is; and, when that server would not
+/// take an endpoint, why, the endpoint then told directly.
+pub struct Subscribing {
+    pub subscription: Value,
+    pub via: Option<String>,
+    pub unregistered: Option<String>,
+}
+
+/// How `phone` is to be told at `at`: through its network's push server when that tells phones
+/// there, registered with the person's devices as the ones that may tell it (0.3); else at the
+/// endpoint itself. A token is told through a push server alone.
+pub async fn subscribing(phone: &Identity, at: PushAt<'_>) -> Result<Subscribing> {
+    let keys = PushKeys::kept_or_made(phone.dir())?;
+    let (platform, to, sandbox) = match at {
+        PushAt::Endpoint(endpoint) => (Platform::Unifiedpush, endpoint, false),
+        PushAt::Token {
+            platform,
+            token,
+            sandbox,
+        } => (platform, token, sandbox),
+    };
+    let kind = serde_json::to_value(platform)?;
+    let server = phone
+        .network()
+        .and_then(|n| n.profile.push)
+        .filter(|p| p.kinds.iter().any(|k| kind.as_str() == Some(k)))
+        .map(|p| p.url);
+    let direct = |unregistered| Subscribing {
+        subscription: keys.subscription(to, false),
+        via: None,
+        unregistered,
+    };
+    let Some(url) = server else {
+        ensure!(
+            platform == Platform::Unifiedpush,
+            "your network has no push server that tells phones through {kind}"
+        );
+        return Ok(direct(None));
+    };
+    let to_server = (platform, to, sandbox);
+    match register(phone.dir(), phone.key(), &url, to_server, &senders(phone)?).await {
+        Ok(endpoint) => Ok(Subscribing {
+            subscription: keys.subscription(&endpoint, true),
+            via: Some(url),
+            unregistered: None,
+        }),
+        Err(e) if platform == Platform::Unifiedpush => Ok(direct(Some(format!("{e:#}")))),
+        Err(e) => Err(e),
+    }
+}
+
+/// Whether `notice`, read, is one to show (spec/push.md "Back"): a device back only when this
+/// phone found it away at or before it was back, then away no more; every other notice.
+pub fn shown(phone: &Identity, notice: &Value) -> Result<bool> {
+    if notice["t"] != "back" {
+        return Ok(true);
+    }
+    let device = notice["device"].as_str().unwrap_or_default();
+    phone.back(device, notice["since"].as_u64().unwrap_or(0))
+}
+
+/// The notice `body` is, read with `phone`'s push keys, when it is one to show (`shown`).
+pub fn notice(phone: &Identity, body: &[u8]) -> Result<Option<Value>> {
+    let notice = PushKeys::kept_or_made(phone.dir())?.read(body)?;
+    Ok(shown(phone, &notice)?.then_some(notice))
 }
 
 /// Give the device on `connection` where this phone is told what happens there, `subscription`.

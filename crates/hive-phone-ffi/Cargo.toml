@@ -24,12 +24,11 @@ bindgen = ["uniffi/cli", "uniffi/cargo-metadata"]
 [dependencies]
 anyhow = "1"
 hive-phone = { path = "../hive-phone" }
+serde_json = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"] }
 uniffi = { version = "0.32", default-features = false }
 
-[dev-dependencies]
-serde_json = "1"
 
 # Debug app builds: optimised, as fast to link as release can be.
 [profile.mobile]

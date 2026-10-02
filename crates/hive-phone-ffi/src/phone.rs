@@ -23,7 +23,7 @@ use crate::{
 
 #[derive(uniffi::Object)]
 pub struct Phone {
-    identity: Arc<Identity>,
+    pub(crate) identity: Arc<Identity>,
     /// What the phone is called, as an app lists it.
     name: String,
     pub(crate) connections: Connections,
