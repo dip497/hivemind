@@ -1,0 +1,98 @@
+# The iOS app (docs/design/phone-app-2026-10-02.md, P5). XcodeGen makes the Xcode project from this
+# file, and the project itself is never committed:
+#
+#   brew install xcodegen
+#   cd apps/ios && xcodegen generate && open HivePhone.xcodeproj
+#
+# The app's first build phase builds the Rust core (crates/hive-phone-ffi) for the platform being
+# built and stages it under build/ios-core (scripts/phone/build-ios.sh); HIVE_SKIP_CORE=1 reuses the
+# last one. The core is built for arm64 alone: devices, and Apple Silicon simulators.
+name: HivePhone
+
+options:
+  bundleIdPrefix: com.hivemind
+  deploymentTarget:
+    iOS: "17.0"
+  developmentLanguage: en
+
+settings:
+  base:
+    # Swift 5 language mode, written to build in Swift 6 mode too.
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Automatic
+    "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
+
+targets:
+  HivePhone:
+    type: application
+    platform: iOS
+    sources:
+      - path: HivePhone
+        excludes:
+          - Info.plist
+          # The C side of the bindings is imported as a module, from build/ios-core (below).
+          - "Core/Generated/*.h"
+          - "Core/Generated/*.modulemap"
+    preBuildScripts:
+      - name: Rust core
+        script: exec "$SRCROOT/../../scripts/phone/build-ios.sh"
+        # Cargo decides what to rebuild; the phase runs on every build.
+        basedOnDependencyAnalysis: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hivemind.phone
+        INFOPLIST_FILE: HivePhone/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        # The build phase writes outside its declared outputs (the core, the staged module).
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        "LIBRARY_SEARCH_PATHS[sdk=iphoneos*]": "$(SRCROOT)/../../build/ios-core/iphoneos"
+        "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]": "$(SRCROOT)/../../build/ios-core/iphonesimulator"
+        "SWIFT_INCLUDE_PATHS[sdk=iphoneos*]": "$(SRCROOT)/../../build/ios-core/iphoneos/include"
+        "SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]": "$(SRCROOT)/../../build/ios-core/iphonesimulator/include"
+        # The core is Rust alone (no C++); rustls's certificates and iroh's network watching
+        # reach into Security, SystemConfiguration and CoreFoundation.
+        OTHER_LDFLAGS:
+          - "-lhive_phone_ffi"
+          - "-framework"
+          - "Security"
+          - "-framework"
+          - "SystemConfiguration"
+          - "-framework"
+          - "CoreFoundation"
+    scheme:
+      testTargets:
+        - HivePhoneTests
+        - HivePhoneUITests
+
+  HivePhoneTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: HivePhoneTests
+    dependencies:
+      - target: HivePhone
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hivemind.phone.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/HivePhone.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HivePhone"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        # `@testable import HivePhone` loads the app's module, which imports the core's C module.
+        "SWIFT_INCLUDE_PATHS[sdk=iphoneos*]": "$(SRCROOT)/../../build/ios-core/iphoneos/include"
+        "SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]": "$(SRCROOT)/../../build/ios-core/iphonesimulator/include"
+
+  HivePhoneUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: HivePhoneUITests
+    dependencies:
+      - target: HivePhone
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hivemind.phone.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: HivePhone
