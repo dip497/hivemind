@@ -13,6 +13,10 @@ import { applyThemeVars, connect } from "@hivemind/view-sdk";
 
 const hm = await connect();
 applyThemeVars(hm);
+// What it is told and does, in the web view's console (on Android, the device's log), so a run
+// that stops here says how far it got.
+const said = (...what) => console.info("phone-probe:", ...what);
+said("connected", JSON.stringify(hm.device));
 
 document.head.append(Object.assign(document.createElement("style"), {
   textContent: `
@@ -61,12 +65,14 @@ hm.on("names", (n) => {
 });
 // Only what was selected since the page came: the host's answer to Select.
 hm.on("selection", (s) => {
+  said("selection", JSON.stringify(s));
   if (!s.fresh) return;
   chosen = s.tileId;
   draw();
 });
 
 select.addEventListener("click", () => {
+  said("select", tiles[0]?.id ?? "none");
   if (tiles[0]) hm.commands.selectTile(tiles[0].id);
 });
 start.addEventListener("click", () => {
