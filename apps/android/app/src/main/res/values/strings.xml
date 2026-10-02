@@ -71,6 +71,7 @@
     <string name="ended_code">The session ended (%d).</string>
     <string name="ended_lost">The connection to its device went.</string>
     <string name="agent_gone">This agent is no longer on its board.</string>
+    <string name="terminal_newest">To the newest line</string>
 
     <!-- The phone's lock, before starting or closing an agent -->
     <string name="lock_start_title">Start %s</string>

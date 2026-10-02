@@ -6,7 +6,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.hivemind.phone.line
@@ -16,13 +20,18 @@ import com.hivemind.phone.run
 import com.hivemind.phone.runs
 import com.hivemind.phone.update
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** The terminal as drawn: each run at its column times the cell width (design §5.3). */
+/**
+ * The terminal as drawn: each run at its column times the cell width (design §5.3), following the
+ * newest line until the person scrolls up (§6.4).
+ */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "mdpi")
@@ -68,6 +77,32 @@ class TerminalViewTest {
             ),
             listOf(2, 3, 5, 6, 7, 8, 9).map { image.cell(it) },
         )
+    }
+
+    @Test
+    fun `a finger scrolling up stops the following, and the button goes back to the newest line`() {
+        val terminal = Terminal()
+        terminal.apply(update(1, first = 0, count = 60, cols = 10, rows = 60, lines = (0L until 60L).map { line(it, "$it") }))
+        compose.setContent { TerminalView(terminal, Modifier.size(200.dp, 120.dp)) }
+
+        compose.onRoot().performTouchInput { swipeDown() }
+        compose.waitForIdle()
+        assertFalse(terminal.following)
+        assertTrue(terminal.list.layoutInfo.visibleItemsInfo.last().index < 59)
+
+        compose.onNodeWithContentDescription("To the newest line").performClick()
+        compose.waitForIdle()
+        assertTrue(terminal.following)
+        assertEquals(59, terminal.list.layoutInfo.visibleItemsInfo.last().index)
+
+        // Up again, back again, and output lands before the view has moved: it follows that too.
+        compose.onRoot().performTouchInput { swipeDown() }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("To the newest line").performClick()
+        terminal.apply(update(2, first = 0, count = 70, cols = 10, rows = 60, lines = (60L until 70L).map { line(it, "$it") }))
+        compose.waitForIdle()
+        assertTrue(terminal.following)
+        assertEquals(69, terminal.list.layoutInfo.visibleItemsInfo.last().index)
     }
 
     // A cell's colour at its top-left corner, away from any glyph.
