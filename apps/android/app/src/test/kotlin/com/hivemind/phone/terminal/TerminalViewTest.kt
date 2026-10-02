@@ -87,22 +87,22 @@ class TerminalViewTest {
 
         compose.onRoot().performTouchInput { swipeDown() }
         compose.waitForIdle()
-        assertFalse(terminal.following)
-        assertTrue(terminal.list.layoutInfo.visibleItemsInfo.last().index < 59)
+        assertFalse(terminal.follow.on)
+        assertTrue(terminal.follow.list.layoutInfo.visibleItemsInfo.last().index < 59)
 
-        compose.onNodeWithContentDescription("To the newest line").performClick()
+        compose.onNodeWithContentDescription("To the newest").performClick()
         compose.waitForIdle()
-        assertTrue(terminal.following)
-        assertEquals(59, terminal.list.layoutInfo.visibleItemsInfo.last().index)
+        assertTrue(terminal.follow.on)
+        assertEquals(59, terminal.follow.list.layoutInfo.visibleItemsInfo.last().index)
 
         // Up again, back again, and output lands before the view has moved: it follows that too.
         compose.onRoot().performTouchInput { swipeDown() }
         compose.waitForIdle()
-        compose.onNodeWithContentDescription("To the newest line").performClick()
+        compose.onNodeWithContentDescription("To the newest").performClick()
         terminal.apply(update(2, first = 0, count = 70, cols = 10, rows = 60, lines = (60L until 70L).map { line(it, "$it") }))
         compose.waitForIdle()
-        assertTrue(terminal.following)
-        assertEquals(69, terminal.list.layoutInfo.visibleItemsInfo.last().index)
+        assertTrue(terminal.follow.on)
+        assertEquals(69, terminal.follow.list.layoutInfo.visibleItemsInfo.last().index)
     }
 
     // A cell's colour at its top-left corner, away from any glyph.

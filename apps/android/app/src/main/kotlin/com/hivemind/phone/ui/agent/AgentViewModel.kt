@@ -10,6 +10,7 @@ import com.hivemind.phone.core.AgentRef
 import com.hivemind.phone.core.Answer
 import com.hivemind.phone.core.Overview
 import com.hivemind.phone.core.Phone
+import com.hivemind.phone.live.ChatFeed
 import com.hivemind.phone.live.ScreenFeed
 import com.hivemind.phone.ui.common.CoreCalls
 import com.hivemind.phone.ui.common.Notice
@@ -30,13 +31,21 @@ fun typing(before: String, after: String): Typing {
     return Typing(erase = before.codePointCount(kept, before.length), text = after.substring(kept))
 }
 
-/** One agent (design §6.4): its live terminal, what it waits on, and what the person can do to it. */
+/**
+ * One agent (design §6.4): its live terminal, what it and the person say to each other (P7), what
+ * it waits on, and what the person can do to it.
+ */
 class AgentViewModel(private val phone: Phone, overview: StateFlow<Overview>, val ref: AgentRef) : ViewModel() {
     val agent: StateFlow<Agent?> = overview.map { it.agents.firstOrNull { agent -> agent.at == ref } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, overview.value.agents.firstOrNull { it.at == ref })
 
     /** The terminal, watched for as long as this screen is in the back stack. */
     val screen = ScreenFeed(phone, ref)
+
+    private val talk = lazy { ChatFeed(phone, ref) }
+
+    /** What it and the person say to each other: followed from when it is first shown, for as long as this screen is in the back stack. */
+    val chat: ChatFeed by talk
 
     val calls = CoreCalls(viewModelScope)
 
@@ -80,7 +89,10 @@ class AgentViewModel(private val phone: Phone, overview: StateFlow<Overview>, va
         if (key == "enter" || key == "ctrl-c") typed = ""
     }
 
-    override fun onCleared() = screen.stop()
+    override fun onCleared() {
+        screen.stop()
+        if (talk.isInitialized()) chat.stop()
+    }
 
     private enum class Call { SEND, ANSWER, STOP, CLOSE }
 }

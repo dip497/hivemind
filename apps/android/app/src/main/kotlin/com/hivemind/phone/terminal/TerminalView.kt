@@ -7,7 +7,6 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Spacer
@@ -15,23 +14,15 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material3.Icon
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
@@ -41,13 +32,12 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import com.hivemind.phone.R
+import com.hivemind.phone.ui.common.FollowTheNewest
+import com.hivemind.phone.ui.common.NewestButton
 
 private const val MAX_ZOOM = 6f
 
@@ -78,15 +68,7 @@ fun TerminalView(terminal: Terminal, modifier: Modifier = Modifier) {
     val across = rememberScrollState()
     val density = LocalDensity.current
 
-    // The person scrolling up stops the view following the newest line; being back at the bottom,
-    // after a drag or a fling, starts it again.
-    val dragged by terminal.list.interactionSource.collectIsDraggedAsState()
-    LaunchedEffect(dragged) {
-        if (dragged) terminal.following = false else if (!terminal.list.canScrollForward) terminal.following = true
-    }
-    LaunchedEffect(terminal) {
-        snapshotFlow { terminal.list.canScrollForward }.collect { more -> if (!more) terminal.following = true }
-    }
+    FollowTheNewest(terminal.follow)
 
     BoxWithConstraints(
         modifier
@@ -98,7 +80,7 @@ fun TerminalView(terminal: Terminal, modifier: Modifier = Modifier) {
                 zoom = next
                 // The point between the fingers stays where it is, across.
                 across.dispatchRawDelta((across.value + centroidX) * applied - centroidX - across.value)
-                if (terminal.following && terminal.lineCount > 0) terminal.list.requestScrollToItem(terminal.lineCount - 1)
+                terminal.follow.grew(terminal.lineCount - 1)
             },
     ) {
         val cols = terminal.cols.coerceAtLeast(1)
@@ -107,22 +89,13 @@ fun TerminalView(terminal: Terminal, modifier: Modifier = Modifier) {
         val width = with(density) { (cells.width * cols).toDp() }
         val lineHeight = with(density) { cells.height.toDp() }
         Box(Modifier.fillMaxSize().horizontalScroll(across)) {
-            LazyColumn(state = terminal.list, modifier = Modifier.width(width).fillMaxHeight()) {
+            LazyColumn(state = terminal.follow.list, modifier = Modifier.width(width).fillMaxHeight()) {
                 items(count = terminal.lineCount, key = { terminal.firstLine + it }) { position ->
                     TerminalLine(terminal.slot(position), painter, cells, lineHeight)
                 }
             }
         }
-        // Scrolled up: back to the newest line, following it again.
-        if (!terminal.following) {
-            SmallFloatingActionButton(
-                onClick = {
-                    terminal.following = true
-                    if (terminal.lineCount > 0) terminal.list.requestScrollToItem(terminal.lineCount - 1)
-                },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
-            ) { Icon(Icons.Filled.KeyboardArrowDown, stringResource(R.string.terminal_newest)) }
-        }
+        NewestButton(terminal.follow) { terminal.lineCount - 1 }
     }
 }
 

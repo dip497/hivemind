@@ -24,12 +24,11 @@ import kotlinx.coroutines.launch
 /** A workspace on one of the person's devices: where an agent can be started. */
 data class Place(val device: String, val deviceName: String, val workspace: String, val workspaceName: String)
 
-/**
- * The workspaces the phone knows of, device by device: those with an agent in them, as the overview
- * names no others.
- */
-fun placesOf(overview: Overview): List<Place> =
-    overview.agents.map { Place(it.at.device, it.deviceName, it.at.workspace, it.workspaceName) }.distinct()
+/** The workspaces the person's devices hold, device by device, as the core lists them. */
+fun placesOf(overview: Overview): List<Place> {
+    val names = overview.devices.associate { it.id to it.name }
+    return overview.workspaces.map { Place(it.device, names[it.device] ?: it.device, it.id, it.name) }
+}
 
 sealed interface Choices {
     data object Loading : Choices

@@ -12,6 +12,7 @@ import com.hivemind.phone.ui.needs.NeedsState
 import com.hivemind.phone.ui.start.Place
 import com.hivemind.phone.ui.start.placesOf
 import com.hivemind.phone.waiting
+import com.hivemind.phone.workspace
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -66,19 +67,25 @@ class ScreenStatesTest {
     }
 
     @Test
-    fun `Start offers each workspace with an agent in it once, by device`() {
+    fun `Start offers every workspace the person's devices hold, under the device's name`() {
         val places = placesOf(
             overview(
-                agents = listOf(
-                    agent("t1", workspace = "ws-1", workspaceName = "hivemind"),
-                    agent("t2", workspace = "ws-1", workspaceName = "hivemind"),
-                    agent("t3", device = "laptop-id", deviceName = "laptop", workspace = "ws-9", workspaceName = "notes"),
+                agents = listOf(agent("t1", workspace = "ws-1", workspaceName = "hivemind")),
+                devices = listOf(device(DESK, "desk"), device("laptop-id", "laptop", reachable = false)),
+                workspaces = listOf(
+                    workspace("ws-1", "hivemind"),
+                    workspace("ws-2", "site", folder = "/home/priya/site"),
+                    workspace("ws-9", "notes", device = "laptop-id"),
                 ),
             ),
         )
 
         assertEquals(
-            listOf(Place(DESK, "desk", "ws-1", "hivemind"), Place("laptop-id", "laptop", "ws-9", "notes")),
+            listOf(
+                Place(DESK, "desk", "ws-1", "hivemind"),
+                Place(DESK, "desk", "ws-2", "site"),
+                Place("laptop-id", "laptop", "ws-9", "notes"),
+            ),
             places,
         )
     }

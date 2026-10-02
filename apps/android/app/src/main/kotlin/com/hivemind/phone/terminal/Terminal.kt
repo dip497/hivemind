@@ -1,6 +1,5 @@
 package com.hivemind.phone.terminal
 
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -9,6 +8,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.hivemind.phone.core.ScreenUpdate
+import com.hivemind.phone.ui.common.Follow
 
 /** A line as drawn: its text, and its runs decoded. */
 @Immutable
@@ -60,11 +60,8 @@ class Terminal {
     private val slots = ArrayDeque<LineSlot>()
     private var cursorSlot: LineSlot? = null
 
-    /** Where the view is scrolled to: kept here, so that an update and the scroll it brings land in one frame. */
-    val list = LazyListState()
-
-    /** Whether the view follows the newest line: until the person scrolls up, and again once they are back at the bottom. */
-    var following by mutableStateOf(true)
+    /** Where the view is, following the newest line: kept here, so an update and the scroll it brings land in one frame. */
+    val follow = Follow()
 
     /** The line [position] lines after [firstLine]. */
     fun slot(position: Int): LineSlot = slots[position]
@@ -100,7 +97,6 @@ class Terminal {
         }
 
         lineCount = count
-        // Not while the person's finger (or a fling) moves the view: that would stop it mid-way.
-        if (following && count > 0 && !list.isScrollInProgress) list.requestScrollToItem(count - 1)
+        follow.grew(count - 1)
     }
 }
