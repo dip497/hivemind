@@ -58,8 +58,8 @@ shamefullyHoist: false
 autoInstallPeers: true
 strictPeerDependencies: false
 
-# The dependencies whose install scripts run. A dependency with a script that is in neither list
-# fails the install (strictDepBuilds, on by default since pnpm 11).
+# Which dependencies' install scripts run (true) or are skipped (false). A dependency with an
+# install script that is not listed fails the install (strictDepBuilds, on since pnpm 11).
 allowBuilds:
   electron: true
   esbuild: true
