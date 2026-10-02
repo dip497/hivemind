@@ -73,7 +73,9 @@ final class ComputerUITests: XCTestCase {
         XCTAssertTrue(reply.waitForExistence(timeout: 30), "the reply box is there")
         reply.tap()
         reply.typeText(message)
-        app.buttons["Send"].tap()
+        // The app's Send, by its identifier: the keyboard's return key is Send too (the reply box's
+        // submit label), and a tap by "Send" finds both.
+        app.buttons["agent.send"].tap()
         XCTAssertTrue(showing(answer, in: app).waitForExistence(timeout: 60), "the agent answered: \(answer)")
 
         // Its terminal, followed all the while the chat was: what it printed on hearing it.

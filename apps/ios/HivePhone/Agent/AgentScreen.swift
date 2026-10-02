@@ -151,6 +151,7 @@ struct AgentScreen: View {
                     .font(.title2)
             }
             .accessibilityLabel("Send")
+            .accessibilityIdentifier("agent.send")
             .disabled(reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .padding(.horizontal, 12)

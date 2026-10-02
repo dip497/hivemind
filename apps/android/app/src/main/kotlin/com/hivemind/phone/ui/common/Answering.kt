@@ -122,7 +122,7 @@ fun ReplyBox(hint: String, busy: Boolean, onSend: (String) -> Unit, modifier: Mo
             keyboardActions = KeyboardActions(onSend = { send() }),
             modifier = Modifier.weight(1f).testTag("reply"),
         )
-        Button(onClick = send, enabled = !busy && text.isNotBlank(), modifier = Modifier.padding(start = 8.dp)) {
+        Button(onClick = send, enabled = !busy && text.isNotBlank(), modifier = Modifier.padding(start = 8.dp).testTag("reply-send")) {
             Text(stringResource(R.string.action_send))
         }
     }

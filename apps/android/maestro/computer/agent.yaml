@@ -50,7 +50,10 @@ name: Pair with a computer, and drive its agent
 - tapOn:
     id: "reply"
 - inputText: ${PAIR_MESSAGE}
-- tapOn: "Send"
+# The app's Send, by its tag: the keyboard's action key sends too (the reply box's ImeAction.Send),
+# and a tap by "Send" could find either.
+- tapOn:
+    id: "reply-send"
 - extendedWaitUntil:
     visible: ${PAIR_ANSWER}
     timeout: 60000
