@@ -289,7 +289,9 @@ describe("settings file", () => {
   let tmp: string;
   const saved = { HIVE_SETTINGS: process.env.HIVE_SETTINGS, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME };
   beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-settings-")); delete process.env.HIVE_SETTINGS; process.env.XDG_CONFIG_HOME = tmp; });
-  afterEach(() => { process.env.HIVE_SETTINGS = saved.HIVE_SETTINGS; process.env.XDG_CONFIG_HOME = saved.XDG_CONFIG_HOME; fs.rmSync(tmp, { recursive: true, force: true }); });
+  // A variable that was unset is unset again: assigning undefined to process.env sets the text
+  // "undefined", a relative directory every later test would then write into.
+  afterEach(() => { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } fs.rmSync(tmp, { recursive: true, force: true }); });
 
   test("path honours HIVE_SETTINGS then XDG; missing file reads as defaults; write is atomic and round-trips", async () => {
     expect(settingsPath()).toBe(path.join(tmp, "hivemind", "settings.json"));

@@ -309,10 +309,14 @@ test("while events stream a peer is sent a frame at most every 25 ms, each heard
     server.publish("terminal.data", "in-1", `${n}`);
     await Bun.sleep(5);
   }
+  const streamed = Date.now() - start;
   await Bun.sleep(PEER_FRAME_MS * 2);
-  // A hundred milliseconds of output, every 5 ms: four or five frames, not twenty.
+  // A hundred milliseconds of output, every 5 ms: four or five frames, not twenty. A busy machine
+  // stretches the stream, not the frames: in each 25 ms it lasted, at most the tick's frame and one
+  // at once after a quiet spell.
   expect(frames.length).toBeGreaterThanOrEqual(3);
-  expect(frames.length).toBeLessThanOrEqual(7);
+  expect(frames.length).toBeLessThanOrEqual(2 * Math.ceil(streamed / PEER_FRAME_MS) + 1);
+  expect(frames.length).toBeLessThan(20);
   expect(frames[0]! - start).toBeLessThan(15);
   expect(heard).toEqual(Array.from({ length: 20 }, (_, n) => `${n}`));
 });

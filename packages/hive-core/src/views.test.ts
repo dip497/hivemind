@@ -7,7 +7,8 @@ import { installView, listInstalledViews, readViewPackage, removeView, userViews
 let tmp: string;
 const savedXdg = process.env.XDG_CONFIG_HOME;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-views-")); process.env.XDG_CONFIG_HOME = path.join(tmp, "xdg"); });
-afterEach(() => { process.env.XDG_CONFIG_HOME = savedXdg; fs.rmSync(tmp, { recursive: true, force: true }); });
+// Unset again when it was unset: `= undefined` would set the text "undefined" (see settings.test.ts).
+afterEach(() => { if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg; fs.rmSync(tmp, { recursive: true, force: true }); });
 
 function pkg(dir: string, manifest: unknown, entry = "index.html") {
   fs.mkdirSync(dir, { recursive: true });
