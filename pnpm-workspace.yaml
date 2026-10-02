@@ -50,3 +50,30 @@ catalog:
 
 ignoredOptionalDependencies:
   - cpu-features
+
+# Every pnpm setting lives here: since pnpm 11, .npmrc carries only registry and auth settings,
+# and the "pnpm" field of package.json is not read at all.
+nodeLinker: isolated
+shamefullyHoist: false
+autoInstallPeers: true
+strictPeerDependencies: false
+
+# The dependencies whose install scripts run. A dependency with a script that is in neither list
+# fails the install (strictDepBuilds, on by default since pnpm 11).
+allowBuilds:
+  electron: true
+  esbuild: true
+  '@lydell/node-pty': true
+  better-sqlite3: true
+  # Picks a 7-Zip for Squirrel.Windows installers; the Windows build is a zip.
+  electron-winstaller: false
+
+overrides:
+  'js-yaml@>=3 <3.15.2': 3.15.2
+  'js-yaml@>=4 <4.3.2': 4.3.2
+  undici@8.5.0: 8.10.2
+  extract-zip: npm:@electron-internal/extract-zip@^1.0.5
+
+patchedDependencies:
+  '@xterm/addon-webgl@0.19.0': patches/@xterm__addon-webgl@0.19.0.patch
+  electron@39.8.10: patches/electron@39.8.10.patch

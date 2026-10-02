@@ -11,7 +11,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh | bash
 #
 # WITH `--dev`: clones the source repo and builds locally. Needs `git`,
-# `node` ≥ 22, `pnpm` ≥ 10, `bun` ≥ 1.2.10. Use this if you want to hack on
+# `node` ≥ 22, `pnpm` ≥ 12, `bun` ≥ 1.2.10. Use this if you want to hack on
 # hivemind or if no prebuilt is published for your platform yet.
 #
 #   bash install.sh --dev

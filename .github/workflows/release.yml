@@ -48,7 +48,8 @@ jobs:
           node-version: "24"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        # v6.1.0, not v6: the first release that installs pnpm 12, and the moving v6 tag still names v6.0.10.
+        uses: pnpm/action-setup@v6.1.0
         with:
           # version pinned via `packageManager` in package.json (avoid dupes)
           run_install: false
@@ -84,7 +85,14 @@ jobs:
         # NOT --prod: electron itself is a devDependency in apps/desktop, and
         # electron-builder needs it installed in the deploy dir to read the
         # version it should bundle ("Cannot compute electron version" otherwise).
+        # verifyDepsBeforeRun off, here and for electron-builder below: pnpm 11+
+        # reinstalls before running a script or `exec` when it judges node_modules
+        # stale, and the deploy dir is no workspace project, so that install meets
+        # `catalog:` with no catalog (ERR_PNPM_CATALOG_ENTRY_NOT_FOUND_FOR_SPEC)
+        # and fails the step. Nothing is stale: both run on the one frozen install.
         run: pnpm --filter @hivemind/desktop deploy --legacy desktop-deploy
+        env:
+          PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
 
       - name: Copy build output into deploy
         # electron-vite emits to apps/desktop/out — the deploy copy has only
@@ -99,17 +107,18 @@ jobs:
         # Run electron-builder INSIDE the deployed copy so node_modules are
         # all under the app dir (no more "package.json must be under …" error).
         # `pnpm exec`, NOT `npx`: electron-builder 26 picks its node-module
-        # collector by detecting the package manager, and `pnpm deploy` leaves
+        # collector by detecting the package manager, and pnpm 10's deploy left
         # no lockfile in desktop-deploy/ for it to detect by file. Run under npx
-        # it guesses npm from the environment, and the npm collector only walks a
+        # it guessed npm from the environment, and the npm collector only walks a
         # flat node_modules — it never sees pnpm's nested
-        # @lydell/node-pty-<platform>, so the app ships with a dead terminal.
+        # @lydell/node-pty-<platform>, so the app shipped with a dead terminal.
         run: |
           cd desktop-deploy
           pnpm exec electron-builder --linux AppImage \
             --config.directories.output=dist-electron
         env:
           DEBUG: electron-builder
+          PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
 
       - name: Verify the bundle has a linux-x64 pty
         # Nothing else fails when the prebuild is missing — the app just launches
@@ -159,7 +168,7 @@ jobs:
           node-version: "24"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@v6.1.0
         with:
           run_install: false
 
@@ -209,7 +218,7 @@ jobs:
           node-version: "24"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@v6.1.0
         with:
           run_install: false
 
@@ -231,7 +240,10 @@ jobs:
         run: pnpm --filter @hivemind/desktop run build
 
       - name: pnpm deploy (materialize workspace deps for electron-builder)
+        # verifyDepsBeforeRun off here and for electron-builder: see the linux job.
         run: pnpm --filter @hivemind/desktop deploy --legacy desktop-deploy
+        env:
+          PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
 
       - name: Copy build output into deploy
         run: |
@@ -264,6 +276,7 @@ jobs:
             "desktop-deploy/$app" "release-assets/hivemind-${version}-arm64-mac.zip"
         env:
           DEBUG: electron-builder
+          PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
 
       - name: Stage release artifacts
         run: |
@@ -325,7 +338,7 @@ jobs:
           node-version: "24"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@v6.1.0
         with:
           run_install: false
 
@@ -354,7 +367,10 @@ jobs:
         run: pnpm --filter @hivemind/desktop run build
 
       - name: pnpm deploy (materialize workspace deps for electron-builder)
+        # verifyDepsBeforeRun off here and for electron-builder: see the linux job.
         run: pnpm --filter @hivemind/desktop deploy --legacy desktop-deploy
+        env:
+          PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
 
       - name: Copy build output into deploy
         shell: pwsh
@@ -369,6 +385,8 @@ jobs:
         run: |
           cd desktop-deploy
           pnpm exec electron-builder --win zip --config.directories.output=dist-electron
+        env:
+          PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
 
       - name: Verify the bundle is x64 with a win32 pty
         # Same class of check as the macOS job: nothing fails the build when the

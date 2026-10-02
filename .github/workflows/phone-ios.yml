@@ -133,7 +133,8 @@ jobs:
         with:
           node-version: "24"
 
-      - uses: pnpm/action-setup@v6
+      # v6.1.0, not v6: the first release that installs pnpm 12, and the moving v6 tag still names v6.0.10.
+      - uses: pnpm/action-setup@v6.1.0
         with:
           # The version from `packageManager` in package.json.
           run_install: false

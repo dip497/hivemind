@@ -28,7 +28,7 @@ docs/design/ architecture design docs (e.g. remote-frames.md)
 scripts/     release.sh + helpers
 ```
 
-pnpm workspace; Node ≥ 22, pnpm ≥ 10, bun ≥ 1.1 (CLI compile only).
+pnpm workspace; Node ≥ 22, pnpm 12 (`packageManager` in package.json pins the exact version), bun ≥ 1.1 (CLI compile only).
 
 ## Build / test / verify (run from `apps/desktop` unless noted)
 
