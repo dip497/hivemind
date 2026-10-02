@@ -1187,6 +1187,11 @@ agents.
 - **The phone needs our own Rust layer.** iroh's Swift/Kotlin bindings (`iroh-ffi`,
   1.1.0) set relays and auth tokens but cannot point address lookup at our server, so the
   app links the `hive-net` crate through UniFFI, as Zeron does.
+
+  *As built (M5 step 15):* without hive-net's server roles: the relay, lookup, access and push
+  roles and the `hive-net` command are behind its `server` feature (on by default), and the phone's
+  crate takes hive-net with none of it, a device's side alone (its dependencies 370 crates where
+  they were 509, the DNS server, the ACME client and the relay server among those gone).
 - Views on the phone run in a WKWebView host that speaks view protocol 1.5 over
   `hive/view/1`.
 

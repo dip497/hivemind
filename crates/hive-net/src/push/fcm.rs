@@ -6,7 +6,10 @@ use anyhow::{Context, Result};
 use ring::signature::RsaKeyPair;
 use serde_json::{json, Value};
 
-use super::{answer_of, wire::Urgency, Outgoing, Passed};
+use super::{
+    posted::Urgency,
+    service::{answer_of, Outgoing, Passed},
+};
 use crate::jwt;
 
 /// The largest data a message carries, its key and value together.

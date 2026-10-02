@@ -11,7 +11,10 @@ use ring::{
 };
 use serde_json::json;
 
-use super::{wire::Urgency, Outgoing, Passed};
+use super::{
+    posted::Urgency,
+    service::{Outgoing, Passed},
+};
 use crate::{jwt, state_file};
 
 /// How long a VAPID token is good for (RFC 8292 §2: at most a day).

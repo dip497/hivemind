@@ -2,7 +2,9 @@
 
 hivemind's phone, its core in Rust (`docs/design/multiplayer-2026-09-28.md` §9.3, M5): the library
 the iOS and Android apps link, on [hive-net](../hive-net), and `hive-phone`, which does in a
-terminal what the phone does, so it can be tried and tested without one. A phone runs no agents.
+terminal what the phone does, so it can be tried and tested without one. A phone runs no agents,
+and no server: it links hive-net without its server roles (`default-features = false`), and CI
+fails if it ever links them again.
 
 ```bash
 hive-phone id                         # this phone's id (its device key, made the first time)

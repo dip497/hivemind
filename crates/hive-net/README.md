@@ -49,9 +49,15 @@ A phone that cannot be reached at an address of its own is told through the netw
 notices encrypted to it and signed by them, which the server passes on unread to a UnifiedPush
 distributor (with its VAPID token), or through Apple's or Google's service given their
 credentials. It posts into none of its own networks but those `--push-allow` names. Its code is
-`src/push/` (`wire`: what is read and signed; `store`: the registrations; `apns`, `fcm`,
-`unifiedpush`: one route each; `client`: the phone's side), on `egress.rs` (where it may post, and
-the clients that do), `limit.rs`, `signed.rs`, `state_file.rs` and `jwt.rs`.
+`src/push/` (`wire`: what a phone signs to register; `client`: the phone's side; `service`: the
+role; `posted`: what it reads; `store`: the registrations; `apns`, `fcm`, `unifiedpush`: one route
+each), on `egress/` (where it may post, and the clients that do), `limit.rs`, `signed.rs`,
+`state_file.rs` and `jwt.rs`.
+
+The server roles (relay, lookup, access, push) and the `hive-net` command are behind the `server`
+feature, on by default. A crate that is only ever a device, as the phone's is, depends on hive-net
+with `default-features = false` and links its device's side alone: the endpoint, pairing, the
+network profile, and the clients of the access and push roles.
 
 ```bash
 hive-net serve --push --data ./push                                  # UnifiedPush, on the internet

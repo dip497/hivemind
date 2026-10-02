@@ -11,7 +11,10 @@ use ring::{
 };
 use serde_json::{json, Value};
 
-use super::{wire::Urgency, Outgoing, Passed};
+use super::{
+    posted::Urgency,
+    service::{Outgoing, Passed},
+};
 use crate::jwt;
 
 /// What a phone's notification says until the phone has decrypted the notice.

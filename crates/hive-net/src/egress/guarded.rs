@@ -1,9 +1,8 @@
-//! What this device's servers and clients post to, and through what (R13, §12.4). A client that
-//! trusts what this device's endpoint trusts (`net::trusted`); one for the push services of the
-//! phones' makers (Apple's, Google's), keeping its HTTP/2 connection as they ask; and one for the
-//! addresses phones give themselves (a UnifiedPush distributor's), which reaches none on this
-//! server's own networks but those it is allowed to (`Allowed`), through no proxy (a proxy would
-//! look the name up itself) and following no redirect.
+//! The push role's clients (§12.4): one for the push services of the phones' makers (Apple's,
+//! Google's), keeping its HTTP/2 connection as they ask; and one for the addresses phones give
+//! themselves (a UnifiedPush distributor's), which reaches none on this server's own networks but
+//! those it is allowed to (`Allowed`), through no proxy (a proxy would look the name up itself) and
+//! following no redirect.
 
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -14,23 +13,7 @@ use std::{
 
 use anyhow::{ensure, Context, Result};
 
-/// The TLS this device trusts; offering HTTP/2 first when `h2`.
-fn tls(h2: bool) -> Result<rustls::ClientConfig> {
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let _ = rustls::crypto::ring::default_provider().install_default();
-    let mut tls = crate::net::trusted().client_config(provider)?;
-    if h2 {
-        tls.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-    }
-    Ok(tls)
-}
-
-/// A client trusting what this device's endpoint trusts.
-pub(crate) fn trusted() -> Result<reqwest::Client> {
-    Ok(reqwest::Client::builder()
-        .tls_backend_preconfigured(tls(false)?)
-        .build()?)
-}
+use super::tls;
 
 /// For Apple's and Google's push services: HTTP/2 (Apple's speaks nothing else), its connection
 /// kept, and pinged hourly while idle, as Apple asks; following no redirect.
@@ -117,7 +100,7 @@ fn canonical(ip: IpAddr) -> IpAddr {
 /// Whether `ip` is on the public internet: not this machine, nor a private, shared, link-local or
 /// unique-local network, nor an address set aside (documentation, benchmarking, multicast,
 /// reserved); an IPv4 address carried in IPv6 (mapped, NAT64, 6to4) as that address is.
-pub(crate) fn public(ip: IpAddr) -> bool {
+fn public(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
             let [a, b, c, _] = v4.octets();

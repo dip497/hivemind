@@ -1,10 +1,5 @@
-//! The access role (R16, spec/network-access.md): who may use a network's relays. A device is
-//! allowed while it is enrolled (by the admin, or by an enrolled device), registered (an
-//! `open-pow` network: it proved its key and did a little work) or visiting (until the voucher
-//! that admitted it expires). Every change is signed, so there are no accounts; what is allowed
-//! is kept in one file, and nothing else is. A relay beside it asks it about each device that
-//! connects (`AccessControl`); a relay elsewhere asks over HTTP (`GET /allowed/<id>`, `Remote`),
-//! as a stock relay can. `serve.rs` serves its requests under `/access`.
+//! The access role itself (R16, spec/network-access.md): what it allows, kept in one file, the
+//! requests that change it, and the relays that ask it, beside it or apart.
 
 use std::{
     collections::{BTreeMap, HashMap},
@@ -19,12 +14,13 @@ use anyhow::{bail, ensure, Context, Result};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full, Limited};
 use hyper::{body::Incoming, Request, Response};
-use iroh::{PublicKey, SecretKey};
+use iroh::PublicKey;
 use iroh_relay::server::{Access, AccessControl, ClientRequest};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+use super::{leading_zero_bits, redeem_bytes, register_bytes, revoke_bytes, Kind, Voucher};
 use crate::{
     egress,
     profile::Policy,
@@ -32,83 +28,10 @@ use crate::{
     state_file,
 };
 
-const VOUCHER: &[u8] = b"hive/voucher/1\n";
-const REDEEM: &[u8] = b"hive/redeem/1\n";
-const REGISTER: &[u8] = b"hive/register/1\n";
-const REVOKE: &[u8] = b"hive/revoke/1\n";
 /// The largest request body the service reads.
 const MAX_BODY: usize = 64 * 1024;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Kind {
-    /// For good, until revoked.
-    Enrol,
-    /// Until the voucher expires.
-    Visit,
-}
-
-/// A signed, time-limited, counted admission.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Voucher {
-    pub v: u32,
-    pub kind: Kind,
-    pub by: String,
-    pub device: Option<String>,
-    pub nonce: String,
-    pub expires: u64,
-    pub uses: u32,
-    pub signature: String,
-}
-
 impl Voucher {
-    /// A voucher of `kind`, signed by `by`, for `device` (none: whoever redeems it), until
-    /// `expires`, redeemed at most `uses` times.
-    pub fn new(
-        kind: Kind,
-        by: &SecretKey,
-        device: Option<PublicKey>,
-        expires: u64,
-        uses: u32,
-    ) -> Self {
-        let mut v = Voucher {
-            v: 1,
-            kind,
-            by: by.public().to_string(),
-            device: device.map(|d| d.to_string()),
-            nonce: hex::encode(rand::random::<[u8; 16]>()),
-            expires,
-            uses,
-            signature: String::new(),
-        };
-        v.signature = hex::encode(
-            by.sign(&v.bytes().expect("a voucher made here is well formed"))
-                .to_bytes(),
-        );
-        v
-    }
-
-    fn bytes(&self) -> Result<Vec<u8>> {
-        let by = key_of(&self.by)?;
-        let device = match &self.device {
-            Some(d) => *key_of(d)?.as_bytes(),
-            None => [0u8; 32],
-        };
-        let mut nonce = [0u8; 16];
-        hex::decode_to_slice(&self.nonce, &mut nonce).context("a nonce is 16 bytes in hex")?;
-        let mut out = VOUCHER.to_vec();
-        out.push(match self.kind {
-            Kind::Enrol => 0,
-            Kind::Visit => 1,
-        });
-        out.extend_from_slice(by.as_bytes());
-        out.extend_from_slice(&device);
-        out.extend_from_slice(&nonce);
-        out.extend_from_slice(&self.expires.to_be_bytes());
-        out.extend_from_slice(&self.uses.to_be_bytes());
-        Ok(out)
-    }
-
     /// Who signed it, if the signature verifies and it has not expired.
     fn check(&self, now: u64) -> Result<PublicKey> {
         ensure!(
@@ -121,38 +44,6 @@ impl Voucher {
         ensure!(self.expires > now, "the voucher has expired");
         Ok(by)
     }
-}
-
-fn redeem_bytes(nonce: &str, device: &PublicKey) -> Result<Vec<u8>> {
-    let mut n = [0u8; 16];
-    hex::decode_to_slice(nonce, &mut n).context("a nonce is 16 bytes in hex")?;
-    Ok([REDEEM, &n, device.as_bytes()].concat())
-}
-
-fn register_bytes(device: &PublicKey, at: u64, nonce: u64) -> Vec<u8> {
-    [
-        REGISTER,
-        device.as_bytes(),
-        &at.to_be_bytes(),
-        &nonce.to_be_bytes(),
-    ]
-    .concat()
-}
-
-fn revoke_bytes(by: &PublicKey, device: &PublicKey, at: u64) -> Vec<u8> {
-    [REVOKE, by.as_bytes(), device.as_bytes(), &at.to_be_bytes()].concat()
-}
-
-fn leading_zero_bits(hash: &[u8]) -> u32 {
-    let mut bits = 0;
-    for b in hash {
-        if *b == 0 {
-            bits += 8;
-        } else {
-            return bits + b.leading_zeros();
-        }
-    }
-    bits
 }
 
 /// A visit: until when, and who vouched for it.
@@ -502,85 +393,5 @@ impl AccessControl for Remote {
                 reason: Some("not allowed on this network".into()),
             }
         }
-    }
-}
-
-/// A device asking a network's access service, as the app and the admin's command line do.
-pub mod client {
-    use super::*;
-
-    fn at(access: &str, path: &str) -> String {
-        format!("{}{path}", access.trim_end_matches('/'))
-    }
-
-    async fn post(access: &str, path: &str, body: Value) -> Result<()> {
-        let response = egress::trusted()?
-            .post(at(access, path))
-            .header("content-type", "application/json")
-            .body(body.to_string())
-            .send()
-            .await
-            .with_context(|| format!("cannot reach {access}"))?;
-        if response.status().is_success() {
-            return Ok(());
-        }
-        let text = response.text().await.unwrap_or_default();
-        let why = serde_json::from_str::<Value>(&text)
-            .ok()
-            .and_then(|v| v["error"].as_str().map(str::to_string))
-            .unwrap_or(text);
-        bail!("{access} refused: {why}")
-    }
-
-    /// Give the service a voucher that names its device.
-    pub async fn vouch(access: &str, voucher: &Voucher) -> Result<()> {
-        post(access, "/vouch", serde_json::to_value(voucher)?).await
-    }
-
-    /// Redeem a voucher that names no device, as `key`'s device.
-    pub async fn redeem(access: &str, voucher: &Voucher, key: &SecretKey) -> Result<()> {
-        let device = key.public();
-        let proof = hex::encode(key.sign(&redeem_bytes(&voucher.nonce, &device)?).to_bytes());
-        post(
-            access,
-            "/redeem",
-            json!({ "voucher": voucher, "device": device.to_string(), "proof": proof }),
-        )
-        .await
-    }
-
-    /// Register `key`'s device on an `open-pow` network: the work it asks for, then the request.
-    pub async fn register(access: &str, key: &SecretKey) -> Result<()> {
-        let bits: Value = serde_json::from_str(
-            &egress::trusted()?
-                .get(at(access, "/pow"))
-                .send()
-                .await
-                .with_context(|| format!("cannot reach {access}"))?
-                .text()
-                .await?,
-        )?;
-        let bits = bits["bits"]
-            .as_u64()
-            .context("the service did not say how much work")? as u32;
-        let device = key.public();
-        let at_ms = now_ms();
-        let nonce = (0u64..)
-            .find(|n| {
-                leading_zero_bits(&Sha256::digest(register_bytes(&device, at_ms, *n))) >= bits
-            })
-            .expect("some nonce does the work");
-        let signature = hex::encode(key.sign(&register_bytes(&device, at_ms, nonce)).to_bytes());
-        post(access, "/register", json!({ "device": device.to_string(), "at": at_ms, "nonce": nonce, "signature": signature })).await
-    }
-
-    /// Take `device`'s admission back, as `by`.
-    pub async fn revoke(access: &str, device: &PublicKey, by: &SecretKey) -> Result<()> {
-        let at_ms = now_ms();
-        let signature = hex::encode(
-            by.sign(&revoke_bytes(&by.public(), device, at_ms))
-                .to_bytes(),
-        );
-        post(access, "/revoke", json!({ "device": device.to_string(), "by": by.public().to_string(), "at": at_ms, "signature": signature })).await
     }
 }

@@ -12,7 +12,8 @@ aes-gcm = "0.10"
 anyhow = "1"
 base64 = "0.22"
 hex = "0.4"
-hive-net = { path = "../hive-net" }
+# Its own side of the network alone: none of the server roles, which a phone never runs.
+hive-net = { path = "../hive-net", default-features = false }
 hmac = "0.13"
 http-body-util = "0.1"
 hyper = { version = "1", features = ["server", "http1"] }
@@ -24,6 +25,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "net", "signal", "sync", "io-std", "io-util"] }
+
+[dev-dependencies]
+# The push role, run in a test as a network's server would.
+hive-net = { path = "../hive-net" }
 
 [profile.release]
 strip = true

@@ -95,6 +95,9 @@ jobs:
       - name: Test
         run: cargo test --locked
 
+      - name: A device's side alone, without the server roles (what a phone links)
+        run: cargo check --locked --no-default-features --all-targets
+
       - name: Two machines (network namespaces)
         # R10's "Done when" on one runner: one network with no internet (mDNS, direct), and two
         # networks that reach each other only through a relay hive-net serves.
@@ -133,6 +136,13 @@ jobs:
 
       - name: Test
         run: cargo test --locked
+
+      - name: It links none of hive-net's server roles
+        # A phone runs no relay, lookup, access or push role (hive-net's `server` feature).
+        run: |
+          if cargo tree --locked -e normal --prefix none | grep -E '^(iroh-dns-server|tokio-rustls-acme) '; then
+            echo "the phone links hive-net's server roles"; exit 1
+          fi
 
   compose:
     # R13: the stack self-hosters run (infra/compose.yml), built from this commit, and its checks:
