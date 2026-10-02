@@ -33,7 +33,8 @@ struct RootView: View {
     }
 }
 
-/// The three tabs (design §6): what needs the person, every agent, and the person's devices.
+/// The tabs (design §6): what needs the person, every agent, the community views the person's
+/// computers offer the phone, and the person's devices.
 @MainActor
 struct MainTabs: View {
     let model: PhoneModel
@@ -46,6 +47,8 @@ struct MainTabs: View {
                 .badge(model.overview.needs.count)
             AgentsTab(model: model)
                 .tabItem { Label("Agents", systemImage: "terminal") }
+            ViewsTab(model: model)
+                .tabItem { Label("Views", systemImage: "square.grid.2x2") }
             DevicesTab(model: model) { pairingAnother = true }
                 .tabItem { Label("Devices", systemImage: "laptopcomputer.and.iphone") }
         }
