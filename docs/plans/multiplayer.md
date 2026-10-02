@@ -728,3 +728,14 @@ guest who may edit the board could start a command on the host (see the log).
   connection, so a phone following a terminal and its chat at once would misroute (being fixed, device side);
   and ci.yml's first run on this branch found a phone "heard" with no answer yet shown as "nothing needs you",
   and hive-net's two-machines test reading a dead device's output as an id (fixed: the test).
+- 2026-10-02 — Device streams: each stream a device opens on its connection is its own. hive-net's daemon kept one send
+  half per stream name, and peer-links served a phone's `api` once per link, so a phone's second stream (the chat beside
+  the terminal, a message, a second workspace, a view) took the first's place. Daemon protocol 2 (stream ids: `open` /
+  `opened` / `ended`; `ready` / `hello` versions, and a mismatched app and hive-net stop and say so); PeerLinks serves each
+  phone `api` stream as its own workspace-API connection and answers each `device` and `agents` stream on itself;
+  workspace API 0.13. Shown to fail first: daemon.rs ×2, peer-links.test.ts ×2, hive-net.test.ts, phone-pairing.spec.ts
+  (`hive-phone agent`, a terminal and a conversation on one connection). Releases now hold for the hive-net of every
+  platform but Windows, since the app and hive-net must come from one release.
+- 2026-10-02 — P9, round 2: iOS green against the real desktop app, the terminal still followed after the chat. Android
+  passed all but that: with the keyboard up on a 320×640 screen, following the last line showed the pty grid's blank rows
+  below the output (a fresh grid's output sits at its top). Both apps are to follow the cursor's line instead.
