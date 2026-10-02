@@ -225,7 +225,9 @@ session:
 
 `claude`, Claude Code's, is the one format read today. Hivemind finds the file for the
 session the agent's tile is in, reads its end, and sends your phone each new piece as it is
-written.
+written. When the agent begins another session (Claude Code's `/clear`), your phone moves to it
+once its file is written; for that, the agent's tracker hook (or `launch.hcp`, which gives the
+agent its tile as `$HIVEMIND_TILE`) has to record the new session for its tile.
 
 ## Icons
 

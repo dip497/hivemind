@@ -140,7 +140,9 @@ function scribeAgent(): void {
 /** A third stand-in agent, one that keeps its conversation as Claude Code does: given
  *  `--session-id <id>` as it starts (its manifest binds one), it writes each line it is given, and
  *  its reply, as Claude Code's records to `<home>/talk/<id>.jsonl`, which its manifest names as its
- *  session file. */
+ *  session file. Given `/clear`, it begins another session, recorded for its tile in
+ *  `$TALKER_TRACKS` as Claude Code's tracker hook records one, its file written from the next line
+ *  on. */
 function talkerAgent(): void {
   fs.writeFileSync(path.join(root, "bin", "talker-agent"), [
     "#!/bin/bash",
@@ -151,6 +153,12 @@ function talkerAgent(): void {
     "printf 'talker> '",
     "n=0",
     "while read -r line; do",
+    "  if [ \"$line\" = /clear ]; then",
+    "    id=\"$id-2\"; f=\"$HOME/talk/$id.jsonl\"",
+    "    t=$(printf '%s' \"$HIVEMIND_TILE\" | base64 | tr '+/' '-_' | tr -d '=')",
+    "    mkdir -p \"$TALKER_TRACKS\" && printf '{\"session_id\":\"%s\"}' \"$id\" > \"$TALKER_TRACKS/$t.json\"",
+    "    printf 'cleared\\n'; continue",
+    "  fi",
     "  n=$((n+1)); at=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)",
     "  printf '{\"type\":\"user\",\"uuid\":\"p%s\",\"timestamp\":\"%s\",\"message\":{\"role\":\"user\",\"content\":\"%s\"}}\\n' \"$n\" \"$at\" \"$line\" >> \"$f\"",
     "  printf '{\"type\":\"assistant\",\"uuid\":\"a%s\",\"timestamp\":\"%s\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"You said %s\"}]}}\\n' \"$n\" \"$at\" \"$line\" >> \"$f\"",
@@ -162,6 +170,8 @@ function talkerAgent(): void {
   fs.writeFileSync(path.join(agent, "agent.yaml"), [
     "manifestVersion: 2", "id: talker", "label: Talker", "bin: talker-agent", "enabled: true",
     "caps: { promptDelivery: typed, turnSignal: false, resume: tile, supervise: human, blockedDetection: false }",
+    // As Claude Code's: its tile is in its environment, where its tracker finds it.
+    "launch: { hcp: true }",
     "session:",
     "  bind: { args: [--session-id, '{newId}'] }",
     "  resume: { args: [--resume, '{id}'], from: { bound: --session-id }, exists: '{home}/talk/{id}.jsonl' }",
@@ -391,14 +401,14 @@ test("the phone drives the person's agents in full: it follows every agent there
   }
 });
 
-test("the phone follows what an agent and the person say to each other, as the agent's session file keeps it: the last of it, then each piece as it is written", async () => {
+test("the phone follows what an agent and the person say to each other, as the agent's session file keeps it: the last of it, then each piece as it is written, and a session the agent begins since from its start", async () => {
   test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
   test.setTimeout(120_000);
   const env = probeAgent();
   talkerAgent();
   const home = path.join(root, "home");
   fs.mkdirSync(home);
-  const d = await desktopWith({ ...env, HOME: home });
+  const d = await desktopWith({ ...env, HOME: home, TALKER_TRACKS: path.join(root, "desktop", "hivemind-dev", "tile-sessions") });
   const { phone } = await pairPhone(d);
   await d.desktop.keyboard.press("Escape");
   const phoneCli = async (...args: string[]) => JSON.parse((await run(HIVE_PHONE, [...args, "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as Record<string, unknown>;
@@ -418,7 +428,7 @@ test("the phone follows what an agent and the person say to each other, as the a
   // Followed from the phone: what is said so far, then each piece as it is written.
   const following = spawn(HIVE_PHONE, ["talk", workspace, tile, "--follow", "--identity", phone, "--json"]);
   procs.push(following);
-  const pieces: Array<{ entries: Array<Record<string, unknown>>; cursor: number }> = [];
+  const pieces: Array<{ entries: Array<Record<string, unknown>>; cursor: number; session: string }> = [];
   let line = "";
   following.stdout!.on("data", (b: Buffer) => {
     const lines = (line + b.toString()).split("\n");
@@ -432,6 +442,16 @@ test("the phone follows what an agent and the person say to each other, as the a
     ["person", "fix the nav"], ["agent", "You said fix the nav"], ["person", "add tests"], ["agent", "You said add tests"],
   ]);
   expect(pieces.length).toBeGreaterThan(1);
+
+  // Cleared, the agent begins another session: once its file is written, the phone follows it, the
+  // pieces named by it.
+  const first = pieces[0]!.session;
+  expect(first).toMatch(/^[0-9a-f-]{36}$/);
+  expect(await phoneCli("send", workspace, tile, "--text", "/clear")).toEqual({ sent: true });
+  expect(await phoneCli("send", workspace, tile, "--text", "a fresh start")).toEqual({ sent: true });
+  const since = () => pieces.filter((p) => p.session !== first).flatMap((p) => p.entries).map((e) => [e.who, e.text]);
+  await expect.poll(since, { timeout: 30_000 }).toEqual([["person", "a fresh start"], ["agent", "You said a fresh start"]]);
+  expect(pieces.at(-1)!.session).toBe(`${first}-2`);
 });
 
 test("what an agent asks, its computer can allow or deny, and says so in the list and the notice; the phone denies it with the agent's own keys, and it is told no and asks again; allows it, and it works; the same answer again does nothing", async () => {

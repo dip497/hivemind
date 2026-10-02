@@ -93,7 +93,7 @@ import { Plans } from "@hivemind/host/plans";
 import { answers } from "@hivemind/host/answers";
 import { heldBoards, manifestOf, permissionKeys, runsIn } from "@hivemind/host/needs";
 import { agentControl } from "@hivemind/host/agent-control";
-import { conversations, transcriptFile } from "@hivemind/host/conversations";
+import { conversations, transcriptOf } from "@hivemind/host/conversations";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
@@ -1231,7 +1231,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   }),
   // What an agent here and the person say to each other, from its session file, as it is written
   // (M5, spec/agents.md "Conversation").
-  conversations({ fileOf: (bare) => transcriptFile(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)) }),
+  conversations({ transcriptOf: (bare) => transcriptOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)) }),
   presence(() => workspaceServer, () => machineIdentity().personId),
   peopleHere.domain,
   // A participant's branch, handed off from their machine (M4).

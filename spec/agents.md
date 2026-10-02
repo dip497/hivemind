@@ -1,4 +1,4 @@
-# Agents (0.2)
+# Agents (0.3)
 
 The person's agents, as their phone sees and drives them (M5, `docs/design/phone-app-2026-10-02.md`
 §4): every agent in the workspaces one of their devices holds, live; and starting one, stopping
@@ -107,17 +107,17 @@ repository answers no files and an empty patch; one on another machine is `FAILE
 
 ## Conversation
 
-`agent.conversation(tile, cursor?)` (0.2) answers what the agent of `tile` and the person said to
-each other, as the agent keeps it in its session file (its manifest's `session.transcript` names
-the format; `claude`, Claude Code's, is the one read), and then sends the caller what is said next,
-as it is written, until the call's connection goes:
+`agent.conversation(tile, cursor?, session?)` (0.2; `session` 0.3) answers what the agent of `tile`
+and the person said to each other, as the agent keeps it in its session file (its manifest's
+`session.transcript` names the format; `claude`, Claude Code's, is the one read), and then sends
+the caller what is said next, as it is written, until the call's connection goes:
 
 ```json
-{ "entries": [ … ], "cursor": 52311 }
+{ "entries": [ … ], "cursor": 52311, "session": "<the session's id>" }
 ```
 
-with the event `agent.said` (`[tile, entries, cursor]`) for each later piece. Each entry is one
-of
+with the event `agent.said` (`[tile, entries, cursor, session]`) for each later piece, never
+before the answer. Each entry is one of
 
 ```json
 { "id": "<its id>", "at": 1790000000000, "who": "person", "text": "<what they asked>" }
@@ -136,11 +136,17 @@ of
   index after it for a record of several blocks; `at` its `timestamp`, in ms since the epoch.
   Thinking, records of a sidechain (`isSidechain`), meta records (`isMeta`), any other record or
   block, and a line that is not one, say nothing.
-- `cursor` is how far into the file the entries go (in bytes, at the end of a line): given back, it
-  answers only what comes after it, as after a reconnect. Without one, it answers the last 200
-  entries of the last 1 MiB of the file.
+- `cursor` is how far into the file the entries go (in bytes, at the end of a line), and `session`
+  the session whose file it is: given back, they answer only what comes after the cursor, as after
+  a reconnect. Without them, or for a session the agent keeps no more, it answers the last 200
+  entries of the last 1 MiB of its file now.
+- The session is the one last recorded for the agent's tile (by its tracker, or as it was started),
+  else the one its manifest would resume. When the agent begins another while it is followed (as
+  Claude Code's `/clear` does), and that session's file is there, the device follows that one
+  instead: the next `agent.said` names it, with the last of it, as answered without a cursor, and
+  cursors into its file. Whoever follows shows a conversation begun anew.
 - An agent with no session file found, or whose manifest names no format, answers no entries and
-  cursor 0, and nothing more.
+  cursor 0, no session, and nothing more.
 
 ## Who may
 

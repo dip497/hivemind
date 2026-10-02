@@ -55,7 +55,7 @@ import { answers } from "./answers.js";
 import { PeerLinks } from "./peer-links.js";
 import { heldBoards, manifestOf, participantNamed, permissionKeys, runsIn } from "./needs.js";
 import { agentControl } from "./agent-control.js";
-import { conversations, transcriptFile } from "./conversations.js";
+import { conversations, transcriptOf } from "./conversations.js";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 import type { KnownMachines } from "@hivemind/core/remote-uri";
 import { manifestFacts } from "./agent-list.js";
@@ -284,7 +284,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     }),
     // What an agent here and the person say to each other, from its session file, as it is
     // written (M5, spec/agents.md "Conversation").
-    conversations({ fileOf: (bare) => transcriptFile(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR)) }),
+    conversations({ transcriptOf: (bare) => transcriptOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR)) }),
   ], intents, o.onWarn);
 
   // The control plane (`hive ctl`): the verbs that need no window, for the agents here and for

@@ -68,7 +68,7 @@ use hive_net::{net, push::Platform};
 use hive_phone::{
     agents::{self, Agent, Listed},
     control::{self, Start},
-    conversation::{self, Entry},
+    conversation::{self, Entry, Piece},
     devices::{self, Unpaired},
     identity::Identity,
     needs::{self, Need},
@@ -551,18 +551,34 @@ async fn run(args: Args) -> Result<()> {
                 let following = {
                     let (ws, tile) = (ws.clone(), tile.clone());
                     tokio::spawn(async move {
-                        conversation::follow(&connection, &ws, &tile, None, |entries, cursor| {
-                            let _ = pieces.send((entries, cursor));
+                        conversation::follow(&connection, &ws, &tile, None, |piece| {
+                            let _ = pieces.send(piece);
                         })
                         .await
                     })
                 };
-                // The last of it, then, following, each piece as it comes.
-                while let Some((entries, cursor)) = heard.recv().await {
+                // The last of it, then, following, each piece as it comes; a session begun since
+                // under a line of its own.
+                let mut session = None;
+                while let Some(piece) = heard.recv().await {
+                    let anew = session
+                        .replace(piece.session.clone())
+                        .is_some_and(|s| s != piece.session);
                     if args.json {
-                        println!("{}", json!({ "entries": entries, "cursor": cursor }));
+                        let Piece {
+                            entries,
+                            cursor,
+                            session,
+                        } = piece;
+                        println!(
+                            "{}",
+                            json!({ "entries": entries, "cursor": cursor, "session": session })
+                        );
                     } else {
-                        for e in &entries {
+                        if anew {
+                            println!("— a new conversation —");
+                        }
+                        for e in &piece.entries {
                             println!("{}", spoken(e));
                         }
                     }

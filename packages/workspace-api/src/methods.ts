@@ -98,10 +98,11 @@ export interface WorkspaceMethods {
   "agent.close": (tile: string) => { closed: boolean };
   /** What the agent in `tile` changed in the folder it runs in, against its last commit. */
   "agent.diff": (tile: string) => AgentChanges;
-  /** What the agent in `tile` and the person said to each other, after `cursor` (none: the last
-   *  of it), and how far into its session file that goes; then each `agent.said` as it is written,
-   *  until the connection goes. */
-  "agent.conversation": (tile: string, cursor?: number) => { entries: ConversationEntry[]; cursor: number };
+  /** What the agent in `tile` and the person said to each other, after `cursor` in `session` (none,
+   *  or another session than its own now: the last of it), how far into its session file that goes,
+   *  and the session; then each `agent.said` as it is written, from the start of each session it
+   *  begins since, until the connection goes. `session` is left out for an agent with none. */
+  "agent.conversation": (tile: string, cursor?: number, session?: string) => { entries: ConversationEntry[]; cursor: number; session?: string };
   "people.list": (repo: string) => PersonHere[];
   "people.role": (repo: string, person: string, role: Role) => void;
   "people.remove": (repo: string, person: string) => void;
@@ -165,8 +166,9 @@ export interface WorkspaceEvents {
   "tile.opened": (tile: TileOpened) => void;
   /** A terminal's output, to the clients that show it. */
   "terminal.data": (tile: string, data: string) => void;
-  /** What was said next in the conversation of the agent in `tile`, to whoever follows it. */
-  "agent.said": (tile: string, entries: ConversationEntry[], cursor: number) => void;
+  /** What was said next in the conversation of the agent in `tile`, to whoever follows it, in its
+   *  session `session`. */
+  "agent.said": (tile: string, entries: ConversationEntry[], cursor: number, session: string) => void;
   /** A terminal's session ended, to the clients that showed it. */
   "terminal.exit": (tile: string, info: ExitInfo) => void;
   /** Changes in watched terminals' activity. */
