@@ -43,7 +43,11 @@ pub struct Waiting {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan: Option<String>,
     /// A permission its device can allow or deny (spec/needs.md 0.5).
-    #[serde(default, deserialize_with = "only_true", skip_serializing_if = "Not::not")]
+    #[serde(
+        default,
+        deserialize_with = "only_true",
+        skip_serializing_if = "Not::not"
+    )]
     pub decide: bool,
 }
 
@@ -70,7 +74,11 @@ pub struct Agent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub waiting: Option<Waiting>,
     /// Its turn can be interrupted from here (`agent.interrupt`).
-    #[serde(default, deserialize_with = "only_true", skip_serializing_if = "Not::not")]
+    #[serde(
+        default,
+        deserialize_with = "only_true",
+        skip_serializing_if = "Not::not"
+    )]
     pub interrupt: bool,
     /// The device that told of it: the phone's own word, never the device's.
     #[serde(default)]
