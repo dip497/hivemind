@@ -1,13 +1,22 @@
 import SwiftUI
 
-/// One agent (design §6.4): its live terminal, fitted to the width and following the newest line;
-/// what it waits on, as a banner with its answers; a reply box, and Type, which types into its
-/// terminal as the person; Stop, its changes, and Close.
+/// One agent (design §6.4, P7): what it and the person said, as a chat, or its live terminal,
+/// fitted to the width and following the newest line; what it waits on, as a banner with its
+/// answers; a reply box, and Type, which types into its terminal as the person; Stop, its changes,
+/// and Close. The chat and the terminal are both followed while the screen is up, so switching
+/// between them waits on nothing.
 @MainActor
 struct AgentScreen: View {
+    enum Showing {
+        case chat
+        case terminal
+    }
+
     let model: PhoneModel
     let ref: AgentRef
     @State private var session: TerminalSession
+    @State private var chat: ChatSession
+    @State private var showing = Showing.chat
     @State private var reply = ""
     @State private var composing: Composing? = nil
     @State private var showingDiff = false
@@ -17,15 +26,12 @@ struct AgentScreen: View {
         self.model = model
         self.ref = ref
         _session = State(initialValue: TerminalSession(agent: ref))
+        _chat = State(initialValue: ChatSession(agent: ref))
     }
 
     /// The agent as the newest overview has it; nil a moment after it was started, or once closed.
     private var agent: Agent? {
         model.overview.agents.first { $0.at == ref }
-    }
-
-    private var reachable: Bool {
-        model.overview.devices.first { $0.id == ref.device }?.reachable ?? false
     }
 
     var body: some View {
@@ -34,10 +40,17 @@ struct AgentScreen: View {
                 WaitBanner(model: model, agent: agent, waiting: waiting) {
                     composing = Composing(agent: agent, waiting: waiting)
                 } type: {
-                    session.beginTyping()
+                    typeIntoTerminal()
                 }
             }
-            if let note {
+            Picker("Show", selection: $showing) {
+                Text("Chat").tag(Showing.chat)
+                Text("Terminal").tag(Showing.terminal)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            if showing == .terminal, let note {
                 Text(note)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -45,7 +58,12 @@ struct AgentScreen: View {
                     .padding(.vertical, 6)
                     .background(.bar)
             }
-            TerminalScreen(session: session)
+            ZStack {
+                ChatScreen(session: chat, shown: showing == .chat)
+                    .accessibilityHidden(showing != .chat)
+                TerminalScreen(session: session, shown: showing == .terminal)
+                    .accessibilityHidden(showing != .terminal)
+            }
             replyBar
         }
         .navigationTitle(agent?.name ?? "Agent")
@@ -82,11 +100,13 @@ struct AgentScreen: View {
         .sheet(item: $composing) { item in
             AnswerSheet(model: model, agent: item.agent, waiting: item.waiting)
         }
-        .onAppear { session.start(on: model.phone) }
-        .onDisappear { session.stop() }
-        .onChange(of: reachable) { _, reachable in
-            // The connection came back: watch again, from the whole screen.
-            if reachable, session.end == .connection { session.start(on: model.phone) }
+        .onAppear {
+            session.start(on: model.phone)
+            chat.start(on: model.phone)
+        }
+        .onDisappear {
+            session.stop()
+            chat.stop()
         }
     }
 
@@ -95,8 +115,8 @@ struct AgentScreen: View {
         switch session.end {
         case .session(let code)?:
             return code == 0 ? "Its session ended." : "Its session ended (code \(code))."
-        case .connection?:
-            return "The connection to \(agent?.deviceName ?? "its device") went; it is watched again when it is back."
+        case .nothing?:
+            return "There is no terminal to watch: it ended unseen, or its workspace is not on \(agent?.deviceName ?? "its device") now."
         case nil:
             break
         }
@@ -106,10 +126,16 @@ struct AgentScreen: View {
         return nil
     }
 
+    /// Type goes to the terminal: shown first, then the keyboard, once SwiftUI has shown it.
+    private func typeIntoTerminal() {
+        showing = .terminal
+        Task { session.beginTyping() }
+    }
+
     private var replyBar: some View {
         HStack(spacing: 10) {
             Button {
-                session.beginTyping()
+                typeIntoTerminal()
             } label: {
                 Image(systemName: "keyboard")
             }
@@ -137,11 +163,16 @@ struct AgentScreen: View {
         guard !text.isEmpty else { return }
         reply = ""
         model.act {
+            let went: Bool
             do {
-                _ = try await model.phone.send(agent: ref, text: text)
+                went = try await model.phone.send(agent: ref, text: text)
             } catch {
                 if reply.isEmpty { reply = text }
                 throw error
+            }
+            if !went {
+                if reply.isEmpty { reply = text }
+                model.notice = "No agent runs there now."
             }
         }
     }

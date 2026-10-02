@@ -24,10 +24,12 @@ final class MainRelayTests: XCTestCase {
 
         XCTAssertEqual(puller.pulls, 2)
     }
+}
 
-    /// Runs what the main queue holds now, and the hops it schedules meanwhile go after.
+extension XCTestCase {
+    /// Runs what the main queue holds now; the hops it schedules meanwhile go after.
     @MainActor
-    private func drainMain() {
+    func drainMain() {
         let drained = expectation(description: "the main queue ran what it held")
         DispatchQueue.main.async { drained.fulfill() }
         wait(for: [drained], timeout: 5)

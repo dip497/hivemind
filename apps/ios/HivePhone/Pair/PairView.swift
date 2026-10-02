@@ -12,6 +12,8 @@ struct PairView: View {
     @State private var link = ""
     @State private var scanning = false
     @State private var busy = false
+    /// The computer being paired with, by name, as the core reads the link.
+    @State private var pairingWith: String? = nil
     @State private var failure: String? = nil
     @State private var paired: Paired? = nil
 
@@ -75,7 +77,7 @@ struct PairView: View {
                 .buttonStyle(.bordered)
                 .disabled(busy || link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             if busy {
-                ProgressView("Pairing…")
+                ProgressView(pairingWith.map { "Pairing with \($0)…" } ?? "Pairing…")
             }
             if let failure {
                 Text(failure)
@@ -90,6 +92,7 @@ struct PairView: View {
         guard !link.isEmpty, !busy else { return }
         busy = true
         failure = nil
+        pairingWith = pairsWith(link: link)?.name
         Task { @MainActor in
             do {
                 paired = try await model.phone.pair(link: link)

@@ -4,15 +4,17 @@ import UIKit
 
 /// One agent's live terminal (design §5.3): the `Watch` on the core's emulator, typing into it, and
 /// what the screen around the terminal shows of it. Its frames go to the terminal view, which keeps
-/// the lines and draws the ones that changed.
+/// the lines and draws the ones that changed. The core keeps the watch across the background and
+/// the device's reconnects, so the app never watches again on its own account.
 @MainActor
 @Observable
 final class TerminalSession {
     enum End: Equatable {
         /// The session ended, with its code.
         case session(Int64)
-        /// The connection to the device went; watching again needs it back.
-        case connection
+        /// There is no terminal to watch: it ended unseen, its workspace is not on that device now,
+        /// or the device refused it.
+        case nothing
     }
 
     let agent: AgentRef
@@ -80,11 +82,12 @@ final class TerminalSession {
         _ = view?.becomeFirstResponder()
     }
 
+    /// Told once, last.
     private func ended(_ code: Int64?) {
         if let code {
             end = .session(code)
         } else {
-            end = .connection
+            end = .nothing
         }
         _ = view?.resignFirstResponder()
         stop()

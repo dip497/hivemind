@@ -68,7 +68,8 @@ final class PhoneModel {
     }
 
     /// Closes an agent once the phone's own lock says it is the person (§4): its session ends and
-    /// its tile leaves the board. Whether it closed.
+    /// its tile leaves the board. Whether it is gone now: the core says no when it was closed
+    /// already, which is gone too.
     func close(_ agent: AgentRef, named name: String) async -> Bool {
         switch await DeviceLock.ask("Close \(name)") {
         case .unlocked:
@@ -80,7 +81,8 @@ final class PhoneModel {
             return false
         }
         do {
-            return try await phone.closeAgent(agent: agent)
+            _ = try await phone.closeAgent(agent: agent)
+            return true
         } catch {
             notice = ErrorText.of(error)
             return false

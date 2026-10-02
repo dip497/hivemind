@@ -48,8 +48,12 @@ struct DevicesTab: View {
             ) { device in
                 Button("Unpair \(device.name)", role: .destructive) {
                     model.act {
-                        _ = try await model.phone.unpair(device: device.id)
+                        let told = try await model.phone.unpair(device: device.id)
                         model.pull()
+                        if !told {
+                            // It still lists this phone.
+                            model.notice = "\(device.name) was not told: unpair this phone there too."
+                        }
                     }
                 }
             } message: { device in
