@@ -2875,6 +2875,11 @@ public struct Agent: Equatable, Hashable {
     public var since: UInt64?
     public var waiting: Waiting?
     public var canInterrupt: Bool
+    /**
+     * It keeps a conversation its device can read (`Phone::conversation`): its manifest maps its
+     * session file. Without one, only its terminal is there to show.
+     */
+    public var hasConversation: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -2884,7 +2889,11 @@ public struct Agent: Equatable, Hashable {
          */machine: String, program: Program?, state: AgentState, 
         /**
          * When it entered its state.
-         */since: UInt64?, waiting: Waiting?, canInterrupt: Bool) {
+         */since: UInt64?, waiting: Waiting?, canInterrupt: Bool, 
+        /**
+         * It keeps a conversation its device can read (`Phone::conversation`): its manifest maps its
+         * session file. Without one, only its terminal is there to show.
+         */hasConversation: Bool = false) {
         self.at = at
         self.name = name
         self.workspaceName = workspaceName
@@ -2895,6 +2904,7 @@ public struct Agent: Equatable, Hashable {
         self.since = since
         self.waiting = waiting
         self.canInterrupt = canInterrupt
+        self.hasConversation = hasConversation
     }
 
     
@@ -2922,7 +2932,8 @@ public struct FfiConverterTypeAgent: FfiConverterRustBuffer {
                 state: FfiConverterTypeAgentState.read(from: &buf), 
                 since: FfiConverterOptionUInt64.read(from: &buf), 
                 waiting: FfiConverterOptionTypeWaiting.read(from: &buf), 
-                canInterrupt: FfiConverterBool.read(from: &buf)
+                canInterrupt: FfiConverterBool.read(from: &buf), 
+                hasConversation: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -2937,6 +2948,7 @@ public struct FfiConverterTypeAgent: FfiConverterRustBuffer {
         FfiConverterOptionUInt64.write(value.since, into: &buf)
         FfiConverterOptionTypeWaiting.write(value.waiting, into: &buf)
         FfiConverterBool.write(value.canInterrupt, into: &buf)
+        FfiConverterBool.write(value.hasConversation, into: &buf)
     }
 }
 

@@ -89,6 +89,10 @@ pub struct Agent {
     pub since: Option<u64>,
     pub waiting: Option<Waiting>,
     pub can_interrupt: bool,
+    /// It keeps a conversation its device can read (`Phone::conversation`): its manifest maps its
+    /// session file. Without one, only its terminal is there to show.
+    #[uniffi(default)]
+    pub has_conversation: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -288,6 +292,7 @@ fn shown(agent: agents::Agent, named: &BTreeMap<&str, &str>) -> Option<Agent> {
             decide: waiting.decide,
         }),
         can_interrupt: agent.interrupt,
+        has_conversation: agent.conversation,
     })
 }
 
@@ -332,6 +337,7 @@ mod tests {
             machine: "Priya's laptop".into(),
             waiting: None,
             interrupt: false,
+            conversation: false,
             device: String::new(),
         }
     }
@@ -366,6 +372,7 @@ mod tests {
                     label: "Claude Code".into(),
                 }),
                 interrupt: true,
+                conversation: true,
                 ..agent("w1", "t1", "working", 10)
             },
             agents::Agent {
@@ -487,6 +494,7 @@ mod tests {
                 since: Some(10),
                 waiting: None,
                 can_interrupt: true,
+                has_conversation: true,
             }
         );
         assert_eq!(
@@ -527,6 +535,7 @@ mod tests {
                     decide: false,
                 }),
                 can_interrupt: false,
+                has_conversation: false,
             }
         );
         assert_eq!(shown.working, 2);

@@ -389,6 +389,8 @@ test("the phone drives the person's agents in full: it follows every agent there
   await expect(d.desktop.locator(`.react-flow__node-terminal[data-id="${scribe}"]`)).toHaveCount(1, { timeout: 20_000 });
   await expect.poll(() => agent(scribe)?.state, { timeout: 30_000 }).toBe("working");
   expect(agent(scribe)).toMatchObject({ workspace, program: { id: "scribe", label: "Scribe" }, interrupt: true });
+  // Its manifest maps no session file: it keeps no conversation the phone can read.
+  expect(agent(scribe)!.conversation).toBeUndefined();
 
   // What it changed, in the folder it runs in: a new file, shown whole.
   const changes = await phoneCli("diff", workspace, scribe);
@@ -435,6 +437,8 @@ test("the phone follows what an agent and the person say to each other, as the a
   let listed: Array<Record<string, unknown>> = [];
   await expect.poll(async () => (listed = (await phoneCli("agents")).agents as typeof listed).length, { timeout: 30_000 }).toBe(1);
   const workspace = listed[0]!.workspace as string;
+  // Its manifest maps its session file: the phone is told it keeps a conversation (spec/agents.md 0.4).
+  expect(listed[0]).toMatchObject({ tile, program: { id: "talker" }, conversation: true });
   expect(await phoneCli("send", workspace, tile, "--text", "fix the nav")).toEqual({ sent: true });
   await expect.poll(() => fs.existsSync(path.join(home, "talk")) && fs.readdirSync(path.join(home, "talk")).length, { timeout: 20_000 }).toBe(1);
 

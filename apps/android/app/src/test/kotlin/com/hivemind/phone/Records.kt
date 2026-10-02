@@ -36,6 +36,7 @@ fun agent(
     waiting: Waiting? = null,
     canInterrupt: Boolean = true,
     since: Long? = null,
+    hasConversation: Boolean = false,
 ) = Agent(
     at = AgentRef(device, workspace, tile),
     name = name,
@@ -47,6 +48,7 @@ fun agent(
     since = since?.toULong(),
     waiting = waiting,
     canInterrupt = canInterrupt,
+    hasConversation = hasConversation,
 )
 
 fun waiting(kind: WaitKind, since: Long, decide: Boolean = false, plan: String? = null) =

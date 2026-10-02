@@ -185,6 +185,7 @@ fn agent_of(need: &Need, device: &str) -> Agent {
             decide: need.decide,
         }),
         interrupt: false,
+        conversation: false,
         device: device.to_string(),
     }
 }

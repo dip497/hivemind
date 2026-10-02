@@ -290,6 +290,7 @@ fn what_a_device_lists_is_kept_whole_with_what_waits_on_the_person_among_it_and_
         machine: "app 10".into(),
         waiting,
         interrupt: false,
+        conversation: false,
         device: device.clone(),
     };
     let waits = |kind: &str| {

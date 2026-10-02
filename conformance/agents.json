@@ -1,5 +1,5 @@
 {
- "about": "Cases every implementation of following agents must pass (spec/agents.md \"Following\"): what a device answers ('computer': its boards, its agents' statuses and the plans they hand off, with the machines it knows ('known'), the program each tile's command starts by its manifest ('programs'), the tiles whose agents' permissions it can decide ('decides') and whose agents say which keys interrupt their turn ('interrupts'), in; every agent, and how many are at work, out), and what a phone shows of the answers it is given ('phone': each answer with the device it came from, in; every agent it reads, with that device, what waits on the person among them as device/tile in the order shown, and the agents at work, out). Written by hand from the spec.",
+ "about": "Cases every implementation of following agents must pass (spec/agents.md \"Following\"): what a device answers ('computer': its boards, its agents' statuses and the plans they hand off, with the machines it knows ('known'), the program each tile's command starts by its manifest ('programs'), the tiles whose agents' permissions it can decide ('decides'), whose agents say which keys interrupt their turn ('interrupts') and whose agents' manifests map their session files ('conversations'), in; every agent, and how many are at work, out), and what a phone shows of the answers it is given ('phone': each answer with the device it came from, in; every agent it reads, with that device, what waits on the person among them as device/tile in the order shown, and the agents at work, out). Written by hand from the spec.",
  "known": {
   "self": {
    "device": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
@@ -15,7 +15,7 @@
  },
  "computer": [
   {
-   "about": "every agent with a status whose tile is on a board here, whatever it is doing, in order of its workspace's id and then its tile; with the program its tile runs, when a manifest here names it, and whether its turn can be interrupted; a tile with no status, or a status for a tile on no board here, is no agent here",
+   "about": "every agent with a status whose tile is on a board here, whatever it is doing, in order of its workspace's id and then its tile; with the program its tile runs, when a manifest here names it, whether its turn can be interrupted, and whether it keeps a conversation the device can read (its manifest maps its session file, 0.4); a tile with no status, or a status for a tile on no board here, is no agent here",
    "held": [
     {
      "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
@@ -123,6 +123,9 @@
    "interrupts": [
     "t2"
    ],
+   "conversations": [
+    "t2"
+   ],
    "agents": [
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -145,7 +148,8 @@
      "state": "working",
      "since": 1790000001000,
      "machine": "desk",
-     "interrupt": true
+     "interrupt": true,
+     "conversation": true
     },
     {
      "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
@@ -530,7 +534,8 @@
          "since": 1790000002000,
          "decide": true
         },
-        "interrupt": true
+        "interrupt": true,
+        "conversation": true
        },
        {
         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -600,6 +605,7 @@
       "decide": true
      },
      "interrupt": true,
+     "conversation": true,
      "device": "desk"
     },
     {
@@ -648,7 +654,7 @@
    "working": 3
   },
   {
-   "about": "an item that cannot be read is left out: a field it must have missing or of another type, a state or a wait's kind not in the spec, a wait without a time; a program that is no id and label, and a decide or interrupt that is not true, and a decide on anything but a permission, are taken as not there",
+   "about": "an item that cannot be read is left out: a field it must have missing or of another type, a state or a wait's kind not in the spec, a wait without a time; a program that is no id and label, and a decide, interrupt or conversation that is not true, and a decide on anything but a permission, are taken as not there",
    "answers": [
     {
      "from": "desk",
@@ -731,7 +737,8 @@
          "since": 1790000001000,
          "decide": "yes"
         },
-        "interrupt": 1
+        "interrupt": 1,
+        "conversation": "yes"
        },
        {
         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",

@@ -1,8 +1,8 @@
 /**
  * Every agent in the workspaces this device holds, as the person's devices follow them (M5,
  * spec/agents.md "Following"): each agent with a status whose tile is on a board here, its state
- * and since when, what it waits on, the program it runs, the machine it runs on and whether its
- * turn can be interrupted from afar. Electron-free: the device's boards, its agents' statuses and
+ * and since when, what it waits on, the program it runs, the machine it runs on, whether its turn
+ * can be interrupted from afar, and whether it keeps a conversation this device can read. Electron-free: the device's boards, its agents' statuses and
  * the plans they hand off in, the list out.
  */
 import type { InputKind } from "@hivemind/agents";
@@ -30,6 +30,9 @@ export interface AgentItem {
   waiting?: { kind: InputKind; since: number; plan?: string; decide?: true };
   /** Its manifest says which keys interrupt its turn. */
   interrupt?: true;
+  /** Its manifest maps its session file's records, so `agent.conversation` can say what it and the
+   *  person said (spec/agents.md 0.4). */
+  conversation?: true;
 }
 
 /** What this device knows of the agent each tile runs. */
@@ -40,6 +43,8 @@ export interface AgentFacts {
   decides(tile: string): boolean;
   /** Whether its agent says which keys interrupt its turn. */
   interrupts(tile: string): boolean;
+  /** Whether its agent's manifest maps its session file's records (`session.transcript`). */
+  converses(tile: string): boolean;
 }
 
 /** What the manifests here say of the agent each tile of `held` runs. */
@@ -51,6 +56,7 @@ export function manifestFacts(held: HeldBoard[]): AgentFacts {
     },
     decides: (tile) => !!manifestOf(held, tile)?.answer?.permission,
     interrupts: (tile) => !!manifestOf(held, tile)?.interrupt,
+    converses: (tile) => !!manifestOf(held, tile)?.session?.transcript,
   };
 }
 
@@ -78,6 +84,7 @@ export function agentsOf(held: HeldBoard[], statuses: WaitingStatus[], plans: Pl
       machine: machineCalled(folderOf(board, at.tile), machines),
       ...(waiting ? { waiting } : {}),
       ...(facts.interrupts(at.tile) ? { interrupt: true as const } : {}),
+      ...(facts.converses(at.tile) ? { conversation: true as const } : {}),
     });
   }
   return items.sort((a, b) => byCodes(a.workspace, b.workspace) || byCodes(a.tile, b.tile));

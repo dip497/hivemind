@@ -65,10 +65,14 @@ import com.hivemind.phone.ui.common.stoppable
 import com.hivemind.phone.ui.theme.LocalStateColors
 
 /** What the screen shows of the agent: what it says, or its terminal. */
-private enum class Shown(@StringRes val label: Int) {
+internal enum class Shown(@StringRes val label: Int) {
     CHAT(R.string.view_chat),
     TERMINAL(R.string.view_terminal),
 }
+
+/** What may be shown of [agent], as offered: what it and the person say only when it keeps a
+ *  conversation its device can read (its manifest maps its session file), and its terminal. */
+internal fun shownOf(agent: Agent?): List<Shown> = if (agent?.hasConversation == true) Shown.entries else listOf(Shown.TERMINAL)
 
 /** The keys of the Type row, as shown and as `type_keys` takes them. */
 private val Keys = listOf(
@@ -122,19 +126,24 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
-                Shown.entries.forEachIndexed { i, view ->
-                    SegmentedButton(
-                        selected = shown == view,
-                        onClick = { shown = view },
-                        shape = SegmentedButtonDefaults.itemShape(i, Shown.entries.size),
-                    ) { Text(stringResource(view.label)) }
+            val offered = shownOf(agent)
+            // As the person chose, when this agent offers it.
+            val showing = shown.takeIf { it in offered } ?: Shown.TERMINAL
+            if (offered.size > 1) {
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    offered.forEachIndexed { i, view ->
+                        SegmentedButton(
+                            selected = showing == view,
+                            onClick = { shown = view },
+                            shape = SegmentedButtonDefaults.itemShape(i, offered.size),
+                        ) { Text(stringResource(view.label)) }
+                    }
                 }
             }
             // Closed elsewhere, or its device no longer lists it: what its terminal last showed stays.
             if (agent == null) Note(stringResource(R.string.agent_gone))
             agent?.waiting?.let { WaitingBanner(it, busy, vm::answer) }
-            when (shown) {
+            when (showing) {
                 Shown.CHAT -> ChatView(vm.chat.chat, Modifier.weight(1f).fillMaxWidth())
                 Shown.TERMINAL -> {
                     vm.screen.keyboard?.let { holder ->
@@ -146,8 +155,8 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
             }
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 // Typing is into the terminal: the chat only sends messages.
-                val typingShown = typing && shown == Shown.TERMINAL
-                if (shown == Shown.TERMINAL) {
+                val typingShown = typing && showing == Shown.TERMINAL
+                if (showing == Shown.TERMINAL) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(selected = !typing, onClick = { typing = false }, label = { Text(stringResource(R.string.mode_message)) })
                         FilterChip(selected = typing, onClick = { typing = true }, label = { Text(stringResource(R.string.mode_type)) })

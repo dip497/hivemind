@@ -135,6 +135,7 @@ function computer() {
       program: (tile) => (tile === "t1" ? { id: "claude", label: "Claude Code" } : undefined),
       decides: (tile) => tile === "t1",
       interrupts: (tile) => tile === "t2",
+      converses: () => false,
     }),
     // Each agent here runs on this computer.
     machines: { self: () => ({ device: self, name: "desk" }), mine: () => undefined, whose: () => undefined, saved: () => undefined },

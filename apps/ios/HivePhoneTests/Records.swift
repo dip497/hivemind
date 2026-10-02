@@ -12,7 +12,8 @@ func anAgent(
     workspaceName: String = "hivemind",
     state: AgentState = .working,
     waiting: Waiting? = nil,
-    canInterrupt: Bool = true
+    canInterrupt: Bool = true,
+    hasConversation: Bool = false
 ) -> Agent {
     Agent(
         at: AgentRef(device: device, workspace: workspace, tile: tile),
@@ -24,7 +25,8 @@ func anAgent(
         state: state,
         since: nil,
         waiting: waiting,
-        canInterrupt: canInterrupt)
+        canInterrupt: canInterrupt,
+        hasConversation: hasConversation)
 }
 
 func aWait(_ kind: WaitKind, decide: Bool = false) -> Waiting {

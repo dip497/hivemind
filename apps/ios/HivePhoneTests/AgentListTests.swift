@@ -24,4 +24,12 @@ final class AgentListTests: XCTestCase {
         // Waiting on a permission, its interrupt keys (Claude Code's: Esc) would answer "no".
         XCTAssertFalse(AgentLook.offersStop(anAgent(state: .waiting, waiting: aWait(.permission), canInterrupt: true)))
     }
+
+    @MainActor
+    func testTheChatIsOfferedOnlyForAnAgentThatKeepsAConversationAndItsTerminalAlways() {
+        XCTAssertEqual(AgentScreen.Showing.offered(for: anAgent(hasConversation: true)), [.chat, .terminal])
+        XCTAssertEqual(AgentScreen.Showing.offered(for: anAgent()), [.terminal])
+        // Not listed yet, a moment after it was started: its terminal.
+        XCTAssertEqual(AgentScreen.Showing.offered(for: nil), [.terminal])
+    }
 }

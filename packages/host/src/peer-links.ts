@@ -63,7 +63,7 @@ const LET_GO_MS = 2_000;
 const FOLLOW_MS = 100;
 /** What the workspace API tells its clients that changes the list of agents here. */
 const LIST_EVENTS = new Set(["status.changed", "plan.review", "plan.decided"]);
-const NO_FACTS: AgentFacts = { program: () => undefined, decides: () => false, interrupts: () => false };
+const NO_FACTS: AgentFacts = { program: () => undefined, decides: () => false, interrupts: () => false, converses: () => false };
 
 /** What a phone may ask of a workspace it opens (M5): to watch a terminal that runs there (its
  *  screen, then its output as it comes) and type into it, asking for its keyboard while someone
