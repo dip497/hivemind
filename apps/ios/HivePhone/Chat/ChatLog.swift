@@ -64,24 +64,21 @@ struct ChatLog {
         }
         let start = rows.count
         for entry in entries where shown.insert(entry.id).inserted {
-            if let result = entry.result, let row = uses[result.of], case .tool(let tool, nil) = rows[row].said {
+            if case .toolOutput(let result) = entry.said, let row = uses[result.of], case .tool(let tool, nil) = rows[row].said {
                 rows[row].said = .tool(tool, result: result)
                 if row < start && !change.updated.contains(row) { change.updated.append(row) }
                 continue
             }
             let said: ChatRow.Said
-            switch entry.who {
-            case .person:
-                said = .person(entry.text ?? "")
-            case .agent:
-                if let tool = entry.tool {
-                    uses[tool.id] = rows.count
-                    said = .tool(tool, result: nil)
-                } else {
-                    said = .agent(ChatMarkdown.parts(entry.text ?? ""))
-                }
-            case .tool:
-                guard let result = entry.result else { continue }
+            switch entry.said {
+            case .person(let text):
+                said = .person(text)
+            case .agent(let text):
+                said = .agent(ChatMarkdown.parts(text))
+            case .toolUse(let tool):
+                uses[tool.id] = rows.count
+                said = .tool(tool, result: nil)
+            case .toolOutput(let result):
                 said = .result(result)
             }
             rows.append(ChatRow(id: entry.id, at: entry.at, said: said))

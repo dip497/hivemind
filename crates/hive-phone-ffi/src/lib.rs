@@ -20,7 +20,7 @@ mod watch;
 
 pub use control::{Diff, DiffFile, Frame, Start, StartOption, StartProgram, Startable};
 pub use conversation::{
-    Conversation, ConversationEnded, ConversationListener, Entry, Tool, ToolResult, Who,
+    Conversation, ConversationEnded, ConversationListener, Entry, Said, Tool, ToolResult,
 };
 pub use error::PhoneError;
 pub use overview::{Following, OverviewListener};

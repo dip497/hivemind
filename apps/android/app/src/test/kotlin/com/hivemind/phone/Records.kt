@@ -8,13 +8,13 @@ import com.hivemind.phone.core.DeviceKind
 import com.hivemind.phone.core.Entry
 import com.hivemind.phone.core.Overview
 import com.hivemind.phone.core.Person
+import com.hivemind.phone.core.Said
 import com.hivemind.phone.core.ScreenLine
 import com.hivemind.phone.core.ScreenUpdate
 import com.hivemind.phone.core.Tool
 import com.hivemind.phone.core.ToolResult
 import com.hivemind.phone.core.WaitKind
 import com.hivemind.phone.core.Waiting
-import com.hivemind.phone.core.Who
 import com.hivemind.phone.core.Workspace
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -91,15 +91,15 @@ fun overview(
 )
 
 // What is said (§5.4): by the person; by the agent, its text or a tool it used; by a tool.
-fun person(id: String, text: String) = Entry(id = id, at = 0u, who = Who.PERSON, text = text, tool = null, result = null)
+fun person(id: String, text: String) = Entry(id = id, at = 0u, said = Said.Person(text))
 
-fun agentSaid(id: String, text: String) = Entry(id = id, at = 0u, who = Who.AGENT, text = text, tool = null, result = null)
+fun agentSaid(id: String, text: String) = Entry(id = id, at = 0u, said = Said.Agent(text))
 
 fun toolUse(id: String, use: String, name: String, about: String? = null) =
-    Entry(id = id, at = 0u, who = Who.AGENT, text = null, tool = Tool(use, name, about), result = null)
+    Entry(id = id, at = 0u, said = Said.ToolUse(Tool(use, name, about)))
 
 fun toolResult(id: String, use: String, text: String, error: Boolean = false) =
-    Entry(id = id, at = 0u, who = Who.TOOL, text = null, tool = null, result = ToolResult(use, text, error))
+    Entry(id = id, at = 0u, said = Said.ToolOutput(ToolResult(use, text, error)))
 
 /** One style run as §5.3 packs it: 16 bytes, little-endian. */
 fun run(start: Int, len: Int, col: Int, flags: Int = 0, fg: Int = 0, bg: Int = 0): ByteArray =

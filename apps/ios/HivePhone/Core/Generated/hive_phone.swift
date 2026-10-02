@@ -3246,26 +3246,19 @@ public func FfiConverterTypeDiffFile_lower(_ value: DiffFile) -> RustBuffer {
 
 
 /**
- * One thing said, when (ms since the epoch), by whom: the person's text; the agent's text, in
- * markdown, or a tool it used; or what a tool gave back.
+ * One thing said, when (ms since the epoch), and what.
  */
 public struct Entry: Equatable, Hashable {
     public var id: String
     public var at: UInt64
-    public var who: Who
-    public var text: String?
-    public var tool: Tool?
-    public var result: ToolResult?
+    public var said: Said
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, at: UInt64, who: Who, text: String?, tool: Tool?, result: ToolResult?) {
+    public init(id: String, at: UInt64, said: Said) {
         self.id = id
         self.at = at
-        self.who = who
-        self.text = text
-        self.tool = tool
-        self.result = result
+        self.said = said
     }
 
     
@@ -3286,20 +3279,14 @@ public struct FfiConverterTypeEntry: FfiConverterRustBuffer {
             try Entry(
                 id: FfiConverterString.read(from: &buf), 
                 at: FfiConverterUInt64.read(from: &buf), 
-                who: FfiConverterTypeWho.read(from: &buf), 
-                text: FfiConverterOptionString.read(from: &buf), 
-                tool: FfiConverterOptionTypeTool.read(from: &buf), 
-                result: FfiConverterOptionTypeToolResult.read(from: &buf)
+                said: FfiConverterTypeSaid.read(from: &buf)
         )
     }
 
     public static func write(_ value: Entry, into buf: inout [UInt8]) {
         FfiConverterString.write(value.id, into: &buf)
         FfiConverterUInt64.write(value.at, into: &buf)
-        FfiConverterTypeWho.write(value.who, into: &buf)
-        FfiConverterOptionString.write(value.text, into: &buf)
-        FfiConverterOptionTypeTool.write(value.tool, into: &buf)
-        FfiConverterOptionTypeToolResult.write(value.result, into: &buf)
+        FfiConverterTypeSaid.write(value.said, into: &buf)
     }
 }
 
@@ -5541,6 +5528,113 @@ public func FfiConverterTypePushAt_lower(_ value: PushAt) -> RustBuffer {
 
 
 /**
+ * What an entry says, and who said it.
+ */
+
+public enum Said: Equatable, Hashable {
+    
+    /**
+     * The person's words.
+     */
+    case person(text: String
+    )
+    /**
+     * The agent's words, in markdown.
+     */
+    case agent(text: String
+    )
+    /**
+     * A tool the agent used.
+     */
+    case toolUse(tool: Tool
+    )
+    /**
+     * What a tool gave back.
+     */
+    case toolOutput(result: ToolResult
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension Said: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSaid: FfiConverterRustBuffer {
+    typealias SwiftType = Said
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Said {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .person(text: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .agent(text: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 3: return .toolUse(tool: try FfiConverterTypeTool.read(from: &buf)
+        )
+        
+        case 4: return .toolOutput(result: try FfiConverterTypeToolResult.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Said, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .person(text):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(text, into: &buf)
+            
+        
+        case let .agent(text):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(text, into: &buf)
+            
+        
+        case let .toolUse(tool):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeTool.write(tool, into: &buf)
+            
+        
+        case let .toolOutput(result):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeToolResult.write(result, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSaid_lift(_ buf: RustBuffer) throws -> Said {
+    return try FfiConverterTypeSaid.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSaid_lower(_ value: Said) -> RustBuffer {
+    return FfiConverterTypeSaid.lower(value)
+}
+
+
+
+/**
  * How a watched terminal ended, as the app tells the person.
  */
 
@@ -5912,85 +6006,6 @@ public func FfiConverterTypeWaitKind_lower(_ value: WaitKind) -> RustBuffer {
 }
 
 
-
-/**
- * Who said an entry.
- */
-
-public enum Who: Equatable, Hashable {
-    
-    case person
-    case agent
-    /**
-     * A tool the agent used, giving back what it found or did.
-     */
-    case tool
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension Who: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeWho: FfiConverterRustBuffer {
-    typealias SwiftType = Who
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Who {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .person
-        
-        case 2: return .agent
-        
-        case 3: return .tool
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: Who, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .person:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .agent:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .tool:
-            writeInt(&buf, Int32(3))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWho_lift(_ buf: RustBuffer) throws -> Who {
-    return try FfiConverterTypeWho.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWho_lower(_ value: Who) -> RustBuffer {
-    return FfiConverterTypeWho.lower(value)
-}
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -6154,54 +6169,6 @@ fileprivate struct FfiConverterOptionTypeProgram: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeProgram.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterOptionTypeTool: FfiConverterRustBuffer {
-    typealias SwiftType = Tool?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeTool.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeTool.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterOptionTypeToolResult: FfiConverterRustBuffer {
-    typealias SwiftType = ToolResult?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeToolResult.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeToolResult.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }

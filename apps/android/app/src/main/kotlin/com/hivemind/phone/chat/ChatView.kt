@@ -48,8 +48,8 @@ import androidx.compose.ui.unit.dp
 import com.hivemind.phone.R
 import com.hivemind.phone.core.ConversationEnded
 import com.hivemind.phone.core.Entry
+import com.hivemind.phone.core.Said
 import com.hivemind.phone.core.ToolResult
-import com.hivemind.phone.core.Who
 import com.hivemind.phone.ui.common.FollowTheNewest
 import com.hivemind.phone.ui.common.NewestButton
 
@@ -59,11 +59,11 @@ private const val ENDED = -1
 /** How an entry is drawn, so that the list reuses a row only for one drawn alike. */
 private enum class Kind { TOOL, RESULT, PERSON, AGENT, ENDED }
 
-private fun kindOf(entry: Entry): Kind = when {
-    entry.tool != null -> Kind.TOOL
-    entry.result != null -> Kind.RESULT
-    entry.who == Who.PERSON -> Kind.PERSON
-    else -> Kind.AGENT
+private fun kindOf(entry: Entry): Kind = when (entry.said) {
+    is Said.ToolUse -> Kind.TOOL
+    is Said.ToolOutput -> Kind.RESULT
+    is Said.Person -> Kind.PERSON
+    is Said.Agent -> Kind.AGENT
 }
 
 /** How inline marks look: `code`, and **strong**. */
@@ -97,7 +97,7 @@ fun ChatView(chat: Chat, modifier: Modifier = Modifier) {
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            items(chat.entries, key = { it.id }, contentType = ::kindOf) { entry -> Said(entry, chat, marks) }
+            items(chat.entries, key = { it.id }, contentType = ::kindOf) { entry -> EntryRow(entry, chat, marks) }
             chat.ended?.let { why ->
                 item(key = ENDED, contentType = Kind.ENDED) {
                     Text(
@@ -131,16 +131,14 @@ private fun endedNote(why: ConversationEnded): String = when (why) {
 }
 
 @Composable
-private fun Said(entry: Entry, chat: Chat, marks: Marks) {
-    val tool = entry.tool
-    val result = entry.result
-    when {
+private fun EntryRow(entry: Entry, chat: Chat, marks: Marks) {
+    when (val said = entry.said) {
         // Its result is read here, by the row alone: when it comes, this row redraws, not the list.
-        tool != null -> ToolRow(tool.name, tool.about, chat.result(tool.id))
+        is Said.ToolUse -> ToolRow(said.tool.name, said.tool.about, chat.result(said.tool.id))
         // A result whose use was told before what is shown began.
-        result != null -> ToolRow(stringResource(R.string.chat_result), null, result)
-        entry.who == Who.PERSON -> PersonSaid(entry.text.orEmpty())
-        else -> AgentSaid(entry.text.orEmpty(), marks)
+        is Said.ToolOutput -> ToolRow(stringResource(R.string.chat_result), null, said.result)
+        is Said.Person -> PersonSaid(said.text)
+        is Said.Agent -> AgentSaid(said.text, marks)
     }
 }
 
