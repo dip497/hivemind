@@ -45,8 +45,8 @@ fun viewRows(overview: Overview, offered: Map<Place, List<ViewInfo>>): List<View
 
 /**
  * The Views tab: each computer reachable is asked which views it offers for each workspace it
- * holds, again whenever those change (a workspace opened, a computer back) and when the person pulls
- * the list down.
+ * holds, again whenever those change (a workspace opened, a computer back), each time the tab is
+ * opened, and when the person pulls the list down.
  */
 class ViewsViewModel(private val phone: Phone, overview: StateFlow<Overview>) : ViewModel() {
     private val offered = MutableStateFlow<Map<Place, List<ViewInfo>>>(emptyMap())
@@ -69,6 +69,12 @@ class ViewsViewModel(private val phone: Phone, overview: StateFlow<Overview>) : 
         viewModelScope.launch { asking.collectLatest(::ask) }
     }
 
+    /** Asks again, as the tab is opened: what the computers offer may have changed since. */
+    fun again() {
+        viewModelScope.launch { ask(asking.value) }
+    }
+
+    /** Asks again, as the person pulled the list down: [refreshing] until every computer answered. */
     fun refresh() {
         if (refreshing) return
         refreshing = true

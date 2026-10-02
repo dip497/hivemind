@@ -20,6 +20,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,6 +74,7 @@ fun HomeScreen(
     NoticeEffect(agents.calls, snackbar)
     NoticeEffect(devices.calls, snackbar)
     val resources = LocalResources.current
+    LaunchedEffect(tab) { if (tab == Tab.VIEWS) views.again() }
 
     Scaffold(
         topBar = {

@@ -15,6 +15,7 @@ on:
       - "scripts/phone/**"
       - "apps/desktop/tests/e2e/phone-app.spec.ts"
       - "apps/desktop/tests/e2e/helpers/phone.ts"
+      - "apps/desktop/tests/e2e/fixtures/views/phone-probe/**"
       - ".github/workflows/phone-ios.yml"
   pull_request:
     paths:
@@ -25,6 +26,7 @@ on:
       - "scripts/phone/**"
       - "apps/desktop/tests/e2e/phone-app.spec.ts"
       - "apps/desktop/tests/e2e/helpers/phone.ts"
+      - "apps/desktop/tests/e2e/fixtures/views/phone-probe/**"
       - ".github/workflows/phone-ios.yml"
   workflow_dispatch:
 
@@ -142,6 +144,11 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm --filter @hivemind/desktop run build
+
+      # The hive CLI, which the spec installs the community view the phone shows with.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4"
 
       - name: The app paired with the desktop app, driving its agent
         working-directory: apps/desktop
