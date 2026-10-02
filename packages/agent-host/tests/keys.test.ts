@@ -6,10 +6,10 @@ import { KEY_GAP_MS, typeKeys } from "../src/keys.js";
 
 test("the first key is typed at once and each next one after a gap, as the bytes its token names", async () => {
   const typed: string[] = [];
-  expect(typeKeys((bytes) => { typed.push(bytes); return true; }, ["Down", "2", "Enter"])).toBe(true);
+  expect(typeKeys((bytes) => { typed.push(bytes); return true; }, ["Down", "2", "ctrl-c", "Enter"])).toBe(true);
   expect(typed).toEqual(["\x1b[B"]);
-  await Bun.sleep(KEY_GAP_MS * 3 + 100);
-  expect(typed).toEqual(["\x1b[B", "2", "\r"]);
+  await Bun.sleep(KEY_GAP_MS * 4 + 100);
+  expect(typed).toEqual(["\x1b[B", "2", "\x03", "\r"]);
 });
 
 test("keys for a terminal that is not there are not typed, and say so", async () => {

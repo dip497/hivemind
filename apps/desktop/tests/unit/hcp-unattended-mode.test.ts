@@ -11,26 +11,34 @@ import { TurnTracker } from "@hivemind/host/control/turn-tracker";
 import { OutputRecorder } from "@hivemind/host/control/output-recorder";
 import { REPO, workspaceDeps, PERSON } from "./hcp-workspace.ts";
 
+/** The control plane's dispatch over a real workspace store, and that store. */
+function dispatcher(agentInstalled?: () => boolean) {
+  const ws = workspaceDeps();
+  return {
+    ws,
+    ...makeDispatch({
+      agentInstalled,
+      turns: new TurnTracker(),
+      recorder: new OutputRecorder(),
+      callRenderer: async () => { throw new Error("no window"); },
+      writeToTile: () => true,
+      deliverToTile: () => true,
+      spawnAllowed: () => true,
+      connect: () => true,
+      disconnect: () => {},
+      forgetPipes: () => {},
+      spawnEdge: () => {},
+      setSupervise: () => {},
+      awaitingApproval: () => {},
+      ...ws,
+    } as unknown as Parameters<typeof makeDispatch>[0]),
+  };
+}
+
 /** What the worker a spawn with `params` opens runs with: its arguments, as written into the
  *  workspace. */
 async function spawnedArgs(params: Record<string, unknown>, agentInstalled?: () => boolean): Promise<string[] | undefined> {
-  const ws = workspaceDeps();
-  const { dispatch } = makeDispatch({
-    agentInstalled,
-    turns: new TurnTracker(),
-    recorder: new OutputRecorder(),
-    callRenderer: async () => { throw new Error("no window"); },
-    writeToTile: () => true,
-    deliverToTile: () => true,
-    spawnAllowed: () => true,
-    connect: () => true,
-    disconnect: () => {},
-    forgetPipes: () => {},
-    spawnEdge: () => {},
-    setSupervise: () => {},
-    awaitingApproval: () => {},
-    ...ws,
-  } as unknown as Parameters<typeof makeDispatch>[0]);
+  const { ws, dispatch } = dispatcher(agentInstalled);
   const { tileId } = (await dispatch("tile.spawn_agent", { callerTile: "hm:tile-p", ...params }, PERSON)) as { tileId: string };
   return (ws.workspaces.getCore(REPO)?.tiles.find((t) => t.id === tileId) as { args?: string[] } | undefined)?.args;
 }
@@ -48,4 +56,16 @@ test("an explicit mode wins, and a supervised worker keeps its prompts", async (
 test("an agent whose CLI is not installed is refused with where to get it, and no tile is made", async () => {
   await assert.rejects(spawnedArgs({ agent: "claude" }, () => false), (e: Error & { code?: string }) =>
     e.code === "UNSUPPORTED" && /not installed/.test(e.message) && /https:\/\/code\.claude\.com/.test(e.message));
+});
+
+test("an agent the person starts from another of their devices opens in the workspace they name, not the one the window shows, and keeps its prompts: never its unattended mode unless asked", async () => {
+  const { ws, spawn } = dispatcher();
+  const other = "/work/other";
+  ws.workspaces.setCore(other, { frames: [{ id: "f9", title: "other", workspacePath: other }], tiles: [] });
+  const tile = await spawn({ agent: "claude", repo: other, attended: true });
+  const opened = ws.workspaces.getCore(other)?.tiles.find((t) => t.id === tile) as { args?: string[] } | undefined;
+  assert.deepEqual(opened?.args, [], "claude's own posture: it asks before it acts");
+  assert.equal(ws.workspaces.getCore(REPO)?.tiles.length, 0, "nothing opened where the window is");
+  const planned = await spawn({ agent: "claude", repo: other, attended: true, mode: "plan" });
+  assert.deepEqual((ws.workspaces.getCore(other)?.tiles.find((t) => t.id === planned) as { args?: string[] }).args, ["--permission-mode", "plan"]);
 });

@@ -35,6 +35,7 @@ import { onWorkspaceChange, sharedStore, workspaceStore } from "./workspace-stor
 import { PeerLinks, type ShownMachine } from "@hivemind/host/peer-links";
 import { heldBoards, participantNamed, permissionKeys, type WaitingStatus } from "@hivemind/host/needs";
 import { manifestFacts } from "@hivemind/host/agent-list";
+import type { KnownMachines } from "@hivemind/core/remote-uri";
 import { machines as savedMachines } from "@hivemind/host/remote/catalog";
 import { PushNotices, PushSubscriptions, postNotice } from "@hivemind/host/push";
 import type { PlanReview } from "@hivemind/workspace-api/plans";
@@ -333,6 +334,15 @@ export function stopNetwork(): void {
 
 /** This computer, as the person's other devices know it: its id, and what it is called. */
 const thisComputer = (): { device: string; name: string } => ({ device: machineIdentity().deviceId, name: os.hostname() });
+
+/** The machines this computer knows, by what each is called: where an agent here runs, as the
+ *  person's devices are told (spec/needs.md 0.3). */
+export const knownMachines: KnownMachines = {
+  self: thisComputer,
+  mine: (device) => pairedDevices().list().find((d) => d.device === device)?.name,
+  whose: (device) => participantNamed(accessLists(), device),
+  saved: (id) => savedMachines.list.find((m) => m.id === id)?.label,
+};
 /** Who this person is to the people they work with, and to their phone (Settings → Profile): the
  *  name they see, and their colour. */
 const shownProfile = async (): Promise<{ name: string; color: string }> => ({ name: await displayName(getSettings().profile.name), color: getSettings().profile.color });
@@ -498,12 +508,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), granted,
     phone: (device) => pairedDevices().list().some((d) => d.device === device && d.kind === "phone"),
     statuses, plans, facts: manifestFacts,
-    machines: {
-      self: thisComputer,
-      mine: (device) => pairedDevices().list().find((d) => d.device === device)?.name,
-      whose: (device) => participantNamed(accessLists(), device),
-      saved: (id) => savedMachines.list.find((m) => m.id === id)?.label,
-    },
+    machines: knownMachines,
     subscribe: (device, sub) => pushSubscriptions().set(device, sub),
     // A phone unpairing itself, recorded as that phone.
     unpair: (device) => {

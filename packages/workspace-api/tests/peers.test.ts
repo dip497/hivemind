@@ -44,6 +44,9 @@ const domain = {
     "plan.decide": (from: Connection, tile: unknown) => { ran.push({ what: "plan.decide", by: from.actor, args: [tile] }); return { answered: true, by: null }; },
     "agent.answer": (from: Connection, tile: unknown) => { ran.push({ what: "agent.answer", by: from.actor, args: [tile] }); return { answered: true }; },
     "agent.send": (from: Connection, tile: unknown) => { ran.push({ what: "agent.send", by: from.actor, args: [tile] }); return { sent: true }; },
+    ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff"].map((what) => [
+      what, (from: Connection, at: unknown) => { ran.push({ what, by: from.actor, args: [at] }); return {}; },
+    ])),
   },
   effects: { "git.commit": () => ({}), "terminal.open": () => ({}) },
   notices: {
@@ -81,6 +84,31 @@ function connect(access: Access, allows?: (method: string, params: unknown[]) =>
   return { server, client, close, actor, guest };
 }
 const code = async (p: Promise<unknown>) => { try { await p; return "ok"; } catch (e) { return (e as ApiError).code; } };
+
+test("what may be started in its workspace and what an agent changed, anyone with access sees; starting, interrupting and closing an agent is driving agents: for its workspace and its tiles alone", async () => {
+  const viewer = connect("view");
+  await viewer.client.call("agent.startable", workspaceUrl(W));
+  await viewer.client.call("agent.diff", "in-1");
+  expect(await code(viewer.client.call("agent.diff", "out-1"))).toBe("FORBIDDEN");
+  for (const [method, at] of [["agent.start", workspaceUrl(W)], ["agent.interrupt", "in-1"], ["agent.close", "in-1"]] as const) {
+    expect(await code(viewer.client.call(method as "agent.close", at))).toBe("FORBIDDEN");
+  }
+  expect(ran).toEqual([{ what: "agent.startable", by: viewer.actor, args: [REPO] }, { what: "agent.diff", by: viewer.actor, args: ["in-1"] }]);
+
+  const driver = connect("agents");
+  await driver.client.call("agent.start", workspaceUrl(W), { program: "claude" });
+  await driver.client.call("agent.interrupt", "in-1");
+  await driver.client.call("agent.close", "in-1");
+  expect(await code(driver.client.call("agent.start", "/work/other", { program: "claude" }))).toBe("FORBIDDEN");
+  expect(await code(driver.client.call("agent.startable", "/work/other"))).toBe("FORBIDDEN");
+  expect(await code(driver.client.call("agent.interrupt", "out-1"))).toBe("FORBIDDEN");
+  expect(await code(driver.client.call("agent.close", "out-1"))).toBe("FORBIDDEN");
+  expect(ran).toEqual([
+    { what: "agent.start", by: driver.actor, args: [REPO] },
+    { what: "agent.interrupt", by: driver.actor, args: ["in-1"] },
+    { what: "agent.close", by: driver.actor, args: ["in-1"] },
+  ]);
+});
 
 test("a peer's calls run as the peer, with the workspace it names read as its repo here; what its role does not allow never runs", async () => {
   const viewer = connect("view");

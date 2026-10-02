@@ -111,6 +111,32 @@ function probeAgent(): Record<string, string> {
   return { PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` };
 }
 
+/** A second stand-in agent, one the phone starts: it takes each line it is given as something to
+ *  write down, in `notes.txt` in the folder it runs in, saying so on its screen (working), and
+ *  stops at Ctrl+C, which its manifest says interrupts its turn. Installed beside the first. */
+function scribeAgent(): void {
+  fs.writeFileSync(path.join(root, "bin", "scribe-agent"), [
+    "#!/bin/bash",
+    "trap 'printf \"\\033[2J\\033[Hscribe stopped\\n\"' INT",
+    "printf 'scribe> '",
+    "while :; do",
+    "  if read -r line; then",
+    "    printf '%s\\n' \"$line\" >> notes.txt",
+    "    printf '\\033[2J\\033[Hscribe is writing: %s\\n' \"$line\"",
+    "  elif [ $? -le 128 ]; then exit; fi",
+    "done",
+  ].join("\n"), { mode: 0o755 });
+  const agent = path.join(root, "desktop", "hivemind", "agents", "scribe");
+  fs.mkdirSync(agent, { recursive: true });
+  fs.writeFileSync(path.join(agent, "agent.yaml"), [
+    "manifestVersion: 2", "id: scribe", "label: Scribe", "bin: scribe-agent", "enabled: true",
+    "caps: { promptDelivery: typed, turnSignal: false, resume: none, supervise: human, blockedDetection: true }",
+    "interrupt: [ctrl-c]",
+    "detect:", "  default: idle", "  rules:",
+    "  - when: { contains: scribe is writing }", "    then: working", "",
+  ].join("\n"));
+}
+
 /** The stand-in agent started on the board of `d`: its tile. */
 async function startProbe(d: Awaited<ReturnType<typeof desktopWith>>): Promise<string> {
   await d.desktop.evaluate(() => window.hive.settingsSet("agents.defaultAgent", "probe"));
@@ -270,6 +296,66 @@ test("the phone is told when an agent on the computer begins waiting on the pers
   await expect.poll(async () => (await state())?.kind, { timeout: 30_000 }).toBe("permission");
   await new Promise((r) => setTimeout(r, 2_000));
   expect(told).toHaveLength(2);
+});
+
+test("the phone drives the person's agents in full: it follows every agent there, live; sees what may be started and starts one with a first prompt, on the computer's board; reads what it changed; interrupts its turn with its agent's keys; and closes it; each recorded as the phone", async () => {
+  test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
+  test.setTimeout(150_000);
+  const env = probeAgent();
+  scribeAgent();
+  const d = await desktopWith(env);
+  const { phone, phoneId } = await pairPhone(d);
+  await d.desktop.keyboard.press("Escape");
+  const probe = await startProbe(d);
+
+  // Following: every agent, as each list comes.
+  const following = spawn(HIVE_PHONE, ["agents", "--follow", "--identity", phone, "--json"]);
+  procs.push(following);
+  const lists: Array<{ agents: Array<Record<string, unknown>>; working: number }> = [];
+  let line = "";
+  following.stdout!.on("data", (b: Buffer) => {
+    const lines = (line + b.toString()).split("\n");
+    line = lines.pop()!;
+    for (const l of lines) lists.push(JSON.parse(l) as (typeof lists)[number]);
+  });
+  const agent = (tile: string) => lists.at(-1)?.agents.find((a) => a.tile === tile);
+  await expect.poll(() => agent(probe)?.waiting, { timeout: 30_000 }).toMatchObject({ kind: "permission", decide: true });
+  const workspace = agent(probe)!.workspace as string;
+  expect(agent(probe)).toMatchObject({ name: "api", agent: "Editing Nav.tsx", state: "waiting", machine: os.hostname() });
+
+  const phoneCli = async (...args: string[]) => JSON.parse((await run(HIVE_PHONE, [...args, "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as Record<string, unknown>;
+  // What may be started there.
+  const startable = await phoneCli("start", workspace);
+  expect((startable.programs as Array<{ id: string }>).map((p) => p.id)).toEqual(expect.arrayContaining(["probe", "scribe"]));
+
+  // Started from the phone with its first prompt: it opens on the computer's board and is at work.
+  const { tile: scribe } = await phoneCli("start", workspace, "scribe", "--prompt", "buy milk") as { tile: string };
+  await expect(d.desktop.locator(`.react-flow__node-terminal[data-id="${scribe}"]`)).toHaveCount(1, { timeout: 20_000 });
+  await expect.poll(() => agent(scribe)?.state, { timeout: 30_000 }).toBe("working");
+  expect(agent(scribe)).toMatchObject({ workspace, program: { id: "scribe", label: "Scribe" }, interrupt: true });
+
+  // What it changed, in the folder it runs in: a new file, shown whole.
+  const changes = await phoneCli("diff", workspace, scribe);
+  expect(changes.files).toContainEqual({ path: "notes.txt", status: "?", added: 1, removed: 0 });
+  expect(changes.patch).toContain("+buy milk");
+
+  // Its turn interrupted with its agent's keys: it stops, and the phone sees it idle. At rest,
+  // there is nothing to interrupt.
+  expect(await phoneCli("stop", workspace, scribe)).toEqual({ interrupted: true });
+  await expect.poll(() => agent(scribe)?.state, { timeout: 30_000 }).toBe("idle");
+  expect(await phoneCli("stop", workspace, scribe)).toEqual({ interrupted: false });
+
+  // Closed from the phone: gone from the board and from the list.
+  expect(await phoneCli("close", workspace, scribe)).toEqual({ closed: true });
+  await expect(d.desktop.locator(`.react-flow__node-terminal[data-id="${scribe}"]`)).toHaveCount(0, { timeout: 20_000 });
+  await expect.poll(() => agent(scribe), { timeout: 30_000 }).toBeUndefined();
+  expect(agent(probe)).toBeDefined();
+
+  const audit = () => fs.readFileSync(path.join(root, "desktop", "hivemind-dev", "audit.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>);
+  const asPhone = { kind: "peer", person: d.me.personId, device: phoneId, access: "owner" };
+  for (const verb of ["agent.start", "agent.interrupt", "agent.close"]) {
+    expect(audit()).toContainEqual(expect.objectContaining({ verb, target: scribe, actor: asPhone, outcome: "ok" }));
+  }
 });
 
 test("what an agent asks, its computer can allow or deny, and says so in the list and the notice; the phone denies it with the agent's own keys, and it is told no and asks again; allows it, and it works; the same answer again does nothing", async () => {

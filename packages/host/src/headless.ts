@@ -24,7 +24,7 @@ import type { Duplex } from "node:stream";
 import { DaemonEndpoint, REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
 import { hcpSockPath } from "@hivemind/agent-host/hooks/token";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
-import { agentForCmd, preferredAgent, setCatalog } from "@hivemind/agents";
+import { agentForCmd, preferredAgent, setCatalog, spawnableAgents } from "@hivemind/agents";
 import { findBin } from "@hivemind/agents/discover";
 import { loadAgents, userAgentsDir } from "@hivemind/agents/load";
 import { readSettings } from "@hivemind/core/settings";
@@ -53,7 +53,9 @@ import { workspaceDomains } from "./domains.js";
 import { HANDED_OFF, handOff } from "./hand-off.js";
 import { answers } from "./answers.js";
 import { PeerLinks } from "./peer-links.js";
-import { heldBoards, participantNamed, permissionKeys } from "./needs.js";
+import { heldBoards, manifestOf, participantNamed, permissionKeys, runsIn } from "./needs.js";
+import { agentControl } from "./agent-control.js";
+import type { KnownMachines } from "@hivemind/core/remote-uri";
 import { manifestFacts } from "./agent-list.js";
 import { PushNotices, PushSubscriptions, postNotice } from "./push.js";
 import { machines as savedMachines } from "./remote/catalog.js";
@@ -238,6 +240,14 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     ownerHere: (workspace) => peers.connectedTo(workspace).has(keys.personId),
   });
   const sharing = new Sharing(lists, (request) => peopleHere.ask(request), (devices) => net?.admit(devices));
+  // The machines this host knows, by what each is called: where an agent here runs, as the
+  // person's devices are told (spec/needs.md 0.3).
+  const machines: KnownMachines = {
+    self: () => ({ device: keys.deviceId, name: deviceName() }),
+    mine: (device) => devices.list().find((d) => d.device === device)?.name,
+    whose: (device) => participantNamed(lists, device),
+    saved: (id) => savedMachines.list.find((m) => m.id === id)?.label,
+  };
   const api: WorkspaceServer = new WorkspaceServer([
     ...workspaceDomains,
     layouts.domain,
@@ -255,6 +265,20 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       permissionKeys: (bare) => permissionKeys(heldBoards(store), bare),
       deliver: (bare, message) => control.mailbox.deliver(`hm:${bare}`, message),
       plans,
+    }),
+    // Agents started, interrupted and closed from another of the person's devices, and what they
+    // changed (M5, spec/agents.md).
+    agentControl({
+      programs: () => spawnableAgents().filter((d) => !!findBin(d.bin)),
+      core: (repo) => store.getCore(repo),
+      machines,
+      start: (repo, start) => control.start(repo, start),
+      status: (bare) => control.status.get(bare),
+      interruptKeys: (bare) => manifestOf(heldBoards(store), bare)?.interrupt,
+      // As the person types: an interrupt key ends the turn in the agent's status too.
+      type: (bare, data) => { control.status.input(bare, data); return writeTile(`hm:${bare}`, data); },
+      close: (bare) => control.close(bare),
+      folderOf: (bare) => runsIn(heldBoards(store), bare),
     }),
   ], intents, o.onWarn);
 
@@ -347,12 +371,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     statuses: () => control.status.all(),
     plans: () => plans.reviews(),
     facts: manifestFacts,
-    machines: {
-      self: () => ({ device: keys.deviceId, name: deviceName() }),
-      mine: (device) => devices.list().find((d) => d.device === device)?.name,
-      whose: (device) => participantNamed(lists, device),
-      saved: (id) => savedMachines.list.find((m) => m.id === id)?.label,
-    },
+    machines,
     // Where each of the person's phones is told what happens here.
     subscribe: (device, sub) => pushSubscriptions.set(device, sub),
     // The phones one of the person's computers paired with are the person's here too

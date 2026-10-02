@@ -95,7 +95,7 @@ impl Workspace {
     }
 
     /// Ask `method` and wait for its result; the events that come meanwhile go unread.
-    async fn call(&mut self, method: &str, params: Value) -> Result<Value> {
+    pub(crate) async fn call(&mut self, method: &str, params: Value) -> Result<Value> {
         let id = self.ask(method, params).await?;
         loop {
             let message = self

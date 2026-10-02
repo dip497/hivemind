@@ -32,6 +32,18 @@
 //!   hive-phone send <workspace> <tile> --text <line>
 //!                               send an agent a message, whatever it is doing: it goes in as its
 //!                               next prompt
+//!   hive-phone start <workspace> [<agent> [--frame <id>] [--prompt <text>] [--model <m>]
+//!                     [--mode <m>]]
+//!                               start an agent there, as you launch one at your computer (your
+//!                               saved options for it, these on top): its tile; with no agent,
+//!                               what may be started there and in which frames
+//!   hive-phone stop <workspace> <tile>
+//!                               interrupt an agent's turn, with the keys its agent says do
+//!   hive-phone close <workspace> <tile>
+//!                               end an agent's session and take it off its board
+//!   hive-phone diff <workspace> <tile>
+//!                               what an agent changed in the folder it runs in, against its
+//!                               last commit: the files, then the patch
 //!   hive-phone push --listen <ip:port>
 //!                               be told what happens on the devices this phone paired with (an
 //!                               agent begins waiting on you, finishes, fails): they post to this
@@ -42,8 +54,8 @@
 //!
 //! Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),
 //! `--name <name>` (pair: what the app lists this phone as; default `Phone`), `--json` (pair,
-//! devices, network, unpair, needs, agents, answer, send, push: as JSON, a notice or a list a
-//! line).
+//! devices, network, unpair, needs, agents, answer, send, start, stop, close, diff, push: as JSON,
+//! a notice or a list a line).
 
 use std::{path::PathBuf, process::ExitCode, sync::Arc, time::SystemTime};
 
@@ -51,6 +63,7 @@ use anyhow::{bail, Context, Result};
 use hive_net::{net, push::Platform};
 use hive_phone::{
     agents::{self, Agent, Listed},
+    control::{self, Start},
     devices,
     identity::Identity,
     needs::{self, Need},
@@ -60,7 +73,7 @@ use hive_phone::{
 };
 use serde_json::{json, Value};
 
-const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | agents [--follow] | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--allow|--deny|--approve|--changes <what> | send <workspace> <tile> --text <line> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
+const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | agents [--follow] | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--allow|--deny|--approve|--changes <what> | send <workspace> <tile> --text <line> | start <workspace> [<agent> [--frame <id>] [--prompt <text>] [--model <m>] [--mode <m>]] | stop <workspace> <tile> | close <workspace> <tile> | diff <workspace> <tile> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
 
 #[derive(Default)]
 struct Args {
@@ -83,6 +96,11 @@ struct Args {
     typing: bool,
     /// `agents`': again each time a device says they changed.
     follow: bool,
+    /// `start`'s: the frame to start it in, its first prompt, its model and its mode.
+    frame: Option<String>,
+    prompt: Option<String>,
+    model: Option<String>,
+    mode: Option<String>,
 }
 
 fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
@@ -102,6 +120,10 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
             "--listen" => args.listen = Some(argv.next().context("--listen needs a value")?),
             "--type" => args.typing = true,
             "--follow" => args.follow = true,
+            "--frame" => args.frame = Some(argv.next().context("--frame needs a value")?),
+            "--prompt" => args.prompt = Some(argv.next().context("--prompt needs a value")?),
+            "--model" => args.model = Some(argv.next().context("--model needs a value")?),
+            "--mode" => args.mode = Some(argv.next().context("--mode needs a value")?),
             flag if flag.starts_with("--") => bail!("{flag} is not an option\n{USAGE}"),
             _ if args.command.is_empty() => args.command = arg,
             _ => args.rest.push(arg),
@@ -427,6 +449,102 @@ async fn run(args: Args) -> Result<()> {
                 }
             }
             endpoint.close().await;
+        }
+        "start" | "stop" | "close" | "diff" => {
+            let (ws, rest) = args.rest.split_first().with_context(|| {
+                format!(
+                    "{}: which workspace? (`hive-phone agents --json` names them)",
+                    args.command
+                )
+            })?;
+            let (endpoint, devices) = reaching(&phone).await?;
+            let done = async {
+                let connection = workspace::holder(&endpoint, &devices, ws).await?;
+                match (args.command.as_str(), rest) {
+                    ("start", []) => {
+                        let can = control::startable(&connection, ws).await?;
+                        if args.json {
+                            println!("{}", serde_json::to_value(&can)?);
+                        } else {
+                            for p in &can.programs {
+                                let choices: Vec<String> = p
+                                    .options
+                                    .iter()
+                                    .map(|o| {
+                                        format!(
+                                            "--{} {}",
+                                            o.id,
+                                            if o.values.is_empty() {
+                                                "<any>".into()
+                                            } else {
+                                                o.values.join("|")
+                                            }
+                                        )
+                                    })
+                                    .collect();
+                                println!("{}  {}  {}", p.id, p.label, choices.join("  "));
+                            }
+                            for f in &can.frames {
+                                println!("--frame {}  {} on {}", f.id, f.name, f.machine);
+                            }
+                        }
+                    }
+                    ("start", [program]) => {
+                        let start = Start {
+                            program: program.clone(),
+                            frame: args.frame.clone(),
+                            prompt: args.prompt.clone(),
+                            model: args.model.clone(),
+                            mode: args.mode.clone(),
+                        };
+                        let tile = control::start(&connection, ws, &start).await?;
+                        if args.json {
+                            println!("{}", json!({ "tile": tile }));
+                        } else {
+                            println!("started {tile}");
+                        }
+                    }
+                    ("stop", [tile]) => {
+                        let done = control::interrupt(&connection, ws, tile).await?;
+                        if args.json {
+                            println!("{}", json!({ "interrupted": done }));
+                        } else if done {
+                            println!("interrupted");
+                        } else {
+                            bail!("it was not at work: nothing to interrupt");
+                        }
+                    }
+                    ("close", [tile]) => {
+                        let done = control::close(&connection, ws, tile).await?;
+                        if args.json {
+                            println!("{}", json!({ "closed": done }));
+                        } else if done {
+                            println!("closed");
+                        } else {
+                            bail!("no agent there to close");
+                        }
+                    }
+                    ("diff", [tile]) => {
+                        let changes = control::diff(&connection, ws, tile).await?;
+                        if args.json {
+                            println!("{}", serde_json::to_value(&changes)?);
+                        } else {
+                            for f in &changes.files {
+                                println!("{} {}  +{} -{}", f.status, f.path, f.added, f.removed);
+                            }
+                            print!("{}", changes.patch);
+                            if changes.truncated {
+                                println!("… (cut at 512 KiB)");
+                            }
+                        }
+                    }
+                    (command, _) => bail!("{command}: which tile?\n{USAGE}"),
+                }
+                Ok::<_, anyhow::Error>(())
+            };
+            let done = done.await;
+            endpoint.close().await;
+            done?;
         }
         "unpair" => {
             let which = args

@@ -50,6 +50,13 @@ const LEAST: Record<string, Role> = {
   // they are (M5).
   "agent.answer": "agents",
   "agent.send": "agents",
+  // Seeing what may be started there and what an agent changed; starting one, interrupting its
+  // turn and closing it is driving agents (spec/agents.md).
+  "agent.startable": "view",
+  "agent.diff": "view",
+  "agent.start": "agents",
+  "agent.interrupt": "agents",
+  "agent.close": "agents",
   "terminal.open": "agents",
   "terminal.close": "agents",
 };

@@ -90,6 +90,14 @@ export function folderOf(board: HeldBoard, tile: string): string {
   return frame?.worktreePath ?? frame?.workspacePath ?? board.repo;
 }
 
+/** The folder the agent of `tile` runs in, on whichever board of `held` it is; null for a tile on
+ *  none of them. */
+export function runsIn(held: HeldBoard[], tile: string): string | null {
+  const bare = toBareId(tile);
+  const board = held.find((h) => h.core?.tiles.some((t) => t.id === bare));
+  return board ? folderOf(board, bare) : null;
+}
+
 /** Whose computer `device` is among the people let into a workspace here (M4): the name of the one
  *  who showed a certificate for it ("" when they gave none); undefined for a device on no list. */
 export function participantNamed(lists: Pick<AccessLists, "workspaces" | "people">, device: string): string | undefined {

@@ -77,12 +77,14 @@ Answer all eleven with a source. Each answer decides a field of the manifest.
 | 9 | `--model` flag? claude-style permission modes? | the `options` block (`model`, `mode`) |
 | 10 | What the TUI prints while **working**, and while **waiting for approval** | the `detect` rules and `caps.blockedDetection` — capture real output, do not guess |
 | 11 | Which keys **allow** and which **deny** its own permission prompt | the `answer.permission` block (the phone's Allow / Deny types them) — read them from the binary's chooser, or leave the block out |
+| 12 | Which key **interrupts its turn** (the "esc to interrupt" hint) | `interrupt` (the phone's Stop types it) — read it from the binary's own hint, or leave it out |
 
 Row 10 needs a real run. If you cannot install the CLI, say so and set
 `blockedDetection: false` rather than inventing prompt text — a wrong detector is
-worse than a missing one, because it reports the wrong state confidently. Row 11 the
-same: a wrong key allows what the person denied, so with no evidence, leave
-`answer` out and the phone answers that agent with text.
+worse than a missing one, because it reports the wrong state confidently. Rows 11 and
+12 the same: a wrong key allows what the person denied, or quits the agent instead of
+stopping its turn (Ctrl+C twice ends some CLIs), so with no evidence, leave `answer`
+and `interrupt` out: the phone answers that agent with text, and offers no Stop.
 
 ---
 

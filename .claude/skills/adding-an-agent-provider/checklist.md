@@ -21,6 +21,7 @@ Every answer needs a source: a doc URL, a `--help` line, or the file you grepped
 | 9 | `--model` flag / permission modes | | | the `options` block |
 | 10 | TUI text while working / while awaiting approval | | | the `detect` rules, `caps.blockedDetection` |
 | 11 | Keys that allow / deny its own permission prompt (from the binary, not memory) | | | the `answer.permission` block |
+| 12 | Key that interrupts its turn (from the binary's own hint, not memory) | | | `interrupt` |
 
 **Tier chosen:** 0 raw · 1 resume · 2 injected runtime · 3 native — and one line on why
 that is the highest tier the CLI supports.
@@ -45,6 +46,7 @@ that is the highest tier the CLI supports.
 | Close / teardown | no leaked PTY state | | |
 | Notification wording is correct | status bus → agent notifications | | |
 | Allow / Deny from the phone types the right keys | `answer.permission` | | |
+| Stop from the phone interrupts its turn, and only that | `interrupt` | | |
 | Remote (`ssh://`) tile | generic transport | | |
 
 ## Files touched (the complete list)

@@ -6,6 +6,7 @@ const KEYMAP: Record<string, string> = {
   enter: "\r", return: "\r", esc: "\x1b", escape: "\x1b",
   tab: "\t", space: " ", backspace: "\x7f", del: "\x1b[3~", delete: "\x1b[3~",
   home: "\x1b[H", end: "\x1b[F", pageup: "\x1b[5~", pagedown: "\x1b[6~",
+  "ctrl-c": "\x03",
 };
 
 /** Gap between successive keys, so a TUI registers each one: a bundled arrow+enter can miss

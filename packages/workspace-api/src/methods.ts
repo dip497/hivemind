@@ -6,7 +6,7 @@ import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } 
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
-import type { AgentAnswer, Links, PipeChange, SpawnChange, StatusChange, TileOpened } from "./agents.js";
+import type { AgentAnswer, AgentChanges, Links, PipeChange, SpawnChange, StartAgent, Startable, StatusChange, TileOpened } from "./agents.js";
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
 import type { Answerer, PlanDecided, PlanReview } from "./plans.js";
 import type { JoinQuestion, PersonHere } from "./people.js";
@@ -86,6 +86,18 @@ export interface WorkspaceMethods {
   /** A message for the agent in `tile`, one line: typed in as its next prompt once it is at its
    *  prompt, Enter after it (M5). `sent` false: no agent runs there. */
   "agent.send": (tile: string, text: string) => { sent: boolean };
+  /** What may be started in the workspace at `repo` (M5, spec/agents.md "Starting"): the agents
+   *  this device starts, with their model and mode choices, and the workspace's frames. */
+  "agent.startable": (repo: string) => Startable;
+  /** Start an agent in the workspace at `repo`, as the person launches one at their desktop. */
+  "agent.start": (repo: string, start: StartAgent) => { tile: string };
+  /** Interrupt the turn of the agent in `tile` with the keys its manifest says do. `interrupted`
+   *  false: it was neither working nor waiting, or has no terminal. */
+  "agent.interrupt": (tile: string) => { interrupted: boolean };
+  /** End the session of `tile` and take it off its board. `closed` false: no workspace has it. */
+  "agent.close": (tile: string) => { closed: boolean };
+  /** What the agent in `tile` changed in the folder it runs in, against its last commit. */
+  "agent.diff": (tile: string) => AgentChanges;
   "people.list": (repo: string) => PersonHere[];
   "people.role": (repo: string, person: string, role: Role) => void;
   "people.remove": (repo: string, person: string) => void;

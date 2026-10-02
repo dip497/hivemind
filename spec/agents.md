@@ -57,8 +57,8 @@ are taken as not there.
 
 ## Starting
 
-`agent.startable()`, a method of the workspace API (`workspace-api.md`), answers what may be
-started in the workspace:
+`agent.startable(workspace)`, a method of the workspace API (`workspace-api.md`), answers what
+may be started in the workspace, which a peer names as `hive://<its id>`:
 
 ```json
 { "programs": [ { "id": "claude", "label": "Claude Code",
@@ -70,8 +70,8 @@ started in the workspace:
 are their `model` and `mode` choices, `values` empty for one taken as typed. `frames` are the
 workspace's frames, as the board orders them.
 
-`agent.start(start)` starts one, as `hive ctl spawn` does: `start` is `{ program, frame?, prompt?,
-model?, mode? }`, `program` one `agent.startable` lists, `frame` one of its frames (none: the
+`agent.start(workspace, start)` starts one there, as `hive ctl spawn` does: `start` is `{ program,
+frame?, prompt?, model?, mode? }`, `program` one `agent.startable` lists, `frame` one of its frames (none: the
 workspace's first frame, or none when it has none), `prompt` at most 10,000 characters with no
 control characters but newlines and tabs, and `model` and `mode` lines of at most 200 characters.
 It starts as the person launches it at their desktop, with the options they saved for that agent
@@ -101,8 +101,9 @@ else its frame's, else the workspace's), against its last commit:
 `files` are the changed files, by path: `status` is `M` (modified), `A` (added), `D` (deleted),
 `R` (renamed), `C` (copied), `U` (conflicted) or `?` (not yet tracked), and `added` and `removed`
 the lines the patch adds and removes in it. `patch` is `git diff HEAD`, followed by each file not
-yet tracked as a new file, cut at 512 KiB, when `truncated` is `true`. A folder that is no git
-repository answers no files and an empty patch; one on another machine is `UNSUPPORTED`.
+yet tracked as a new file (one over 64 KiB, or that is not text, is listed and not shown), cut at
+512 KiB at the end of a line, when `truncated` is `true`. A folder that is no git
+repository answers no files and an empty patch; one on another machine is `FAILED`, saying so.
 
 ## Who may
 

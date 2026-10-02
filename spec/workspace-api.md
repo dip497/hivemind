@@ -1,4 +1,4 @@
-# Workspace API (0.10)
+# Workspace API (0.11)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -60,7 +60,7 @@ after a minute without it, and never what was typed.
 A peer names the workspace by its id, `hive://<workspaceId>`, wherever a call takes a repo (or a
 `cwd` inside it); the host reads that as its repo. A guest's call or notice about a workspace
 (`store.*`, `git.*`, `worktree.*`, `file.*`, `issue.*`, `review.*`, `people.*`, `plan.list`,
-`presence.set`) names this one, or a place in it, and nothing else on the host: another folder, a
+`presence.set`, `agent.startable`, `agent.start`) names this one, or a place in it, and nothing else on the host: another folder, a
 path out of it (`..`), another workspace or a machine is `FORBIDDEN` (a notice is dropped). The
 person's own devices are the owner, there as here. What the host answers of every agent it runs
 (`status.all`, `link.list`) a peer is answered for the workspace's own agents alone, as it hears
@@ -70,14 +70,17 @@ other first frame, or a workspace not held there, closes the connection), as the
 call nothing there but `terminal.open` with `attachOnly` (it watches a terminal, its screen and
 then its output), `terminal.write` and `terminal.keyboard.ask` (it types into one as the owner,
 and asks for its keyboard while someone else holds it, 0.10), `agent.answer` (it answers what an
-agent waits on the person for) and `agent.send` (it sends one a message, 0.10): it never starts,
-sizes or closes a terminal, nor gives or takes a keyboard (M5). Each call and notice is checked against the
+agent waits on the person for), `agent.send` (it sends one a message, 0.10), and `agent.startable`,
+`agent.start`, `agent.interrupt`, `agent.close` and `agent.diff` (it starts an agent, interrupts its
+turn, closes it and reads what it changed, `agents.md`, 0.11): it never starts a terminal but by
+starting an agent, never sizes one, nor gives or takes a keyboard (M5). Each call and notice is checked against the
 peer's role on the workspace (design §6) before it runs, and one the role does not allow is
 `FORBIDDEN` (a notice is dropped): reads and watching terminals are anyone's with access; typing
 into and resizing a terminal, and asking for its keyboard or handing it on, *Can use terminals*;
 handing a branch of one's own to the host (`git.handOff`, M4), *Can edit board*;
 answering an agent's plan or what it waits on (`agent.answer`), sending one a message
-(`agent.send`), and opening and closing tiles, *Can drive agents*; anything else is the
+(`agent.send`), starting one, interrupting its turn and closing it (`agent.start`,
+`agent.interrupt`, `agent.close`, 0.11), and opening and closing tiles, *Can drive agents*; anything else is the
 owner's (taking a keyboard back among them, and the `store.*` writes). A peer edits the board
 through the workspace document's own sync (the connection's `sync` stream), where the host takes
 only what the peer's role allows, and drops a change that does more, whole: moving, sizing,
@@ -176,6 +179,11 @@ log.
 | `plan.list` | `repo` | the plans the workspace's agents wait on a person for: `[{requestId, tileId, plan, cwd}]`; each after it is a `plan.review` event | |
 | `agent.answer` | `tile`, `since`, `{text}` or `{decision, feedback?}` | `{answered}`: what the agent waits on the person for is answered, a plan decided, a permission allowed or denied with the agent's own keys, or a line typed into its terminal, only while it still waits on that wait (`since`) and once (`needs.md`, "Answering") | target the agent's tile |
 | `agent.send` | `tile`, `text` | `{sent}`: a message for the agent, whatever it is doing, one line typed in as its next prompt once it is at its prompt, Enter after it; `sent` false: no agent runs there (`needs.md`, "Sending", 0.10) | target the agent's tile |
+| `agent.startable` | `repo` | `{programs, frames}`: the agents this device starts, with their model and mode choices, and the workspace's frames, each on the machine its folder is on (`agents.md`, "Starting", 0.11) | — |
+| `agent.start` | `repo`, `{program, frame?, prompt?, model?, mode?}` | `{tile}`: an agent started as the person launches one at their desktop, their saved options with these on top, never in its unattended mode unless `mode` says so (`agents.md`, 0.11) | target the new tile |
+| `agent.interrupt` | `tile` | `{interrupted}`: the keys its manifest says interrupt its turn, typed a moment apart, while it works or waits (`agents.md`, "Stopping", 0.11) | target the agent's tile |
+| `agent.close` | `tile` | `{closed}`: its session ended and its tile taken off its board, as `hive ctl close` (`agents.md`, 0.11) | target the agent's tile |
+| `agent.diff` | `tile` | `{files, patch, truncated}`: what it changed in the folder it runs in, against its last commit (`agents.md`, "Changes", 0.11) | — |
 | `plan.decide` | `tile`, `requestId`, `"allow"` or `"deny"`, `feedback`? | `{answered, by}`: the first answer is the one the agent gets; a later one, or one about another tile's plan, answers nothing (`by`: who answered first) | target the agent's tile, detail the answer |
 
 | `people.list` | `repo` | who is on the workspace's access list: `[{person, name, color, role, grantedAt, expires, devices, present}]`, `present` whether they are connected now; `[]` for a workspace that does not say whose it is yet | read |

@@ -210,6 +210,10 @@ export interface Dispatcher {
   forgetTile: (tileId: string) => void;
   /** What the control plane's messages call a tile (names.ts). */
   labelOf: (tileId: string) => string;
+  /** Spawn an agent, as `tile.spawn_agent` does, without recording it: the caller has (M5). */
+  spawn: (opts: { agent: string; frame?: string; prompt?: string; model?: string; mode?: string; repo: string; attended: true }) => Promise<string>;
+  /** Close a tile, as `tile.close` does, without recording it: the caller has (M5). */
+  close: (tileId: string) => Promise<unknown>;
 }
 
 export function makeDispatch(deps: MethodDeps): Dispatcher {
@@ -275,6 +279,12 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   const doSpawn = async (opts: {
     agent?: unknown; prompt?: unknown; frame?: unknown; mode?: unknown; model?: unknown;
     callerTile?: unknown; report?: unknown; supervise?: unknown; name?: unknown; resume?: unknown;
+    /** The workspace to open it in (a person's spawn from another of their devices, M5), not the
+     *  caller's or the one the user's window shows. */
+    repo?: string;
+    /** A person is at it, from another of their devices: never its unattended mode unless `mode`
+     *  says so. */
+    attended?: boolean;
   }): Promise<string> => {
     const callerDepth = opts.callerTile ? (depthOf.get(bareOf(String(opts.callerTile))) ?? 0) : 0;
     const childDepth = callerDepth + 1;
@@ -315,7 +325,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     // No human at a delegated worker's tile, so it runs in the agent's unattended
     // mode — unless the caller chose one, or it is supervised (its broker hook
     // only fires while permissions are not skipped).
-    const mode = opts.mode != null ? opts.mode : sup ? undefined : agentOption(def, "mode")?.unattended;
+    const mode = opts.mode != null ? opts.mode : sup || opts.attended ? undefined : agentOption(def, "mode")?.unattended;
     const resume = opts.resume != null ? String(opts.resume) : undefined;
     if (resume !== undefined) {
       if (!def.session?.resume) throw new HcpError("UNSUPPORTED", `${def.label} cannot resume a session`);
@@ -335,7 +345,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const tileId = openTile(opts.callerTile, opts.frame, (ws) => ({
       id: mintId(`tile-${def.id}`), kind: AGENT_TILE_KIND,
       ...agentLaunch(def, { options, labels: ws.tiles.map((t) => t.label), prompt, resume }),
-    }), { name, prompt, background: opts.report === false });
+    }), { name, prompt, background: opts.report === false, repo: opts.repo });
     const res = { tileId };
     depthOf.set(res.tileId, childDepth);
     agentOfTile.set(res.tileId, agent);
@@ -414,9 +424,10 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // workspace with no frames, where the window that lays it out makes one).
   const openTile = (
     callerTile: unknown, named: unknown,
-    make: (ws: CoreLayout) => TileRecord, at: { name?: string; prompt?: string; background: boolean },
+    make: (ws: CoreLayout) => TileRecord, at: { name?: string; prompt?: string; background: boolean; repo?: string },
   ): string => {
-    const ws = workspaceFor(callerTile);
+    const core = at.repo === undefined ? null : deps.workspaces.getCore(at.repo);
+    const ws = at.repo === undefined ? workspaceFor(callerTile) : core && { repo: at.repo, core, frame: null };
     if (!ws) throw new HcpError("NOT_FOUND", "no workspace is open: open one in the app first");
     let frame: FrameRecord | undefined;
     if (named != null && named !== "") {
@@ -914,5 +925,5 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     }
   };
 
-  return { dispatch, forgetTile: forgetTileState, labelOf: label };
+  return { dispatch, forgetTile: forgetTileState, labelOf: label, spawn: doSpawn, close: closeTile };
 }

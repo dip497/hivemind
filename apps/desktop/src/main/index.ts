@@ -26,7 +26,7 @@ import {
   installAgenticStack as coreInstallAgenticStack,
 } from "@hivemind/core";
 import os from "node:os";
-import { agentById, agentForCmd, getCatalog, preferredAgent, setCatalog, type AgentProviderDef } from "@hivemind/agents";
+import { agentById, agentForCmd, getCatalog, preferredAgent, setCatalog, spawnableAgents, type AgentProviderDef } from "@hivemind/agents";
 import { agentPresence, discoverOptions, findBin, verifyAgent } from "@hivemind/agents/discover";
 import { listSessions } from "@hivemind/agents/node";
 import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
@@ -75,7 +75,7 @@ import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, sett
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
-import { dialDevice, installNetworkIpc, isYourDevice, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
+import { dialDevice, installNetworkIpc, isYourDevice, knownMachines, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
 import { elsewhere, mayWriteShared, onceStarted, placedRun, refusedShared, startedByOthers, wroteShared } from "./shared-workspaces.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
@@ -91,7 +91,8 @@ import { Layouts, type Shown } from "@hivemind/host/store";
 import { presence } from "@hivemind/host/presence";
 import { Plans } from "@hivemind/host/plans";
 import { answers } from "@hivemind/host/answers";
-import { heldBoards, permissionKeys } from "@hivemind/host/needs";
+import { heldBoards, manifestOf, permissionKeys, runsIn } from "@hivemind/host/needs";
+import { agentControl } from "@hivemind/host/agent-control";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
 import { fileIn } from "@hivemind/host/repo-paths";
@@ -1208,6 +1209,23 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     permissionKeys: (bare) => permissionKeys(heldBoards(workspaceStore()), bare),
     deliver: (bare, message) => control.mailbox.deliver(`hm:${bare}`, message),
     plans,
+  }),
+  // Agents started, interrupted and closed from another of the person's devices, and what they
+  // changed (M5, spec/agents.md).
+  agentControl({
+    programs: async () => {
+      await shellEnvReady;
+      return spawnableAgents().filter((d) => !!findBin(d.bin));
+    },
+    core: (repo) => workspaceStore().getCore(repo),
+    machines: knownMachines,
+    start: (repo, start) => control.start(repo, start),
+    status: (bare) => control.status.get(bare),
+    interruptKeys: (bare) => manifestOf(heldBoards(workspaceStore()), bare)?.interrupt,
+    // As the person types: an interrupt key ends the turn in the agent's status too.
+    type: (bare, data) => { control.status.input(bare, data); return writeTile(`hm:${bare}`, data); },
+    close: (bare) => control.close(bare),
+    folderOf: (bare) => runsIn(heldBoards(workspaceStore()), bare),
   }),
   presence(() => workspaceServer, () => machineIdentity().personId),
   peopleHere.domain,

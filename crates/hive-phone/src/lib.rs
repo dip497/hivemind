@@ -4,6 +4,7 @@
 //! app, and is their device from then on (M5).
 
 pub mod agents;
+pub mod control;
 pub mod devices;
 pub mod identity;
 pub mod needs;

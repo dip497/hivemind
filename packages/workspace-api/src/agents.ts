@@ -40,6 +40,31 @@ export interface TileOpened {
  *  its terminal. */
 export type AgentAnswer = { text: string } | { decision: "allow" | "deny"; feedback?: string };
 
+/** What may be started in a workspace (M5, spec/agents.md "Starting"): the agents a device starts,
+ *  with their model and mode choices (`values` empty: one taken as typed), and the workspace's
+ *  frames, with the machine each one's folder is on. */
+export interface Startable {
+  programs: Array<{ id: string; label: string; options: Array<{ id: string; label: string; values: string[] }> }>;
+  frames: Array<{ id: string; name: string; machine: string }>;
+}
+
+/** An agent to start, as the person launches one at their desktop. */
+export interface StartAgent {
+  program: string;
+  frame?: string;
+  prompt?: string;
+  model?: string;
+  mode?: string;
+}
+
+/** What an agent changed in the folder it runs in, against its last commit (spec/agents.md
+ *  "Changes"). */
+export interface AgentChanges {
+  files: Array<{ path: string; status: string; added: number; removed: number }>;
+  patch: string;
+  truncated: boolean;
+}
+
 /** Every link there is now. */
 export interface Links {
   pipes: Array<{ src: string; dst: string }>;

@@ -70,6 +70,8 @@ function computer() {
   const answered: Array<{ by: Actor; tile: unknown }> = [];
   const sent: Array<{ by: Actor; tile: unknown }> = [];
   const keyed: Array<{ what: string; by: Actor; tile: unknown }> = [];
+  /** What starting, interrupting, closing an agent or reading its changes reached, and by whom. */
+  const driven: Array<{ what: string; by: Actor; at: unknown }> = [];
   /** Where each device is told what happens here; each device forgotten; the phones each device
    *  said it paired with. */
   const subscribed: Array<{ device: string; sub: unknown }> = [];
@@ -84,6 +86,9 @@ function computer() {
       "terminal.open": (from: Connection, opts: unknown) => { watched.push({ by: from.actor, opts }); return { pid: 1, joined: true }; },
       "agent.answer": (from: Connection, tile: unknown) => { answered.push({ by: from.actor, tile }); return { answered: true }; },
       "agent.send": (from: Connection, tile: unknown) => { sent.push({ by: from.actor, tile }); return { sent: true }; },
+      ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff"].map((what) => [
+        what, (from: Connection, at: unknown) => { driven.push({ what, by: from.actor, at }); return {}; },
+      ])),
     },
     effects: {},
     notices: {
@@ -139,7 +144,7 @@ function computer() {
     }
     return { heard, send: (stream: string, m: unknown) => deviceEnd.send(stream, JSON.stringify(m)), closed: computerEnd.closed, hangUp: () => deviceEnd.close("done") };
   };
-  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, sent, keyed, subscribed, unpaired, introduced, forgot, host, connect, statusChanged };
+  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, sent, keyed, driven, subscribed, unpaired, introduced, forgot, host, connect, statusChanged };
 }
 const until = async (done: () => boolean) => { for (let t = 0; t < 5_000 && !done(); t += 20) await wait(20); };
 
@@ -173,7 +178,7 @@ test("a phone is answered which workspaces its computer holds and what waits on 
   assert.equal(c.daemons.length, 1, "no connection to the daemon for the phone");
 });
 
-test("a phone opens a workspace to watch and type into its terminals and answer and message its agents, as the owner's device; anything else there (starting, sizing a terminal, giving or taking a keyboard) is refused, and one opened without naming a workspace here is closed", async () => {
+test("a phone opens a workspace to watch and type into its terminals and answer and message its agents, as the owner's device; anything else there (starting a terminal, sizing one, giving or taking a keyboard) is refused, and one opened without naming a workspace here is closed", async () => {
   const c = computer();
   const phone = c.connect(c.phone);
   phone.send("api", { t: "open", workspace: c.workspace });
@@ -213,6 +218,31 @@ test("a phone opens a workspace to watch and type into its terminals and answer 
     other.send("api", first);
     assert.equal(await Promise.race([other.closed, wait(2_000).then(() => "open")]), "removed", JSON.stringify(first));
   }
+});
+
+test("a phone drives the workspace's agents as the owner's device: sees what may be started, starts one, interrupts its turn, closes it and reads what it changed; an agent of another workspace is refused", async () => {
+  const c = computer();
+  const phone = c.connect(c.phone);
+  phone.send("api", { t: "open", workspace: c.workspace });
+  const here = `hive://${c.workspace}`;
+  phone.send("api", { id: 1, method: "agent.startable", params: [here] });
+  phone.send("api", { id: 2, method: "agent.start", params: [here, { program: "claude", prompt: "fix the nav" }] });
+  phone.send("api", { id: 3, method: "agent.interrupt", params: ["t2"] });
+  phone.send("api", { id: 4, method: "agent.diff", params: ["t2"] });
+  phone.send("api", { id: 5, method: "agent.close", params: ["t2"] });
+  phone.send("api", { id: 6, method: "agent.close", params: ["elsewhere"] });
+  await until(() => phone.heard.get("api")!.length >= 6);
+  const answers = Object.fromEntries(phone.heard.get("api")!.map((m) => JSON.parse(m) as { id: number; error?: { code: string } }).map((a) => [a.id, a]));
+  assert.deepEqual([1, 2, 3, 4, 5].map((id) => answers[id]?.error), [undefined, undefined, undefined, undefined, undefined]);
+  assert.equal(answers[6]?.error?.code, "FORBIDDEN");
+  const asPhone = { kind: "peer", person: c.person, device: c.phone, access: "owner" };
+  assert.deepEqual(c.driven, [
+    { what: "agent.startable", by: asPhone, at: c.repo },
+    { what: "agent.start", by: asPhone, at: c.repo },
+    { what: "agent.interrupt", by: asPhone, at: "t2" },
+    { what: "agent.diff", by: asPhone, at: "t2" },
+    { what: "agent.close", by: asPhone, at: "t2" },
+  ]);
 });
 
 test("a phone gives where it is told what happens here and is answered that it was taken, or that it is no subscription; the owner's laptop is told nothing", async () => {

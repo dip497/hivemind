@@ -195,6 +195,21 @@ Claude Code, for example, takes a digit as that option of its chooser, and its f
 is always "Yes"; Esc is "No, and tell Claude what to do differently". An agent whose file
 says nothing here is answered on your phone as on its screen, with a line of text.
 
+## Stop from your phone
+
+Your phone can stop an agent's turn — interrupt what it is doing, as Esc does at your
+desk — if the agent's file says which keys do that:
+
+```yaml
+interrupt: [escape]     # the keys that interrupt its turn
+```
+
+One to four keys, written as for `answer`. Hivemind types them only while the agent is at
+work or waiting, and its status says it was interrupted. Read the key from the real
+program: Claude Code shows "esc to interrupt" while it works. Some CLIs quit on a second
+Ctrl+C, so never guess. An agent whose file says nothing here has no Stop on your phone;
+you can still close it there.
+
 ## Icons
 
 Draw the icon with shapes rather than SVG markup. Hivemind builds the markup from your

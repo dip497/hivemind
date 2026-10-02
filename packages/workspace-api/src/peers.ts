@@ -45,9 +45,9 @@ export interface PeerOf {
 const refused = (message: string): Answer => ({ error: { code: "FORBIDDEN", message } });
 
 /** Methods and notices whose first param names a tile. */
-const BY_TILE = /^(terminal\.(write|show|resize|flow|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.(answer|send))$/;
+const BY_TILE = /^(terminal\.(write|show|resize|flow|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.(answer|send|interrupt|close|diff))$/;
 /** Methods and notices whose first param names the workspace, or a place in it (its `.hivemind`). */
-const BY_WORKSPACE = /^(store|git|worktree|file|issue|review|people)\.|^(plan\.list|presence\.set)$/;
+const BY_WORKSPACE = /^(store|git|worktree|file|issue|review|people)\.|^(plan\.list|presence\.set|agent\.(startable|start))$/;
 
 /** Whether `place`, as the host reads a param, is the workspace's repo `repo` or inside it: a
  *  peer names the workspace by its id, and nothing else on the host, no other folder and no other
