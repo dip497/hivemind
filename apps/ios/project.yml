@@ -53,7 +53,8 @@ targets:
         "SWIFT_INCLUDE_PATHS[sdk=iphoneos*]": "$(SRCROOT)/../../build/ios-core/iphoneos/include"
         "SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]": "$(SRCROOT)/../../build/ios-core/iphonesimulator/include"
         # The core is Rust alone (no C++); rustls's certificates and iroh's network watching
-        # reach into Security, SystemConfiguration and CoreFoundation.
+        # reach into Security, SystemConfiguration and CoreFoundation, and iroh's `netdev` reads
+        # the phone's interfaces and gateways through Network (its `nw_path_*`).
         OTHER_LDFLAGS:
           - "-lhive_phone_ffi"
           - "-framework"
@@ -62,6 +63,8 @@ targets:
           - "SystemConfiguration"
           - "-framework"
           - "CoreFoundation"
+          - "-framework"
+          - "Network"
     scheme:
       testTargets:
         - HivePhoneTests
