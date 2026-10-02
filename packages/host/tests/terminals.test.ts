@@ -16,13 +16,13 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-terminals-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 let logs = 0;
 
-function host(opts: { askedByHost?: (bare: string) => boolean } = {}) {
+function host(opts: { askedByHost?: (bare: string) => boolean; hidden?: () => boolean } = {}) {
   const calls: string[] = [];
   const outputs = new Map<string, SessionOutput>();
   const file = path.join(tmp, `audit-${logs++}.jsonl`);
   const terminals = new Terminals({
     intents: new Intents(new AuditLog({ file })),
-    relay: { record: () => {}, screenPrefix: "" },
+    relay: { record: () => {}, screenPrefix: "", hidden: opts.hidden },
     askedByHost: opts.askedByHost,
     backend: {
       start: async (o, out) => { calls.push(`start ${o.tileId}`); outputs.set(o.tileId, out); return { pid: 7 }; },
@@ -37,11 +37,11 @@ function host(opts: { askedByHost?: (bare: string) => boolean } = {}) {
     },
   });
   const server = new WorkspaceServer([terminals.domain], new Intents(new AuditLog({ file })));
-  const client = () => {
+  const client = (actor: Connection["actor"] = { kind: "person" }) => {
     const closing = new AbortController();
     const received: EventMessage[] = [];
     const c: Connection & { received: EventMessage[]; close(): void } = {
-      actor: { kind: "person" }, received, send: (m) => received.push(m), closed: closing.signal, close: () => closing.abort(),
+      actor, received, send: (m) => received.push(m), closed: closing.signal, close: () => closing.abort(),
     };
     server.connect(c);
     return c;
@@ -142,4 +142,24 @@ test("a client that goes lets go of what it showed: a session nobody else shows 
   await new Promise((r) => setTimeout(r, 50));
   assert.deepEqual(output(b), [{ event: "terminal.data", params: ["hm:t2", "still here"] }]);
   assert.deepEqual(output(a), []);
+});
+
+test("while every window here is hidden a session's output waits longer, but not while someone watches it from another device: they are sent it as it comes", async () => {
+  const h = host({ hidden: () => true });
+  const window = h.client();
+  await h.open(window, "hm:t1");
+  const pushed = async (data: string, to: { received: EventMessage[] }) => {
+    const before = output(to).length;
+    const at = Date.now();
+    h.outputs.get("hm:t1")!.data(data);
+    while (output(to).length === before && Date.now() - at < 1_000) await new Promise((r) => setTimeout(r, 2));
+    return Date.now() - at;
+  };
+  assert.ok(await pushed("unseen", window) >= 150, "held while nobody can see it");
+  const phone = h.client({ kind: "peer", person: "p".repeat(64), device: "d".repeat(64), access: "owner" });
+  await h.open(phone, "hm:t1", { attachOnly: true });
+  assert.ok(await pushed("watched", phone) < 150, "the phone watching is sent it at once");
+  phone.close();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.ok(await pushed("unseen again", window) >= 150, "held again once the phone went");
 });

@@ -127,7 +127,9 @@ export class Terminals {
   private readonly keyboards: Keyboards;
 
   constructor(private readonly opts: TerminalsOptions) {
-    this.relay = new SessionRelay(opts.relay);
+    // Output waits longer while every window here is hidden, but not while someone watches from
+    // another device (the person's phone, a guest): they see it as it comes.
+    this.relay = new SessionRelay({ ...opts.relay, hidden: () => !!opts.relay.hidden?.() && !this.watchedFromAfar() });
     this.keyboards = new Keyboards({
       publish: (event, ...params) => opts.publish?.(event, ...params),
       tell: (to, event, ...params) => emit(to, event, ...params),
@@ -207,6 +209,12 @@ export class Terminals {
     if (this.ended.size > ENDED_KEPT) this.ended.delete(this.ended.values().next().value!);
     this.drop(tile);
     this.opts.backend.kill(tile);
+  }
+
+  /** Whether a session here is open on another device. */
+  private watchedFromAfar(): boolean {
+    for (const opened of this.openers.values()) for (const c of opened) if (c.actor.kind === "peer" && !c.closed.aborted) return true;
+    return false;
   }
 
   private open(opts: TerminalOpts, from: Connection): Promise<{ pid: number; joined: boolean }> {

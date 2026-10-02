@@ -657,3 +657,8 @@ guest who may edit the board could start a command on the host (see the log).
   only answers them: steps P1–P7, built in parallel by agents in worktrees.
 - 2026-10-02 — P1: the phone drives agents on the wire: follows every agent live, starts one, stops
   its turn with its agent's keys, closes it and reads its diff (`spec/agents.md` 0.1).
+- 2026-10-02 — Real time for the phone: a session's output waited 200 ms a batch while every window
+  on the computer was hidden, the person's phone or other device watching it or not (the batching
+  is per host, `PtyOutputBuffer`). `Terminals` now counts a viewer on another device as watching:
+  output is batched as for a shown window while one is open (`terminals.test.ts`, 3 mutations
+  caught).
