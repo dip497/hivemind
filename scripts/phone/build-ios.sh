@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # The phone's core for the iOS app (docs/design/phone-app-2026-10-02.md, P5): crates/hive-phone-ffi
 # built for the platform Xcode is building, its static library and C module staged where the
-# HivePhone target links and imports them, and the committed Swift bindings made again from it. The
-# target's first build phase runs it; it also runs by hand (the simulator, Debug, by default):
+# HivePhone target links and imports them, and the committed Swift bindings made again
+# (scripts/phone/bindings.sh). The target's first build phase runs it; it also runs by hand (the
+# simulator, Debug, by default):
 #
 #   scripts/phone/build-ios.sh [iphonesimulator|iphoneos]
 #
@@ -53,22 +54,11 @@ else
     --profile "$PROFILE" --target "$TARGET"
   cp -p "${CARGO_TARGET_DIR:-$CRATE/target}/$TARGET/$PROFILE/libhive_phone_ffi.a" "$LIB"
 
-  # The bindings, made again from the core just built; the facade's script decides how. A file
-  # whose content did not change keeps its time, so that Xcode compiles nothing again for it, and
-  # CI's `git diff --exit-code` on the folder says whether the committed ones still match.
-  if [[ -x "$ROOT/scripts/phone/bindings.sh" ]]; then
-    before="$(mktemp -d)"
-    cp -p "$GENERATED"/* "$before"/ 2>/dev/null || true
-    clean "$ROOT/scripts/phone/bindings.sh" swift
-    for kept in "$before"/*; do
-      [[ -e "$kept" ]] || continue
-      now="$GENERATED/$(basename "$kept")"
-      if cmp -s "$kept" "$now"; then touch -r "$kept" "$now"; fi
-    done
-    rm -rf "$before"
-  else
-    echo "note: no scripts/phone/bindings.sh: the committed Swift bindings are used as they are"
-  fi
+  # The Swift bindings, made again by the facade's script, which writes a file only when it
+  # changed (so Xcode compiles nothing again for nothing); CI's `git diff --exit-code` on the
+  # folder then says whether the committed ones still match. Its one argument is where Kotlin
+  # goes, so it is given none.
+  clean "$ROOT/scripts/phone/bindings.sh"
 fi
 
 for file in hive_phone.swift hive_phoneFFI.h hive_phoneFFI.modulemap; do

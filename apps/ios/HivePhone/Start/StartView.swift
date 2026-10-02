@@ -38,9 +38,16 @@ struct StartView: View {
                     Section("Workspace") {
                         Picker("Workspace", selection: $workspace) {
                             Text("Choose").tag(String?.none)
-                            ForEach(StartChoices.workspaces(on: device, in: model.overview.agents)) { workspace in
+                            ForEach(workspaces(on: device), id: \.id) { workspace in
                                 Text(workspace.name).tag(Optional(workspace.id))
                             }
+                        }
+                        if let folder = workspaces(on: device).first(where: { $0.id == workspace })?.folder {
+                            Text(folder)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.head)
                         }
                     }
                 }
@@ -177,21 +184,9 @@ struct StartView: View {
             }
         }
     }
-}
 
-/// The workspaces an agent can be started in on a device: those the overview shows an agent of.
-enum StartChoices {
-    struct Workspace: Identifiable, Hashable {
-        let id: String
-        let name: String
-    }
-
-    static func workspaces(on device: String, in agents: [Agent]) -> [Workspace] {
-        var seen = Set<String>()
-        var found: [Workspace] = []
-        for agent in agents where agent.at.device == device && seen.insert(agent.at.workspace).inserted {
-            found.append(Workspace(id: agent.at.workspace, name: agent.workspaceName))
-        }
-        return found
+    /// The workspaces `device` holds, as the overview has them.
+    private func workspaces(on device: String) -> [Workspace] {
+        model.overview.workspaces.filter { $0.device == device }
     }
 }
