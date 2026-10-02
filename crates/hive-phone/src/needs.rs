@@ -6,7 +6,7 @@
 use std::{collections::BTreeMap, fs};
 
 use anyhow::Result;
-use iroh::Endpoint;
+use iroh::{endpoint::Connection, Endpoint};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -105,13 +105,19 @@ pub async fn ask(endpoint: &Endpoint, device: &PairedWith) -> Result<Answer> {
     let asked = async {
         let at = hive_net::net::addr_of(&device.device, &device.addrs, &device.relay)?;
         let connection = endpoint.connect(at, hive_net::ws::ALPN).await?;
-        let answer = devices::ask(&connection, &json!({ "t": "needs" })).await?;
+        let answer = ask_on(&connection, &device.name).await?;
         connection.close(0u32.into(), b"done");
-        Ok::<_, anyhow::Error>(read_answer(&answer, &device.name))
+        Ok::<_, anyhow::Error>(answer)
     };
     tokio::time::timeout(ANSWER_WITHIN, asked)
         .await
         .map_err(|_| anyhow::anyhow!("{} did not answer", device.name))?
+}
+
+/// Ask the device called `from`, on `connection` to it, what waits on the person there.
+pub async fn ask_on(connection: &Connection, from: &str) -> Result<Answer> {
+    let answer = devices::ask(connection, &json!({ "t": "needs" })).await?;
+    Ok(read_answer(&answer, from))
 }
 
 /// What a device last answered this phone, and when (ms since the epoch).

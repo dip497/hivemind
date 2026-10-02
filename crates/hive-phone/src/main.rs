@@ -61,7 +61,7 @@
 //! devices, network, unpair, needs, agents, answer, send, start, stop, close, diff, talk, push: as
 //! JSON, a notice, a list or a piece of a conversation a line).
 
-use std::{path::PathBuf, process::ExitCode, sync::Arc, time::SystemTime};
+use std::{path::PathBuf, process::ExitCode, sync::Arc};
 
 use anyhow::{bail, Context, Result};
 use hive_net::{net, push::Platform};
@@ -69,12 +69,13 @@ use hive_phone::{
     agents::{self, Agent, Listed},
     control::{self, Start},
     conversation::{self, Entry},
-    devices,
+    devices::{self, Unpaired},
     identity::Identity,
     needs::{self, Need},
-    pairing,
+    now_ms,
+    pairing::{self, Pairing},
     push::{self, PushKeys},
-    workspace::{self, Watched},
+    workspace::{self, Reply, Watched},
 };
 use serde_json::{json, Value};
 
@@ -270,12 +271,6 @@ fn waited(since: u64, now: u64) -> String {
     }
 }
 
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map_or(0, |d| d.as_millis() as u64)
-}
-
 async fn run(args: Args) -> Result<()> {
     let phone = Identity::open(&identity_dir(&args)?)?;
     match args.command.as_str() {
@@ -289,31 +284,9 @@ async fn run(args: Args) -> Result<()> {
             let link = pairing::parse_link(text).context(
                 "that is not a pairing link: it is the one under Settings → Devices on your computer",
             )?;
-            // Onto the app's network first, as its link says, to reach it from anywhere; then to
-            // the app, where the link says it is.
-            let admission = match &link.admission {
-                Some(admission) => phone
-                    .let_in(admission)
-                    .await
-                    .context("not let onto the app's network")?,
-                None => "none needed",
-            };
-            let reach = phone.reach_through(link.relay.as_deref());
-            let endpoint = net::endpoint(phone.key().clone(), &reach, vec![]).await?;
-            let paired =
-                pairing::pair(&endpoint, args.name.as_deref().unwrap_or("Phone"), &link).await;
-            let paired = match paired {
-                Ok(paired) => paired,
-                Err(e) => {
-                    endpoint.close().await;
-                    return Err(e);
-                }
-            };
-            phone.keep(&paired, now_ms())?;
-            // Whose devices these are, and which others it may reach, as the app says now; asked
-            // again whenever this phone dials them, so one that does not answer now is told later.
-            let _ = phone.learn_from(&endpoint, now_ms()).await;
-            endpoint.close().await;
+            let Pairing { paired, admission } = phone
+                .pair_with(args.name.as_deref().unwrap_or("Phone"), &link)
+                .await?;
             let network = phone.network().map(|n| n.profile.name);
             let person = &paired.certificate.person;
             let whose = phone.person();
@@ -620,29 +593,11 @@ async fn run(args: Args) -> Result<()> {
                 }
                 None => bail!("{which} is not a device this phone is paired with"),
             };
-            // One this phone learned of from an app is unpaired there: the app tells it.
-            if let Some(d) = all
-                .iter()
-                .find(|d| d.with.device == device.device && !d.via.is_empty())
-            {
-                let through: Vec<_> = all
-                    .iter()
-                    .filter(|a| d.via.contains(&a.with.device))
-                    .map(|a| a.with.name.as_str())
-                    .collect();
-                bail!(
-                    "{} knows this phone through {}: unpair from that",
-                    device.name,
-                    through.join(", ")
-                );
-            }
             let endpoint = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
-            let told = phone.unpair(&endpoint, device).await?;
+            let unpaired = phone.unpair_from(&endpoint, &device.device).await;
             endpoint.close().await;
-            // Its push server is told the devices that may tell this phone now: not that one.
-            if let Err(e) =
-                push::register_again(&identity_dir(&args)?, phone.key(), &senders(&phone)?).await
-            {
+            let Unpaired { told, still_told } = unpaired?;
+            if let Some(e) = still_told {
                 eprintln!(
                     "hive-phone: the push server still lets {} tell this phone: {e:#}",
                     device.name
@@ -677,7 +632,7 @@ async fn run(args: Args) -> Result<()> {
                     use tokio::io::AsyncBufReadExt;
                     let mut stdin = tokio::io::BufReader::new(tokio::io::stdin()).lines();
                     while let Ok(Some(line)) = stdin.next_line().await {
-                        if lines.send(line).await.is_err() {
+                        if lines.send(format!("{line}\r")).await.is_err() {
                             return;
                         }
                     }
@@ -693,13 +648,14 @@ async fn run(args: Args) -> Result<()> {
                         let _ = std::io::Write::write_all(&mut stdout, data.as_bytes());
                         let _ = std::io::Write::flush(&mut stdout);
                     }
-                    // Someone else holds its keyboard: what is typed here waits until they give it.
+                    // Someone else holds its keyboard: what is typed here asks for it, and waits until
+                    // they give it.
                     Watched::Keyboard(Some(holder)) if args.typing && holder["id"] != me.as_str() => {
                         let name = holder["name"].as_str().filter(|n| !n.is_empty()).unwrap_or("someone");
-                        eprintln!("hive-phone: {name} has its keyboard: asked for it, and what you type goes in once it is given");
+                        eprintln!("hive-phone: {name} has its keyboard: what you type asks for it, and goes in once it is given");
                     }
                     Watched::Keyboard(_) if args.typing => eprintln!("hive-phone: its keyboard is yours"),
-                    Watched::Keyboard(_) => {}
+                    Watched::Keyboard(_) | Watched::Size(..) => {}
                 })
                 .await
             };
@@ -716,17 +672,18 @@ async fn run(args: Args) -> Result<()> {
             let since: u64 = since
                 .parse()
                 .context("answer: the wait is when it began, a number")?;
-            let answer: Value = match (&args.text, args.allow || args.approve, args.deny, &args.changes) {
-                (Some(text), false, false, None) => json!({ "text": text }),
-                (None, true, false, None) => json!({ "decision": "allow" }),
-                (None, false, true, None) => json!({ "decision": "deny" }),
-                (None, false, false, Some(changes)) => json!({ "decision": "deny", "feedback": changes }),
+            let reply = match (&args.text, args.allow, args.deny, args.approve, &args.changes) {
+                (Some(text), false, false, false, None) => Reply::Text(text.clone()),
+                (None, true, false, false, None) => Reply::Decide { allow: true },
+                (None, false, true, false, None) => Reply::Decide { allow: false },
+                (None, false, false, true, None) => Reply::Plan { approve: true, feedback: None },
+                (None, false, false, false, Some(changes)) => Reply::Plan { approve: false, feedback: Some(changes.clone()) },
                 _ => bail!("answer: --text <line>, --allow, --deny, --approve or --changes <what>, one of them"),
             };
             let (endpoint, devices) = reaching(&phone).await?;
             let answered = async {
                 let connection = workspace::holder(&endpoint, &devices, ws).await?;
-                workspace::answer(&connection, ws, tile, since, answer).await
+                workspace::answer(&connection, ws, tile, since, &reply).await
             };
             let answered = answered.await;
             endpoint.close().await;
@@ -780,7 +737,8 @@ async fn run(args: Args) -> Result<()> {
             let via = match &server {
                 Some(url) => {
                     let to = (Platform::Unifiedpush, listening.as_str(), false);
-                    match push::register(&dir, phone.key(), url, to, &senders(&phone)?).await {
+                    match push::register(&dir, phone.key(), url, to, &push::senders(&phone)?).await
+                    {
                         Ok(endpoint) => Some((url.clone(), endpoint)),
                         Err(e) => {
                             eprintln!("hive-phone: {e:#}: the devices post here directly");
@@ -827,20 +785,6 @@ async fn run(args: Args) -> Result<()> {
         other => bail!("{other}: not a command\n{USAGE}"),
     }
     Ok(())
-}
-
-/// The devices that may tell this phone what happens on them: the person's, as it knows them.
-fn senders(phone: &Identity) -> Result<Vec<iroh::PublicKey>> {
-    phone
-        .devices()
-        .iter()
-        .map(|d| {
-            d.with
-                .device
-                .parse()
-                .with_context(|| format!("{} is no device", d.with.device))
-        })
-        .collect()
 }
 
 /// This phone on the network, and the person's devices it reaches: those it paired with, and the

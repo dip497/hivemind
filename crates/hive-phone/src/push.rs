@@ -19,7 +19,10 @@ use sha2::Sha256;
 use hive_net::push::{client, Platform};
 use serde::{Deserialize, Serialize};
 
-use crate::{devices, identity::write_private};
+use crate::{
+    devices,
+    identity::{write_private, Identity},
+};
 
 /// Where this phone last registered at its network's push server, kept beside its keys.
 const REGISTERED: &str = "push-server.json";
@@ -178,6 +181,20 @@ pub async fn register(
     };
     write_private(&dir.join(REGISTERED), &serde_json::to_string(&kept)?)?;
     Ok(endpoint)
+}
+
+/// The devices that may tell this phone what happens on them: the person's, as it knows them.
+pub fn senders(phone: &Identity) -> Result<Vec<iroh::PublicKey>> {
+    phone
+        .devices()
+        .iter()
+        .map(|d| {
+            d.with
+                .device
+                .parse()
+                .with_context(|| format!("{} is no device", d.with.device))
+        })
+        .collect()
 }
 
 /// Register anew where this phone last registered, to be told by `senders` alone now (one was
