@@ -239,8 +239,38 @@ session:
     fallback:
     - --continue
     exists: '{home}/.claude/projects/*/{id}.jsonl'
-  # The session file, read as the conversation your phone shows.
-  transcript: claude
+  # The session file, read as the conversation your phone shows: one record a line; the person's
+  # prompts, what Claude says, the tools it uses and what they gave back. Its side threads
+  # (sidechains) and the meta records it writes for itself say nothing.
+  transcript:
+    id: uuid
+    at: timestamp
+    skipWhen: { isSidechain: true, isMeta: true }
+    said:
+    - require: { type: user }
+      text: message.content
+      who: person
+    - require: { type: user }
+      each: message.content
+      item: { type: text }
+      text: text
+      who: person
+    - require: { type: user }
+      each: message.content
+      item: { type: tool_result }
+      result: { of: tool_use_id, text: content, error: is_error }
+    - require: { type: assistant }
+      each: message.content
+      item: { type: text }
+      text: text
+      who: agent
+    - require: { type: assistant }
+      each: message.content
+      item: { type: tool_use }
+      tool:
+        id: id
+        name: name
+        about: [input.file_path, input.path, input.command, input.pattern, input.url, input.query, input.description]
 hooks:
   arg: --settings
   template: '{"hooks":{events}}'

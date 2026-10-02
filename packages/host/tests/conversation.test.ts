@@ -1,21 +1,20 @@
 // What an agent and the person said to each other (conversation.ts, conversations.ts,
-// spec/agents.md "Conversation"): Claude Code's session file read as conformance/conversation.json's
-// cases say; from its end, or after a cursor, whole lines only; followed as it is written; served
-// to whoever asks, then each piece written to them alone, and the next session's once the agent
-// begins one, until they go; and found as the agent's manifest says it keeps it, for the session its
-// tracker last recorded.
+// spec/agents.md "Conversation"): an agent's session file read, as its manifest maps it, from its
+// end or after a cursor, whole lines only; followed as it is written; served to whoever asks, then
+// each piece written to them alone, and the next session's once the agent begins one, until they
+// go; and found as the agent's manifest says it keeps it, for the session its tracker last
+// recorded. How a mapping reads records is packages/hive-agents' (transcript.test.ts).
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { setCatalog, TILE_SESSIONS_DIR, writeTrackedSession, type AgentProviderDef } from "@hivemind/agents/node";
+import { setCatalog, TILE_SESSIONS_DIR, writeTrackedSession, type AgentProviderDef, type AgentTranscript } from "@hivemind/agents/node";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
-import { claudeEntries, followConversation, readConversation, TAIL_BYTES, TAIL_ENTRIES } from "../src/conversation.ts";
+import { followConversation, readConversation, TAIL_BYTES, TAIL_ENTRIES } from "../src/conversation.ts";
 import { conversations, transcriptOf, type Transcript } from "../src/conversations.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-conversation-"));
@@ -23,10 +22,9 @@ after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let made = 0;
 
-const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../conformance/conversation.json");
-const { claude: cases } = JSON.parse(fs.readFileSync(file, "utf8")) as { claude: Array<{ about: string; lines: string[]; entries: unknown[] }> };
-
-/** A record of the person's, as Claude Code writes one: its line. */
+/** How the session files here say what was said: each record a prompt of the person's. */
+const FORMAT: AgentTranscript = { id: "uuid", at: "timestamp", said: [{ require: { type: "user" }, text: "message.content", who: "person" }] };
+/** A record of the person's: its line. */
 const said = (n: number, text = `prompt ${n}`) =>
   `${JSON.stringify({ type: "user", uuid: `u${n}`, timestamp: new Date(1_790_000_000_000 + n).toISOString(), message: { role: "user", content: text } })}\n`;
 const sessionFile = (body: string) => {
@@ -35,20 +33,15 @@ const sessionFile = (body: string) => {
   return at;
 };
 
-test("Claude Code's records are read as the spec's cases say", () => {
-  assert.ok(cases.length > 0);
-  for (const c of cases) assert.deepEqual(claudeEntries(c.lines), c.entries, c.about);
-});
-
 test("from its end the file is read whole lines only, the last 200 entries of its last 1 MiB; after a cursor, only what came after it; a line not yet ended waits", () => {
   const lines = Array.from({ length: 300 }, (_, n) => said(n)).join("");
   const at = sessionFile(`${lines}${said(300).slice(0, 20)}`);
-  const first = readConversation(at);
+  const first = readConversation(at, FORMAT);
   assert.equal(first.entries.length, TAIL_ENTRIES);
   assert.deepEqual([first.entries[0]!.id, first.entries.at(-1)!.id], ["u100", "u299"]);
   assert.equal(first.cursor, Buffer.byteLength(lines), "the cursor stops at the end of the last whole line");
   fs.appendFileSync(at, `${said(300).slice(20)}${said(301)}`);
-  assert.deepEqual(readConversation(at, first.cursor).entries.map((e) => e.id), ["u300", "u301"]);
+  assert.deepEqual(readConversation(at, FORMAT, first.cursor).entries.map((e) => e.id), ["u300", "u301"]);
   // A file longer than 1 MiB is read from inside it: the piece of a line it begins in is no record,
   // even one that reads as one.
   const last = said(1);
@@ -56,14 +49,14 @@ test("from its end the file is read whole lines only, the last 200 entries of it
   const fake = inside.replace('"content":""', `"content":"${"z".repeat(TAIL_BYTES - Buffer.byteLength(inside) - Buffer.byteLength(last))}"`).trimEnd();
   const big = sessionFile(`not a record ${fake}\n${last}`);
   assert.equal(fs.statSync(big).size - TAIL_BYTES, Buffer.byteLength("not a record "), "the read begins where the fake record does");
-  assert.deepEqual(readConversation(big).entries.map((e) => e.id), ["u1"]);
-  assert.deepEqual(readConversation(path.join(tmp, "none.jsonl")), { entries: [], cursor: 0 });
+  assert.deepEqual(readConversation(big, FORMAT).entries.map((e) => e.id), ["u1"]);
+  assert.deepEqual(readConversation(path.join(tmp, "none.jsonl"), FORMAT), { entries: [], cursor: 0 });
 });
 
 test("followed, what is written next is handed on as it comes, a line once it ends, until it is stopped", async () => {
   const at = sessionFile(said(0));
   const heard: Array<{ ids: string[]; cursor: number }> = [];
-  const stop = followConversation(at, readConversation(at).cursor, (s) => heard.push({ ids: s.entries.map((e) => e.id), cursor: s.cursor }));
+  const stop = followConversation(at, FORMAT, readConversation(at, FORMAT).cursor, (s) => heard.push({ ids: s.entries.map((e) => e.id), cursor: s.cursor }));
   fs.appendFileSync(at, said(1));
   fs.appendFileSync(at, said(2).slice(0, 10));
   for (let t = 0; t < 3000 && heard.length === 0; t += 20) await wait(20);
@@ -96,7 +89,7 @@ const ids = (answer: unknown) => ((answer as { result?: { entries: Array<{ id: s
 
 test("asked for an agent's conversation, the caller is answered what it says so far, in which session, and then sent each piece written, alone, until it goes; an agent with no session file says nothing", async () => {
   const at = sessionFile(said(0) + said(1));
-  const { server, client } = served(() => ({ session: "s1", file: at }));
+  const { server, client } = served(() => ({ session: "s1", file: at, format: FORMAT }));
   const [phone, other] = [client(), client()];
   try {
     const answer = await server.answer("agent.conversation", ["hm:t1"], phone);
@@ -127,7 +120,7 @@ test("asked for an agent's conversation, the caller is answered what it says so 
 
 test("followed, an agent that begins another session (Claude Code's /clear) is followed in it: the last of it, then what is written to it, each named by it; the one before says no more", async () => {
   const before = sessionFile(said(0));
-  let kept: Transcript | null = { session: "s1", file: before };
+  let kept: Transcript | null = { session: "s1", file: before, format: FORMAT };
   const { server, client } = served(() => kept);
   const phone = client();
   try {
@@ -137,7 +130,7 @@ test("followed, an agent that begins another session (Claude Code's /clear) is f
     await wait(1500);
     assert.deepEqual(phone.got, []);
     const after = sessionFile(said(5));
-    kept = { session: "s2", file: after };
+    kept = { session: "s2", file: after, format: FORMAT };
     for (let t = 0; t < 4000 && phone.got.length === 0; t += 20) await wait(20);
     assert.deepEqual(phone.got.map((e) => e.params), [["t1", [{ id: "u5", at: 1_790_000_000_005, who: "person", text: "prompt 5" }], fs.statSync(after).size, "s2"]]);
     fs.appendFileSync(before, said(1));
@@ -150,7 +143,7 @@ test("followed, an agent that begins another session (Claude Code's /clear) is f
   }
 });
 
-test("an agent's session is the one last recorded for its tile, else the one bound as it started, its file where its manifest says; none when the manifest names no format, or the file is not there", () => {
+test("an agent's session is the one last recorded for its tile, else the one bound as it started, its file where its manifest says, read as its manifest maps it; none when the manifest maps no transcript, or the file is not there", () => {
   const home = fs.mkdtempSync(path.join(tmp, "home-"));
   const sessions = path.join(tmp, `tile-sessions-${made++}`);
   const project = path.join(home, ".claude", "projects", "-home-p-api");
@@ -160,7 +153,7 @@ test("an agent's session is the one last recorded for its tile, else the one bou
   // same.
   const claude = {
     id: "claude", label: "Claude Code", bin: "claude", enabled: true,
-    session: { transcript: "claude", resume: { args: ["--resume", "{id}"], from: { bound: "--session-id" }, exists: "{home}/.claude/projects/*/{id}.jsonl" } },
+    session: { transcript: FORMAT, resume: { args: ["--resume", "{id}"], from: { bound: "--session-id" }, exists: "{home}/.claude/projects/*/{id}.jsonl" } },
   } as unknown as AgentProviderDef;
   const plain = { ...claude, id: "plain", bin: "plain", session: { ...claude.session, transcript: undefined } } as unknown as AgentProviderDef;
   setCatalog([claude, plain]);
@@ -168,9 +161,9 @@ test("an agent's session is the one last recorded for its tile, else the one bou
     { id: "t1", kind: "claude", label: "Claude", cmd: "claude", args: ["--session-id", "s-bound"] },
     { id: "t2", kind: "plain", label: "Plain", cmd: "plain", args: ["--session-id", "s-bound"] },
   ] } }] as never;
-  assert.deepEqual(transcriptOf(held, "hm:t1", sessions, home), { session: "s-bound", file: path.join(project, "s-bound.jsonl") });
+  assert.deepEqual(transcriptOf(held, "hm:t1", sessions, home), { session: "s-bound", file: path.join(project, "s-bound.jsonl"), format: FORMAT });
   writeTrackedSession(sessions, "hm:t1", "s-tracked");
-  assert.deepEqual(transcriptOf(held, "t1", sessions, home), { session: "s-tracked", file: path.join(project, "s-tracked.jsonl") });
+  assert.deepEqual(transcriptOf(held, "t1", sessions, home), { session: "s-tracked", file: path.join(project, "s-tracked.jsonl"), format: FORMAT });
   assert.equal(transcriptOf(held, "t2", sessions, home), null);
   assert.equal(transcriptOf(held, "t9", sessions, home), null);
   writeTrackedSession(sessions, "hm:t1", "s-gone");

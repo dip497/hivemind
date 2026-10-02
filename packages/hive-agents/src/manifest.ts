@@ -3,7 +3,7 @@
  *  hooks) it must wire itself (`launch.hcp`, `session.resume`), and claiming a
  *  capability nothing here delivers is refused. */
 import { AGENT_EVENTS, EVENT_HOOK, INPUT_KINDS, TURN_OUTCOMES, isAgentEventName } from "./events.js";
-import type { AgentAsset, AgentCapabilities, AgentHome, AgentHomeFile, AgentHookEntry, AgentHooks, AgentIcon, AgentInstall, AgentLaunch, AgentOption, AgentProviderDef, AgentSession, SessionFind, TileStatus } from "./types.js";
+import type { AgentAsset, AgentCapabilities, AgentHome, AgentHomeFile, AgentHookEntry, AgentHooks, AgentIcon, AgentInstall, AgentLaunch, AgentOption, AgentProviderDef, AgentSession, AgentTranscript, SessionFind, TileStatus, TranscriptRule } from "./types.js";
 import { compileDetect, validateExpr, validateScope, type DetectRules, type Expr, type Scope } from "./detect-rules.js";
 import { GENERIC_AGENT_ICON } from "./icon.js";
 import { RESERVED_AGENTS } from "./reserved.js";
@@ -332,6 +332,63 @@ function validateHooks(raw: unknown): AgentHooks {
   return out;
 }
 
+/** `session.transcript`: how the session file's records say what was said. */
+function validateTranscript(raw: unknown): AgentTranscript {
+  const w = "session.transcript";
+  req(isObj(raw), `${w} must be a map: how each record of the session file says what was said`);
+  const t = raw as Record<string, unknown>;
+  const path = (v: unknown, at: string): string => {
+    req(typeof v === "string" && DOT_PATH_RE.test(v), `${at} must be a field path`);
+    return v as string;
+  };
+  const values = (v: unknown, at: string): Record<string, string | number | boolean> => {
+    const ok = isObj(v) && Object.keys(v).length >= 1 && Object.keys(v).length <= 4
+      && Object.entries(v as Record<string, unknown>).every(([k, x]) => DOT_PATH_RE.test(k) && ["string", "number", "boolean"].includes(typeof x));
+    req(ok, `${at} must map 1-4 field paths to the values they hold`);
+    return v as Record<string, string | number | boolean>;
+  };
+  const out: AgentTranscript = { id: path(t.id, `${w}.id`), at: path(t.at, `${w}.at`), said: [] };
+  if (t.skipWhen !== undefined) out.skipWhen = values(t.skipWhen, `${w}.skipWhen`);
+  req(Array.isArray(t.said) && t.said.length >= 1 && t.said.length <= 16, `${w}.said must be 1-16 rules`);
+  (t.said as unknown[]).forEach((raw, i) => {
+    const at = `${w}.said[${i}]`;
+    req(isObj(raw), `${at} must be a map`);
+    const r = raw as Record<string, unknown>;
+    const rule: TranscriptRule = {};
+    if (r.require !== undefined) rule.require = values(r.require, `${at}.require`);
+    if (r.each !== undefined) rule.each = path(r.each, `${at}.each`);
+    if (r.item !== undefined) {
+      req(rule.each !== undefined, `${at}.item needs each: the list whose items it requires`);
+      rule.item = values(r.item, `${at}.item`);
+    }
+    req(["text", "tool", "result"].filter((k) => r[k] !== undefined).length === 1, `${at} must read exactly one of text, tool or result`);
+    if (r.text !== undefined) {
+      rule.text = path(r.text, `${at}.text`);
+      req(r.who === "person" || r.who === "agent", `${at}.who must be person or agent: who said the text`);
+      rule.who = r.who;
+    } else {
+      req(r.who === undefined, `${at}.who goes with text alone: a tool's use is the agent's, what it gave back the tool's`);
+    }
+    if (r.tool !== undefined) {
+      req(isObj(r.tool), `${at}.tool must be a map`);
+      const x = r.tool as Record<string, unknown>;
+      rule.tool = { id: path(x.id, `${at}.tool.id`), name: path(x.name, `${at}.tool.name`) };
+      if (x.about !== undefined) {
+        req(strArray(x.about) && x.about.length >= 1 && x.about.length <= 8 && x.about.every((p) => DOT_PATH_RE.test(p)), `${at}.tool.about must be 1-8 field paths`);
+        rule.tool.about = x.about;
+      }
+    }
+    if (r.result !== undefined) {
+      req(isObj(r.result), `${at}.result must be a map`);
+      const x = r.result as Record<string, unknown>;
+      rule.result = { of: path(x.of, `${at}.result.of`), text: path(x.text, `${at}.result.text`) };
+      if (x.error !== undefined) rule.result.error = path(x.error, `${at}.result.error`);
+    }
+    out.said.push(rule);
+  });
+  return out;
+}
+
 function validateSession(raw: unknown): AgentSession {
   req(isObj(raw), "session must be a map");
   const m = raw as Record<string, unknown>;
@@ -375,9 +432,8 @@ function validateSession(raw: unknown): AgentSession {
     out.list = list;
   }
   if (m.transcript !== undefined) {
-    req(m.transcript === "claude", 'session.transcript must be "claude": the session file formats Hivemind reads');
     req(isObj(m.resume) && typeof (m.resume as Record<string, unknown>).exists === "string", "session.transcript needs session.resume.exists: where the session file is");
-    out.transcript = "claude";
+    out.transcript = validateTranscript(m.transcript);
   }
   if (m.resume === undefined) return out;
   req(isObj(m.resume), "session.resume must be a map");

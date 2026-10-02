@@ -45,13 +45,3 @@ test("a session's file is found where its store says, under any one directory; n
   expect(sessionFile(PATTERN, "abc-1", path.join(home, "nope"))).toBeNull();
   fs.rmSync(home, { recursive: true, force: true });
 });
-
-test("the manifest may name its session file's format, Claude Code's alone, and only with where the file is", () => {
-  const base = YAML.parse(authoredYaml(AUTHORED.find((a) => a.id === "claude")!));
-  expect(defFromManifest(base).session!.transcript).toBe("claude");
-  const without = { ...base, session: { ...base.session, transcript: undefined } };
-  expect(defFromManifest(without).session!.transcript).toBeUndefined();
-  expect(() => defFromManifest({ ...base, session: { ...base.session, transcript: "codex" } })).toThrow(/session.transcript must be "claude"/);
-  const { exists: _, ...resume } = base.session.resume;
-  expect(() => defFromManifest({ ...base, session: { ...base.session, resume } })).toThrow(/session.transcript needs session.resume.exists/);
-});

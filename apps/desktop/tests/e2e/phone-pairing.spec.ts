@@ -175,7 +175,13 @@ function talkerAgent(): void {
     "session:",
     "  bind: { args: [--session-id, '{newId}'] }",
     "  resume: { args: [--resume, '{id}'], from: { bound: --session-id }, exists: '{home}/talk/{id}.jsonl' }",
-    "  transcript: claude",
+    // Its session file mapped as any agent's is: its records' fields, nothing Hivemind knows.
+    "  transcript:",
+    "    id: uuid",
+    "    at: timestamp",
+    "    said:",
+    "    - { require: { type: user }, text: message.content, who: person }",
+    "    - { require: { type: assistant }, each: message.content, item: { type: text }, text: text, who: agent }",
     "detect: { default: idle, rules: [] }", "",
   ].join("\n"));
 }

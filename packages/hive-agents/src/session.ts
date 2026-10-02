@@ -13,6 +13,7 @@ import { basename, join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { execFile, execFileSync } from "node:child_process";
 import { canListSessions, isSessionId } from "./catalog.js";
+import { valueAt as at } from "./field-path.js";
 export { canListSessions };
 import type { AgentProviderDef, ProviderResumeTransforms, SessionFind, SessionInfo, SessionList, SpawnSpec } from "./types.js";
 
@@ -20,16 +21,6 @@ import type { AgentProviderDef, ProviderResumeTransforms, SessionFind, SessionIn
 const MAX_DEPTH = 6;
 const MAX_FILES = 4000;
 const MAX_READS = 200;
-
-/** `a.b.c` through plain objects. Missing link → undefined, never a throw. */
-function at(obj: unknown, path: string): unknown {
-  let cur: unknown = obj;
-  for (const key of path.split(".")) {
-    if (typeof cur !== "object" || cur === null) return undefined;
-    cur = (cur as Record<string, unknown>)[key];
-  }
-  return cur;
-}
 
 /** The first line, read in chunks: a session header can carry a whole system prompt. */
 function firstLine(file: string, cap = 4 * 1024 * 1024): string {

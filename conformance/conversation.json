@@ -1,5 +1,5 @@
 {
- "about": "Cases every reader of Claude Code's session file must pass (spec/agents.md \"Conversation\"): the file's lines (a record as JSON, or a line as it is), in; the entries the person's devices are sent, out; and what a phone reads of the entries a device sends it ('phone': an answer's entries, in; those it reads, out). Written by hand from the spec, the records shaped as Claude Code 2.1.287 writes them.",
+ "about": "Cases every reader of an agent's session file must pass (spec/agents.md \"Conversation\"): the file's lines (a record as JSON, or a line as it is), in; the entries the person's devices are sent, out. 'claude': Claude Code's file, read as its manifest maps it (session.transcript), the records shaped as Claude Code 2.1.287 writes them. 'mapped': the mapping rules themselves, a mapping and records shaped as another agent might keep them. 'phone': what a phone reads of the entries a device sends it (an answer's entries, in; those it reads, out). Written by hand from the spec.",
  "claude": [
   {
    "about": "the person's prompt, as text or a text block, is theirs; the agent's text block is its, in markdown; a meta record and a sidechain's say nothing",
@@ -155,6 +155,210 @@
    "entries": []
   }
  ],
+ "mapped": {
+  "transcript": {
+   "id": "rid",
+   "at": "ts",
+   "skipWhen": {
+    "hidden": true
+   },
+   "said": [
+    {
+     "require": {
+      "kind": "msg",
+      "payload.role": "user"
+     },
+     "each": "payload.parts",
+     "item": {
+      "type": "input_text"
+     },
+     "text": "text",
+     "who": "person"
+    },
+    {
+     "require": {
+      "kind": "msg",
+      "payload.role": "user"
+     },
+     "each": "payload.parts",
+     "item": {
+      "type": "input_image"
+     },
+     "text": "caption",
+     "who": "person"
+    },
+    {
+     "require": {
+      "kind": "msg",
+      "payload.role": "assistant"
+     },
+     "each": "payload.parts",
+     "item": {
+      "type": "output_text"
+     },
+     "text": "text",
+     "who": "agent"
+    },
+    {
+     "require": {
+      "kind": "call"
+     },
+     "tool": {
+      "id": "payload.call_id",
+      "name": "payload.name",
+      "about": [
+       "payload.args.cmd",
+       "payload.args.file"
+      ]
+     }
+    },
+    {
+     "require": {
+      "kind": "output"
+     },
+     "result": {
+      "of": "payload.call_id",
+      "text": "payload.output",
+      "error": "payload.failed"
+     }
+    },
+    {
+     "require": {
+      "kind": "note"
+     },
+     "text": "payload.text",
+     "who": "agent"
+    }
+   ]
+  },
+  "cases": [
+   {
+    "about": "text from the items of a list in the record, each item by the rule that requires its kind, in the list's order; an item no rule requires says nothing; a record of several items names each by its index",
+    "lines": [
+     "{\"rid\": \"r1\", \"ts\": \"2026-10-02T09:00:00.000Z\", \"kind\": \"msg\", \"payload\": {\"role\": \"user\", \"parts\": [{\"type\": \"input_text\", \"text\": \"fix the nav\"}]}}",
+     "{\"rid\": \"r2\", \"ts\": \"2026-10-02T09:00:01.000Z\", \"kind\": \"msg\", \"payload\": {\"role\": \"user\", \"parts\": [{\"type\": \"input_image\", \"caption\": \"the broken menu\"}, {\"type\": \"input_text\", \"text\": \"like this\"}]}}",
+     "{\"rid\": \"r3\", \"ts\": \"2026-10-02T09:00:02.000Z\", \"kind\": \"msg\", \"payload\": {\"role\": \"assistant\", \"parts\": [{\"type\": \"reasoning\", \"text\": \"hmm\"}, {\"type\": \"output_text\", \"text\": \"Done: the **nav** works.\"}]}}"
+    ],
+    "entries": [
+     {
+      "id": "r1",
+      "at": 1790931600000,
+      "who": "person",
+      "text": "fix the nav"
+     },
+     {
+      "id": "r2/0",
+      "at": 1790931601000,
+      "who": "person",
+      "text": "the broken menu"
+     },
+     {
+      "id": "r2/1",
+      "at": 1790931601000,
+      "who": "person",
+      "text": "like this"
+     },
+     {
+      "id": "r3/1",
+      "at": 1790931602000,
+      "who": "agent",
+      "text": "Done: the **nav** works."
+     }
+    ]
+   },
+   {
+    "about": "a tool the agent used, about the first of its about paths that is text, its first line, at most 120 characters, or none; what a tool gave back, its text or its items' text a line each, cut to 2,000 characters, an error only when its field is true",
+    "lines": [
+     "{\"rid\": \"r4\", \"ts\": \"2026-10-02T09:00:03.000Z\", \"kind\": \"call\", \"payload\": {\"call_id\": \"c1\", \"name\": \"shell\", \"args\": {\"cmd\": [\"ls\", \"-la\"], \"file\": \"src/nav.ts\\nand more\"}}}",
+     "{\"rid\": \"r5\", \"ts\": \"2026-10-02T09:00:03.000Z\", \"kind\": \"call\", \"payload\": {\"call_id\": \"c2\", \"name\": \"edit\", \"args\": {\"cmd\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"}}}",
+     "{\"rid\": \"r6\", \"ts\": \"2026-10-02T09:00:03.000Z\", \"kind\": \"call\", \"payload\": {\"call_id\": \"c3\", \"name\": \"think\", \"args\": {}}}",
+     "{\"rid\": \"r7\", \"ts\": \"2026-10-02T09:00:04.000Z\", \"kind\": \"output\", \"payload\": {\"call_id\": \"c1\", \"output\": \"no such file\", \"failed\": true}}",
+     "{\"rid\": \"r8\", \"ts\": \"2026-10-02T09:00:04.000Z\", \"kind\": \"output\", \"payload\": {\"call_id\": \"c2\", \"output\": [{\"text\": \"a\"}, {\"image\": \"x\"}, {\"text\": \"b\"}], \"failed\": \"yes\"}}",
+     "{\"rid\": \"r9\", \"ts\": \"2026-10-02T09:00:04.000Z\", \"kind\": \"output\", \"payload\": {\"call_id\": \"c3\", \"output\": \"yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\"}}"
+    ],
+    "entries": [
+     {
+      "id": "r4",
+      "at": 1790931603000,
+      "who": "agent",
+      "tool": {
+       "id": "c1",
+       "name": "shell",
+       "about": "src/nav.ts"
+      }
+     },
+     {
+      "id": "r5",
+      "at": 1790931603000,
+      "who": "agent",
+      "tool": {
+       "id": "c2",
+       "name": "edit",
+       "about": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+     },
+     {
+      "id": "r6",
+      "at": 1790931603000,
+      "who": "agent",
+      "tool": {
+       "id": "c3",
+       "name": "think"
+      }
+     },
+     {
+      "id": "r7",
+      "at": 1790931604000,
+      "who": "tool",
+      "result": {
+       "of": "c1",
+       "text": "no such file",
+       "error": true
+      }
+     },
+     {
+      "id": "r8",
+      "at": 1790931604000,
+      "who": "tool",
+      "result": {
+       "of": "c2",
+       "text": "a\nb"
+      }
+     },
+     {
+      "id": "r9",
+      "at": 1790931604000,
+      "who": "tool",
+      "result": {
+       "of": "c3",
+       "text": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+      }
+     }
+    ]
+   },
+   {
+    "about": "the record itself read as text; a record with a value skipWhen names, with no id, with no time, of no rule's kind, or whose text is not text, and a line that is not a record, say nothing",
+    "lines": [
+     "{\"rid\": \"r10\", \"ts\": \"2026-10-02T09:00:05.000Z\", \"kind\": \"note\", \"payload\": {\"text\": \"Plan: refactor the nav first.\"}}",
+     "{\"rid\": \"r11\", \"ts\": \"2026-10-02T09:00:05.000Z\", \"kind\": \"note\", \"hidden\": true, \"payload\": {\"text\": \"kept to itself\"}}",
+     "{\"ts\": \"2026-10-02T09:00:05.000Z\", \"kind\": \"note\", \"payload\": {\"text\": \"no id\"}}",
+     "{\"rid\": \"r12\", \"kind\": \"note\", \"payload\": {\"text\": \"no time\"}}",
+     "{\"rid\": \"r13\", \"ts\": \"whenever\", \"kind\": \"note\", \"payload\": {\"text\": \"no time it can read\"}}",
+     "{\"rid\": \"r14\", \"ts\": \"2026-10-02T09:00:05.000Z\", \"kind\": \"other\", \"payload\": {\"text\": \"no rule's kind\"}}",
+     "{\"rid\": \"r15\", \"ts\": \"2026-10-02T09:00:05.000Z\", \"kind\": \"note\", \"payload\": {\"text\": 7}}",
+     "not a record"
+    ],
+    "entries": [
+     {
+      "id": "r10",
+      "at": 1790931605000,
+      "who": "agent",
+      "text": "Plan: refactor the nav first."
+     }
+    ]
+   }
+  ]
+ },
  "phone": [
   {
    "about": "each entry the phone can read, in the order sent: the person's or the agent's text, a tool the agent used (about left out when not said), what a tool gave back (error only as true); one that is not an object, of another who, without what its who says, or with a field of another type, is left out",

@@ -47,6 +47,7 @@ that is the highest tier the CLI supports.
 | Notification wording is correct | status bus → agent notifications | | |
 | Allow / Deny from the phone types the right keys | `answer.permission` | | |
 | Stop from the phone interrupts its turn, and only that | `interrupt` | | |
+| The phone's conversation reads a real session file: prompts, replies, tools and what they gave back | `session.transcript` | | |
 | Remote (`ssh://`) tile | generic transport | | |
 
 ## Files touched (the complete list)

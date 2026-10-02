@@ -170,9 +170,39 @@ export interface AgentSession {
      *  but ahead of what the launch adds, or last of all (the default). */
     position?: "before" | "beforeLaunch" | "after";
   };
-  /** The format of the session file `resume.exists` names, which Hivemind reads as the
-   *  conversation the person's phone shows (spec/agents.md "Conversation"). */
-  transcript?: "claude";
+  /** How the session file `resume.exists` names says what the person, the agent and its tools
+   *  said to each other, which Hivemind reads as the conversation the person's phone shows
+   *  (spec/agents.md "Conversation"). */
+  transcript?: AgentTranscript;
+}
+
+/** A session file read as a conversation: one JSON record a line, each read by the rules in
+ *  `said`. Every path is a field path (`message.content`) into the record, or into an item of a
+ *  list in it. */
+export interface AgentTranscript {
+  /** The record's id. */
+  id: string;
+  /** When it was written, an ISO 8601 time. */
+  at: string;
+  /** A record with any of these values says nothing. */
+  skipWhen?: Record<string, string | number | boolean>;
+  said: TranscriptRule[];
+}
+
+/** One way a record says something: the records it reads (`require`: each field equal to its
+ *  value), the record itself or each item of the list `each` (those `item` requires), and what
+ *  it reads there: exactly one of text said by `who`, a tool the agent used, or what a tool gave
+ *  back. Rules over the same list read it together, each item by the first that requires it. */
+export interface TranscriptRule {
+  require?: Record<string, string | number | boolean>;
+  each?: string;
+  item?: Record<string, string | number | boolean>;
+  text?: string;
+  who?: "person" | "agent";
+  /** `about`: what the use is about, the first of these that is text. */
+  tool?: { id: string; name: string; about?: string[] };
+  /** `text`: text, or a list whose items' `text` are joined a line each. `error`: when true. */
+  result?: { of: string; text: string; error?: string };
 }
 
 /** A file inside the overlay that Hivemind writes rather than links. */

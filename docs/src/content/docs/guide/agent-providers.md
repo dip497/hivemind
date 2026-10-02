@@ -213,19 +213,48 @@ you can still close it there.
 ## The conversation on your phone
 
 Your phone can show what the agent and you say to each other as a conversation, rather than
-its terminal, if Hivemind can read the agent's own session file. Name its format under
-`session`, beside `resume.exists`, which says where the file is:
+its terminal, if Hivemind can read the agent's own session file. Hivemind knows no agent's
+format: the manifest maps it under `session.transcript`, beside `resume.exists`, which says where
+the file is. The file is read one JSON record a line; each rule under `said` says which records
+it reads (`require`: fields equal to these values), whether it reads the record itself or each
+item of a list in it (`each`, the items `item` requires), and what it reads there, exactly one of:
+
+- `text` and `who` (`person` or `agent`): what was said, in markdown;
+- `tool`: a tool the agent used, its `id` and `name`, and `about`, the first of these fields
+  that is text (its first line, at most 120 characters);
+- `result`: what a tool gave back, `of` the use it answers, its `text` (text, or a list whose
+  items' `text` are joined a line each, cut to 2,000 characters), and `error` when that field is
+  `true`.
+
+Rules over the same list read it together, each item by the first rule that requires it, in the
+list's order. A record with a value under `skipWhen`, or with no `id` or no `at` (an ISO 8601
+time), says nothing. Claude Code's, as its manifest maps it:
 
 ```yaml
 session:
   resume:
     exists: '{home}/.claude/projects/*/{id}.jsonl'
-  transcript: claude      # the session file's format
+  transcript:
+    id: uuid
+    at: timestamp
+    skipWhen: { isSidechain: true, isMeta: true }
+    said:
+    - { require: { type: user }, text: message.content, who: person }
+    - { require: { type: user }, each: message.content, item: { type: text }, text: text, who: person }
+    - require: { type: user }
+      each: message.content
+      item: { type: tool_result }
+      result: { of: tool_use_id, text: content, error: is_error }
+    - { require: { type: assistant }, each: message.content, item: { type: text }, text: text, who: agent }
+    - require: { type: assistant }
+      each: message.content
+      item: { type: tool_use }
+      tool: { id: id, name: name, about: [input.file_path, input.path, input.command, input.pattern, input.url, input.query, input.description] }
 ```
 
-`claude`, Claude Code's, is the one format read today. Hivemind finds the file for the
-session the agent's tile is in, reads its end, and sends your phone each new piece as it is
-written. When the agent begins another session (Claude Code's `/clear`), your phone moves to it
+Hivemind finds the file for the session the agent's tile is in, reads its end, and sends your
+phone each new piece as it is written. `conformance/conversation.json` has cases to check a mapping
+against. When the agent begins another session (Claude Code's `/clear`), your phone moves to it
 once its file is written; for that, the agent's tracker hook (or `launch.hcp`, which gives the
 agent its tile as `$HIVEMIND_TILE`) has to record the new session for its tile.
 

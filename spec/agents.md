@@ -109,8 +109,8 @@ repository answers no files and an empty patch; one on another machine is `FAILE
 
 `agent.conversation(tile, cursor?, session?)` (0.2; `session` 0.3) answers what the agent of `tile`
 and the person said to each other, as the agent keeps it in its session file (its manifest's
-`session.transcript` names the format; `claude`, Claude Code's, is the one read), and then sends
-the caller what is said next, as it is written, until the call's connection goes:
+`session.transcript` maps the file's records), and then sends the caller what is said next, as it
+is written, until the call's connection goes:
 
 ```json
 { "entries": [ … ], "cursor": 52311, "session": "<the session's id>" }
@@ -126,16 +126,13 @@ before the answer. Each entry is one of
 { "id": "<its id>", "at": 1790000000000, "who": "tool", "result": { "of": "<the use>", "text": "<what it gave back>", "error": true } }
 ```
 
-- In Claude Code's file, each line is a record; a `user` or `assistant` record's `message.content`
-  is text or a list of blocks. A user's text, or `text` block, is the person's; an assistant's
-  `text` block is the agent's; its `tool_use` block a tool it used, `about` the first of its
-  input's `file_path`, `path`, `command`, `pattern`, `url`, `query`, `description` that is text, its
-  first line, at most 120 characters (left out when none is); a user's `tool_result` block what a
-  tool gave back, its text (or its `text` blocks' joined) cut to 2,000 characters, `error` when
-  `is_error` is true (left out otherwise). `id` is the record's `uuid`, with `/` and the block's
-  index after it for a record of several blocks; `at` its `timestamp`, in ms since the epoch.
-  Thinking, records of a sidechain (`isSidechain`), meta records (`isMeta`), any other record or
-  block, and a line that is not one, say nothing.
+- The device reads them from the file as the agent's manifest maps its records
+  (`session.transcript`: which records say what, and in which fields; the agent providers guide
+  has the rules). It knows no agent's format of its own. `id` is the record's, with `/` and the
+  item's index after it for one read from a list of several items; `at` its time, in ms since the
+  epoch; a tool's `about` at most 120 characters, its first line; what a tool gave back cut to
+  2,000 characters, `error` only when true (left out otherwise). A line that is not a record, and
+  a record or item no rule reads, say nothing.
 - `cursor` is how far into the file the entries go (in bytes, at the end of a line), and `session`
   the session whose file it is: given back, they answer only what comes after the cursor, as after
   a reconnect. Without them, or for a session the agent keeps no more, it answers the last 200
@@ -145,8 +142,8 @@ before the answer. Each entry is one of
   Claude Code's `/clear` does), and that session's file is there, the device follows that one
   instead: the next `agent.said` names it, with the last of it, as answered without a cursor, and
   cursors into its file. Whoever follows shows a conversation begun anew.
-- An agent with no session file found, or whose manifest names no format, answers no entries and
-  cursor 0, no session, and nothing more.
+- An agent with no session file found, or whose manifest maps no transcript, answers no entries
+  and cursor 0, no session, and nothing more.
 
 ## Who may
 

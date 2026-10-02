@@ -4,17 +4,19 @@
  * sent to that caller as it comes, and the next session's from its start once the agent begins
  * another (as Claude Code's `/clear` does), until the caller goes.
  */
-import { agentForCmd, readTrackedSession, sessionFile, sessionFor } from "@hivemind/agents/node";
+import { agentForCmd, readTrackedSession, sessionFile, sessionFor, type AgentTranscript } from "@hivemind/agents/node";
 import { ApiError, text } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { followConversation, readConversation, type Said } from "./conversation.js";
 import { runsIn, type HeldBoard } from "./needs.js";
 
-/** A session an agent keeps its conversation in: its id, and its file. */
+/** A session an agent keeps its conversation in: its id, its file, and how the file's records say
+ *  what was said, as its manifest maps them. */
 export interface Transcript {
   session: string;
   file: string;
+  format: AgentTranscript;
 }
 
 /** How often a followed agent is looked at for a session it began since. */
@@ -22,7 +24,7 @@ const SESSION_CHECK_MS = 1000;
 
 /** The session the agent of `tile` keeps its conversation in now, among the boards `held`, and its
  *  file, as its manifest says it is kept (`session.transcript`, `session.resume.exists`); null
- *  when it names no format, or no file is found. The session is the one last recorded for the tile
+ *  when it maps no transcript, or no file is found. The session is the one last recorded for the tile
  *  in `tileSessionsDir` (by its tracker hook, or by the daemon as it bound one at its start), else
  *  the one its manifest would resume. */
 export function transcriptOf(held: HeldBoard[], tile: string, tileSessionsDir: string, home?: string): Transcript | null {
@@ -30,16 +32,17 @@ export function transcriptOf(held: HeldBoard[], tile: string, tileSessionsDir: s
   const record = held.flatMap((h) => h.core?.tiles ?? []).find((t) => t.id === bare) as { cmd?: string; args?: string[] } | undefined;
   const def = agentForCmd(record?.cmd);
   const exists = def?.session?.resume?.exists;
-  if (!record || !def?.session?.transcript || !exists) return null;
+  const format = def?.session?.transcript;
+  if (!record || !format || !exists) return null;
   const spec = { cwd: runsIn(held, bare) ?? "", args: record.args ?? [] };
   const session = readTrackedSession(tileSessionsDir, `hm:${bare}`) ?? readTrackedSession(tileSessionsDir, bare) ?? sessionFor(def, spec);
   const file = session ? sessionFile(exists, session, home) : null;
-  return session && file ? { session, file } : null;
+  return session && file ? { session, file, format } : null;
 }
 
 export interface ConversationsOptions {
-  /** The session the agent of `tile` keeps its conversation in now, and its file, in a format its
-   *  manifest names; null when none. */
+  /** The session the agent of `tile` keeps its conversation in now, its file, and how its manifest
+   *  maps the file's records; null when none. */
   transcriptOf(tile: string): Transcript | null;
 }
 
@@ -55,7 +58,7 @@ export function conversations(o: ConversationsOptions): Domain<"agent.conversati
         const now = o.transcriptOf(bare);
         if (!now) return { entries: [], cursor: 0 };
         // A cursor counts in the session it was given in, and only there.
-        const first = readConversation(now.file, session === now.session ? (cursor ?? undefined) : undefined);
+        const first = readConversation(now.file, now.format, session === now.session ? (cursor ?? undefined) : undefined);
         let mine = following.get(from);
         if (!mine) following.set(from, (mine = new Map()));
         mine.get(bare)?.();
@@ -77,14 +80,14 @@ export function conversations(o: ConversationsOptions): Domain<"agent.conversati
  *  Stop it with what it returns. */
 function followAgent(now: () => Transcript | null, at: Transcript, cursor: number, send: (said: Said, session: string) => void): () => void {
   let current = at;
-  const follow = (t: Transcript, from: number) => followConversation(t.file, from, (said) => send(said, t.session));
+  const follow = (t: Transcript, from: number) => followConversation(t.file, t.format, from, (said) => send(said, t.session));
   let stop = follow(at, cursor);
   const check = setInterval(() => {
     const next = now();
     if (!next || next.session === current.session) return;
     stop();
     current = next;
-    const first = readConversation(next.file);
+    const first = readConversation(next.file, next.format);
     send(first, next.session);
     stop = follow(next, first.cursor);
   }, SESSION_CHECK_MS);

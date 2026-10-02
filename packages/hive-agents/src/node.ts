@@ -18,6 +18,7 @@ export * from "./catalog.js";
 export { shq } from "./shq.js";
 export * from "./tile-session-store.js";
 export * from "./session.js";
+export * from "./transcript.js";
 export * from "./runtime.js";
 export * from "./runtime-manifest.js";
 export * from "./hooks.js";
