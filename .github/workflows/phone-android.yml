@@ -108,6 +108,9 @@ jobs:
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
+      - name: SDK command-line tools, the newest (the image's cannot make an Android 17 AVD)
+        run: bash scripts/phone/update-cmdline-tools.sh
+
       # Booted cold, not from a snapshot: an emulator restored from one dropped off adb as Maestro
       # started its driver ("device offline", runs 36987502508 and 36989241234).
       - name: Smoke flow
