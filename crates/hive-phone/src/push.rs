@@ -5,10 +5,10 @@
 //! server, the phone registers there, naming the devices that may tell it, and is told through it
 //! (0.3).
 
-use std::{fs, path::Path};
+use std::{fs, future::Future, path::Path, time::Duration};
 
 use aes_gcm::{aead::Aead, Aes128Gcm, KeyInit as _, Nonce};
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{ensure, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use hmac::{Hmac, KeyInit as _, Mac};
 use iroh::endpoint::Connection;
@@ -22,11 +22,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     devices,
+    failure::Failure,
     identity::{write_private, Identity},
 };
 
 /// Where this phone last registered at its network's push server, kept beside its keys.
 const REGISTERED: &str = "push-server.json";
+/// How long a device has to take where the phone is told; one that does not is away.
+const TELL_WITHIN: Duration = Duration::from_secs(10);
 
 fn hmac(key: &[u8], data: &[&[u8]]) -> [u8; 32] {
     let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC takes any key");
@@ -213,6 +216,17 @@ pub async fn subscribing(phone: &Identity, at: PushAt<'_>) -> Result<Subscribing
     }
 }
 
+/// The VAPID key (RFC 8292) of the push server on `phone`'s network that tells phones through
+/// UnifiedPush, as its profile names it (`push.vapid`): for the phone to give its distributor as it
+/// registers, so a distributor that asks for one takes what that server posts (spec/push.md 0.3).
+/// None on a network without such a server.
+pub fn vapid(phone: &Identity) -> Option<String> {
+    let push = phone.network()?.profile.push?;
+    let kind = serde_json::to_value(Platform::Unifiedpush).ok()?;
+    let unifiedpush = push.kinds.iter().any(|k| kind.as_str() == Some(k));
+    unifiedpush.then_some(push.vapid).flatten()
+}
+
 /// Whether `notice`, read, is one to show (spec/push.md "Back"): a device back only when this
 /// phone found it away at or before it was back, then away no more; every other notice.
 pub fn shown(phone: &Identity, notice: &Value) -> Result<bool> {
@@ -229,15 +243,50 @@ pub fn notice(phone: &Identity, body: &[u8]) -> Result<Option<Value>> {
     Ok(shown(phone, &notice)?.then_some(notice))
 }
 
-/// Give the device on `connection` where this phone is told what happens there, `subscription`.
+/// Give the device on `connection` where this phone is told what happens there, `subscription`:
+/// refused in the device's words when it does not take it.
 pub async fn subscribe(connection: &Connection, subscription: &Value) -> Result<()> {
     let mut given = subscription.clone();
     given["t"] = json!("push");
     let answer = devices::ask(connection, &given).await?;
     if answer.get("ok").and_then(Value::as_bool) != Some(true) {
-        bail!("{}", devices::refusal(&answer));
+        let message = devices::refusal(&answer).to_string();
+        return Err(Failure::Refused {
+            code: None,
+            message,
+        }
+        .into());
     }
     Ok(())
+}
+
+/// How one of the person's devices took where this phone is told.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Took {
+    /// It took it.
+    Yes,
+    /// It said no, in its words.
+    Refused(String),
+    /// It was not reached, or did not answer in time: it is away, and is told again as the app
+    /// comes back.
+    Away,
+}
+
+/// Give the device `reaching` connects to where this phone is told, `subscription`, within the
+/// time a device has to take it: how it took it.
+pub async fn tell(
+    reaching: impl Future<Output = Result<Connection>>,
+    subscription: &Value,
+) -> Took {
+    let given = async { subscribe(&reaching.await?, subscription).await };
+    match tokio::time::timeout(TELL_WITHIN, given).await {
+        Ok(Ok(())) => Took::Yes,
+        Ok(Err(e)) => match e.downcast_ref::<Failure>() {
+            Some(Failure::Refused { message, .. }) => Took::Refused(message.clone()),
+            _ => Took::Away,
+        },
+        Err(_) => Took::Away,
+    }
 }
 
 /// Where this phone registered to be told through a push server: the server, and where it tells

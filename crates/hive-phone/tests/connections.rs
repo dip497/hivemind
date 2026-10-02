@@ -5,7 +5,8 @@
 //! closed, and back in the foreground the device is reached again; a device gone is found away. A
 //! device that lists its agents is followed, each list kept as it comes, and the workspaces it
 //! holds; one that does not is asked what waits on the person. A device unpaired is told,
-//! forgotten, and its connection closed.
+//! forgotten, and its connection closed. Which device holds a workspace is asked of all at once,
+//! for as long as given and no longer.
 
 mod support;
 
@@ -14,12 +15,12 @@ use std::{
         atomic::{AtomicUsize, Ordering::SeqCst},
         Arc,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use hive_phone::{connections::Connections, needs::Heard, workspace::Held};
 use serde_json::{json, Value};
-use support::{paired_with, tmp, until, Desk, TILE, WORKSPACE};
+use support::{paired_also, paired_with, tmp, until, Desk, TILE, WORKSPACE};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_device_is_kept_reached_in_the_foreground_closed_in_the_background_and_found_away_once_gone(
@@ -140,4 +141,29 @@ async fn a_device_unpaired_is_told_forgotten_and_its_connection_closed() {
     assert!(connections.seen().is_empty());
     // The call's own connection, and the one kept.
     assert!(until(Duration::from_secs(5), || desk.closed.load(SeqCst) == 2).await);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn which_device_holds_a_workspace_is_the_first_to_say_so_asked_all_at_once_and_none_once_the_time_given_is_up(
+) {
+    let desk = Desk::start(72).await;
+    let dir = tmp("holder");
+    let phone = paired_with(&dir, &desk);
+    // Another of Priya's computers, never reached: asking it waits on nothing. Paired with the
+    // desk again, the desk is listed after it, and asked after it were they asked one by one.
+    paired_also(&phone, 73, "attic", "203.0.113.7:4433");
+    let phone = paired_with(&dir, &desk);
+    let listed: Vec<String> = phone.devices().into_iter().map(|d| d.with.name).collect();
+    assert_eq!(listed, ["attic", "desk"]);
+    let connections = Connections::new(phone.clone(), || {});
+    let within = Duration::from_secs(2);
+    let began = Instant::now();
+    assert_eq!(
+        connections.holder_of(WORKSPACE, within).await,
+        Some(desk.id.clone())
+    );
+    assert!(began.elapsed() < within, "the desk answered at once");
+    assert_eq!(connections.holder_of("w9", within).await, None);
+    // Not the time a device has to answer: a push handler has seconds.
+    assert!(began.elapsed() < 2 * within, "{:?}", began.elapsed());
 }

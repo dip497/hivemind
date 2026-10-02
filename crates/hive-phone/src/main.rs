@@ -884,26 +884,27 @@ async fn run(args: Args) -> Result<()> {
                 .as_str()
                 .unwrap_or_default()
                 .to_string();
-            let (mut told, mut away) = (vec![], vec![]);
+            let (mut told, mut away, mut refused) = (vec![], vec![], vec![]);
             for d in &devices {
-                let given = async {
+                let reaching = async {
                     let at = hive_net::net::addr_of(&d.device, &d.addrs, &d.relay)?;
-                    let connection = net.connect(at, hive_net::ws::ALPN).await?;
-                    push::subscribe(&connection, &subscription).await?;
-                    connection.close(0u32.into(), b"done");
-                    Ok::<_, anyhow::Error>(())
+                    Ok(net.connect(at, hive_net::ws::ALPN).await?)
                 };
-                match tokio::time::timeout(std::time::Duration::from_secs(10), given).await {
-                    Ok(Ok(())) => told.push(d.name.clone()),
-                    _ => away.push(d.name.clone()),
+                match push::tell(reaching, &subscription).await {
+                    push::Took::Yes => told.push(d.name.clone()),
+                    push::Took::Refused(why) => refused.push((d.name.clone(), why)),
+                    push::Took::Away => away.push(d.name.clone()),
                 }
             }
             net.close().await;
             if args.json {
-                println!(
-                    "{}",
-                    json!({ "endpoint": endpoint, "via": via, "told": told, "away": away })
-                );
+                let refused: Vec<Value> = refused
+                    .iter()
+                    .map(|(device, why)| json!({ "device": device, "why": why }))
+                    .collect();
+                let told = json!({ "endpoint": endpoint, "via": via, "told": told, "away": away,
+                    "refused": refused });
+                println!("{told}");
             } else {
                 if let Some(url) = &via {
                     println!("told through the push server {url}");
@@ -911,6 +912,9 @@ async fn run(args: Args) -> Result<()> {
                 println!("told at {endpoint}: {}", told.join(", "));
                 for name in &away {
                     println!("{name} is away: it is not told where to reach this phone");
+                }
+                for (name, why) in &refused {
+                    println!("{name} said no: {why}");
                 }
             }
             notices(listener, keys, Arc::new(phone), args.json).await?;

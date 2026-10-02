@@ -105,6 +105,28 @@ pub fn paired_with(dir: &Path, desk: &Desk) -> Arc<Identity> {
     Arc::new(phone)
 }
 
+/// `phone` paired with another of Priya's devices too, the `n`th, called `name` and said to be
+/// reached at `addr`: its id.
+pub fn paired_also(phone: &Identity, n: u8, name: &str, addr: &str) -> String {
+    let priya = key(9);
+    let device = key(n).public().to_string();
+    let with = PairedWith {
+        device: device.clone(),
+        name: name.into(),
+        kind: "app".into(),
+        certificate: certify(&priya, &device),
+        addrs: vec![addr.into()],
+        relay: None,
+    };
+    let paired = Paired {
+        with,
+        certificate: certify(&priya, &phone.id()),
+        network: None,
+    };
+    phone.keep(&paired, 2).unwrap();
+    device
+}
+
 /// Priya's computer, as the phone reaches it.
 pub struct Desk {
     pub id: String,
@@ -285,7 +307,8 @@ async fn serve(connection: &Connection, serving: Serving) {
     }
 }
 
-/// The `device` stream, as the app answers it.
+/// The `device` stream, as the app answers it: what needs the person, the workspaces it holds, the
+/// person's other devices, unpairing, and where to tell the phone.
 async fn device(mut send: SendStream, mut recv: RecvStream, serving: &Serving) {
     while let Ok(Some(frame)) = read_frame(&mut recv).await {
         let asked: Value = serde_json::from_slice(&frame).unwrap();
@@ -300,6 +323,11 @@ async fn device(mut send: SendStream, mut recv: RecvStream, serving: &Serving) {
             Some("devices") => json!({ "t": "devices", "devices": [],
                 "profile": { "name": "Priya", "color": "#aa3366" } }),
             Some("unpair") => json!({ "t": "unpair", "ok": true }),
+            // Where to tell the phone: a subscription is taken, anything else refused.
+            Some("push") if asked["endpoint"].is_string() => json!({ "t": "push", "ok": true }),
+            Some("push") => {
+                json!({ "t": "push", "ok": false, "error": "not a push subscription" })
+            }
             _ => continue,
         };
         let _ = write_frame(&mut send, answer.to_string().as_bytes()).await;

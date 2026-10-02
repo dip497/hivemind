@@ -26,7 +26,7 @@ pub use error::PhoneError;
 pub use overview::{Following, OverviewListener};
 pub use pairing::{pairs_with, PairsWith};
 pub use phone::Phone;
-pub use push::{Notice, PushAt, PushTold};
+pub use push::{Notice, PushAt, PushRefused, PushTold};
 pub use records::*;
 pub use view::{
     Screen, ThemeMode, ViewEnded, ViewFile, ViewFonts, ViewInfo, ViewListener, ViewSession,

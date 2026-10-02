@@ -59,8 +59,9 @@ private fun PushState.words(): List<String> = when (this) {
         val via = told.via
         add(if (via != null) stringResource(R.string.push_via, via) else stringResource(R.string.push_direct))
         told.unregistered?.let { add(stringResource(R.string.push_server_refused, it)) }
-        if (told.told.isEmpty() && told.away.isEmpty()) add(stringResource(R.string.push_told_nobody))
+        if (told.told.isEmpty() && told.away.isEmpty() && told.refused.isEmpty()) add(stringResource(R.string.push_told_nobody))
         if (told.told.isNotEmpty()) add(stringResource(R.string.push_told, told.told.joinToString(", ")))
         if (told.away.isNotEmpty()) add(stringResource(R.string.push_away, told.away.joinToString(", ")))
+        for (refused in told.refused) add(stringResource(R.string.push_refused, refused.device, refused.why))
     }
 }

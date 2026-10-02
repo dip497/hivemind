@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use hive_phone::push::{self, Platform};
+use hive_phone::push::{self, Platform, Took};
 use serde_json::Value;
 use tokio::task::JoinSet;
 
@@ -15,8 +15,9 @@ use crate::{
     PhoneError,
 };
 
-/// How long a device has to take where the phone is told; one that does not is away.
-const TELL_WITHIN: Duration = Duration::from_secs(10);
+/// How long reading a notice asks the person's devices which holds its workspace, when what they
+/// last said does not say: a push handler has seconds, not the time a device has to answer.
+const HOLDER_WITHIN: Duration = Duration::from_secs(3);
 
 /// Where the app's push service tells the phone.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
@@ -29,14 +30,24 @@ pub enum PushAt {
 }
 
 /// Where the phone is told now: through the push server `via`, when it is; the devices that took
-/// it, and those away, by name (call again as the app comes to the foreground, and an away one
-/// takes it then); and, when the push server would not take the endpoint, why.
+/// it, by name; those away, not reached or not answering in time (call again as the app comes to
+/// the foreground, and an away one takes it then); those that said no, and why; and, when the push
+/// server would not take the endpoint, why.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct PushTold {
     pub via: Option<String>,
     pub told: Vec<String>,
     pub away: Vec<String>,
+    #[uniffi(default)]
+    pub refused: Vec<PushRefused>,
     pub unregistered: Option<String>,
+}
+
+/// A device that would not take where the phone is told: by name, and why, in its words.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct PushRefused {
+    pub device: String,
+    pub why: String,
 }
 
 /// What a notice says. The same agent, workspace and `since` told by two devices is one notice.
@@ -141,37 +152,45 @@ impl Phone {
             for device in identity.devices() {
                 let (connections, subscription) = (connections.clone(), subscription.clone());
                 telling.spawn(async move {
-                    let given = async {
-                        let connection = connections.to(&device.with.device).await?;
-                        push::subscribe(&connection, &subscription).await
-                    };
-                    let took = matches!(tokio::time::timeout(TELL_WITHIN, given).await, Ok(Ok(())));
-                    (device.with.name, took)
+                    let reaching = connections.to(&device.with.device);
+                    (device.with.name, push::tell(reaching, &subscription).await)
                 });
             }
-            let (mut told, mut away) = (vec![], vec![]);
+            let (mut told, mut away, mut refused) = (vec![], vec![], vec![]);
             while let Some(Ok((name, took))) = telling.join_next().await {
-                if took {
-                    told.push(name)
-                } else {
-                    away.push(name)
+                match took {
+                    Took::Yes => told.push(name),
+                    Took::Away => away.push(name),
+                    Took::Refused(why) => refused.push(PushRefused { device: name, why }),
                 }
             }
             told.sort();
             away.sort();
+            refused.sort_by(|a, b| a.device.cmp(&b.device));
             Ok(PushTold {
                 via,
                 told,
                 away,
+                refused,
                 unregistered,
             })
         })
         .await
     }
 
+    /// The VAPID key (RFC 8292, base64url) of the push server on the person's network that tells
+    /// phones through UnifiedPush: for the app to give its distributor as it registers (Android's
+    /// `UnifiedPush.register(…, vapid)`), so one that asks for a key takes what that server posts.
+    /// None on a network without such a server.
+    pub fn push_vapid(&self) -> Option<String> {
+        push::vapid(&self.identity)
+    }
+
     /// What `body`, a notice the app's push service handed it, says: none for one not to show (a
     /// device back the phone did not find away, or a kind it does not know). Its agent's device is
-    /// the one that holds its workspace, as last heard, else as asked now.
+    /// the one that holds its workspace, as last heard, else as the devices say when asked now, all
+    /// at once and for three seconds at most, so it is read within a push handler's few seconds:
+    /// none ("") when none said by then.
     pub async fn read_notice(&self, body: Vec<u8>) -> Result<Option<Notice>, PhoneError> {
         let (identity, connections) = (self.identity.clone(), self.connections.clone());
         let heard = self.overview().workspaces;
@@ -185,16 +204,7 @@ impl Phone {
                 .find(|w| w.id == workspace)
                 .map(|w| w.device);
             if device.is_none() && !workspace.is_empty() {
-                for paired in identity.devices() {
-                    if connections
-                        .holding(&paired.with.device, workspace)
-                        .await
-                        .is_ok()
-                    {
-                        device = Some(paired.with.device);
-                        break;
-                    }
-                }
+                device = connections.holder_of(workspace, HOLDER_WITHIN).await;
             }
             Ok(notice_of(&notice, device.unwrap_or_default()))
         })

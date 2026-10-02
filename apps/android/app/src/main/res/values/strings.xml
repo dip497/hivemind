@@ -196,5 +196,6 @@
     <string name="push_told_nobody">None of your devices has been told yet.</string>
     <string name="push_told">%s will tell this phone what needs you.</string>
     <string name="push_away">%s: away, told when the app next opens.</string>
+    <string name="push_refused">%1$s said no: %2$s</string>
     <string name="action_try_again">Try again</string>
 </resources>

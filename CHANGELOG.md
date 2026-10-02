@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: `hive-phone push` says which of your devices said no to telling your phone, and why, apart from those that are away (`refused` in `--json`).
 - New: your computer tells your phone which agents keep a conversation it can show as a chat: those whose agent file maps their session file (`session.transcript`). The phone offers the chat only for those, and the terminal for every agent (`hive-phone agents --json` says `conversation`; spec/agents.md 0.4).
 - New: a community view shown on your phone is served by your computer as its own windows serve it: with the view SDK, through the page that runs a view whose entry is a script, and each file under the same policy (no network, scripts only from the view). It is told your phone's screen size and look, and when either changes (`hive-phone view <workspace> <view> --size 390x844`; workspace API 0.14: `view.list` says the page to load, `view.file` the policy, `view.open` and `view.screen` the screen).
 - New: a community view can say it works on a phone (`"phone": true` in `hivemind-view.json`), and your computer offers those to your phone: their files, and the view opened on a workspace there, its host running on the computer, told it is on a phone's screen and doing only what your phone may (`hive-phone views <workspace>`, `hive-phone view <workspace> <view>`; workspace API 0.12, `view.*`).

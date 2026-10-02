@@ -519,6 +519,11 @@ uint64_t uniffi_hive_phone_ffi_fn_method_phone_watch(uint64_t ptr, RustBuffer ag
 uint64_t uniffi_hive_phone_ffi_fn_method_phone_push_to(uint64_t ptr, RustBuffer at
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_PUSH_VAPID
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_PUSH_VAPID
+RustBuffer uniffi_hive_phone_ffi_fn_method_phone_push_vapid(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_READ_NOTICE
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_READ_NOTICE
 uint64_t uniffi_hive_phone_ffi_fn_method_phone_read_notice(uint64_t ptr, RustBuffer body
@@ -1067,6 +1072,12 @@ uint16_t uniffi_hive_phone_ffi_checksum_method_phone_watch(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_PUSH_TO
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_PUSH_TO
 uint16_t uniffi_hive_phone_ffi_checksum_method_phone_push_to(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_PUSH_VAPID
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_PUSH_VAPID
+uint16_t uniffi_hive_phone_ffi_checksum_method_phone_push_vapid(void
     
 );
 #endif

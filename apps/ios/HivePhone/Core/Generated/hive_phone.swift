@@ -1448,9 +1448,19 @@ public protocol PhoneProtocol: AnyObject, Sendable {
     func pushTo(at: PushAt) async throws  -> PushTold
     
     /**
+     * The VAPID key (RFC 8292, base64url) of the push server on the person's network that tells
+     * phones through UnifiedPush: for the app to give its distributor as it registers (Android's
+     * `UnifiedPush.register(…, vapid)`), so one that asks for a key takes what that server posts.
+     * None on a network without such a server.
+     */
+    func pushVapid()  -> String?
+    
+    /**
      * What `body`, a notice the app's push service handed it, says: none for one not to show (a
      * device back the phone did not find away, or a kind it does not know). Its agent's device is
-     * the one that holds its workspace, as last heard, else as asked now.
+     * the one that holds its workspace, as last heard, else as the devices say when asked now, all
+     * at once and for three seconds at most, so it is read within a push handler's few seconds:
+     * none ("") when none said by then.
      */
     func readNotice(body: Data) async throws  -> Notice?
     
@@ -1843,9 +1853,26 @@ open func pushTo(at: PushAt)async throws  -> PushTold  {
 }
     
     /**
+     * The VAPID key (RFC 8292, base64url) of the push server on the person's network that tells
+     * phones through UnifiedPush: for the app to give its distributor as it registers (Android's
+     * `UnifiedPush.register(…, vapid)`), so one that asks for a key takes what that server posts.
+     * None on a network without such a server.
+     */
+open func pushVapid() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_method_phone_push_vapid(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
      * What `body`, a notice the app's push service handed it, says: none for one not to show (a
      * device back the phone did not find away, or a kind it does not know). Its agent's device is
-     * the one that holds its workspace, as last heard, else as asked now.
+     * the one that holds its workspace, as last heard, else as the devices say when asked now, all
+     * at once and for three seconds at most, so it is read within a push handler's few seconds:
+     * none ("") when none said by then.
      */
 open func readNotice(body: Data)async throws  -> Notice?  {
     return
@@ -3703,22 +3730,82 @@ public func FfiConverterTypeProgram_lower(_ value: Program) -> RustBuffer {
 
 
 /**
+ * A device that would not take where the phone is told: by name, and why, in its words.
+ */
+public struct PushRefused: Equatable, Hashable {
+    public var device: String
+    public var why: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(device: String, why: String) {
+        self.device = device
+        self.why = why
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PushRefused: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePushRefused: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PushRefused {
+        return
+            try PushRefused(
+                device: FfiConverterString.read(from: &buf), 
+                why: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PushRefused, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.device, into: &buf)
+        FfiConverterString.write(value.why, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePushRefused_lift(_ buf: RustBuffer) throws -> PushRefused {
+    return try FfiConverterTypePushRefused.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePushRefused_lower(_ value: PushRefused) -> RustBuffer {
+    return FfiConverterTypePushRefused.lower(value)
+}
+
+
+/**
  * Where the phone is told now: through the push server `via`, when it is; the devices that took
- * it, and those away, by name (call again as the app comes to the foreground, and an away one
- * takes it then); and, when the push server would not take the endpoint, why.
+ * it, by name; those away, not reached or not answering in time (call again as the app comes to
+ * the foreground, and an away one takes it then); those that said no, and why; and, when the push
+ * server would not take the endpoint, why.
  */
 public struct PushTold: Equatable, Hashable {
     public var via: String?
     public var told: [String]
     public var away: [String]
+    public var refused: [PushRefused]
     public var unregistered: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(via: String?, told: [String], away: [String], unregistered: String?) {
+    public init(via: String?, told: [String], away: [String], refused: [PushRefused] = [], unregistered: String?) {
         self.via = via
         self.told = told
         self.away = away
+        self.refused = refused
         self.unregistered = unregistered
     }
 
@@ -3741,6 +3828,7 @@ public struct FfiConverterTypePushTold: FfiConverterRustBuffer {
                 via: FfiConverterOptionString.read(from: &buf), 
                 told: FfiConverterSequenceString.read(from: &buf), 
                 away: FfiConverterSequenceString.read(from: &buf), 
+                refused: FfiConverterSequenceTypePushRefused.read(from: &buf), 
                 unregistered: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -3749,6 +3837,7 @@ public struct FfiConverterTypePushTold: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.via, into: &buf)
         FfiConverterSequenceString.write(value.told, into: &buf)
         FfiConverterSequenceString.write(value.away, into: &buf)
+        FfiConverterSequenceTypePushRefused.write(value.refused, into: &buf)
         FfiConverterOptionString.write(value.unregistered, into: &buf)
     }
 }
@@ -6399,6 +6488,31 @@ fileprivate struct FfiConverterSequenceTypeFrame: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypePushRefused: FfiConverterRustBuffer {
+    typealias SwiftType = [PushRefused]
+
+    public static func write(_ value: [PushRefused], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePushRefused.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [PushRefused] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [PushRefused]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePushRefused.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeScreenLine: FfiConverterRustBuffer {
     typealias SwiftType = [ScreenLine]
 
@@ -6706,7 +6820,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_hive_phone_ffi_checksum_method_phone_push_to() != 61669) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_hive_phone_ffi_checksum_method_phone_read_notice() != 45931) {
+    if (uniffi_hive_phone_ffi_checksum_method_phone_push_vapid() != 16554) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_phone_read_notice() != 25086) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_phone_open_view() != 22111) {
