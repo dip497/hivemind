@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.hivemind.phone.R
+import com.hivemind.phone.core.ConversationEnded
 import com.hivemind.phone.core.Entry
 import com.hivemind.phone.core.ToolResult
 import com.hivemind.phone.core.Who
@@ -100,7 +101,7 @@ fun ChatView(chat: Chat, modifier: Modifier = Modifier) {
             chat.ended?.let { why ->
                 item(key = ENDED, contentType = Kind.ENDED) {
                     Text(
-                        stringResource(R.string.chat_ended, why),
+                        endedNote(why),
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -119,6 +120,14 @@ fun ChatView(chat: Chat, modifier: Modifier = Modifier) {
         }
         NewestButton(chat.follow) { chat.last }
     }
+}
+
+/** Why the conversation is told no more, in words. */
+@Composable
+private fun endedNote(why: ConversationEnded): String = when (why) {
+    is ConversationEnded.Refused -> stringResource(R.string.chat_ended, why.why)
+    ConversationEnded.NotHeld -> stringResource(R.string.chat_ended_not_held)
+    ConversationEnded.Unpaired -> stringResource(R.string.chat_ended_unpaired)
 }
 
 @Composable

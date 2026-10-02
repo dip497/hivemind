@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use hive_phone::{
     conversation,
+    failure::Lost,
     talking::{Listener, Talking},
 };
 
@@ -86,9 +87,29 @@ pub trait ConversationListener: Send + Sync {
     /// in place of all it told before (or after a divider), as the first telling is, and each after
     /// the agent began another session (`/clear`); then it may tell nothing yet.
     fn said(&self, entries: Vec<Entry>, anew: bool);
-    /// It is told no more, and why: the device refused it, its workspace is not on that device
-    /// now, or the device is no longer one of the person's. Told once, last.
-    fn ended(&self, why: String);
+    /// It is told no more, and why. Told once, last.
+    fn ended(&self, why: ConversationEnded);
+}
+
+/// Why a conversation followed is told no more, as the app tells the person.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum ConversationEnded {
+    /// The device said no, in its words: no agent runs there, …
+    Refused { why: String },
+    /// Its workspace is not on that device now.
+    NotHeld,
+    /// That device is not one of the person's now.
+    Unpaired,
+}
+
+impl From<Lost> for ConversationEnded {
+    fn from(lost: Lost) -> Self {
+        match lost {
+            Lost::Refused(why) => Self::Refused { why },
+            Lost::NotHeld(_) => Self::NotHeld,
+            Lost::Unpaired(_) => Self::Unpaired,
+        }
+    }
 }
 
 /// A listener, as the core tells a conversation's news.
@@ -100,8 +121,8 @@ impl Listener for Listening {
         self.0.said(entries, anew)
     }
 
-    fn ended(&self, why: String) {
-        self.0.ended(why)
+    fn ended(&self, why: Lost) {
+        self.0.ended(why.into())
     }
 }
 
@@ -207,6 +228,29 @@ mod tests {
         ];
         for (said, handed) in cases {
             assert_eq!(Entry::from_core(said), Some(handed));
+        }
+    }
+
+    #[test]
+    fn why_a_conversation_ends_is_told_apart_as_the_app_shows_it() {
+        let cases = [
+            (
+                Lost::Refused("no agent runs there".into()),
+                ConversationEnded::Refused {
+                    why: "no agent runs there".into(),
+                },
+            ),
+            (
+                Lost::NotHeld("desk does not hold it".into()),
+                ConversationEnded::NotHeld,
+            ),
+            (
+                Lost::Unpaired("d9 is not yours".into()),
+                ConversationEnded::Unpaired,
+            ),
+        ];
+        for (core, app) in cases {
+            assert_eq!(ConversationEnded::from(core), app);
         }
     }
 }

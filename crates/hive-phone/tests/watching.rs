@@ -3,8 +3,8 @@
 //! keyboard told by name, and none once this phone holds it; what the person types goes in as it
 //! is, in order, the keyboard asked for first and keys a moment apart; its end told with its code.
 //! The watch goes on across a dropped connection and the background, its screen drawn anew on each
-//! connection, and ends only with the session: at once, with no code, when there is none to watch.
-//! A watch stopped lets go of the terminal.
+//! connection, and ends only with the session; at once, told which, when there is none to watch,
+//! the device refuses it, or does not hold its workspace. A watch stopped lets go of the terminal.
 
 mod support;
 
@@ -15,17 +15,18 @@ use std::{
 
 use hive_phone::{
     connections::Connections,
-    watching::{Watcher, Watching},
+    failure::Lost,
+    watching::{Ended, Watcher, Watching},
 };
 use serde_json::json;
-use support::{paired_with, tmp, until, Desk, TILE, WORKSPACE};
+use support::{paired_with, tmp, until, Desk, REFUSED, TILE, WORKSPACE};
 
 /// What a watch told.
 #[derive(Default)]
 struct Told {
     frames: Mutex<Vec<u64>>,
     keyboards: Mutex<Vec<Option<String>>>,
-    ended: Mutex<Option<Option<i64>>>,
+    ended: Mutex<Vec<Ended>>,
 }
 
 impl Watcher for Told {
@@ -37,8 +38,8 @@ impl Watcher for Told {
         self.keyboards.lock().unwrap().push(holder);
     }
 
-    fn ended(&self, code: Option<i64>) {
-        *self.ended.lock().unwrap() = Some(code);
+    fn ended(&self, why: Ended) {
+        self.ended.lock().unwrap().push(why);
     }
 }
 
@@ -77,9 +78,9 @@ async fn a_watched_terminal_is_drawn_at_its_size_and_typed_into_as_the_person_in
     watching.type_text("ls -la".into());
     let keys = ["Enter", "down", "down", "ctrl-c"];
     watching.type_keys(keys.map(String::from).to_vec());
-    let ended = || told.ended.lock().unwrap().is_some();
+    let ended = || !told.ended.lock().unwrap().is_empty();
     assert!(until(Duration::from_secs(10), ended).await);
-    assert_eq!(*told.ended.lock().unwrap(), Some(Some(3)));
+    assert_eq!(*told.ended.lock().unwrap(), [Ended::Exited(3)]);
     let session = format!("hm:{TILE}");
     let write = |data: &str| json!({ "method": "terminal.write", "params": [session, data] });
     assert_eq!(
@@ -169,36 +170,50 @@ async fn a_watch_goes_on_across_a_dropped_connection_and_the_background_drawn_an
     connections.foreground();
     assert!(until(Duration::from_secs(10), || showing("Hello once more")).await);
     assert_eq!(shown(), ["Hello once more"]);
-    assert_eq!(*told.ended.lock().unwrap(), None);
+    assert!(told.ended.lock().unwrap().is_empty());
 
     // Typed into on the connection it is on now, it ends with its session.
     watching.type_keys(vec!["ctrl-c".into()]);
-    let ended = || told.ended.lock().unwrap().is_some();
+    let ended = || !told.ended.lock().unwrap().is_empty();
     assert!(until(Duration::from_secs(10), ended).await);
-    assert_eq!(*told.ended.lock().unwrap(), Some(Some(3)));
+    assert_eq!(*told.ended.lock().unwrap(), [Ended::Exited(3)]);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_watch_with_no_session_to_show_ends_at_once_with_no_code() {
+async fn a_watch_with_nothing_to_show_ends_at_once_told_why_once() {
     let desk = Desk::start(34).await;
     // Its session ended before it was watched.
     desk.ended.store(true, SeqCst);
     let phone = paired_with(&tmp("none"), &desk);
     let connections = Connections::new(phone.clone(), || {});
     connections.foreground();
-    // That workspace's, and one of a workspace the device does not hold.
-    for workspace in [WORKSPACE, "elsewhere"] {
+    let not_held = "desk does not hold that workspace now";
+    let cases = [
+        (WORKSPACE, TILE, Ended::NoSession),
+        (
+            WORKSPACE,
+            REFUSED,
+            Ended::Lost(Lost::Refused("not yours to watch".into())),
+        ),
+        (
+            "elsewhere",
+            TILE,
+            Ended::Lost(Lost::NotHeld(not_held.into())),
+        ),
+    ];
+    for (workspace, tile, why) in cases {
         let told = Arc::new(Told::default());
         let _watching = Watching::start(
             &connections,
             &phone.id(),
             &desk.id,
             workspace,
-            TILE,
+            tile,
             told.clone(),
         );
-        let ended = || told.ended.lock().unwrap().is_some();
-        assert!(until(Duration::from_secs(10), ended).await, "{workspace}");
-        assert_eq!(*told.ended.lock().unwrap(), Some(None), "{workspace}");
+        let ended = || !told.ended.lock().unwrap().is_empty();
+        assert!(until(Duration::from_secs(10), ended).await, "{why:?}");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(*told.ended.lock().unwrap(), [why]);
     }
 }

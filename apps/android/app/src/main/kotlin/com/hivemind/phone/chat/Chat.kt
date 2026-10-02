@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.hivemind.phone.core.ConversationEnded
 import com.hivemind.phone.core.Entry
 import com.hivemind.phone.core.ToolResult
 import com.hivemind.phone.ui.common.Follow
@@ -27,7 +28,7 @@ class Chat {
         private set
 
     /** Why the conversation is told no more, once it is. */
-    var ended: String? by mutableStateOf(null)
+    var ended: ConversationEnded? by mutableStateOf(null)
         private set
 
     val follow = Follow()
@@ -67,7 +68,7 @@ class Chat {
         follow.grew(last)
     }
 
-    fun end(why: String) {
+    fun end(why: ConversationEnded) {
         heard = true
         ended = why
         follow.grew(last)

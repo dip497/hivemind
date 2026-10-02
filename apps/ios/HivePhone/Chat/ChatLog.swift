@@ -48,7 +48,7 @@ struct ChatLog {
 
     private(set) var rows: [ChatRow] = []
     /// Why it is told no more, once it is.
-    private(set) var ended: String? = nil
+    private(set) var ended: ConversationEnded? = nil
     private var shown: Set<String> = []
     /// Each tool use's row, by the use's id.
     private var uses: [String: Int] = [:]
@@ -91,9 +91,21 @@ struct ChatLog {
     }
 
     /// Told once, last: whether this is the first time.
-    mutating func end(_ why: String) -> Bool {
+    mutating func end(_ why: ConversationEnded) -> Bool {
         guard ended == nil else { return false }
         ended = why
         return true
+    }
+
+    /// Why a conversation is told no more, in words.
+    static func words(_ ended: ConversationEnded) -> String {
+        switch ended {
+        case .refused(let why):
+            return "Not followed any more: \(why)"
+        case .notHeld:
+            return "Not followed any more: its workspace is not on its device now."
+        case .unpaired:
+            return "Not followed any more: its device is not one of yours now."
+        }
     }
 }

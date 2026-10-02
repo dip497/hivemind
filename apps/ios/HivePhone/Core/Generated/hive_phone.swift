@@ -765,10 +765,9 @@ public protocol ConversationListener: AnyObject, Sendable {
     func said(entries: [Entry], anew: Bool) 
     
     /**
-     * It is told no more, and why: the device refused it, its workspace is not on that device
-     * now, or the device is no longer one of the person's. Told once, last.
+     * It is told no more, and why. Told once, last.
      */
-    func ended(why: String) 
+    func ended(why: ConversationEnded) 
     
 }
 /**
@@ -844,14 +843,13 @@ open func said(entries: [Entry], anew: Bool)  {try! rustCall() {
 }
     
     /**
-     * It is told no more, and why: the device refused it, its workspace is not on that device
-     * now, or the device is no longer one of the person's. Told once, last.
+     * It is told no more, and why. Told once, last.
      */
-open func ended(why: String)  {try! rustCall() {
+open func ended(why: ConversationEnded)  {try! rustCall() {
         uniffiCallStatus in
     uniffi_hive_phone_ffi_fn_method_conversationlistener_ended(
             self.uniffiCloneHandle(),
-        FfiConverterString.lower(why),uniffiCallStatus
+        FfiConverterTypeConversationEnded_lower(why),uniffiCallStatus
     )
 }
 }
@@ -922,7 +920,7 @@ fileprivate struct UniffiCallbackInterfaceConversationListener {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return uniffiObj.ended(
-                     why: try FfiConverterString.lift(why)
+                     why: try FfiConverterTypeConversationEnded_lift(why)
                 )
             }
 
@@ -1989,11 +1987,10 @@ public protocol ScreenListener: AnyObject, Sendable {
     func keyboard(holder: String?) 
     
     /**
-     * The session ended, with its code; or there is none to watch now (none): it ended unseen,
-     * its workspace is not on that device now, or the device refused it. Told once, last: a
-     * connection that goes is no end, the watch goes on on the next one.
+     * How the watch ended. Told once, last: a connection that goes is no end, the watch goes on
+     * on the next one.
      */
-    func ended(code: Int64?) 
+    func ended(why: ScreenEnded) 
     
 }
 /**
@@ -2077,15 +2074,14 @@ open func keyboard(holder: String?)  {try! rustCall() {
 }
     
     /**
-     * The session ended, with its code; or there is none to watch now (none): it ended unseen,
-     * its workspace is not on that device now, or the device refused it. Told once, last: a
-     * connection that goes is no end, the watch goes on on the next one.
+     * How the watch ended. Told once, last: a connection that goes is no end, the watch goes on
+     * on the next one.
      */
-open func ended(code: Int64?)  {try! rustCall() {
+open func ended(why: ScreenEnded)  {try! rustCall() {
         uniffiCallStatus in
     uniffi_hive_phone_ffi_fn_method_screenlistener_ended(
             self.uniffiCloneHandle(),
-        FfiConverterOptionInt64.lower(code),uniffiCallStatus
+        FfiConverterTypeScreenEnded_lower(why),uniffiCallStatus
     )
 }
 }
@@ -2168,7 +2164,7 @@ fileprivate struct UniffiCallbackInterfaceScreenListener {
         },
         ended: { (
             uniffiHandle: UInt64,
-            code: RustBuffer,
+            why: RustBuffer,
             uniffiOutReturn: UnsafeMutableRawPointer,
             uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
         ) in
@@ -2178,7 +2174,7 @@ fileprivate struct UniffiCallbackInterfaceScreenListener {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return uniffiObj.ended(
-                     code: try FfiConverterOptionInt64.lift(code)
+                     why: try FfiConverterTypeScreenEnded_lift(why)
                 )
             }
 
@@ -4992,6 +4988,94 @@ public func FfiConverterTypeAnswer_lower(_ value: Answer) -> RustBuffer {
 
 
 
+/**
+ * Why a conversation followed is told no more, as the app tells the person.
+ */
+
+public enum ConversationEnded: Equatable, Hashable {
+    
+    /**
+     * The device said no, in its words: no agent runs there, …
+     */
+    case refused(why: String
+    )
+    /**
+     * Its workspace is not on that device now.
+     */
+    case notHeld
+    /**
+     * That device is not one of the person's now.
+     */
+    case unpaired
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ConversationEnded: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConversationEnded: FfiConverterRustBuffer {
+    typealias SwiftType = ConversationEnded
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConversationEnded {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .refused(why: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .notHeld
+        
+        case 3: return .unpaired
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ConversationEnded, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .refused(why):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(why, into: &buf)
+            
+        
+        case .notHeld:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .unpaired:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConversationEnded_lift(_ buf: RustBuffer) throws -> ConversationEnded {
+    return try FfiConverterTypeConversationEnded.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConversationEnded_lower(_ value: ConversationEnded) -> RustBuffer {
+    return FfiConverterTypeConversationEnded.lower(value)
+}
+
+
+
 
 public enum Decision: Equatable, Hashable {
     
@@ -5444,6 +5528,117 @@ public func FfiConverterTypePushAt_lower(_ value: PushAt) -> RustBuffer {
 
 
 
+/**
+ * How a watched terminal ended, as the app tells the person.
+ */
+
+public enum ScreenEnded: Equatable, Hashable {
+    
+    /**
+     * The session ended, with its exit code.
+     */
+    case exited(code: Int64
+    )
+    /**
+     * There was no session to watch: it had ended before the watch began.
+     */
+    case noSession
+    /**
+     * The device said no, in its words.
+     */
+    case refused(why: String
+    )
+    /**
+     * Its workspace is not on that device now.
+     */
+    case notHeld
+    /**
+     * That device is not one of the person's now.
+     */
+    case unpaired
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ScreenEnded: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeScreenEnded: FfiConverterRustBuffer {
+    typealias SwiftType = ScreenEnded
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ScreenEnded {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .exited(code: try FfiConverterInt64.read(from: &buf)
+        )
+        
+        case 2: return .noSession
+        
+        case 3: return .refused(why: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 4: return .notHeld
+        
+        case 5: return .unpaired
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ScreenEnded, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .exited(code):
+            writeInt(&buf, Int32(1))
+            FfiConverterInt64.write(code, into: &buf)
+            
+        
+        case .noSession:
+            writeInt(&buf, Int32(2))
+        
+        
+        case let .refused(why):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(why, into: &buf)
+            
+        
+        case .notHeld:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .unpaired:
+            writeInt(&buf, Int32(5))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScreenEnded_lift(_ buf: RustBuffer) throws -> ScreenEnded {
+    return try FfiConverterTypeScreenEnded.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScreenEnded_lower(_ value: ScreenEnded) -> RustBuffer {
+    return FfiConverterTypeScreenEnded.lower(value)
+}
+
+
+
 
 public enum ThemeMode: Equatable, Hashable {
     
@@ -5827,30 +6022,6 @@ fileprivate struct FfiConverterOptionUInt64: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterUInt64.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterOptionInt64: FfiConverterRustBuffer {
-    typealias SwiftType = Int64?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterInt64.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterInt64.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -6493,7 +6664,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_hive_phone_ffi_checksum_method_conversationlistener_said() != 25321) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_hive_phone_ffi_checksum_method_conversationlistener_ended() != 41614) {
+    if (uniffi_hive_phone_ffi_checksum_method_conversationlistener_ended() != 20241) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_following_stop() != 34156) {
@@ -6589,7 +6760,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_hive_phone_ffi_checksum_method_screenlistener_keyboard() != 61941) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_hive_phone_ffi_checksum_method_screenlistener_ended() != 48354) {
+    if (uniffi_hive_phone_ffi_checksum_method_screenlistener_ended() != 19695) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_watch_stop() != 16582) {

@@ -33,13 +33,6 @@ impl fmt::Display for Failure {
 
 impl std::error::Error for Failure {}
 
-impl Failure {
-    /// Whether `e` is the device refusing: asking again gets the same answer.
-    pub fn refused(e: &anyhow::Error) -> bool {
-        matches!(e.downcast_ref::<Failure>(), Some(Failure::Refused { .. }))
-    }
-}
-
 /// Why what the phone follows on one of the person's devices (a terminal, a conversation, a view)
 /// is told no more, when it did not end of itself, told apart as the apps tell the person: each in
 /// words they can be shown.

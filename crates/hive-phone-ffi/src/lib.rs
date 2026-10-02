@@ -19,7 +19,9 @@ mod view;
 mod watch;
 
 pub use control::{Diff, DiffFile, Frame, Start, StartOption, StartProgram, Startable};
-pub use conversation::{Conversation, ConversationListener, Entry, Tool, ToolResult, Who};
+pub use conversation::{
+    Conversation, ConversationEnded, ConversationListener, Entry, Tool, ToolResult, Who,
+};
 pub use error::PhoneError;
 pub use overview::{Following, OverviewListener};
 pub use pairing::{pairs_with, PairsWith};
@@ -30,7 +32,7 @@ pub use view::{
     Screen, ThemeMode, ViewEnded, ViewFile, ViewFonts, ViewInfo, ViewListener, ViewSession,
     ViewTheme,
 };
-pub use watch::{ScreenLine, ScreenListener, ScreenUpdate, Watch};
+pub use watch::{ScreenEnded, ScreenLine, ScreenListener, ScreenUpdate, Watch};
 
 uniffi::setup_scaffolding!("hive_phone");
 

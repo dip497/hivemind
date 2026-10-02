@@ -24,15 +24,15 @@ pub trait Listener: Send + Sync {
     /// the first telling is, and each after the agent began another session; then it may tell
     /// nothing yet.
     fn said(&self, entries: Vec<Entry>, anew: bool);
-    /// It is told no more, and why: the device refused it, its workspace is not on that device
-    /// now, or the device is no longer one of the person's. Told once, last.
-    fn ended(&self, why: String);
+    /// It is told no more, and why: the device refused it, holds its workspace no more, or is no
+    /// longer one of the person's. Told once, last.
+    fn ended(&self, why: Lost);
 }
 
 /// What the telling thread is handed: what was said, anew or not; or why it ended.
 enum Told {
     Said(Vec<Entry>, bool),
-    Ended(String),
+    Ended(Lost),
 }
 
 /// What is told, gathered between two tellings: what each session said, in order, and why it
@@ -40,7 +40,7 @@ enum Told {
 struct Telling {
     listener: Arc<dyn Listener>,
     said: Vec<(Vec<Entry>, bool)>,
-    ended: Option<String>,
+    ended: Option<Lost>,
     stopped: Arc<AtomicBool>,
 }
 
@@ -122,7 +122,7 @@ impl Talking {
                 }
                 Connections::again(&connection).await;
             };
-            let _ = told.send(Told::Ended(why.to_string()));
+            let _ = told.send(Told::Ended(why));
         });
         Self { following, stopped }
     }

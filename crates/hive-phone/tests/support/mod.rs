@@ -35,6 +35,8 @@ pub const WORKSPACE: &str = "w1";
 pub const TILE: &str = "t1";
 /// The agent's first session, as the computer names it.
 pub const SESSION: &str = "s1";
+/// A tile whose terminal the computer refuses the phone.
+pub const REFUSED: &str = "t9";
 /// The community view the computer offers a phone; any other it refuses.
 pub const VIEW: &str = "priya-board";
 /// Why its host disables a view that posts `{"type": "flood"}`.
@@ -336,7 +338,8 @@ async fn agents(mut send: SendStream, mut recv: RecvStream, serving: &Serving) {
 }
 
 /// The `api` stream of the workspace: its terminal's keyboard, size and screen as the phone opens
-/// it, or none when its session ended; its keyboard given to the phone, `phone`, as it asks; what
+/// it, or none when its session ended, or, of a tile `REFUSED`, refused; its keyboard given to the
+/// phone, `phone`, as it asks; what
 /// the phone types kept; and the session's end once it types Ctrl-C. Or its agent's conversation.
 /// Or its community view, opened, posted to and shown on another screen (`view`).
 async fn api(mut send: SendStream, mut recv: RecvStream, phone: &str, serving: &Serving) {
@@ -362,6 +365,10 @@ async fn api(mut send: SendStream, mut recv: RecvStream, phone: &str, serving: &
                 viewed.iter().filter(|m| m["method"] == "view.open").count()
             };
             out = view(&message, &mut screens, opened);
+        } else if message["method"] == "terminal.open" && message["params"][0]["tile"] == REFUSED {
+            out.push(json!({ "id": message["id"], "error": {
+                "code": "FORBIDDEN", "message": "not yours to watch",
+            } }));
         } else if let Some(id) = message.get("id") {
             let mut pid = 1;
             if message["method"] == "terminal.open" {

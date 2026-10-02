@@ -162,7 +162,7 @@ final class ChatView: UIView, UITableViewDataSource, UITableViewDelegate {
             let row = log.rows[index]
             return .row(row, open: open.contains(row.id))
         }
-        return .note(log.ended ?? "")
+        return .note(log.ended.map(ChatLog.words) ?? "")
     }
 
     /// A tool's use with what it gave back unfolds, and folds again.

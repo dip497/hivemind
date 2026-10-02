@@ -616,7 +616,7 @@ void uniffi_hive_phone_ffi_fn_method_screenlistener_keyboard(uint64_t ptr, RustB
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_SCREENLISTENER_ENDED
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_SCREENLISTENER_ENDED
-void uniffi_hive_phone_ffi_fn_method_screenlistener_ended(uint64_t ptr, RustBuffer code, RustCallStatus *_Nonnull out_status
+void uniffi_hive_phone_ffi_fn_method_screenlistener_ended(uint64_t ptr, RustBuffer why, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_CLONE_WATCH

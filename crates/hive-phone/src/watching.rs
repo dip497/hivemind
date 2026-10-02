@@ -12,11 +12,23 @@ use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
     connections::Connections,
-    failure::Failure,
+    failure::Lost,
     keys,
     screen::{Frame, LiveScreen},
     workspace::{self, Watched},
 };
+
+/// How a watch ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Ended {
+    /// The session ended, with its code.
+    Exited(i64),
+    /// There was no session to watch: it had ended before it was watched.
+    NoSession,
+    /// It is watched no more: the device refused it, holds its workspace no more, or is no longer
+    /// one of the person's.
+    Lost(Lost),
+}
 
 /// What a watch tells as it happens, from its own threads.
 pub trait Watcher: Send + Sync {
@@ -24,9 +36,8 @@ pub trait Watcher: Send + Sync {
     fn frame_ready(&self, revision: u64);
     /// Who holds its keyboard now, by name: none while the person's devices do.
     fn keyboard(&self, holder: Option<String>);
-    /// The session ended, with its code; or there is none to watch now (none): it ended unseen,
-    /// its workspace is not on that device now, or the device refused it. Told once, last.
-    fn ended(&self, code: Option<i64>);
+    /// How it ended. Told once, last: a connection that goes is no end.
+    fn ended(&self, why: Ended);
 }
 
 /// What the person types: text as it is, or keys by name.
@@ -67,9 +78,10 @@ impl Watching {
         // Everything the watch does is one task: stopped, all of it goes, its streams with it.
         let watching = tokio::spawn(async move {
             let mut again = false;
-            let code = loop {
-                let Ok(connection) = connections.kept_for(&device, &workspace).await else {
-                    break None;
+            let why = loop {
+                let connection = match connections.kept_for(&device, &workspace).await {
+                    Ok(connection) => connection,
+                    Err(lost) => break Ended::Lost(lost),
                 };
                 // Each connection is sent the screen whole first: on the first, drawn as it comes;
                 // on each after, drawn in place of what the last showed.
@@ -90,12 +102,15 @@ impl Watching {
                     never = type_in(&mut typing, keyed) => match never {},
                 };
                 match watched {
-                    Ok(Some(ended)) => break ended.code,
-                    Err(e) if Failure::refused(&e) => break None,
-                    _ => Connections::again(&connection).await,
+                    Ok(Some(ended)) => break ended.code.map_or(Ended::NoSession, Ended::Exited),
+                    Err(e) => match Lost::refusal(&e) {
+                        Some(lost) => break Ended::Lost(lost),
+                        None => Connections::again(&connection).await,
+                    },
+                    Ok(None) => Connections::again(&connection).await,
                 }
             };
-            watcher.ended(code);
+            watcher.ended(why);
         });
         Self {
             screen,

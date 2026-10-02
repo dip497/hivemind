@@ -7,7 +7,8 @@ use std::sync::Arc;
 
 use hive_phone::{
     connections::Connections,
-    watching::{Watcher, Watching},
+    failure::Lost,
+    watching::{self, Watcher, Watching},
 };
 
 use crate::records::AgentRef;
@@ -19,10 +20,36 @@ pub trait ScreenListener: Send + Sync {
     fn frame_ready(&self, revision: u64);
     /// Who holds its keyboard, by name; none while the person's devices do.
     fn keyboard(&self, holder: Option<String>);
-    /// The session ended, with its code; or there is none to watch now (none): it ended unseen,
-    /// its workspace is not on that device now, or the device refused it. Told once, last: a
-    /// connection that goes is no end, the watch goes on on the next one.
-    fn ended(&self, code: Option<i64>);
+    /// How the watch ended. Told once, last: a connection that goes is no end, the watch goes on
+    /// on the next one.
+    fn ended(&self, why: ScreenEnded);
+}
+
+/// How a watched terminal ended, as the app tells the person.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum ScreenEnded {
+    /// The session ended, with its exit code.
+    Exited { code: i64 },
+    /// There was no session to watch: it had ended before the watch began.
+    NoSession,
+    /// The device said no, in its words.
+    Refused { why: String },
+    /// Its workspace is not on that device now.
+    NotHeld,
+    /// That device is not one of the person's now.
+    Unpaired,
+}
+
+impl From<watching::Ended> for ScreenEnded {
+    fn from(ended: watching::Ended) -> Self {
+        match ended {
+            watching::Ended::Exited(code) => Self::Exited { code },
+            watching::Ended::NoSession => Self::NoSession,
+            watching::Ended::Lost(Lost::Refused(why)) => Self::Refused { why },
+            watching::Ended::Lost(Lost::NotHeld(_)) => Self::NotHeld,
+            watching::Ended::Lost(Lost::Unpaired(_)) => Self::Unpaired,
+        }
+    }
 }
 
 /// A listener, as the core tells a watch's news.
@@ -37,8 +64,8 @@ impl Watcher for Listening {
         self.0.keyboard(holder)
     }
 
-    fn ended(&self, code: Option<i64>) {
-        self.0.ended(code)
+    fn ended(&self, why: watching::Ended) {
+        self.0.ended(why.into())
     }
 }
 
@@ -132,4 +159,34 @@ pub struct ScreenLine {
     pub index: u64,
     pub text: String,
     pub runs: Vec<u8>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn how_a_watch_ends_is_told_apart_as_the_app_shows_it() {
+        let cases = [
+            (watching::Ended::Exited(3), ScreenEnded::Exited { code: 3 }),
+            (watching::Ended::NoSession, ScreenEnded::NoSession),
+            (
+                watching::Ended::Lost(Lost::Refused("not yours to watch".into())),
+                ScreenEnded::Refused {
+                    why: "not yours to watch".into(),
+                },
+            ),
+            (
+                watching::Ended::Lost(Lost::NotHeld("desk does not hold it".into())),
+                ScreenEnded::NotHeld,
+            ),
+            (
+                watching::Ended::Lost(Lost::Unpaired("d9 is not yours".into())),
+                ScreenEnded::Unpaired,
+            ),
+        ];
+        for (core, app) in cases {
+            assert_eq!(ScreenEnded::from(core), app);
+        }
+    }
 }

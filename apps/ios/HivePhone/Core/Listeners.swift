@@ -19,12 +19,12 @@ final class OverviewRelay: OverviewListener, @unchecked Sendable {
 final class ScreenRelay: ScreenListener, @unchecked Sendable {
     private let frames: MainRelay
     private let onKeyboard: @MainActor (String?) -> Void
-    private let onEnded: @MainActor (Int64?) -> Void
+    private let onEnded: @MainActor (ScreenEnded) -> Void
 
     init(
         frame: @escaping @MainActor () -> Void,
         keyboard: @escaping @MainActor (String?) -> Void,
-        ended: @escaping @MainActor (Int64?) -> Void
+        ended: @escaping @MainActor (ScreenEnded) -> Void
     ) {
         frames = MainRelay(pull: frame)
         onKeyboard = keyboard
@@ -42,10 +42,10 @@ final class ScreenRelay: ScreenListener, @unchecked Sendable {
         }
     }
 
-    func ended(code: Int64?) {
+    func ended(why: ScreenEnded) {
         let onEnded = self.onEnded
         DispatchQueue.main.async {
-            MainActor.assumeIsolated { onEnded(code) }
+            MainActor.assumeIsolated { onEnded(why) }
         }
     }
 }
@@ -56,7 +56,7 @@ final class ScreenRelay: ScreenListener, @unchecked Sendable {
 final class ConversationRelay: ConversationListener, @unchecked Sendable {
     enum Told: Equatable {
         case said([Entry], anew: Bool)
-        case ended(String)
+        case ended(ConversationEnded)
     }
 
     private let inbox: Inbox
@@ -73,7 +73,7 @@ final class ConversationRelay: ConversationListener, @unchecked Sendable {
         hop.poke()
     }
 
-    func ended(why: String) {
+    func ended(why: ConversationEnded) {
         inbox.put(.ended(why))
         hop.poke()
     }

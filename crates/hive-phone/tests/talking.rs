@@ -15,6 +15,7 @@ use std::{
 use hive_phone::{
     connections::Connections,
     conversation::Entry,
+    failure::Lost,
     talking::{Listener, Talking},
 };
 use serde_json::{json, Value};
@@ -24,7 +25,7 @@ use support::{paired_with, tmp, until, Desk, SESSION, TILE, WORKSPACE};
 #[derive(Default)]
 struct Told {
     said: Mutex<Vec<(Vec<String>, bool)>>,
-    ended: Mutex<Vec<String>>,
+    ended: Mutex<Vec<Lost>>,
     /// Told the entry of this id, it is stopped a moment later.
     stop_on: Option<&'static str>,
     talking: OnceLock<Talking>,
@@ -41,7 +42,7 @@ impl Listener for Told {
         }
     }
 
-    fn ended(&self, why: String) {
+    fn ended(&self, why: Lost) {
         self.ended.lock().unwrap().push(why);
     }
 }
@@ -136,17 +137,21 @@ async fn a_conversation_the_device_refuses_or_does_not_hold_ends_told_why_once()
     connections.foreground();
     desk.say(10, entry("e1", "person", "fix the nav"));
     let cases = [
-        (WORKSPACE, "t9", "no agent runs there"),
-        ("elsewhere", TILE, "desk does not hold that workspace now"),
+        (WORKSPACE, "t9", Lost::Refused("no agent runs there".into())),
+        (
+            "elsewhere",
+            TILE,
+            Lost::NotHeld("desk does not hold that workspace now".into()),
+        ),
     ];
     for (workspace, tile, why) in cases {
         let told = Arc::new(Told::default());
         let _talking = Talking::start(&connections, &desk.id, workspace, tile, told.clone());
         let ended = || !told.ended.lock().unwrap().is_empty();
-        assert!(until(Duration::from_secs(10), ended).await, "{why}");
+        assert!(until(Duration::from_secs(10), ended).await, "{why:?}");
         tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(told.said.lock().unwrap().is_empty(), "{why:?}");
         assert_eq!(*told.ended.lock().unwrap(), [why]);
-        assert!(told.said.lock().unwrap().is_empty(), "{why}");
     }
 }
 

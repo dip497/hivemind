@@ -50,8 +50,8 @@ import com.hivemind.phone.R
 import com.hivemind.phone.chat.ChatView
 import com.hivemind.phone.core.Agent
 import com.hivemind.phone.core.Answer
+import com.hivemind.phone.core.ScreenEnded
 import com.hivemind.phone.core.Waiting
-import com.hivemind.phone.live.Ended
 import com.hivemind.phone.terminal.TerminalView
 import com.hivemind.phone.ui.common.AnswerControls
 import com.hivemind.phone.ui.common.LocalPhoneLock
@@ -140,14 +140,7 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
                     vm.screen.keyboard?.let { holder ->
                         Note(stringResource(R.string.keyboard_held, holder))
                     }
-                    vm.screen.ended?.let { ended ->
-                        Note(
-                            when (ended) {
-                                is Ended.Exited -> stringResource(R.string.ended_code, ended.code)
-                                Ended.NothingToWatch -> stringResource(R.string.ended_none)
-                            },
-                        )
-                    }
+                    vm.screen.ended?.let { ended -> Note(endedNote(ended, agent?.deviceName)) }
                     TerminalView(vm.screen.terminal, Modifier.weight(1f).fillMaxWidth())
                 }
             }
@@ -167,6 +160,19 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
                 }
             }
         }
+    }
+}
+
+/** How its terminal's watch ended, in words: [device] is the agent's device, by name, while it is listed. */
+@Composable
+private fun endedNote(ended: ScreenEnded, device: String?): String {
+    val where = device ?: stringResource(R.string.its_device)
+    return when (ended) {
+        is ScreenEnded.Exited -> stringResource(R.string.ended_code, ended.code)
+        ScreenEnded.NoSession -> stringResource(R.string.ended_none)
+        is ScreenEnded.Refused -> stringResource(R.string.ended_refused, where, ended.why)
+        ScreenEnded.NotHeld -> stringResource(R.string.ended_not_held, where)
+        ScreenEnded.Unpaired -> stringResource(R.string.ended_unpaired, where)
     }
 }
 

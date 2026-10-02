@@ -112,11 +112,18 @@ struct AgentScreen: View {
 
     /// What stands between the person and the terminal, if anything.
     private var note: String? {
+        let device = agent?.deviceName ?? "its device"
         switch session.end {
-        case .session(let code)?:
+        case .exited(let code)?:
             return code == 0 ? "Its session ended." : "Its session ended (code \(code))."
-        case .nothing?:
-            return "There is no terminal to watch: it ended unseen, or its workspace is not on \(agent?.deviceName ?? "its device") now."
+        case .noSession?:
+            return "There is no terminal to watch: its session ended before it was watched."
+        case .refused(let why)?:
+            return "\(device) said no: \(why)"
+        case .notHeld?:
+            return "Its workspace is not on \(device) now."
+        case .unpaired?:
+            return "\(device) is not one of your devices now."
         case nil:
             break
         }
