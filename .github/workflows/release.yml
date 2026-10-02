@@ -613,21 +613,22 @@ jobs:
           path: release-assets/
 
   # hive-net (crates/hive-net, R10): this machine's device on the network, and the relay role.
-  # New and not yet proven on a release, so a failed target ships the release without that
-  # binary, and the installers install the rest (they treat hive-net as optional).
+  # The app, `hive host` and hive-net speak one daemon protocol and must come from one release
+  # (a mismatched pair stops and says so), so a release does not ship without the hive-net of a
+  # platform it ships the app or the CLI for. Windows alone stays optional, as its app does.
   build-hive-net:
     name: build ${{ matrix.asset }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    continue-on-error: true
+    continue-on-error: ${{ matrix.optional }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest, asset: hive-net-linux-x86_64, exe: hive-net }
-          - { os: ubuntu-24.04-arm, asset: hive-net-linux-arm64, exe: hive-net }
-          - { os: macos-26, asset: hive-net-darwin-arm64, exe: hive-net }
-          - { os: windows-latest, asset: hive-net-windows-x64.exe, exe: hive-net.exe }
+          - { os: ubuntu-latest, asset: hive-net-linux-x86_64, exe: hive-net, optional: false }
+          - { os: ubuntu-24.04-arm, asset: hive-net-linux-arm64, exe: hive-net, optional: false }
+          - { os: macos-26, asset: hive-net-darwin-arm64, exe: hive-net, optional: false }
+          - { os: windows-latest, asset: hive-net-windows-x64.exe, exe: hive-net.exe, optional: true }
     defaults:
       run:
         shell: bash
