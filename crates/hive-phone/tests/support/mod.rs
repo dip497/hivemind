@@ -32,8 +32,20 @@ use tokio::sync::watch;
 /// The workspace the computer holds, and the tile whose terminal it shows.
 pub const WORKSPACE: &str = "w1";
 pub const TILE: &str = "t1";
-/// The agent's session, as the computer names it.
+/// The agent's first session, as the computer names it.
 pub const SESSION: &str = "s1";
+
+/// The session of the computer's agent now, and what it and the person said in it, as its file
+/// holds it: each entry with how far into the file it goes.
+#[derive(Clone, Default)]
+pub struct Session {
+    pub id: String,
+    pub said: Vec<(u64, Value)>,
+}
+
+/// Where the phone asked to be told a conversation from: the session it names, and how far into
+/// it; none, from the last of it.
+pub type AskedFrom = Option<(String, u64)>;
 
 pub fn key(n: u8) -> SecretKey {
     SecretKey::from_bytes(&[n; 32])
@@ -106,11 +118,11 @@ pub struct Desk {
     pub ended: Arc<AtomicBool>,
     /// How many times the phone opened its terminal.
     pub opened: Arc<AtomicUsize>,
-    /// What the agent of its tile and the person said, as its session file holds it: each entry
-    /// with how far into the file it goes.
-    pub said: watch::Sender<Vec<(u64, Value)>>,
-    /// How far into the conversation the phone asked from each time, as it asked.
-    pub asked_from: Arc<Mutex<Vec<Option<u64>>>>,
+    /// The session of the agent of its tile now, and what was said in it.
+    pub session: watch::Sender<Session>,
+    /// Where in the conversation the phone asked from each time, as it asked: the session, and
+    /// how far into it.
+    pub asked_from: Arc<Mutex<Vec<AskedFrom>>>,
     /// The connections the phone made, while they last.
     connections: Arc<Mutex<Vec<Connection>>>,
 }
@@ -125,8 +137,8 @@ struct Serving {
     screen: Arc<Mutex<String>>,
     ended: Arc<AtomicBool>,
     opened: Arc<AtomicUsize>,
-    said: watch::Sender<Vec<(u64, Value)>>,
-    asked_from: Arc<Mutex<Vec<Option<u64>>>>,
+    session: watch::Sender<Session>,
+    asked_from: Arc<Mutex<Vec<AskedFrom>>>,
 }
 
 impl Desk {
@@ -162,7 +174,10 @@ impl Desk {
             screen: Arc::new(Mutex::new("Hello from the agent".into())),
             ended: Arc::default(),
             opened: Arc::default(),
-            said: watch::Sender::new(vec![]),
+            session: watch::Sender::new(Session {
+                id: SESSION.into(),
+                said: vec![],
+            }),
             asked_from: Arc::default(),
             connections: Arc::default(),
         };
@@ -174,7 +189,7 @@ impl Desk {
             screen: desk.screen.clone(),
             ended: desk.ended.clone(),
             opened: desk.opened.clone(),
-            said: desk.said.clone(),
+            session: desk.session.clone(),
             asked_from: desk.asked_from.clone(),
         };
         let (dialled, closed) = (desk.dialled.clone(), desk.closed.clone());
@@ -209,9 +224,17 @@ impl Desk {
         }
     }
 
-    /// The agent says `entry`, which goes as far as `cursor` into its session file.
+    /// The agent says `entry`, which goes as far as `cursor` into its session's file.
     pub fn say(&self, cursor: u64, entry: Value) {
-        self.said.send_modify(|said| said.push((cursor, entry)));
+        self.session
+            .send_modify(|now| now.said.push((cursor, entry)));
+    }
+
+    /// The agent begins the session `id` (`/clear`): its file, once the computer finds it, holds
+    /// `said`.
+    pub fn begin(&self, id: &str, said: Vec<(u64, Value)>) {
+        let id = id.to_string();
+        self.session.send_replace(Session { id, said });
     }
 
     /// The `api` notices the phone sent, by method and params, without when.
@@ -348,9 +371,10 @@ async fn api(mut send: SendStream, mut recv: RecvStream, phone: &str, serving: &
     }
 }
 
-/// `agent.conversation`, `asked`: of its tile, what was said after the cursor given (all of it
-/// without one), then each entry as it is said, until the phone lets go; of any other tile,
-/// refused.
+/// `agent.conversation`, `asked`: of its tile, what was said after the cursor given in the session
+/// it names, or the last of the session now when it names another (all of it here), then each
+/// entry as it is said, and the last of each session the agent begins, until the phone lets go; of
+/// any other tile, refused.
 async fn converse(mut send: SendStream, mut recv: RecvStream, asked: &Value, serving: &Serving) {
     let id = &asked["id"];
     if asked["params"][0] != TILE {
@@ -360,22 +384,20 @@ async fn converse(mut send: SendStream, mut recv: RecvStream, asked: &Value, ser
         let _ = read_frame(&mut recv).await;
         return;
     }
-    let from = asked["params"][1].as_u64();
-    serving.asked_from.lock().unwrap().push(from);
-    let mut said = serving.said.subscribe();
-    // What was said after `from`, and how far into the file it goes.
-    let after = |said: &[(u64, Value)], from: Option<u64>| {
-        let after: Vec<&(u64, Value)> = said
-            .iter()
-            .filter(|(at, _)| from.is_none_or(|from| *at > from))
-            .collect();
-        let at = after.last().map_or(from.unwrap_or(0), |(at, _)| *at);
-        let entries: Vec<Value> = after.into_iter().map(|(_, e)| e.clone()).collect();
-        (entries, at)
+    let from = match (asked["params"][1].as_u64(), asked["params"][2].as_str()) {
+        (Some(cursor), Some(session)) => Some((session.to_string(), cursor)),
+        _ => None,
     };
-    let (entries, mut at) = after(&said.borrow_and_update(), from);
+    serving.asked_from.lock().unwrap().push(from.clone());
+    let mut session = serving.session.subscribe();
+    let (mut following, entries, mut at) = {
+        let now = session.borrow_and_update();
+        let cursor = from.filter(|(asked, _)| *asked == now.id).map(|(_, at)| at);
+        let (entries, at) = after(&now.said, cursor);
+        (now.id.clone(), entries, at)
+    };
     let answer = json!({ "id": id,
-        "result": { "entries": entries, "cursor": at, "session": SESSION } });
+        "result": { "entries": entries, "cursor": at, "session": following } });
     if write_frame(&mut send, answer.to_string().as_bytes())
         .await
         .is_err()
@@ -384,16 +406,21 @@ async fn converse(mut send: SendStream, mut recv: RecvStream, asked: &Value, ser
     }
     loop {
         tokio::select! {
-            changed = said.changed() => if changed.is_err() { return },
+            changed = session.changed() => if changed.is_err() { return },
             // The phone sends nothing more: its end of the stream closes as it lets go.
             _ = read_frame(&mut recv) => return,
         }
-        let (entries, now) = after(&said.borrow_and_update(), Some(at));
-        if entries.is_empty() {
+        let (now, entries, now_at) = {
+            let now = session.borrow_and_update();
+            let from = (now.id == following).then_some(at);
+            let (entries, at) = after(&now.said, from);
+            (now.id.clone(), entries, at)
+        };
+        if entries.is_empty() && now == following {
             continue;
         }
-        at = now;
-        let event = json!([{ "event": "agent.said", "params": [TILE, entries, at, SESSION] }]);
+        (following, at) = (now, now_at);
+        let event = json!([{ "event": "agent.said", "params": [TILE, entries, at, following] }]);
         if write_frame(&mut send, event.to_string().as_bytes())
             .await
             .is_err()
@@ -401,6 +428,16 @@ async fn converse(mut send: SendStream, mut recv: RecvStream, asked: &Value, ser
             return;
         }
     }
+}
+
+/// What was said after `from` (all of it, without), and how far into the file it goes.
+fn after(said: &[(u64, Value)], from: Option<u64>) -> (Vec<Value>, u64) {
+    let after: Vec<&(u64, Value)> = said
+        .iter()
+        .filter(|(at, _)| from.is_none_or(|from| *at > from))
+        .collect();
+    let at = after.last().map_or(from.unwrap_or(0), |(at, _)| *at);
+    (after.into_iter().map(|(_, e)| e.clone()).collect(), at)
 }
 
 /// Wait until `done`, checking every 20 ms, for `within` at most: whether it came.

@@ -9,13 +9,11 @@ use std::sync::{
     Arc,
 };
 
-use anyhow::Result;
-use iroh::endpoint::Connection;
 use tokio::task::JoinHandle;
 
 use crate::{
     connections::Connections,
-    conversation::{self, Entry},
+    conversation::{self, Entry, Piece},
     failure::Failure,
     pacing::{self, Paced},
 };
@@ -118,7 +116,7 @@ impl Talking {
                     }
                     from = Some((piece.session, piece.cursor));
                 };
-                match follow(&connection, &workspace, &tile, resume, said).await {
+                match conversation::follow(&connection, &workspace, &tile, resume, said).await {
                     Err(why) if Failure::refused(&why) => break why,
                     _ => Connections::again(&connection).await,
                 }
@@ -139,34 +137,4 @@ impl Drop for Talking {
     fn drop(&mut self) {
         self.stop();
     }
-}
-
-/// A piece of a conversation as spec/agents.md 0.3's follow hands it (`conversation::Piece`): its
-/// entries, how far into its session's file they go, and that session.
-struct Piece {
-    entries: Vec<Entry>,
-    cursor: u64,
-    session: String,
-}
-
-/// spec/agents.md 0.3's follow, as `conversation::follow` takes it once it lands, made of 0.2's
-/// until then: from the cursor in the session `from` names, each piece handed to `said` in order
-/// and once. 0.2 names no session: all it hands is of one.
-async fn follow(
-    connection: &Connection,
-    workspace: &str,
-    tile: &str,
-    from: Option<(&str, u64)>,
-    mut said: impl FnMut(Piece),
-) -> Result<()> {
-    let cursor = from.map(|(_, cursor)| cursor);
-    conversation::follow(connection, workspace, tile, cursor, |entries, cursor| {
-        let session = String::new();
-        said(Piece {
-            entries,
-            cursor,
-            session,
-        })
-    })
-    .await
 }
