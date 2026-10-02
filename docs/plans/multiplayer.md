@@ -622,3 +622,6 @@ guest who may edit the board could start a command on the host (see the log).
 - 2026-10-02 — M5 step 7: the phone takes the network of the computer it pairs with, and is let onto it.
   Changing networks in Settings restarted the daemon two seconds late, cutting off a pairing begun
   meanwhile; it restarts at once now.
+- 2026-10-02 — Full e2e for M5 (steps 6 and 7): 205 of 205 in 18.8 minutes, on a quiet machine with
+  nothing else running, `multiplayer-load` among them. Everything of M5 that builds here is done;
+  what it leaves is in its row.
