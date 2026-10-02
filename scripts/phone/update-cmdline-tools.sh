@@ -7,7 +7,9 @@
 set -euo pipefail
 
 sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-yes | "$sdk/cmdline-tools/latest/bin/sdkmanager" --install "cmdline-tools;latest" > /dev/null
+# `yes` answers the prompts, and is cut off (SIGPIPE) once sdkmanager is done: under pipefail
+# that would fail the step though the install went through, so only sdkmanager's own status counts.
+{ yes || true; } | "$sdk/cmdline-tools/latest/bin/sdkmanager" --install "cmdline-tools;latest" > /dev/null
 # sdkmanager does not overwrite the tools it runs from: it installs beside them, as latest-2.
 if [ -d "$sdk/cmdline-tools/latest-2" ]; then
   rm -rf "$sdk/cmdline-tools/latest"
