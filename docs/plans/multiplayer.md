@@ -634,3 +634,12 @@ guest who may edit the board could start a command on the host (see the log).
   person.
 - 2026-10-02 — M5 step 12: the person's other computers and hosts learn of a phone from the app it
   paired with, and the phone of them; agents on a `hive host` reach it.
+- 2026-10-02 — M5 step 13: the push server (`hive-net serve --push`): a phone that cannot be reached
+  directly is told through it at UnifiedPush, APNs or FCM, what the devices it named sign, unread.
+  Checked against the providers' documentation and other relays by a research agent first.
+- 2026-10-02 — M5 step 14: Allow / Deny from the phone, with the keys each agent's manifest gives
+  for its own permission prompt (Claude Code's read from its binary).
+- 2026-10-02 — M5 step 15: hive-net's server roles behind its `server` feature; the phone links
+  none of them (509 crates to 370).
+- 2026-10-02 — M5 step 16: the phone knows whose it is, by the name and colour of the person's
+  profile. Nothing of M5 that builds here is left.
