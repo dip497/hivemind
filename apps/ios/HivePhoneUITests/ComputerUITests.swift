@@ -6,8 +6,8 @@ import XCTest
 /// its chat; and sends it a message from the reply box, which it answers in the chat and in its
 /// terminal, still followed. Then the community view the computer offers the phone (P8): its page,
 /// served by the computer, shows the computer's agent; what the view may do at once (selecting a
-/// tile) the computer answers; what would start an agent waits for the phone's lock, which a
-/// simulator does not have, and the app says so. Run by
+/// tile) the computer answers; what would start an agent waits for the phone's lock, whose prompt
+/// (a simulator always has a passcode) is cancelled, so nothing starts. Run by
 /// apps/desktop/tests/e2e/phone-app.spec.ts (PHONE_APP=ios), which hands it the link and what to find
 /// there: xcodebuild gives the test runner each `TEST_RUNNER_<NAME>` it was given as `<NAME>`.
 /// Without a link it skips itself, so the app's own UI test run is unchanged. A computer's network,
@@ -114,14 +114,30 @@ final class ComputerUITests: XCTestCase {
         select.tap()
         XCTAssertTrue(inPage(selected, app).waitForExistence(timeout: 60), "the computer answered: \(selected)")
 
-        // What would start an agent waits for the phone's lock; a simulator has none, and the app
-        // says so rather than starting it.
+        // What would start an agent waits for the phone's lock.
         let start = app.webViews.buttons["Start an agent"]
         XCTAssertTrue(start.waitForExistence(timeout: 30), "the view offers Start an agent")
         start.tap()
-        let notice = app.descendants(matching: .any)["view.notice"]
-        XCTAssertTrue(notice.waitForExistence(timeout: 30), "the phone's lock was asked first")
-        XCTAssertTrue(notice.label.contains("passcode"), "the app says why: \(notice.label)")
+        // A simulator always has a passcode (it takes any), so the lock is asked as on a phone with
+        // one: the system's own prompt, over the app. Cancelled, nothing is started, which the
+        // computer checks on its board after.
+        let cancel = lockPrompt(app)
+        XCTAssertTrue(cancel.exists, "the phone's lock was asked first")
+        cancel.tap()
+        XCTAssertEqual(gone(cancel), .completed, "the lock's prompt went")
+    }
+
+    /// The Cancel of the system's prompt for the phone's lock, which the system shows over the app:
+    /// SpringBoard's, or the app's own when the prompt is shown in it. Waits a minute at most.
+    @MainActor
+    private func lockPrompt(_ app: XCUIApplication) -> XCUIElement {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for _ in 0..<4 {
+            for place in [springboard, app] where place.buttons["Cancel"].waitForExistence(timeout: 7) {
+                return place.buttons["Cancel"]
+            }
+        }
+        return springboard.buttons["Cancel"]
     }
 
     /// Waits a minute at most for `terminal` to show `line` among the lines in sight.
