@@ -6,9 +6,10 @@ description: Run your own network for hivemind — a relay, a lookup server, adm
 A fresh install uses no servers at all: devices on the same network find each other there, and
 nothing leaves it (**Settings → Network** reads *Local network*). To reach devices elsewhere —
 a teammate at home, your laptop on the train, a server in the cloud — hivemind needs a way
-through, and you choose it once: hivemind's servers, **your own**, or one of your devices serving
-the rest. This page is about your own. Everything below is the `hive-net` binary that `install.sh`
-puts beside `hive`, MIT-licensed; hivemind's own servers run exactly the same.
+through, and you choose it once: **your own** network, or one of your devices serving the rest.
+The built-in *Hosted* profile is not available yet: its `*.hivemind.griiken.com` server names do
+not resolve in DNS. This page is about your own network. Everything below is the `hive-net` binary
+that `install.sh` puts beside `hive`, MIT-licensed.
 
 ## What a network is
 
@@ -86,11 +87,31 @@ What goes through the relay is end-to-end encrypted either way, and every change
 it is signed. Devices on the same network keep finding each other directly; the server only helps
 those that cannot.
 
+## Across networks with Tailscale
+
+When both computers can reach the same Tailscale network, run the network on one of them using
+that machine's Tailscale IP address (replace `<tailscale-ip>`):
+
+```bash
+hive-net serve --all --data ~/hive-net --url http://<tailscale-ip>:3340 --bind <tailscale-ip>:3340
+```
+
+On the owner's computer, make an enrolment link and use it in **Settings → Network → Change…**:
+
+```bash
+hive-net access enrol-link ~/hive-net/network.json --admin ~/hive-net/admin.key
+```
+
+The owner then shares the workspace from **Share**. The friend opens that workspace invite link;
+it carries the relay address and the guest's admission to this closed network. The friend needs
+Tailscale access to the server, but does not need the owner's enrolment link.
+
 ## Using it
 
-On each computer: **Settings → Network → Change…**, paste the link, **Use** (or `hive network use
-<link>` in a terminal). On a closed network the device must also be enrolled. As the admin, make
-an enrolment link — the network's link with a one-time voucher in it — and give it to the person:
+To join the network directly on a computer: **Settings → Network → Change…**, paste the link,
+**Use** (or `hive network use <link>` in a terminal). On a closed network that device must also be
+enrolled. As the admin, make an enrolment link — the network's link with a one-time voucher in it —
+and give it to the device's owner:
 
 ```bash
 hive-net access enrol-link /var/lib/hive-net/network.json --admin /var/lib/hive-net/admin.key
@@ -130,8 +151,8 @@ admin.key`. To leave the network: **Settings → Network → Change… → Local
 
 ## Several relays
 
-The hosted network runs a relay per region and one access service: relays on other machines ask
-it about each device that connects.
+A network can run a relay per region and one access service: relays on other machines ask it about
+each device that connects.
 
 ```bash
 # on access.example.com
