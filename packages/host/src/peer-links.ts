@@ -103,6 +103,9 @@ export interface PeerLinksOptions {
    *  told waits on the person here. None: nothing does. */
   statuses?(): WaitingStatus[];
   plans?(): PlanReview[];
+  /** Whether a permission the agent of `tile` asks can be allowed or denied from here (its agent
+   *  says which of its keys do, spec/needs.md 0.5). None: none can. */
+  decides?(tile: string): boolean;
   /** The machines this device knows, by what each is called: where each agent waiting runs. */
   machines: KnownMachines;
   /** One of the owner's phones gives where it is told what happens here (its push subscription,
@@ -340,7 +343,7 @@ export class PeerLinks {
     const asked = parseDevice(text);
     if (asked?.t === "needs") {
       const [held, statuses] = [heldBoards(store), this.o.statuses?.() ?? []];
-      const needs = needsOf(held, statuses, this.o.plans?.() ?? [], this.o.machines);
+      const needs = needsOf(held, statuses, this.o.plans?.() ?? [], this.o.machines, (tile) => this.o.decides?.(tile) ?? false);
       return link.send("device", JSON.stringify({ t: "needs", needs, working: workingIn(held, statuses) } satisfies DeviceMessage));
     }
     // Only a phone is told what happens here: a computer of the person's shows it.

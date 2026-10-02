@@ -15,3 +15,12 @@ export const KEY_GAP_MS = 40;
 export function keyBytes(token: string): string {
   return KEYMAP[token.toLowerCase()] ?? token;
 }
+
+/** Type `tokens` with `write`, the first now and each next one `KEY_GAP_MS` after the last.
+ *  False, and nothing more typed, when `write` could not take the first (no terminal there). */
+export function typeKeys(write: (bytes: string) => boolean | void, tokens: readonly string[]): boolean {
+  const [first, ...rest] = tokens.map(keyBytes);
+  if (first === undefined || write(first) === false) return false;
+  rest.forEach((bytes, i) => setTimeout(() => write(bytes), KEY_GAP_MS * (i + 1)));
+  return true;
+}

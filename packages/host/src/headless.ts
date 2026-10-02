@@ -53,7 +53,7 @@ import { workspaceDomains } from "./domains.js";
 import { HANDED_OFF, handOff } from "./hand-off.js";
 import { answers } from "./answers.js";
 import { PeerLinks } from "./peer-links.js";
-import { heldBoards, participantNamed } from "./needs.js";
+import { heldBoards, participantNamed, permissionKeys } from "./needs.js";
 import { PushNotices, PushSubscriptions, postNotice } from "./push.js";
 import { machines as savedMachines } from "./remote/catalog.js";
 import { People } from "./people.js";
@@ -251,6 +251,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     answers({
       status: (bare) => control.status.get(bare),
       type: (bare, data) => writeTile(`hm:${bare}`, data),
+      permissionKeys: (bare) => permissionKeys(heldBoards(store), bare),
       deliver: (bare, message) => control.mailbox.deliver(`hm:${bare}`, message),
       plans,
     }),
@@ -340,9 +341,11 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     granted: (device) => terminals.machineChanged(`peer:${device}`),
     // One of the person's phones, which is served what a phone does alone (M5).
     phone: (device) => devices.list().some((d) => d.device === device && d.kind === "phone"),
-    // What waits on the person here, for their devices to ask (M5), and on which machine.
+    // What waits on the person here, for their devices to ask (M5), on which machine, and which
+    // permissions their phone may allow or deny.
     statuses: () => control.status.all(),
     plans: () => plans.reviews(),
+    decides: (tile) => !!permissionKeys(heldBoards(store), tile),
     machines: {
       self: () => ({ device: keys.deviceId, name: deviceName() }),
       mine: (device) => devices.list().find((d) => d.device === device)?.name,
@@ -367,6 +370,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   const notices = new PushNotices({
     me: () => ({ device: keys.deviceId, name: deviceName() }),
     boards: () => heldBoards(store),
+    decides: (tile) => !!permissionKeys(heldBoards(store), tile),
     changes: (listener) => { heard.add(listener); return () => { heard.delete(listener); }; },
     subscriptions: pushSubscriptions,
     post: (endpoint, body, urgency, sign) => postNotice(endpoint, body, urgency, sign ? keys.device : null),

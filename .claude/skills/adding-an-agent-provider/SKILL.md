@@ -62,7 +62,7 @@ then grep its `dist/` for flag strings. Finish with one adversarial search per t
 
 ### The capability probe → the `caps` you will write
 
-Answer all ten with a source. Each answer decides a field of the manifest.
+Answer all eleven with a source. Each answer decides a field of the manifest.
 
 | # | Question | Decides |
 |---|---|---|
@@ -76,10 +76,13 @@ Answer all ten with a source. Each answer decides a field of the manifest.
 | 8 | Can the agent run shell commands + inherit the spawn env? | whether the worker can call `hive ctl report` (needs `hive` on PATH + HIVE_HCP_SOCK/HCP_TOKEN/HIVEMIND_TILE from the env) |
 | 9 | `--model` flag? claude-style permission modes? | the `options` block (`model`, `mode`) |
 | 10 | What the TUI prints while **working**, and while **waiting for approval** | the `detect` rules and `caps.blockedDetection` — capture real output, do not guess |
+| 11 | Which keys **allow** and which **deny** its own permission prompt | the `answer.permission` block (the phone's Allow / Deny types them) — read them from the binary's chooser, or leave the block out |
 
 Row 10 needs a real run. If you cannot install the CLI, say so and set
 `blockedDetection: false` rather than inventing prompt text — a wrong detector is
-worse than a missing one, because it reports the wrong state confidently.
+worse than a missing one, because it reports the wrong state confidently. Row 11 the
+same: a wrong key allows what the person denied, so with no evidence, leave
+`answer` out and the phone answers that agent with text.
 
 ---
 

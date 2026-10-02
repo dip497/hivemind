@@ -39,6 +39,19 @@ pub struct Need {
     /// device's name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub machine: Option<String>,
+    /// A permission the device can allow or deny (0.5): the phone may offer Allow / Deny. Said
+    /// only as `true`, and only of a permission.
+    #[serde(
+        default,
+        deserialize_with = "only_true",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub decide: bool,
+}
+
+/// `true` as itself; anything else as not said.
+fn only_true<'de, D: serde::Deserializer<'de>>(said: D) -> Result<bool, D::Error> {
+    Ok(Value::deserialize(said)? == Value::Bool(true))
 }
 
 /// What a device answers: what waits on the person there, and how many agents are at work there.
@@ -50,8 +63,9 @@ pub struct Answer {
 
 /// What the device called `from` answering `answer` says: what waits on the person, each item
 /// that says all it must, as the device ordered them, on the machine it says (else on `from`,
-/// a device of 0.2); and how many agents are at work (none when it does not say, or says it as
-/// anything but a whole number of none or more). Anything that is not an answer says nothing.
+/// a device of 0.2), a permission it can allow or deny said so; and how many agents are at work
+/// (none when it does not say, or says it as anything but a whole number of none or more).
+/// Anything that is not an answer says nothing.
 pub fn read_answer(answer: &Value, from: &str) -> Answer {
     if answer.get("t").and_then(Value::as_str) != Some("needs") {
         return Answer::default();
@@ -66,6 +80,7 @@ pub fn read_answer(answer: &Value, from: &str) -> Answer {
             .filter(|need| KINDS.contains(&need.kind.as_str()))
             .map(|need| Need {
                 machine: need.machine.or_else(|| Some(from.to_string())),
+                decide: need.decide && need.kind == "permission",
                 ..need
             })
             .collect(),

@@ -1,4 +1,4 @@
-# Needs you (0.4)
+# Needs you (0.5)
 
 What waits on the person (M5, design §9.2 "Home: Needs you"): each agent waiting on them, in the
 workspaces one of their devices holds, as their phone lists it. The device that runs the agents
@@ -16,7 +16,8 @@ holds is one item:
 ```json
 { "workspace": "<the workspace's id>", "name": "<the workspace's name>", "tile": "<the agent's tile>",
   "agent": "<what the agent is called>", "kind": "permission", "since": 1790000000000,
-  "plan": "<the plan, in markdown>", "machine": "<what the machine it runs on is called>" }
+  "plan": "<the plan, in markdown>", "machine": "<what the machine it runs on is called>",
+  "decide": true }
 ```
 
 - `since` is when it began waiting (ms since the epoch): with `tile`, it says which wait this is,
@@ -31,6 +32,11 @@ holds is one item:
   (`someone's computer` when their name is not known); a saved machine by its name; the host of an
   `ssh://` folder; and one the device no longer knows as `a device not paired here` or `a machine
   no longer saved`.
+- `decide` (0.5) is `true` on a `permission` the device can allow or deny ("Answering"): the
+  agent's manifest says which of its keys allow what it asks on its screen and which deny it
+  (`answer.permission`). It is left out otherwise: for any other kind, and for an agent that says
+  no keys, whose permission is answered with a line, as the person would answer it on its
+  screen.
 
 A session is named `hm:<tile>` or by its tile; both are the tile. An agent in no workspace the
 device holds is not listed, nor is one doing anything else (working, done, failed, …).
@@ -38,9 +44,11 @@ device holds is not listed, nor is one doing anything else (working, done, faile
 Items are in order of how long they have waited, the longest first; of two waiting since the same
 moment, the one whose tile comes first (by its characters' codes). A phone that has the lists of
 several devices shows them as one, in the same order. An item is left out when it lacks a field
-above (`plan` and `machine` may be missing), has one that is not text (`since`: not a number), or
-has a `kind` not listed here. An item with no `machine` (from a device of 0.2) runs on the device
-that answered, and the phone shows it with that device's name.
+above (`plan`, `machine` and `decide` may be missing), has one that is not text (`since`: not a
+number), or has a `kind` not listed here. An item with no `machine` (from a device of 0.2) runs on
+the device that answered, and the phone shows it with that device's name. A `decide` that is not
+`true`, or is on anything but a `permission`, is taken as not there: the item is shown as it would
+be without it.
 
 ## Answering
 
@@ -52,10 +60,15 @@ and once: an answer for a wait that is over, or one answered already, does nothi
 
 - for a `plan`, `{ "decision": "allow" | "deny", "feedback"?: "<what to change>" }`: the plan is
   decided as at the desktop (`plan.decide`), and everyone is told who decided it;
+- for a `permission` the list says the device can decide (`decide`, 0.5), also
+  `{ "decision": "allow" | "deny" }`: the keys the agent's manifest gives for that decision are
+  typed into its terminal, the first at once and each next one a moment (40 ms) after the last, so
+  its screen takes each one;
 - for anything else, `{ "text": "<one line>" }`: typed into the agent's terminal, Enter after it.
   It is one line of at most 1000 characters, with no control characters.
 
-Anything else is `BAD_REQUEST`. One may answer who may drive the workspace's agents, and the
+Anything else is `BAD_REQUEST`: a decision for an agent that says no keys, or for a wait that is
+neither a plan nor a permission, among it. One may answer who may drive the workspace's agents, and the
 person's own devices, a phone among them.
 
 ## Sending

@@ -1,5 +1,5 @@
 {
- "about": "Cases every implementation of needs-you must pass (spec/needs.md): what a device answers waits on the person ('computer': its boards, its agents' statuses and the plans they hand off, in, with the machines it knows ('known': itself, the person's other devices, participants' computers by whose they are, and saved machines); the list, each item with the machine its agent runs on, and how many agents are at work, out), and what a phone shows of the answers it is given ('phone': each from the device named in 'from'). Written by hand from the spec.",
+ "about": "Cases every implementation of needs-you must pass (spec/needs.md): what a device answers waits on the person ('computer': its boards, its agents' statuses and the plans they hand off, in, with the machines it knows ('known': itself, the person's other devices, participants' computers by whose they are, and saved machines) and the tiles whose agents say which keys allow and deny what they ask ('decides', none when not given); the list, each item with the machine its agent runs on, and how many agents are at work, out), and what a phone shows of the answers it is given ('phone': each from the device named in 'from'). Written by hand from the spec.",
  "known": {
   "self": {
    "device": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
@@ -1082,6 +1082,113 @@
     }
    ],
    "working": 0
+  },
+  {
+   "about": "a permission the device can allow or deny, its agent saying which of its keys do, says so (0.5); a question of such an agent, and a permission of one that says no keys, do not",
+   "held": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "repo": "/home/p/api",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "t1",
+        "kind": "claude",
+        "label": "Claude"
+       },
+       {
+        "id": "t2",
+        "kind": "claude",
+        "label": "Claude"
+       },
+       {
+        "id": "t3",
+        "kind": "probe",
+        "label": "Probe"
+       }
+      ]
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "hm:t1",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000000000,
+      "kind": "permission",
+      "title": "Editing Nav.tsx"
+     }
+    },
+    {
+     "tileId": "hm:t2",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000001000,
+      "kind": "question",
+      "title": "Which test runner?"
+     }
+    },
+    {
+     "tileId": "hm:t3",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000002000,
+      "kind": "permission",
+      "title": "Running make"
+     }
+    }
+   ],
+   "plans": [],
+   "decides": [
+    "t1",
+    "t2"
+   ],
+   "needs": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t1",
+     "agent": "Editing Nav.tsx",
+     "kind": "permission",
+     "since": 1790000000000,
+     "machine": "desk",
+     "decide": true
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t2",
+     "agent": "Which test runner?",
+     "kind": "question",
+     "since": 1790000001000,
+     "machine": "desk"
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t3",
+     "agent": "Running make",
+     "kind": "permission",
+     "since": 1790000002000,
+     "machine": "desk"
+    }
+   ],
+   "working": 0
   }
  ],
  "phone": [
@@ -1441,6 +1548,81 @@
    ],
    "needs": [],
    "working": 5
+  },
+  {
+   "about": "a permission the device can allow or deny is shown as one (0.5); said of anything but a permission, or as anything but true, it is not, and the item is shown as it would be without it",
+   "answers": [
+    {
+     "t": "needs",
+     "needs": [
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t1",
+       "agent": "Nav fix",
+       "kind": "permission",
+       "since": 1790000000000,
+       "machine": "desk",
+       "decide": true
+      },
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t2",
+       "agent": "Docs",
+       "kind": "question",
+       "since": 1790000001000,
+       "machine": "desk",
+       "decide": true
+      },
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t3",
+       "agent": "Build",
+       "kind": "permission",
+       "since": 1790000002000,
+       "machine": "desk",
+       "decide": "yes"
+      }
+     ],
+     "working": 0
+    }
+   ],
+   "from": [
+    "desk"
+   ],
+   "needs": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t1",
+     "agent": "Nav fix",
+     "kind": "permission",
+     "since": 1790000000000,
+     "machine": "desk",
+     "decide": true
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t2",
+     "agent": "Docs",
+     "kind": "question",
+     "since": 1790000001000,
+     "machine": "desk"
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t3",
+     "agent": "Build",
+     "kind": "permission",
+     "since": 1790000002000,
+     "machine": "desk"
+    }
+   ],
+   "working": 0
   }
  ]
 }

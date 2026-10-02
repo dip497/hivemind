@@ -17,10 +17,13 @@
 //!                               until it ends (or Ctrl+C); with --type, each line read here is
 //!                               typed into it, Enter after it, as you (its keyboard asked for:
 //!                               one someone else holds waits until they give it)
-//!   hive-phone answer <workspace> <tile> <since> --text <line> | --approve | --changes <what>
+//!   hive-phone answer <workspace> <tile> <since> --text <line> | --allow | --deny
+//!                     | --approve | --changes <what>
 //!                               answer what an agent waits on you for (`needs --json` names the
-//!                               wait): a line typed into its terminal, or its plan approved or
-//!                               sent back; only while it still waits on that, and once
+//!                               wait): a line typed into its terminal; a permission allowed or
+//!                               denied with the agent's own keys (one `needs` says it can decide);
+//!                               or its plan approved or sent back; only while it still waits on
+//!                               that, and once
 //!   hive-phone send <workspace> <tile> --text <line>
 //!                               send an agent a message, whatever it is doing: it goes in as its
 //!                               next prompt
@@ -49,7 +52,7 @@ use hive_phone::{
 };
 use serde_json::{json, Value};
 
-const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--approve|--changes <what> | send <workspace> <tile> --text <line> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
+const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--allow|--deny|--approve|--changes <what> | send <workspace> <tile> --text <line> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
 
 #[derive(Default)]
 struct Args {
@@ -59,8 +62,11 @@ struct Args {
     identity: Option<PathBuf>,
     name: Option<String>,
     json: bool,
-    /// `answer`'s: a line to type, or a plan's decision and what to change; `send`'s message.
+    /// `answer`'s: a line to type; a permission allowed or denied; a plan approved, or what to
+    /// change in it; `send`'s message.
     text: Option<String>,
+    allow: bool,
+    deny: bool,
     approve: bool,
     changes: Option<String>,
     /// `push`'s: where this phone listens for its notices.
@@ -79,6 +85,8 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
             "--name" => args.name = Some(argv.next().context("--name needs a value")?),
             "--json" => args.json = true,
             "--text" => args.text = Some(argv.next().context("--text needs a value")?),
+            "--allow" => args.allow = true,
+            "--deny" => args.deny = true,
             "--approve" => args.approve = true,
             "--changes" => args.changes = Some(argv.next().context("--changes needs a value")?),
             "--listen" => args.listen = Some(argv.next().context("--listen needs a value")?),
@@ -105,6 +113,7 @@ fn identity_dir(args: &Args) -> Result<PathBuf> {
 /// What an agent waits on the person for, in words.
 fn what(n: &Need) -> &'static str {
     match n.kind.as_str() {
+        "permission" if n.decide => "needs permission (allow or deny it here)",
         "permission" => "needs permission",
         "question" => "asks you something",
         "plan" => "has a plan for you to review",
@@ -399,11 +408,12 @@ async fn run(args: Args) -> Result<()> {
             let since: u64 = since
                 .parse()
                 .context("answer: the wait is when it began, a number")?;
-            let answer: Value = match (&args.text, args.approve, &args.changes) {
-                (Some(text), false, None) => json!({ "text": text }),
-                (None, true, None) => json!({ "decision": "allow" }),
-                (None, false, Some(changes)) => json!({ "decision": "deny", "feedback": changes }),
-                _ => bail!("answer: --text <line>, --approve or --changes <what>, one of them"),
+            let answer: Value = match (&args.text, args.allow || args.approve, args.deny, &args.changes) {
+                (Some(text), false, false, None) => json!({ "text": text }),
+                (None, true, false, None) => json!({ "decision": "allow" }),
+                (None, false, true, None) => json!({ "decision": "deny" }),
+                (None, false, false, Some(changes)) => json!({ "decision": "deny", "feedback": changes }),
+                _ => bail!("answer: --text <line>, --allow, --deny, --approve or --changes <what>, one of them"),
             };
             let (endpoint, devices) = reaching(&phone).await?;
             let answered = async {
@@ -573,7 +583,15 @@ async fn notices(
                             } else if shown && notice["t"] == "back" {
                                 println!("{} is back", s("name"));
                             } else if shown {
-                                println!("{} · {} — {}", s("agent"), s("name"), s("t"));
+                                // A permission its device can allow or deny is answered from here.
+                                let decide =
+                                    notice["decide"] == true && notice["kind"] == "permission";
+                                let here = if decide {
+                                    ": allow or deny it here"
+                                } else {
+                                    ""
+                                };
+                                println!("{} · {} — {}{here}", s("agent"), s("name"), s("t"));
                             }
                             StatusCode::CREATED
                         }

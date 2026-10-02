@@ -39,6 +39,15 @@ spawn:
   label: 'claude #{n}'
   titles:
   - Claude Code
+# Answering its permission prompt from another of your devices (a phone's Allow / Deny), read
+# from claude 2.1.287: its chooser takes a digit as that option, and the first is always "Yes";
+# Esc is "No, and tell Claude what to do differently".
+answer:
+  permission:
+    allow:
+    - '1'
+    deny:
+    - escape
 options:
 - id: mode
   label: Permission mode

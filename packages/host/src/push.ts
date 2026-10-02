@@ -27,6 +27,8 @@ export interface Notice {
   kind?: InputKind;
   /** When its status became what it is, ms since the epoch: with `tile`, which wait (`needs`). */
   since: number;
+  /** A permission the device can allow or deny (`needs`, 0.4): the phone may offer Allow / Deny. */
+  decide?: true;
 }
 
 /** What a phone is told when one of the person's devices is back: it started, or woke. */
@@ -58,11 +60,13 @@ export function toldOf(before: Status | undefined, status: Status): Notice["t"] 
   return before.state === status.state ? null : status.state === "done" ? "finished" : "failed";
 }
 
-/** The notice `t` of `change`, for the agent of `held` it is; null while it is on none of them. */
-function noticeFor(t: Notice["t"], { tileId, status }: WaitingStatus, held: HeldBoard[]): Notice | null {
+/** The notice `t` of `change`, for the agent of `held` it is; null while it is on none of them. A
+ *  permission is one it can decide when `decides` says so of the agent's tile. */
+function noticeFor(t: Notice["t"], { tileId, status }: WaitingStatus, held: HeldBoard[], decides: (tile: string) => boolean): Notice | null {
   const at = agentOf(held, tileId, status.title);
   if (!at) return null;
-  return { v: 1, t, ...at, name: short(at.name), agent: short(at.agent), ...(t === "needs" ? { kind: status.kind } : {}), since: status.since };
+  const decide = t === "needs" && status.kind === "permission" && decides(at.tile);
+  return { v: 1, t, ...at, name: short(at.name), agent: short(at.agent), ...(t === "needs" ? { kind: status.kind } : {}), since: status.since, ...(decide ? { decide } : {}) };
 }
 
 /** The phones subscribed here, kept in a file beside this device's keys (0600): one each. */
@@ -103,6 +107,9 @@ export interface PushOptions {
   me(): { device: string; name: string };
   /** The workspaces held here, with their boards, and each change to them. */
   boards(): HeldBoard[];
+  /** Whether a permission the agent of `tile` asks can be allowed or denied from here (its agent
+   *  says which of its keys do). */
+  decides(tile: string): boolean;
   changes: Changes;
   subscriptions: PushSubscriptions;
   /** Post `body` to `endpoint`, signed when `sign`: the status the push service answered. */
@@ -160,7 +167,7 @@ export class PushNotices {
     else this.before.set(tile, { state, ...(kind ? { kind } : {}), since });
     this.unplaced.delete(tile);
     if (!t) return;
-    const notice = noticeFor(t, change, this.o.boards());
+    const notice = noticeFor(t, change, this.o.boards(), (tile) => this.o.decides(tile));
     if (notice) this.tell(notice);
     else this.unplaced.set(tile, { t, change });
   }
@@ -177,7 +184,7 @@ export class PushNotices {
     if (this.unplaced.size === 0) return;
     const held = this.o.boards();
     for (const [tile, { t, change }] of this.unplaced) {
-      const notice = noticeFor(t, change, held);
+      const notice = noticeFor(t, change, held, (tile) => this.o.decides(tile));
       if (!notice) continue;
       this.unplaced.delete(tile);
       this.tell(notice);

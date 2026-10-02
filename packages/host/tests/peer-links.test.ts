@@ -103,6 +103,8 @@ function computer() {
       { tileId: "t1", status: { state: "waiting", kind: "permission", since: 1_790_000_000_000, title: "Editing Nav.tsx" } },
       { tileId: "t2", status: { state: "working", since: 1_790_000_000_000 } },
     ],
+    // The agent of t1 says which of its keys allow and deny what it asks.
+    decides: (tile) => tile === "t1",
     // Each agent here runs on this computer.
     machines: { self: () => ({ device: self, name: "desk" }), mine: () => undefined, whose: () => undefined, saved: () => undefined },
     subscribe: (device, sub) => subscribed.push({ device, sub }),
@@ -149,7 +151,7 @@ test("a phone is answered which workspaces its computer holds and what waits on 
   await until(() => phone.heard.get("device")!.length >= 2);
   assert.deepEqual(phone.heard.get("device")!.map((m) => JSON.parse(m) as unknown), [
     { t: "workspaces", workspaces: [{ workspace: c.workspace, name: "api", repo: c.repo }] },
-    { t: "needs", needs: [{ workspace: c.workspace, name: "api", tile: "t1", agent: "Editing Nav.tsx", kind: "permission", since: 1_790_000_000_000, machine: "desk" }], working: 1 },
+    { t: "needs", needs: [{ workspace: c.workspace, name: "api", tile: "t1", agent: "Editing Nav.tsx", kind: "permission", since: 1_790_000_000_000, machine: "desk", decide: true }], working: 1 },
   ]);
   await wait(200);
   assert.deepEqual([...phone.heard].filter(([s, h]) => s !== "device" && h.length > 0).map(([s]) => s), [], "the phone hears on no other stream");

@@ -91,6 +91,7 @@ import { Layouts, type Shown } from "@hivemind/host/store";
 import { presence } from "@hivemind/host/presence";
 import { Plans } from "@hivemind/host/plans";
 import { answers } from "@hivemind/host/answers";
+import { heldBoards, permissionKeys } from "@hivemind/host/needs";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
 import { fileIn } from "@hivemind/host/repo-paths";
@@ -1204,6 +1205,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   answers({
     status: (bare) => control.status.get(bare),
     type: (bare, data) => writeTile(`hm:${bare}`, data),
+    permissionKeys: (bare) => permissionKeys(heldBoards(workspaceStore()), bare),
     deliver: (bare, message) => control.mailbox.deliver(`hm:${bare}`, message),
     plans,
   }),

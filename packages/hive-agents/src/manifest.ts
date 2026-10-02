@@ -65,6 +65,11 @@ export interface AgentManifest {
    *  never downloads the plugin. The app itself answers to `manifestVersion`. */
   minAppVersion?: string;
   detect?: DetectRules;
+  /** How the person's answer to one of the agent's own prompts is typed from another of their
+   *  devices: `permission.allow` and `permission.deny`, the keys that allow what it asks and the
+   *  keys that deny it on its screen (a phone's Allow / Deny). Claim them only from the real
+   *  binary: a wrong key answers the wrong way. */
+  answer?: { permission?: { allow: string[]; deny: string[] } };
   session?: unknown;
   assets?: unknown;
   launch?: unknown;
@@ -150,6 +155,8 @@ export function iconFromManifest(icon: ManifestIcon): AgentIcon {
 }
 
 const strArray = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
+/** Keys to type, as `hive ctl keys` takes them: one to four tokens. */
+const keyTokens = (v: unknown): v is string[] => strArray(v) && v.length > 0 && v.length <= 4;
 const OPTION_ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const FLAG_RE = /^--?[A-Za-z0-9][\w-]*$/;
 
@@ -524,11 +531,20 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
       req(Array.isArray(sp.dismiss), "spawn.dismiss must be an array");
       (sp.dismiss as Array<Record<string, unknown>>).forEach((d, i) => {
         req(d && typeof d === "object" && d.when !== undefined, `spawn.dismiss[${i}] needs a \`when\``);
-        req(strArray(d.keys) && (d.keys as string[]).length > 0 && (d.keys as string[]).length <= 4,
-          `spawn.dismiss[${i}].keys must be 1-4 key tokens`);
+        req(keyTokens(d.keys), `spawn.dismiss[${i}].keys must be 1-4 key tokens`);
         try { validateExpr(d.when, `spawn.dismiss[${i}].when`); validateScope(d.scope, `spawn.dismiss[${i}].scope`); }
         catch (e) { throw new ManifestError((e as Error).message); }
       });
+    }
+  }
+
+  if (m.answer !== undefined) {
+    const a = m.answer as Record<string, unknown>;
+    req(a && typeof a === "object" && !Array.isArray(a), "answer must be a map");
+    if (a.permission !== undefined) {
+      const p = a.permission as Record<string, unknown>;
+      req(p && typeof p === "object" && !Array.isArray(p), "answer.permission must be a map");
+      for (const k of ["allow", "deny"] as const) req(keyTokens(p[k]), `answer.permission.${k} must be 1-4 key tokens`);
     }
   }
 
@@ -577,6 +593,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     ...(m.spawn?.args ? { defaultArgs: m.spawn.args } : {}),
     ...(m.spawn?.titles ? { titles: m.spawn.titles } : {}),
     ...(dismiss.length ? { dismiss } : {}),
+    ...(m.answer?.permission ? { answer: { permission: { allow: m.answer.permission.allow, deny: m.answer.permission.deny } } } : {}),
     enabled: m.enabled ?? false,
     caps: m.caps,
     ...(detect ? { detect } : {}),

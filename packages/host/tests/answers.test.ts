@@ -3,22 +3,25 @@
 // is decided as at the desktop, only while the agent still waits on that wait (its tile, and when
 // it began) and once: an answer that comes late, or again, does nothing and says so. One waiting
 // on its supervisor, or on nothing, is not answered; and an answer is one line of text, or a plan's
-// decision. And a message to an agent, whatever it is doing: one line, handed to it as its next
+// decision. A permission is allowed or denied with the keys its agent says do that on its screen
+// (0.5). And a message to an agent, whatever it is doing: one line, handed to it as its next
 // prompt (spec/needs.md "Sending").
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Connection } from "@hivemind/workspace-api/server";
 import { ApiError } from "@hivemind/workspace-api/protocol";
 import type { PlanDecided, PlanReview } from "@hivemind/workspace-api/plans";
+import type { PermissionKeys } from "@hivemind/agents";
+import { KEY_GAP_MS } from "@hivemind/agent-host/keys";
 import { answers, ANSWER_MAX } from "../src/answers.ts";
 import { Plans } from "../src/plans.ts";
 
 const T = 1_790_000_000_000;
 const phone: Connection = { actor: { kind: "peer", person: "p".repeat(64), device: "d".repeat(64), access: "owner" }, send: () => {}, closed: new AbortController().signal };
 
-/** A computer whose agent in `t1` has `status`: what is typed into each terminal, the plans told
- *  decided, and its `agent.answer`. */
-function computer(status: { state: string; kind?: "permission" | "question" | "plan" | "approval" | "other"; since: number }) {
+/** A computer whose agent in `t1` has `status`, and says `keys` allow and deny a permission it
+ *  asks: what is typed into each terminal, the plans told decided, and its `agent.answer`. */
+function computer(status: { state: string; kind?: "permission" | "question" | "plan" | "approval" | "other"; since: number }, keys?: PermissionKeys) {
   const statuses = new Map([["t1", status]]);
   const typed: string[] = [];
   const decided: PlanDecided[] = [];
@@ -32,6 +35,7 @@ function computer(status: { state: string; kind?: "permission" | "question" | "p
   const domain = answers({
     status: (tile) => statuses.get(tile),
     type: (tile, data) => { typed.push(`${tile}:${JSON.stringify(data)}`); return tile === "t1"; },
+    permissionKeys: (tile) => (tile === "t1" ? keys : undefined),
     deliver: (tile, text) => { delivered.push(`${tile}:${text}`); return tile === "t1"; },
     plans,
   });
@@ -70,6 +74,34 @@ test("a plan is decided as at the desktop: the agent gets the first answer, and 
   assert.deepEqual(c.answer("t1", T, { decision: "allow" }), { answered: false });
   assert.deepEqual(replies, ["deny smaller steps"]);
   assert.deepEqual(c.typed, [], "nothing typed for a plan");
+});
+
+test("a permission is allowed or denied with the keys its agent says do that, each a moment after the last, once: again, or for a wait that has passed, nothing", async () => {
+  const keys = { allow: ["y", "Enter"], deny: ["Escape"] };
+  const settle = () => new Promise((resolve) => setTimeout(resolve, KEY_GAP_MS * 2 + 50));
+  const c = computer({ state: "waiting", kind: "permission", since: T }, keys);
+  assert.deepEqual(c.answer("hm:t1", T, { decision: "allow" }), { answered: true });
+  assert.deepEqual(c.typed, ['t1:"y"'], "the first key at once");
+  await settle();
+  assert.deepEqual(c.typed, ['t1:"y"', 't1:"\\r"']);
+  assert.deepEqual(c.answer("t1", T, { decision: "deny" }), { answered: false }, "again");
+  // It asks again: the earlier wait's decision is late, the new one's lands.
+  c.statuses.set("t1", { state: "waiting", kind: "permission", since: T + 5_000 });
+  assert.deepEqual(c.answer("t1", T, { decision: "deny" }), { answered: false }, "late");
+  assert.deepEqual(c.answer("t1", T + 5_000, { decision: "deny" }), { answered: true });
+  await settle();
+  assert.deepEqual(c.typed, ['t1:"y"', 't1:"\\r"', 't1:"\\u001b"']);
+});
+
+test("an agent that says no keys for what it asks is answered on its screen: a decision for it, or for a question, is a bad request and types nothing", () => {
+  const c = computer({ state: "waiting", kind: "permission", since: T });
+  assert.equal(code(() => c.answer("t1", T, { decision: "allow" })), "BAD_REQUEST");
+  assert.deepEqual(c.typed, []);
+  assert.deepEqual(c.answer("t1", T, { text: "1" }), { answered: true }, "a line it still takes");
+  const question = computer({ state: "waiting", kind: "question", since: T }, { allow: ["y"], deny: ["n"] });
+  assert.equal(code(() => question.answer("t1", T, { decision: "allow" })), "BAD_REQUEST");
+  assert.equal(code(() => question.answer("t1", T, { decision: "maybe" })), "BAD_REQUEST");
+  assert.deepEqual(question.typed, []);
 });
 
 test("an agent that does not wait on the person is not answered: working, waiting on its supervisor's approval, or unknown", () => {

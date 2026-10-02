@@ -17,7 +17,7 @@ import { agentById } from "@hivemind/agents";
 import { registerAgentTile, unregisterAgentTile, shouldDeliver, type SendToAgentDetail } from "./agent-send";
 import { peekWork, claimWork } from "./work-queue";
 import { publishStatus, clearStatus, setLabel, statusOf, subscribeTileStatus, type TileStatusKind } from "./agent-status-bus";
-import { keyBytes, KEY_GAP_MS } from "@hivemind/agent-host/keys";
+import { typeKeys } from "@hivemind/agent-host/keys";
 import { SUBMIT_DELAY_MS, deliversPromptViaArgv } from "@hivemind/agent-host/agent-io";
 import { AgentStart, START_TICK_MS, typeTask } from "@hivemind/agent-host/agent-start";
 import { Pencil, GripVertical } from "lucide-react";
@@ -965,7 +965,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             // flags already answered: skip it once so the tile reaches its prompt.
             const now = Date.now();
             const keys = starting.mayDismiss(now) ? starting.dismiss(readScreen(), now) : null;
-            keys?.forEach((k, i) => setTimeout(() => window.hive.ptyWrite(ptyId, keyBytes(k)), KEY_GAP_MS * i));
+            if (keys) typeKeys((bytes) => window.hive.ptyWrite(ptyId, bytes), keys);
             // Quiet alone is not ready: a first run can open a trust or update chooser and
             // sit there, and a task typed into a chooser picks an option instead. Only a
             // screen that WAITS holds the task back — a booting agent has no status yet, and

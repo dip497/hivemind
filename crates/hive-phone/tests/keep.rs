@@ -204,6 +204,7 @@ fn what_each_device_last_answered_is_kept_until_it_is_forgotten_and_another_pers
         since: 4,
         plan: None,
         machine: Some("app 10".into()),
+        decide: true,
     };
     let said = |needs: Vec<Need>, working| Answer { needs, working };
     let (from_a, from_b) = (a.with.device.clone(), b.with.device.clone());

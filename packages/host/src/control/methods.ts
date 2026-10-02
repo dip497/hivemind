@@ -9,7 +9,7 @@
  *     they need no window (docs/design/multiplayer-2026-09-28.md, R5).
  */
 import { randomUUID } from "node:crypto";
-import { keyBytes, KEY_GAP_MS } from "@hivemind/agent-host/keys";
+import { typeKeys } from "@hivemind/agent-host/keys";
 import { HcpError, type HcpCall } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
@@ -639,13 +639,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           if (!keys.length) throw new HcpError("BAD_REQUEST", "keys required");
           const pid = ptyId(tileId);
           armRead(tileId); // keys can submit a prompt; a following read wants the turn they cause
-          const bytesOf = keyBytes;
-          const ok = deps.writeToTile(pid, bytesOf(keys[0]!));
-          if (!ok) throw new HcpError("TILE_NOT_FOUND", `no live agent for tile ${tileId}`);
-          for (let i = 1; i < keys.length; i++) {
-            const b = bytesOf(keys[i]!);
-            setTimeout(() => deps.writeToTile(pid, b), KEY_GAP_MS * i);
-          }
+          if (!typeKeys((bytes) => deps.writeToTile(pid, bytes), keys)) throw new HcpError("TILE_NOT_FOUND", `no live agent for tile ${tileId}`);
           return { ok: true, keys: keys.length };
         });
 

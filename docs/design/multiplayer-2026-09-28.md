@@ -1103,8 +1103,9 @@ agents.
    subscription (an endpoint, and a P-256 push key and secret of its own) on the `device` stream;
    the device that runs the agent tells it when one begins waiting on the person (a new `since`),
    finishes or fails, the notice encrypted to that phone (RFC 8291) and posted to the endpoint.
-   An agent first seen as the device starts is told of from its next change on. Not built here:
-   the notification itself and its actions, which are the phone app's.
+   An agent first seen as the device starts is told of from its next change on. A permission its
+   device can allow or deny says so (`decide`, M5 step 14), so the notification can carry Allow
+   and Deny. Not built here: the notification itself and its actions, which are the phone app's.
 5. **Answer.** Permission → Allow once / Always / Deny. Question → the options as buttons,
    plus a text box. Plan → the plan as text, Approve / Ask for changes.
 
@@ -1112,8 +1113,16 @@ agents.
    device that runs the agent: a plan is decided as at the desktop; anything else is one line typed
    into the agent's terminal (the choice as its prompt takes it: the phone shows the screen, from
    *Watch*). It lands only while the agent still waits on that wait (`since`), and once, so a late
-   or repeated answer, a notification's included, does nothing. The buttons per agent (which key
-   is *Allow once*) are the phone app's to draw from the screen; not built here.
+   or repeated answer, a notification's included, does nothing.
+
+   *As built (M5 step 14, `spec/needs.md` 0.5, `spec/push.md` 0.4):* which key is *Allow once*
+   is the agent's to say, not the phone's to guess from the screen: an agent's manifest gives the
+   keys that allow and deny its own permission prompt (`answer.permission`; Claude Code's are `1`
+   and Esc, read from its 2.1.287 binary), the device that runs it says so of each permission it
+   can decide (`decide`, in the list and in the notice), and the phone answers Allow or Deny as
+   `{decision}`, the device typing those keys a moment apart. An agent that gives none is answered
+   with a line, as before. *Always* is not offered: what "always" allows differs per agent and
+   per prompt, so it stays on the screen.
 6. **Watch.** Tap an agent → a live terminal, read-only by default, scaled to width;
    pinch to zoom. **Type** asks for the keyboard like a guest; the reply box sends one
    line through the task-delivery path, which is easier than typing into a TUI.

@@ -206,6 +206,18 @@ describe("manifest validation refuses what it cannot back", () => {
     expect(def.detect!("zzz")).toBe("idle");
   });
 
+  test("the keys that allow and deny a permission on the agent's screen are carried as written, and a block that cannot be typed is refused at load", () => {
+    const def = defFromManifest({ ...base, answer: { permission: { allow: ["1"], deny: ["escape"] } } });
+    expect(def.answer).toEqual({ permission: { allow: ["1"], deny: ["escape"] } });
+    expect(defFromManifest(base).answer).toBeUndefined();
+    bad({ answer: ["1"] }, /answer must be a map/);
+    bad({ answer: { permission: "1" } }, /answer.permission must be a map/);
+    bad({ answer: { permission: { allow: ["1"] } } }, /answer.permission.deny must be 1-4 key tokens/);
+    bad({ answer: { permission: { allow: [], deny: ["n"] } } }, /answer.permission.allow must be 1-4 key tokens/);
+    bad({ answer: { permission: { allow: ["y"], deny: ["n", "enter", "n", "enter", "n"] } } }, /answer.permission.deny must be 1-4 key tokens/);
+    bad({ answer: { permission: { allow: [1], deny: ["n"] } } }, /answer.permission.allow must be 1-4 key tokens/);
+  });
+
   test("an agent id is one name — an agent stands for one CLI, so there is no scope", () => {
     expect(defFromManifest({ ...base, id: "acme-two" }).id).toBe("acme-two");
     for (const id of ["@dip497/aider", "dip497/aider", "../aider", "Aider"]) bad({ id }, /id must be lowercase/);

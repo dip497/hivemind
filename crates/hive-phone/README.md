@@ -14,8 +14,10 @@ hive-phone needs                      # what waits on you on them, the one waiti
                                       # how many agents are at work, and of a device that is
                                       # away, what it last answered and when
 hive-phone watch <workspace> <tile>   # an agent's terminal, read-only, until it ends (or Ctrl+C)
-hive-phone answer <workspace> <tile> <since> --text 1   # answer what it waits on (or --approve,
-                                      # --changes '<what>' for a plan); once, while it still waits
+hive-phone answer <workspace> <tile> <since> --text 1   # answer what it waits on (or --allow,
+                                      # --deny for a permission `needs` says it can decide;
+                                      # --approve, --changes '<what>' for a plan); once, while
+                                      # it still waits
 hive-phone push --listen 192.168.1.31:8080   # be told, at this address, when an agent begins
                                       # waiting on you, finishes or fails; each notice as it comes
 ```

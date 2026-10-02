@@ -173,6 +173,28 @@ pattern can freeze the window: `(a+)+$` against 41 characters takes about a seco
 Hivemind checks every agent's screen every 1.2 seconds. Every test above runs in time
 proportional to the line it reads.
 
+## Allow and Deny from your phone
+
+When an agent asks permission on its screen, your phone can show **Allow** and **Deny** on
+the notification and in its list, if the agent's file says which keys answer that prompt:
+
+```yaml
+answer:
+  permission:
+    allow: ['1']        # the keys that allow what it asks
+    deny: [escape]      # the keys that deny it
+```
+
+Each list is one to four keys, written as `hive ctl keys` takes them: a word such as
+`enter`, `escape`, `up` or `tab`, or anything else typed as it is. Quote a digit (`'1'`),
+or YAML reads it as a number. Hivemind types the keys into the agent's terminal one after
+another, only while the agent still waits on that same prompt, and only once.
+
+Read the keys from the real program, not from memory: a wrong key answers the wrong way.
+Claude Code, for example, takes a digit as that option of its chooser, and its first option
+is always "Yes"; Esc is "No, and tell Claude what to do differently". An agent whose file
+says nothing here is answered on your phone as on its screen, with a line of text.
+
 ## Icons
 
 Draw the icon with shapes rather than SVG markup. Hivemind builds the markup from your

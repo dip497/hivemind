@@ -200,16 +200,19 @@ test("a frame of the app's own workspace runs on the paired host: placed on one 
   await expect.poll(() => read(path.join(builds, "after.txt")), { timeout: 30_000 }).toBe("finished");
 });
 
-test("a phone paired with the app is the person's at the host too: the host lets it in, as a phone, answers what waits on the person there and tells it when an agent there begins to; unpaired on the app, the host forgets it", async () => {
+test("a phone paired with the app is the person's at the host too: the host lets it in, as a phone, answers what waits on the person there and tells it when an agent there begins to, and lets it allow what the agent asks; unpaired on the app, the host forgets it", async () => {
   test.skip(!hiveNetBuilt() || !hostable || !fs.existsSync(HIVE_PHONE), "needs hive-net and hive-phone (cargo build in crates/hive-net and crates/hive-phone) and a current apps/cli/dist/hive");
   test.setTimeout(180_000);
-  // A stand-in agent the host runs, read from its screen: it asks to edit a file until answered.
+  // A stand-in agent the host runs, read from its screen: it asks to edit a file until answered,
+  // and keeps the answer it was given; its manifest says `y` and Enter allow what it asks.
   const bin = path.join(root, "bin");
+  const answered = path.join(root, "answered");
   fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin, "probe-agent"), [
     "#!/bin/bash",
     "printf '\\033]0;Editing Nav.tsx\\007Allow edit to Nav.tsx? (y/n) '",
     "read -r answer",
+    `printf '%s' "$answer" > '${answered}'`,
     "exec sleep 600",
   ].join("\n"), { mode: 0o755 });
   // Its agents are in the host's data folder, where the host and `hive ctl` there look for them,
@@ -221,6 +224,7 @@ test("a phone paired with the app is the person's at the host too: the host lets
   fs.writeFileSync(path.join(agent, "agent.yaml"), [
     "manifestVersion: 2", "id: probe", "label: Probe", "bin: probe-agent", "enabled: true",
     "caps: { promptDelivery: typed, turnSignal: false, resume: none, supervise: human, blockedDetection: true }",
+    "answer: { permission: { allow: ['y', enter], deny: ['n', enter] } }",
     "detect:", "  default: idle", "  rules:",
     "  - when: { contains: 'Allow edit to Nav.tsx?' }", "    then: permission", "",
   ].join("\n"));
@@ -285,8 +289,8 @@ test("a phone paired with the app is the person's at the host too: the host lets
   const needs = async () => JSON.parse((await run(HIVE_PHONE, ["needs", "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as { needs: Array<Record<string, unknown>>; away: unknown[] };
   let waiting: Record<string, unknown> | undefined;
   await expect.poll(async () => (waiting = (await needs()).needs[0])?.kind, { timeout: 40_000 }).toBe("permission");
-  expect(waiting).toMatchObject({ name: "api", agent: "nav", machine: os.hostname() });
-  await expect.poll(() => told.slice(1), { timeout: 20_000 }).toContainEqual(expect.objectContaining({ t: "needs", workspace: waiting!.workspace, tile: waiting!.tile }));
+  expect(waiting).toMatchObject({ name: "api", agent: "nav", machine: os.hostname(), decide: true });
+  await expect.poll(() => told.slice(1), { timeout: 20_000 }).toContainEqual(expect.objectContaining({ t: "needs", workspace: waiting!.workspace, tile: waiting!.tile, decide: true }));
 
   // As a phone: what it sends to start a terminal on the host starts nothing.
   const at = known.find((d) => d.device === hostDevice) as unknown as { addrs: string[]; relay: string | null };
@@ -301,6 +305,11 @@ test("a phone paired with the app is the person's at the host too: the host lets
   } finally {
     net.stop();
   }
+
+  // Allowed from the phone: the host types the agent's own keys for yes.
+  const allowed = await run(HIVE_PHONE, ["answer", waiting!.workspace as string, waiting!.tile as string, String(waiting!.since), "--allow", "--identity", phone, "--json"], { timeout: 30_000 });
+  expect(JSON.parse(allowed.stdout)).toEqual({ answered: true });
+  await expect.poll(() => read(answered), { timeout: 20_000 }).toBe("y");
 
   // Unpaired on the laptop: the host forgets it.
   await devices();

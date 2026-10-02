@@ -331,6 +331,16 @@ export interface AgentProviderDef {
   /** Startup screens the host may answer because the launch flags already answered them
    *  (see ManifestSpawn.dismiss). `keys` are the tokens `hive ctl keys` takes. */
   dismiss?: ReadonlyArray<{ match: (screen: string) => boolean; keys: readonly string[] }>;
+  /** How the person's answer to one of the agent's own prompts is typed, from another of their
+   *  devices (a phone's Allow / Deny): `permission`, the keys that allow what it asks and the
+   *  keys that deny it. Tokens as `hive ctl keys` takes them. */
+  answer?: { permission?: PermissionKeys };
+}
+
+/** The keys that allow, and the keys that deny, a permission an agent asks on its screen. */
+export interface PermissionKeys {
+  allow: readonly string[];
+  deny: readonly string[];
 }
 
 // ── daemon-side ──────────────────────────────────────────────────────────────

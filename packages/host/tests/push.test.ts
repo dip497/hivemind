@@ -5,7 +5,8 @@
 // one its push service no longer knows is dropped; an agent not yet on a board here is told of
 // once it is, by at most 200 characters of its name; a device back tells each phone so; and the
 // subscriptions are kept one per phone, readable by this user alone; and each notice is posted as
-// Web Push takes it, signed by the device that posts it, as a push server asks (0.3).
+// Web Push takes it, signed by the device that posts it, as a push server asks (0.3). A permission
+// the device can allow or deny is told as one (0.4).
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { createDecipheriv, createECDH, createHash, createHmac, createPublicKey, verify, type ECDH } from "node:crypto";
@@ -71,7 +72,7 @@ test("each phone subscribed is posted the notice encrypted to it alone, urgently
   subscriptions.set("b".repeat(64), b.sub);
   const posted: Array<{ endpoint: string; body: Buffer; urgency: string; sign: boolean }> = [];
   // b's push service no longer knows it.
-  const notices = new PushNotices({ boards: () => held, changes: () => () => {}, subscriptions, post: async (endpoint, body, urgency, sign) => { posted.push({ endpoint, body, urgency, sign }); return endpoint.endsWith("/b") ? 410 : 201; } });
+  const notices = new PushNotices({ boards: () => held, decides: () => false, changes: () => () => {}, subscriptions, post: async (endpoint, body, urgency, sign) => { posted.push({ endpoint, body, urgency, sign }); return endpoint.endsWith("/b") ? 410 : 201; } });
   notices.changed(change(st("working")));
   notices.changed(change(st("waiting", "permission", T)));
   await new Promise((r) => setImmediate(r));
@@ -102,6 +103,7 @@ test("an agent on no board here yet is told of once its window saves its tile, b
   const posted: unknown[] = [];
   const notices = new PushNotices({
     boards,
+    decides: () => false,
     changes: (l) => { heard.add(l); return () => { heard.delete(l); }; },
     subscriptions,
     post: async (_endpoint, body) => { posted.push(read(body, a.key, a.auth)); return 201; },
@@ -126,6 +128,26 @@ test("an agent on no board here yet is told of once its window saves its tile, b
   assert.deepEqual(posted, [{ v: 1, t: "needs", workspace: W, name: "ä".repeat(AGENT_MAX), tile: "t2", agent: "🐝".repeat(AGENT_MAX), kind: "permission", since: T }]);
 });
 
+test("a permission the device can allow or deny is told as one, so the phone may offer Allow / Deny; a question of the same agent, or a permission of one that says no keys, is not", async () => {
+  const a = phone("https://push.example/a");
+  const subscriptions = new PushSubscriptions(path.join(tmp, `push-${made++}.json`));
+  subscriptions.set("a".repeat(64), a.sub);
+  const boards = (): HeldBoard[] => [{ workspace: W, name: "api", repo: "/home/p/api", core: { frames: [], tiles: [{ id: "t1", kind: "claude", label: "Claude" }, { id: "t2", kind: "probe", label: "Probe" }] } }];
+  const posted: unknown[] = [];
+  const notices = new PushNotices({ boards, decides: (tile) => tile === "t1", changes: () => () => {}, subscriptions, post: async (_endpoint, body) => { posted.push(read(body, a.key, a.auth)); return 201; } });
+  for (const tile of ["hm:t1", "hm:t2"]) notices.changed(change(st("idle"), tile));
+  notices.changed(change(st("waiting", "permission", T), "hm:t1"));
+  notices.changed(change(st("waiting", "permission", T + 1), "hm:t2"));
+  notices.changed(change(st("waiting", "question", T + 2), "hm:t1"));
+  await new Promise((r) => setImmediate(r));
+  const told = { v: 1, t: "needs", workspace: W, name: "api" };
+  assert.deepEqual(posted, [
+    { ...told, tile: "t1", agent: "Claude", kind: "permission", since: T, decide: true },
+    { ...told, tile: "t2", agent: "Probe", kind: "permission", since: T + 1 },
+    { ...told, tile: "t1", agent: "Claude", kind: "question", since: T + 2 },
+  ]);
+});
+
 test("a device back tells each phone subscribed, encrypted to it, by its id and what it is called (at most 200 characters of it), plainly", async () => {
   const [a, b] = [phone("https://push.example/a"), phone("https://push.example/b")];
   const subscriptions = new PushSubscriptions(path.join(tmp, `push-${made++}.json`));
@@ -135,6 +157,7 @@ test("a device back tells each phone subscribed, encrypted to it, by its id and 
   const notices = new PushNotices({
     me: () => ({ device: "d".repeat(64), name: "desk".repeat(AGENT_MAX) }),
     boards: () => held,
+    decides: () => false,
     changes: () => () => {},
     subscriptions,
     post: async (endpoint, body, urgency) => { posted.push({ endpoint, body, urgency }); return 201; },

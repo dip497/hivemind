@@ -79,14 +79,22 @@ async function pairPhone(d: Awaited<ReturnType<typeof desktopWith>>) {
 
 /** A stand-in agent, read from its screen: it says what it is doing in its title, and asks to
  *  edit a file until it is answered, then draws its screen afresh, working, and says each line it
- *  hears from then on. What the desktop's environment needs to run it. */
+ *  hears from then on. Told no, it says so and asks again a moment later; its manifest says `y`
+ *  and Enter allow what it asks and `n` and Enter deny it. What the desktop's environment needs to
+ *  run it. */
 function probeAgent(): Record<string, string> {
   const bin = path.join(root, "bin");
   fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin, "probe-agent"), [
     "#!/bin/bash",
-    "printf '\\033]0;Editing Nav.tsx\\007Allow edit to Nav.tsx? (y/n) '",
-    "read -r answer",
+    "printf '\\033]0;Editing Nav.tsx\\007'",
+    "while :; do",
+    "  printf 'Allow edit to Nav.tsx? (y/n) '",
+    "  read -r answer",
+    "  [ \"$answer\" = n ] || break",
+    "  printf '\\033[2J\\033[Hprobe was told no\\n'",
+    "  sleep 2",
+    "done",
     "printf '\\033[2J\\033[Hprobe is thinking\\n'",
     "while read -r line; do printf 'heard: %s\\n' \"$line\"; done",
   ].join("\n"), { mode: 0o755 });
@@ -95,6 +103,7 @@ function probeAgent(): Record<string, string> {
   fs.writeFileSync(path.join(agent, "agent.yaml"), [
     "manifestVersion: 2", "id: probe", "label: Probe", "bin: probe-agent", "enabled: true",
     "caps: { promptDelivery: typed, turnSignal: false, resume: none, supervise: human, blockedDetection: true }",
+    "answer: { permission: { allow: ['y', enter], deny: ['n', enter] } }",
     "detect:", "  default: idle", "  rules:",
     "  - when: { contains: 'Allow edit to Nav.tsx?' }", "    then: permission",
     "  - when: { contains: probe is thinking }", "    then: working", "",
@@ -252,6 +261,44 @@ test("the phone is told when an agent on the computer begins waiting on the pers
   await expect.poll(async () => (await state())?.kind, { timeout: 30_000 }).toBe("permission");
   await new Promise((r) => setTimeout(r, 2_000));
   expect(told).toHaveLength(2);
+});
+
+test("what an agent asks, its computer can allow or deny, and says so in the list and the notice; the phone denies it with the agent's own keys, and it is told no and asks again; allows it, and it works; the same answer again does nothing", async () => {
+  test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
+  test.setTimeout(120_000);
+  const d = await desktopWith(probeAgent());
+  const { phone } = await pairPhone(d);
+  await d.desktop.keyboard.press("Escape");
+  const told = listen(phone);
+  await expect.poll(() => told[0], { timeout: 30_000 }).toMatchObject({ told: [os.hostname()] });
+  const tile = await startProbe(d);
+  const asked = async () => (await needsOf(phone)).needs[0] as Record<string, unknown> | undefined;
+  let first: Record<string, unknown> | undefined;
+  await expect.poll(async () => (first = await asked())?.kind, { timeout: 30_000 }).toBe("permission");
+  expect(first).toMatchObject({ tile, decide: true });
+  await expect.poll(() => told.slice(1), { timeout: 10_000 }).toEqual([expect.objectContaining({ t: "needs", tile, kind: "permission", since: first!.since, decide: true })]);
+
+  const watching = spawn(HIVE_PHONE, ["watch", first!.workspace as string, tile, "--identity", phone]);
+  procs.push(watching);
+  let seen = "";
+  watching.stdout!.on("data", (b: Buffer) => { seen += b.toString(); });
+  await expect.poll(() => seen, { timeout: 20_000 }).toContain("Allow edit to Nav.tsx?");
+  const decide = async (wait: Record<string, unknown>, decision: "--allow" | "--deny") =>
+    JSON.parse((await run(HIVE_PHONE, ["answer", wait.workspace as string, tile, String(wait.since), decision, "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as unknown;
+
+  // Denied from the phone: the agent's keys for no go in, it is told no, and it asks again, anew.
+  expect(await decide(first!, "--deny")).toEqual({ answered: true });
+  await expect.poll(() => seen, { timeout: 20_000 }).toContain("probe was told no");
+  let again: Record<string, unknown> | undefined;
+  await expect.poll(async () => (again = await asked())?.since !== undefined && again!.since !== first!.since, { timeout: 30_000 }).toBe(true);
+  expect(again).toMatchObject({ tile, kind: "permission", decide: true });
+  expect(await decide(first!, "--allow")).toEqual({ answered: false });
+
+  // Allowed from the phone: it works, nothing waits; allowed again, nothing happens.
+  expect(await decide(again!, "--allow")).toEqual({ answered: true });
+  await expect.poll(() => seen, { timeout: 20_000 }).toContain("probe is thinking");
+  await expect.poll(async () => { const n = await needsOf(phone); return [n.needs.length, n.working]; }, { timeout: 30_000 }).toEqual([0, 1]);
+  expect(await decide(again!, "--allow")).toEqual({ answered: false });
 });
 
 test("a computer away is shown with what it last said needed the person, and when; back, as it starts or wakes, it tells the phone, which shows it only after finding it away; unpaired from the phone while away, only the phone forgets it", async () => {

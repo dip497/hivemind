@@ -3,11 +3,13 @@
  * spec/needs.md "Answering"). A wait is named by its tile and when it began (`since`, as the needs
  * list gives it): an answer lands only while the agent still waits on that wait, and once, so one
  * that comes late, or again, does nothing and says so. A plan is decided as the person at the
- * desktop decides one; anything else is one line typed into the agent's terminal, Enter after it.
+ * desktop decides one; a permission is allowed or denied with the keys its agent says do that on
+ * its screen (0.5); anything else is one line typed into the agent's terminal, Enter after it.
  * And sending an agent a message, whatever it is doing (spec/needs.md "Sending"): one line, handed
  * to it as `hive ctl send` hands one, as its next prompt once it is at its prompt. Electron-free.
  */
-import type { InputKind } from "@hivemind/agents";
+import type { InputKind, PermissionKeys } from "@hivemind/agents";
+import { typeKeys } from "@hivemind/agent-host/keys";
 import { ApiError, oneOf, text, written } from "@hivemind/workspace-api/protocol";
 import type { Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
@@ -19,6 +21,9 @@ export interface AnswersOptions {
   status(tile: string): { state: string; kind?: InputKind; since: number } | undefined;
   /** Type `data` into the terminal of `tile` now; false when it has none. */
   type(tile: string, data: string): boolean;
+  /** The keys that allow and deny a permission the agent of `tile` asks, as it says; undefined
+   *  when it says none. */
+  permissionKeys(tile: string): PermissionKeys | undefined;
   /** Hand `text` to the agent of `tile` as a message: typed in, Enter after it, once it is at its
    *  prompt; false when it has no terminal. */
   deliver(tile: string, text: string): boolean;
@@ -57,6 +62,11 @@ export function answers(o: AnswersOptions): Domain<"agent.answer" | "agent.send"
           const feedback = a.feedback == null ? undefined : written(a.feedback, "answer.feedback");
           const review = o.plans.reviews().find((r) => toBareId(r.tileId) === bare);
           done = !!review && o.plans.decide(from, bare, review.requestId, decision, feedback).answered;
+        } else if (a.decision !== undefined) {
+          const decision = oneOf(a.decision, "answer.decision", ["allow", "deny"] as const);
+          const keys = status.kind === "permission" ? o.permissionKeys(bare)?.[decision] : undefined;
+          if (!keys) throw new ApiError("BAD_REQUEST", "this agent is answered on its screen: it says no keys that allow or deny what it asks");
+          done = typeKeys((bytes) => o.type(bare, bytes), keys);
         } else {
           done = o.type(bare, `${line(a.text, "answer.text")}\r`);
         }

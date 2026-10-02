@@ -1,4 +1,4 @@
-# Push (0.3)
+# Push (0.4)
 
 What happens while the person is away, told to their phone (M5, design §9.2 "Push notification"):
 an agent on one of their devices begins waiting on them, finishes or fails; and a device the phone
@@ -38,7 +38,7 @@ by its user alone, and forgets it when that phone is unpaired there.
 ```json
 { "v": 1, "t": "needs", "workspace": "<the workspace's id>", "name": "<the workspace's name>",
   "tile": "<the agent's tile>", "agent": "<what the agent is called>", "kind": "permission",
-  "since": 1790000000000 }
+  "since": 1790000000000, "decide": true }
 ```
 
 - `t` is `needs` when an agent in a workspace the device holds begins waiting on the person
@@ -47,7 +47,9 @@ by its user alone, and forgets it when that phone is unpaired there.
   else is told: not working, not waiting for an approval, not the same wait again (its title
   changing, say), not done or failed again.
 - `workspace`, `tile` and `kind` are as `needs.md` has them, `kind` for `needs` alone. `since` is
-  when the status became what it is. `name` and `agent` are as there, the first 200 characters
+  when the status became what it is. `decide` (0.4) is as there too: `true` on a permission the
+  device can allow or deny, so the phone may put Allow and Deny on the notification itself and
+  answer from it (`needs.md`, "Answering"), and left out otherwise. `name` and `agent` are as there, the first 200 characters
   (Unicode code points) of each (0.3: `name` too), so that a notice fits what Apple's push service
   carries.
 - An agent first seen, as the device starts and brings back its sessions' statuses, or a session
