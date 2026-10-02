@@ -59,11 +59,11 @@ final class ConversationRelay: ConversationListener, @unchecked Sendable {
         case ended(ConversationEnded)
     }
 
-    private let inbox: Inbox
+    private let inbox: Inbox<Told>
     private let hop: MainRelay
 
     init(take: @escaping @MainActor ([Told]) -> Void) {
-        let inbox = Inbox()
+        let inbox = Inbox<Told>()
         self.inbox = inbox
         hop = MainRelay { take(inbox.drain()) }
     }
@@ -77,24 +77,54 @@ final class ConversationRelay: ConversationListener, @unchecked Sendable {
         inbox.put(.ended(why))
         hop.poke()
     }
+}
 
-    /// What was told on the core's thread, until the main thread takes it.
-    private final class Inbox: @unchecked Sendable {
-        private let lock = NSLock()
-        private var told: [Told] = []
+/// A community view's listener (design §5.5): what its host says, each message for the page as it
+/// is, and when the view starts again or ends. As with a conversation, none is dropped and the order
+/// is kept: the page is handed every message in turn, and a view starts again only after its page
+/// of before was handed all that was said to it.
+final class ViewRelay: ViewListener, @unchecked Sendable {
+    enum Told: Equatable {
+        case said(String)
+        case ended(ViewEnded)
+    }
 
-        func put(_ telling: Told) {
-            lock.lock()
-            told.append(telling)
-            lock.unlock()
-        }
+    private let inbox: Inbox<Told>
+    private let hop: MainRelay
 
-        func drain() -> [Told] {
-            lock.lock()
-            defer { lock.unlock() }
-            let all = told
-            told = []
-            return all
-        }
+    init(take: @escaping @MainActor ([Told]) -> Void) {
+        let inbox = Inbox<Told>()
+        self.inbox = inbox
+        hop = MainRelay { take(inbox.drain()) }
+    }
+
+    func said(message: String) {
+        inbox.put(.said(message))
+        hop.poke()
+    }
+
+    func ended(why: ViewEnded) {
+        inbox.put(.ended(why))
+        hop.poke()
+    }
+}
+
+/// What a core thread told, kept in order until the main thread takes all of it.
+final class Inbox<Item>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var told: [Item] = []
+
+    func put(_ item: Item) {
+        lock.lock()
+        told.append(item)
+        lock.unlock()
+    }
+
+    func drain() -> [Item] {
+        lock.lock()
+        defer { lock.unlock() }
+        let all = told
+        told = []
+        return all
     }
 }
