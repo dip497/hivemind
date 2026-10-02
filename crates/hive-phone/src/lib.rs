@@ -8,5 +8,6 @@ pub mod identity;
 pub mod needs;
 pub mod network;
 pub mod pairing;
+pub mod person;
 pub mod push;
 pub mod workspace;

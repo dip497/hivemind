@@ -5,10 +5,10 @@
 //! its device and is the phone's person's is listed; a certificate that does not name the phone is
 //! not its own. What each device last answered is kept, and forgotten with the device
 //! (spec/needs.md "Asking", spec/pairing.md "Unpairing"); the computers and hosts an app tells of,
-//! kept as it told of them while an app that did lists them (spec/pairing.md 0.7); a device found
-//! away is shown back once,
-//! when it says it is back since then (spec/push.md 0.2); and the network an app gives, which the
-//! phone reaches the person's devices through (spec/pairing.md 0.5).
+//! kept as it told of them while an app that did lists them (spec/pairing.md 0.7), and whose they
+//! are as the app paired with first says (0.8); a device found away is shown back once, when it
+//! says it is back since then (spec/push.md 0.2); and the network an app gives, which the phone
+//! reaches the person's devices through (spec/pairing.md 0.5).
 
 use std::{fs, path::PathBuf};
 
@@ -18,6 +18,7 @@ use hive_phone::{
     identity::{DeviceCertificate, Identity},
     needs::{Answer, Heard, Need},
     pairing::{Paired, PairedWith},
+    person::Person,
 };
 use iroh::SecretKey;
 use serde_json::json;
@@ -463,4 +464,86 @@ fn the_network_an_app_gives_is_kept_and_reached_through_until_another_persons_ap
     assert!(phone.network().is_none());
     assert_eq!(phone.reach(), Reach::local());
     fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn whose_devices_these_are_is_as_the_app_paired_with_first_says_a_name_that_is_none_not_taken_and_another_person_forgets_it(
+) {
+    let dir = tmp("person");
+    let phone = Identity::open(&dir.join("id")).unwrap();
+    let (priya, sam) = (key(1), key(2));
+    let (desk, laptop) = (paired(&phone, 10, &priya), paired(&phone, 11, &priya));
+    phone.keep(&desk, 1).unwrap();
+    phone.keep(&laptop, 2).unwrap();
+    let (desk_id, laptop_id) = (desk.with.device.clone(), laptop.with.device.clone());
+    let said = |name: &str, color: &str| json!({ "t": "devices", "devices": [], "profile": { "name": name, "color": color } });
+    assert_eq!(phone.person(), None, "none before an app says");
+
+    // Both say: the desk, paired with first, is whose word is kept, whatever order they answer in.
+    phone
+        .learn_all(
+            &[
+                (laptop_id.clone(), said("Priya S", "#10b981")),
+                (desk_id.clone(), said("  Priya  ", "#3b82f6")),
+            ],
+            3,
+        )
+        .unwrap();
+    assert_eq!(
+        phone.person(),
+        Some(Person {
+            name: "Priya".into(),
+            color: "#3b82f6".into()
+        })
+    );
+    // The desk away, the laptop's word is kept; a colour that is not one is taken as none.
+    phone
+        .learn_all(&[(laptop_id.clone(), said("Priya S", "blue"))], 4)
+        .unwrap();
+    assert_eq!(
+        phone.person(),
+        Some(Person {
+            name: "Priya S".into(),
+            color: String::new()
+        })
+    );
+    // A name that is none, too long or with a control character is not taken; nor anything from
+    // a device this phone did not pair with itself.
+    for name in ["", "   ", &"P".repeat(65), "Priya\nS"] {
+        phone
+            .learn_all(&[(desk_id.clone(), said(name, "#3b82f6"))], 5)
+            .unwrap();
+        assert_eq!(phone.person().unwrap().name, "Priya S", "{name:?}");
+    }
+    phone
+        .learn_all(
+            &[(key(12).public().to_string(), said("Mallory", "#000000"))],
+            6,
+        )
+        .unwrap();
+    assert_eq!(phone.person().unwrap().name, "Priya S");
+    phone
+        .learn_all(
+            &[(desk_id.clone(), json!({ "t": "devices", "devices": [] }))],
+            7,
+        )
+        .unwrap();
+    assert_eq!(
+        phone.person().unwrap().name,
+        "Priya S",
+        "an app that says none leaves it"
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = fs::metadata(dir.join("id").join("person.json"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600);
+    }
+
+    // Paired with another person's app: whose they were is forgotten.
+    phone.keep(&paired(&phone, 20, &sam), 8).unwrap();
+    assert_eq!(phone.person(), None);
 }

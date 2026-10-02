@@ -1061,6 +1061,11 @@ agents.
    `conformance/pairing.json`. Name and colour do not carry over yet, and it pairs on the local
    network: the reach chooser (step 2 below) comes with the phone's shell.
 
+   *As built (M5 step 16, `spec/pairing.md` 0.8):* name and colour carry over. The app tells the
+   phone whose devices these are, as its Settings → Profile has them, with the devices it may
+   reach (as it pairs, and each time it dials them), and the phone shows itself as that person's,
+   in their colour: as the app it paired with first says.
+
    *As built (M5 step 12, `spec/pairing.md` 0.7):* the person's other computers and hosts learn of
    the phone from the app it paired with, which tells each of them its phones, all of them each
    time (as one pairs or is forgotten, and as the app starts and wakes), so they let it in, serve it

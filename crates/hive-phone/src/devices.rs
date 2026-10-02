@@ -17,6 +17,7 @@ use crate::{
     identity::{write_private, Identity},
     needs,
     pairing::{Paired, PairedWith},
+    person,
 };
 
 /// How long a device has to answer the phone before it is said to be away.
@@ -72,6 +73,7 @@ impl Identity {
         self.certify(&paired.certificate)?;
         if !same {
             needs::forget_heard(self, None)?;
+            self.forget_person()?;
         }
         // The network the app is on; the same person's app that gives none leaves it as it was.
         if paired.network.is_some() || !same {
@@ -148,9 +150,37 @@ impl Identity {
         Ok(())
     }
 
+    /// What the apps this phone paired with answered when it asked which of the person's
+    /// computers and hosts it may reach through each (`answers`, by the app that gave each), kept
+    /// at `now`: the devices each tells of (spec/pairing.md 0.7), and whose they are as the app
+    /// this phone paired with first among those that say (0.8).
+    pub fn learn_all(&self, answers: &[(String, Value)], now: u64) -> Result<()> {
+        let mut whose: Option<(u64, person::Person)> = None;
+        for (by, answer) in answers {
+            if let Some(told) = answer.get("devices").and_then(Value::as_array) {
+                self.learn(by, told, now)?;
+            }
+            let paired_at = self
+                .devices()
+                .iter()
+                .find(|d| d.with.device == *by && d.via.is_empty())
+                .map(|d| d.paired_at);
+            let said = answer.get("profile").and_then(person::read_profile);
+            if let (Some(at), Some(person)) = (paired_at, said) {
+                if whose.as_ref().is_none_or(|(first, _)| at < *first) {
+                    whose = Some((at, person));
+                }
+            }
+        }
+        match whose {
+            Some((_, person)) => self.keep_person(&person),
+            None => Ok(()),
+        }
+    }
+
     /// Ask each app this phone paired with, on `endpoint`, which of the person's computers and
-    /// hosts it may reach through it, and keep what they say at `now` (spec/pairing.md 0.7): one
-    /// that does not answer leaves what it said before.
+    /// hosts it may reach through it, and whose they are, and keep what they say at `now`
+    /// (`learn_all`): one that does not answer leaves what it said before.
     pub async fn learn_from(&self, endpoint: &Endpoint, now: u64) -> Result<()> {
         let mut asking = tokio::task::JoinSet::new();
         for app in self.devices() {
@@ -171,14 +201,13 @@ impl Identity {
                 (app.with.device, answer)
             });
         }
+        let mut answers = vec![];
         while let Some(Ok((by, answer))) = asking.join_next().await {
             if let Ok(Ok(answer)) = answer {
-                if let Some(told) = answer.get("devices").and_then(Value::as_array) {
-                    self.learn(&by, told, now)?;
-                }
+                answers.push((by, answer));
             }
         }
-        Ok(())
+        self.learn_all(&answers, now)
     }
 
     fn write_devices(&self, devices: &[PairedDevice]) -> Result<()> {

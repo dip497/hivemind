@@ -112,6 +112,7 @@ function computer() {
     introduced: (by, phones) => introduced.push({ by, phones }),
     forget: (by, device) => { forgot.push({ by, device }); return device === phone; },
     devices: () => [host],
+    profile: async () => ({ name: "Priya", color: "#3b82f6" }),
   });
   /** `device` connects: what it hears on each stream, and its end of the link. */
   const connect = (device: string) => {
@@ -253,7 +254,7 @@ test("a phone unpairs itself: it is told so and forgotten once it hangs up, or l
   assert.deepEqual(c.unpaired, [c.phone, c.phone]);
 });
 
-test("the owner's laptop says which phones it paired with, and which it unpaired that paired here, and is answered; a phone asks which of the owner's devices it may reach through this one, and is told; neither is answered the other's question", async () => {
+test("the owner's laptop says which phones it paired with, and which it unpaired that paired here, and is answered; a phone asks which of the owner's devices it may reach through this one, and is told, and whose they are; neither is answered the other's question", async () => {
   const c = computer();
   const pixel = { device: c.phone, name: "Pixel" };
   const laptop = c.connect(c.laptop);
@@ -276,7 +277,7 @@ test("the owner's laptop says which phones it paired with, and which it unpaired
   phone.send("device", { t: "devices" });
   await until(() => phone.heard.get("device")!.length >= 1);
   await wait(100);
-  assert.deepEqual(phone.heard.get("device")!.map((m) => JSON.parse(m) as unknown), [{ t: "devices", devices: [c.host] }]);
+  assert.deepEqual(phone.heard.get("device")!.map((m) => JSON.parse(m) as unknown), [{ t: "devices", devices: [c.host], profile: { name: "Priya", color: "#3b82f6" } }]);
   assert.deepEqual(c.introduced, [{ by: c.laptop, phones: [pixel] }], "a phone's word is no introduction");
   assert.equal(c.forgot.length, 2, "nor is it unpairing another");
 });

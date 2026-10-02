@@ -1,4 +1,4 @@
-# Pairing (0.7)
+# Pairing (0.8)
 
 Two devices become one person's (R14 and §5.2 in `docs/design/multiplayer-2026-09-28.md`): the
 device being added receives the person key and certifies itself with it (`identity.md`), or, a
@@ -171,6 +171,16 @@ each whose certificate verifies, names it and names the phone's person, and that
 that app told of it; forgets each that app told of before and lists no more, unless another still
 lists it; and asks them as it asks the app (`needs.md`, `push.md`). An app that does not answer
 leaves what it told before.
+
+The answer also says whose these devices are (0.8): `"profile": { "name", "color" }`, the person
+as that app's profile has them (Settings → Profile), the name the people they work with see them
+by (the one they chose, else the one offered for it) and their colour, `#rrggbb` (empty while none
+is chosen). The phone shows itself as that person's, in that colour: as the app it paired with
+first says, of those that answer and say. A name that is not text, is empty, is longer than 64
+characters or has a control character in it is not taken; a colour that is not `#rrggbb`, in
+lowercase, is taken as none chosen. The phone keeps it beside its keys, readable by its user alone,
+asks again whenever it asks for the devices (as it pairs, and each time it dials them), and forgets
+it when it pairs with another person's app.
 
 ## Unpairing
 

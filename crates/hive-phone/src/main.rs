@@ -200,22 +200,35 @@ async fn run(args: Args) -> Result<()> {
             let endpoint = net::endpoint(phone.key().clone(), &reach, vec![]).await?;
             let paired =
                 pairing::pair(&endpoint, args.name.as_deref().unwrap_or("Phone"), &link).await;
-            endpoint.close().await;
-            let paired = paired?;
+            let paired = match paired {
+                Ok(paired) => paired,
+                Err(e) => {
+                    endpoint.close().await;
+                    return Err(e);
+                }
+            };
             phone.keep(&paired, now_ms())?;
+            // Whose devices these are, and which others it may reach, as the app says now; asked
+            // again whenever this phone dials them, so one that does not answer now is told later.
+            let _ = phone.learn_from(&endpoint, now_ms()).await;
+            endpoint.close().await;
             let network = phone.network().map(|n| n.profile.name);
             let person = &paired.certificate.person;
+            let whose = phone.person();
             if args.json {
                 let w = &paired.with;
                 println!(
                     "{}",
-                    json!({ "device": w.device, "name": w.name, "kind": w.kind, "person": person, "network": network, "admission": admission })
+                    json!({ "device": w.device, "name": w.name, "kind": w.kind, "person": person, "profile": whose, "network": network, "admission": admission })
                 );
             } else {
+                let whose = whose.map_or_else(
+                    || format!("its person's ({}…)", &person[..8]),
+                    |p| format!("{}'s", p.name),
+                );
                 println!(
-                    "paired with {}: this phone is its person's ({}…) from now on",
-                    paired.with.name,
-                    &person[..8]
+                    "paired with {}: this phone is {whose} from now on",
+                    paired.with.name
                 );
                 if let Some(network) = network {
                     println!("on the network {network} ({admission})");
@@ -240,6 +253,14 @@ async fn run(args: Args) -> Result<()> {
             } else if devices.is_empty() {
                 println!("none: pair this phone with `hive-phone pair <link>`");
             } else {
+                if let Some(p) = phone.person() {
+                    let color = if p.color.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" ({})", p.color)
+                    };
+                    println!("{}'s{color}:", p.name);
+                }
                 for d in devices {
                     println!("{}  {}  {}…", d.with.name, d.with.kind, &d.with.device[..8]);
                 }

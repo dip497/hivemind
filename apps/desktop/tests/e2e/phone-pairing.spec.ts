@@ -142,13 +142,15 @@ async function needsOf(phone: string) {
   };
 }
 
-test("a phone scans the computer's code and is certified as the person's: each lists the other, it holds no person key, nothing is opened, moved or run on it, and unpaired from the phone, each forgets the other", async () => {
+test("a phone scans the computer's code and is certified as the person's, by their name and colour: each lists the other, it holds no person key, nothing is opened, moved or run on it, and unpaired from the phone, each forgets the other", async () => {
   test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
   test.setTimeout(120_000);
   const d = await desktopWith();
   const { repo, desktop, me } = d;
+  await desktop.evaluate(() => window.hive.settingsSet("profile.name", "Priya Shah"));
+  await desktop.evaluate(() => window.hive.settingsSet("profile.color", "#3b82f6"));
   const { link, phone, paired, phoneId } = await pairPhone(d);
-  expect(paired).toMatchObject({ device: me.deviceId, kind: "app", person: me.personId });
+  expect(paired).toMatchObject({ device: me.deviceId, kind: "app", person: me.personId, profile: { name: "Priya Shah", color: "#3b82f6" } });
 
   // The computer lists it as a phone; the phone lists the computer, and holds a certificate
   // naming it as the person's, and no person key.
@@ -157,7 +159,14 @@ test("a phone scans the computer's code and is certified as the person's: each l
   expect(listed.map((d) => [d.device, d.kind, d.certificate.person])).toEqual([[me.deviceId, "app", me.personId]]);
   const cert = JSON.parse(fs.readFileSync(path.join(phone, "device.cert"), "utf8")) as { person: string; device: string };
   expect([cert.person, cert.device]).toEqual([me.personId, phoneId]);
-  expect(fs.readdirSync(phone).sort()).toEqual(["device.cert", "device.key", "devices.json"]);
+  expect(fs.readdirSync(phone).sort()).toEqual(["device.cert", "device.key", "devices.json", "person.json"]);
+  // Whose it is, as the computer's profile says: changed there, the phone is told the next time it
+  // asks the computer anything.
+  const whose = () => JSON.parse(fs.readFileSync(path.join(phone, "person.json"), "utf8")) as unknown;
+  expect(whose()).toEqual({ name: "Priya Shah", color: "#3b82f6" });
+  await desktop.evaluate(() => window.hive.settingsSet("profile.name", "Priya S."));
+  await run(HIVE_PHONE, ["needs", "--identity", phone, "--json"], { timeout: 30_000 });
+  expect(whose()).toEqual({ name: "Priya S.", color: "#3b82f6" });
   await desktop.keyboard.press("Escape");
 
   // Never a place to run anything: it holds no workspaces to open, a workspace does not move to it,

@@ -124,6 +124,10 @@ export interface PeerLinksOptions {
   /** The owner's devices a phone may reach through this one: those it paired with, phones aside.
    *  None: a phone is told of none. */
   devices?(): PairedWith[];
+  /** Who the owner is to the people they work with (Settings → Profile): the name others see, and
+   *  their colour (`#rrggbb`, or empty while none is chosen), which their phone shows as theirs
+   *  (spec/pairing.md 0.8). None: a phone is told none. */
+  profile?(): Promise<{ name: string; color: string }>;
   onWarn?(message: string): void;
 }
 
@@ -147,7 +151,7 @@ export type DeviceMessage =
   | { t: "phones"; ok: boolean; error?: string }
   | { t: "forget"; device: string }
   | { t: "forget"; ok: boolean }
-  | { t: "devices"; devices?: PairedWith[] };
+  | { t: "devices"; devices?: PairedWith[]; profile?: { name: string; color: string } };
 
 function parseDevice(text: string): DeviceMessage | null {
   try {
@@ -376,8 +380,14 @@ export class PeerLinks {
     if (asked?.t === "forget" && "device" in asked && !phone) {
       return link.send("device", JSON.stringify({ t: "forget", ok: this.o.forget?.(link.peer, asked.device) ?? false } satisfies DeviceMessage));
     }
-    // A phone asks which of the owner's devices it may reach through this one.
-    if (asked?.t === "devices" && phone) return link.send("device", JSON.stringify({ t: "devices", devices: this.o.devices?.() ?? [] } satisfies DeviceMessage));
+    // A phone asks which of the owner's devices it may reach through this one, and is told whose
+    // they are.
+    if (asked?.t === "devices" && phone) {
+      const devices = this.o.devices?.() ?? [];
+      void (this.o.profile?.() ?? Promise.resolve(undefined)).catch(() => undefined).then((profile) =>
+        link.send("device", JSON.stringify({ t: "devices", devices, ...(profile ? { profile } : {}) } satisfies DeviceMessage)));
+      return;
+    }
     if (asked?.t !== "workspaces" || asked.workspaces) return;
     const workspaces = heldBoards(store).map(({ workspace, name, repo }) => ({ workspace, name, repo }));
     link.send("device", JSON.stringify({ t: "workspaces", workspaces } satisfies DeviceMessage));

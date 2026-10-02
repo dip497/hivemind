@@ -332,6 +332,9 @@ export function stopNetwork(): void {
 
 /** This computer, as the person's other devices know it: its id, and what it is called. */
 const thisComputer = (): { device: string; name: string } => ({ device: machineIdentity().deviceId, name: os.hostname() });
+/** Who this person is to the people they work with, and to their phone (Settings → Profile): the
+ *  name they see, and their colour. */
+const shownProfile = async (): Promise<{ name: string; color: string }> => ({ name: await displayName(getSettings().profile.name), color: getSettings().profile.color });
 
 /** Resolves once this computer is online, or after a minute: one waking takes a moment to join
  *  its network again. */
@@ -521,8 +524,9 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
       void hostIntents().perform(there, { verb: "net:unpair", detail: device.slice(0, 8) }, () => forgetDevice(device));
       return true;
     },
-    // The person's computers and hosts a phone may reach through this one.
+    // The person's computers and hosts a phone may reach through this one, and whose they are.
     devices: () => placesToRun().map(pairedWith),
+    profile: shownProfile,
     onWarn: (m) => console.warn(`[peers] ${m}`),
   });
   // The person's phones are told what happens here, encrypted to each (M5).
@@ -596,7 +600,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
       }
     }
     const { certificate } = machineIdentity();
-    const profile = { name: await displayName(getSettings().profile.name), color: getSettings().profile.color };
+    const profile = await shownProfile();
     const reply = (await hn.pair(link.host, link.where, { v: 1, workspace: link.workspace, secret: link.secret, certificate, profile })) as PairReply;
     if (reply?.ok) {
       joinedList().add({
