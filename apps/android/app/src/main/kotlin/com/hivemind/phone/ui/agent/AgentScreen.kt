@@ -109,6 +109,8 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
+            // Closed elsewhere, or its device no longer lists it: what its terminal last showed stays.
+            if (agent == null) Note(stringResource(R.string.agent_gone))
             agent?.waiting?.let { WaitingBanner(it, busy, vm::answer) }
             vm.screen.keyboard?.let { holder ->
                 Note(stringResource(R.string.keyboard_held, holder))
