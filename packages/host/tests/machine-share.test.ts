@@ -51,6 +51,8 @@ function linkPair(): [host: Link, machine: Link] {
       heard[i]!.set(stream, set.add(l));
       return () => { set.delete(l); };
     },
+    // Each stream here is opened once, and heard by its name.
+    streams: () => () => {},
     close: (why = "closed") => close(why),
     closed,
   });

@@ -1,7 +1,8 @@
 //! `hive/ws/1` (design §7): a peer's connection to a workspace's host. It carries named streams:
-//! the device that dialled opens each one, naming it in its first frame, and both sides then
-//! send frames on it. What the frames mean is main's (`sync`, `presence`, `api`): hive-net only
-//! carries them.
+//! the device that dialled opens each one, naming it in its first frame, as many of one name as it
+//! likes (a phone opens an `api` stream for each thing it follows), and both sides then send frames
+//! on it, each stream its own. What the frames mean is main's (`sync`, `presence`, `api`): hive-net
+//! only carries them.
 
 use anyhow::Result;
 use iroh::endpoint::{Connection, RecvStream, SendStream};

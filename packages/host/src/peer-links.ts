@@ -21,22 +21,30 @@
  * them through it, as `shownFrom` gives them, and never dials that machine. It says there what its
  * person lets the people here do on it (`Grant`), as they change it.
  *
- * Any of the owner's devices, a phone among them, may follow every agent here on the `agents`
+ * Any of the owner's devices, a phone among them, may follow every agent here on an `agents`
  * stream (spec/agents.md): it is sent the list now and again as it changes.
  *
  * The owner's other devices say on the `device` stream which phones paired with them, and ask to
  * forget one unpaired elsewhere (spec/pairing.md 0.7). One of the owner's phones (0.3) is let in,
- * as their device, for what a phone does: it may ask on the `device` stream which workspaces there
+ * as their device, for what a phone does: it may ask on a `device` stream which workspaces there
  * are and what waits on the person in them (`needs`, spec/needs.md), which of the owner's devices
  * it may reach through this one, give where it is told what happens there (`push`, spec/push.md)
- * and unpair itself (spec/pairing.md), and open one workspace's API on the `api`
- * stream (its first frame `{t:"open", workspace}`), as the owner, to watch and type into its
- * terminals, answer and message its agents and show its community views (`phoneMay`), and nothing
- * of the rest (no terminals started, sized or closed, no workspace's board or files, no hosting).
+ * and unpair itself (spec/pairing.md), and open a workspace's API on an `api` stream (its first
+ * frame `{t:"open", workspace}`), as the owner, to watch and type into its terminals, answer and
+ * message its agents and show its community views (`phoneMay`), and nothing of the rest (no
+ * terminals started, sized or closed, no workspace's board or files, no hosting).
+ *
+ * A phone keeps one connection to each device and opens a stream on it for each thing it does at
+ * once: a terminal watched, a conversation followed, each call, each question. So each `api`,
+ * `device` and `agents` stream is served as its own, answered on alone: each `api` stream a
+ * workspace API connection of its own, for the workspace its first frame names, with its own
+ * events, held to what a phone may and the role of whoever opened it, until it ends. The owner's
+ * other devices open each stream once (the app's daemon opens a name again only once the last of
+ * it ended), so the rest are served by their name.
  */
 import { StringDecoder } from "node:string_decoder";
 import type { Duplex } from "node:stream";
-import type { Link } from "@hivemind/workspace-host/hive-net";
+import type { Link, Stream } from "@hivemind/workspace-host/hive-net";
 import type { AccessLists } from "@hivemind/workspace-host/access";
 import { parseSync, serveReplica, type Changes } from "@hivemind/workspace-host/doc-sync";
 import { serveList } from "@hivemind/workspace-host/list-sync";
@@ -267,9 +275,9 @@ export class PeerLinks {
   /** The links whose app shows its machine's sessions here (M4), the workspace each is for, and
    *  what its person lets the people here do on it. */
   private readonly machines = new Map<Link, { workspace: string; grant: Grant }>();
-  /** The owner's devices following every agent here (spec/agents.md), and the list each was last
-   *  sent. */
-  private readonly following = new Map<Link, string>();
+  /** The streams on which the owner's devices follow every agent here (spec/agents.md), and the
+   *  list each was last sent. */
+  private readonly following = new Map<Stream, string>();
   /** While the list went out within the last 100 ms: whether it changed since. */
   private held: { changed: boolean } | null = null;
 
@@ -284,22 +292,24 @@ export class PeerLinks {
   serve(link: Link): void {
     const { store, lists, server, hosting } = this.o;
     // A phone runs nothing and holds nothing here: it is answered what it asks, and watches.
-    link.on("agents", (text) => this.follow(link, text));
+    link.streams("agents", (agents) => agents.on((text) => this.follow(link, agents, text)));
     if (this.o.phone?.(link.peer)) {
-      link.on("device", (text) => this.answerDevice(link, text, true));
-      const off = link.on("api", (text) => {
-        off();
-        const workspace = opened(text);
-        const repo = workspace ? store.repoOf(workspace) : null;
-        const person = workspace ? lists.personOf(workspace, link.peer) : null;
-        if (!workspace || !repo || !person) return link.close("removed");
-        servePeer(server, streamOf(link, "api"), {
-          // The owner's device, held to what a phone does.
-          actor: { kind: "peer", person, device: link.peer, access: "owner" },
-          workspace,
-          repo,
-          holds: (tile) => store.workspaceOf(toBareId(tile)) === repo,
-          allows: phoneMay,
+      link.streams("device", (device) => device.on((text) => this.answerDevice(link, device, text, true)));
+      link.streams("api", (api) => {
+        const off = api.on((text) => {
+          off();
+          const workspace = opened(text);
+          const repo = workspace ? store.repoOf(workspace) : null;
+          const person = workspace ? lists.personOf(workspace, link.peer) : null;
+          if (!workspace || !repo || !person) return link.close("removed");
+          servePeer(server, api, {
+            // The owner's device, held to what a phone does.
+            actor: { kind: "peer", person, device: link.peer, access: "owner" },
+            workspace,
+            repo,
+            holds: (tile) => store.workspaceOf(toBareId(tile)) === repo,
+            allows: phoneMay,
+          });
         });
       });
       return;
@@ -325,7 +335,7 @@ export class PeerLinks {
       const answered = hosting ? hosting.answer(link.peer, message) : Promise.resolve({ ok: false, error: "this device hosts nothing it is handed" });
       void answered.then((answer) => link.send("hosting", JSON.stringify(answer)));
     });
-    link.on("device", (text) => this.answerDevice(link, text, false));
+    link.streams("device", (device) => device.on((text) => this.answerDevice(link, device, text, false)));
     const off = link.on("sync", (text) => {
       const hello = parseSync(text);
       if (hello?.t !== "hello") return;
@@ -366,17 +376,18 @@ export class PeerLinks {
     });
   }
 
-  /** One of the owner's devices follows every agent here on the `agents` stream (spec/agents.md
-   *  "Following"): sent the list now, and again as it changes, until it goes. */
-  private follow(link: Link, text: string): void {
+  /** One of the owner's devices, at the other end of `link`, follows every agent here on the
+   *  `agents` stream `on` (spec/agents.md "Following"): sent the list now, and again as it
+   *  changes, until the stream ends. */
+  private follow(link: Link, on: Stream, text: string): void {
     if (!this.o.lists.ownersDevice(link.peer)) return link.close("removed");
     let asked: { t?: unknown } | null;
     try { asked = JSON.parse(text) as { t?: unknown } | null; } catch { return; }
-    if (asked?.t !== "follow" || this.following.has(link)) return;
+    if (asked?.t !== "follow" || this.following.has(on)) return;
     const list = JSON.stringify(this.agentList());
-    this.following.set(link, list);
-    link.send("agents", list);
-    void link.closed.then(() => this.following.delete(link));
+    this.following.set(on, list);
+    on.send(list);
+    void on.closed.then(() => this.following.delete(on));
   }
 
   /** The agents here changed: those following them are sent the list again, at once unless it went
@@ -389,10 +400,10 @@ export class PeerLinks {
     }
     const list = JSON.stringify(this.agentList());
     let sent = false;
-    for (const [link, last] of this.following) {
+    for (const [on, last] of this.following) {
       if (last === list) continue;
-      this.following.set(link, list);
-      link.send("agents", list);
+      this.following.set(on, list);
+      on.send(list);
       sent = true;
     }
     if (!sent) return;
@@ -411,10 +422,11 @@ export class PeerLinks {
     return { t: "agents", agents, working: workingIn(held, statuses) };
   }
 
-  /** Answer one of the owner's devices asking on the `device` stream which workspaces are here, or
-   *  what waits on the person in them; take where a phone, `phone`, is told what happens here; and
-   *  let a phone unpair itself. */
-  private answerDevice(link: Link, text: string, phone: boolean): void {
+  /** Answer one of the owner's devices, at the other end of `link`, asking on the `device` stream
+   *  `on` which workspaces are here, or what waits on the person in them; take where a phone,
+   *  `phone`, is told what happens here; and let a phone unpair itself. Each answer goes on the
+   *  stream it was asked on. */
+  private answerDevice(link: Link, on: Stream, text: string, phone: boolean): void {
     const { store, lists } = this.o;
     if (!lists.ownersDevice(link.peer)) return link.close("removed");
     const asked = parseDevice(text);
@@ -422,22 +434,22 @@ export class PeerLinks {
       const [held, statuses] = [heldBoards(store), this.o.statuses?.() ?? []];
       const facts = this.o.facts?.(held) ?? NO_FACTS;
       const needs = needsOf(held, statuses, this.o.plans?.() ?? [], this.o.machines, (tile) => facts.decides(tile));
-      return link.send("device", JSON.stringify({ t: "needs", needs, working: workingIn(held, statuses) } satisfies DeviceMessage));
+      return on.send(JSON.stringify({ t: "needs", needs, working: workingIn(held, statuses) } satisfies DeviceMessage));
     }
     // Only a phone is told what happens here: a computer of the person's shows it.
     if (asked?.t === "push" && "sub" in asked && phone) {
       const taken = !!asked.sub && !!this.o.subscribe;
       if (taken) this.o.subscribe!(link.peer, asked.sub!);
       const answer: DeviceMessage = taken ? { t: "push", ok: true } : { t: "push", ok: false, error: asked.sub ? "this device tells nobody" : "not a push subscription" };
-      return link.send("device", JSON.stringify(answer));
+      return on.send(JSON.stringify(answer));
     }
     // A phone unpairing itself is told so, and forgotten once it hangs up, or is let go after a
     // moment: forgetting it cuts its connection at once, which would take the answer with it.
     if (asked?.t === "unpair" && phone) {
-      if (!this.o.unpair) return link.send("device", JSON.stringify({ t: "unpair", ok: false, error: "this device keeps no phone" } satisfies DeviceMessage));
+      if (!this.o.unpair) return on.send(JSON.stringify({ t: "unpair", ok: false, error: "this device keeps no phone" } satisfies DeviceMessage));
       if (this.letGo.has(link)) return;
       this.letGo.add(link);
-      link.send("device", JSON.stringify({ t: "unpair", ok: true } satisfies DeviceMessage));
+      on.send(JSON.stringify({ t: "unpair", ok: true } satisfies DeviceMessage));
       const timer = setTimeout(() => link.close("removed"), LET_GO_MS);
       void link.closed.then(() => {
         clearTimeout(timer);
@@ -446,25 +458,25 @@ export class PeerLinks {
     }
     // Another of the owner's devices says which phones it paired with: never a phone's word.
     if (asked?.t === "phones" && "phones" in asked && !phone) {
-      if (!this.o.introduced) return link.send("device", JSON.stringify({ t: "phones", ok: false, error: "this device keeps no phone" } satisfies DeviceMessage));
+      if (!this.o.introduced) return on.send(JSON.stringify({ t: "phones", ok: false, error: "this device keeps no phone" } satisfies DeviceMessage));
       this.o.introduced(link.peer, asked.phones);
-      return link.send("device", JSON.stringify({ t: "phones", ok: true } satisfies DeviceMessage));
+      return on.send(JSON.stringify({ t: "phones", ok: true } satisfies DeviceMessage));
     }
     // Another of the owner's devices unpaired a phone that paired with this one: never a phone's word.
     if (asked?.t === "forget" && "device" in asked && !phone) {
-      return link.send("device", JSON.stringify({ t: "forget", ok: this.o.forget?.(link.peer, asked.device) ?? false } satisfies DeviceMessage));
+      return on.send(JSON.stringify({ t: "forget", ok: this.o.forget?.(link.peer, asked.device) ?? false } satisfies DeviceMessage));
     }
     // A phone asks which of the owner's devices it may reach through this one, and is told whose
     // they are.
     if (asked?.t === "devices" && phone) {
       const devices = this.o.devices?.() ?? [];
       void (this.o.profile?.() ?? Promise.resolve(undefined)).catch(() => undefined).then((profile) =>
-        link.send("device", JSON.stringify({ t: "devices", devices, ...(profile ? { profile } : {}) } satisfies DeviceMessage)));
+        on.send(JSON.stringify({ t: "devices", devices, ...(profile ? { profile } : {}) } satisfies DeviceMessage)));
       return;
     }
     if (asked?.t !== "workspaces" || asked.workspaces) return;
     const workspaces = heldBoards(store).map(({ workspace, name, repo }) => ({ workspace, name, repo }));
-    link.send("device", JSON.stringify({ t: "workspaces", workspaces } satisfies DeviceMessage));
+    on.send(JSON.stringify({ t: "workspaces", workspaces } satisfies DeviceMessage));
   }
 
   /** The sessions on the participant's machine `device` (M4), for the workspace here that `tile`

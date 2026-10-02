@@ -1,9 +1,10 @@
 /**
  * hive-net's daemon, for this process (R11, M1): started as a child with a local socket this
  * process listens on (0600; a named pipe on Windows), and spoken to in its messages
- * (`crates/hive-net/src/daemon.rs`): JSON in frames of a u32 big-endian length and the bytes.
- * The network is the daemon's: it finds devices, holds connections and admits only the devices
- * given to it. What the frames on a connection mean is ours.
+ * (`crates/hive-net/src/daemon.rs`): JSON in frames of a u32 big-endian length and the bytes, in
+ * the daemon's protocol `PROTOCOL`, which each side says it speaks before anything else. The
+ * network is the daemon's: it finds devices, holds connections and admits only the devices given
+ * to it. What the frames on a connection mean is ours.
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -35,15 +36,36 @@ export interface FoundHost extends HostRecord {
   record: string;
 }
 
-/** One connection to another device, on `hive/ws/1`: frames of text on named streams. */
+/** The daemon's protocol: what this process speaks to it (`PROTOCOL` in daemon.rs). 2: a stream is
+ *  known by its id, and a connection carries any number of streams of one name. */
+export const PROTOCOL = 2;
+
+/** One stream of a connection: frames of text, both ways, from when it opens until it ends. */
+export interface Stream {
+  /** Send `data` on it, after everything sent on it before. */
+  send(data: string): void;
+  /** Hear each frame that arrives on it. */
+  on(listener: (data: string) => void): () => void;
+  /** Resolves, with why, when it ends: the other device ended it, or the connection went. */
+  readonly closed: Promise<string>;
+}
+
+/** One connection to another device, on `hive/ws/1`: frames of text on named streams. The device
+ *  that dialled opens them, as many of a name as it likes (a phone opens an `api` stream for each
+ *  terminal it watches, conversation it follows and call it makes); the other side answers on
+ *  them. */
 export interface Link {
   /** The other device's id, as its key proved it. */
   readonly peer: string;
-  /** Send `data` on `stream`, after everything sent on it before. The device that dialled opens a
-   *  stream by sending on it; the other side can only answer on streams opened to it. */
+  /** Send `data` on `stream`, after everything sent on it before: on the stream of that name this
+   *  device opened, opening it the first time (and again once it ended), when it dialled; else on
+   *  the newest of that name the other device opened, if it opened one. */
   send(stream: string, data: string): void;
-  /** Hear each frame that arrives on `stream`. */
+  /** Hear each frame that arrives on every stream named `stream`. */
   on(stream: string, listener: (data: string) => void): () => void;
+  /** Each stream named `stream` the other device opens from now on, as it opens it: a stream of
+   *  its own, its frames its own, and answered on alone. */
+  streams(stream: string, listener: (opened: Stream) => void): () => void;
   /** Close it, saying why to the other side ("removed", "left", …). */
   close(reason?: string): void;
   /** Resolves, with why, when the connection is gone. */
@@ -76,15 +98,50 @@ export interface HiveNetOptions {
 
 type Message = Record<string, unknown> & { t: string };
 
+/** A stream of a connection the daemon holds, by its id there. */
+class DaemonStream implements Stream {
+  readonly listeners = new Set<(data: string) => void>();
+  readonly closed: Promise<string>;
+  end!: (why: string) => void;
+  constructor(readonly id: number, readonly name: string, private readonly link: DaemonLink) {
+    this.closed = new Promise((resolve) => { this.end = resolve; });
+  }
+  send(data: string): void {
+    this.link.write(this, data);
+  }
+  on(listener: (data: string) => void): () => void {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  }
+}
+
 class DaemonLink implements Link {
+  /** Its streams open now, by id: given here to those this device opens, when it dialled; by the
+   *  daemon to those the other device opens, when it did. */
+  private readonly open = new Map<number, DaemonStream>();
+  /** The newest stream open of each name: where `send` goes. */
+  private readonly newest = new Map<string, DaemonStream>();
   private readonly listeners = new Map<string, Set<(data: string) => void>>();
+  private readonly accepting = new Map<string, Set<(opened: Stream) => void>>();
+  private nextStream = 1;
   readonly closed: Promise<string>;
   private end!: (why: string) => void;
-  constructor(readonly conn: number, readonly peer: string, private readonly tell: (m: Message) => void) {
+  constructor(readonly conn: number, readonly peer: string, private readonly dialled: boolean, private readonly tell: (m: Message) => void) {
     this.closed = new Promise((resolve) => { this.end = resolve; });
   }
   send(stream: string, data: string): void {
-    this.tell({ t: "send", conn: this.conn, stream, data });
+    let s = this.newest.get(stream);
+    if (!s) {
+      // The device that dialled opens the streams; the other side answers on those it opened.
+      if (!this.dialled) return;
+      s = this.add(this.nextStream++, stream);
+      this.tell({ t: "open", conn: this.conn, stream: s.id, name: stream });
+    }
+    this.write(s, data);
+  }
+  /** `data` on the stream `s`, while it is open: one that ended takes nothing more. */
+  write(s: DaemonStream, data: string): void {
+    if (this.open.get(s.id) === s) this.tell({ t: "send", conn: this.conn, stream: s.id, data });
   }
   on(stream: string, listener: (data: string) => void): () => void {
     let set = this.listeners.get(stream);
@@ -92,14 +149,45 @@ class DaemonLink implements Link {
     set.add(listener);
     return () => { set!.delete(listener); };
   }
+  streams(stream: string, listener: (opened: Stream) => void): () => void {
+    let set = this.accepting.get(stream);
+    if (!set) this.accepting.set(stream, (set = new Set()));
+    set.add(listener);
+    return () => { set!.delete(listener); };
+  }
   close(reason?: string): void {
     this.tell({ t: "close", conn: this.conn, reason });
   }
-  receive(stream: string, data: string): void {
-    for (const l of this.listeners.get(stream) ?? []) l(data);
+  /** The other device opened the stream `id`, named `name`. */
+  opened(id: number, name: string): void {
+    const s = this.add(id, name);
+    for (const l of this.accepting.get(name) ?? []) l(s);
+  }
+  receive(id: number, data: string): void {
+    const s = this.open.get(id);
+    if (!s) return;
+    for (const l of s.listeners) l(data);
+    for (const l of this.listeners.get(s.name) ?? []) l(data);
+  }
+  /** Nothing more goes either way on the stream `id`. */
+  ended(id: number): void {
+    const s = this.open.get(id);
+    if (!s) return;
+    this.open.delete(id);
+    if (this.newest.get(s.name) === s) this.newest.delete(s.name);
+    s.end("ended");
   }
   gone(why: string): void {
+    for (const s of this.open.values()) s.end(why);
+    this.open.clear();
+    this.newest.clear();
     this.end(why);
+  }
+  private add(id: number, name: string): DaemonStream {
+    const s = new DaemonStream(id, name, this);
+    this.open.set(id, s);
+    this.newest.set(name, s);
+    return s;
   }
 }
 
@@ -138,12 +226,20 @@ export class HiveNet {
     const socket = await Promise.race([new Promise<net.Socket>((resolve) => server.once("connection", resolve)), exited]);
     const frames = readFrames(socket);
     const first = await Promise.race([frames.next(), exited]);
-    if (first.done || (first.value as Message).t !== "ready") throw new Error("hive-net did not say it was ready");
-    const r = first.value as unknown as Ready;
     exited.catch(() => {});
+    if (first.done || (first.value as Message).t !== "ready") throw new Error("hive-net did not say it was ready");
+    const r = first.value as unknown as Ready & { v?: unknown };
+    // One of another release speaks another protocol: said so, and stopped, rather than half heard.
+    if (r.v !== PROTOCOL) {
+      child.kill();
+      socket.destroy();
+      server.close();
+      throw new Error(`hive-net speaks the daemon's protocol ${typeof r.v === "number" ? r.v : 1}, and this app ${PROTOCOL}: install the app and hive-net from one release`);
+    }
     child.removeAllListeners("exit");
     child.removeAllListeners("error");
     const hn = new HiveNet(opts, server, socket, child, { id: r.id, addrs: r.addrs, relay: r.relay ?? null, lookup: r.lookup ?? null });
+    hn.tell({ t: "hello", v: PROTOCOL });
     child.once("exit", (code) => hn.gone(`hive-net exited (${code}): ${stderr.trim()}`));
     child.on("error", (e) => hn.gone(`hive-net: ${e.message}`));
     void hn.read(frames);
@@ -159,7 +255,7 @@ export class HiveNet {
   async dial(peer: string, where: Where = { addrs: [], relay: null }): Promise<Link> {
     const answer = await this.ask({ t: "dial", peer, addrs: where.addrs, relay: where.relay });
     if (answer.t === "failed") throw new Error(String(answer.error));
-    return this.linkFor(answer.conn as number, peer);
+    return this.linked(answer.conn as number, peer, true);
   }
 
   /** Ask the device `peer` to pair, with `hello`; what it answers. */
@@ -253,9 +349,10 @@ export class HiveNet {
     this.socket.write(Buffer.concat([head, body]));
   }
 
-  private linkFor(conn: number, peer: string): DaemonLink {
-    let link = this.links.get(conn);
-    if (!link) this.links.set(conn, (link = new DaemonLink(conn, peer, (m) => this.tell(m))));
+  /** The connection `conn` to `peer`, which this device `dialled`, or accepted. */
+  private linked(conn: number, peer: string, dialled: boolean): DaemonLink {
+    const link = new DaemonLink(conn, peer, dialled, (m) => this.tell(m));
+    this.links.set(conn, link);
     return link;
   }
 
@@ -272,10 +369,16 @@ export class HiveNet {
     for await (const m of frames) {
       switch (m.t) {
         case "incoming":
-          this.opts.onIncoming(this.linkFor(m.conn as number, m.peer as string));
+          this.opts.onIncoming(this.linked(m.conn as number, m.peer as string, false));
+          break;
+        case "opened":
+          this.links.get(m.conn as number)?.opened(m.stream as number, m.name as string);
           break;
         case "recv":
-          this.links.get(m.conn as number)?.receive(m.stream as string, m.data as string);
+          this.links.get(m.conn as number)?.receive(m.stream as number, m.data as string);
+          break;
+        case "ended":
+          this.links.get(m.conn as number)?.ended(m.stream as number);
           break;
         case "closed": {
           const link = this.links.get(m.conn as number);
