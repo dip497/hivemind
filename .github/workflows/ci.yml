@@ -9,6 +9,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # By hand, on any branch (Actions → ci → Run workflow).
+  workflow_dispatch:
 
 jobs:
   build-and-test:
@@ -16,20 +18,20 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "24"
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           # version pinned via `packageManager` in package.json (avoid dupes)
           run_install: false
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3"
+          bun-version: "1.4"
 
       - name: pnpm install
         run: pnpm install --frozen-lockfile
@@ -40,7 +42,7 @@ jobs:
       - name: Build (renderer + main + CLI)
         run: pnpm -r --parallel build
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -79,12 +81,12 @@ jobs:
       run:
         working-directory: crates/hive-net
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Rust (stable)
         run: rustup update stable --no-self-update && rustup default stable
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -122,12 +124,12 @@ jobs:
       run:
         working-directory: crates/hive-phone
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Rust (stable)
         run: rustup update stable --no-self-update && rustup default stable
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -166,12 +168,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Rust (stable)
         run: rustup update stable --no-self-update && rustup default stable
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry

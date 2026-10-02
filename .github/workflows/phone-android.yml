@@ -27,9 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
@@ -39,7 +39,7 @@ jobs:
           rustup update stable --no-self-update && rustup default stable
           rustup target add aarch64-linux-android x86_64-linux-android
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -57,20 +57,23 @@ jobs:
           ndk=$(sed -n 's/^ndk = "\(.*\)"/\1/p' apps/android/gradle/libs.versions.toml)
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ndk" > /dev/null
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          # The action's open-source cache (MIT); its default from v6 is a proprietary one.
+          cache-provider: basic
 
       - name: Build (the core through buildCore) and unit tests
         working-directory: apps/android
         run: ./gradlew assembleDebug testDebugUnitTest
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: hivemind-phone-debug
           path: apps/android/app/build/outputs/apk/debug/app-debug.apk
 
       - name: What the unit tests said
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unit-test-reports
           path: apps/android/app/build/reports/tests/
@@ -81,13 +84,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: hivemind-phone-debug
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
@@ -99,6 +102,8 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Maestro
+        env:
+          MAESTRO_VERSION: "2.11.0"
         run: |
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
@@ -111,7 +116,9 @@ jobs:
           MAESTRO_CLI_NO_ANALYTICS: "1"
           MAESTRO_DRIVER_STARTUP_TIMEOUT: "120000"
         with:
-          api-level: 35
+          # Android 17. The app targets 36, so its local-network rule for apps targeting 37 is not
+          # in play; the smoke shows the app runs on the newest Android all the same.
+          api-level: "37.0"
           target: google_apis
           arch: x86_64
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
@@ -121,7 +128,7 @@ jobs:
 
       - name: What Maestro said
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: maestro-report
           path: |

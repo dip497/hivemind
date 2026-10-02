@@ -33,10 +33,19 @@ concurrency:
 
 jobs:
   ios:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+
+      # The newest stable Xcode on the runner, by name, not the image's default: the App Store
+      # takes builds from Xcode 26 and its SDK on, and the simulator below must be one it runs.
+      - name: Xcode, the newest stable one here
+        run: |
+          xcode=$(ls -d /Applications/Xcode_*.app | grep -E '/Xcode_[0-9]+(\.[0-9]+)*\.app$' | sort -V | tail -1)
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+          echo "IOS_SDK=$(xcrun --sdk iphonesimulator --show-sdk-version)" >> "$GITHUB_ENV"
 
       - name: Rust (stable), for iOS devices and Apple Silicon simulators
         run: |
@@ -56,20 +65,21 @@ jobs:
         working-directory: apps/ios
         run: xcodegen generate
 
-      - name: An iPhone simulator, on the newest iOS the runner has
+      - name: An iPhone simulator, on the newest iOS this Xcode runs
         run: |
           udid=$(xcrun simctl list -j devices available | python3 -c '
-          import json, re, sys
+          import json, os, re, sys
+          sdk = tuple(int(n) for n in os.environ["IOS_SDK"].split(".")[:2])
           found = []
           for runtime, devices in json.load(sys.stdin)["devices"].items():
               version = re.search(r"iOS-(\d+)-(\d+)", runtime)
-              if not version:
+              if not version or (int(version[1]), int(version[2])) > sdk:
                   continue
               for device in devices:
                   if device.get("isAvailable", True) and device["name"].startswith("iPhone"):
                       found.append(((int(version[1]), int(version[2])), device["udid"]))
           if not found:
-              sys.exit("no iPhone simulator on this runner")
+              sys.exit("no iPhone simulator for the iOS " + os.environ["IOS_SDK"] + " SDK on this runner")
           print(max(found)[1])
           ')
           echo "SIMULATOR=$udid" >> "$GITHUB_ENV"
@@ -108,7 +118,7 @@ jobs:
 
       - name: What the tests saw
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: HivePhone.xcresult
           path: ${{ runner.temp }}/HivePhone.xcresult

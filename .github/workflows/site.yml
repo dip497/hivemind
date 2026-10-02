@@ -22,13 +22,13 @@ jobs:
     # The deploy credential is a repo secret, so a fork skips this instead of failing red.
     if: ${{ github.repository == 'dip497/hivemind' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@v3
 
       - name: Deploy hivemind-site
         run: gcloud run deploy hivemind-site --source . --region europe-west1 --allow-unauthenticated --quiet
