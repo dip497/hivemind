@@ -62,3 +62,10 @@ gha-creds-*.json
 # Astro writes type stubs wherever it is run; the site keeps its own under docs/.
 /.astro/
 target/
+
+# The iOS app: XcodeGen makes the Xcode project from apps/ios/project.yml, and the core's static
+# library is built into build/ios-core by scripts/phone/build-ios.sh.
+apps/ios/*.xcodeproj
+build/
+DerivedData/
+*.a

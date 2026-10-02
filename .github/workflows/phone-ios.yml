@@ -1,0 +1,104 @@
+name: phone-ios
+
+# The iOS app (docs/design/phone-app-2026-10-02.md, P5) on a macOS runner: the Rust core for the
+# simulator (the app's own build phase builds it), the Xcode project from apps/ios/project.yml, the
+# unit and UI tests on an iPhone simulator, and the committed Swift bindings held to the core. No
+# Apple account: nothing is signed.
+on:
+  push:
+    paths:
+      - "apps/ios/**"
+      - "crates/hive-phone/**"
+      - "crates/hive-phone-ffi/**"
+      - "crates/hive-net/**"
+      - "scripts/phone/**"
+      - ".github/workflows/phone-ios.yml"
+  pull_request:
+    paths:
+      - "apps/ios/**"
+      - "crates/hive-phone/**"
+      - "crates/hive-phone-ffi/**"
+      - "crates/hive-net/**"
+      - "scripts/phone/**"
+      - ".github/workflows/phone-ios.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phone-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust (stable), for iOS devices and Apple Silicon simulators
+        run: |
+          rustup update stable --no-self-update && rustup default stable
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/hive-phone-ffi
+          key: ios
+          cache-on-failure: true
+
+      - name: XcodeGen
+        run: brew install xcodegen
+
+      - name: The Xcode project, from project.yml
+        working-directory: apps/ios
+        run: xcodegen generate
+
+      - name: An iPhone simulator, on the newest iOS the runner has
+        run: |
+          udid=$(xcrun simctl list -j devices available | python3 -c '
+          import json, re, sys
+          found = []
+          for runtime, devices in json.load(sys.stdin)["devices"].items():
+              version = re.search(r"iOS-(\d+)-(\d+)", runtime)
+              if not version:
+                  continue
+              for device in devices:
+                  if device.get("isAvailable", True) and device["name"].startswith("iPhone"):
+                      found.append(((int(version[1]), int(version[2])), device["udid"]))
+          if not found:
+              sys.exit("no iPhone simulator on this runner")
+          print(max(found)[1])
+          ')
+          echo "SIMULATOR=$udid" >> "$GITHUB_ENV"
+          xcrun simctl list devices | grep "$udid"
+
+      - name: Build the app and its tests (the core first, in the app's build phase)
+        run: |
+          xcodebuild build-for-testing \
+            -project apps/ios/HivePhone.xcodeproj -scheme HivePhone \
+            -destination "platform=iOS Simulator,id=$SIMULATOR" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: The committed Swift bindings are the core's
+        # The build phase made them again from the core it built.
+        run: git diff --exit-code -- apps/ios/HivePhone/Core/Generated
+
+      - name: Unit and UI tests
+        run: |
+          xcodebuild test-without-building \
+            -project apps/ios/HivePhone.xcodeproj -scheme HivePhone \
+            -destination "platform=iOS Simulator,id=$SIMULATOR" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/HivePhone.xcresult" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: What the tests saw
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HivePhone.xcresult
+          path: ${{ runner.temp }}/HivePhone.xcresult
+          if-no-files-found: ignore
