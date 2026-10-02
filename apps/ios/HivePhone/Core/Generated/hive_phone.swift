@@ -6729,6 +6729,32 @@ public func pairsWith(link: String) -> PairsWith?  {
     )
 })
 }
+/**
+ * Whether `message`, which a view's page posted, starts or closes something on the board: the
+ * app asks the phone's lock before it posts it, and drops it when the lock says no.
+ */
+public func viewAsksLock(message: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_func_view_asks_lock(
+        FfiConverterString.lower(message),uniffiCallStatus
+    )
+})
+}
+/**
+ * The script the app runs at the start of each view's page, in the page's own world
+ * (`WKUserScript` at document start; Android's `addDocumentStartJavaScript`): it hands the view
+ * its port once the page has loaded, and relays it as JSON text. The page posts through `hive`,
+ * the object the app gives it (`webkit.messageHandlers.hive`, or Android's web message
+ * listener), and is told through `hive.onmessage` on Android, `__hive.said(text)` on iOS.
+ */
+public func viewBridge() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_func_view_bridge(uniffiCallStatus
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -6749,6 +6775,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_func_pairs_with() != 42769) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_func_view_asks_lock() != 52913) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_func_view_bridge() != 5070) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_conversation_stop() != 58626) {

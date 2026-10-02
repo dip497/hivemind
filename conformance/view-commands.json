@@ -1,0 +1,30 @@
+{
+  "about": "The view protocol's commands and the permission each needs (COMMAND_PERMISSION in packages/hive-view-sdk/src/protocol.ts), and, of what a view's page posts on the phone, what starts or closes something on the board: a command needing workspace:spawn or workspace:close, before which the phone asks its own lock (docs/design/phone-app-2026-10-02.md §6.1). Written by hand from protocol.ts.",
+  "commands": {
+    "selectTile": null,
+    "selectFrame": null,
+    "focusTile": null,
+    "closeTile": "workspace:close",
+    "spawnTile": "workspace:spawn",
+    "spawnVis": "workspace:spawn",
+    "spawnClaude": "workspace:spawn",
+    "addFrame": "workspace:spawn",
+    "spawnAgent": "workspace:spawn",
+    "renameTile": "workspace:edit",
+    "openFolder": "workspace:edit"
+  },
+  "posted": [
+    { "text": "{\"type\":\"command\",\"name\":\"spawnAgent\",\"args\":[null,null,{\"name\":\"Priya's reviewer\"}]}", "asksLock": true, "why": "starts an agent" },
+    { "text": "{\"type\":\"command\",\"name\":\"spawnClaude\",\"args\":[]}", "asksLock": true, "why": "starts the person's default agent" },
+    { "text": "{\"type\":\"command\",\"name\":\"closeTile\",\"args\":[\"t1\"]}", "asksLock": true, "why": "closes a tile, its session ended" },
+    { "text": "{\"type\":\"command\",\"name\":\"spawnTile\",\"args\":[\"shell\",null]}", "asksLock": true, "why": "starts a terminal" },
+    { "text": "{\"type\":\"command\",\"name\":\"selectTile\",\"args\":[\"t1\"]}", "asksLock": false, "why": "needs no permission" },
+    { "text": "{\"type\":\"command\",\"name\":\"renameTile\",\"args\":[\"t1\",\"Priya's agent\"]}", "asksLock": false, "why": "an edit, not a start or a close" },
+    { "text": "{\"type\":\"command\",\"name\":\"launch\",\"args\":[]}", "asksLock": false, "why": "no such command: its host refuses it" },
+    { "text": "{\"type\":\"ready\",\"v\":1}", "asksLock": false, "why": "not a command" },
+    { "text": "{\"type\":\"subscribeStatus\",\"tileId\":\"t1\"}", "asksLock": false, "why": "not a command" },
+    { "text": "{\"type\":\"request\",\"requestId\":2,\"name\":\"spawnAgent\",\"args\":[]}", "asksLock": false, "why": "a request named like a command is not one" },
+    { "text": "[\"command\",\"spawnAgent\"]", "asksLock": false, "why": "not a message" },
+    { "text": "spawnAgent", "asksLock": false, "why": "not JSON: dropped as it is posted" }
+  ]
+}

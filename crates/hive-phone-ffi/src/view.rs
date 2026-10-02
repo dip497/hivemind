@@ -185,6 +185,23 @@ impl ViewSession {
     }
 }
 
+/// The script the app runs at the start of each view's page, in the page's own world
+/// (`WKUserScript` at document start; Android's `addDocumentStartJavaScript`): it hands the view
+/// its port once the page has loaded, and relays it as JSON text. The page posts through `hive`,
+/// the object the app gives it (`webkit.messageHandlers.hive`, or Android's web message
+/// listener), and is told through `hive.onmessage` on Android, `__hive.said(text)` on iOS.
+#[uniffi::export]
+pub fn view_bridge() -> String {
+    viewing::BRIDGE.to_string()
+}
+
+/// Whether `message`, which a view's page posted, starts or closes something on the board: the
+/// app asks the phone's lock before it posts it, and drops it when the lock says no.
+#[uniffi::export]
+pub fn view_asks_lock(message: String) -> bool {
+    viewing::asks_lock(&message)
+}
+
 #[uniffi::export]
 impl Phone {
     /// The community views `device` offers a phone, for `workspace`, which it holds.

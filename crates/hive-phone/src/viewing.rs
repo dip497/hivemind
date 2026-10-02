@@ -28,6 +28,34 @@ use crate::{
 /// flooding anyway.
 const POSTS_WAITING: usize = 256;
 
+/// The script the app runs at the start of a view's page, in the page's own world: it hands the
+/// view SDK its port as the computer's windows do, and relays it to the app as JSON text, through
+/// the `hive` object the app gives the page and `__hive.said(text)` (view_bridge.js).
+pub const BRIDGE: &str = include_str!("view_bridge.js");
+
+/// The view protocol's commands that start or close something on a board: those it says need
+/// `workspace:spawn` or `workspace:close` (`COMMAND_PERMISSION` in the view SDK's protocol.ts,
+/// conformance/view-commands.json).
+const STARTS_OR_CLOSES: [&str; 6] = [
+    "closeTile",
+    "spawnTile",
+    "spawnVis",
+    "spawnClaude",
+    "addFrame",
+    "spawnAgent",
+];
+
+/// Whether `message`, as a view's page posts it, starts or closes something on the board: the
+/// phone's lock is asked before it goes, as before the app's own Start and Close (design §4).
+pub fn asks_lock(message: &str) -> bool {
+    let Ok(Value::Object(message)) = serde_json::from_str(message) else {
+        return false;
+    };
+    message.get("type").and_then(Value::as_str) == Some("command")
+        && (message.get("name").and_then(Value::as_str))
+            .is_some_and(|name| STARTS_OR_CLOSES.contains(&name))
+}
+
 /// Why a view shown on the phone is told no more, or starts again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ended {

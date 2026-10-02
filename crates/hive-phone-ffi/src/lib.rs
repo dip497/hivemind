@@ -29,8 +29,8 @@ pub use phone::Phone;
 pub use push::{Notice, PushAt, PushRefused, PushTold};
 pub use records::*;
 pub use view::{
-    Screen, ThemeMode, ViewEnded, ViewFile, ViewFonts, ViewInfo, ViewListener, ViewSession,
-    ViewTheme,
+    view_asks_lock, view_bridge, Screen, ThemeMode, ViewEnded, ViewFile, ViewFonts, ViewInfo,
+    ViewListener, ViewSession, ViewTheme,
 };
 pub use watch::{ScreenEnded, ScreenLine, ScreenListener, ScreenUpdate, Watch};
 

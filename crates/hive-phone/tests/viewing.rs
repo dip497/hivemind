@@ -6,7 +6,8 @@
 //! connection and the background it is opened again on the newest screen, told to start again,
 //! and what the page of before posted until the view is ready again is dropped. It ends, told why
 //! once, when its host disables it, the device refuses it or holds its workspace no more; stopped,
-//! it tells nothing more and the device lets go of it.
+//! it tells nothing more and the device lets go of it. What a page posts that starts or closes
+//! something on the board asks the phone's lock first, held to conformance/view-commands.json.
 
 mod support;
 
@@ -19,7 +20,7 @@ use std::{
 use hive_phone::{
     connections::Connections,
     failure::Lost,
-    viewing::{Ended, Viewer, Viewing},
+    viewing::{asks_lock, Ended, Viewer, Viewing},
     views::{self, Mode, Screen, Theme, ViewFile},
 };
 use serde_json::{json, Value};
@@ -284,4 +285,29 @@ async fn a_view_stopped_tells_nothing_more_and_the_device_lets_go_of_it() {
     tokio::time::sleep(Duration::from_millis(300)).await;
     assert_eq!(shown.told(), [hello(390, 844)]);
     assert_eq!(desk.viewed().len(), 2, "{:?}", desk.viewed());
+}
+
+#[test]
+fn what_a_page_posts_asks_the_phones_lock_when_it_starts_or_closes_something_on_the_board() {
+    let cases: Value =
+        serde_json::from_str(include_str!("../../../conformance/view-commands.json")).unwrap();
+    for case in cases["posted"].as_array().unwrap() {
+        let text = case["text"].as_str().unwrap();
+        let expected = case["asksLock"].as_bool().unwrap();
+        assert_eq!(asks_lock(text), expected, "{text}: {}", case["why"]);
+    }
+    // Every command the protocol has: the lock asked for each that needs `workspace:spawn` or
+    // `workspace:close`, and for no other.
+    for (name, permission) in cases["commands"].as_object().unwrap() {
+        let command = json!({ "type": "command", "name": name, "args": [] }).to_string();
+        let starts_or_closes = matches!(
+            permission.as_str(),
+            Some("workspace:spawn" | "workspace:close")
+        );
+        assert_eq!(
+            asks_lock(&command),
+            starts_or_closes,
+            "{name}: {permission}"
+        );
+    }
 }

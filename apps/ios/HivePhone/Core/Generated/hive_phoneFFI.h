@@ -665,6 +665,17 @@ RustBuffer uniffi_hive_phone_ffi_fn_func_core_version(RustCallStatus *_Nonnull o
 RustBuffer uniffi_hive_phone_ffi_fn_func_pairs_with(RustBuffer link, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_VIEW_ASKS_LOCK
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_VIEW_ASKS_LOCK
+int8_t uniffi_hive_phone_ffi_fn_func_view_asks_lock(RustBuffer message, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_VIEW_BRIDGE
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_VIEW_BRIDGE
+RustBuffer uniffi_hive_phone_ffi_fn_func_view_bridge(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_FFI_HIVE_PHONE_FFI_RUSTBUFFER_ALLOC
 #define UNIFFI_FFIDEF_FFI_HIVE_PHONE_FFI_RUSTBUFFER_ALLOC
 RustBuffer ffi_hive_phone_ffi_rustbuffer_alloc(uint64_t size, RustCallStatus *_Nonnull out_status
@@ -934,6 +945,18 @@ uint16_t uniffi_hive_phone_ffi_checksum_func_core_version(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_PAIRS_WITH
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_PAIRS_WITH
 uint16_t uniffi_hive_phone_ffi_checksum_func_pairs_with(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_VIEW_ASKS_LOCK
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_VIEW_ASKS_LOCK
+uint16_t uniffi_hive_phone_ffi_checksum_func_view_asks_lock(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_VIEW_BRIDGE
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_VIEW_BRIDGE
+uint16_t uniffi_hive_phone_ffi_checksum_func_view_bridge(void
     
 );
 #endif
