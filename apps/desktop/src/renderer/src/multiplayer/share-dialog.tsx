@@ -52,17 +52,17 @@ export function ShareDialog({ repo, open, onClose, onPeople, onMoved }: { repo: 
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) { onClose(); setLink(null); setError(null); } }}>
-      <DialogContent className="sm:max-w-[460px]" data-share-dialog>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[460px]" data-share-dialog>
         <DialogTitle className="flex items-center"><Share2 size={15} className="mr-2" /> Invite people to {name}</DialogTitle>
         <DialogDescription>
           {elsewhere ? "Works for people who can reach the device it is hosted on." : net && net.builtin !== "local" ? `Works for people on this network, and through ${net.profile.name}'s servers.` : "Works for people on this network."} You are asked before anyone joins.
         </DialogDescription>
         {!elsewhere && net?.builtin === "local" && (reaching
           ? <ReachChooser current={net} onChosen={(n) => { setNet(n); setReaching(false); setLink(null); }} onCancel={() => { setReaching(false); setError("Stays on this network: the link works only here."); }} />
-          : <Button size="sm" variant="ghost" className="self-start" onClick={() => setReaching(true)} data-invite-elsewhere>Invite someone elsewhere…</Button>)}
+          : <Button size="sm" variant="ghost" className="justify-self-start" onClick={() => setReaching(true)} data-invite-elsewhere>Invite someone elsewhere…</Button>)}
         <div className="settings-row">
           <label htmlFor="share-role">They can</label>
-          <select id="share-role" value={role} onChange={(e) => { setRole(e.target.value as LinkRole); setLink(null); }}>
+          <select id="share-role" className="w-40" value={role} onChange={(e) => { setRole(e.target.value as LinkRole); setLink(null); }}>
             <option value="view">{ROLE_LABELS.view}</option>
             <option value="edit">{ROLE_LABELS.edit}</option>
             <option value="terminals">{ROLE_LABELS.terminals}</option>
@@ -70,7 +70,7 @@ export function ShareDialog({ repo, open, onClose, onPeople, onMoved }: { repo: 
         </div>
         <div className="settings-row">
           <label htmlFor="share-expiry">Link expires in</label>
-          <select id="share-expiry" value={expiresIn} onChange={(e) => { setExpiresIn(Number(e.target.value)); setLink(null); }}>
+          <select id="share-expiry" className="w-40" value={expiresIn} onChange={(e) => { setExpiresIn(Number(e.target.value)); setLink(null); }}>
             {EXPIRIES.map(([label, ms]) => <option key={ms} value={ms}>{label}</option>)}
           </select>
         </div>
@@ -79,15 +79,15 @@ export function ShareDialog({ repo, open, onClose, onPeople, onMoved }: { repo: 
           Anyone with the link can use it, not only the first person
         </label>
         {link ? (
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <code className="flex-1 min-w-0 truncate rounded bg-[var(--color-bg3)] px-2 py-1.5 font-mono text-[11px]" data-share-link title={link}>{link}</code>
-            <Button size="sm" variant="outline" onClick={copy}>{copied ? <Check /> : <Copy />} Copy link</Button>
+            <Button size="sm" variant="outline" className="shrink-0" onClick={copy}>{copied ? <Check /> : <Copy />} Copy link</Button>
           </div>
         ) : (
           <Button onClick={() => void create()} disabled={busy} data-share-create>{busy ? "Making the link…" : "Make a link"}</Button>
         )}
         {error && <p className="text-[12px] text-[var(--color-err)]" role="alert">{error}</p>}
-        <Button variant="ghost" size="sm" className="self-start" onClick={onPeople} data-share-people><Users /> People with access…</Button>
+        <Button variant="ghost" size="sm" className="justify-self-start" onClick={onPeople} data-share-people><Users /> People with access…</Button>
         {!elsewhere && <Hosting repo={repo} onMoved={onMoved} />}
       </DialogContent>
     </Dialog>

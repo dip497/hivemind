@@ -21,7 +21,7 @@ export function ReachChooser({ onChosen, onCancel, current }: { onChosen: (net: 
     try { onChosen(await window.hive.useNetwork(given)); } catch (e) { setError(messageOf(e)); }
   };
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-[var(--color-line)] p-3 text-[12px]" data-reach-chooser>
+    <div className="flex min-w-0 flex-col gap-2 rounded-md border border-[var(--color-line)] p-3 text-[12px]" data-reach-chooser>
       <p className="text-[var(--color-fg2)]">To reach devices outside this network, hivemind needs a way through. Choose one:</p>
       {current?.builtin !== "local" && (
         <Button size="sm" variant="ghost" className="justify-start" onClick={() => void use("local")} data-use-network="local">
@@ -44,7 +44,7 @@ export function ReachChooser({ onChosen, onCancel, current }: { onChosen: (net: 
       {serving && (
         <p className="rounded bg-[var(--color-bg3)] p-2 text-[var(--color-fg2)]" data-reach-serve-how>
           On a machine the others can reach (a public address, a forwarded port or a VPN), run{" "}
-          <code className="font-mono">hive-net serve --relay --access --admin-id &lt;your key&gt; --data ~/hive-network</code>, sign a
+          <code className="break-all font-mono">hive-net serve --relay --access --admin-id &lt;your key&gt; --data ~/hive-network</code>, sign a
           profile naming it with <code className="font-mono">hive-net profile sign</code>, and paste its link above.
         </p>
       )}

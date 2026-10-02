@@ -38,7 +38,8 @@
 .settings-row > :first-child { min-width: 0; }
 .settings-row label { font-weight: 500; }
 .settings-row p, .settings-note { font-size: 12px; line-height: 1.5; color: var(--color-fg2); margin-top: 3px; }
-:is(.settings-dialog, .theme-panel) select { max-width: 100%; min-width: 160px; background: var(--color-bg2); border: 1px solid var(--color-line2); color: var(--color-fg); border-radius: 5px; padding: 6px 28px 6px 10px; font-size: 13px; }
+:is(.settings-dialog, .theme-panel, [role="dialog"]) select { max-width: 100%; min-width: 160px; background: var(--color-bg2); border: 1px solid var(--color-line2); color: var(--color-fg); border-radius: 5px; padding: 6px 28px 6px 10px; font-size: 13px; }
+select option { background: var(--color-bg2); color: var(--color-fg); }
 .settings-icon-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 5px; font-size: 12px; white-space: nowrap; min-height: 30px; }
 .settings-icon-button { border: 0; padding: 6px; color: var(--color-fg2); }
 .settings-icon-button:hover { background: var(--color-bg3); }
@@ -88,7 +89,7 @@
   .settings-page-header { padding: 18px; }
   .settings-page-content { padding: 8px 18px 28px; }
   .settings-row { gap: 12px; flex-wrap: wrap; }
-  :is(.settings-dialog, .theme-panel) select { min-width: 120px; }
+  :is(.settings-dialog, .theme-panel, [role="dialog"]) select { min-width: 120px; }
 }
 .settings-inline { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .settings-disclosure { border-bottom: 1px solid var(--color-line2); }
