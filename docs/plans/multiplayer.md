@@ -646,3 +646,6 @@ guest who may edit the board could start a command on the host (see the log).
   none of them (509 crates to 370).
 - 2026-10-02 — M5 step 16: the phone knows whose it is, by the name and colour of the person's
   profile. Nothing of M5 that builds here is left.
+- 2026-10-02 — Full e2e after M5 steps 13–16: 209 of 209 in 21.2 minutes, on a quiet machine. The
+  push-server spec now also walks the M5 gate's path on one machine: paired, told through the push
+  server, allowed from the notice alone, the agent at work again.

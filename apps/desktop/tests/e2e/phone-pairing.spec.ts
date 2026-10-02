@@ -388,7 +388,7 @@ for (const [policy, admission] of [["closed", "vouched for by the app"], ["open-
   });
 }
 
-test("on a network with a push server, the phone registers there, naming the computer, and is told through it what waits on the person; the server keeps nothing of what it passes on; unpaired, the computer is named no more", async () => {
+test("on a network with a push server, the phone registers there, naming the computer, and is told through it what waits on the person, which it allows from the notice alone; the server keeps nothing of what it passes on; unpaired, the computer is named no more", async () => {
   test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
   test.setTimeout(120_000);
   const net = await ownNetwork(root, procs, "closed");
@@ -411,6 +411,13 @@ test("on a network with a push server, the phone registers there, naming the com
   // What the server keeps names no workspace, agent or wait.
   const kept = fs.readFileSync(path.join(net.data, "push.json"), "utf8");
   for (const secret of ["api", "Editing Nav.tsx", tile, "permission"]) expect(kept).not.toContain(secret);
+
+  // Allowed from the notice alone, as its notification's Allow would be: the agent works again.
+  const notice = told[1] as { workspace: string; tile: string; since: number; decide?: boolean };
+  expect(notice.decide).toBe(true);
+  const allowed = await run(HIVE_PHONE, ["answer", notice.workspace, notice.tile, String(notice.since), "--allow", "--identity", phone, "--json"], { timeout: 30_000 });
+  expect(JSON.parse(allowed.stdout)).toEqual({ answered: true });
+  await expect.poll(async () => { const n = await needsOf(phone); return [n.needs.length, n.working]; }, { timeout: 30_000 }).toEqual([0, 1]);
 
   // Unpaired from the phone: it registers again, and the computer is named no more.
   const unpaired = JSON.parse((await run(HIVE_PHONE, ["unpair", d.me.deviceId, "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as unknown;
