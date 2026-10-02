@@ -3,6 +3,7 @@
 //! does, so it can be tried and tested without one. It runs no agents: it pairs with the person's
 //! app, and is their device from then on (M5).
 
+pub mod agents;
 pub mod devices;
 pub mod identity;
 pub mod needs;

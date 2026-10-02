@@ -12,6 +12,11 @@
 //!                               devices this phone paired with, the one waiting longest first,
 //!                               and how many are at work; of a device that is away, what it last
 //!                               answered and when
+//!   hive-phone agents [--follow]
+//!                               every agent on the devices this phone reaches, by device: what
+//!                               each is doing and what it waits on, and how many are at work;
+//!                               with --follow, again each time a device says it changed, until
+//!                               Ctrl+C
 //!   hive-phone watch <workspace> <tile> [--type]
 //!                               an agent's terminal: its screen, then its output as it comes,
 //!                               until it ends (or Ctrl+C); with --type, each line read here is
@@ -37,13 +42,16 @@
 //!
 //! Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),
 //! `--name <name>` (pair: what the app lists this phone as; default `Phone`), `--json` (pair,
-//! devices, network, unpair, needs, answer, send, push: as JSON, a notice a line).
+//! devices, network, unpair, needs, agents, answer, send, push: as JSON, a notice or a list a
+//! line).
 
 use std::{path::PathBuf, process::ExitCode, sync::Arc, time::SystemTime};
 
 use anyhow::{bail, Context, Result};
 use hive_net::{net, push::Platform};
 use hive_phone::{
+    agents::{self, Agent, Listed},
+    devices,
     identity::Identity,
     needs::{self, Need},
     pairing,
@@ -52,7 +60,7 @@ use hive_phone::{
 };
 use serde_json::{json, Value};
 
-const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--allow|--deny|--approve|--changes <what> | send <workspace> <tile> --text <line> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
+const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | agents [--follow] | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--allow|--deny|--approve|--changes <what> | send <workspace> <tile> --text <line> | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
 
 #[derive(Default)]
 struct Args {
@@ -73,6 +81,8 @@ struct Args {
     listen: Option<String>,
     /// `watch`'s: each line read here is typed into the terminal.
     typing: bool,
+    /// `agents`': again each time a device says they changed.
+    follow: bool,
 }
 
 fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
@@ -91,6 +101,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
             "--changes" => args.changes = Some(argv.next().context("--changes needs a value")?),
             "--listen" => args.listen = Some(argv.next().context("--listen needs a value")?),
             "--type" => args.typing = true,
+            "--follow" => args.follow = true,
             flag if flag.starts_with("--") => bail!("{flag} is not an option\n{USAGE}"),
             _ if args.command.is_empty() => args.command = arg,
             _ => args.rest.push(arg),
@@ -146,6 +157,54 @@ fn summary(needs: &[Need], working: u64, now: u64) -> Vec<String> {
         (false, None) => {}
     }
     lines
+}
+
+/// Every agent the devices said, and what waits on the person among them: as JSON, one line; else
+/// by device, with what each is doing.
+fn show_agents(last: &[Option<Listed>], devices: &[pairing::PairedWith], json: bool) {
+    let all = agents::as_one(last.iter().flatten().cloned().collect());
+    if json {
+        println!(
+            "{}",
+            json!({ "agents": all.agents, "needs": all.needs, "working": all.working })
+        );
+        return;
+    }
+    let mut device = None;
+    for a in &all.agents {
+        if device != Some(&a.device) {
+            let name = devices.iter().find(|d| d.device == a.device);
+            println!("{}:", name.map_or(a.device.as_str(), |d| d.name.as_str()));
+            device = Some(&a.device);
+        }
+        println!("  {} · {} on {} — {}", a.agent, a.name, a.machine, doing(a));
+    }
+    match all.working {
+        0 if all.agents.is_empty() => println!("No agents."),
+        0 => {}
+        1 => println!("1 agent working."),
+        n => println!("{n} agents working."),
+    }
+}
+
+/// What an agent is doing, in words.
+fn doing(a: &Agent) -> String {
+    match &a.waiting {
+        Some(w) if w.kind == "approval" => "waits on the agent supervising it".into(),
+        Some(w) => what(&Need {
+            workspace: a.workspace.clone(),
+            name: a.name.clone(),
+            tile: a.tile.clone(),
+            agent: a.agent.clone(),
+            kind: w.kind.clone(),
+            since: w.since,
+            plan: w.plan.clone(),
+            machine: Some(a.machine.clone()),
+            decide: w.decide,
+        })
+        .into(),
+        None => a.state.clone(),
+    }
 }
 
 /// How long ago `at` was, as a person says it.
@@ -316,6 +375,58 @@ async fn run(args: Args) -> Result<()> {
                     }
                 }
             }
+        }
+        "agents" => {
+            if phone.devices().is_empty() {
+                bail!("this phone is paired with nothing yet: `hive-phone pair <link>`");
+            }
+            let (endpoint, devices) = reaching(&phone).await?;
+            // Each device followed at once: one away holds up none of the others.
+            let (told, mut lists) = tokio::sync::mpsc::unbounded_channel::<(usize, Listed)>();
+            for (i, d) in devices.iter().cloned().enumerate() {
+                let (endpoint, told) = (endpoint.clone(), told.clone());
+                tokio::spawn(async move {
+                    let followed = async {
+                        let at = net::addr_of(&d.device, &d.addrs, &d.relay)?;
+                        let connection = endpoint.connect(at, hive_net::ws::ALPN).await?;
+                        agents::follow(&connection, &d.device, |list| {
+                            let _ = told.send((i, list));
+                        })
+                        .await
+                    };
+                    if let Err(e) = followed.await {
+                        eprintln!("hive-phone: {} did not answer: {e:#}", d.name);
+                    }
+                });
+            }
+            drop(told);
+            // Each device's list as it last said it, shown one device after another.
+            let mut last: Vec<Option<Listed>> = vec![None; devices.len()];
+            let mut heard = 0;
+            loop {
+                let next = if args.follow || heard == devices.len() {
+                    lists.recv().await
+                } else {
+                    tokio::time::timeout(devices::ANSWER_WITHIN, lists.recv())
+                        .await
+                        .unwrap_or(None)
+                };
+                let Some((i, list)) = next else {
+                    if !args.follow {
+                        show_agents(&last, &devices, args.json);
+                    }
+                    break;
+                };
+                heard += usize::from(last[i].is_none());
+                last[i] = Some(list);
+                if args.follow {
+                    show_agents(&last, &devices, args.json);
+                } else if heard == devices.len() {
+                    show_agents(&last, &devices, args.json);
+                    break;
+                }
+            }
+            endpoint.close().await;
         }
         "unpair" => {
             let which = args

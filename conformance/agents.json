@@ -648,7 +648,7 @@
    "working": 3
   },
   {
-   "about": "an item that cannot be read is left out: a field it must have missing or of another type, a state or a wait's kind not in the spec, a wait without a time; a program that is no id and label, and a decide or interrupt that is not true, are taken as not there",
+   "about": "an item that cannot be read is left out: a field it must have missing or of another type, a state or a wait's kind not in the spec, a wait without a time; a program that is no id and label, and a decide or interrupt that is not true, and a decide on anything but a permission, are taken as not there",
    "answers": [
     {
      "from": "desk",
@@ -733,6 +733,20 @@
         },
         "interrupt": 1
        },
+       {
+        "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "name": "api",
+        "tile": "k8",
+        "agent": "Asks",
+        "state": "waiting",
+        "since": 1790000001000,
+        "machine": "desk",
+        "waiting": {
+         "kind": "question",
+         "since": 1790000001000,
+         "decide": true
+        }
+       },
        "not an agent"
       ],
       "working": 0
@@ -753,10 +767,25 @@
       "since": 1790000001000
      },
      "device": "desk"
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "k8",
+     "agent": "Asks",
+     "state": "waiting",
+     "since": 1790000001000,
+     "machine": "desk",
+     "waiting": {
+      "kind": "question",
+      "since": 1790000001000
+     },
+     "device": "desk"
     }
    ],
    "needs": [
-    "desk/k7"
+    "desk/k7",
+    "desk/k8"
    ],
    "working": 0
   },

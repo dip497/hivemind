@@ -52,7 +52,8 @@ nothing; a `working` that is not a whole number of none or more counts none. An 
 is left out: one that is not an object, has a field it must have (`program`, `waiting` and
 `interrupt` may be missing) missing or of another type, a `state` not listed above, or a `waiting`
 that is no object, has a kind not listed or no `since`. A `program` that is not an `id` and a
-`label`, and a `decide` or `interrupt` that is not `true`, are taken as not there.
+`label`, a `decide` or `interrupt` that is not `true`, and a `decide` on anything but a permission,
+are taken as not there.
 
 ## Starting
 
