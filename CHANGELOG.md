@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Mermaid diagrams in Markdown previews are drawn by mermaid 12: flowcharts, state and class diagrams are laid out by ELK, and use-case diagrams are supported.
 - An invalid issue file or `.hivemind/config.yaml` names each field that is wrong and why, instead of printing raw validation JSON; validation messages read as zod 4 words them.
 - The app's icons come from lucide 1, which redraws several of them.
 - Fixed: notifications in the corner can be swiped away in any direction and a toast that changes size re-measures (sonner 2).

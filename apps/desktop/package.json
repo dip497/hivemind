@@ -128,7 +128,7 @@
     "loro-crdt": "catalog:",
     "lucide-react": "catalog:",
     "marked": "^18.0.14",
-    "mermaid": "^11.17.2",
+    "mermaid": "^12.1.0",
     "path-browserify": "^1.0.1",
     "react": "catalog:",
     "react-dom": "catalog:",
