@@ -441,7 +441,8 @@ jobs:
         shell: pwsh
         run: |
           cd desktop-deploy
-          pnpm exec electron-builder --win zip --config.directories.output=dist-electron --config.compression=store
+          # package.json's compression "maximum" took 23 min on this zip (run 37036151192); normal is fast and keeps most of the saving.
+          pnpm exec electron-builder --win zip --config.directories.output=dist-electron --config.compression=normal
         env:
           PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
 
