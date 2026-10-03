@@ -29,7 +29,8 @@ const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../ou
 // chooser load when opened (they had been on this path, 989 290 bytes, which this test caught).
 // Re-baselined for tailwind-merge 3: cn() is on every first-frame component and v3 carries
 // Tailwind v4's class grammar (~29 kB over v2; 1 009 683 before).
-const ENTRY_BASELINE = 1_038_883;
+// Re-baselined for sonner 2: the Toaster mounts with the app and v2 inlines its styles (~19 kB).
+const ENTRY_BASELINE = 1_058_031;
 const ENTRY_MARGIN = 0.04;
 
 test("the default renderer path stays small, and three.js is gone from the build", (t) => {
