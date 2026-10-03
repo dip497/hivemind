@@ -9,7 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
-- New: `hive share`, `hive people` and `hive join` work with the desktop app running, not only `hive host`.
+- New: `hive share`, `hive people` and `hive join` work with the desktop app running, not only `hive host`; a `hive join` there opens the workspace in the app.
 
 - New: guests open in the host's chosen workspace view, including host-served community views, and can follow the host's live canvas camera.
 
