@@ -181,6 +181,12 @@
     <string name="notify_denied">Denied</string>
     <string name="notify_already">Already answered</string>
     <string name="notify_not_answered">Not answered: %s</string>
+    <string name="notify_join">%1$s asks to join %2$s</string>
+    <string name="notify_join_someone">Someone</string>
+    <string name="notify_join_role">Their link lets them %s</string>
+    <string name="notify_role_view">view</string>
+    <string name="notify_role_edit">edit</string>
+    <string name="notify_role_terminals">use terminals</string>
     <string name="notify_answering">Answering from a notification</string>
     <string name="notify_ask">Be told when an agent needs you, even with the app closed.</string>
     <string name="notify_refused">Notifications are off for hivemind: turn them on in the system\'s settings.</string>

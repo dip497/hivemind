@@ -41,6 +41,9 @@ function host(network: { access?: { url: string; policy: "open" | "closed" } } =
   const vouchers: unknown[] = [];
   const file = path.join(dir, "audit.jsonl");
   let ownerHere = true;
+  const phoned: unknown[] = [];
+  let phones = false;
+  let waitsAway = false;
   let server!: WorkspaceServer;
   const ppl = new People({
     lists: () => lists,
@@ -59,6 +62,8 @@ function host(network: { access?: { url: string; policy: "open" | "closed" } } =
     keyOf: (ws) => idOf(workspaceSeed(owner, ws)),
     publishTo: (to, event, ...params) => server.publishTo(to, event, ...params),
     ownerHere: () => ownerHere,
+    phones: (repo, question) => { if (phones) phoned.push([repo, question]); return phones; },
+    get waitsAway() { return waitsAway; },
   });
   server = new WorkspaceServer([ppl.domain], new Intents(new AuditLog({ file })));
   const client = (actor: Actor) => {
@@ -74,8 +79,8 @@ function host(network: { access?: { url: string; policy: "open" | "closed" } } =
     return answer.result;
   };
   const audited = () => fs.readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => { const { verb, target, detail, outcome } = JSON.parse(l); return `${verb} ${target} ${detail ?? ""} ${outcome}`.trim(); });
-  const away = () => { ownerHere = false; };
-  return { lists, here, closed, admitted: () => admitted, vouchers, call, audited, owner, ppl, server, client, window, away };
+  const away = (o: { phones?: boolean; waits?: boolean } = {}) => { ownerHere = false; phones = !!o.phones; waitsAway = !!o.waits; };
+  return { lists, here, closed, admitted: () => admitted, vouchers, call, audited, owner, ppl, server, client, window, away, phoned };
 }
 
 test("its owner sees who is on the list and who is here; a new role closes their connections, and driving agents goes only to someone here", async () => {
@@ -131,7 +136,9 @@ test("each change is the asker's intent; nobody but the owner may ask", async ()
     `people.remove ${REPO} ${SAM.slice(0, 8)} ok`,
     `people.invite ${REPO} view ok`,
   ]);
-  for (const method of ["people.list", "people.role", "people.remove", "people.invite"]) {
+  await h.call("people.answering", REPO, "invite");
+  assert.equal(h.audited().at(-1), `people.answering ${REPO} invite ok`);
+  for (const method of ["people.list", "people.role", "people.remove", "people.invite", "people.requests", "people.answering"]) {
     for (const role of ROLES) assert.equal(mayCall(role, method), false, `${role} may not ${method}`);
     assert.equal(mayCall("owner", method), true);
   }
@@ -139,7 +146,7 @@ test("each change is the asker's intent; nobody but the owner may ask", async ()
 
 const asking = { workspace: WS, repo: REPO, person: "e".repeat(64), device: "f".repeat(64), profile: { name: "Noor", color: "#0a0" }, role: "edit" as const };
 /** What a question has come to now: its answer, or that it still waits. */
-const now = (asked: Promise<boolean>) => Promise.race([asked, Promise.resolve("still waiting")]);
+const now = (asked: Promise<string | null>) => Promise.race([asked, Promise.resolve("still waiting")]);
 const told = (c: { received: EventMessage[] }) => c.received.filter((m) => m.event.startsWith("people.")).map((m) => [m.event, ...m.params]);
 
 test("someone asking to join is asked about at each of the owner's clients, the first answer counting and the others told", async () => {
@@ -151,14 +158,14 @@ test("someone asking to join is asked about at each of the owner's clients, the 
   for (const owner of [h.window, laptop]) assert.deepEqual(told(owner), [["people.asked", REPO, question]]);
   assert.deepEqual(told(guest), [], "only the owner is asked");
   assert.deepEqual(await h.server.answer("people.answer", [REPO, 1, true], laptop), { result: { answered: true } });
-  assert.equal(await now(allowed), true);
+  assert.equal(await now(allowed), "edit");
   for (const owner of [h.window, laptop]) assert.deepEqual(told(owner).at(-1), ["people.answered", REPO, 1]);
   // Too late, and an answer naming another workspace: neither counts.
   assert.deepEqual(await h.server.answer("people.answer", [REPO, 1, false], h.window), { result: { answered: false } });
   const denied = h.ppl.ask(asking);
   assert.deepEqual(await h.call("people.answer", "/work/web", 2, true), { answered: false });
   assert.deepEqual(await h.call("people.answer", REPO, 2, false), { answered: true });
-  assert.equal(await now(denied), false);
+  assert.equal(await now(denied), null);
   assert.match(h.audited().join("\n"), /people\.answer \/work\/api allow ok[\s\S]*people\.answer \/work\/api deny ok/);
 });
 
@@ -168,12 +175,63 @@ test("with none of the owner's clients here it is no at once, and with none answ
     const h = host();
     const waited = h.ppl.ask(asking);
     mock.timers.tick(ANSWER_WITHIN_MS);
-    assert.equal(await now(waited), false);
+    assert.equal(await now(waited), null);
     assert.deepEqual(told(h.window).at(-1), ["people.answered", REPO, 1]);
     h.away();
-    assert.equal(await now(h.ppl.ask(asking)), false);
+    assert.equal(await now(h.ppl.ask(asking)), null);
     assert.equal(told(h.window).length, 2, "nobody is asked");
   } finally {
     mock.timers.reset();
   }
+});
+
+test("with none of the owner's clients here their phones are asked, and a host whose person answers at its command line waits for them", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const h = host();
+    h.away({ phones: true });
+    const phoned = h.ppl.ask(asking);
+    assert.deepEqual(h.phoned, [[REPO, { req: 1, workspace: "api", profile: asking.profile, role: "edit" }]]);
+    assert.equal(await now(phoned), "still waiting");
+    assert.deepEqual(await h.call("people.answer", REPO, 1, true), { answered: true });
+    assert.equal(await now(phoned), "edit");
+    h.away({ waits: true });
+    const waiting = h.ppl.ask(asking);
+    assert.equal(await now(waiting), "still waiting");
+    mock.timers.tick(ANSWER_WITHIN_MS);
+    assert.equal(await now(waiting), null);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("the questions waiting on the owner are listed by workspace until answered, with how it lets people in", async () => {
+  const h = host();
+  assert.deepEqual(await h.call("people.requests", REPO), { answering: "ask", asking: [] });
+  const asked = h.ppl.ask(asking);
+  assert.deepEqual(await h.call("people.requests", REPO), { answering: "ask", asking: [{ req: 1, workspace: "api", profile: asking.profile, role: "edit" }] });
+  assert.deepEqual(await h.call("people.requests", "/work/web"), { answering: "ask", asking: [] });
+  await h.call("people.answer", REPO, 1, false);
+  assert.equal(await asked, null);
+  assert.deepEqual(await h.call("people.requests", REPO), { answering: "ask", asking: [] });
+});
+
+test("a workspace that lets in anyone with a valid invite lets them in at once, asking nobody", async () => {
+  const h = host();
+  await h.call("people.answering", REPO, "invite");
+  assert.deepEqual(await h.call("people.requests", REPO), { answering: "invite", asking: [] });
+  assert.equal(await now(h.ppl.ask(asking)), "edit");
+  assert.deepEqual(told(h.window), [], "nobody is asked");
+  await assert.rejects(h.call("people.answering", REPO, "always"), /rule/);
+  await h.call("people.answering", REPO, "ask");
+  assert.equal(await now(h.ppl.ask(asking)), "still waiting");
+});
+
+test("the owner may let someone in at another role than their link's, never driving agents", async () => {
+  const h = host();
+  const asked = h.ppl.ask(asking);
+  await assert.rejects(h.call("people.answer", REPO, 1, true, "agents"), /role/);
+  assert.deepEqual(await h.call("people.answer", REPO, 1, true, "view"), { answered: true });
+  assert.equal(await asked, "view");
+  assert.equal(h.audited().at(-1), `people.answer ${REPO} allow as view ok`);
 });

@@ -11,7 +11,7 @@ use tokio::task::JoinSet;
 use crate::{
     on_runtime,
     phone::Phone,
-    records::{AgentRef, WaitKind},
+    records::{AgentRef, JoinRef, WaitKind},
     PhoneError,
 };
 
@@ -75,6 +75,15 @@ pub enum Notice {
         workspace_name: String,
         since: u64,
     },
+    /// Someone, `who` as they call themselves, asks to join the workspace `workspace_name` with a
+    /// link for `role`, while none of the person's windows is there: Allow / Deny with `let_in`.
+    Join {
+        join: JoinRef,
+        who: String,
+        workspace_name: String,
+        role: String,
+        since: u64,
+    },
     /// One of the person's devices, found away, is back.
     Back {
         device: String,
@@ -116,6 +125,17 @@ fn notice_of(notice: &Value, device: String) -> Option<Notice> {
             agent: agent(),
             agent_name: text("agent"),
             workspace_name: text("name"),
+            since,
+        }),
+        "join" => Some(Notice::Join {
+            join: JoinRef {
+                device,
+                workspace: text("workspace"),
+                req: notice["req"].as_u64()?,
+            },
+            who: text("who"),
+            workspace_name: text("name"),
+            role: text("role"),
             since,
         }),
         "back" => Some(Notice::Back {
@@ -227,8 +247,8 @@ mod tests {
     }
 
     #[test]
-    fn a_notice_says_which_agent_on_which_device_waits_finished_or_failed_or_which_device_is_back()
-    {
+    fn a_notice_says_which_agent_on_which_device_waits_finished_or_failed_who_asks_to_join_or_which_device_is_back(
+    ) {
         let said = |t: &str, kind: Option<&str>, decide: Option<bool>| {
             let mut n = json!({ "v": 1, "t": t, "workspace": "w1", "name": "api", "tile": "t1",
                 "agent": "Editing Nav.tsx", "since": 1_790_000_000_000u64 });
@@ -301,5 +321,28 @@ mod tests {
             "a kind the phone does not know"
         );
         assert_eq!(notice_of(&json!({ "v": 1 }), "d1".into()), None);
+        let join = json!({ "v": 1, "t": "join", "workspace": "w1", "name": "api", "req": 3,
+            "who": "Priya", "role": "edit", "since": 9 });
+        assert_eq!(
+            notice_of(&join, "d1".into()),
+            Some(Notice::Join {
+                join: JoinRef {
+                    device: "d1".into(),
+                    workspace: "w1".into(),
+                    req: 3
+                },
+                who: "Priya".into(),
+                workspace_name: "api".into(),
+                role: "edit".into(),
+                since: 9
+            })
+        );
+        let mut unnumbered = join.clone();
+        unnumbered["req"] = json!(null);
+        assert_eq!(
+            notice_of(&unnumbered, "d1".into()),
+            None,
+            "a question with no number cannot be answered"
+        );
     }
 }

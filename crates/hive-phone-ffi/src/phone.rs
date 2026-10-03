@@ -16,7 +16,7 @@ use hive_phone::{
 use crate::{
     on_runtime,
     overview::{Following, OverviewListener, Overviews},
-    records::{AgentRef, Answer, Overview, Paired, Person},
+    records::{AgentRef, Answer, JoinRef, Overview, Paired, Person},
     watch::{ScreenListener, Watch},
     PhoneError, RUNTIME,
 };
@@ -138,6 +138,18 @@ impl Phone {
                 workspace::answer(&connection, &agent.workspace, &agent.tile, since, &reply)
                     .await?,
             )
+        })
+        .await
+    }
+
+    /// Answer someone asking to join (`Notice::Join`): let them in at their link's role, or turn
+    /// them away. Whether the answer counted: not once answered already, or after the device
+    /// stopped waiting.
+    pub async fn let_in(&self, join: JoinRef, allow: bool) -> Result<bool, PhoneError> {
+        let connections = self.connections.clone();
+        on_runtime(async move {
+            let connection = connections.holding(&join.device, &join.workspace).await?;
+            Ok(workspace::let_in(&connection, &join.workspace, join.req, allow).await?)
         })
         .await
     }

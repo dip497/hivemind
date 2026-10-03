@@ -1412,6 +1412,13 @@ public protocol PhoneProtocol: AnyObject, Sendable {
     func id()  -> String
     
     /**
+     * Answer someone asking to join (`Notice::Join`): let them in at their link's role, or turn
+     * them away. Whether the answer counted: not once answered already, or after the device
+     * stopped waiting.
+     */
+    func letIn(join: JoinRef, allow: Bool) async throws  -> Bool
+    
+    /**
      * The app went to the background: the connections close.
      */
     func onBackground() 
@@ -1725,6 +1732,27 @@ open func id() -> String  {
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Answer someone asking to join (`Notice::Join`): let them in at their link's role, or turn
+     * them away. Whether the answer counted: not once answered already, or after the device
+     * stopped waiting.
+     */
+open func letIn(join: JoinRef, allow: Bool)async throws  -> Bool  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_hive_phone_ffi_fn_method_phone_let_in(
+                        self.uniffiCloneHandle(),FfiConverterTypeJoinRef_lower(join),FfiConverterBool.lower(allow)
+                )
+            },
+            pollFunc: ffi_hive_phone_ffi_rust_future_poll_i8,
+            completeFunc: ffi_hive_phone_ffi_rust_future_complete_i8,
+            freeFunc: ffi_hive_phone_ffi_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypePhoneError_lift
+        )
 }
     
     /**
@@ -3412,6 +3440,68 @@ public func FfiConverterTypeFrame_lift(_ buf: RustBuffer) throws -> Frame {
 #endif
 public func FfiConverterTypeFrame_lower(_ value: Frame) -> RustBuffer {
     return FfiConverterTypeFrame.lower(value)
+}
+
+
+/**
+ * Someone asking to join a workspace, where they ask: the device that hosts it, the workspace, and
+ * the question as that device numbers it.
+ */
+public struct JoinRef: Equatable, Hashable {
+    public var device: String
+    public var workspace: String
+    public var req: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(device: String, workspace: String, req: UInt64) {
+        self.device = device
+        self.workspace = workspace
+        self.req = req
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension JoinRef: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeJoinRef: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> JoinRef {
+        return
+            try JoinRef(
+                device: FfiConverterString.read(from: &buf), 
+                workspace: FfiConverterString.read(from: &buf), 
+                req: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: JoinRef, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.device, into: &buf)
+        FfiConverterString.write(value.workspace, into: &buf)
+        FfiConverterUInt64.write(value.req, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJoinRef_lift(_ buf: RustBuffer) throws -> JoinRef {
+    return try FfiConverterTypeJoinRef.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJoinRef_lower(_ value: JoinRef) -> RustBuffer {
+    return FfiConverterTypeJoinRef.lower(value)
 }
 
 
@@ -5409,6 +5499,12 @@ public enum Notice: Equatable, Hashable {
     case failed(agent: AgentRef, agentName: String, workspaceName: String, since: UInt64
     )
     /**
+     * Someone, `who` as they call themselves, asks to join the workspace `workspace_name` with a
+     * link for `role`, while none of the person's windows is there: Allow / Deny with `let_in`.
+     */
+    case join(join: JoinRef, who: String, workspaceName: String, role: String, since: UInt64
+    )
+    /**
      * One of the person's devices, found away, is back.
      */
     case back(device: String, name: String, since: UInt64
@@ -5443,7 +5539,10 @@ public struct FfiConverterTypeNotice: FfiConverterRustBuffer {
         case 3: return .failed(agent: try FfiConverterTypeAgentRef.read(from: &buf), agentName: try FfiConverterString.read(from: &buf), workspaceName: try FfiConverterString.read(from: &buf), since: try FfiConverterUInt64.read(from: &buf)
         )
         
-        case 4: return .back(device: try FfiConverterString.read(from: &buf), name: try FfiConverterString.read(from: &buf), since: try FfiConverterUInt64.read(from: &buf)
+        case 4: return .join(join: try FfiConverterTypeJoinRef.read(from: &buf), who: try FfiConverterString.read(from: &buf), workspaceName: try FfiConverterString.read(from: &buf), role: try FfiConverterString.read(from: &buf), since: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 5: return .back(device: try FfiConverterString.read(from: &buf), name: try FfiConverterString.read(from: &buf), since: try FfiConverterUInt64.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -5480,8 +5579,17 @@ public struct FfiConverterTypeNotice: FfiConverterRustBuffer {
             FfiConverterUInt64.write(since, into: &buf)
             
         
-        case let .back(device,name,since):
+        case let .join(join,who,workspaceName,role,since):
             writeInt(&buf, Int32(4))
+            FfiConverterTypeJoinRef.write(join, into: &buf)
+            FfiConverterString.write(who, into: &buf)
+            FfiConverterString.write(workspaceName, into: &buf)
+            FfiConverterString.write(role, into: &buf)
+            FfiConverterUInt64.write(since, into: &buf)
+            
+        
+        case let .back(device,name,since):
+            writeInt(&buf, Int32(5))
             FfiConverterString.write(device, into: &buf)
             FfiConverterString.write(name, into: &buf)
             FfiConverterUInt64.write(since, into: &buf)
@@ -6985,6 +7093,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_phone_id() != 40747) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_phone_let_in() != 50905) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_phone_on_background() != 24223) {

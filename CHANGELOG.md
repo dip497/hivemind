@@ -12,6 +12,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - New: guests open in the host's chosen workspace view, including host-served community views, and can follow the host's live canvas camera.
 
 - Fixed: one failing workspace listener no longer stops a shared workspace's guests from getting updates; connections and a quiet host are logged.
+- New: on Android, someone asking to join one of your workspaces while no window of yours is open shows as a notification ("Priya asks to join api"), with Allow and Deny that answer from the notification.
+- New: `hive network enrol-link` on your network's server prints a link that puts one more device on it (`--uses`, `--expires`), signed with the admin key `hive-net serve` keeps in its data folder (`--data`, default `/var/lib/hive-net`).
+- New: share from a host with no window: `hive share <workspace>` prints an invite link (`--role`, `--uses`, `--expires`), `hive people` lists who is asking and lets them in or turns them away (at another role with `--role`), changes roles and takes people off, and `hive join <link>` asks to join a workspace; each acts through the running `hive host` and lands in its audit log (workspace API 0.16: `people.invite … uses`, `people.answer … role`).
+- New: a shared workspace can let in anyone with a valid invite at once, at the invite's role, instead of asking you each time (`hive people rule invite`); with no window of yours open, someone asking to join is sent to your phone (workspace API 0.16: `people.requests`, `people.answering`; push 0.5: `join`).
 - Fixed: rejoining an open shared workspace replaces its old connection and role; repeated Join submissions for the same invite ask the host once.
 
 - New: opt into nightly builds from main with `install.sh --channel nightly` or `install.ps1 -Channel nightly`; upgrades and the app's update check stay on the installed channel, while stable remains the default. Roll back with `--version <tag>` / `-Version <tag>`, which installs exactly that build, older ones too; `--channel stable` steps back from a nightly. The 14 newest nightlies are kept.

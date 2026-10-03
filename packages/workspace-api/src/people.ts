@@ -2,7 +2,7 @@
  * Who is in a workspace, as the workspace API says it (`people.*`, M3): its owner asks the
  * workspace's host, wherever the workspace is hosted.
  */
-import type { LinkRole, Person } from "@hivemind/workspace-host/access";
+import type { Answering, LinkRole, Person } from "@hivemind/workspace-host/access";
 import type { ProfileSettings } from "@hivemind/core/settings-schema";
 
 /** Someone on a workspace's list, and whether they are connected to it now. */
@@ -18,4 +18,11 @@ export interface JoinQuestion {
   profile: ProfileSettings;
   /** What their link lets them do. */
   role: LinkRole;
+}
+
+/** The questions about a workspace waiting on its owner, and how it lets in someone with a valid
+ *  invite. */
+export interface JoinRequests {
+  answering: Answering;
+  asking: JoinQuestion[];
 }

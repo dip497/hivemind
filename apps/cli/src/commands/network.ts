@@ -7,12 +7,18 @@
  *   hive network use <local|hosted|link|file>   use another; an update to the network in use
  *                                     must be signed by its admin
  *   hive network doctor               whether its relays answer this computer
+ *   hive network enrol-link [--data <dir>]   on the network's server: a link that puts one more
+ *                                     device on it, signed with the admin key kept in its data
  */
 import { defineCommand } from "citty";
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { NetworkProfiles, type NetworkProfile } from "@hivemind/workspace-host/network-profile";
 import { err, ok } from "../format.js";
 import { appData, hiveNetBin } from "../app-data.js";
+import { EXIT } from "../hcp.js";
+import { duration } from "./share.js";
 
 function profiles(ctx: { json: boolean }): NetworkProfiles | null {
   const bin = hiveNetBin();
@@ -80,7 +86,36 @@ const doctorCmd = defineCommand({
   },
 });
 
+const enrolLinkCmd = defineCommand({
+  meta: { name: "enrol-link", description: "On the network's server: a link that puts one more device on it" },
+  args: {
+    data: { type: "string", description: "the server's data folder, as `hive-net serve --data` has it (default: /var/lib/hive-net)" },
+    uses: { type: "string", description: "how many devices it enrols (default: 1)" },
+    expires: { type: "string", description: "how long it works: 12h, 7d … (default: 7d)" },
+    json: { type: "boolean" },
+  },
+  run({ args }) {
+    const ctx = { json: !!args.json };
+    const bin = hiveNetBin();
+    if (!bin) return err(ctx, "not_installed", "hive-net is not installed here: reinstall hivemind (install.sh puts it beside hive)");
+    const data = path.resolve(String(args.data ?? "/var/lib/hive-net"));
+    const profile = path.join(data, "network.json");
+    const admin = path.join(data, "admin.key");
+    for (const f of [profile, admin]) {
+      if (!fs.existsSync(f)) return err(ctx, "usage", `no ${path.basename(f)} in ${data}: point --data at the folder \`hive-net serve --data\` keeps`, EXIT.usage);
+    }
+    const uses = args.uses === undefined ? 1 : Number(args.uses);
+    if (!Number.isSafeInteger(uses) || uses < 1) return err(ctx, "usage", "--uses is a whole number from 1", EXIT.usage);
+    const ms = duration(String(args.expires ?? "7d"));
+    if (!ms) return err(ctx, "usage", "--expires is a length of time: 12h, 7d", EXIT.usage);
+    const r = spawnSync(bin, ["access", "enrol-link", profile, "--admin", admin, "--uses", String(uses), "--expires-in", String(ms / 1000)], { encoding: "utf8" });
+    if (r.status !== 0) return err(ctx, "refused", (r.stderr || r.error?.message || "hive-net failed").trim());
+    const link = r.stdout.trim();
+    return ok(ctx, { link, uses, expires: Date.now() + ms }, () => `${link}\nenrols ${uses === 1 ? "one device" : `${uses} devices`} for ${args.expires ?? "7d"}: \`hive network use <link>\` there, or Settings → Network → Change…`);
+  },
+});
+
 export const networkCmd = defineCommand({
   meta: { name: "network", description: "This computer's network: show, use another, check its servers" },
-  subCommands: { show: showCmd, use: useCmd, doctor: doctorCmd },
+  subCommands: { show: showCmd, use: useCmd, doctor: doctorCmd, "enrol-link": enrolLinkCmd },
 });

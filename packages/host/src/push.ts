@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { InputKind } from "@hivemind/agents";
+import type { JoinQuestion } from "@hivemind/workspace-api/people";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import type { Changes } from "@hivemind/workspace-host/doc-sync";
 import { idOf, signWith, type Seed } from "@hivemind/workspace-host/identity";
@@ -38,6 +39,22 @@ export interface Back {
   /** The device: its id, and what it is called. */
   device: string;
   name: string;
+  since: number;
+}
+
+/** What a phone is told when someone asks to join a workspace of the person's while none of their
+ *  windows is there to ask (0.5): Allow / Deny answers it (`people.answer`). */
+export interface Join {
+  v: 1;
+  t: "join";
+  /** The workspace: its id, and its name. */
+  workspace: string;
+  name: string;
+  /** The question, as `people.answer` names it. */
+  req: number;
+  /** Who asks, as they said, and the role their link gives. */
+  who: string;
+  role: string;
   since: number;
 }
 
@@ -180,6 +197,15 @@ export class PushNotices {
     this.send({ v: 1, t: "back", device, name: short(name), since: Date.now() }, "normal");
   }
 
+  /** Someone asks to join `workspace` (its id; `question` names it): each phone is told, urgently.
+   *  Whether there was any phone to tell. */
+  asked(workspace: string, question: JoinQuestion): boolean {
+    if (this.o.subscriptions.list().length === 0) return false;
+    const who = short(question.profile.name || "someone");
+    this.send({ v: 1, t: "join", workspace, name: short(question.workspace), req: question.req, who, role: question.role, since: Date.now() }, "high");
+    return true;
+  }
+
   /** The boards changed: each agent now on one is told of. */
   private placed(): void {
     if (this.unplaced.size === 0) return;
@@ -198,7 +224,7 @@ export class PushNotices {
   }
 
   /** Post `message` to each phone subscribed, encrypted to it. */
-  private send(message: Notice | Back, urgency: "high" | "normal"): void {
+  private send(message: Notice | Back | Join, urgency: "high" | "normal"): void {
     const plaintext = Buffer.from(JSON.stringify(message));
     for (const sub of this.o.subscriptions.list()) {
       // A subscription the push service no longer knows is dropped (RFC 8030 §7.3).

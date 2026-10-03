@@ -11,6 +11,7 @@ import com.hivemind.phone.MINUTE
 import com.hivemind.phone.agent
 import com.hivemind.phone.core.AgentRef
 import com.hivemind.phone.core.AgentState
+import com.hivemind.phone.core.JoinRef
 import com.hivemind.phone.core.Notice
 import com.hivemind.phone.core.WaitKind
 import com.hivemind.phone.device
@@ -107,5 +108,18 @@ class NoticesTest {
         // Heard since, and answered.
         notices.cleared(overview(devices = listOf(device(DESK, "desk", heardAt = posted + 2))))
         assertFalse(isShown("ws-1/t1/$since", Notices.WAITS))
+    }
+
+    @Test
+    fun `someone asking to join is told by name and workspace, what their link lets them do, with Allow and Deny`() {
+        notices.show(Notice.Join(JoinRef(DESK, "ws-1", 3uL), "Priya", "hivemind", "terminals", 9uL))
+        notices.show(Notice.Join(JoinRef(DESK, "ws-1", 4uL), "", "hivemind", "view", 9uL))
+
+        val asked = shown("join/ws-1/3", Notices.JOIN)
+        assertEquals(Notices.CHANNEL_NEEDS, asked.channelId)
+        assertEquals("Priya asks to join hivemind", asked.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
+        assertEquals("Their link lets them use terminals", asked.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+        assertEquals(listOf("Allow", "Deny"), asked.buttons)
+        assertEquals("Someone asks to join hivemind", shown("join/ws-1/4", Notices.JOIN).extras.getCharSequence(Notification.EXTRA_TITLE).toString())
     }
 }

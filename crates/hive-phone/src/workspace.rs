@@ -310,6 +310,25 @@ pub async fn answer(
     Ok(result.get("answered").and_then(Value::as_bool) == Some(true))
 }
 
+/// Answer someone asking to join `workspace`, the question `req` its device told of (spec/push.md
+/// "Join"): let them in at their link's role, or turn them away. Whether the answer counted: not
+/// when it was answered already, or nobody answered in time.
+pub async fn let_in(
+    connection: &Connection,
+    workspace: &str,
+    req: u64,
+    allow: bool,
+) -> Result<bool> {
+    let mut w = Workspace::open(connection, workspace).await?;
+    let result = w
+        .call(
+            "people.answer",
+            json!([format!("hive://{workspace}"), req, allow]),
+        )
+        .await?;
+    Ok(result.get("answered").and_then(Value::as_bool) == Some(true))
+}
+
 /// Send the agent of `tile` in `workspace` the message `text`, one line: it is typed in as its next
 /// prompt once it is at its prompt (spec/needs.md, "Sending"). Whether it went: not when no agent
 /// runs there.

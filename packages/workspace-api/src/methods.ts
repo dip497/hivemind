@@ -9,10 +9,10 @@ import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnaps
 import type { AgentAnswer, AgentChanges, ConversationEntry, Links, PipeChange, SpawnChange, StartAgent, Startable, StatusChange, TileOpened } from "./agents.js";
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
 import type { Answerer, PlanDecided, PlanReview } from "./plans.js";
-import type { JoinQuestion, PersonHere } from "./people.js";
+import type { JoinQuestion, JoinRequests, PersonHere } from "./people.js";
 import type { ViewFile, ViewListing, ViewScreen } from "./views.js";
 import type { HostMessage, PluginMessage, SurfaceRect } from "@hivemind/view-sdk/protocol";
-import type { LinkRole, Role } from "@hivemind/workspace-host/access";
+import type { Answering, LinkRole, Role } from "@hivemind/workspace-host/access";
 import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
@@ -121,8 +121,15 @@ export interface WorkspaceMethods {
   "people.list": (repo: string) => PersonHere[];
   "people.role": (repo: string, person: string, role: Role) => void;
   "people.remove": (repo: string, person: string) => void;
-  "people.invite": (repo: string, role: LinkRole, expiresIn: number, reusable?: boolean) => string;
-  "people.answer": (repo: string, req: number, allow: boolean) => { answered: boolean };
+  /** A join link; `uses` (0.16): how many people a reusable one lets in at most. */
+  "people.invite": (repo: string, role: LinkRole, expiresIn: number, reusable?: boolean, uses?: number) => string;
+  /** `role` (0.16): let them in at this role in place of the link's. */
+  "people.answer": (repo: string, req: number, allow: boolean, role?: LinkRole) => { answered: boolean };
+  /** The questions about `repo` waiting on its owner now, and how it lets in someone with a valid
+   *  invite. */
+  "people.requests": (repo: string) => JoinRequests;
+  /** How `repo` lets in someone with a valid invite: asked about first, or at once at its role. */
+  "people.answering": (repo: string, rule: Answering) => void;
   /** A workspace's layouts, for a client that holds them: every read after it answers from what
    *  it holds, and each `store.changed` says what to read again. */
   "store.open": (repo: string) => StoreSnapshot;

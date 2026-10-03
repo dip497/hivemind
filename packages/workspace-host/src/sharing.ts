@@ -35,8 +35,9 @@ export type PairReply =
 export class Sharing {
   constructor(
     private readonly lists: AccessLists,
-    /** Ask the person at the host: true lets them in. */
-    private readonly ask: (request: JoinRequest) => Promise<boolean>,
+    /** Ask the person at the host: the role they are let in at (the link's, or another the
+     *  person chose), or null. */
+    private readonly ask: (request: JoinRequest) => Promise<LinkRole | null>,
     /** The devices the lists admit changed: give them to the gate. */
     private readonly admittedChanged: (devices: string[]) => void,
   ) {}
@@ -51,14 +52,15 @@ export class Sharing {
     const repo = this.lists.repoOf(h.workspace);
     if (!role || !repo) return { ok: false, error: "expired" };
     const request: JoinRequest = { workspace: h.workspace, repo, person: h.certificate.person, device: peer, profile: profileOf(h.profile), role };
-    if (!(await this.ask(request))) return { ok: false, error: "declined" };
+    const given = await this.ask(request);
+    if (!given) return { ok: false, error: "declined" };
     // Asked again after the answer: the invite may have been used or expired while the person decided.
     if (this.lists.offered(h.workspace, h.secret) !== role) return { ok: false, error: "expired" };
-    this.lists.grant(h.workspace, request.person, role);
+    this.lists.grant(h.workspace, request.person, given);
     this.lists.redeem(h.workspace, h.secret, request.person);
     this.lists.remember(h.workspace, request.person, request.profile);
     this.lists.addDevice(h.workspace, h.certificate);
     this.admittedChanged(this.lists.admitted());
-    return { ok: true, role, workspace: h.workspace };
+    return { ok: true, role: given, workspace: h.workspace };
   }
 }
