@@ -61,7 +61,7 @@ const BOOT_WAIT_CAP_MS = 60_000;
  *  registry is on the other side of someone's network. */
 const CATALOG_RETRY_MS = 45_000;
 const CATALOG_RETRIES = 3;
-import { defaultTileSize, snapToGrid } from "./canvas-sizing";
+import { defaultSizeForKind, defaultTileSize, snapToGrid } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
 // Loaded when it is first opened: the dialog (add form, machine list, folder picker) is not startup work.
 const MachinesHub = lazy(() => import("./machines/MachinesHub").then((m) => ({ default: m.MachinesHub })));
@@ -477,7 +477,8 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       } else {
         const p = positionsRef.current[id];
         if (!p) return;
-        const s = sizesRef.current[id] ?? defaultTileSize(id);
+        const kind = tilesRef.current.find((t) => t.id === id)?.kind;
+        const s = sizesRef.current[id] ?? (kind ? defaultSizeForKind(kind) : defaultTileSize(id));
         cx = p.x + s.width / 2;
         cy = p.y + s.height / 2;
         w = s.width;
@@ -751,21 +752,21 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   });
   // Tiles the control plane opens: announced before they reach the layout (the prompt to start
   // each with, and whether to bring it forward), then laid out as they arrive.
-  const arrivals = useRef(new Map<string, boolean>());
+  const arrivals = useRef(new Map<string, { background: boolean; near?: string }>());
   useEffect(() => {
-    const off = window.hive.onHcpSpawned(({ tileId, repo, prompt, background }) => {
+    const off = window.hive.onHcpSpawned(({ tileId, repo, prompt, background, near }) => {
       if (repo !== persistKey) return;
       if (prompt) queueWork(tileId, prompt);
       if (background) markBackgroundTile(tileId);
-      arrivals.current.set(tileId, background);
+      arrivals.current.set(tileId, { background, near });
     });
     return () => { off(); arrivals.current.clear(); };
   }, [persistKey]);
   useEffect(() => {
-    for (const [id, background] of arrivals.current) {
+    for (const [id, at] of arrivals.current) {
       if (!tiles.some((t) => t.id === id)) continue;
       arrivals.current.delete(id);
-      placeArrived(id, { background });
+      placeArrived(id, at);
     }
   }, [tiles, placeArrived]);
   // A session already running on a machine (the frame's machine chip) opens as a terminal in that frame.
@@ -1137,7 +1138,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       if (!def) return false;
       const id = spawnTile(AGENT_TILE_KIND, frameId, { agent: { id: def.id, cmd: def.bin, label: def.label }, ...(opts?.prompt ? { work: opts.prompt } : {}), ...(opts?.resume ? { resume: opts.resume } : {}) });
       if (id && opts?.name) renameTile(id, opts.name);
-      return true;
+      return !!id;
     },
     renameTile,
     openFolder: (frameId) => void bindWorkspace(frameId),

@@ -6,6 +6,7 @@
  * refs + setters as context; the handlers read/update them exactly as before.
  */
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { toast } from "sonner";
 import { frameColorFor } from "./frame-color";
 import { reserveTileSlot, FRAME_ROW_MAX, FRAME_GAP, type LayoutRect } from "./frame-layout";
 import { defaultSizeForKind, defaultTileSize, FRAME_PAD, FRAME_HEADER } from "./canvas-sizing";
@@ -106,7 +107,7 @@ export function useSpawn(ctx: SpawnCtx) {
   const pendingSlots = useRef(new Map<string, Map<string, LayoutRect>>());
   useEffect(() => { pendingSlots.current.clear(); }, [repoPath]);
 
-  const placeInFrame = useCallback((id: string, frame: FrameState, opts?: { background?: boolean; kind?: TileKind }) => {
+  const placeInFrame = useCallback((id: string, frame: FrameState, opts?: { background?: boolean; kind?: TileKind; near?: string }) => {
     // CRITICAL: these MUST match the auto-fit derivation in `tileBox`
     // (frame.x = minTileX − FRAME_PAD, frame.y = minTileY − FRAME_HEADER). If
     // they diverge, the auto-fit effect recomputes the frame's box a few px off
@@ -156,7 +157,7 @@ export function useSpawn(ctx: SpawnCtx) {
       members,
       pending,
       { w: me.width, h: me.height },
-      { padX, padTop, gap, maxRowWidth: FRAME_ROW_MAX },
+      { padX, padTop, gap, maxRowWidth: FRAME_ROW_MAX, near: members.find((m) => m.id === opts?.near) },
     );
     const placeX = slot.x;
     const placeY = slot.y;
@@ -400,10 +401,13 @@ export function useSpawn(ctx: SpawnCtx) {
   // A tile another writer opened (the control plane): lay it out in its frame, or, in a
   // workspace with none, in the one a spawn here would make, and bring it forward unless it is a
   // background worker.
-  const placeArrived = useCallback((id: string, opts: { background: boolean }) => {
+  // A background worker does not take the view, so a quiet note says where it went; one per
+  // frame, so a fan-out of workers is one note.
+  const placeArrived = useCallback((id: string, opts: { background: boolean; near?: string }) => {
     const frame = framesRef.current.find((f) => f.id === frameOfRef.current[id]) ?? ensureFrame();
     placeInFrame(id, frame, opts);
-  }, [ensureFrame, placeInFrame]);
+    if (opts.background) toast(`A worker started in ${frame.title || "this workspace"}`, { id: `worker-${frame.id}`, action: { label: "Show", onClick: () => focusTile(id) } });
+  }, [ensureFrame, placeInFrame, focusTile]);
 
   return { placeInFrame, ensureFrame, spawnTile, spawnInto, spawnDefaultAgent, spawnAgent, spawnVis, frameOpen, openPlanReview, placeArrived };
 }

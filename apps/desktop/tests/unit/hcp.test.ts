@@ -262,9 +262,10 @@ test("dispatch tile.spawn_agent writes the tile in main: beside its caller, else
   const worker = await spawn({ callerTile: "hm:tile-lead", prompt: "Review the auth module. Then fix it.", report: false });
   assert.deepEqual(tileOf(worker), { id: worker, kind: "claude", label: "claude #2", cmd: "claude", args: ["--dangerously-skip-permissions", "--model", "opus"], task: "Review the auth module" });
   assert.equal(frameOf(worker), "f1", "beside the agent that spawned it");
-  assert.deepEqual(ws.announced.at(-1), { tileId: worker, repo: REPO, prompt: "Review the auth module. Then fix it.", background: true });
+  assert.deepEqual(ws.announced.at(-1), { tileId: worker, repo: REPO, prompt: "Review the auth module. Then fix it.", background: true, near: "tile-lead" });
   assert.equal(frameOf(await spawn({})), "f2", "a caller in no tile: where the user is");
   assert.equal(frameOf(await spawn({ callerTile: "hm:tile-lead", frame: "NOTES" })), "f2", "a frame named any way spawn takes");
+  assert.equal(ws.announced.at(-1)?.near, undefined, "laid out beside its caller only in the caller's frame");
   await assert.rejects(spawn({ frame: "nothing" }), (e: unknown) => e instanceof HcpError && e.code === "NOT_FOUND");
   assert.equal(ws.workspaces.getCore(REPO)!.tiles.length, 4, "a refused spawn opens nothing");
   assert.deepEqual(heardFirst, [true, true, true], "the windows hear of each tile before it is written");

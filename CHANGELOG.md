@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Changed: a new tile takes the first free spot in its workspace instead of the far end of the last row; a worker an agent starts lands beside that agent, and one started in the background shows a short note saying where it went.
+
 - Fixed: rejoining an open shared workspace replaces its old connection and role; repeated Join submissions for the same invite ask the host once.
 
 - Docs: explain sharing over a Tailscale-hosted network and mark the built-in Hosted network unavailable until its server names resolve.

@@ -14,6 +14,7 @@ import { HcpError, type HcpCall } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
 import { mintId, toPtyId as ptyId, toBareId as bareOf } from "@hivemind/workspace-api/tile-id";
+import type { TileOpened } from "@hivemind/workspace-api/agents";
 import { labelOf as labelIn } from "./names.js";
 import { agentById, agentForCmd, agentLaunch, agentOption, cleanName, isSessionId, nextOrdinal, spawnableAgents, workerAgents, type AgentProviderDef, type SpawnOptions } from "@hivemind/agents";
 import { canListSessions, listSessions } from "@hivemind/agents/node";
@@ -180,7 +181,7 @@ export interface MethodDeps {
   launchOptions: (agentId: string) => SpawnOptions;
   /** Tell the windows about a tile the control plane is opening, before it reaches the layout:
    *  the prompt to start it with, and whether to bring it forward. */
-  announceSpawn: (spawn: { tileId: string; repo: string; prompt?: string; background: boolean }) => void;
+  announceSpawn: (spawn: TileOpened) => void;
   /** Every session's status, as its host reports it. */
   status: Pick<StatusStore, "get">;
   /** End the session a tile runs (by its pty id), as its window's kill does. */
@@ -430,15 +431,16 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const ws = at.repo === undefined ? workspaceFor(callerTile) : core && { repo: at.repo, core, frame: null };
     if (!ws) throw new HcpError("NOT_FOUND", "no workspace is open: open one in the app first");
     let frame: FrameRecord | undefined;
+    const caller = typeof callerTile === "string" && callerTile ? bareOf(callerTile) : undefined;
     if (named != null && named !== "") {
       frame = frameFor(ws.core.frames, String(named));
       if (!frame) throw new HcpError("NOT_FOUND", `no frame answers to "${String(named)}"`);
     } else {
-      const caller = typeof callerTile === "string" && callerTile ? ws.core.frameOf?.[bareOf(callerTile)] : undefined;
-      frame = defaultFrame(ws.core.frames, { caller, selected: ws.frame });
+      frame = defaultFrame(ws.core.frames, { caller: caller && ws.core.frameOf?.[caller], selected: ws.frame });
     }
     const tile = make(ws.core);
-    deps.announceSpawn({ tileId: tile.id, repo: ws.repo, prompt: at.prompt, background: at.background });
+    const near = caller && frame && ws.core.frameOf?.[caller] === frame.id ? caller : undefined;
+    deps.announceSpawn({ tileId: tile.id, repo: ws.repo, prompt: at.prompt, background: at.background, ...(near ? { near } : {}) });
     deps.workspaces.addTile(ws.repo, tile, { frame: frame?.id, name: at.name }, CONTROL);
     return tile.id;
   };

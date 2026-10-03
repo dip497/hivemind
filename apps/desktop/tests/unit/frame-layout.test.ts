@@ -92,6 +92,28 @@ test("second tile extends the row to the right when it fits", () => {
   assert.equal(slot.y, 248, "top-aligned with the row");
 });
 
+test("a dragged tile far across the frame does not push a new spawn away from the open first slot", () => {
+  const slot = nextSlotInFrame({ x: 100, y: 200 }, [rect("moved", 5000, 248, 1200, 800)], { w: 1100, h: 740 }, PACK);
+  assert.deepEqual(slot, { x: 124, y: 248 });
+});
+
+test("a new tile fills the first free gap in a row before wrapping", () => {
+  const members = [rect("first", 124, 248, 1100, 740), rect("moved", 2600, 248, 1100, 740)];
+  const slot = nextSlotInFrame({ x: 100, y: 200 }, members, { w: 1100, h: 740 }, PACK);
+  assert.deepEqual(slot, { x: 124 + 1100 + PACK.gap, y: 248 });
+});
+
+test("a tile opened by another lands right of it, else below it, else in the first free slot", () => {
+  const lead = rect("lead", 2600, 248, 1100, 740);
+  const tile = { w: 1100, h: 740 };
+  const origin = { x: 100, y: 200 };
+  assert.deepEqual(nextSlotInFrame(origin, [lead], tile, { ...PACK, near: lead }), { x: 2600 + 1100 + 24, y: 248 });
+  const right = rect("right", 3724, 248, 1100, 740);
+  assert.deepEqual(nextSlotInFrame(origin, [lead, right], tile, { ...PACK, near: lead }), { x: 2600, y: 248 + 740 + 24 });
+  const below = rect("below", 2600, 1012, 1100, 740);
+  assert.deepEqual(nextSlotInFrame(origin, [lead, right, below], tile, { ...PACK, near: lead }), { x: 124, y: 248 });
+});
+
 test("tile wraps to a new row when the row would exceed maxRowWidth", () => {
   const origin = { x: 100, y: 200 };
   // Two big tiles already fill the row (124..124+1480+24+1480 ≈ 3108); a third
