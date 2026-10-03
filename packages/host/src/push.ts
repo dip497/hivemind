@@ -156,7 +156,8 @@ export class PushNotices {
   private readonly unplaced = new Map<string, { t: Notice["t"]; change: WaitingStatus }>();
 
   constructor(private readonly o: PushOptions) {
-    o.changes(() => this.placed());
+    const pushNotices = () => this.placed();
+    o.changes(pushNotices);
   }
 
   changed(change: WaitingStatus): void {

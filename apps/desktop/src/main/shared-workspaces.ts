@@ -77,6 +77,8 @@ interface Open {
 const open = new Map<string, Open>();
 /** The next dial after `tries` failed ones: 0.5 s, 1 s, 2 s … then every 15 s. */
 const backoff = (tries: number): number => Math.min(15_000, 500 * 2 ** tries);
+/** How long a connected host may say nothing on `sync` before it is logged, once per silence. */
+const QUIET_MS = 60_000;
 
 /** The tile an event is about, by its first word: the tile, its session (`hm:<tile>`), or what
  *  names it (`{tileId}`). */
@@ -106,9 +108,12 @@ export async function openShared(workspace: string, access: Access, reach: Reach
     entry.status = { state, access: given };
     reach.told(workspace, entry.status);
   };
+  const log = (m: string): void => console.warn(`[shared] ${workspace}: ${m}`);
   const again = (state: SharedState): void => {
     set(state);
-    entry.retry = setTimeout(() => void connect(), backoff(entry.tries++));
+    const wait = backoff(entry.tries++);
+    log(`${state}, dialling again in ${wait / 1000}s`);
+    entry.retry = setTimeout(() => void connect(), wait);
   };
   const connect = async (): Promise<void> => {
     entry.retry = null;
@@ -121,6 +126,19 @@ export async function openShared(workspace: string, access: Access, reach: Reach
     }
     if (open.get(workspace) !== entry) return link.close("left");
     entry.link = link;
+    // A host that goes quiet while connected is logged once, and again when it speaks.
+    let heard = Date.now();
+    let quiet = false;
+    const offHeard = link.on("sync", () => {
+      if (quiet) log(`an update from the host again after ${Math.round((Date.now() - heard) / 1000)}s`);
+      heard = Date.now();
+      quiet = false;
+    });
+    const watch = setInterval(() => {
+      if (quiet || entry.status.state !== "connected" || Date.now() - heard < QUIET_MS) return;
+      quiet = true;
+      log(`no update from the host for ${QUIET_MS / 1000}s while connected`);
+    }, 15_000);
     entry.api = peerTransport(streamOf(link, "api"));
     // A tile in a frame of this person's on this machine runs here, whoever put it there: what is
     // said of it (a task for it, its keyboard, its size) is this machine's, never its host's (M4).
@@ -137,6 +155,7 @@ export async function openShared(workspace: string, access: Access, reach: Reach
       changes: onWorkspaceChange,
       onWelcome: (given) => {
         entry.tries = 0;
+        log(`connected (${given})`);
         set("connected", given);
         // Welcomed as the owner's: the list is kept in step with the host's (M3).
         stopList();
@@ -161,6 +180,9 @@ export async function openShared(workspace: string, access: Access, reach: Reach
       onFailed: (why) => console.warn(`[shared] ${workspace}: ${why}`),
     });
     void link.closed.then(async (why) => {
+      log(`disconnected: ${why || "no reason"}`);
+      clearInterval(watch);
+      offHeard();
       stop();
       stopList();
       stopMachine();

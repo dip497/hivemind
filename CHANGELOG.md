@@ -11,6 +11,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - New: guests open in the host's chosen workspace view, including host-served community views, and can follow the host's live canvas camera.
 
+- Fixed: one failing workspace listener no longer stops a shared workspace's guests from getting updates; connections and a quiet host are logged.
 - Fixed: rejoining an open shared workspace replaces its old connection and role; repeated Join submissions for the same invite ask the host once.
 
 - New: opt into nightly builds from main with `install.sh --channel nightly` or `install.ps1 -Channel nightly`; upgrades and the app's update check stay on the installed channel, while stable remains the default. Roll back with `--version <tag>` / `-Version <tag>`, which installs exactly that build, older ones too; `--channel stable` steps back from a nightly. The 14 newest nightlies are kept.
