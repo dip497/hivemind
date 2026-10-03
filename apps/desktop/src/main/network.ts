@@ -506,6 +506,38 @@ export interface NetworkSources {
   plans: () => PlanReview[];
 }
 
+// The same invite can be submitted from two windows, or after the join dialog is reopened
+// while its first request is still waiting. Both callers get the one answer from the host.
+const joining = new Map<string, Promise<JoinReply>>();
+/** Ask the host a link names to let this person in: the Join dialog, and `hive join`. */
+export async function joinLink(text: unknown): Promise<JoinReply> {
+  const link = typeof text === "string" ? parseJoinLink(text) : null;
+  if (!link) throw new Error("join: that is not an invite link");
+  const key = `${link.host}:${link.workspace}:${link.secret}`;
+  const pending = joining.get(key);
+  if (pending) return pending;
+  const attempt = (async (): Promise<JoinReply> => {
+    const reply = await join(link, {
+      net: await network(), profiles: networkProfiles(), certificate: machineIdentity().certificate,
+      profile: await shownProfile(), joined: joinedList(),
+    });
+    if (reply?.ok && apiServer) {
+      const server = apiServer;
+      // A window may still show this workspace. Replace its old link so the new grant and
+      // invite address take effect even when opening the same hive:// path changes no query key.
+      if (sharedStatus(link.workspace)) {
+        leaveShared(link.workspace);
+        void openJoined(link.workspace, (event) => server.relay(event)).catch((e: unknown) =>
+          console.warn(`[network] could not reopen ${link.workspace.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`));
+      }
+    }
+    return reply;
+  })();
+  joining.set(key, attempt);
+  try { return await attempt; }
+  finally { if (joining.get(key) === attempt) joining.delete(key); }
+}
+
 export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, statuses, onStatus, plans }: NetworkSources): void {
   apiServer = server;
   daemonHere = daemon;
@@ -599,36 +631,8 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     return link && { workspace: link.names.workspace, host: link.names.host };
   });
 
-  // The same invite can be submitted from two windows, or after the join dialog is reopened
-  // while its first request is still waiting. Both callers get the one answer from the host.
-  const joining = new Map<string, Promise<JoinReply>>();
   // Ask the host a link names to let this person in.
-  handleEffect("net:join", () => ({}), async (_e, text: unknown): Promise<JoinReply> => {
-    const link = typeof text === "string" ? parseJoinLink(text) : null;
-    if (!link) throw new Error("join: that is not an invite link");
-    const key = `${link.host}:${link.workspace}:${link.secret}`;
-    const pending = joining.get(key);
-    if (pending) return pending;
-    const attempt = (async (): Promise<JoinReply> => {
-      const reply = await join(link, {
-        net: await network(), profiles: networkProfiles(), certificate: machineIdentity().certificate,
-        profile: await shownProfile(), joined: joinedList(),
-      });
-      if (reply?.ok) {
-        // A window may still show this workspace. Replace its old link so the new grant and
-        // invite address take effect even when opening the same hive:// path changes no query key.
-        if (sharedStatus(link.workspace)) {
-          leaveShared(link.workspace);
-          void openJoined(link.workspace, (event) => server.relay(event)).catch((e: unknown) =>
-            console.warn(`[network] could not reopen ${link.workspace.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`));
-        }
-      }
-      return reply;
-    })();
-    joining.set(key, attempt);
-    try { return await attempt; }
-    finally { if (joining.get(key) === attempt) joining.delete(key); }
-  });
+  handleEffect("net:join", () => ({}), (_e, text: unknown) => joinLink(text));
 
   // The workspaces this person joined elsewhere.
   handle("net:joined", () => joinedList().list());

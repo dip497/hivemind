@@ -76,7 +76,7 @@ import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, onSe
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
-import { dialDevice, installNetworkIpc, isYourDevice, knownMachines, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
+import { dialDevice, installNetworkIpc, isYourDevice, joinLink, knownMachines, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
 import { elsewhere, mayWriteShared, onceStarted, placedRun, refusedShared, startedByOthers, wroteShared } from "./shared-workspaces.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
@@ -1029,6 +1029,12 @@ const control: ControlPlane = new ControlPlane({
     endSession: (tileId) => terminals.end(tileId),
     sessionHeld: (id) => hasSession(id) || hasRemotePty(id),
     intents: hostIntents(),
+    workspaceApi: async (method, params, actor) => {
+      const answer = await workspaceServer.answer(method, params, { actor, send: () => {}, closed: new AbortController().signal });
+      if ("error" in answer) throw new Error(answer.error.message);
+      return answer.result;
+    },
+    join: joinLink,
   }),
 });
 // View protocol 1.3: output levels for watched tiles (a window asks with terminal.watchActivity).
