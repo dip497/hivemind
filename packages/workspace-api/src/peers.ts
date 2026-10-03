@@ -171,6 +171,11 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     if (event.event === "file.changed" || event.event === "presence.changed" || event.event === "people.asked" || event.event === "people.answered") {
       return event.params[0] === peer.repo ? { event: event.event, params: [url, ...event.params.slice(1)] } : null;
     }
+    // A peer knows the workspace by its id, not the host's folder.
+    if (event.event === "tile.opened") {
+      const opened = event.params[0] as { repo?: unknown } | undefined;
+      return opened?.repo === peer.repo && tilesOf(event)!.every((t) => peer.holds(t)) ? { event: event.event, params: [{ ...opened, repo: url }] } : null;
+    }
     if (event.event === "terminal.activity") {
       const levels = Object.fromEntries(Object.entries((event.params[0] ?? {}) as Record<string, unknown>).filter(([tile]) => peer.holds(tile)));
       return { event: event.event, params: [levels] };

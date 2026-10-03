@@ -282,14 +282,15 @@ test("a guest hears a tile opened in its workspace, and not one opened in anothe
   const mine = connect("view");
   const other = connect("view", undefined, "/work/other");
   const heard = { mine: [] as string[], other: [] as string[] };
-  mine.client.on("tile.opened", (t) => heard.mine.push(t.tileId));
+  mine.client.on("tile.opened", (t) => heard.mine.push(`${t.tileId} ${t.repo}`));
   other.client.on("tile.opened", (t) => heard.other.push(t.tileId));
   await mine.client.call("file.read", workspaceUrl(W), "a.ts"); // connected
   await other.client.call("file.read", workspaceUrl(W), "a.ts");
   mine.server.publish("tile.opened", { tileId: "in-1", repo: REPO, background: false });
   other.server.publish("tile.opened", { tileId: "out-1", repo: "/work/other", background: false });
   await Bun.sleep(10);
-  expect(heard).toEqual({ mine: ["in-1"], other: [] });
+  // Named by the workspace's id, never the host's folder.
+  expect(heard).toEqual({ mine: [`in-1 ${workspaceUrl(W)}`], other: [] });
 });
 
 test("a guest hears a link removed from its workspace's tile, and not one removed from another's", async () => {
