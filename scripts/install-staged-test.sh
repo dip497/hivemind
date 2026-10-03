@@ -44,12 +44,16 @@ while [ $# -gt 0 ]; do
 done
 want=$(cat "$TMP_LATEST")
 echo "$url" >> "$TMP_URLS"
+# An asset is the build of the release it is downloaded from.
+case "$url" in */releases/download/*) want=$(printf '%s' "$url" | sed -E 's#.*/releases/download/([^/]+)/.*#\1#');; esac
 case "$url" in
   # The redirect the installer reads first: no API, no hourly limit. `-w %{url_effective}`
   # asks curl for the URL it ended on.
   */releases/latest)
     [ "$(cat "$TMP_NO_REDIRECT" 2>/dev/null || echo 0)" = 1 ] && exit 22
     printf 'https://github.com/dip497/hivemind/releases/tag/%s' "$want";;
+  *'/releases?per_page='*)
+    printf '[{"tag_name":"v9.9.13","prerelease":false},{"tag_name":"%s","prerelease":true}]\n' "$want";;
   *api.github.com*)
     if [ "$(cat "$TMP_API_403" 2>/dev/null || echo 0)" = 1 ]; then printf '\n403'; exit 22; fi
     printf '{"tag_name": "%s"}\n' "$want";;
@@ -78,7 +82,7 @@ export TMP_LATEST="$TMP/latest" TMP_RUNNING="$TMP/running" TMP_URLS="$TMP/urls" 
 echo v9.9.9 > "$TMP_LATEST"
 echo 0 > "$TMP_RUNNING"
 
-run_installer() { bash "$REPO_ROOT/install.sh" 2>&1; }
+run_installer() { bash "$REPO_ROOT/install.sh" "$@" 2>&1; }
 
 # ── 1. a first install, with nothing running ──────────────────────────────
 run_installer > "$TMP/out1"
@@ -143,5 +147,25 @@ check "the rest of it is installed" "v9.9.13" "$(stamp .installed-version)"
 check "it says hive-net is not in it" "yes" "$(grep -qi "hive-net is not in v9.9.13" "$TMP/out7" && echo yes || echo no)"
 check "the hive-net there before stays" "hive-net v9.9.12" "$("$HIVEMIND_BIN_DIR/hive-net" 2>&1)"
 echo 0 > "$TMP_NO_NET"
+
+# A selected nightly uses the newest pre-release and keeps that channel on upgrade.
+echo nightly-20261003-123 > "$TMP_LATEST"
+: > "$TMP_URLS"
+run_installer --channel nightly > "$TMP/out8"
+check "nightly tag installed" "nightly-20261003-123" "$(stamp .installed-version)"
+check "nightly uses its versionless app asset" "yes" "$(grep -q 'hivemind-linux-x86_64.AppImage' "$TMP_URLS" && echo yes || echo no)"
+echo nightly-20261004-124 > "$TMP_LATEST"
+run_installer > "$TMP/out9"
+check "upgrade stays on nightly" "nightly-20261004-124" "$(stamp .installed-version)"
+check "nightly asks the releases list" "yes" "$(grep -q 'releases?per_page=30' "$TMP_URLS" && echo yes || echo no)"
+echo v9.9.14 > "$TMP_LATEST"
+run_installer --channel stable > "$TMP/out10"
+check "a newer nightly steps back to stable" "v9.9.14" "$(stamp .installed-version)"
+check "stepping back is not 'nothing to do'" "no" "$(grep -q 'nothing to do' "$TMP/out10" && echo yes || echo no)"
+
+# Rollback: --version installs exactly that build, an older one too.
+run_installer --version v9.9.12 > "$TMP/out11"
+check "--version rolls back to an older build" "v9.9.12" "$(stamp .installed-version)"
+check "the app rolls back with it" "yes" "$(grep -q "AppRun v9.9.12" "$APP/hivemind-extracted/AppRun" && echo yes || echo no)"
 
 if [ "$fail" = 0 ]; then echo "staged upgrade: all ok"; else echo "staged upgrade: FAILED"; exit 1; fi

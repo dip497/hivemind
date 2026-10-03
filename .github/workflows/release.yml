@@ -28,9 +28,27 @@ on:
         required: false
         default: "false"
         type: string
+  workflow_call:
+    inputs:
+      channel:
+        type: string
+        required: true
+      source_ref:
+        type: string
+        required: true
+      tag:
+        type: string
+        required: true
+      publish:
+        type: string
+        required: true
 
 permissions:
   contents: write  # needed to create releases + upload assets
+
+env:
+  electron_config_cache: ${{ github.workspace }}/.ci-cache/electron
+  ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.ci-cache/electron-builder
 
 jobs:
   build-linux:
@@ -41,6 +59,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
 
       - name: Setup Node
         uses: actions/setup-node@v7
@@ -53,6 +73,16 @@ jobs:
         with:
           # version pinned via `packageManager` in package.json (avoid dupes)
           run_install: false
+          cache: true
+
+      - name: Cache Electron downloads and builder tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.electron_config_cache }}
+            ${{ env.ELECTRON_BUILDER_CACHE }}
+          key: electron-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-tools-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -161,6 +191,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
 
       - name: Setup Node
         uses: actions/setup-node@v7
@@ -171,6 +203,7 @@ jobs:
         uses: pnpm/action-setup@v6.1.0
         with:
           run_install: false
+          cache: true
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -211,6 +244,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
 
       - name: Setup Node
         uses: actions/setup-node@v7
@@ -221,6 +256,16 @@ jobs:
         uses: pnpm/action-setup@v6.1.0
         with:
           run_install: false
+          cache: true
+
+      - name: Cache Electron downloads and builder tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.electron_config_cache }}
+            ${{ env.ELECTRON_BUILDER_CACHE }}
+          key: electron-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-tools-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -331,6 +376,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
 
       - name: Setup Node
         uses: actions/setup-node@v7
@@ -341,6 +388,16 @@ jobs:
         uses: pnpm/action-setup@v6.1.0
         with:
           run_install: false
+          cache: true
+
+      - name: Cache Electron downloads and builder tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.electron_config_cache }}
+            ${{ env.ELECTRON_BUILDER_CACHE }}
+          key: electron-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-tools-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -384,7 +441,7 @@ jobs:
         shell: pwsh
         run: |
           cd desktop-deploy
-          pnpm exec electron-builder --win zip --config.directories.output=dist-electron
+          pnpm exec electron-builder --win zip --config.directories.output=dist-electron --config.compression=store
         env:
           PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
 
@@ -653,6 +710,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
 
       - name: Rust (stable)
         run: |
@@ -662,6 +721,11 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
             echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           fi
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/hive-net
+          key: release-${{ matrix.asset }}
 
       - name: Build
         run: |
@@ -701,7 +765,7 @@ jobs:
     # A tag push always publishes. A MANUAL run only publishes when it explicitly
     # asks to — the default is build-only, so dispatching to smoke-test a build
     # can never cut an accidental release.
-    if: github.event_name != 'workflow_dispatch' || inputs.publish == 'true'
+    if: github.event_name == 'push' || inputs.publish == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Download all build artifacts
@@ -731,8 +795,8 @@ jobs:
       - name: Resolve release tag
         id: tag
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
           else
             echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
           fi
@@ -743,6 +807,9 @@ jobs:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: ${{ steps.tag.outputs.tag }}
           generate_release_notes: true
+          prerelease: ${{ inputs.channel == 'nightly' }}
+          make_latest: ${{ inputs.channel == 'nightly' && 'false' || 'legacy' }}
+          target_commitish: ${{ inputs.source_ref || github.sha }}
           # Windows is listed but its job stays continue-on-error: a Windows failure
           # publishes the release without those two names rather than blocking it.
           files: |

@@ -55,3 +55,22 @@ export function tagFromReleasesLatest(finalUrl: string): string | null {
   const m = /\/releases\/tag\/v?([0-9][^/?#]*)/.exec(finalUrl);
   return m?.[1] ?? null;
 }
+
+/** Nightly tags carry their UTC day and run id; the releases list may contain stable builds too. */
+export function newerNightlyTag(latest: string, installed: string | null): boolean {
+  const parts = (tag: string | null): RegExpExecArray | null => tag ? /^nightly-([0-9]{8})-([0-9]+)$/.exec(tag) : null;
+  const next = parts(latest);
+  if (!next) return false;
+  const old = parts(installed);
+  return !old || next[1]! > old[1]! || (next[1] === old[1] && BigInt(next[2]!) > BigInt(old[2]!));
+}
+
+export function latestNightlyTag(releases: unknown): string | null {
+  if (!Array.isArray(releases)) return null;
+  return releases.reduce<string | null>((latest, item: unknown) => {
+    if (!item || typeof item !== "object") return latest;
+    const release = item as { prerelease?: unknown; tag_name?: unknown };
+    const tag = release.tag_name;
+    return release.prerelease === true && typeof tag === "string" && newerNightlyTag(tag, latest) ? tag : latest;
+  }, null);
+}

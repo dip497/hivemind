@@ -58,7 +58,7 @@ import { watchRepo } from "./fs-watcher.js";
 import { registerAgentNotifications } from "./agent-notify.js";
 import { getNotificationSettings, setNotificationSettings } from "./notification-settings-store.js";
 import { normalizeNotificationSettings } from "../shared/notification-settings.js";
-import { tagFromReleasesLatest } from "../shared/update-progress.js";
+import { latestNightlyTag, newerNightlyTag, tagFromReleasesLatest } from "../shared/update-progress.js";
 import type { AppErrorEvent, MachineAddRequest } from "../shared/ipc.js";
 import { startPlanBridge, type PlanRequest } from "./plan-bridge.js";
 import { randomUUID } from "node:crypto";
@@ -646,11 +646,26 @@ function isNewerVersion(latest: string, current: string): boolean {
  *  installer records it apart from the installed version, and the launcher promotes it when
  *  it applies it (`install.sh`). Absent, unreadable or not newer: nothing is waiting. */
 function stagedVersion(current: string): string | null {
-  const dir = process.env.HIVEMIND_APP_DIR?.trim() || path.join(os.homedir(), ".hivemind-app");
+  const dir = installedAppDir();
   try {
-    const v = readFileSync(path.join(dir, ".staged-version"), "utf8").trim().replace(/^v/, "");
-    return v && isNewerVersion(v, current) ? v : null;
+    const v = readFileSync(path.join(dir, ".staged-version"), "utf8").trim();
+    const installed = installedReleaseTag();
+    if (v.startsWith("nightly-")) return newerNightlyTag(v, installed) ? v : null;
+    const numeric = v.replace(/^v/, "");
+    if (installed?.startsWith("nightly-")) return numeric || null;
+    return numeric && isNewerVersion(numeric, current) ? numeric : null;
   } catch { return null; }
+}
+
+function installedAppDir(): string {
+  return process.env.HIVEMIND_APP_DIR?.trim() || (process.platform === "win32"
+    ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"), "hivemind")
+    : path.join(os.homedir(), ".hivemind-app"));
+}
+
+function installedReleaseTag(): string | null {
+  try { return readFileSync(path.join(installedAppDir(), ".installed-version"), "utf8").trim() || null; }
+  catch { return null; }
 }
 
 handle("checkForUpdate", async () => {
@@ -671,6 +686,19 @@ handle("checkForUpdate", async () => {
         staged: t.staged && isNewerVersion(t.staged, current) ? t.staged : null,
       };
     } catch { /* not JSON: fall through to the real check */ }
+  }
+  const installed = installedReleaseTag();
+  if (installed?.startsWith("nightly-")) {
+    try {
+      const res = await net.fetch(`https://api.github.com/repos/dip497/hivemind/releases?per_page=30&nocache=${Date.now()}`, {
+        cache: "no-store",
+        headers: { Accept: "application/vnd.github+json", "User-Agent": "hivemind-desktop", "Cache-Control": "no-cache" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) return { current, latest: null, updateAvailable: false, ok: false, staged };
+      const latest = latestNightlyTag(await res.json());
+      return { current, latest, updateAvailable: !!latest && newerNightlyTag(latest, installed), ok: !!latest, staged };
+    } catch { return { current, latest: null, updateAvailable: false, ok: false, staged }; }
   }
   // `ok` distinguishes a COMPLETED check (whose result the renderer can trust
   // and cache) from a FAILED one (offline / timeout / 403 rate-limit). Without

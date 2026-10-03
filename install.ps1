@@ -9,6 +9,8 @@
 
     irm https://raw.githubusercontent.com/dip497/hivemind/main/install.ps1 | iex
 
+  NIGHTLY: pass -Channel nightly to install the newest pre-release built from main.
+
   WITH -Dev: clones the source repo and builds locally. Needs git, node >= 22,
   pnpm >= 12, bun >= 1.1.
 
@@ -29,12 +31,17 @@
   Build from source instead of downloading a release.
 
 .PARAMETER Version
-  Pin a release tag (e.g. v1.17.0). Default: latest.
+  Install exactly this release tag, an older one too (a rollback): e.g. v2026.10.0 or
+  nightly-20261003-123. Default: the newest of the channel.
+
+.PARAMETER Channel
+  stable or nightly. Default: stable on first install; upgrades keep the installed channel.
 #>
 [CmdletBinding()]
 param(
   [switch]$Dev,
   [string]$Version = $env:HIVEMIND_VERSION,
+  [string]$Channel = $env:HIVEMIND_CHANNEL,
   [string]$Repo = $(if ($env:HIVEMIND_REPO) { $env:HIVEMIND_REPO } else { "dip497/hivemind" })
 )
 
@@ -51,6 +58,11 @@ function Die  ($m) { Write-Host "x $m" -ForegroundColor Red; exit 1 }
 $AppDir = if ($env:HIVEMIND_APP_DIR) { $env:HIVEMIND_APP_DIR } else { Join-Path $env:LOCALAPPDATA "hivemind" }
 $BinDir = Join-Path $AppDir "bin"
 $VersionFile = Join-Path $AppDir ".installed-version"
+if (-not $Channel) {
+  $installed = if (Test-Path $VersionFile) { (Get-Content $VersionFile -Raw).Trim() } else { "" }
+  $Channel = if ($installed -match '^nightly-') { "nightly" } else { "stable" }
+}
+if ($Channel -notin @("stable", "nightly")) { Die "channel must be stable or nightly" }
 
 if ([Environment]::Is64BitOperatingSystem -eq $false) { Die "hivemind needs 64-bit Windows." }
 
@@ -164,25 +176,35 @@ function Install-Prebuilt {
 
   $tag = $Version
   if (-not $tag) {
-    Say "resolving latest release of $Repo"
-    # Where GitHub redirects releases/latest: not the api, so no 60-requests-an-hour limit
-    # shared with everyone behind this address.
-    try {
-      $r = Invoke-WebRequest "https://github.com/$Repo/releases/latest" -MaximumRedirection 5 -UseBasicParsing
-      if ($r.BaseResponse.ResponseUri) { $final = $r.BaseResponse.ResponseUri.AbsoluteUri } else { $final = $r.BaseResponse.RequestMessage.RequestUri.AbsoluteUri }
-      if ($final -match '/releases/tag/(v?[0-9][^/?#]*)') { $tag = $Matches[1] }
-    } catch { }
-    if (-not $tag) {
+    Say "resolving latest $Channel release of $Repo"
+    if ($Channel -eq "nightly") {
       try {
-        # A cache answers with the release before this one for its first minute (the api sends
-        # max-age=60), so ask for an answer nobody has stored.
-        $url = "https://api.github.com/repos/$Repo/releases/latest?nocache=" + [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-        $tag = (Invoke-RestMethod $url -Headers @{ "Cache-Control" = "no-cache" }).tag_name
-      } catch {
-        if ($_.Exception.Response.StatusCode.value__ -in 403,429) {
-          Die "GitHub is rate-limiting this address (60 api requests an hour, shared). Wait, or install a known version: -Version vX.Y.Z"
+        $url = "https://api.github.com/repos/$Repo/releases?per_page=30&nocache=" + [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        $nightly = Invoke-RestMethod $url -Headers @{ "Cache-Control" = "no-cache" } |
+          Where-Object { $_.prerelease -and $_.tag_name -match '^nightly-[0-9]{8}-[0-9]+$' } | Select-Object -First 1
+        if (-not $nightly) { Die "no nightly release found for $Repo" }
+        $tag = $nightly.tag_name
+      } catch { Die "could not resolve a nightly release of $Repo - check your network" }
+    } else {
+      # Where GitHub redirects releases/latest: not the api, so no 60-requests-an-hour limit
+      # shared with everyone behind this address.
+      try {
+        $r = Invoke-WebRequest "https://github.com/$Repo/releases/latest" -MaximumRedirection 5 -UseBasicParsing
+        if ($r.BaseResponse.ResponseUri) { $final = $r.BaseResponse.ResponseUri.AbsoluteUri } else { $final = $r.BaseResponse.RequestMessage.RequestUri.AbsoluteUri }
+        if ($final -match '/releases/tag/(v?[0-9][^/?#]*)') { $tag = $Matches[1] }
+      } catch { }
+      if (-not $tag) {
+        try {
+          # A cache answers with the release before this one for its first minute (the api sends
+          # max-age=60), so ask for an answer nobody has stored.
+          $url = "https://api.github.com/repos/$Repo/releases/latest?nocache=" + [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+          $tag = (Invoke-RestMethod $url -Headers @{ "Cache-Control" = "no-cache" }).tag_name
+        } catch {
+          if ($_.Exception.Response.StatusCode.value__ -in 403,429) {
+            Die "GitHub is rate-limiting this address (60 api requests an hour, shared). Wait, or install a known version: -Version vX.Y.Z"
+          }
+          Die "could not resolve the latest release of $Repo - check your network"
         }
-        Die "could not resolve the latest release of $Repo - check your network"
       }
     }
   }
@@ -207,7 +229,8 @@ function Install-Prebuilt {
   $bare = $tag.TrimStart("v")
   $cliUrl = "https://github.com/$Repo/releases/download/$tag/hive-windows-x64.exe"
   $netUrl = "https://github.com/$Repo/releases/download/$tag/hive-net-windows-x64.exe"
-  $appUrl = "https://github.com/$Repo/releases/download/$tag/hivemind-$bare-x64-win.zip"
+  $appAsset = if ($tag -match '^nightly-') { "hivemind-windows-x64.zip" } else { "hivemind-$bare-x64-win.zip" }
+  $appUrl = "https://github.com/$Repo/releases/download/$tag/$appAsset"
   $tmpCli = Join-Path $AppDir "hive.$PID.new"
   $tmpNet = Join-Path $AppDir "hive-net.$PID.new"
   $tmpApp = Join-Path $AppDir "app.$PID.zip"

@@ -11,9 +11,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - New: guests open in the host's chosen workspace view, including host-served community views, and can follow the host's live canvas camera.
 
-- Changed: a new tile takes the first free spot in its workspace instead of the far end of the last row; a worker an agent starts lands beside that agent, and one started in the background shows a short note saying where it went.
-
 - Fixed: rejoining an open shared workspace replaces its old connection and role; repeated Join submissions for the same invite ask the host once.
+
+- New: opt into nightly builds from main with `install.sh --channel nightly` or `install.ps1 -Channel nightly`; upgrades and the app's update check stay on the installed channel, while stable remains the default. Roll back with `--version <tag>` / `-Version <tag>`, which installs exactly that build, older ones too; `--channel stable` steps back from a nightly. The 14 newest nightlies are kept.
 
 - Docs: explain sharing over a Tailscale-hosted network and mark the built-in Hosted network unavailable until its server names resolve.
 - Fixed: script-entry community views on Android no longer clip their content and controls when the web view resolves a zero page height.
