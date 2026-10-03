@@ -120,7 +120,7 @@ function tilesOf(event: EventMessage): string[] | null {
     case "link.spawn":
       return [String((p as Record<string, unknown>)?.parent), String((p as Record<string, unknown>)?.child)];
     case "tile.opened":
-      return [String((p as Record<string, unknown>)?.id)];
+      return [String((p as Record<string, unknown>)?.tileId)];
     case "plan.review":
     case "plan.decided":
       return [String((p as Record<string, unknown>)?.tileId)];

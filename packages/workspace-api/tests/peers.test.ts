@@ -278,6 +278,20 @@ test("a peer hears only the events about its workspace, and is refused a tile ou
   expect(ran.map((r) => r.args[0])).toEqual(["in-1", REPO]);
 });
 
+test("a guest hears a tile opened in its workspace, and not one opened in another", async () => {
+  const mine = connect("view");
+  const other = connect("view", undefined, "/work/other");
+  const heard = { mine: [] as string[], other: [] as string[] };
+  mine.client.on("tile.opened", (t) => heard.mine.push(t.tileId));
+  other.client.on("tile.opened", (t) => heard.other.push(t.tileId));
+  await mine.client.call("file.read", workspaceUrl(W), "a.ts"); // connected
+  await other.client.call("file.read", workspaceUrl(W), "a.ts");
+  mine.server.publish("tile.opened", { tileId: "in-1", repo: REPO, background: false });
+  other.server.publish("tile.opened", { tileId: "out-1", repo: "/work/other", background: false });
+  await Bun.sleep(10);
+  expect(heard).toEqual({ mine: ["in-1"], other: [] });
+});
+
 test("a peer is answered the statuses and links of its workspace's own agents, never another's", async () => {
   const { client } = connect("view");
   expect(await client.call("status.all")).toEqual([{ tileId: "in-1", status: { state: "working", title: "in-1's work" } } as never]);
