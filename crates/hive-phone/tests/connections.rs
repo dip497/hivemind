@@ -167,3 +167,37 @@ async fn which_device_holds_a_workspace_is_the_first_to_say_so_asked_all_at_once
     // Not the time a device has to answer: a push handler has seconds.
     assert!(began.elapsed() < 2 * within, "{:?}", began.elapsed());
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn someone_asking_to_join_is_let_in_or_turned_away_on_the_device_that_asked_once() {
+    let desk = Desk::start(29).await;
+    let phone = paired_with(&tmp("let-in"), &desk);
+    let connections = Connections::new(phone, || {});
+    connections.foreground();
+    let connection = connections.holding(&desk.id, WORKSPACE).await.unwrap();
+    assert!(
+        hive_phone::workspace::let_in(&connection, WORKSPACE, 7, true)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !hive_phone::workspace::let_in(&connection, WORKSPACE, 8, false)
+            .await
+            .unwrap()
+    );
+    let told: Vec<Value> = desk
+        .told
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(_, m)| json!([m["method"], m["params"]]))
+        .collect();
+    let url = format!("hive://{WORKSPACE}");
+    assert_eq!(
+        told,
+        vec![
+            json!(["people.answer", [url, 7, true]]),
+            json!(["people.answer", [url, 8, false]])
+        ]
+    );
+}

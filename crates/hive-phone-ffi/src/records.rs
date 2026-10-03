@@ -37,6 +37,15 @@ pub struct AgentRef {
     pub tile: String,
 }
 
+/// Someone asking to join a workspace, where they ask: the device that hosts it, the workspace, and
+/// the question as that device numbers it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct JoinRef {
+    pub device: String,
+    pub workspace: String,
+    pub req: u64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum AgentState {
     Idle,

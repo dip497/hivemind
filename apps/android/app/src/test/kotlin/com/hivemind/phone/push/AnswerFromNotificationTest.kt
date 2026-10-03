@@ -12,6 +12,7 @@ import com.hivemind.phone.MINUTE
 import com.hivemind.phone.PhoneApp
 import com.hivemind.phone.core.AgentRef
 import com.hivemind.phone.core.Decision
+import com.hivemind.phone.core.JoinRef
 import com.hivemind.phone.core.Notice
 import com.hivemind.phone.core.WaitKind
 import kotlinx.coroutines.runBlocking
@@ -79,5 +80,34 @@ class AnswerFromNotificationTest {
         }
         assertTrue(shown.said, shown.said.startsWith("Not answered: ") && shown.said.length > "Not answered: ".length)
         assertEquals(listOf("Allow", "Deny"), shown.buttons)
+    }
+
+    private val asking = Asking.of(Notice.Join(JoinRef(DESK, "ws-1", 3uL), "Priya", "hivemind", "edit", 9uL))
+    private val asked: Notification get() = manager.getNotification(asking.tag, Notices.JOIN) ?: throw AssertionError("not shown")
+    private val joined = Notice.Join(asking.join, asking.who, asking.workspaceName, asking.role, asking.since.toULong())
+
+    @Test
+    fun `someone let in from the notification says so, and Allow and Deny go`() = runBlocking {
+        core.notices.show(joined)
+        core.notices.answer(asking, Decision.ALLOW) { true }
+
+        assertEquals("Allowed", asked.said)
+        assertEquals(emptyList<String>(), asked.buttons)
+    }
+
+    @Test
+    fun `Deny tapped on someone asking to join says so at once, then, over the real core, why it did not go, with Allow and Deny to try again`() {
+        core.notices.show(joined)
+        val deny = shadowOf(asked.actions.first { it.title == "Deny" }.actionIntent).savedIntent
+        AnswerReceiver().onReceive(app, deny)
+        assertEquals("Denying…", asked.said)
+
+        val until = System.nanoTime() + 30_000_000_000
+        while (asked.said == "Denying…" && System.nanoTime() < until) {
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(20)
+        }
+        assertTrue(asked.said, asked.said.startsWith("Not answered: ") && asked.said.length > "Not answered: ".length)
+        assertEquals(listOf("Allow", "Deny"), asked.buttons)
     }
 }

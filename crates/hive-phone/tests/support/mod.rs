@@ -397,6 +397,15 @@ async fn api(mut send: SendStream, mut recv: RecvStream, phone: &str, serving: &
             out.push(json!({ "id": message["id"], "error": {
                 "code": "FORBIDDEN", "message": "not yours to watch",
             } }));
+        } else if message["method"] == "people.answer" {
+            // The question it asked of the phone is the 7th; any other was answered already.
+            serving
+                .told
+                .lock()
+                .unwrap()
+                .push((Instant::now(), message.clone()));
+            let answered = message["params"][1] == 7;
+            out.push(json!({ "id": message["id"], "result": { "answered": answered } }));
         } else if let Some(id) = message.get("id") {
             let mut pid = 1;
             if message["method"] == "terminal.open" {

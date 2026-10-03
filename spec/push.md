@@ -94,6 +94,7 @@ gave nothing), each its first 200 characters; `role` the role their link gives; 
 as `people.answer` names it; `since` when it was asked. It is sent as a notice is, with `Urgency:
 high`. The phone may offer Allow and Deny on it and answer with `people.answer`, on the workspace
 `workspace` (`workspace-api.md`, "Peers"); an answer after 170 s, or after another, does not count.
+A notice with no `req` is not shown.
 
 ## Sending
 

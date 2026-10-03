@@ -38,7 +38,8 @@ private sealed interface Answered {
  * What the person is told while the app is away (P6, spec/push.md), as notifications: a channel for
  * each kind; one notification for each wait, its workspace, tile and `since` its tag, so that two
  * devices telling the same thing show it once; Allow and Deny on a permission its device can decide
- * from the notification; and a wait cleared once its device says it waits no more.
+ * from the notification; and a wait cleared once its device says it waits no more. Someone asking to
+ * join a workspace is told with Allow and Deny, which let them in or turn them away.
  */
 class Notices(private val context: Context) {
     private val manager = NotificationManagerCompat.from(context)
@@ -71,6 +72,7 @@ class Notices(private val context: Context) {
                 ended(FINISHED, notice.agent, notice.agentName, notice.workspaceName, notice.since, R.string.notify_finished)
             is Notice.Failed ->
                 ended(FAILED, notice.agent, notice.agentName, notice.workspaceName, notice.since, R.string.notify_failed)
+            is Notice.Join -> asks(Asking.of(notice), said = null, actions = true)
             is Notice.Back -> post(
                 BACK,
                 "back/${notice.device}",
@@ -87,34 +89,38 @@ class Notices(private val context: Context) {
     }
 
     /** Allow or Deny tapped: said at once, the actions gone, while the answer goes. */
-    fun answering(wait: Wait, decision: Decision) = waits(
-        wait,
-        context.getString(if (decision == Decision.ALLOW) R.string.notify_allowing else R.string.notify_denying),
-        actions = false,
-    )
+    fun answering(wait: Wait, decision: Decision) = waits(wait, going(decision), actions = false)
+
+    fun answering(asking: Asking, decision: Decision) = asks(asking, going(decision), actions = false)
 
     /**
      * Answers [wait] with [decision] by [answer], the core's call (spec/needs.md "Answering"), and
      * says on its notification how that went.
      */
-    suspend fun answer(wait: Wait, decision: Decision, answer: suspend () -> Boolean) = answered(
-        wait,
-        try {
-            if (answer()) Answered.Landed(decision) else Answered.Already
-        } catch (e: PhoneException) {
-            Answered.NotAnswered(e.message.orEmpty())
-        },
-    )
+    suspend fun answer(wait: Wait, decision: Decision, answer: suspend () -> Boolean) =
+        answered(answered(decision, answer), retry = wait.decide) { said, actions -> waits(wait, said, actions) }
 
-    /** How answering from the notification went; Allow and Deny again when it did not go, to try again. */
-    private fun answered(wait: Wait, answered: Answered) = when (answered) {
-        is Answered.Landed -> waits(
-            wait,
+    /** Lets in or turns away [asking] by [answer], the core's `let_in`, and says on its notification how that went. */
+    suspend fun answer(asking: Asking, decision: Decision, answer: suspend () -> Boolean) =
+        answered(answered(decision, answer), retry = true) { said, actions -> asks(asking, said, actions) }
+
+    private suspend fun answered(decision: Decision, answer: suspend () -> Boolean): Answered = try {
+        if (answer()) Answered.Landed(decision) else Answered.Already
+    } catch (e: PhoneException) {
+        Answered.NotAnswered(e.message.orEmpty())
+    }
+
+    private fun going(decision: Decision) =
+        context.getString(if (decision == Decision.ALLOW) R.string.notify_allowing else R.string.notify_denying)
+
+    /** How answering from the notification went, shown by [show]; Allow and Deny again when it did not go and may be tried again. */
+    private fun answered(answered: Answered, retry: Boolean, show: (String, Boolean) -> Unit) = when (answered) {
+        is Answered.Landed -> show(
             context.getString(if (answered.decision == Decision.ALLOW) R.string.notify_allowed else R.string.notify_denied),
-            actions = false,
+            false,
         )
-        Answered.Already -> waits(wait, context.getString(R.string.notify_already), actions = false)
-        is Answered.NotAnswered -> waits(wait, context.getString(R.string.notify_not_answered, answered.why), actions = wait.decide)
+        Answered.Already -> show(context.getString(R.string.notify_already), false)
+        is Answered.NotAnswered -> show(context.getString(R.string.notify_not_answered, answered.why), retry)
     }
 
     /**
@@ -159,6 +165,47 @@ class Notices(private val context: Context) {
         }
         post(WAITS, wait.tag, builder.build())
     }
+
+    private fun asks(asking: Asking, said: String?, actions: Boolean) {
+        val builder = NotificationCompat.Builder(context, CHANNEL_NEEDS)
+            .setSmallIcon(R.drawable.ic_notify)
+            .setContentTitle(context.getString(R.string.notify_join, asking.who.ifEmpty { context.getString(R.string.notify_join_someone) }, asking.workspaceName))
+            .setContentText(said ?: context.getString(R.string.notify_join_role, role(asking.role)))
+            .setWhen(asking.since)
+            .setShowWhen(true)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(app())
+            .addExtras(asking.bundle())
+        if (actions) {
+            builder.addAction(0, context.getString(R.string.action_allow), letIn(asking, Decision.ALLOW))
+            builder.addAction(0, context.getString(R.string.action_deny), letIn(asking, Decision.DENY))
+        }
+        post(JOIN, asking.tag, builder.build())
+    }
+
+    private fun role(role: String) = context.getString(
+        when (role) {
+            "view" -> R.string.notify_role_view
+            "terminals" -> R.string.notify_role_terminals
+            else -> R.string.notify_role_edit
+        },
+    )
+
+    private fun letIn(asking: Asking, decision: Decision): PendingIntent = PendingIntent.getBroadcast(
+        context,
+        0,
+        Intent(context, AnswerReceiver::class.java)
+            .setData(
+                Uri.Builder().scheme("hivemind").authority("join")
+                    .appendPath(asking.join.device).appendPath(asking.join.workspace)
+                    .appendPath(asking.join.req.toString()).appendPath(decision.name)
+                    .build(),
+            )
+            .putExtras(asking.bundle())
+            .putExtra(AnswerReceiver.DECISION, decision.name),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
 
     private fun ended(id: Int, agent: AgentRef, agentName: String, workspaceName: String, since: ULong, said: Int) = post(
         id,
@@ -235,6 +282,9 @@ class Notices(private val context: Context) {
         const val FINISHED = 2
         const val FAILED = 3
         const val BACK = 4
+
+        // 5 is the notification of an answer going (AnswerWork).
+        const val JOIN = 6
 
         private const val TAG = "hivemind"
     }
