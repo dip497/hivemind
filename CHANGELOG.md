@@ -10,7 +10,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ## [Unreleased]
 
 - New: a workspace joined from another computer shows in its host's theme (preset, mode, accent, palette, glass, wallpaper), and its views too; your own fonts stay, a wallpaper from the host's files becomes a built-in one, and your workspaces keep your theme (workspace API 0.17: `appearance.get`, `appearance.changed`).
-- New: `hive share`, `hive people` and `hive join` work with the desktop app running, not only `hive host`.
+- New: `hive share`, `hive people` and `hive join` work with the desktop app running, not only `hive host`; a `hive join` there opens the workspace in the app.
 
 - New: guests open in the host's chosen workspace view, including host-served community views, and can follow the host's live canvas camera.
 

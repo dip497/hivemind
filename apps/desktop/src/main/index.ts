@@ -1034,7 +1034,12 @@ const control: ControlPlane = new ControlPlane({
       if ("error" in answer) throw new Error(answer.error.message);
       return answer.result;
     },
-    join: joinLink,
+    // `hive join`: in, the window the user is at opens the workspace, as the Join dialog's Open does.
+    join: async (link) => {
+      const reply = await joinLink(link);
+      if (reply.ok) userWindow()?.webContents.send("open-project", `hive://${reply.workspace}`);
+      return reply;
+    },
   }),
 });
 // View protocol 1.3: output levels for watched tiles (a window asks with terminal.watchActivity).
