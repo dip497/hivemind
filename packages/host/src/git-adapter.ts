@@ -13,6 +13,7 @@ import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
 import { isRemote } from "@hivemind/core/remote-uri";
 import { runRemoteGit, readRemoteFile, writeRemoteFile } from "./remote/git.js";
 import { DIFF_MAX_FILE_BYTES, OVERSIZE_SENTINEL } from "@hivemind/workspace-api/git";
+import { resolveRealInRepo } from "./repo-paths.js";
 import type {
   DiffPayload,
   DiffScope,
@@ -514,9 +515,12 @@ export async function gitFileContents(
   rev: "HEAD" | "INDEX" | "WORKING"
 ): Promise<string> {
   if (rev === "WORKING") {
+    if (isRemote(repoPath)) {
+      try { return await readRemoteFile(repoPath, file); } catch { return ""; }
+    }
+    // A bad path must reach the caller; missing working-tree files still read as empty.
+    const abs = await resolveRealInRepo(repoPath, file);
     try {
-      if (isRemote(repoPath)) return await readRemoteFile(repoPath, file);
-      const abs = path.join(repoPath, file);
       const { size } = await fs.stat(abs);
       if (size > DIFF_MAX_FILE_BYTES) return `${OVERSIZE_SENTINEL}${size}`;
       return await fs.readFile(abs, "utf8");

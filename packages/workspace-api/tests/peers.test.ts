@@ -78,13 +78,13 @@ function channel(): [TextChannel, TextChannel, (why: string) => void] {
   return [end(toA, toB), end(toB, toA), close];
 }
 
-function connect(access: Access, allows?: (method: string, params: unknown[]) => boolean) {
+function connect(access: Access, allows?: (method: string, params: unknown[]) => boolean, repo = REPO) {
   ran.length = 0;
   gone.length = 0;
   const server = new WorkspaceServer([domain], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
   const [host, guest, close] = channel();
   const actor = { kind: "peer", person: "p".repeat(64), device: "d".repeat(64), access } as const;
-  servePeer(server, host, { actor, workspace: W, repo: REPO, holds: (t) => t.startsWith("in-"), ...(allows ? { allows } : {}) });
+  servePeer(server, host, { actor, workspace: W, repo, holds: (t) => t.startsWith("in-"), ...(allows ? { allows } : {}) });
   const client = new WorkspaceClient(peerTransport(guest));
   return { server, client, close, actor, guest };
 }
@@ -136,9 +136,11 @@ test("a peer's calls run as the peer, with the workspace it names read as its re
   expect(ran).toEqual([]);
   // Starting what runs on the host is for those who drive agents; its cwd is read as a path here.
   expect(await code(editor.client.call("terminal.open", { tileId: "in-1", cwd: `${workspaceUrl(W)}/src` } as never))).toBe("FORBIDDEN");
-  const driver = connect("agents");
+  const repo = path.join(tmp, "repo");
+  fs.mkdirSync(path.join(repo, "src"), { recursive: true });
+  const driver = connect("agents", undefined, repo);
   await driver.client.call("terminal.open", { tileId: "in-1", cwd: `${workspaceUrl(W)}/src` } as never);
-  expect(ran).toEqual([{ what: "terminal.open", by: driver.actor, args: [{ tileId: "in-1", cwd: "/work/api/src" }] }]);
+  expect(ran).toEqual([{ what: "terminal.open", by: driver.actor, args: [{ tileId: "in-1", cwd: path.join(repo, "src") }] }]);
   // The owner's alone: not named for any role.
   expect(await code(driver.client.call("git.commit", workspaceUrl(W), "m"))).toBe("FORBIDDEN");
   // Answering what an agent of the workspace waits on, and sending one a message, is driving
@@ -151,6 +153,46 @@ test("a peer's calls run as the peer, with the workspace it names read as its re
   expect(await code(driver.client.call("agent.send", "out-1", "hi"))).toBe("FORBIDDEN");
   await driver.client.call("agent.send", "in-1", "hi");
   expect(ran).toEqual([{ what: "agent.answer", by: driver.actor, args: ["in-1"] }, { what: "agent.send", by: driver.actor, args: ["in-1"] }]);
+});
+
+test("an agent-role peer cannot open a terminal outside its workspace or on another workspace's tile", async () => {
+  const repo = path.join(tmp, "repo");
+  const elsewhere = path.join(tmp, "elsewhere");
+  fs.mkdirSync(repo);
+  fs.mkdirSync(elsewhere);
+  const alias = path.join(repo, "outside-link");
+  fs.symlinkSync(elsewhere, alias);
+  const driver = connect("agents", undefined, repo);
+  for (const [tileId, cwd] of [["in-1", elsewhere], ["in-1", alias], ["out-1", repo]] as const) {
+    expect(await code(driver.client.call("terminal.open", { tileId, cwd, cmd: "sh", cols: 80, rows: 24 }))).toBe("FORBIDDEN");
+  }
+  expect(ran).toEqual([]);
+});
+
+test("a peer may open a terminal under a URI-backed repo only on that machine and below that path", async () => {
+  for (const [repo, inside, otherMachine, traversal] of [
+    ["machine://machine-a/srv/repo", "machine://machine-a/srv/repo/sub", "machine://machine-b/srv/repo/sub", "machine://machine-a/srv/repo/../private"],
+    ["ssh://alice@box:2222/srv/repo", "ssh://alice@box:2222/srv/repo/sub", "ssh://alice@other:2222/srv/repo/sub", "ssh://alice@box:2222/srv/repo/../private"],
+  ]) {
+    const driver = connect("agents", undefined, repo);
+    const opts = (cwd: string) => ({ tileId: "in-1", cwd, cmd: "sh", cols: 80, rows: 24 });
+    await driver.client.call("terminal.open", opts(inside));
+    expect(ran.map((r) => r.what)).toEqual(["terminal.open"]);
+    ran.length = 0;
+    for (const cwd of [otherMachine, traversal]) expect(await code(driver.client.call("terminal.open", opts(cwd)))).toBe("FORBIDDEN");
+    expect(ran).toEqual([]);
+  }
+});
+
+test("a peer cannot name a symlink outside the workspace as a nested repo", async () => {
+  const repo = path.join(tmp, "repo");
+  const elsewhere = path.join(tmp, "elsewhere");
+  fs.mkdirSync(repo);
+  fs.mkdirSync(elsewhere);
+  fs.symlinkSync(elsewhere, path.join(repo, "outside-link"));
+  const viewer = connect("view", undefined, repo);
+  expect(await code(viewer.client.call("file.read", `${workspaceUrl(W)}/outside-link`, "secret.txt"))).toBe("FORBIDDEN");
+  expect(ran).toEqual([]);
 });
 
 test("a guest names this workspace, by its id, and nothing else on the host: another folder, a way out of it, another workspace or a machine is refused and never runs; the person's own devices are the owner", async () => {

@@ -64,6 +64,21 @@ test("a file a call names outside its repo is a bad request: nothing outside is 
   assert.deepEqual(await ask("file.read", repo, "a.txt"), { result: "inside" });
 });
 
+test("working-tree reads refuse a symlink to a file outside the repo", async () => {
+  const repo = makeRepo();
+  const secret = path.join(tmp, "outside-secret.txt");
+  fs.writeFileSync(secret, "outside secret");
+  fs.symlinkSync(secret, path.join(repo, "linked-secret.txt"));
+  const outsideDir = path.join(tmp, "outside-dir");
+  fs.mkdirSync(outsideDir);
+  fs.symlinkSync(outsideDir, path.join(repo, "linked-dir"));
+  assert.equal(await codeOf("file.read", repo, "linked-secret.txt"), "BAD_REQUEST");
+  assert.equal(await codeOf("git.fileContents", repo, "linked-secret.txt", "WORKING"), "BAD_REQUEST");
+  assert.equal(await codeOf("file.read", repo, "linked-dir/missing.txt"), "BAD_REQUEST");
+  assert.equal(await codeOf("file.read", repo, "missing.txt"), "FAILED");
+  assert.deepEqual(await ask("git.fileContents", repo, "missing.txt", "WORKING"), { result: "" });
+});
+
 test("a revision a diff names may not be an option: git would write the diff to a file of the caller's choosing", async () => {
   const repo = makeRepo();
   const out = path.join(tmp, "written-by-diff");

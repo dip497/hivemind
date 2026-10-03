@@ -7,14 +7,14 @@ import { text, written } from "@hivemind/workspace-api/protocol";
 import type { Domain } from "@hivemind/workspace-api/server";
 import { isRemote } from "@hivemind/core/remote-uri";
 import { readRemoteFile, writeRemoteFile } from "./remote/git.js";
-import { fileIn, remoteRel, resolveInRepo } from "./repo-paths.js";
+import { fileIn, remoteRel, resolveInRepo, resolveRealInRepo } from "./repo-paths.js";
 
 export const files: Domain<"file.read" | "file.write"> = {
   answers: {
-    "file.read": (_, repo, file) => {
+    "file.read": async (_, repo, file) => {
       const r = text(repo, "repo");
       const f = text(file, "file");
-      return isRemote(r) ? readRemoteFile(r, remoteRel(f)) : fsp.readFile(resolveInRepo(r, f), "utf8");
+      return isRemote(r) ? readRemoteFile(r, remoteRel(f)) : fsp.readFile(await resolveRealInRepo(r, f), "utf8");
     },
     "file.write": (_, repo, file, contents) => {
       const r = text(repo, "repo");

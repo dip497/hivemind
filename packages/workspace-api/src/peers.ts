@@ -13,6 +13,9 @@
  * `peerTransport` is the other side, a `ClientTransport` over the channel.
  */
 import type { Actor } from "@hivemind/workspace-host/intents";
+import { parseMachineUri, parseRemote } from "@hivemind/core/remote-uri";
+import { realpath } from "node:fs/promises";
+import path from "node:path";
 import type { ClientTransport } from "./client.js";
 import { mayCall } from "./roles.js";
 import type { Answer, EventMessage } from "./protocol.js";
@@ -59,6 +62,34 @@ function inWorkspace(repo: string, place: string): boolean {
   if (place.split(/[\\/]/).includes("..")) return false;
   const sep = repo.endsWith("/") || repo.endsWith("\\") ? "" : "/";
   return place.startsWith(`${repo}${sep}`) || (sep !== "" && place.startsWith(`${repo}\\`));
+}
+
+/** A remote cwd may be checked here only by its URI: the filesystem belongs to that machine. */
+function remoteCwdIn(repo: string, cwd: string): boolean {
+  const folder = (value: string): boolean =>
+    value.startsWith("/") && !value.includes("\\") && !value.split("/").includes("..") && path.posix.normalize(value) === value;
+  let rootPath: string;
+  let cwdPath: string;
+  if (repo.startsWith("machine://") && cwd.startsWith("machine://")) {
+    const root = parseMachineUri(repo);
+    const at = parseMachineUri(cwd);
+    if (!root || !at || root.machineId !== at.machineId) return false;
+    rootPath = root.path;
+    cwdPath = at.path;
+  } else if (repo.startsWith("ssh://") && cwd.startsWith("ssh://")) {
+    try {
+      const root = parseRemote(repo);
+      const at = parseRemote(cwd);
+      if (root.hostId !== at.hostId) return false;
+      rootPath = root.path;
+      cwdPath = at.path;
+    } catch {
+      return false;
+    }
+  } else return false;
+  if (!folder(rootPath) || !folder(cwdPath)) return false;
+  const relative = path.posix.relative(rootPath, cwdPath);
+  return relative === "" || (relative !== ".." && !relative.startsWith("../") && !path.posix.isAbsolute(relative));
 }
 
 /** The tiles an event concerns: it goes to a peer only when each is in its workspace. */
@@ -173,7 +204,7 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     // Showing a terminal that is running already is watching it; starting one is not.
     const attaching = method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true;
     if (peer.allows && !(typeof method === "string" && peer.allows(method, params))) return `${String(method)} is not open to this device`;
-    if (attaching && !peer.holds(String((params[0] as { tileId?: unknown }).tileId))) return "that tile is not of this workspace";
+    if (method === "terminal.open" && !peer.holds(String((params[0] as { tileId?: unknown } | null)?.tileId))) return "that tile is not of this workspace";
     if (typeof method !== "string" || !(attaching || mayCall(peer.actor.access, method))) return `${String(method)} is not open to your role on this workspace`;
     if (BY_TILE.test(method) && !peer.holds(String(params[0]))) return `${String(params[0])} is not a tile of this workspace`;
     // A guest names this workspace, by its id, and nothing else on the host. The person's own
@@ -184,6 +215,37 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     }
     if (method === "terminal.watchActivity" && Array.isArray(params[0]) && !params[0].every((t) => peer.holds(String(t)))) return "a tile there is not of this workspace";
     return null;
+  };
+
+  /** Check a local path against the workspace on disk, including symlinked ancestors. A missing
+   *  path may still be named by a read, so check its nearest existing ancestor in that case. */
+  const realPlace = async (place: string, mayBeMissing: boolean): Promise<boolean> => {
+    try {
+      let root: string;
+      try {
+        root = await realpath(peer.repo);
+      } catch (e) {
+        // A missing workspace has no files to expose; the handler keeps its existing result.
+        return mayBeMissing && (e as NodeJS.ErrnoException).code === "ENOENT";
+      }
+      let at = place;
+      let target: string;
+      for (;;) {
+        try {
+          target = await realpath(at);
+          break;
+        } catch (e) {
+          if (!mayBeMissing || (e as NodeJS.ErrnoException).code !== "ENOENT") return false;
+          const parent = path.dirname(at);
+          if (parent === at) return false;
+          at = parent;
+        }
+      }
+      const relative = path.relative(root, target);
+      return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+    } catch {
+      return false;
+    }
   };
 
   /** What the host answers of every agent it runs, narrowed to those of this workspace: a peer
@@ -205,12 +267,28 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     }
     const params = Array.isArray(m.params) ? m.params.map(inbound) : [];
     const why = check(m.method, params);
+    const cwd = (params[0] as { cwd?: unknown; attachOnly?: unknown } | null)?.cwd;
+    const place = BY_WORKSPACE.test(String(m.method)) ? params[0] : BY_WORKSPACE_SECOND.test(String(m.method)) ? params[1] : null;
+    const checked = async (): Promise<string | null> => {
+      if (why) return why;
+      if (m.method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly !== true) {
+        return typeof cwd === "string" && (path.isAbsolute(peer.repo)
+          ? path.isAbsolute(cwd) && await realPlace(cwd, false)
+          : remoteCwdIn(peer.repo, cwd))
+          ? null : "that working directory is not of this workspace";
+      }
+      if (peer.actor.access !== "owner" && typeof place === "string" && path.isAbsolute(peer.repo)) {
+        return await realPlace(place, true) ? null : "name this workspace by its id: nothing else of the host's is open to you";
+      }
+      return null;
+    };
     if (typeof m.id !== "number") {
-      if (!why) server.notice(m.method, params, connection);
+      void checked().then((denied) => { if (!denied && !connection.closed.aborted) server.notice(m.method, params, connection); });
       return;
     }
     const id = m.id;
-    void (why ? Promise.resolve(refused(why)) : server.answer(m.method, params, connection)).then((answer) => {
+    void checked().then((cwdWhy) => cwdWhy || connection.closed.aborted
+      ? refused(cwdWhy ?? "connection closed") : server.answer(m.method, params, connection)).then((answer) => {
       flush();
       channel.send(JSON.stringify({ id, ...scoped(m.method, answer) }));
     });
