@@ -27,7 +27,7 @@ import {
   type IssueState,
 } from "@hivemind/core";
 import { EXIT, HcpCliError, exitCodeFor, hcpCall, hcpStream, ownTile } from "../hcp.js";
-import { UnsupportedError, UsageError, boolFlag, emitArgs, intFlag, parseKeys, readSchedule, resolveAgent, workflowParams } from "../ctl-args.js";
+import { UnsupportedError, UsageError, boolFlag, emitArgs, durationFlag, intFlag, parseKeys, readSchedule, resolveAgent, workflowParams } from "../ctl-args.js";
 import { ensureAgentCatalog } from "../agent-catalog.js";
 import { detectWho } from "../who.js";
 
@@ -149,10 +149,10 @@ const READ_DEFAULT_MS = 100_000; // under Claude Code's 120 s Bash default
 
 const read = sub("read", "Wait for an agent's turn to finish and print its reply (exit 4 on timeout)", {
   ...tileArg,
-  timeout: { type: "string", description: `total wait in ms (default ${READ_DEFAULT_MS}); made of short HCP polls, never one long request` },
+  timeout: { type: "string", description: `total wait, e.g. 90s or 5m (default ${READ_DEFAULT_MS / 1000}s); made of short HCP polls, never one long request` },
   poll: { type: "boolean", description: "don't wait: return the current turn state immediately (always exit 0)" },
 }, async (a) => {
-  const total = a.poll ? 0 : intFlag(a.timeout, "timeout", READ_DEFAULT_MS);
+  const total = a.poll ? 0 : durationFlag(a.timeout, "timeout", READ_DEFAULT_MS);
   let last: unknown = null;
   for (const slice of readSchedule(total)) {
     last = await hcpCall("agent.read", { tileId: a.tileId, timeoutMs: slice }, slice + READ_SLACK_MS);
@@ -184,7 +184,7 @@ const workflow = sub("workflow", "Run a multi-agent workflow (fanout | pipeline 
   frame: { type: "string", description: "frame to spawn workers into (id, repo name, or title)" },
   supervise: { type: "string", description: "broker workers' tool perms to this CLI: 'all' or a comma-list of tools" },
   "max-concurrent": { type: "string", description: "max workers live at once (default 6, cap 12)" },
-  timeout: { type: "string", description: "per-worker turn ceiling in ms (default 600000)" },
+  timeout: { type: "string", description: "per-worker turn ceiling, e.g. 10m (default 10m)" },
   close: { type: "boolean", description: "close worker tiles after collecting their replies" },
 }, async (a) => {
   await ensureAgentCatalog();
@@ -214,12 +214,12 @@ const openReview = sub("open-review", "Open a plan-review tile and block until t
   plan: { type: "string", description: "plan markdown (or use --file)" },
   file: { type: "string", description: "read the plan from this file ('-' = stdin)" },
   cwd: { type: "string", description: "repo the plan applies to (default: current directory)" },
-  timeout: { type: "string", description: "how long to wait for the decision, ms (default 24h — pass a Bash-tool timeout to match)" },
+  timeout: { type: "string", description: "how long to wait for the decision, e.g. 30m (default 24h — pass a Bash-tool timeout to match)" },
 }, (a) => {
   let plan = a.plan;
   if (!plan && a.file) plan = a.file === "-" ? fs.readFileSync(0, "utf8") : fs.readFileSync(String(a.file), "utf8");
   if (!plan) throw new UsageError("--plan <markdown> or --file <path> required");
-  const ceiling = intFlag(a.timeout, "timeout", 24 * 60 * 60 * 1000);
+  const ceiling = durationFlag(a.timeout, "timeout", 24 * 60 * 60 * 1000);
   return hcpCall("review.open", { plan, cwd: a.cwd || process.cwd() }, ceiling);
 });
 
@@ -231,7 +231,7 @@ const stream = defineCommand({
     ...tileArg,
     since: { type: "string", description: "replay from this byte offset (as printed by a previous --json run) before going live" },
     lines: { type: "string", description: "replay the last N recorded lines before going live" },
-    timeout: { type: "string", description: "stop after this many ms (default 0 = until Ctrl-C)" },
+    timeout: { type: "string", description: "stop after this long, e.g. 30s (default: until Ctrl-C)" },
     snapshot: { type: "boolean", description: "print the replay and exit (no live tail)" },
     json: { type: "boolean", description: "NDJSON: one {seq,chunk,offset,replay} per event, then {end:true,offset}" },
   },
@@ -240,7 +240,7 @@ const stream = defineCommand({
     try {
       const since = args.since != null ? intFlag(args.since, "since", 0) : undefined;
       const lines = args.lines != null ? intFlag(args.lines, "lines", 0) : undefined;
-      let timeoutMs = intFlag(args.timeout, "timeout", 0);
+      let timeoutMs = durationFlag(args.timeout, "timeout", 0);
       if (args.snapshot && !timeoutMs) timeoutMs = 400; // long enough for the replay event to land
       const signal = { stop: () => {} };
       process.on("SIGINT", () => signal.stop());

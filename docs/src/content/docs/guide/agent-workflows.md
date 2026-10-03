@@ -52,11 +52,13 @@ hive ctl workflow --shape fanout --items "auth || billing || search" \
 
 Practical rules:
 
+- Durations take units: `--timeout 90s`, `10m`. A bare number is milliseconds, and one
+  under 1000 is refused rather than read as a near-zero wait.
 - Keep `read --timeout` below your tool's Bash limit (default wait is 100 s, built from
   ≤ 10 s polls, so retrying is safe). A timeout exits 4 with `finalStatus:"timeout"`;
   call `read` again to collect the turn.
-- `workflow --agent codex` exits 7 before spawning — codex has no turn signal; use
-  claude, droid, pi, or kiro for workers.
+- `workflow --agent <id>` exits 7 before spawning when that agent has no turn signal;
+  `hive agents list` shows which do.
 - `hive ctl stream <tile> --lines 40 --snapshot` shows a tile's screen (ANSI-stripped)
   for runtimes that cannot be read deterministically.
 - `hive ctl open-review --file plan.md` opens a review tile and waits for a human

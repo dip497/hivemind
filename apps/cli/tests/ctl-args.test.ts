@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { READ_SLICE_MS, UsageError, boolFlag, emitArgs, intFlag, parseKeys, readSchedule, splitDouble, tailLines, workflowParams } from "../src/ctl-args.js";
+import { READ_SLICE_MS, UsageError, boolFlag, durationFlag, emitArgs, intFlag, parseKeys, readSchedule, splitDouble, tailLines, workflowParams } from "../src/ctl-args.js";
 import { EXIT, exitCodeFor } from "../src/hcp.js";
 import { useFixtureAgents } from "./agents-fixtures.js";
 
@@ -28,6 +28,16 @@ describe("flag parsing", () => {
     expect(intFlag("1500", "timeout", 7)).toBe(1500);
     expect(() => intFlag("soon", "timeout", 7)).toThrow(UsageError);
     expect(() => intFlag("-1", "timeout", 7)).toThrow(UsageError);
+  });
+  test("durationFlag takes units, and refuses a bare number that can only mean seconds", () => {
+    expect(durationFlag(undefined, "timeout", 7)).toBe(7);
+    expect(durationFlag("90s", "timeout", 7)).toBe(90_000);
+    expect(durationFlag("5m", "timeout", 7)).toBe(300_000);
+    expect(durationFlag("250ms", "timeout", 7)).toBe(250);
+    expect(durationFlag("1500", "timeout", 7)).toBe(1500);
+    expect(durationFlag("0", "timeout", 7)).toBe(0);
+    expect(() => durationFlag("120", "timeout", 7)).toThrow(/120s/);
+    expect(() => durationFlag("soon", "timeout", 7)).toThrow(UsageError);
   });
   test("boolFlag handles citty's true/false/undefined and strings", () => {
     expect(boolFlag(undefined)).toBeUndefined();

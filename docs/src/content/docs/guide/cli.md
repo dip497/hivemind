@@ -78,8 +78,8 @@ hive ctl spawn [--agent claude] [--prompt "…"] [--name "title"]
                                         # → {"tileId":…}; workers auto-report by default
 hive ctl send <tileId> "text"
 hive ctl keys <tileId> Down,Enter       # Esc, Tab, digits, …
-hive ctl read <tileId> [--timeout 90000] [--poll]   # default wait 100 s; --poll: no wait
-hive ctl stream <tileId> [--lines 40] [--since <offset>] [--timeout ms]
+hive ctl read <tileId> [--timeout 90s] [--poll]   # default wait 100 s; --poll: no wait
+hive ctl stream <tileId> [--lines 40] [--since <offset>] [--timeout 30s]
                        [--snapshot] [--json]        # NDJSON tail with byte offsets
 hive ctl focus <tileId>
 hive ctl close <tileId>
@@ -95,11 +95,11 @@ hive ctl workflow --shape fanout|pipeline|mapreduce
                   [--stages "draft || critique || rewrite"] [--input "seed"]
                   [--reduce-prompt "Merge {results}"]
                   [--agent claude] [--model m] [--frame f] [--supervise all]
-                  [--max-concurrent 6] [--timeout 600000] [--close]
+                  [--max-concurrent 6] [--timeout 10m] [--close]
                                         # per-worker timeout; blocks until all replies
 hive ctl approve <reqId> allow|deny|always|never [--reason "…"]
 hive ctl report "summary"               # to the tile that spawned you ($HIVEMIND_TILE)
-hive ctl open-review --file plan.md [--cwd dir] [--timeout ms]   # default ceiling 24 h
+hive ctl open-review --file plan.md [--cwd dir] [--timeout 30m]   # default ceiling 24 h
 ```
 
 ## `hive ctl` — issue verbs
