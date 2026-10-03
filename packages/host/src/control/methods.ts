@@ -930,11 +930,13 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       case "host.status":
         return { workspaces: deps.workspaces.repos().map((repo) => ({ repo, workspace: deps.workspaces.ownership(repo)?.workspaceId ?? null })) };
       case "host.people": {
+        if (call.actor.kind !== "person") throw new HcpError("UNAUTHORIZED", "only the person at this machine shares and answers who joins, not an agent");
         const verb = String(p.method ?? "");
         if (!verb.startsWith("people.") || !deps.workspaceApi) throw new HcpError("BAD_REQUEST", `host.people answers people.*, not ${verb}`);
         return await deps.workspaceApi(verb, Array.isArray(p.params) ? p.params : [], call.actor);
       }
       case "host.join":
+        if (call.actor.kind !== "person") throw new HcpError("UNAUTHORIZED", "only the person at this machine joins a workspace, not an agent");
         if (!deps.join) throw new HcpError("UNSUPPORTED", "joining is not served here");
         return await deps.join(String(p.link ?? ""));
 
