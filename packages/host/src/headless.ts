@@ -244,6 +244,12 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     keyOf: (workspace) => idOf(workspaceSeed(keys.person, workspace)),
     publishTo: (to, event, ...params) => api.publishTo(to, event, ...params),
     ownerHere: (workspace) => peers.connectedTo(workspace).has(keys.personId),
+    phones: (repo, question) => {
+      const workspace = store.ownership(repo)?.workspaceId;
+      return !!workspace && notices.asked(workspace, question);
+    },
+    // No window here: the person answers with `hive people allow`, or from a phone.
+    waitsAway: true,
   });
   const sharing = new Sharing(lists, (request) => peopleHere.ask(request), (devices) => net?.admit(devices));
   // The machines this host knows, by what each is called: where an agent here runs, as the

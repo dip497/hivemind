@@ -77,6 +77,11 @@ export interface Person {
 export const LINK_ROLES = ["view", "edit", "terminals"] as const;
 export type LinkRole = (typeof LINK_ROLES)[number];
 
+/** How someone with a valid invite is let in: asked about first (the default), or at once at the
+ *  invite's role. */
+export const ANSWERING = ["ask", "invite"] as const;
+export type Answering = (typeof ANSWERING)[number];
+
 /** An invite as the owner's devices keep it: the secret itself is never stored, only its hash. */
 interface Invite {
   role: LinkRole;
@@ -247,6 +252,16 @@ export class AccessLists {
   /** The name and colour `person` goes by, as the People panel shows them. */
   remember(workspace: string, person: string, profile: { name: string; color: string }): void {
     this.edit(workspace, (doc) => doc.getMap("profiles").set(person, { name: profile.name, color: profile.color }));
+  }
+
+  /** How someone with a valid invite to `workspace` is let in. */
+  answering(workspace: string): Answering {
+    return this.doc(workspace).getMap("meta").get("answer") === "invite" ? "invite" : "ask";
+  }
+
+  setAnswering(workspace: string, rule: Answering): void {
+    if (!ANSWERING.includes(rule)) throw new TypeError(`access: ${String(rule)} is not a way to answer`);
+    this.edit(workspace, (doc) => doc.getMap("meta").set("answer", rule));
   }
 
   /** The repo here that `workspace` is, as its first invite recorded. */

@@ -480,7 +480,14 @@ export const peopleHere = new People({
   keyOf: (workspace) => hostedAs(workspace).key,
   publishTo: (to, event, ...params) => apiServer?.publishTo(to, event, ...params),
   ownerHere: (workspace) => !!userWindow() || (peers?.connectedTo(workspace).has(machineIdentity().personId) ?? false),
+  phones: (repo, question) => {
+    const workspace = workspaceStore().ownership(repo)?.workspaceId;
+    return !!workspace && !!pushNotices?.asked(workspace, question);
+  },
+  waitsAway: false,
 });
+/** What the person's phones are told (M5), once the network is set up. */
+let pushNotices: PushNotices | null = null;
 /** The workspace API every window and device is answered by, once it is set up. */
 let apiServer: WorkspaceServer | null = null;
 /** This computer's PTY daemon, once the IPC is installed: none without one. */
@@ -536,7 +543,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     onWarn: (m) => console.warn(`[peers] ${m}`),
   });
   // The person's phones are told what happens here, encrypted to each (M5).
-  const notices = new PushNotices({
+  const notices = (pushNotices = new PushNotices({
     me: thisComputer,
     boards: () => heldBoards(workspaceStore()),
     decides,
@@ -544,7 +551,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     subscriptions: pushSubscriptions(),
     post: (endpoint, body, urgency, sign) => postNotice(endpoint, body, urgency, sign ? machineIdentity().device : null),
     onWarn: (m) => console.warn(`[push] ${m}`),
-  });
+  }));
   onStatus((change) => notices.changed(change));
   // Be where the people let in, and the person's other devices, reach this computer, when anything
   // is shared from here or the person has other devices: as this app starts (below), and as the

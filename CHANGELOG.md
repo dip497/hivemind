@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: a shared workspace can let in anyone with a valid invite at once, at the invite's role, instead of asking you each time (`hive people rule invite`); with no window of yours open, someone asking to join is sent to your phone (workspace API 0.16: `people.requests`, `people.answering`; push 0.5: `join`).
 - Fixed: rejoining an open shared workspace replaces its old connection and role; repeated Join submissions for the same invite ask the host once.
 
 - Docs: explain sharing over a Tailscale-hosted network and mark the built-in Hosted network unavailable until its server names resolve.

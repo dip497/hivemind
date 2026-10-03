@@ -8,14 +8,16 @@
  *
  * Someone asking to join (`Sharing`) is asked about of the owner wherever they are: each of their
  * windows connected to the host is told (`people.asked`), the first answer counts and the others
- * are told it came (`people.answered`). A host nobody of theirs is at declines at once.
+ * are told it came (`people.answered`); with none of their windows here, their phones are. A
+ * workspace may instead let in anyone with a valid invite at its role (`people.answering`).
  */
 import path from "node:path";
-import { LINK_ROLES, ROLES, type AccessLists, type LinkRole, type Person } from "@hivemind/workspace-host/access";
+import { ANSWERING, LINK_ROLES, ROLES, type AccessLists, type LinkRole, type Person } from "@hivemind/workspace-host/access";
 import type { Ready } from "@hivemind/workspace-host/hive-net";
 import { formatJoinLink } from "@hivemind/workspace-host/join-link";
 import type { NetworkProfiles } from "@hivemind/workspace-host/network-profile";
 import type { JoinRequest } from "@hivemind/workspace-host/sharing";
+import type { JoinQuestion } from "@hivemind/workspace-api/people";
 import { flag, oneOf, text, whole } from "@hivemind/workspace-api/protocol";
 import { named, type Connection, type Domain, type WorkspaceServer } from "@hivemind/workspace-api/server";
 
@@ -42,9 +44,15 @@ export interface PeopleOptions {
   publishTo: WorkspaceServer["publishTo"];
   /** Whether the owner of `workspace` is at one of its clients now, to be asked. */
   ownerHere(workspace: string): boolean;
+  /** Ask the owner's phones about `question` on `repo`, while none of their clients is here (M5):
+   *  whether any phone was told. */
+  phones(repo: string, question: JoinQuestion): boolean;
+  /** Wait for an answer even when nobody was told: a host with no window, whose person answers at
+   *  its command line (`hive people allow`). */
+  waitsAway: boolean;
 }
 
-type PeopleMethod = "people.list" | "people.role" | "people.remove" | "people.invite" | "people.answer";
+type PeopleMethod = "people.list" | "people.role" | "people.remove" | "people.invite" | "people.answer" | "people.requests" | "people.answering";
 
 /** The owner's clients: a window of this host's own, or one of their devices. */
 const owners = (c: Connection): boolean => c.actor.kind === "person" || (c.actor.kind === "peer" && c.actor.access === "owner");
@@ -52,7 +60,7 @@ const owners = (c: Connection): boolean => c.actor.kind === "person" || (c.actor
 export class People {
   readonly domain: Domain<PeopleMethod>;
   /** Questions waiting on the owner, by number. */
-  private readonly asking = new Map<number, { repo: string; settle: (allow: boolean) => void }>();
+  private readonly asking = new Map<number, { repo: string; question: JoinQuestion; settle: (allow: boolean) => void }>();
   private next = 1;
 
   constructor(private readonly o: PeopleOptions) {
@@ -129,23 +137,40 @@ export class People {
           asked.settle(flag(allow, "allow") === true);
           return { answered: true };
         },
+        "people.requests": (_, repo) => {
+          const r = text(repo, "repo");
+          const workspace = o.workspaceOf(r);
+          return {
+            answering: workspace ? o.lists().answering(workspace) : "ask",
+            asking: [...this.asking.values()].filter((a) => a.repo === r).map((a) => a.question),
+          };
+        },
+        "people.answering": (_, repo, rule) => {
+          const { workspace } = workspaceAt(repo);
+          o.lists().setAnswering(workspace, oneOf(rule, "rule", ANSWERING));
+        },
       },
       effects: {
         "people.role": (repo, person, role) => ({ target: named(repo), detail: `${String(person).slice(0, 8)}… → ${String(role)}` }),
         "people.remove": (repo, person) => ({ target: named(repo), detail: String(person).slice(0, 8) }),
         "people.invite": (repo, role) => ({ target: named(repo), detail: named(role) }),
         "people.answer": (repo, _req, allow) => ({ target: named(repo), detail: allow === true ? "allow" : "deny" }),
+        "people.answering": (repo, rule) => ({ target: named(repo), detail: named(rule) }),
       },
     };
   }
 
-  /** Ask the owner whether to let in someone asking to join (`Sharing`'s question): each of their
-   *  clients here is asked, and the first answer counts. No, at once when none is here, and when
-   *  none answers within ANSWER_WITHIN_MS. */
+  /** Ask the owner whether to let in someone asking to join (`Sharing`'s question): yes at once
+   *  when the workspace lets in anyone with a valid invite. Otherwise each of the owner's clients
+   *  here is asked, or with none here their phones, and the first answer counts. No, at once when
+   *  nobody was asked (unless the host `waitsAway`), and when none answers within ANSWER_WITHIN_MS. */
   ask(request: JoinRequest): Promise<boolean> {
-    if (!this.o.ownerHere(request.workspace)) return Promise.resolve(false);
+    if (this.o.lists().answering(request.workspace) === "invite") return Promise.resolve(true);
     const req = this.next++;
     const { repo } = request;
+    const question: JoinQuestion = { req, workspace: path.basename(repo), profile: request.profile, role: request.role };
+    const here = this.o.ownerHere(request.workspace);
+    if (!here && !this.o.phones(repo, question) && !this.o.waitsAway) return Promise.resolve(false);
     return new Promise((resolve) => {
       const settle = (allow: boolean): void => {
         clearTimeout(timer);
@@ -155,8 +180,8 @@ export class People {
       };
       const timer = setTimeout(() => settle(false), ANSWER_WITHIN_MS);
       timer.unref?.();
-      this.asking.set(req, { repo, settle });
-      this.o.publishTo(owners, "people.asked", repo, { req, workspace: path.basename(repo), profile: request.profile, role: request.role });
+      this.asking.set(req, { repo, question, settle });
+      this.o.publishTo(owners, "people.asked", repo, question);
     });
   }
 }

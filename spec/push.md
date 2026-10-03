@@ -1,8 +1,9 @@
-# Push (0.4)
+# Push (0.5)
 
 What happens while the person is away, told to their phone (M5, design §9.2 "Push notification"):
 an agent on one of their devices begins waiting on them, finishes or fails; and a device the phone
-found away is back (0.2). The device tells each phone that gave it where to, encrypted to that
+found away is back (0.2); and someone asks to join one of their workspaces while none of their
+windows is there to ask (0.5). The device tells each phone that gave it where to, encrypted to that
 phone, so that whatever carries the message reads nothing of it; a phone that cannot be reached
 at an address of its own is told through its network's push server (0.3), which passes on what
 the devices it named sign, unread. The cases in `../conformance/push.json` decide whether an
@@ -77,6 +78,22 @@ A phone shows it only for a device it found away (`needs.md`, "Asking") at or be
 does not count that device away from then on. One it did not find away, or found away again after
 `since` (a push service keeps a message for as long as its `TTL`, and gives it late), it does not
 show.
+
+## Join
+
+Someone asking to join a workspace of the person's hosted on a device (`workspace-api.md`,
+`people.*`), while none of the person's windows is connected to it there, is told to each phone
+subscribed there (0.5):
+
+```json
+{ "v": 1, "t": "join", "workspace": "<its id, hex>", "name": "api", "req": 3, "who": "Noor", "role": "edit", "since": 1790000000000 }
+```
+
+`name` is the workspace's name, `who` what the person asking calls themselves (`someone` when they
+gave nothing), each its first 200 characters; `role` the role their link gives; `req` the question,
+as `people.answer` names it; `since` when it was asked. It is sent as a notice is, with `Urgency:
+high`. The phone may offer Allow and Deny on it and answer with `people.answer`, on the workspace
+`workspace` (`workspace-api.md`, "Peers"); an answer after 170 s, or after another, does not count.
 
 ## Sending
 

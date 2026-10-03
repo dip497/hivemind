@@ -1,4 +1,4 @@
-# Workspace API (0.15)
+# Workspace API (0.16)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -76,7 +76,8 @@ and asks for its keyboard while someone else holds it, 0.10), `agent.answer` (it
 agent waits on the person for), `agent.send` (it sends one a message, 0.10), and `agent.startable`,
 `agent.start`, `agent.interrupt`, `agent.close` and `agent.diff` (it starts an agent, interrupts its
 turn, closes it and reads what it changed, `agents.md`, 0.11), and the `view.*` calls (it shows the
-community views here that work on a phone, 0.12): it never starts a terminal but by
+community views here that work on a phone, 0.12), and `people.answer` (it answers someone asking
+to join, from the notice that told it, `push.md` "Join", 0.16): it never starts a terminal but by
 starting an agent, never sizes one, nor gives or takes a keyboard (M5). Each call and notice is checked against the
 peer's role on the workspace (design §6) before it runs, and one the role does not allow is
 `FORBIDDEN` (a notice is dropped): reads, watching terminals and showing a community view are anyone's with access; typing
@@ -199,13 +200,17 @@ log.
 | `people.remove` | `repo`, `person` | `null`: off the list, their connections closed, and the link they came in by lets nobody in again | target `repo`, detail the person |
 | `people.invite` | `repo`, `role` (`view`, `edit` or `terminals`), `expiresIn` (ms), `reusable`? | a join link, `hivemind://join/<host's device id>#…`: where the host is, the workspace's name and its owner's, its key and the network's lookup server, and on a network whose relays admit only whom they are told to a voucher for the guest's device; used once unless `reusable` | target `repo`, detail the role |
 | `people.answer` | `repo`, `req`, `allow` | `{answered}`: whether this answer to the question `req` (`people.asked`) counted, the first one does | target `repo`, detail `allow` or `deny` |
+| `people.requests` | `repo` | `{answering, asking}` (0.16): how the workspace lets in someone with a valid invite (`ask` or `invite`), and the questions about it waiting on its owner now, each `{req, workspace, profile, role}` as `people.asked` tells it | read |
+| `people.answering` | `repo`, `rule` (`ask` or `invite`) | `null` (0.16): `ask`, the default, asks the owner about each person with a valid invite; `invite` lets them in at once at the invite's role | target `repo`, detail the rule |
 
 Only the workspace's owner asks the `people.*` methods: at a window of the host's own, or from
 another of their devices while the workspace is hosted on one they moved it to (a peer whose role
 is the owner's). Someone asking to join with a link (`spec/pairing.md`'s `hive/pair/1`, with the
 link's secret) is asked about at each of the owner's clients connected then (`people.asked`): the
-first answer counts, the others are told it came (`people.answered`), and with none of them
-connected the host declines at once. Nobody answering within 170 s is a no.
+first answer counts, the others are told it came (`people.answered`). With none of them connected,
+the owner's phones are told (`push.md`, "Join"); with no phone either, the host declines at once,
+unless it has no window and its person answers at its command line (`hive people allow`, 0.16).
+Nobody answering within 170 s is a no. A workspace whose rule is `invite` asks nobody.
 
 | `store.open` | `repo` | `{core, views: {[viewId]: layout}, objects}`: a workspace's layouts, for a client that holds them | read |
 | `store.core` | `repo` | the core layout (frames, tiles, their names), or null | read |

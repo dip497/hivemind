@@ -231,3 +231,26 @@ test("a notice is posted as Web Push takes it; signed, where its subscription as
   await assert.rejects(postNotice(`http://127.0.0.1:${port}/moved`, body, "normal", device));
   assert.deepEqual(got.map((g) => g.url), [`/push/${handle}`, "/up/a-phone", "/moved"]);
 });
+
+test("someone asking to join is told to each phone subscribed, urgently, by the workspace, the question, who asks and the role; with no phone, nobody is told", async () => {
+  const a = phone("https://push.example/a");
+  const subscriptions = new PushSubscriptions(path.join(tmp, `push-${made++}.json`));
+  const posted: Array<{ body: Buffer; urgency: string }> = [];
+  const notices = new PushNotices({
+    me: () => ({ device: "d".repeat(64), name: "desk" }),
+    boards: () => held,
+    decides: () => false,
+    changes: () => () => {},
+    subscriptions,
+    post: async (_endpoint, body, urgency) => { posted.push({ body, urgency }); return 201; },
+  });
+  const question = { req: 3, workspace: "api", profile: { name: "Noor", color: "#0a0" }, role: "edit" as const };
+  assert.equal(notices.asked(W, question), false);
+  subscriptions.set("a".repeat(64), a.sub);
+  assert.equal(notices.asked(W, question), true);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(posted.length, 1);
+  const join = read(posted[0]!.body, a.key, a.auth) as { since: number };
+  assert.deepEqual({ ...join, since: 0 }, { v: 1, t: "join", workspace: W, name: "api", req: 3, who: "Noor", role: "edit", since: 0 });
+  assert.equal(posted[0]!.urgency, "high");
+});
