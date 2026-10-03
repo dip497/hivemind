@@ -4,7 +4,7 @@ import { recoverOnProcessLoss } from "./recover";
 import desktopPkg from "../../package.json" with { type: "json" };
 import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, powerMonitor, protocol, screen, session, shell, webContents, type WebContents } from "electron";
+import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, nativeImage, net, powerMonitor, protocol, screen, session, shell, webContents, type WebContents } from "electron";
 import { isDay, promptProblem } from "@hivemind/view-sdk/protocol";
 import { ActivityMeter } from "./pty-activity.js";
 import { POLL_MS as PRESENCE_POLL_MS, PresenceMonitor, localDay, type PresenceTotals } from "./presence.js";
@@ -68,6 +68,7 @@ const PERSIST_PTY = process.env.HIVEMIND_PTY_DAEMON !== "0";
 const ptyMod = PERSIST_PTY ? ptyDaemon : ptyHost;
 const { spawnPty, writePty, resizePty, killPty, detachPty, hasSession, pausePty, resumePty } = ptyMod;
 const killAllPtys = ptyMod.killAll;
+import { dialogStart, rememberPick } from "./dialog-start";
 import { applyShellEnvToProcess, refreshShellEnv } from "@hivemind/agent-host/shell-env";
 import {
   gitCommit,
@@ -759,9 +760,11 @@ ipcMain.handle("pickProjectFolder", async () => {
   if (!mainWindow || mainWindow.isDestroyed()) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
     title: "Open project",
+    defaultPath: dialogStart("project", app.getPath("home")),
     properties: ["openDirectory", "createDirectory"],
   });
   if (result.canceled || result.filePaths.length === 0) return null;
+  rememberPick("project", result.filePaths[0]!);
   return result.filePaths[0];
 });
 // Initialize a .hivemind/ workspace in `dir` (no terminal needed). Mirrors
@@ -1715,11 +1718,13 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
         : `overlay-${slot.slice("overlay:".length).replace(/[^a-z0-9-]/gi, "").slice(0, 40) || "x"}`;
       if (!mainWindow || mainWindow.isDestroyed()) return null;
       const result = await dialog.showOpenDialog(mainWindow, {
+        defaultPath: dialogStart("media", app.getPath("pictures")),
         properties: ["openFile"],
         filters: [{ name: "Media", extensions: ["webm", "gif", "apng", "png", "jpg", "jpeg", "webp", "mp4", "mov"] }],
       });
       if (result.canceled || result.filePaths.length === 0) return null;
       const src = result.filePaths[0]!;
+      rememberPick("media", src);
       try {
         if (!existsSync(src) || !statSync(src).isFile()) return null;
         mkdirSync(mediaDir, { recursive: true });
@@ -1891,7 +1896,7 @@ function startViewHost(): void {
       const { width, height } = img.getSize();
       return { png: img.toPNG(), width, height };
     },
-    copy: (png) => clipboard.writeImage(nativeImage.createFromBuffer(Buffer.from(png))),
+    copy: (png) => clipboard.write([new ClipboardItem({ "image/png": new Blob([Buffer.from(png)], { type: "image/png" }) })]),
     chooseSavePath: async (name) => {
       const opts = { defaultPath: path.join(app.getPath("pictures"), name), filters: [{ name: "PNG image", extensions: ["png"] }] };
       const r = mainWindow && !mainWindow.isDestroyed() ? await dialog.showSaveDialog(mainWindow, opts) : await dialog.showSaveDialog(opts);

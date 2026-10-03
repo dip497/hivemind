@@ -13,6 +13,7 @@ import path from "node:path";
  * an arbitrary path from a URL), and (d) lets us stamp a strict CSP on every
  * response so plugin code cannot reach the network or embed anything.
  */
+import { dialogStart, rememberPick } from "./dialog-start";
 import { app, net, protocol, dialog, ipcMain, type BrowserWindow, type WebFrameMain } from "electron";
 import { pathToFileURL } from "node:url";
 import { listInstalledViews, readViewPackage, installView, removeView, type InstalledView } from "@hivemind/core/views";
@@ -167,8 +168,9 @@ export function installViewManagementIpc(getWindow: () => BrowserWindow | null):
     const win = assertSender(event);
     if (pending?.staged) await rm(pending.dir, { recursive: true, force: true }).catch(() => {});
     pending = null;
-    const result = await dialog.showOpenDialog(win, { title: "Choose a view extension", buttonLabel: "Review extension", properties: ["openDirectory"] });
+    const result = await dialog.showOpenDialog(win, { title: "Choose a view extension", buttonLabel: "Review extension", defaultPath: dialogStart("view", app.getPath("home")), properties: ["openDirectory"] });
     if (result.canceled || !result.filePaths[0]) return null;
+    rememberPick("view", result.filePaths[0]);
     return reviewViewDir(result.filePaths[0], false);
   });
   ipcMain.handle("views:install", async (event, token: string) => {
