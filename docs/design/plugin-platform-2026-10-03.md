@@ -349,11 +349,12 @@ per-instance upgrade + migrations, shallow-snapshot compaction.
 "Going out" means shipping as a **built-in plugin**: in the box, disable-able and replaceable by a
 community one, same id and settings keys, using the public contract only. Nothing is removed.
 
-- **Pure UI over data moves out whole.** Issues first (on the Phase 0 contract), editor second:
-  the CodeMirror UI becomes a plugin; file, git and LSP reads stay core services it consumes.
-  Diff third: core provides a git service (status, structured diff hunks, stage / unstage /
-  apply / revert actions, change events); diff viewers — unified, side-by-side, review and
-  comment, AI summary — are plugins on it.
+- **Pure UI over data moves out whole**, in this order: issues (on the Phase 0 contract), then
+  diff, then the editor. Diff goes before the editor because it is read-mostly and smaller, and
+  the git service it needs is reused by the editor. Core provides that git service (status,
+  structured diff hunks, stage / unstage / apply / revert actions, change events); diff viewers —
+  unified, side-by-side, review and comment, AI summary — are plugins on it. Then the CodeMirror
+  UI becomes a plugin; file, git and LSP reads stay core services it consumes.
 - **Anything that owns a native engine keeps the engine in the kernel.** The PTY and the
   browser's `WebContentsView` (with its cookies and sessions) stay kernel surfaces behind a
   contract; only their chrome — tabs, toolbar, share-tab — becomes plugin UI. Agents follow the
