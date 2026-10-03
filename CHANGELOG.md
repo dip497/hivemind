@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.10.0] — 2026-10-03
+
 ### Fixed
 
 - An agent CLI installed under `~/.npm-global/bin` or `~/.local/bin` is found when Hivemind is started from the desktop, and Settings ▸ Agents ▸ Check again picks up a CLI installed after launch (#77).
@@ -1377,7 +1379,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.9...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.10.0...HEAD
+[2026.10.0]: https://github.com/dip497/hivemind/releases/tag/v2026.10.0
 [2026.9.9]: https://github.com/dip497/hivemind/releases/tag/v2026.9.9
 [2026.9.8]: https://github.com/dip497/hivemind/releases/tag/v2026.9.8
 [2026.9.7]: https://github.com/dip497/hivemind/releases/tag/v2026.9.7
