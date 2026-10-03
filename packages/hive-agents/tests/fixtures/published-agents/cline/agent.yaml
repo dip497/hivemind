@@ -32,6 +32,9 @@ options:
     ask:
     - --auto-approve
     - "false"
+    yolo:
+    - --auto-approve
+    - "true"
 install:
   url: https://docs.cline.bot/cline-cli/installation
   command: "npm install -g cline"
