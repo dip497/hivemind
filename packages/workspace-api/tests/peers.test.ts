@@ -292,6 +292,24 @@ test("a guest hears a tile opened in its workspace, and not one opened in anothe
   expect(heard).toEqual({ mine: ["in-1"], other: [] });
 });
 
+test("a guest hears a link removed from its workspace's tile, and not one removed from another's", async () => {
+  const mine = connect("view");
+  const other = connect("view", undefined, "/work/other");
+  const heard = { mine: [] as string[], other: [] as string[] };
+  for (const [who, peer] of [["mine", mine], ["other", other]] as const) {
+    peer.client.on("link.pipe", (c) => heard[who].push(`pipe ${c.src}`));
+    peer.client.on("link.spawn", (c) => heard[who].push(`spawn ${c.child}`));
+  }
+  await mine.client.call("file.read", workspaceUrl(W), "a.ts"); // connected
+  await other.client.call("file.read", workspaceUrl(W), "a.ts");
+  mine.server.publish("link.pipe", { src: "in-1", dst: null, connected: false });
+  mine.server.publish("link.spawn", { child: "in-2", parent: null, connected: false });
+  other.server.publish("link.pipe", { src: "out-1", dst: null, connected: false });
+  other.server.publish("link.spawn", { child: "out-2", parent: null, connected: false });
+  await Bun.sleep(10);
+  expect(heard).toEqual({ mine: ["pipe in-1", "spawn in-2"], other: [] });
+});
+
 test("a peer is answered the statuses and links of its workspace's own agents, never another's", async () => {
   const { client } = connect("view");
   expect(await client.call("status.all")).toEqual([{ tileId: "in-1", status: { state: "working", title: "in-1's work" } } as never]);

@@ -115,10 +115,11 @@ function tilesOf(event: EventMessage): string[] | null {
       return [String(p)];
     case "status.changed":
       return [String((p as Record<string, unknown>)?.tileId)];
+    // A removal names only one side (dst or parent null): it is judged by that side.
     case "link.pipe":
-      return [String((p as Record<string, unknown>)?.src), String((p as Record<string, unknown>)?.dst)];
+      return [String((p as Record<string, unknown>)?.src), ...[(p as Record<string, unknown>)?.dst].filter((t) => t !== null).map(String)];
     case "link.spawn":
-      return [String((p as Record<string, unknown>)?.parent), String((p as Record<string, unknown>)?.child)];
+      return [String((p as Record<string, unknown>)?.child), ...[(p as Record<string, unknown>)?.parent].filter((t) => t !== null).map(String)];
     case "tile.opened":
       return [String((p as Record<string, unknown>)?.tileId)];
     case "plan.review":
