@@ -68,7 +68,7 @@ const PERSIST_PTY = process.env.HIVEMIND_PTY_DAEMON !== "0";
 const ptyMod = PERSIST_PTY ? ptyDaemon : ptyHost;
 const { spawnPty, writePty, resizePty, killPty, detachPty, hasSession, pausePty, resumePty } = ptyMod;
 const killAllPtys = ptyMod.killAll;
-import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
+import { applyShellEnvToProcess, refreshShellEnv } from "@hivemind/agent-host/shell-env";
 import {
   gitCommit,
   gitConflictedFile,
@@ -1570,7 +1570,16 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     ipcMain.handle("agents:verify", wrap(async (_e, id: string) => {
       await applyShellEnvToProcess();
       const def = knownDef(String(id));
-      return def ? verifyAgent(def) : { path: null };
+      if (!def) return { path: null, searchedPath: process.env.PATH };
+      let v = await verifyAgent(def);
+      // Not found may mean "installed a minute ago": re-interrogate the login
+      // shell's PATH once before giving up, so Check again recovers a fresh
+      // install without an app restart.
+      if (!v.path) {
+        await refreshShellEnv();
+        v = await verifyAgent(def);
+      }
+      return v.path ? v : { ...v, searchedPath: process.env.PATH };
     }));
     // Browser-tile extensions (prototype): load every UNPACKED extension in
     // <userData>/browser-extensions/<name>/ into the SAME session the <webview>
@@ -1974,7 +1983,14 @@ function startHcpControlPlane(): void {
       if (method === "agent.screen") {
         // A daemon read an agent's screen: its status until the agent's hooks report.
         const r = (params ?? {}) as { tileId?: string; state?: ScreenState };
-        if (r.tileId && r.state && SCREEN_STATES.has(r.state)) hcpStatus.screen(toBareId(r.tileId), r.state);
+        if (!r.tileId || !r.state || !SCREEN_STATES.has(r.state)) return;
+        const bare = toBareId(r.tileId);
+        const was = hcpStatus.get(bare)?.state;
+        hcpStatus.screen(bare, r.state);
+        // A hooked turn the screen showed ending (it died on a limit, so no Stop came):
+        // messages held for its end go out now.
+        const now = hcpStatus.get(bare);
+        if (now?.source === "hooks" && now.state === "idle" && was !== "idle") hcpMailbox.setIdle(toPtyId(r.tileId));
         return;
       }
       if (method === "agent.reply") {

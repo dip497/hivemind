@@ -260,13 +260,13 @@ hive ctl send <tileId> "Now cover the expired-token path too." --json
 
 ## Read the reply, with a timeout you control
 \`\`\`bash
-hive ctl read <tileId> --timeout 90000 --json
+hive ctl read <tileId> --timeout 90s --json
 # → {"text":"…","finalStatus":"turn","truncated":false}
 # still working → exit 4 and {"text":null,"finalStatus":"timeout",…}; call again, nothing is lost.
 hive ctl read <tileId> --poll --json              # never blocks: current state, exit 0
 hive ctl stream <tileId> --lines 40 --snapshot    # what is on its screen right now (ANSI-stripped)
 \`\`\`
-Keep \`--timeout\` below your tool's own limit (Claude Code's Bash default is 120000 ms) or pass a matching tool timeout. The wait is made of short polls, so it is always safe to interrupt and retry.
+Durations take units (\`90s\`, \`10m\`); a bare number is milliseconds, and one under 1000 is refused. Keep \`--timeout\` below your tool's own limit (Claude Code's Bash default is 120 s) or pass a matching tool timeout. The wait is made of short polls, so it is always safe to interrupt and retry.
 
 ## Fanout / pipeline / mapreduce (blocks until every worker has replied)
 \`\`\`bash
@@ -280,7 +280,7 @@ hive ctl workflow --shape pipeline --input "docs/spec.md" \\
 
 hive ctl workflow --shape mapreduce --items "a || b" --prompt "Summarise {item}" --reduce-prompt "Merge these: {results}" --json
 \`\`\`
-\`--timeout <ms>\` is the per-worker turn ceiling (default 600000); give the Bash tool a timeout at least as long as the whole run. \`--frame\`, \`--agent\`, \`--model\`, \`--max-concurrent\` apply to every worker.
+\`--timeout 10m\` is the per-worker turn ceiling (default 10m); give the Bash tool a timeout at least as long as the whole run. \`--frame\`, \`--agent\`, \`--model\`, \`--max-concurrent\` apply to every worker.
 
 ## Supervise a worker and answer its approvals
 \`\`\`bash
@@ -395,7 +395,7 @@ hive ctl workflow --shape pipeline \\
 # → {"shape":"pipeline","steps":[…],"output":"…"}
 \`\`\`
 
-Options: \`--agent claude|codex|droid|opencode|pi\` (runtime for every worker; must be installed or the worker returns \`status:"error"\`), \`--model opus|sonnet\` (claude only), \`--frame <id|repo|title>\` (default: your frame), \`--supervise all|Bash,Edit\` (broker workers' permission prompts to YOU), \`--max-concurrent N\` (default 6, cap 12), \`--timeout <ms>\` per worker turn (default 600000), \`--close\` (remove worker tiles when done).
+Options: \`--agent claude|codex|droid|opencode|pi\` (runtime for every worker; must be installed or the worker returns \`status:"error"\`), \`--model opus|sonnet\` (claude only), \`--frame <id|repo|title>\` (default: your frame), \`--supervise all|Bash,Edit\` (broker workers' permission prompts to YOU), \`--max-concurrent N\` (default 6, cap 12), \`--timeout 10m\` per worker turn (default 10m), \`--close\` (remove worker tiles when done).
 
 Always check each result's \`status\` before trusting \`text\`. Give the Bash tool a timeout at least as long as the whole run.
 
@@ -404,14 +404,14 @@ Always check each result's \`status\` before trusting \`text\`. Give the Bash to
 \`\`\`bash
 hive ctl spawn --prompt "…" [--agent pi] [--name reviewer] [--frame repo] [--model opus] [--mode plan] [--supervise all] --json   # → {"tileId":"…"}
 hive ctl send <tileId> "next instruction"                     # a follow-up turn (typed + submitted for you)
-hive ctl read <tileId> --timeout 90000 --json                 # block for its reply: {"text","finalStatus":"turn"}; exit 4 + finalStatus "timeout" if still busy
+hive ctl read <tileId> --timeout 90s --json                 # block for its reply: {"text","finalStatus":"turn"}; exit 4 + finalStatus "timeout" if still busy
 hive ctl read <tileId> --poll --json                          # never blocks
 hive ctl keys <tileId> Down,Enter                             # drive its TUI picker (AskUserQuestion etc.)
 hive ctl list --json                                          # tiles grouped by frame, each with live status (working / idle / awaiting_approval / …)
 hive ctl focus <tileId> · hive ctl close <tileId>
 \`\`\`
 
-With no \`--mode\`, a delegated worker runs autonomously (no human at its tile). Pass \`--mode plan|acceptEdits|default\` to keep a human in the loop, or \`--supervise\` to route its prompts to you. \`--no-report\` makes a fire-and-forget worker you'll poll with \`read\`. Keep \`read --timeout\` under your own tool's limit (Claude Code Bash: 120000 ms); the wait is short polls, so it is safe to call again.
+With no \`--mode\`, a delegated worker runs autonomously (no human at its tile). Pass \`--mode yolo\` to ask nothing whatever the agent, or \`--mode plan|acceptEdits|default\` to keep a human in the loop, or \`--supervise\` to route its prompts to you. \`--no-report\` makes a fire-and-forget worker you'll poll with \`read\`. Keep \`read --timeout\` (e.g. \`90s\`) under your own tool's limit (Claude Code Bash: 120 s); the wait is short polls, so it is safe to call again.
 
 ## Supervising a fleet (unattended runs)
 

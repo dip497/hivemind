@@ -15,6 +15,24 @@ test("the screen stands in until the hooks speak; from then on only the hooks de
   expect(s.get("b")).toMatchObject({ state: "waiting", kind: "other", source: "screen" });
 });
 
+test("a hook-reported turn showing the agent's own chooser is waiting, until the screen moves on or a hook speaks", () => {
+  const s = store();
+  s.event("a", { event: "turn.started" });
+  s.screen("a", "idle"); // a gap between steps is not the end of a hooked turn
+  expect(s.get("a")).toMatchObject({ state: "working", source: "hooks" });
+  s.screen("a", "blocked"); // a model-switch prompt no hook reports
+  expect(s.get("a")).toMatchObject({ state: "waiting", kind: "other", source: "hooks" });
+  s.screen("a", "idle"); // answered, and the turn had already died on a limit: no Stop comes
+  expect(s.get("a")).toMatchObject({ state: "idle", source: "hooks" });
+  s.screen("a", "working"); // the override ended with the chooser
+  expect(s.get("a")?.state).toBe("idle");
+  s.event("a", { event: "turn.started" });
+  s.screen("a", "blocked");
+  s.event("a", { event: "turn.ended", outcome: "done" }); // a hook speaks: it decides again
+  s.screen("a", "idle");
+  expect(s.get("a")).toMatchObject({ state: "done", source: "hooks" });
+});
+
 test("what the screen read before the hooks spoke is dropped: a session start leaves it idle", () => {
   const s = store();
   s.screen("a", "working"); // a busy startup screen
