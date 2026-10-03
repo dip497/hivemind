@@ -14,15 +14,12 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - An agent CLI installed under `~/.npm-global/bin` or `~/.local/bin` is found when Hivemind is started from the desktop, and Settings ▸ Agents ▸ Check again picks up a CLI installed after launch (#77).
 - `hive ctl` durations take units (`--timeout 90s`, `10m`); a bare number under 1000 is refused instead of read as milliseconds, which turned `read --timeout 120` into an instant "still working".
 - A tile no longer says "working" while its agent waits on a menu of its own (Codex's rate-limit model switch): it shows as needing you and notifies. A turn that dies on a usage limit returns to idle, and messages held for it are sent.
+- The Layers rail's right-click menu: Spawn agent's per-agent choices can be clicked again, and the menu reads over a wallpaper like the panel it opens from.
+- Moving between tiles on the canvas is a straight 220ms glide instead of a 400ms zoom-out-and-back that blurred every terminal on the way.
 
 ### Added
 
 - `yolo` is one launch mode for every agent (`hive ctl spawn --mode yolo`, Settings ▸ Agents): it runs the agent without asking, using the agent's own flag. Antigravity, Codex, Copilot and Kiro gain it; Cline gains `ask`, since it approves everything by default.
-
-### Fixed
-
-- The Layers rail's right-click menu: Spawn agent's per-agent choices can be clicked again, and the menu reads over a wallpaper like the panel it opens from.
-- Moving between tiles on the canvas is a straight 220ms glide instead of a 400ms zoom-out-and-back that blurred every terminal on the way.
 
 ## [2026.9.9] — 2026-09-29
 
