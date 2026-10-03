@@ -1,8 +1,7 @@
 {
   "files": [],
   "compilerOptions": {
-    "baseUrl": ".",
-    "paths": { "@/*": ["src/renderer/src/*"] }
+    "paths": { "@/*": ["./src/renderer/src/*"] }
   },
   "references": [
     { "path": "./tsconfig.web.json" },
