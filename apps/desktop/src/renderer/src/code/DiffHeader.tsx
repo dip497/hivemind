@@ -41,7 +41,7 @@ export function DiffHeader(props: {
           props.onToggleCollapsed();
         }}
       >
-        {props.collapsed ? <ChevronRight aria-hidden /> : <ChevronDown aria-hidden />}
+        {props.collapsed ? <ChevronRight /> : <ChevronDown />}
       </Button>
 
       {props.showStage && (

@@ -15,7 +15,7 @@
  * and Commit&Push require a summary + something to commit; Push/Pull don't.
  */
 import { useEffect, useState } from "react";
-import { GitCommitHorizontal, ArrowUp, ArrowDown, Loader2, X } from "lucide-react";
+import { GitCommitHorizontal, ArrowUp, ArrowDown, LoaderCircle, X } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
@@ -183,7 +183,7 @@ export function GitCommitModal({
             disabled={!canPull}
             title="Update this branch from upstream (fast-forward only)"
           >
-            {pullMut.isPending ? <Loader2 className="animate-spin" /> : <ArrowDown />}
+            {pullMut.isPending ? <LoaderCircle className="animate-spin" /> : <ArrowDown />}
             Pull{behind > 0 ? ` ↓${behind}` : ""}
           </Button>
           <Button
@@ -193,7 +193,7 @@ export function GitCommitModal({
             disabled={!canPush}
             title={ahead > 0 ? `Push ${ahead} commit(s)` : "Nothing to push yet"}
           >
-            {pushMut.isPending ? <Loader2 className="animate-spin" /> : <ArrowUp />}
+            {pushMut.isPending ? <LoaderCircle className="animate-spin" /> : <ArrowUp />}
             Push{ahead > 0 ? ` ↑${ahead}` : ""}
           </Button>
 
@@ -205,7 +205,7 @@ export function GitCommitModal({
               disabled={!canCommit}
               title="Commit staged changes (⌘↵)"
             >
-              {commitMut.isPending ? <Loader2 className="animate-spin" /> : null}
+              {commitMut.isPending ? <LoaderCircle className="animate-spin" /> : null}
               Commit
             </Button>
             <Button
@@ -214,7 +214,7 @@ export function GitCommitModal({
               disabled={!canCommit}
               title="Commit, then push"
             >
-              {(commitMut.isPending || pushMut.isPending) ? <Loader2 className="animate-spin" /> : null}
+              {(commitMut.isPending || pushMut.isPending) ? <LoaderCircle className="animate-spin" /> : null}
               Commit &amp; Push
             </Button>
           </div>

@@ -18,7 +18,7 @@
  * shadcn primitives (Button/Switch), which own their look and focus rings.
  */
 import { useState } from "react";
-import { Film, Image as ImageIcon, Plus, Trash2, ChevronDown } from "lucide-react";
+import { Film, Image as ImageIcon, Plus, Trash, ChevronDown } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Switch as SwitchPrimitive } from "./components/ui/switch";
 import { PRESETS, type TerminalPalette } from "@hivemind/core/settings-schema";
@@ -276,7 +276,7 @@ function OverlayRow({ layer, index }: { layer: MediaLayer; index: number }) {
           aria-label={`Remove overlay ${index + 1}`}
           onClick={() => removeOverlay(layer.id)}
         >
-          <Trash2 />
+          <Trash />
         </Button>
       </div>
       <Slider label="Opacity" value={Math.round(layer.opacity * 100)} min={0} max={100} suffix="%" onChange={(v) => updateOverlay(layer.id, { opacity: v / 100 })} />

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { setViewMode } from "./workspace/view-mode-store";
-import { Check, ChevronDown, ChevronRight, ExternalLink, FolderPlus, LayoutGrid, RefreshCw, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ExternalLink, FolderPlus, LayoutGrid, RefreshCw, Trash } from "lucide-react";
 import { GENERIC_AGENT_ICON, defFromManifest, iconFromManifest } from "@hivemind/agents";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -74,7 +74,7 @@ export function InstalledPlugins() {
               {problem && <p role="status" className="settings-note error">{problem}</p>}
               <details><summary>Details <ChevronDown size={12} /></summary>
                 <dl><dt>Available to</dt><dd>{pkg.source === "user" ? "All your workspaces" : "This repository"}</dd><dt>Location</dt><dd className="settings-path">{pkg.dir}</dd><dt>Additional access</dt><dd>{pkg.manifest?.permissions.join(", ") || "None"}</dd></dl>
-                {pkg.source === "user" ? removing === pkg.id ? <div className="settings-remove-confirm"><p>Remove {pkg.manifest?.name ?? pkg.id}? Its saved layout will be kept.</p><div className="settings-actions"><Button size="sm" variant="outline" disabled={busy} onClick={() => setRemoving(null)}>Keep extension</Button><Button size="sm" variant="destructive" disabled={busy} onClick={() => void act(async () => { await window.hive.removeViewPackage(pkg.id); setRemoving(null); rescan(); setNotice("Extension removed. Your work is still running."); })}>Remove extension</Button></div></div> : <Button variant="destructive" size="sm" className="mt-3" disabled={busy} onClick={() => setRemoving(pkg.id)}><Trash2 />Remove extension</Button> : <p className="settings-note">Included by this repository. Disable it here to stop using it.</p>}
+                {pkg.source === "user" ? removing === pkg.id ? <div className="settings-remove-confirm"><p>Remove {pkg.manifest?.name ?? pkg.id}? Its saved layout will be kept.</p><div className="settings-actions"><Button size="sm" variant="outline" disabled={busy} onClick={() => setRemoving(null)}>Keep extension</Button><Button size="sm" variant="destructive" disabled={busy} onClick={() => void act(async () => { await window.hive.removeViewPackage(pkg.id); setRemoving(null); rescan(); setNotice("Extension removed. Your work is still running."); })}>Remove extension</Button></div></div> : <Button variant="destructive" size="sm" className="mt-3" disabled={busy} onClick={() => setRemoving(pkg.id)}><Trash />Remove extension</Button> : <p className="settings-note">Included by this repository. Disable it here to stop using it.</p>}
               </details>
             </>}
           />;

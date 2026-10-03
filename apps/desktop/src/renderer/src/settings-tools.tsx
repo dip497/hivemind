@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, FileCode2, Globe2, ListTodo } from "lucide-react";
+import { ChevronRight, FileCodeCorner, Earth, ListTodo } from "lucide-react";
 import { toast } from "sonner";
 import { BUNDLED_TOOL_PLUGINS, BROWSER_PLUGIN_ID, bundledToolRegistry, CODE_PLUGIN_ID, ISSUES_PLUGIN_ID } from "@hivemind/core/tool-plugins";
 import { getSettings, patchSettings, useSettings } from "./settings-store";
@@ -33,7 +33,7 @@ function useToolEnabled(pluginId: string): [boolean, () => void] {
 }
 
 const ToolIcon = ({ pluginId, size }: { pluginId: string; size: number }) => {
-  const Icon = pluginId === CODE_PLUGIN_ID ? FileCode2 : pluginId === ISSUES_PLUGIN_ID ? ListTodo : Globe2;
+  const Icon = pluginId === CODE_PLUGIN_ID ? FileCodeCorner : pluginId === ISSUES_PLUGIN_ID ? ListTodo : Earth;
   return <Icon size={size} />;
 };
 

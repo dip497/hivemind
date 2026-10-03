@@ -10,7 +10,7 @@
  * views as escape hatches instead of a white screen.
  */
 import { Component, Suspense, type ErrorInfo, type ReactNode } from "react";
-import { AlertTriangle } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { getView, useViews, type WorkspaceViewProps } from "./workspace-view";
 
@@ -38,7 +38,7 @@ export function ViewFailure({ viewId, error, onSwitch, onRetry }: {
     <div className="flex-1 min-h-0 grid place-items-center p-6" role="alert" data-view-failure>
       <div className="max-w-[440px] rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] p-4 shadow-2xl">
         <div className="flex items-center gap-2 text-[13px] font-medium text-[var(--color-fg)]">
-          <AlertTriangle size={15} className="text-[var(--color-err)]" aria-hidden />
+          <TriangleAlert size={15} className="text-[var(--color-err)]" />
           {viewId ? <>View “{viewId}” failed</> : <>No workspace view is available</>}
         </div>
         <p className="mt-1.5 text-[12px] leading-snug text-[var(--color-fg2)]">

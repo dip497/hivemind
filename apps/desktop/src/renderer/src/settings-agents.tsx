@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronRight, Copy, ExternalLink, Store, Trash2, TriangleAlert } from "lucide-react";
+import { Check, ChevronRight, Copy, ExternalLink, Store, Trash, TriangleAlert } from "lucide-react";
 import {
   GENERIC_AGENT_ICON, defFromManifest, optionChoices,
   type AgentOption, type AgentProviderDef, type AgentWireEntry,
@@ -102,7 +102,7 @@ export function AgentsOverview() {
           aria-label={c.id === defaultId ? `${label(c)} is the default` : `Make ${label(c)} the default`} title="Default agent"
           onClick={() => patchSettings("agents.defaultAgent", c.id)}>{c.id === defaultId ? "Default" : <span className="plugin-choice-dot" aria-hidden="true" />}</Button>
       )}
-      <ChevronRight className="plugin-row-go" size={15} aria-hidden="true" />
+      <ChevronRight className="plugin-row-go" size={15} />
     </div>
   );
   const group = (title: string, list: Card[], hint?: string) => list.length > 0 && (
@@ -177,7 +177,7 @@ function RemoveAgent({ id, label }: { id: string; label: string }) {
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return <section className="plugin-section" aria-label="Remove">
-    {!confirm ? <Button variant="destructive" size="sm" className="mt-3" onClick={() => setConfirm(true)}><Trash2 />Remove {label}</Button>
+    {!confirm ? <Button variant="destructive" size="sm" className="mt-3" onClick={() => setConfirm(true)}><Trash />Remove {label}</Button>
       : <div className="settings-remove-confirm">
         <p>Remove {label}? Hivemind will not add it again on its own. Its CLI stays installed.</p>
         {error && <p role="alert" className="settings-note error">{error}</p>}

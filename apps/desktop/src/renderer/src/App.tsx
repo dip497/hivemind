@@ -10,7 +10,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { UPDATE_START, UPDATE_STEPS, updateProgress, type UpdateProgress } from "../../shared/update-progress";
-import { Bell, ChevronRight, ExternalLink, Loader2, Plus, Settings, X, Palette, PanelsTopLeft, Puzzle, Bot, Keyboard, Info } from "lucide-react";
+import { Bell, ChevronRight, ExternalLink, LoaderCircle, Plus, Settings, X, Palette, PanelsTopLeft, Puzzle, Bot, Keyboard, Info } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
@@ -448,7 +448,7 @@ export function App() {
                 className="pointer-events-auto"
                 title="New issue (⌘N)"
               >
-                <Plus aria-hidden />
+                <Plus />
                 <span>New issue</span>
                 <kbd className="font-mono text-[9.5px] ml-0.5">⌘N</kbd>
               </Button>
@@ -461,7 +461,7 @@ export function App() {
               title={update.status?.updateAvailable ? "Settings — update available" : "Settings"}
               aria-label="settings"
             >
-              <Settings aria-hidden />
+              <Settings />
               {update.status?.updateAvailable && (
                 <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-[var(--color-warn)] ring-2 ring-[var(--color-bg2)]" aria-hidden />
               )}
@@ -527,7 +527,7 @@ function UpdateWork({ progress, busy, onRestart }: { progress: UpdateProgress | 
     <>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
-          {busy && <Loader2 className="size-3 animate-spin text-[var(--color-fg2)]" aria-hidden />}
+          {busy && <LoaderCircle className="size-3 animate-spin text-[var(--color-fg2)]" />}
           <span className="truncate">{p.label}</span>
         </div>
         <div className="hm-update-bar mt-1.5" data-busy={busy ? "1" : "0"} role="progressbar"
@@ -719,7 +719,7 @@ function SettingsModal({
                 const shown = items.filter((item) => !item.plugin || open || item.id === page);
                 return <div key={group} className="settings-nav-group" role="group" aria-label={group}>
                 <h3 className="settings-nav-heading">{foldable
-                  ? <button aria-expanded={open} onClick={() => toggleGroup(group)}><ChevronRight size={12} aria-hidden="true" /><span>{group}</span></button>
+                  ? <button aria-expanded={open} onClick={() => toggleGroup(group)}><ChevronRight size={12} /><span>{group}</span></button>
                   : <span className="settings-nav-heading-text">{group}</span>}</h3>
                 {shown.map((item) => <button key={item.id} onClick={() => setPage(item.id)} aria-current={page === item.id ? "page" : undefined}
                   title={item.label} data-settings-page={item.id} data-plugin={item.plugin ? "" : undefined}>

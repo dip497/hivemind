@@ -14,7 +14,7 @@ import { MachineDot, statusWords } from "./machines/status";
 import { A_DEVICE, GONE_MACHINE, openMachines, placeOf, statusOf, useMachines } from "./machines/store";
 import type { MachineInfo } from "../../shared/ipc";
 import { memo, useEffect, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Globe, Monitor, Plus, RefreshCw, MoreHorizontal, ServerCog, X, Pencil, Trash2 } from "lucide-react";
+import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Globe, Monitor, Plus, RefreshCw, Ellipsis, ServerCog, X, Pencil, Trash } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon } from "./agents";
 import { FrameRailMenu, type FrameActions } from "./FrameRailMenu";
@@ -395,7 +395,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           {t.kind === AGENT_TILE_KIND
             ? <AgentIcon id={t.agent} size={14} />
             : t.kind === "browser"
-              ? <Globe size={12} aria-hidden />
+              ? <Globe size={12} />
               : KIND_GLYPH[t.kind]}
         </span>
         {/* Name first, so every row's text starts at the same x. The badge used to
@@ -631,7 +631,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           <div className="mt-1.5">
             <div className="flex items-center gap-2 h-8 pr-2 mx-2 pl-[26px]">
               <span className="flex-1 flex items-center gap-2 min-w-0 text-[14px] font-medium text-[var(--color-fg2)]">
-                <FolderOpen size={15} aria-hidden className="shrink-0 text-[var(--color-fg3)]" />
+                <FolderOpen size={15} className="shrink-0 text-[var(--color-fg3)]" />
                 <span className="truncate">Canvas</span>
                 <span className="ml-auto font-mono text-[11px] text-[var(--color-fg3)]">{looseTiles.length}</span>
               </span>
@@ -701,7 +701,7 @@ function TileRailMenu({ tile, x, y, onCloseTile, onRequestRename, close }: {
           <span className="truncate">Rename</span>
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onCloseTile(tile.id)} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
-          <span className="shrink-0 grid place-items-center size-4"><Trash2 size={13} /></span>
+          <span className="shrink-0 grid place-items-center size-4"><Trash size={13} /></span>
           <span className="truncate">Close tile</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -732,7 +732,7 @@ function IdleMachines({ groups }: { groups: MachineGroup[] }) {
         className="sticky top-0 z-10 bg-[var(--color-bg2)] w-full flex items-center gap-1.5 h-7 pl-3 pr-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)] hover:text-[var(--color-fg2)] cursor-pointer"
       >
         {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        <Server size={11} aria-hidden />
+        <Server size={11} />
         <span>Machines</span>
         <span className="font-mono tracking-normal font-normal tabular-nums">{groups.length}</span>
         {!open && summary && <span className="ml-auto normal-case tracking-normal font-normal truncate">{summary}</span>}
@@ -763,10 +763,10 @@ function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYo
       data-machine-header={group.key === "local" ? "local" : group.label}
       title={m ? `${m.target}${s.detail ? ` — ${s.detail}` : ""}` : undefined}
     >
-      {!group.hostId ? <Monitor size={11} aria-hidden />
+      {!group.hostId ? <Monitor size={11} />
         : used ? (
           <span className="relative shrink-0 grid place-items-center">
-            <Server size={11} aria-hidden />
+            <Server size={11} />
             <span className="absolute -right-1 -bottom-0.5 leading-[0]"><MachineDot status={s} enabled={on} size={5} /></span>
           </span>
         ) : <MachineDot status={s} enabled={on} size={6} />}
@@ -797,7 +797,7 @@ function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYo
             </Button>
           )}
           <Button variant="ghost" size="icon-2xs" onClick={() => setMenu((x) => !x)} aria-label={`${m.label} actions`}>
-            <MoreHorizontal size={12} />
+            <Ellipsis size={12} />
           </Button>
           </span>
           {used && on && DOWN.has(s.state) && !menu && (

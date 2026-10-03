@@ -279,7 +279,7 @@ export function BrowserTile({ tileId, frameId, url, selected, openReq, onClose, 
     <div className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]" onKeyDown={onKeyDown}>
       {/* Tab strip (doubles as the drag handle). */}
       <div className="tile-drag-handle flex items-stretch gap-0.5 px-1.5 pt-1 bg-[var(--color-bg3)] border-b border-[var(--color-line)] cursor-grab active:cursor-grabbing">
-        <GripVertical aria-hidden size={13} className="text-[var(--color-fg3)] self-center shrink-0 mr-0.5" />
+        <GripVertical size={13} className="text-[var(--color-fg3)] self-center shrink-0 mr-0.5" />
         <div className="flex items-end gap-0.5 overflow-x-auto flex-1 min-w-0">
           {tabs.map((t) => (
             <button

@@ -9,7 +9,7 @@
  * (which used 10–11px) — they match plan mode: 13px icons, 11.5–12.5px text.
  */
 import type { ReactNode } from "react";
-import { MessageSquare, Trash2, Tag } from "lucide-react";
+import { MessageSquare, Trash, Tag } from "lucide-react";
 import { QUICK_LABELS } from "./plan-review/types";
 import type { ReviewComment } from "./diff-comments";
 import { Button } from "./components/ui/button";
@@ -171,7 +171,7 @@ export function ActionToolbar({
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1">
         <ToolBtn icon={<MessageSquare size={13} />} label="Comment" onClick={onComment} />
-        {onDelete && <ToolBtn icon={<Trash2 size={13} />} label="Delete" danger onClick={onDelete} />}
+        {onDelete && <ToolBtn icon={<Trash size={13} />} label="Delete" danger onClick={onDelete} />}
       </div>
       <div className="flex flex-wrap gap-1 max-w-[230px] pt-0.5">
         {QUICK_LABELS.map((q) => (

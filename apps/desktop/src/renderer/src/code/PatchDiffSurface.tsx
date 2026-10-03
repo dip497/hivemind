@@ -127,7 +127,7 @@ export function PatchDiffSurface({
           then send them all to claude (spawns one if none is alive). */}
       {review.count > 0 && (
         <div className="shrink-0 flex items-center gap-2 px-2.5 py-1.5 border-t border-[var(--color-line)] bg-[var(--color-bg3)] text-[11px]">
-          <MessageSquarePlus size={12} className="text-[var(--color-warn)]" aria-hidden />
+          <MessageSquarePlus size={12} className="text-[var(--color-warn)]" />
           <span className="text-[var(--color-warn)] font-medium">{review.count} comment{review.count > 1 ? "s" : ""}</span>
           <Button
             size="xs"
@@ -135,7 +135,7 @@ export function PatchDiffSurface({
             onClick={review.sendReview}
             title="Send all comments on this file to claude"
           >
-            <Play fill="currentColor" strokeWidth={0} aria-hidden /> Send to Claude
+            <Play fill="currentColor" strokeWidth={0} /> Send to Claude
           </Button>
           <Button variant="destructive" size="xs" onClick={review.clearFile} title="discard this file's comments">
             clear

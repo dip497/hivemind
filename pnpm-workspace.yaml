@@ -34,7 +34,7 @@ catalog:
   class-variance-authority: ^0.7.1
   clsx: ^2.1.1
   tailwind-merge: ^3.7.0
-  lucide-react: ^0.461.0
+  lucide-react: ^1.50.0
   '@lydell/node-pty': 1.2.0-beta.15
   '@modelcontextprotocol/sdk': ^1.0.4
   better-sqlite3: ^11.7.0

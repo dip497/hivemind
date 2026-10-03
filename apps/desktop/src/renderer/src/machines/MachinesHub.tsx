@@ -5,7 +5,7 @@
  * run is this computer (M4): there, choosing where it runs is choosing a folder here.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Folder, History, Laptop, Loader2, Plus, RefreshCw, Server } from "lucide-react";
+import { ArrowLeft, ChevronRight, Folder, RotateCcwClock, Laptop, LoaderCircle, Plus, RefreshCw, Server } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
@@ -214,7 +214,7 @@ function MachineList({ picking, onChoose, onChooseDevice, onEdit, onAdd, usageOf
                     <span className="block text-[11px] font-mono text-[var(--color-fg3)] truncate">{m.target}</span>
                   </span>
                   <span className="shrink-0 text-[10.5px] tabular-nums text-[var(--color-fg2)]">
-                    {busy[m.id] ? <Loader2 size={11} className="animate-spin" /> : statusWords(s, m.enabled)}
+                    {busy[m.id] ? <LoaderCircle size={11} className="animate-spin" /> : statusWords(s, m.enabled)}
                   </span>
                 </button>
               </li>
@@ -247,7 +247,7 @@ function MachineList({ picking, onChoose, onChooseDevice, onEdit, onAdd, usageOf
             <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-y-1.5 text-[12px]">
               <dt className="text-[var(--color-fg3)]">Connection</dt>
               <dd className="min-w-0 text-[var(--color-fg)] flex items-center gap-1.5 whitespace-nowrap">
-                {doing ? <><Loader2 size={11} className="animate-spin" />{doing}…</> : statusWords(s, m.enabled)}
+                {doing ? <><LoaderCircle size={11} className="animate-spin" />{doing}…</> : statusWords(s, m.enabled)}
                 {s.detail && s.state !== "online" && s.state !== "attention" && <span className="min-w-0 text-[var(--color-fg3)] truncate" title={s.detail}>— {s.detail}</span>}
               </dd>
               <dt className="text-[var(--color-fg3)]">hive</dt>
@@ -414,7 +414,7 @@ function AddMachine({ initialTarget, editing, onCancel, onAdded }: {
         ? <AttentionNote target={target.trim()} detail={error.text} />
         : <p className="text-[11.5px] text-destructive break-words">{error.text}</p>)}
       <div className="flex items-center justify-end gap-2">
-        {busy && <span className="mr-auto flex items-center gap-1.5 text-[11.5px] text-muted-foreground"><Loader2 size={12} className="animate-spin" />Connecting…</span>}
+        {busy && <span className="mr-auto flex items-center gap-1.5 text-[11.5px] text-muted-foreground"><LoaderCircle size={12} className="animate-spin" />Connecting…</span>}
         <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
         <Button type="submit" disabled={busy || !target.trim()}>{editing ? "Save" : "Add"}</Button>
       </div>
@@ -631,7 +631,7 @@ function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; 
             <div className="px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)]">Recent</div>
             {recent.map((d) => (
               <button key={d} onClick={() => open(d)} title={`Open ${d}`} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[12px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] cursor-pointer">
-                <History size={13} className="shrink-0 text-[var(--color-fg3)]" />
+                <RotateCcwClock size={13} className="shrink-0 text-[var(--color-fg3)]" />
                 <span className="truncate flex-1 font-mono">{home && d.startsWith(home + "/") ? "~" + d.slice(home.length) : d}</span>
               </button>
             ))}

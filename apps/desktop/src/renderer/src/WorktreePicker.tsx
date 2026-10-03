@@ -12,7 +12,7 @@
  * portals this into a popover (FrameNode's AnchoredMenu).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { GitBranch, Plus, Check, Loader2 } from "lucide-react";
+import { GitBranch, Plus, Check, LoaderCircle } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { MenuItem } from "./components/ui/menu-item";
@@ -139,7 +139,7 @@ export function WorktreePicker({ repoPath, activePath, onAttach, onCreate }: Wor
           <div className="px-3 py-2 text-[11px] text-[var(--color-err)]">{err}</div>
         ) : list === null ? (
           <div className="flex items-center gap-2 px-3 py-2 text-[11px] text-[var(--color-fg3)]">
-            <Loader2 size={12} className="animate-spin" /> loading worktrees…
+            <LoaderCircle size={12} className="animate-spin" /> loading worktrees…
           </div>
         ) : filtered.length === 0 ? (
           <div className="px-3 py-2 text-[11px] text-[var(--color-fg3)]">no worktrees</div>
