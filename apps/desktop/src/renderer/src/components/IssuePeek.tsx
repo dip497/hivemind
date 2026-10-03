@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Play, FileQuestion, X } from "lucide-react";
+import { Play, FileQuestionMark, X } from "lucide-react";
 import type { AcceptanceItem, Issue, IssueState, LinkType } from "@hivemind/core/types";
 import { Button } from "./ui/button";
 import {
@@ -73,7 +73,7 @@ export function IssuePeek({ root, id, onClose }: Props) {
         ) : !issue ? (
           <div className="grid place-items-center h-[80vh] max-h-[820px] px-6">
             <div className="flex flex-col items-center gap-3 text-center max-w-[320px]">
-              <FileQuestion size={28} className="text-[var(--color-fg3)]" />
+              <FileQuestionMark size={28} className="text-[var(--color-fg3)]" />
               <div className="text-[13px] font-medium text-[var(--color-fg)]">
                 {isError ? "Couldn't load this issue" : "Issue not found"}
               </div>
@@ -109,7 +109,7 @@ export function IssuePeek({ root, id, onClose }: Props) {
                   }}
                   title="Set up agents (if needed), spawn claude, and tell it to work on this issue"
                 >
-                  <Play fill="currentColor" strokeWidth={0} aria-hidden />
+                  <Play fill="currentColor" strokeWidth={0} />
                   Work on this
                 </Button>
                 <span aria-hidden className="mx-0.5 h-5 w-px bg-[var(--color-line2)]" />

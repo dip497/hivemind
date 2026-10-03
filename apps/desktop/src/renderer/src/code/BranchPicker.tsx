@@ -56,12 +56,12 @@ export function BranchPicker({
         title={value ?? autoLabel}
       >
         <span className="truncate">{value ?? autoLabel}</span>
-        <ChevronDown aria-hidden />
+        <ChevronDown />
       </Button>
       {open && (
         <div className="nodrag absolute z-50 left-0 top-full mt-1 w-60 flex flex-col bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-lg shadow-xl overflow-hidden">
           <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--color-line2)]">
-            <Search size={11} aria-hidden className="text-[var(--color-fg3)] shrink-0" />
+            <Search size={11} className="text-[var(--color-fg3)] shrink-0" />
             <input
               autoFocus
               value={query}

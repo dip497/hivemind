@@ -7,7 +7,7 @@
 import { MenuItem } from "../components/ui/menu-item";
 import { Button } from "../components/ui/button";
 import { useEffect, useState } from "react";
-import { Check, FolderOpen, GitBranch, Loader2, RefreshCw, Server, Settings2, SquareTerminal, Unplug } from "lucide-react";
+import { Check, FolderOpen, GitBranch, LoaderCircle, RefreshCw, Server, Settings2, SquareTerminal, Unplug } from "lucide-react";
 import type { Grant, SessionSummary } from "../../../shared/ipc";
 import { parseDeviceUri, parseRemote, remotePath, sshTargetOf, REMOTE_SCHEME } from "@hivemind/core/remote-uri";
 import { joinedId, useShown } from "../multiplayer/shown";
@@ -81,7 +81,7 @@ export default function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }
       {/* A device's own sessions are its windows' to show. */}
       {place.device || hostId?.startsWith("device:") ? null : sessions === null ? (
         <MenuItem onClick={() => void loadSessions()} disabled={loading}>
-          {loading ? <Loader2 size={13} className="animate-spin" /> : <SquareTerminal size={13} />} Sessions running there…
+          {loading ? <LoaderCircle size={13} className="animate-spin" /> : <SquareTerminal size={13} />} Sessions running there…
         </MenuItem>
       ) : (
         <div className="grid gap-0.5">
@@ -141,7 +141,7 @@ function HandOff({ workspace, uri }: { workspace: string; uri: string }) {
   return (
     <>
       <MenuItem onClick={go} disabled={busy} data-hand-off>
-        {busy ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />} Hand off its branch to the host
+        {busy ? <LoaderCircle size={13} className="animate-spin" /> : <GitBranch size={13} />} Hand off its branch to the host
       </MenuItem>
       {state && "landed" in state && (
         <p className="px-2 text-[11px] text-[var(--color-fg2)] break-words" data-hand-off-landed={state.landed}>

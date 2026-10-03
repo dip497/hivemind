@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ExternalLink, Puzzle, Store, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ExternalLink, Puzzle, Store, Trash } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { MenuItem } from "./components/ui/menu-item";
 import { Switch } from "./components/ui/switch";
@@ -64,7 +64,7 @@ export function ViewsOverview() {
           aria-label={mode === view.id ? `${view.label} is in use` : `Use ${view.label}`} title="Workspace view"
           onClick={() => setViewMode(view.id)}>{mode === view.id ? "In use" : <span className="plugin-choice-dot" aria-hidden="true" />}</Button>
       )}
-      <ChevronRight className="plugin-row-go" size={15} aria-hidden="true" />
+      <ChevronRight className="plugin-row-go" size={15} />
     </div>
   );
   return <div className="settings-stack">
@@ -140,7 +140,7 @@ export function ViewPage({ id }: { id: string }) {
 function RemoveView({ id, name, onRemoved }: { id: string; name: string; onRemoved: () => void }) {
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (!confirm) return <Button variant="destructive" size="sm" className="mt-3" onClick={() => setConfirm(true)}><Trash2 />Remove {name}</Button>;
+  if (!confirm) return <Button variant="destructive" size="sm" className="mt-3" onClick={() => setConfirm(true)}><Trash />Remove {name}</Button>;
   return <div className="settings-remove-confirm">
     <p>Remove {name}? Its saved layout is kept, and your work keeps running.</p>
     {error && <p role="alert" className="settings-note error">{error}</p>}

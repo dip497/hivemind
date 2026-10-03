@@ -4,7 +4,7 @@
  * queue + the spawn actions). Extracted to keep Canvas.tsx focused.
  */
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { AlertCircle, CheckCircle2, AlertTriangle, Sparkles, X } from "lucide-react";
+import { CircleAlert, CircleCheck, TriangleAlert, Sparkles, X } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { useTileFocus } from "./canvas-camera";
 import { openMachines } from "./machines/store";
@@ -17,10 +17,10 @@ import { toastKindOf, toastTtlMs, type Toast, type NoticeKind } from "./useAgent
  *  (and a pulse on needs-you), never by a competing second color. Needs-you
  *  pulses (actionable); done/error are steady — only needs-you earns motion
  *  (pulsing everything is the slop tell). */
-const NOTICE: Record<NoticeKind, { Icon: typeof AlertCircle; verb: string; pulse: boolean }> = {
-  needs: { Icon: AlertCircle, verb: "needs your input", pulse: true },
-  done: { Icon: CheckCircle2, verb: "finished — click to view", pulse: false },
-  error: { Icon: AlertTriangle, verb: "failed — click to view", pulse: false },
+const NOTICE: Record<NoticeKind, { Icon: typeof CircleAlert; verb: string; pulse: boolean }> = {
+  needs: { Icon: CircleAlert, verb: "needs your input", pulse: true },
+  done: { Icon: CircleCheck, verb: "finished — click to view", pulse: false },
+  error: { Icon: TriangleAlert, verb: "failed — click to view", pulse: false },
 };
 
 /** "just now" / "Ns ago" — coarse, auto-updates on a 1s tick (Toasts only mounts

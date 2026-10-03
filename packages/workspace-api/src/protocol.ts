@@ -45,10 +45,10 @@ export function written(value: unknown, name: string): string {
 }
 
 /** A param checked against a schema (one of core's zod schemas): what it parses to. */
-export function shaped<T>(schema: { safeParse(value: unknown): { success: true; data: T } | { success: false; error: { issues: Array<{ path: Array<string | number>; message: string }> } } }, value: unknown, name: string): T {
+export function shaped<T>(schema: { safeParse(value: unknown): { success: true; data: T } | { success: false; error: { issues: Array<{ path: PropertyKey[]; message: string }> } } }, value: unknown, name: string): T {
   const parsed = schema.safeParse(value);
   if (parsed.success) return parsed.data;
-  const why = parsed.error.issues.map((i) => `${[name, ...i.path].join(".")}: ${i.message}`).join("; ");
+  const why = parsed.error.issues.map((i) => `${[name, ...i.path.map(String)].join(".")}: ${i.message}`).join("; ");
   throw new ApiError("BAD_REQUEST", why);
 }
 

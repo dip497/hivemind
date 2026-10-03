@@ -19,7 +19,7 @@
 import { FRAME_SWATCHES } from "./frame-color";
 import type { ReactNode } from "react";
 import {
-  GitBranch, FolderGit2, Server, LayoutGrid, Plus, Pencil, Trash2, Palette,
+  GitBranch, FolderGit2, Server, LayoutGrid, Plus, Pencil, Trash, Palette,
   Bot, GitCommitHorizontal, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { optionChoices } from "@hivemind/agents";
@@ -211,7 +211,7 @@ export function FrameRailMenu({
             ))}
           </div>
         </Sub>
-        <Item icon={<Trash2 size={13} />} label="Delete frame" danger onSelect={() => actions.onDelete(fid)} />
+        <Item icon={<Trash size={13} />} label="Delete frame" danger onSelect={() => actions.onDelete(fid)} />
       </DropdownMenuContent>
     </DropdownMenu>
   );

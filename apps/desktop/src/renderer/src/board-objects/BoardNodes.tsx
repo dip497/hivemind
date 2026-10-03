@@ -7,7 +7,7 @@
  */
 import { memo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { NodeResizer, type NodeTypes } from "@xyflow/react";
-import { Check, Copy, GripVertical, Plus, Trash2 } from "lucide-react";
+import { Check, Copy, GripVertical, Plus, Trash } from "lucide-react";
 import type { ChecklistItem, ChecklistObject, NoteObject, TextObject } from "@hivemind/workspace-doc/shapes";
 import { Button } from "../components/ui/button";
 import { mintId } from "@hivemind/workspace-api/tile-id";
@@ -55,7 +55,7 @@ function BoxBar({ id, object }: { id: string; object: BoxObject }) {
           onClick={() => board.update(id, (o) => (o.kind === "note" ? { ...o, color: c } : o))} />
       ))}
       <Button variant="ghost" size="icon-sm" aria-label="duplicate" title="Duplicate  (⌘D)" onClick={() => board.duplicate(id)}><Copy /></Button>
-      <Button variant="ghost" size="icon-sm" aria-label="delete" title="Delete  (⌫)" onClick={() => board.remove(id)}><Trash2 /></Button>
+      <Button variant="ghost" size="icon-sm" aria-label="delete" title="Delete  (⌫)" onClick={() => board.remove(id)}><Trash /></Button>
     </div>
   );
 }

@@ -727,7 +727,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     >
       {/* tile chrome */}
       <div className="tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
-        <GripVertical aria-hidden size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
+        <GripVertical size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
         <span className="font-semibold text-[var(--color-fg)]">Diff</span>
         <span aria-hidden className="text-[var(--color-line2)]">·</span>
         <span className="text-[var(--color-fg2)]">{repoPath.split("/").slice(-1)[0]}</span>
@@ -824,7 +824,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             Line-level matches, scroll + highlight, ↑/↓ nav. */}
         {searchOpen || search.trim() ? (
           <div className="nodrag ml-1.5 inline-flex items-center gap-1 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-1.5 py-0.5">
-            <Search size={11} aria-hidden className="text-[var(--color-fg3)] shrink-0" />
+            <Search size={11} className="text-[var(--color-fg3)] shrink-0" />
             <input
               autoFocus
               className="w-28 bg-transparent text-[10px] font-mono text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg3)]"
@@ -881,7 +881,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             aria-label="search diff"
             title="Search diff"
           >
-            <Search aria-hidden />
+            <Search />
           </Button>
         )}
 
@@ -895,7 +895,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             onClick={() => setViewMenuOpen((o) => !o)}
             title="View options"
           >
-            <SlidersHorizontal aria-hidden />
+            <SlidersHorizontal />
             view
           </Button>
           {viewMenuOpen && (
@@ -963,7 +963,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
                   aria-label="refresh diff"
                   title="Refresh diff (re-read files + diffs)"
                 >
-                  <RefreshCw aria-hidden />
+                  <RefreshCw />
                 </Button>
               </div>
             </div>
@@ -1210,7 +1210,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
               onClick={sendReview}
               title="Send all review comments to claude (spawns one if none is running)"
             >
-              <Play fill="currentColor" strokeWidth={0} aria-hidden />
+              <Play fill="currentColor" strokeWidth={0} />
               Send review to Claude
             </Button>
             <Button

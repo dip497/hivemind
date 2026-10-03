@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Download, Folder, GitCompare, Globe2, ListChecks, ListTodo, Loader2, MoveUpRight, Palette, RotateCw, Scan, StickyNote, Terminal, Type, Upload, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, Download, Folder, GitCompare, Earth, ListChecks, ListTodo, LoaderCircle, MoveUpRight, Palette, RotateCw, Scan, StickyNote, Terminal, Type, Upload, type LucideIcon } from "lucide-react";
 import type { ToolbarAction, ToolbarActionId } from "@hivemind/core/toolbar";
 import { Button } from "../components/ui/button";
 import { MenuItem } from "../components/ui/menu-item";
@@ -33,7 +33,7 @@ export interface StandardToolbarProps {
 
 const icons: Record<Exclude<ToolbarActionId, "agent" | "board">, LucideIcon> = {
   terminal: Terminal, explorer: Folder, diff: GitCompare, issues: ListTodo,
-  frame: Scan, browser: Globe2, theme: Palette,
+  frame: Scan, browser: Earth, theme: Palette,
 };
 // Derived per call: the catalog is replaced when manifests load.
 const enabledAgents = () => getAgents().filter((agent) => agent.enabled);
@@ -62,7 +62,7 @@ export function StandardToolbar(props: StandardToolbarProps) {
       onClick={props.updateStaged && !props.upgrading ? props.onRestart : props.onUpgrade}
       disabled={props.upgrading} aria-busy={props.upgrading}
       title={props.upgrading ? "Downloading the update…" : props.updateStaged ? "Downloaded — restart to finish" : "Update available — click to download it"}>
-      {props.upgrading ? <Loader2 className="animate-spin" /> : props.updateStaged ? <RotateCw /> : <Upload />}
+      {props.upgrading ? <LoaderCircle className="animate-spin" /> : props.updateStaged ? <RotateCw /> : <Upload />}
       {props.upgrading ? "Updating…" : props.updateStaged ? "Restart to finish" : "Update available"}
     </Button>}
   </div>;

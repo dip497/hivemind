@@ -55,7 +55,7 @@ const KIND_GLYPH: Record<LayerTile["kind"], string> = {
 
 function TabGlyph({ tile }: { tile: LayerTile }): ReactNode {
   if (tile.kind === AGENT_TILE_KIND) return <AgentIcon id={tile.agent} size={13} />;
-  if (tile.kind === "browser") return <Globe size={12} aria-hidden />;
+  if (tile.kind === "browser") return <Globe size={12} />;
   return (
     <span aria-hidden className="font-mono text-[11px] text-[var(--color-fg3)]">
       {KIND_GLYPH[tile.kind]}

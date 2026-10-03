@@ -18,6 +18,7 @@ import path from "node:path";
 import os from "node:os";
 import matter from "gray-matter";
 import YAML from "yaml";
+import { z } from "zod";
 import {
   ConfigZ,
   IssueFrontmatterZ,
@@ -134,7 +135,7 @@ export async function readConfig(root: string): Promise<Config> {
     if (!final.success) {
       throw new HiveError(
         "bad_config",
-        `.hivemind/config.yaml invalid and self-repair failed: ${final.error.message}`
+        `.hivemind/config.yaml invalid and self-repair failed: ${z.prettifyError(final.error)}`
       );
     }
     await writeConfig(root, final.data);
@@ -323,7 +324,7 @@ export function parseIssueFile(p: string, raw: string): Issue {
   const parsed = matter(raw);
   const fmResult = IssueFrontmatterZ.safeParse(parsed.data);
   if (!fmResult.success) {
-    throw new HiveError("bad_issue", `${p}: invalid frontmatter: ${fmResult.error.message}`);
+    throw new HiveError("bad_issue", `${p}: invalid frontmatter: ${z.prettifyError(fmResult.error)}`);
   }
   const sections = parseSections(parsed.content);
   return {

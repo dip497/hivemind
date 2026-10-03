@@ -2,7 +2,7 @@
  *  hosts (R14) and those shared with them (M1), a way to browse for another, and another window on
  *  this one. */
 import { Suspense, lazy, useEffect, useState } from "react";
-import { AppWindow, FolderOpen, History, LogIn, Server, Users } from "lucide-react";
+import { AppWindow, FolderOpen, RotateCcwClock, LogIn, Server, Users } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "./components/ui/dialog";
 import { MenuItem } from "./components/ui/menu-item";
 // Joining loads when its page is opened.
@@ -43,7 +43,7 @@ export function RecentProjects({ open, recents, current, onOpen, onBrowse, onNew
     <Dialog open={open} onOpenChange={(o) => { if (!o) { onClose(); setJoining(false); } }}>
       <DialogContent padding="none" className="sm:max-w-[480px] overflow-hidden">
         <header className="flex items-center gap-2 px-4 pt-4 pb-2">
-          {joining ? <LogIn size={15} className="text-[var(--color-fg3)]" /> : <History size={15} className="text-[var(--color-fg3)]" />}
+          {joining ? <LogIn size={15} className="text-[var(--color-fg3)]" /> : <RotateCcwClock size={15} className="text-[var(--color-fg3)]" />}
           <DialogTitle className="h-7 flex items-center">{joining ? "Join a shared workspace" : "Open recent"}</DialogTitle>
         </header>
         {joining ? (

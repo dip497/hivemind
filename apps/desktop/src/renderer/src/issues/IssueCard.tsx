@@ -63,7 +63,7 @@ export function IssueCard({
             onWork();
           }}
         >
-          <Play fill="currentColor" strokeWidth={0} aria-hidden />
+          <Play fill="currentColor" strokeWidth={0} />
           work
         </Button>
       </div>
@@ -116,7 +116,7 @@ export function IssueRow({ issue, root, onWork }: { issue: IssueSummary; root: s
           onWork();
         }}
       >
-        <Play fill="currentColor" strokeWidth={0} aria-hidden />
+        <Play fill="currentColor" strokeWidth={0} />
         work
       </Button>
     </div>

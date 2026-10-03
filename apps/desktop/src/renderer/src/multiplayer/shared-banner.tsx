@@ -72,17 +72,17 @@ export function SharedBanner({ onMoved }: { onMoved: (folder: string) => void })
       {error && <span className="max-w-[260px] truncate text-[var(--color-err)]" role="alert" title={error}>{error}</span>}
       {home && status.state === "connected" && (
         <Button size="sm" variant="ghost" disabled={moving} onClick={() => void bringHere(window.hive.moveHostingHere)} title={`Host it on this computer again, from ${home}`} data-move-here>
-          <House aria-hidden /> {moving ? "Moving…" : "Move here"}
+          <House /> {moving ? "Moving…" : "Move here"}
         </Button>
       )}
       {home && status.state === "offline" && (
         <Button size="sm" variant="ghost" disabled={moving} onClick={() => void bringHere(window.hive.takeOver)} title={`Host it on this computer again, from ${home}, as it was last seen here`} data-take-over>
-          <House aria-hidden /> {moving ? "Taking over…" : "Host it here"}
+          <House /> {moving ? "Taking over…" : "Host it here"}
         </Button>
       )}
       {!ended && (
         <Button size="sm" variant="ghost" onClick={() => void window.hive.leave(workspace)} data-leave>
-          <LogOut aria-hidden /> Leave
+          <LogOut /> Leave
         </Button>
       )}
     </div>

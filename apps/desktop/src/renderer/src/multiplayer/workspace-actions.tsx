@@ -25,7 +25,7 @@ export function WorkspaceActions({ onShare, onPeople }: { onShare: () => void; o
           title="Invite people to this workspace"
           data-share
         >
-          <Share2 aria-hidden />
+          <Share2 />
           <span>Share</span>
         </Button>
       )}

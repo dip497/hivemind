@@ -153,7 +153,7 @@ export function KeyboardChip({ tile, name, kb }: { tile: string; name: string; k
   return (
     <span className="nodrag inline-flex shrink-0 items-center gap-1 text-[10.5px] text-[var(--color-fg3)]" data-keyboard={tile} data-keyboard-holder={kb.holder.name} data-keyboard-machine={kb.holder.machine ? "" : undefined}>
       <span className="inline-flex items-center gap-1 rounded bg-[var(--color-bg)] px-1 py-px" title={kb.holder.you ? "You have the keyboard" : kb.holder.machine ? `Runs on ${kb.holder.name}'s machine: typed into there` : `${kb.holder.name} has the keyboard`}>
-        <Keyboard size={11} aria-hidden /> {kb.holder.name}
+        <Keyboard size={11} /> {kb.holder.name}
       </span>
       {typing && <span className="animate-pulse text-[var(--color-fg2)]" data-typing={tile}>{typing} is typing</span>}
       {kb.mayTake && (
@@ -180,7 +180,7 @@ export function KeyboardPill({ tile, kb }: { tile: string; kb: TerminalKeyboard 
   if (kb.mayType || !kb.holder || !(kb.mayAsk || kb.mayTake)) return null;
   return (
     <div className="nodrag pointer-events-auto absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full border border-[var(--color-line)] bg-[var(--color-bg2)] px-3 py-1 text-[12px] shadow-md" role="status" data-keyboard-pill={tile}>
-      <Keyboard size={13} aria-hidden />
+      <Keyboard size={13} />
       <span>{kb.holder.name} {kb.holder.name === "You" ? "have" : "has"} the keyboard</span>
       {kb.mayTake && <Button size="sm" variant="secondary" onClick={() => window.hive.keyboardTake(tile)}>Take back</Button>}
       {kb.mayAsk && (

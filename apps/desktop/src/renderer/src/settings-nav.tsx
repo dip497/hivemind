@@ -1,7 +1,7 @@
 /** The Settings sidebar: fixed pages per group, plus a page for each installed agent,
  *  each view, and each tool. Eager: the sidebar renders before the lazy chunk loads. */
 import { useState, type ReactNode } from "react";
-import { Globe2 } from "lucide-react";
+import { Earth } from "lucide-react";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
 import { SvgMark, useAgents } from "./agents";
 import { GENERIC_AGENT_ICON, defFromManifest } from "@hivemind/agents";
@@ -53,7 +53,7 @@ export function useSettingsNav(current?: string): { groups: SettingsNavGroup[]; 
         ? [{ id: current, label: agentLabel(current.slice(6)), icon: <SvgMark icon={agentIcon(current.slice(6))} size={15} />, plugin: true }] : []),
     ],
     Views: views.map((v) => ({ id: `view:${v.id}`, label: v.label, icon: <v.icon size={15} strokeWidth={1.7} />, plugin: true })),
-    Tools: BUNDLED_TOOL_PLUGINS.map((p) => ({ id: `tool:${p.id}`, label: toolLabel(p.id), icon: <Globe2 size={15} strokeWidth={1.7} />, plugin: true })),
+    Tools: BUNDLED_TOOL_PLUGINS.map((p) => ({ id: `tool:${p.id}`, label: toolLabel(p.id), icon: <Earth size={15} strokeWidth={1.7} />, plugin: true })),
   };
   const groups = SETTINGS_GROUPS.map((group) => ({
     group,
