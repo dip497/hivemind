@@ -6,7 +6,7 @@ import { PresenceHub, presenceOf, QUIET_FOR_MS, type Participant } from "../src/
 
 afterEach(() => setSystemTime());
 
-const at = (id: string, person: string, x: number): Participant => ({ id, person, name: person, color: "", cursor: { x, y: 0 }, over: null, selection: [] });
+const at = (id: string, person: string, x: number): Participant => ({ id, person, name: person, color: "", cursor: { x, y: 0 }, over: null, selection: [], viewport: null });
 
 test("one participant per connection, as they last said; leaving takes them out of one workspace, or of all", () => {
   const hub = new PresenceHub();
@@ -36,9 +36,20 @@ test("one who has said nothing for a minute is gone", () => {
 
 test("what a client sends is bounded: a long name cut, a colour that is not one dropped, a cursor that is not a point off the board, over nothing that is not an id", () => {
   expect(presenceOf({ name: "x".repeat(100), color: "#ABCDEF", cursor: { x: 1, y: 2 }, over: "tile-1", selection: ["t1", 2, "t2"] }))
-    .toEqual({ name: "x".repeat(64), color: "#abcdef", cursor: { x: 1, y: 2 }, over: "tile-1", selection: ["t1", "t2"] });
+    .toEqual({ name: "x".repeat(64), color: "#abcdef", cursor: { x: 1, y: 2 }, over: "tile-1", selection: ["t1", "t2"], viewport: null });
   expect(presenceOf({ name: 7, color: "red; background: url(x)", cursor: { x: Infinity, y: 0 }, over: "t".repeat(257), selection: Array.from({ length: 150 }, (_, i) => `t${i}`) }))
-    .toEqual({ name: "", color: "", cursor: null, over: null, selection: Array.from({ length: 100 }, (_, i) => `t${i}`) });
+    .toEqual({ name: "", color: "", cursor: null, over: null, selection: Array.from({ length: 100 }, (_, i) => `t${i}`), viewport: null });
   expect(presenceOf({ over: 7 })?.over).toBeNull();
   expect(presenceOf("here")).toBeNull();
+});
+
+test("a live camera crosses presence, with invalid zoom rejected, and disappears when its window leaves", () => {
+  const hub = new PresenceHub();
+  const state = presenceOf({ viewport: { x: 120, y: -40, zoom: 1.5 } });
+  expect(state?.viewport).toEqual({ x: 120, y: -40, zoom: 1.5 });
+  expect(presenceOf({ viewport: { x: 0, y: 0, zoom: Infinity } })?.viewport).toBeNull();
+  hub.set("/a", { ...at("window:1", "host", 1), ...state! });
+  expect(hub.people("/a")[0]?.viewport).toEqual({ x: 120, y: -40, zoom: 1.5 });
+  hub.leave("window:1", "/a");
+  expect(hub.people("/a")).toEqual([]);
 });

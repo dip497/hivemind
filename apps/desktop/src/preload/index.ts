@@ -249,6 +249,13 @@ const api: HiveIpc & {
     return () => ipcRenderer.removeListener("settings:changed", listener);
   },
   listViews: (repoRoot) => ipcRenderer.invoke("views:list", repoRoot),
+  viewOpen: (id, repo, screen) => workspace.call("view.open", id, repo, screen, true),
+  viewPost: (session, message, repo) => workspace.notice("view.post", session, message, repo),
+  viewScreen: (session, screen, repo) => workspace.notice("view.screen", session, screen, repo),
+  viewClose: (session, repo) => workspace.call("view.close", session, repo),
+  onViewSaid: (cb) => workspace.on("view.said", cb),
+  onViewRects: (cb) => workspace.on("view.rects", cb),
+  onViewEnded: (cb) => workspace.on("view.ended", cb),
   listAgents: (repoRoot) => ipcRenderer.invoke("agents:list", repoRoot),
   agentOptionChoices: (id) => ipcRenderer.invoke("agents:option-choices", id),
   agentPresence: () => ipcRenderer.invoke("agents:presence"),

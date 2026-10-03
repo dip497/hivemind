@@ -39,10 +39,11 @@ import type { SharePrepared } from "../../../../../shared/ipc";
 import type { ShareOutcome } from "@hivemind/view-sdk/protocol";
 import { disableCommunityView } from "./registry";
 import { edgeBandClip } from "./edge-band";
+import { RemoteCommunityView } from "./RemoteCommunityView";
 
 const THEME_VARS = ["bg", "bg2", "bg3", "bg4", "fg", "fg2", "fg3", "line", "line2", "brand", "err", "ok", "warn", "info", "accent"];
 
-function readTheme(): ViewTheme {
+export function readTheme(): ViewTheme {
   const cs = getComputedStyle(document.documentElement);
   const colors: Record<string, string> = {};
   for (const k of THEME_VARS) {
@@ -75,6 +76,7 @@ function layoutSpec(pluginId: string): ViewLayoutSpec<unknown> {
 /** The host for one package. Rendered through the lazy wrapper in registry.ts
  *  (`pkg` is fixed per registered view; the props are the view contract). */
 export function CommunityViewHost({ pkg, model, commands }: WorkspaceViewProps & { pkg: ViewPackageInfo }) {
+  if (pkg.source === "host") return <RemoteCommunityView pkg={pkg} model={model} commands={commands} />;
   const manifest = pkg.manifest!;
   const url = pkg.url!;
   const capabilities = useMemo(() => manifest.permissions as ViewPermission[], [manifest]);

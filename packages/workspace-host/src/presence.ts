@@ -16,6 +16,8 @@ export interface PresenceState {
   over: string | null;
   /** The tiles and objects they have selected. */
   selection: string[];
+  /** This person's live canvas camera, never part of the workspace document. */
+  viewport: { x: number; y: number; zoom: number } | null;
 }
 
 export interface Participant extends PresenceState {
@@ -35,12 +37,15 @@ export function presenceOf(raw: unknown): PresenceState | null {
   if (typeof raw !== "object" || raw === null) return null;
   const r = raw as Record<string, unknown>;
   const cursor = r.cursor as Record<string, unknown> | null | undefined;
+  const viewport = r.viewport as Record<string, unknown> | null | undefined;
   return {
     name: typeof r.name === "string" ? r.name.slice(0, 64) : "",
     color: typeof r.color === "string" && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color.toLowerCase() : "",
     cursor: cursor && num(cursor.x) && num(cursor.y) ? { x: cursor.x, y: cursor.y } : null,
     over: typeof r.over === "string" && r.over.length > 0 && r.over.length <= 256 ? r.over : null,
     selection: Array.isArray(r.selection) ? r.selection.filter((s): s is string => typeof s === "string").slice(0, 100) : [],
+    viewport: viewport && num(viewport.x) && num(viewport.y) && num(viewport.zoom) && viewport.zoom >= 0.05 && viewport.zoom <= 8
+      ? { x: viewport.x, y: viewport.y, zoom: viewport.zoom } : null,
   };
 }
 
@@ -70,7 +75,7 @@ export class PresenceHub {
     const out: Participant[] = [];
     for (const [id, p] of here) {
       if (now - p.at > QUIET_FOR_MS) here.delete(id);
-      else out.push({ id: p.id, person: p.person, name: p.name, color: p.color, cursor: p.cursor, over: p.over, selection: p.selection });
+      else out.push({ id: p.id, person: p.person, name: p.name, color: p.color, cursor: p.cursor, over: p.over, selection: p.selection, viewport: p.viewport });
     }
     return out;
   }

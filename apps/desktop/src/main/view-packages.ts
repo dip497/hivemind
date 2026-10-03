@@ -21,23 +21,47 @@ import { pathToFileURL } from "node:url";
 import { listInstalledViews, readViewPackage, installView, removeView, type InstalledView } from "@hivemind/core/views";
 import { VIEW_SCHEME, entryUrl, newNonce, serveViewFile } from "@hivemind/core/view-files";
 import { viewHost } from "@hivemind/view-sdk/manifest";
+import type { ViewFile, ViewListing } from "@hivemind/workspace-api/views";
+import { elsewhere } from "./shared-workspaces.js";
 
 export { VIEW_SCHEME, entryUrl } from "@hivemind/core/view-files";
 
-export interface ViewPackageInfo extends InstalledView {
+export interface ViewPackageInfo extends Omit<InstalledView, "source"> {
+  source: InstalledView["source"] | "host";
   /** Where the iframe loads from (null when the package will not load). */
   url: string | null;
 }
 
+async function remoteCall<T>(method: string, params: unknown[]): Promise<T> {
+  const answer = await elsewhere.call(method, params);
+  if (!answer || "error" in answer) throw new Error(answer && "error" in answer ? answer.error.message : "host unavailable");
+  return answer.result as T;
+}
+
 /** Origin host → the package behind it, from the last scan. Only these are served. The host is
  *  not always the id (`@owner/name` is served as `owner--name`), so the id travels with it. */
-const served = new Map<string, { id: string; dir: string }>();
+const served = new Map<string, { id: string; dir?: string; repo?: string }>();
 
 /** Scan both roots; remember the loadable ones for the protocol handler. */
 export async function listViewPackages(repoRoot: string | null): Promise<ViewPackageInfo[]> {
-  const views = await listInstalledViews(repoRoot);
+  const remote = repoRoot?.startsWith("hive://") ? repoRoot : null;
+  const views = await listInstalledViews(remote ? null : repoRoot);
   served.clear();
-  return Promise.all(views.map(async (v) => {
+  const hosted: ViewPackageInfo[] = [];
+  if (remote) {
+    try {
+      const listed = await remoteCall<ViewListing[]>("view.list", [remote, "desktop"]);
+      for (const v of listed) {
+        if (!v.manifest) continue;
+        const page = new URL(entryUrl(v.id, v.entry));
+        page.searchParams.set("workspace", remote);
+        const url = page.toString();
+        served.set(viewHost(v.id), { id: v.id, repo: remote });
+        hosted.push({ id: v.id, dir: "", source: "host", manifest: v.manifest, error: null, url });
+      }
+    } catch { /* a disconnected host leaves the built-in and local views available */ }
+  }
+  const local = await Promise.all(views.filter((v) => !hosted.some((h) => h.id === v.id)).map(async (v) => {
     if (v.error || !v.manifest) return { ...v, url: null };
     served.set(viewHost(v.id), { id: v.id, dir: v.dir });
     const entry = await stat(path.join(v.dir, v.manifest.entry)).catch(() => null);
@@ -46,6 +70,7 @@ export async function listViewPackages(repoRoot: string | null): Promise<ViewPac
     url.searchParams.set("revision", revision);
     return { ...v, url: url.toString() };
   }));
+  return [...hosted, ...local];
 }
 
 
@@ -72,9 +97,18 @@ export function handleViewProtocol(): void {
   protocol.handle(VIEW_SCHEME, async (request) => {
     try {
       const u = new URL(request.url);
-      const dir = served.get(u.host)?.dir;
-      if (!dir) return new Response("unknown view", { status: 404 });
+      const source = served.get(u.host);
+      if (!source) return new Response("unknown view", { status: 404 });
       const rel = decodeURIComponent(u.pathname.replace(/^\/+/, ""));
+      if (source.repo) {
+        const file = await remoteCall<ViewFile>("view.file", [source.id, rel, source.repo]);
+        return new Response(Buffer.from(file.data, "base64"), { status: 200, headers: {
+          "Content-Security-Policy": file.csp, "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
+          "Access-Control-Allow-Origin": "*", "Content-Type": file.type,
+        } });
+      }
+      const dir = source.dir;
+      if (!dir) return new Response("unknown view", { status: 404 });
       const file = await serveViewFile(dir, rel, { js: u.searchParams.get("js"), sdk: viewSdk });
       if (file.status !== 200) return new Response(file.status === 400 ? "bad entry" : file.status === 403 ? "forbidden" : "not found", { status: file.status });
       // The files are the view's published code; who may run them is the CSP's call.

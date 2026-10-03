@@ -1239,7 +1239,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   conversations({ transcriptOf: (bare) => transcriptOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)) }),
   // The community views here on the person's phone, their host run here (P8).
   views({
-    installed: () => listInstalledViews(),
+    installed: (repo) => listInstalledViews(repo),
     sdk: viewSdk,
     store: workspaceStore,
     server: () => workspaceServer,

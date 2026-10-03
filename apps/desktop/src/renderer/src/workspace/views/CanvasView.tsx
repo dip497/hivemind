@@ -34,10 +34,10 @@ import { CanvasEmptyState, Toasts } from "../../canvas-overlays";
 import { nodeTypes, PinnedLayerContext } from "../../canvas-nodes";
 import { pipeEdgeTypes } from "../../canvas-pipe-edge";
 import { ArrowDraft, BoardArrows, BoardPointer } from "../../board-objects/Arrows";
-import { PresenceLayer } from "../../multiplayer/presence";
+import { PresenceLayer, followPerson, useFollowing, usePeopleHere } from "../../multiplayer/presence";
 import { BoardContext } from "../../board-objects/board-context";
 import { isBoxType } from "../../board-objects/board-model";
-import { useOnViewportChange } from "@xyflow/react";
+import { useOnViewportChange, useReactFlow, useStore } from "@xyflow/react";
 import { snapViewportCrisp, FocusMode, FocusOnTile, PanMomentum, ViewportSnap } from "../../canvas-camera";
 import { buildBaseNodes, reuseNodes } from "../../canvas-node-build";
 import type { WorkspaceViewPlugin, WorkspaceViewProps } from "../workspace-view";
@@ -66,6 +66,26 @@ function ViewportMirror({ target }: { target: { current: { x: number; y: number;
   // Stable: the hook writes these into react-flow's store whenever they change.
   const mirror = useCallback((vp: { x: number; y: number; zoom: number }) => { target.current = vp; }, [target]);
   useOnViewportChange({ onChange: mirror, onEnd: mirror });
+  return null;
+}
+
+function FollowCamera({ repo }: { repo: string }) {
+  const person = useFollowing(repo);
+  const people = usePeopleHere(repo);
+  const flow = useReactFlow();
+  const viewport = person ? people.find((p) => p.person === person)?.viewport : null;
+  const dom = useStore((s) => s.domNode);
+  useEffect(() => {
+    if (viewport) void flow.setViewport(viewport, { duration: 80 });
+  }, [flow, viewport?.x, viewport?.y, viewport?.zoom]);
+  // The guest's own pan or zoom on the canvas ends following; a wheel over a tile scrolls the tile.
+  useEffect(() => {
+    if (!person || !dom) return;
+    const stop = (e: Event) => { if (!(e.target as Element | null)?.closest?.(".react-flow__node")) followPerson(repo, null); };
+    dom.addEventListener("wheel", stop, { capture: true, passive: true });
+    dom.addEventListener("pointerdown", stop, { capture: true });
+    return () => { dom.removeEventListener("wheel", stop, { capture: true }); dom.removeEventListener("pointerdown", stop, { capture: true }); };
+  }, [dom, person, repo]);
   return null;
 }
 
@@ -612,6 +632,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
           <PanMomentum req={momentumReq} activeRef={inMomentumRef} onSettle={bumpSnap} />
           <ViewportSnap req={snapReq} activeRef={inMomentumRef} />
           <ViewportMirror target={currentViewportRef} />
+          {repoPath && <FollowCamera repo={repoPath} />}
           <BoardPointer target={rt.canvasPointRef} pane={flowWrapRef} />
           {repoPath && <PresenceLayer repo={repoPath} pane={flowWrapRef} />}
           <BoardArrows />

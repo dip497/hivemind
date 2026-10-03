@@ -27,7 +27,9 @@ const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../ou
 // Re-baselined for multiplayer (M1): others' pointers and faces, and the banner over a workspace
 // joined from elsewhere, are drawn on the first frame; Share, People, joining and the reach
 // chooser load when opened (they had been on this path, 989 290 bytes, which this test caught).
-const ENTRY_BASELINE = 972_156;
+// Re-baselined for the host's view and Follow (M1a): a guest's first frame opens in the host's view
+// and follows its camera, so both sit on this path (~4 kB; 1 010 541 before, already near the margin).
+const ENTRY_BASELINE = 1_014_748;
 const ENTRY_MARGIN = 0.04;
 
 test("the default renderer path stays small, and three.js is gone from the build", (t) => {

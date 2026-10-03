@@ -96,6 +96,7 @@ import {
 import { saveViewLayout, useDebouncedSave, useViewLayout } from "./workspace/view-layout-store";
 import { onStoreChange, showWorkspace } from "./workspace/workspace-store-client";
 import { setViewMode, useViewMode } from "./workspace/view-mode-store";
+import { useSharedDefaultView } from "./workspace/shared-default-view";
 import { CANVAS_CAMERA, CANVAS_LAYOUT, loadCanvasCamera, loadCanvasLayout, reloadCanvasLayout } from "./workspace/views/canvas-layout";
 import { PIN_SIZE, PINS } from "./workspace/pins";
 import { CanvasRuntimeContext, type CanvasRuntime, type FocusModeReq, type FocusReq, type Viewport } from "./workspace/views/canvas-runtime";
@@ -568,11 +569,15 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // registry is an external store, so this also re-renders the switchers.
   useViews();
   useEffect(() => {
-    void loadCommunityViews(root);
-    const reload = () => { void loadCommunityViews(root); };
+    const viewRoot = joinedId(repoPath) ? repoPath : root;
+    void loadCommunityViews(viewRoot);
+    const reload = () => { void loadCommunityViews(viewRoot); };
     window.addEventListener("hivemind:reload-views", reload);
-    return () => window.removeEventListener("hivemind:reload-views", reload);
-  }, [root]);
+    const offBack = window.hive.onSharedStatus((workspace, status) => {
+      if (`hive://${workspace}` === viewRoot && status.state === "connected") reload();
+    });
+    return () => { window.removeEventListener("hivemind:reload-views", reload); offBack(); };
+  }, [root, repoPath]);
   // With the root, or agents the repo ships are left out.
   useEffect(() => { void syncAgentPlugins(root); }, [root]);
   // Catalog agents whose CLI this machine has are added once the workspace is up and its
@@ -629,6 +634,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     return () => { live = false; clearTimeout(timer); };
   }, []);
   const activeViewId = resolveViewId(useViewMode());
+  useSharedDefaultView(persistKey, activeViewId);
   const activeViewIdRef = useRef(activeViewId);
   activeViewIdRef.current = activeViewId;
   // View protocol 1.3: the event hub hears every tile whatever view is active. Off the first

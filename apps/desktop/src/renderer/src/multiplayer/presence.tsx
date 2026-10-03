@@ -104,7 +104,20 @@ type Pointing = Omit<PresenceState, "name" | "color" | "selection">;
 const pointers = new Map<string, () => Pointing>();
 /** Each workspace this window says it is in: say it again soon. */
 const sayers = new Map<string, () => void>();
-const NOWHERE: Pointing = { cursor: null, over: null };
+const NOWHERE: Pointing = { cursor: null, over: null, viewport: null };
+const following = new Map<string, string>();
+const followListeners = new Set<() => void>();
+export function followPerson(repo: string, person: string | null): void {
+  if (person) following.set(repo, person);
+  else following.delete(repo);
+  for (const listener of followListeners) listener();
+}
+export function useFollowing(repo: string): string | null {
+  return useSyncExternalStore(
+    (listener) => { followListeners.add(listener); return () => { followListeners.delete(listener); }; },
+    () => following.get(repo) ?? null,
+  );
+}
 
 /**
  * Says this window's person is in `repo`, whichever view shows it: their name and colour, what
@@ -170,6 +183,7 @@ export function PresenceLayer({ repo, pane }: { repo: string; pane: RefObject<HT
     if (!el) return undefined;
     let pointer: { x: number; y: number } | null = null;
     let over: string | null = null;
+    let viewport: PresenceState["viewport"] = null;
     const moved = (): void => sayers.get(repo)?.();
     const move = (e: PointerEvent): void => {
       pointer = { x: e.clientX, y: e.clientY };
@@ -179,16 +193,22 @@ export function PresenceLayer({ repo, pane }: { repo: string; pane: RefObject<HT
     const leave = (): void => { pointer = null; over = null; moved(); };
     el.addEventListener("pointermove", move, { passive: true });
     el.addEventListener("pointerleave", leave);
-    pointers.set(repo, () => ({ cursor: pointer ? screenToFlowPosition(pointer) : null, over }));
+    pointers.set(repo, () => ({ cursor: pointer ? screenToFlowPosition(pointer) : null, over, viewport }));
+    const camera = (e: Event) => { viewport = (e as CustomEvent<PresenceState["viewport"]>).detail; moved(); };
+    el.addEventListener("hivemind:camera", camera);
     return () => {
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerleave", leave);
+      el.removeEventListener("hivemind:camera", camera);
       pointers.delete(repo);
       moved();
     };
   }, [repo, pane, screenToFlowPosition]);
 
   const [panX, panY, zoom] = useStore((s) => s.transform);
+  useEffect(() => {
+    pane.current?.dispatchEvent(new CustomEvent("hivemind:camera", { detail: { x: panX, y: panY, zoom } }));
+  }, [pane, panX, panY, zoom]);
   const rings = useMemo(() => people.flatMap((p) => p.selection.map((id) => ({ id, p }))), [people]);
   if (people.length === 0) return null;
   return (
@@ -243,8 +263,9 @@ function SelectionRing({ id, who }: { id: string; who: Participant }) {
 
 /** The faces of everyone else in `repo`, one per person, by Share; `onManage`, when given, opens
  *  the People panel from them. */
-export function PeopleHere({ repo, onManage }: { repo: string; onManage?: () => void }) {
+export function PeopleHere({ repo, onManage, hostName }: { repo: string; onManage?: () => void; hostName?: string }) {
   const persons = useFacesHere(repo);
+  const followed = useFollowing(repo);
   if (persons.length === 0) return null;
   return (
     <div
@@ -254,6 +275,16 @@ export function PeopleHere({ repo, onManage }: { repo: string; onManage?: () => 
       title={onManage ? "People" : undefined}
     >
       {persons.slice(0, 5).map((p) => (
+        hostName && p.name === hostName ? <button
+          key={p.person}
+          type="button"
+          title={followed === p.person ? `Stop following ${p.name}` : `Follow ${p.name}`}
+          aria-label={followed === p.person ? `Stop following ${p.name}` : `Follow ${p.name}`}
+          aria-pressed={followed === p.person}
+          onClick={() => followPerson(repo, followed === p.person ? null : p.person)}
+          className="grid size-7 place-items-center rounded-full text-[11px] font-semibold text-white ring-2 ring-[var(--color-bg)] focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
+          style={{ background: colorOf(p) }}
+        >{initialsOf(p.name)}</button> : (
         <span
           key={p.person}
           title={p.name || "Someone"}
@@ -263,6 +294,7 @@ export function PeopleHere({ repo, onManage }: { repo: string; onManage?: () => 
         >
           {initialsOf(p.name)}
         </span>
+        )
       ))}
       {persons.length > 5 && (
         <span className="grid size-7 place-items-center rounded-full bg-[var(--color-bg3)] text-[11px] text-[var(--color-fg2)] ring-2 ring-[var(--color-bg)]">

@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: guests open in the host's chosen workspace view, including host-served community views, and can follow the host's live canvas camera.
+
 - Changed: a new tile takes the first free spot in its workspace instead of the far end of the last row; a worker an agent starts lands beside that agent, and one started in the background shows a short note saying where it went.
 
 - Fixed: rejoining an open shared workspace replaces its old connection and role; repeated Join submissions for the same invite ask the host once.

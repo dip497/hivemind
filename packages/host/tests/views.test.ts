@@ -154,6 +154,25 @@ test("the views here that say they work on a phone are offered with the page to 
   }
 });
 
+test("a guest desktop can load the host's desktop view without installing it, with view-role commands withheld", async () => {
+  const c = computer();
+  installed("desk-only", { name: "Desk only", permissions: ["workspace:spawn", "workspace:edit"] }, { "scene.js": "export const scene = true;" });
+  const guest = c.caller(() => false, { ...PHONE, access: "view" });
+  const listed = await c.call("view.list", [c.repo, "desktop"], guest) as Array<{ id: string; manifest?: { permissions: string[] } }>;
+  assert.deepEqual(listed.map((v) => v.id), ["desk-only"]);
+  assert.deepEqual(listed[0]?.manifest?.permissions, ["workspace:spawn", "workspace:edit"]);
+  const file = await c.call("view.file", ["desk-only", "scene.js", c.repo], guest) as { data: string };
+  assert.equal(Buffer.from(file.data, "base64").toString(), "export const scene = true;");
+  assert.equal(await code(c.call("view.open", ["desk-only", c.repo, { w: 400, h: 800, theme: { colors: {} } }], guest)), "BAD_REQUEST", "a phone still gets only phone views");
+  const { session } = await c.call("view.open", ["desk-only", c.repo, { w: 1200, h: 800, theme: { colors: {} }, device: { touch: false, compact: false } }, true], guest) as { session: string };
+  c.post(guest, session, { type: "ready", v: 1 });
+  assert.deepEqual(c.said(guest, session)[0]?.capabilities, []);
+  assert.deepEqual(c.said(guest, session)[0]?.device, { touch: false, compact: false });
+  c.post(guest, session, { type: "command", name: "spawnAgent", args: ["claude", null] });
+  assert.deepEqual(c.started, []);
+  assert.equal(c.store.getCore(c.repo)?.tiles.length, 2);
+});
+
 test("a view opened on a workspace here is told, once ready, where it is (a phone's screen) and what the board holds, as the window tells a view: its caller alone", async () => {
   const c = computer();
   installed("priya-board", { name: "Priya's board", phone: true, permissions: ["workspace:spawn", "workspace:close", "workspace:edit", "workspace:prompt", "workspace:sessions"] });

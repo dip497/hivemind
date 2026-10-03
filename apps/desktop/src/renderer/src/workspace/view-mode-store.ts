@@ -20,10 +20,10 @@ export function getViewMode(): string | null {
   return current;
 }
 
-export function setViewMode(id: string | null): void {
+export function setViewMode(id: string | null, persist = true): void {
   if (id === current) return;
   current = id;
-  if (id && getSettings().views.defaultView !== id) patchSettings("views.defaultView", id);
+  if (persist && id && getSettings().views.defaultView !== id) patchSettings("views.defaultView", id);
   for (const l of listeners) l();
 }
 

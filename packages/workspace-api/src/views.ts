@@ -5,6 +5,7 @@
  * (`@hivemind/view-sdk/protocol`). Node-free.
  */
 import type { ViewTheme } from "@hivemind/view-sdk/protocol";
+import type { ViewManifest } from "@hivemind/view-sdk/manifest";
 
 /** A view installed on the device that says it works on a phone: its id, name, version, the file
  *  it starts from, and the page a screen loads to show it (0.14): `entry` when that is a page,
@@ -15,6 +16,8 @@ export interface ViewListing {
   version: string;
   entry: string;
   page: string;
+  /** Desktop callers need the manifest to render the host's view in their sandbox. */
+  manifest?: ViewManifest;
 }
 
 /** One of a view's files: its bytes, base64, its type, and the Content-Security-Policy to serve it
@@ -31,4 +34,5 @@ export interface ViewScreen {
   w: number;
   h: number;
   theme: ViewTheme;
+  device?: { touch: boolean; compact: boolean };
 }

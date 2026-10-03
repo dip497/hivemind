@@ -644,7 +644,13 @@ watch them live, and type into one when you hand them the keyboard.
 5. **Conflicts**: two people drag the same tile → the last drop wins, the other sees it
    jump to the new place with a short glide. No dialogs.
 6. Views: every view (Canvas, Windows, Queue, Tiled, community views) shows the same
-   workspace; each person picks their own view and camera.
+   workspace. The host's selected view is the workspace's default: a guest opens in it, even
+   when it is a community view they have not installed. Its files and view session come from
+   the host through `view.list` / `view.file` / `view.open`; it runs in the same sandbox as a
+   local view, with commands limited by the guest's role. The guest may switch views freely.
+   Each person's camera and settings remain their own. **Follow** temporarily moves a guest's
+   camera with the host's live presence; the guest's next pan or zoom ends it. Camera presence
+   is never written to the workspace document.
 
 **D. Terminals together**
 1. Every terminal tile shows who holds its keyboard: a small avatar in its title bar

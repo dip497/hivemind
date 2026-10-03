@@ -326,6 +326,11 @@ function onThisMachine(repo: string, bare: string): boolean {
  *  answered here. */
 function workspaceOf(method: unknown, params: unknown): string | null {
   if (typeof method !== "string" || !Array.isArray(params)) return null;
+  // View file and session calls have no tile or workspace in their historical arguments.
+  // Desktop callers append the joined workspace solely for routing; the host ignores it.
+  if (method === "view.open") return idOf(params[1]);
+  if (method === "view.list") return idOf(params[0]);
+  if (method === "view.file" || method === "view.post" || method === "view.screen" || method === "view.close") return idOf(params.at(-1));
   const [first] = params as unknown[];
   const named = idOf(first) ?? idOf((first as { cwd?: unknown } | null)?.cwd);
   if (named) return named;

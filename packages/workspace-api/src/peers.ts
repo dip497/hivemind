@@ -204,6 +204,12 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     // Showing a terminal that is running already is watching it; starting one is not.
     const attaching = method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true;
     if (peer.allows && !(typeof method === "string" && peer.allows(method, params))) return `${String(method)} is not open to this device`;
+    // Desktop view discovery names a workspace so repo-shipped packages are available. A guest
+    // may not use that optional name to read another folder's view files on the host.
+    if (peer.actor.access !== "owner" && (method === "view.list" || method === "view.file")) {
+      const place = method === "view.list" ? params[0] : params[2];
+      if (place !== undefined && !(typeof place === "string" && inWorkspace(peer.repo, place))) return "that view is not of this workspace";
+    }
     if (method === "terminal.open" && !peer.holds(String((params[0] as { tileId?: unknown } | null)?.tileId))) return "that tile is not of this workspace";
     if (typeof method !== "string" || !(attaching || mayCall(peer.actor.access, method))) return `${String(method)} is not open to your role on this workspace`;
     if (BY_TILE.test(method) && !peer.holds(String(params[0]))) return `${String(params[0])} is not a tile of this workspace`;

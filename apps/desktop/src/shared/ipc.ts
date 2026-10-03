@@ -2,7 +2,8 @@ import type { SessionStatus } from "@hivemind/agent-host/status-store";
 /** Typed contract for IPC between main and renderer. */
 import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee, LinkType, IssuePatch } from "@hivemind/core/types";
 import type { ViewManifest } from "@hivemind/view-sdk/manifest";
-import type { ActivityLevel, ShareOutcome, ViewHistoryDay, ViewSession, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
+import type { ActivityLevel, HostMessage, PluginMessage, ShareOutcome, SurfaceRect, ViewHistoryDay, ViewSession, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
+import type { ViewScreen } from "@hivemind/workspace-api/views";
 import type { NotificationSettings } from "./notification-settings.js";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
@@ -181,7 +182,7 @@ import type { CatalogEntry } from "@hivemind/core/plugin-catalog";
 export interface ViewPackageInfo {
   id: string;
   dir: string;
-  source: "user" | "repo";
+  source: "user" | "repo" | "host";
   manifest: ViewManifest | null;
   error: string | null;
   url: string | null;
@@ -242,6 +243,13 @@ export interface HiveIpc {
   /** Installed view packages (user dir + this repo's .hivemind/views), each
    *  with its load URL or the reason it will not load. Rescans on every call. */
   listViews(repoRoot: string | null): Promise<ViewPackageInfo[]>;
+  viewOpen(id: string, workspace: string, screen: ViewScreen): Promise<{ session: string }>;
+  viewPost(session: string, message: PluginMessage, workspace: string): void;
+  viewScreen(session: string, screen: ViewScreen, workspace: string): void;
+  viewClose(session: string, workspace: string): Promise<{ closed: boolean }>;
+  onViewSaid(cb: (session: string, message: HostMessage) => void): () => void;
+  onViewRects(cb: (session: string, rects: SurfaceRect[]) => void): () => void;
+  onViewEnded(cb: (session: string, why: string) => void): () => void;
   /** Agent providers on disk. Only manifests cross — a def carries detect(). */
   listAgents(repoRoot: string | null): Promise<{
     agents: Array<{ id: string; file: string; source: "user" | "repo"; manifest: unknown; error: string | null; disabled: boolean }>;

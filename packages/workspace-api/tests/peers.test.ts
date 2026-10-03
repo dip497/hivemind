@@ -52,6 +52,8 @@ const domain = {
       ran.push({ what: "view.open", by: from.actor, args: [id, repo, ["agent.start", "agent.close", "store.setCore"].filter((m) => from.may?.(m))] });
       return { session: "s1" };
     },
+    "view.list": (from: Connection, repo: unknown) => { ran.push({ what: "view.list", by: from.actor, args: [repo] }); return []; },
+    "view.file": (from: Connection, id: unknown, at: unknown, repo: unknown) => { ran.push({ what: "view.file", by: from.actor, args: [repo] }); return {}; },
   },
   effects: { "git.commit": () => ({}), "terminal.open": () => ({}) },
   notices: {
@@ -222,6 +224,17 @@ test("a view opened on a remote screen names the workspace after the view, a gue
   viewer.client.notice("view.screen", "s1", { w: 390, h: 844, theme: { colors: {} } });
   await new Promise((r) => setTimeout(r, PEER_FRAME_MS * 2));
   expect(ran.slice(1).map((r) => r.what)).toEqual(["view.post", "view.screen"]);
+  // A guest's desktop lists and loads the views of this workspace, and no other folder's.
+  ran.length = 0;
+  for (const elsewhere of ["/work/other", `hive://${"f".repeat(32)}`]) {
+    expect(await code(viewer.client.call("view.list", elsewhere, "desktop"))).toBe("FORBIDDEN");
+    expect(await code(viewer.client.call("view.file", "board", "index.html", elsewhere))).toBe("FORBIDDEN");
+  }
+  expect(ran).toEqual([]);
+  await viewer.client.call("view.list", workspaceUrl(W), "desktop");
+  await viewer.client.call("view.file", "board", "index.html", workspaceUrl(W));
+  expect(ran.map((r) => r.args[0])).toEqual([REPO, REPO]);
+  ran.length = 0;
   const driver = connect("agents");
   await driver.client.call("view.open", "board", workspaceUrl(W));
   expect(ran.map((r) => r.args[2])).toEqual([["agent.start", "agent.close"]]);

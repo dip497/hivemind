@@ -15,7 +15,7 @@ export function WorkspaceActions({ onShare, onPeople }: { onShare: () => void; o
   const owner = !joinedId(repo) || shared?.access === "owner";
   return (
     <>
-      <PeopleHere repo={repo} onManage={owner ? onPeople : undefined} />
+      <PeopleHere repo={repo} onManage={owner ? onPeople : undefined} hostName={owner ? undefined : shared?.names.host} />
       {owner && (
         <Button
           variant="secondary"

@@ -21,7 +21,7 @@ import { isRemote, machineCalled, type KnownMachines } from "@hivemind/core/remo
 import { pageOf, serveViewFile } from "@hivemind/core/view-files";
 import type { InstalledView } from "@hivemind/core/views";
 import type { ViewManifest } from "@hivemind/view-sdk/manifest";
-import { PROTOCOL_VERSION, STATUS_TONES, type ViewFrameMachine, type ViewPermission, type ViewTheme } from "@hivemind/view-sdk/protocol";
+import { PROTOCOL_VERSION, STATUS_TONES, type SurfaceRect, type ViewFrameMachine, type ViewPermission, type ViewTheme } from "@hivemind/view-sdk/protocol";
 import { CommunityLink, type LinkCommands } from "@hivemind/view-host/link";
 import { viewAgentStatus } from "@hivemind/view-host/status";
 import { viewStructure } from "@hivemind/view-host/structure";
@@ -55,7 +55,7 @@ const SERVED: Partial<Record<ViewPermission, string>> = {
 
 export interface ViewsOptions {
   /** The views installed on this device. */
-  installed(): Promise<InstalledView[]>;
+  installed(repo?: string): Promise<InstalledView[]>;
   /** The view SDK this device serves its views (`__sdk.js`), its windows' and a remote screen's. */
   sdk(): Promise<string>;
   /** The workspaces here: the boards a view shows, where it renames a tile. */
@@ -153,7 +153,11 @@ function screenOf(raw: unknown): ViewScreen {
   if (!isObject(raw)) throw new ApiError("BAD_REQUEST", "screen: not an object");
   const size = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0 && v <= SCREEN_MAX;
   if (!size(raw.w) || !size(raw.h)) throw new ApiError("BAD_REQUEST", "screen: w and h are whole numbers of pixels");
-  return { w: raw.w, h: raw.h, theme: themeOf(raw.theme) };
+  const device = raw.device;
+  if (device !== undefined && (!isObject(device) || typeof device.touch !== "boolean" || typeof device.compact !== "boolean")) {
+    throw new ApiError("BAD_REQUEST", "screen.device: touch and compact are booleans");
+  }
+  return { w: raw.w, h: raw.h, theme: themeOf(raw.theme), ...(device ? { device: { touch: (device as { touch: boolean }).touch, compact: (device as { compact: boolean }).compact } } : {}) };
 }
 
 /** A frame's colour as `#rrggbb`, from what a window saves (frame-color.ts): `oklch(L C H)`, or the
@@ -195,12 +199,14 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
   const watching = new Map<string, Set<(s: SessionStatus) => void>>();
   let listening = false;
 
+  const availableViews = async (repo?: string): Promise<Array<InstalledView & { manifest: ViewManifest }>> =>
+    (await o.installed(repo)).filter((v): v is InstalledView & { manifest: ViewManifest } => !v.error && !!v.manifest);
   const phoneViews = async (): Promise<Array<InstalledView & { manifest: ViewManifest }>> =>
-    (await o.installed()).filter((v): v is InstalledView & { manifest: ViewManifest } => !v.error && v.manifest?.phone === true);
-  const viewNamed = async (id: unknown) => {
+    (await availableViews()).filter((v) => v.manifest.phone === true);
+  const viewNamed = async (id: unknown, repo?: string) => {
     const name = text(id, "view");
-    const view = (await phoneViews()).find((v) => v.id === name);
-    if (!view) throw new ApiError("BAD_REQUEST", `no view ${name} here works on a phone`);
+    const view = (await (repo ? availableViews(repo) : phoneViews())).find((v) => v.id === name);
+    if (!view) throw new ApiError("BAD_REQUEST", `no view ${name} here`);
     return view;
   };
 
@@ -287,7 +293,7 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
     // Its look and size are the screen's, as its caller says them; no saved layout from here.
     s.link.send({
       type: "hello", v: PROTOCOL_VERSION, pluginId: s.view, capabilities: s.capabilities, theme: s.screen.theme,
-      layout: null, viewport: { w: s.screen.w, h: s.screen.h }, visible: true, features: s.link.features, device: DEVICE,
+      layout: null, viewport: { w: s.screen.w, h: s.screen.h }, visible: true, features: s.link.features, device: s.screen.device ?? DEVICE,
     });
     tell(s);
     s.link.send({ type: "selection", ...s.selection, fresh: false });
@@ -329,10 +335,10 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
 
   return {
     answers: {
-      "view.list": async (): Promise<ViewListing[]> =>
-        (await phoneViews()).map(({ id, manifest: m }) => ({ id, name: m.name, version: m.version, entry: m.entry, page: pageOf(m.entry) })),
-      "view.file": async (_from, id, at): Promise<ViewFile> => {
-        const view = await viewNamed(id);
+      "view.list": async (_from, workspace, screen): Promise<ViewListing[]> =>
+        (await (screen === "desktop" ? availableViews(typeof workspace === "string" ? workspace : undefined) : phoneViews())).map(({ id, manifest: m }) => ({ id, name: m.name, version: m.version, entry: m.entry, page: pageOf(m.entry), ...(screen === "desktop" ? { manifest: m } : {}) })),
+      "view.file": async (_from, id, at, workspace): Promise<ViewFile> => {
+        const view = await viewNamed(id, typeof workspace === "string" ? workspace : undefined);
         const rel = text(at, "path");
         // As the app serves its windows, but for the page that runs a `.js` entry: that entry is the manifest's.
         const entry = view.manifest.entry;
@@ -345,9 +351,10 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
         return { data: data.toString("base64"), type: file.type, csp: file.csp };
       },
       "view.open": async (from, id, workspace, screen, surfaces) => {
-        const view = await viewNamed(id);
+        const view = await viewNamed(id, typeof workspace === "string" ? workspace : undefined);
         const repo = text(workspace, "workspace");
         const shown = screen == null ? UNSAID : screenOf(screen);
+        if (!view.manifest.phone && shown.device?.compact !== false) throw new ApiError("BAD_REQUEST", `no view ${view.id} here works on a phone`);
         if (surfaces != null && typeof surfaces !== "boolean") throw new ApiError("BAD_REQUEST", "surfaces is true or false");
         if (!o.store().getCore(repo)) throw new ApiError("BAD_REQUEST", "no such workspace here");
         if (view.manifest.protocol > PROTOCOL_VERSION) {
@@ -370,7 +377,7 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
           onReady: () => hello(s),
           // A screen that places live surfaces itself (0.15: a phone's app, over the view's web
           // view) is said to; the rects are its own, and nothing here draws them.
-          ...(surfaces === true ? { onSurfaceRects: () => {} } : {}),
+          ...(surfaces === true ? { onSurfaceRects: (rects: SurfaceRect[]) => from.send({ event: "view.rects", params: [s.id, rects] }) } : {}),
           // A remote screen keeps no layout here, and its frames are its own.
           onLayout: () => {},
           onFramesDrawn: () => {},

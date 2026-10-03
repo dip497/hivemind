@@ -291,7 +291,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     conversations({ transcriptOf: (bare) => transcriptOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR)) }),
     // The community views installed here on the person's phone, their host run here (P8).
     views({
-      installed: () => listInstalledViews(),
+      installed: (repo) => listInstalledViews(repo),
       sdk: o.viewSdk,
       store: () => store,
       server: () => api,
