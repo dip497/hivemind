@@ -13,22 +13,22 @@ export const PACKAGE_LIMITS = { files: 4096, bytes: 128 * 1024 * 1024, fileBytes
 const id = z.string().regex(/^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-9][a-z0-9-]{1,63}$/);
 const label = z.string().min(1).max(120).refine((s) => !/[\x00-\x1f\x7f]/.test(s), "control characters are not allowed");
 const relative = z.string().refine((s) => isSafeRelativePath(s) && !/[\x00-\x1f\x7f]/.test(s), "expected a relative path inside the package");
-const schema = z.object({
+const schema = z.strictObject({
   apiVersion: z.literal(1),
   id: z.string().regex(/^[a-z0-9][a-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{1,39}$/),
   name: label,
   version: z.string().regex(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/),
-  views: z.array(z.object({ path: relative }).strict()).max(8).default([]),
-  agents: z.array(z.object({
+  views: z.array(z.strictObject({ path: relative })).max(8).default([]),
+  agents: z.array(z.strictObject({
     id, name: label, provider: id, model: label.optional(),
     prompt: z.string().min(1).max(16000).refine((s) => !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(s), "invalid prompt control character"),
-  }).strict()).max(16).default([]),
-  startup: z.object({
+  })).max(16).default([]),
+  startup: z.strictObject({
     view: id.optional(),
     agents: z.array(id).max(8).default([]),
     maxConcurrent: z.number().int().min(1).max(4).default(1),
-  }).strict().optional(),
-}).strict();
+  }).optional(),
+});
 
 export type PackageManifest = z.infer<typeof schema>;
 export interface PackageProvider { id: string; enabled: boolean; modelFlag: boolean; supervision: string }
