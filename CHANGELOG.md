@@ -9,6 +9,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Security
+
+- dompurify 3.4.16 (the app's Markdown sanitizer).
+
 ## [2026.10.0] — 2026-10-03
 
 ### Fixed
