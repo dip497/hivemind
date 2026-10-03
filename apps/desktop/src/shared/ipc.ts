@@ -259,7 +259,7 @@ export interface HiveIpc {
   /** Where each agent's CLI was found on PATH (null = not installed). Runs nothing. */
   agentPresence(): Promise<Record<string, { path: string | null }>>;
   /** Found, and answering `--version` like a CLI (not a same-named program). */
-  verifyAgent(id: string): Promise<{ path: string | null; version?: string; mismatch?: string }>;
+  verifyAgent(id: string): Promise<{ path: string | null; version?: string; mismatch?: string; searchedPath?: string }>;
   /** The values each of an agent's options takes, read from its CLI. Cached per binary version. */
   agentOptionChoices(id: string): Promise<Record<string, { values: string[]; from: "help" | "list" | null; error?: string }>>;
   previewViewInstall(): Promise<{ token: string; package: ViewPackageInfo; replacesVersion: string | null } | null>;
