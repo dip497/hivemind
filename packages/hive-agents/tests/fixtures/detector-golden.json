@@ -240,7 +240,9 @@
         "opts": {
           "mode": "yolo"
         },
-        "args": [],
+        "args": [
+          "--yes-always"
+        ],
         "label": "Aider #2"
       },
       {
@@ -248,7 +250,9 @@
           "mode": "yolo",
           "model": "default"
         },
-        "args": [],
+        "args": [
+          "--yes-always"
+        ],
         "label": "Aider #2"
       },
       {
@@ -258,7 +262,8 @@
         },
         "args": [
           "--model",
-          "opus"
+          "opus",
+          "--yes-always"
         ],
         "label": "Aider #2"
       },
@@ -269,7 +274,8 @@
         },
         "args": [
           "--model",
-          "gpt-5"
+          "gpt-5",
+          "--yes-always"
         ],
         "label": "Aider #2"
       },
@@ -573,14 +579,20 @@
         "opts": {
           "model": "opus"
         },
-        "args": [],
+        "args": [
+          "--model",
+          "opus"
+        ],
         "label": "Antigravity #2"
       },
       {
         "opts": {
           "model": "gpt-5"
         },
-        "args": [],
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
         "label": "Antigravity #2"
       },
       {
@@ -603,7 +615,10 @@
           "mode": "default",
           "model": "opus"
         },
-        "args": [],
+        "args": [
+          "--model",
+          "opus"
+        ],
         "label": "Antigravity #2"
       },
       {
@@ -611,7 +626,10 @@
           "mode": "default",
           "model": "gpt-5"
         },
-        "args": [],
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
         "label": "Antigravity #2"
       },
       {
@@ -634,7 +652,10 @@
           "mode": "plan",
           "model": "opus"
         },
-        "args": [],
+        "args": [
+          "--model",
+          "opus"
+        ],
         "label": "Antigravity #2"
       },
       {
@@ -642,7 +663,10 @@
           "mode": "plan",
           "model": "gpt-5"
         },
-        "args": [],
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
         "label": "Antigravity #2"
       },
       {
@@ -665,7 +689,10 @@
           "mode": "acceptEdits",
           "model": "opus"
         },
-        "args": [],
+        "args": [
+          "--model",
+          "opus"
+        ],
         "label": "Antigravity #2"
       },
       {
@@ -673,7 +700,10 @@
           "mode": "acceptEdits",
           "model": "gpt-5"
         },
-        "args": [],
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
         "label": "Antigravity #2"
       },
       {
@@ -696,7 +726,10 @@
           "mode": "bypassPermissions",
           "model": "opus"
         },
-        "args": [],
+        "args": [
+          "--model",
+          "opus"
+        ],
         "label": "Antigravity #2"
       },
       {
@@ -704,7 +737,10 @@
           "mode": "bypassPermissions",
           "model": "gpt-5"
         },
-        "args": [],
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
         "label": "Antigravity #2"
       },
       {
@@ -727,7 +763,10 @@
           "mode": "ask",
           "model": "opus"
         },
-        "args": [],
+        "args": [
+          "--model",
+          "opus"
+        ],
         "label": "Antigravity #2"
       },
       {
@@ -735,14 +774,19 @@
           "mode": "ask",
           "model": "gpt-5"
         },
-        "args": [],
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
         "label": "Antigravity #2"
       },
       {
         "opts": {
           "mode": "yolo"
         },
-        "args": [],
+        "args": [
+          "--dangerously-skip-permissions"
+        ],
         "label": "Antigravity #2"
       },
       {
@@ -750,7 +794,9 @@
           "mode": "yolo",
           "model": "default"
         },
-        "args": [],
+        "args": [
+          "--dangerously-skip-permissions"
+        ],
         "label": "Antigravity #2"
       },
       {
@@ -758,7 +804,11 @@
           "mode": "yolo",
           "model": "opus"
         },
-        "args": [],
+        "args": [
+          "--model",
+          "opus",
+          "--dangerously-skip-permissions"
+        ],
         "label": "Antigravity #2"
       },
       {
@@ -766,7 +816,11 @@
           "mode": "yolo",
           "model": "gpt-5"
         },
-        "args": [],
+        "args": [
+          "--model",
+          "gpt-5",
+          "--dangerously-skip-permissions"
+        ],
         "label": "Antigravity #2"
       },
       {
@@ -789,7 +843,10 @@
           "mode": "high",
           "model": "opus"
         },
-        "args": [],
+        "args": [
+          "--model",
+          "opus"
+        ],
         "label": "Antigravity #2"
       },
       {
@@ -797,7 +854,10 @@
           "mode": "high",
           "model": "gpt-5"
         },
-        "args": [],
+        "args": [
+          "--model",
+          "gpt-5"
+        ],
         "label": "Antigravity #2"
       }
     ],
@@ -1353,8 +1413,7 @@
           "mode": "yolo"
         },
         "args": [
-          "--permission-mode",
-          "yolo"
+          "--dangerously-skip-permissions"
         ],
         "label": "claude #2"
       },
@@ -1364,8 +1423,7 @@
           "model": "default"
         },
         "args": [
-          "--permission-mode",
-          "yolo"
+          "--dangerously-skip-permissions"
         ],
         "label": "claude #2"
       },
@@ -1375,8 +1433,7 @@
           "model": "opus"
         },
         "args": [
-          "--permission-mode",
-          "yolo",
+          "--dangerously-skip-permissions",
           "--model",
           "opus"
         ],
@@ -1388,8 +1445,7 @@
           "model": "gpt-5"
         },
         "args": [
-          "--permission-mode",
-          "yolo",
+          "--dangerously-skip-permissions",
           "--model",
           "gpt-5"
         ],
@@ -1634,7 +1690,10 @@
         "opts": {
           "mode": "ask"
         },
-        "args": [],
+        "args": [
+          "--auto-approve",
+          "false"
+        ],
         "label": "Cline #2"
       },
       {
@@ -1642,7 +1701,10 @@
           "mode": "ask",
           "model": "default"
         },
-        "args": [],
+        "args": [
+          "--auto-approve",
+          "false"
+        ],
         "label": "Cline #2"
       },
       {
@@ -1652,7 +1714,9 @@
         },
         "args": [
           "--model",
-          "opus"
+          "opus",
+          "--auto-approve",
+          "false"
         ],
         "label": "Cline #2"
       },
@@ -1663,7 +1727,9 @@
         },
         "args": [
           "--model",
-          "gpt-5"
+          "gpt-5",
+          "--auto-approve",
+          "false"
         ],
         "label": "Cline #2"
       },
@@ -2073,8 +2139,7 @@
           "mode": "yolo"
         },
         "args": [
-          "--ask-for-approval",
-          "yolo",
+          "--dangerously-bypass-approvals-and-sandbox",
           "--sandbox",
           "workspace-write"
         ],
@@ -2086,8 +2151,7 @@
           "model": "default"
         },
         "args": [
-          "--ask-for-approval",
-          "yolo",
+          "--dangerously-bypass-approvals-and-sandbox",
           "--sandbox",
           "workspace-write"
         ],
@@ -2101,8 +2165,7 @@
         "args": [
           "--model",
           "opus",
-          "--ask-for-approval",
-          "yolo",
+          "--dangerously-bypass-approvals-and-sandbox",
           "--sandbox",
           "workspace-write"
         ],
@@ -2116,8 +2179,7 @@
         "args": [
           "--model",
           "gpt-5",
-          "--ask-for-approval",
-          "yolo",
+          "--dangerously-bypass-approvals-and-sandbox",
           "--sandbox",
           "workspace-write"
         ],
@@ -2407,7 +2469,9 @@
         "opts": {
           "mode": "yolo"
         },
-        "args": [],
+        "args": [
+          "--auto"
+        ],
         "label": "Continue #2"
       },
       {
@@ -2415,7 +2479,9 @@
           "mode": "yolo",
           "model": "default"
         },
-        "args": [],
+        "args": [
+          "--auto"
+        ],
         "label": "Continue #2"
       },
       {
@@ -2425,7 +2491,8 @@
         },
         "args": [
           "--model",
-          "opus"
+          "opus",
+          "--auto"
         ],
         "label": "Continue #2"
       },
@@ -2436,7 +2503,8 @@
         },
         "args": [
           "--model",
-          "gpt-5"
+          "gpt-5",
+          "--auto"
         ],
         "label": "Continue #2"
       },
@@ -2741,8 +2809,7 @@
           "mode": "yolo"
         },
         "args": [
-          "--mode",
-          "yolo"
+          "--yolo"
         ],
         "label": "Copilot #2"
       },
@@ -2752,8 +2819,7 @@
           "model": "default"
         },
         "args": [
-          "--mode",
-          "yolo"
+          "--yolo"
         ],
         "label": "Copilot #2"
       },
@@ -2765,8 +2831,7 @@
         "args": [
           "--model",
           "opus",
-          "--mode",
-          "yolo"
+          "--yolo"
         ],
         "label": "Copilot #2"
       },
@@ -2778,8 +2843,7 @@
         "args": [
           "--model",
           "gpt-5",
-          "--mode",
-          "yolo"
+          "--yolo"
         ],
         "label": "Copilot #2"
       },
@@ -3347,8 +3411,7 @@
           "mode": "yolo"
         },
         "args": [
-          "--mode",
-          "yolo"
+          "--force"
         ],
         "label": "Cursor #2"
       },
@@ -3358,8 +3421,7 @@
           "model": "default"
         },
         "args": [
-          "--mode",
-          "yolo"
+          "--force"
         ],
         "label": "Cursor #2"
       },
@@ -3369,8 +3431,7 @@
           "model": "opus"
         },
         "args": [
-          "--mode",
-          "yolo",
+          "--force",
           "--model",
           "opus"
         ],
@@ -3382,8 +3443,7 @@
           "model": "gpt-5"
         },
         "args": [
-          "--mode",
-          "yolo",
+          "--force",
           "--model",
           "gpt-5"
         ],
@@ -3673,7 +3733,7 @@
         },
         "args": [
           "--auto",
-          "yolo"
+          "high"
         ],
         "label": "Droid #2"
       },
@@ -3684,7 +3744,7 @@
         },
         "args": [
           "--auto",
-          "yolo"
+          "high"
         ],
         "label": "Droid #2"
       },
@@ -3695,7 +3755,7 @@
         },
         "args": [
           "--auto",
-          "yolo"
+          "high"
         ],
         "label": "Droid #2"
       },
@@ -3706,7 +3766,7 @@
         },
         "args": [
           "--auto",
-          "yolo"
+          "high"
         ],
         "label": "Droid #2"
       },
@@ -4018,7 +4078,7 @@
         },
         "args": [
           "--permission-mode",
-          "yolo"
+          "bypassPermissions"
         ],
         "label": "Grok #2"
       },
@@ -4029,7 +4089,7 @@
         },
         "args": [
           "--permission-mode",
-          "yolo"
+          "bypassPermissions"
         ],
         "label": "Grok #2"
       },
@@ -4042,7 +4102,7 @@
           "--model",
           "opus",
           "--permission-mode",
-          "yolo"
+          "bypassPermissions"
         ],
         "label": "Grok #2"
       },
@@ -4055,7 +4115,7 @@
           "--model",
           "gpt-5",
           "--permission-mode",
-          "yolo"
+          "bypassPermissions"
         ],
         "label": "Grok #2"
       },
@@ -4897,7 +4957,9 @@
         "opts": {
           "mode": "yolo"
         },
-        "args": [],
+        "args": [
+          "--trust-all-tools"
+        ],
         "label": "Kiro #2"
       },
       {
@@ -4905,7 +4967,9 @@
           "mode": "yolo",
           "model": "default"
         },
-        "args": [],
+        "args": [
+          "--trust-all-tools"
+        ],
         "label": "Kiro #2"
       },
       {
@@ -4913,7 +4977,9 @@
           "mode": "yolo",
           "model": "opus"
         },
-        "args": [],
+        "args": [
+          "--trust-all-tools"
+        ],
         "label": "Kiro #2"
       },
       {
@@ -4921,7 +4987,9 @@
           "mode": "yolo",
           "model": "gpt-5"
         },
-        "args": [],
+        "args": [
+          "--trust-all-tools"
+        ],
         "label": "Kiro #2"
       },
       {
@@ -5192,7 +5260,7 @@
         },
         "args": [
           "--agent",
-          "yolo"
+          "auto-approve"
         ],
         "label": "Mistral Vibe #2"
       },
@@ -5203,7 +5271,7 @@
         },
         "args": [
           "--agent",
-          "yolo"
+          "auto-approve"
         ],
         "label": "Mistral Vibe #2"
       },
@@ -5214,7 +5282,7 @@
         },
         "args": [
           "--agent",
-          "yolo"
+          "auto-approve"
         ],
         "label": "Mistral Vibe #2"
       },
@@ -5225,7 +5293,7 @@
         },
         "args": [
           "--agent",
-          "yolo"
+          "auto-approve"
         ],
         "label": "Mistral Vibe #2"
       },
@@ -5997,7 +6065,9 @@
         "opts": {
           "mode": "yolo"
         },
-        "args": [],
+        "args": [
+          "--always-approve"
+        ],
         "label": "OpenHands #2"
       },
       {
@@ -6005,7 +6075,9 @@
           "mode": "yolo",
           "model": "default"
         },
-        "args": [],
+        "args": [
+          "--always-approve"
+        ],
         "label": "OpenHands #2"
       },
       {
@@ -6013,7 +6085,9 @@
           "mode": "yolo",
           "model": "opus"
         },
-        "args": [],
+        "args": [
+          "--always-approve"
+        ],
         "label": "OpenHands #2"
       },
       {
@@ -6021,7 +6095,9 @@
           "mode": "yolo",
           "model": "gpt-5"
         },
-        "args": [],
+        "args": [
+          "--always-approve"
+        ],
         "label": "OpenHands #2"
       },
       {
