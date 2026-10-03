@@ -16,6 +16,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ### Fixed
 
 - The Layers rail's right-click menu: Spawn agent's per-agent choices can be clicked again, and the menu reads over a wallpaper like the panel it opens from.
+- Moving between tiles on the canvas is a straight 220ms glide instead of a 400ms zoom-out-and-back that blurred every terminal on the way.
 
 ## [2026.9.9] — 2026-09-29
 
