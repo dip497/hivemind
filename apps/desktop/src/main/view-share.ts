@@ -32,7 +32,7 @@ export function shareFileName(suggested: string, fallback: string, now = Date.no
 export interface ShareDeps {
   /** Decode and re-encode as PNG; null when the bytes do not decode. */
   reencode: (bytes: Uint8Array) => { png: Uint8Array; width: number; height: number } | null;
-  copy: (png: Uint8Array) => void;
+  copy: (png: Uint8Array) => void | Promise<void>;
   /** Ask where to save; null when the user cancelled. */
   chooseSavePath: (defaultName: string) => Promise<string | null>;
 }
@@ -59,7 +59,7 @@ export class ViewShare {
     const png = this.pending.get(token);
     this.pending.delete(token);
     if (!png || action === "cancel") return "cancelled";
-    if (action === "copy") { this.deps.copy(png); return "copied"; }
+    if (action === "copy") { await this.deps.copy(png); return "copied"; }
     const target = await this.deps.chooseSavePath(shareFileName(suggestedName, "view"));
     if (!target) return "cancelled";
     await fs.writeFile(path.extname(target) ? target : `${target}.png`, png);

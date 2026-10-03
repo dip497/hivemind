@@ -46,6 +46,17 @@ export function intFlag(v: unknown, name: string, dflt: number): number {
   return Math.floor(n);
 }
 
+/** A wait: `500ms`, `90s`, `5m`, `1h`, or bare milliseconds. A bare number under a second is
+ *  refused, not obeyed — `--timeout 120` is someone meaning seconds, and 120ms reads as a hang. */
+export function durationFlag(v: unknown, name: string, dflt: number): number {
+  if (v == null || v === "") return dflt;
+  const m = /^(\d+(?:\.\d+)?)(ms|s|m|h)?$/.exec(String(v).trim());
+  if (!m) throw new UsageError(`--${name} must be a duration like 90s, 5m or 1500ms (got ${String(v)})`);
+  const n = Number(m[1]);
+  if (!m[2] && n > 0 && n < 1000) throw new UsageError(`--${name} ${String(v)} is milliseconds — write ${String(v)}s for seconds, or ${String(v)}ms if you meant it`);
+  return Math.floor(n * { ms: 1, s: 1000, m: 60_000, h: 3_600_000 }[m[2] ?? "ms"]!);
+}
+
 export class UsageError extends Error {
   code = "USAGE";
   constructor(message: string) { super(message); this.name = "UsageError"; }
@@ -95,7 +106,7 @@ export function workflowParams(f: WorkflowFlags): { params: Record<string, unkno
   if (shape !== "pipeline" && !items) throw new UsageError(`${shape} needs --items 'x || y' and --prompt`);
   if (shape !== "pipeline" && !f.prompt) throw new UsageError(`${shape} needs --prompt (use {item})`);
   if (shape === "mapreduce" && !f["reduce-prompt"]) throw new UsageError("mapreduce needs --reduce-prompt (use {results})");
-  const perTurn = intFlag(f.timeout, "timeout", 600_000);
+  const perTurn = durationFlag(f.timeout, "timeout", 600_000);
   const params: Record<string, unknown> = {
     shape, items, prompt: f.prompt, stages, input: f.input, reduce_prompt: f["reduce-prompt"],
     agent: resolveAgent(f.agent, true), model: f.model, frame: f.frame, supervise: f.supervise,

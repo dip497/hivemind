@@ -110,6 +110,34 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - Fixed: in the Windows view, a tab restored from the Layers rail no longer comes back minimized when the view is switched straight away. The restore happens with the click, and a view that closes before showing its last layout change still saves it.
 - The app now keeps each project's canvas and view layouts itself, in `workspaces/` under its data folder, instead of in the window's browser storage — the first step towards several windows, devices and people sharing one workspace. Each project's layout is one document that records a change as the edits it makes (a tile moved, a frame renamed), so that once several windows or devices edit it, changes to different things merge instead of one replacing the other. Layouts saved by an earlier version are imported the first time a project opens, and nothing newer is overwritten.
 
+## [2026.10.1] — 2026-10-03
+
+### Changed
+
+- **Breaking:** Electron 44 (Chromium 152, Node 24), from 39. macOS 12 is no longer supported; macOS 13 or later is needed. Fixes four high-severity Electron advisories (popup sandbox inheritance, cross-origin reads through protocol handlers, Node in `<webview>` workers).
+- File pickers open where you last picked, not in Downloads.
+
+### Security
+
+- dompurify 3.4.16 (the app's Markdown sanitizer).
+
+## [2026.10.0] — 2026-10-03
+
+### Fixed
+
+- An agent CLI installed under `~/.npm-global/bin` or `~/.local/bin` is found when Hivemind is started from the desktop, and Settings ▸ Agents ▸ Check again picks up a CLI installed after launch (#77).
+- `hive ctl` durations take units (`--timeout 90s`, `10m`); a bare number under 1000 is refused instead of read as milliseconds, which turned `read --timeout 120` into an instant "still working".
+- A tile no longer says "working" while its agent waits on a menu of its own (Codex's rate-limit model switch): it shows as needing you and notifies. A turn that dies on a usage limit returns to idle, and messages held for it are sent.
+- The Layers rail's right-click menu: Spawn agent's per-agent choices can be clicked again, and the menu reads over a wallpaper like the panel it opens from.
+- Moving between tiles on the canvas is a straight 220ms glide instead of a 400ms zoom-out-and-back that blurred every terminal on the way.
+
+### Added
+
+- `yolo` is one launch mode for every agent (`hive ctl spawn --mode yolo`, Settings ▸ Agents): it runs the agent without asking, using the agent's own flag. Antigravity, Codex, Copilot and Kiro gain it; Cline gains `ask`, since it approves everything by default.
+
+## [2026.9.9] — 2026-09-29
+
+- Fixed: after an upgrade, agents the new version cannot load are repaired from the registry even when the first attempt fails or the workspace never settles. The check ran once per launch and counted a failed attempt as the run, and it waited for every restored tile to start — but an agent this version cannot load is a tile that may never start, so a machine could sit with every agent unavailable until it was restarted. It now waits at most a minute, tries again while an agent is still broken, and only stops asking once a check has actually succeeded.
 ## [2026.9.8] — 2026-09-28
 
 - **Breaking:** a supervisor's `allow` now covers the call it was asked about, and nothing more. Hivemind used to remember it for the rest of that worker's life for a list of file-touching tools, which is what `always` is for — and the list was one agent's tool names, so it fit some agents and not others. Answer `always` to remember a tool for that worker; the request says so.
@@ -1463,7 +1491,10 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.9.8...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.10.1...HEAD
+[2026.10.1]: https://github.com/dip497/hivemind/releases/tag/v2026.10.1
+[2026.10.0]: https://github.com/dip497/hivemind/releases/tag/v2026.10.0
+[2026.9.9]: https://github.com/dip497/hivemind/releases/tag/v2026.9.9
 [2026.9.8]: https://github.com/dip497/hivemind/releases/tag/v2026.9.8
 [2026.9.7]: https://github.com/dip497/hivemind/releases/tag/v2026.9.7
 [2026.9.6]: https://github.com/dip497/hivemind/releases/tag/v2026.9.6

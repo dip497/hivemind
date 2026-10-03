@@ -4,9 +4,11 @@
  * and, for an agent that reports nothing, the screen.
  *
  * One authority per session. Until an agent's hooks have spoken, the screen stands in; from
- * the first hook event on, the hooks alone decide and screen reports are ignored. An agent
- * whose hooks never fire (not installed, or it has none) therefore stays on the screen,
- * and every status says which source it came from.
+ * the first hook event on, the hooks decide. An agent whose hooks never fire (not installed,
+ * or it has none) therefore stays on the screen, and every status says which source it came
+ * from. One exception: a turn the hooks call working while the screen shows the agent's own
+ * chooser (a model switch, a limit notice) is waiting on the user — no hook reports that —
+ * so the screen's reading stands until the screen moves on or a hook speaks again.
  *
  * The machine that runs a session is the one that derives its status (docs/design/
  * multiplayer-2026-09-28.md, R6). A session another machine hosts is mirrored: the status is
@@ -52,6 +54,8 @@ export class StatusStore {
   private sessions = new Map<string, SessionStatus>();
   /** Sessions another machine hosts, whose status is that host's. */
   private mirrored = new Set<string>();
+  /** Sessions whose hook-reported turn the screen is overriding (see the header). */
+  private screenHeld = new Set<string>();
   private log: StatusChange[] = [];
   private seq = 0;
   private listeners = new Set<(c: StatusChange) => void>();
@@ -88,6 +92,7 @@ export class StatusStore {
     if (this.mirrored.has(tileId)) return;
     const cur = this.sessions.get(tileId);
     const fromScreen = cur?.source !== "hooks" && cur?.state !== "exited";
+    this.screenHeld.delete(tileId);
     this.apply(tileId, "hooks", (s) => foldStatus(fromScreen ? { ...s, ...INITIAL_STATUS, kind: undefined } : s, input));
   }
 
@@ -95,7 +100,17 @@ export class StatusStore {
   screen(tileId: string, state: ScreenState): void {
     if (this.mirrored.has(tileId)) return;
     const cur = this.sessions.get(tileId);
-    if (cur?.source === "hooks" || cur?.state === "exited") return;
+    if (cur?.state === "exited") return;
+    if (cur?.source === "hooks") {
+      const waiting = state !== "idle" && state !== "working";
+      if (this.screenHeld.has(tileId)) {
+        // The chooser closed: what the screen shows now is the truth until a hook speaks.
+        if (!waiting) this.screenHeld.delete(tileId);
+      } else if (!(waiting && cur.state === "working")) return;
+      else this.screenHeld.add(tileId);
+      this.apply(tileId, "hooks", (s) => (waiting ? { ...s, state: "waiting", kind: SCREEN_KIND[state] } : { ...s, state, kind: undefined }));
+      return;
+    }
     this.apply(tileId, "screen", (s) => (state === "idle" || state === "working"
       ? { ...s, state, kind: undefined }
       : { ...s, state: "waiting", kind: SCREEN_KIND[state] }));
@@ -132,6 +147,7 @@ export class StatusStore {
   forget(tileId: string): void {
     this.sessions.delete(tileId);
     this.mirrored.delete(tileId);
+    this.screenHeld.delete(tileId);
   }
 
   private apply(tileId: string, source: StatusSource | null, fold: (s: AgentStatus) => AgentStatus): void {

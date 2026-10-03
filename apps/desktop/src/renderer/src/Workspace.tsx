@@ -54,6 +54,13 @@ import { useStateWithRef } from "./use-state-with-ref";
 import { useBoard } from "./board-objects/useBoard";
 import type { BoxKind, Point } from "./board-objects/board-model";
 import { markRestored, whenBootIdle } from "./boot-queue";
+/** How long the catalog check waits for restored tiles to start before going anyway: an agent
+ *  this version cannot load is a tile that may never start, and the check is its repair. */
+const BOOT_WAIT_CAP_MS = 60_000;
+/** A check that changed nothing while an agent is still broken is worth asking again — the
+ *  registry is on the other side of someone's network. */
+const CATALOG_RETRY_MS = 45_000;
+const CATALOG_RETRIES = 3;
 import { defaultTileSize, snapToGrid } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
 // Loaded when it is first opened: the dialog (add form, machine list, folder picker) is not startup work.
@@ -81,7 +88,7 @@ import { SayHere } from "./multiplayer/presence";
 import { joinedId } from "./multiplayer/shown";
 import { HostChrome } from "./workspace/host-chrome";
 import { loadCommunityViews } from "./workspace/views/community/registry";
-import { syncAgentPlugins } from "./agent-plugins";
+import { agentScanProblems, syncAgentPlugins } from "./agent-plugins";
 import {
   FALLBACK_VIEW_ID, getView, resolveChrome, resolveViewId, useViews,
   type SpawnOpts, type WorkspaceCommands, type WorkspaceViewModel,
@@ -569,9 +576,25 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   useEffect(() => { void syncAgentPlugins(root); }, [root]);
   // Catalog agents whose CLI this machine has are added once the workspace is up and its
   // restored tiles have started, so the network and each CLI's `--version` stay off both.
+  //
+  // Two things this must survive, because together they strand a machine: an agent this
+  // version cannot load is a tile that may never finish starting (so "boot is idle" never
+  // comes), and the registry is on the other side of someone's network (so the check can
+  // fail). Waiting is therefore capped, and a check that changed nothing while an installed
+  // agent is still broken is tried again.
   useEffect(() => {
     let live = true;
-    const timer = setTimeout(() => void whenBootIdle().then(() => live ? window.hive.autoInstallAgents() : { added: [], updated: [] }).then(({ added, updated }) => {
+    const capped = () => Promise.race([whenBootIdle(), new Promise<void>((r) => setTimeout(r, BOOT_WAIT_CAP_MS))]);
+    const check = async (attempt: number): Promise<void> => {
+      if (!live) return;
+      const { added, updated } = await window.hive.autoInstallAgents();
+      if (!added.length && !updated.length && attempt < CATALOG_RETRIES && agentScanProblems().length) {
+        setTimeout(() => void check(attempt + 1), CATALOG_RETRY_MS);
+      }
+      return announce({ added, updated });
+    };
+    const timer = setTimeout(() => void capped().then(() => live ? check(0) : undefined).catch(() => {}), 4000);
+    const announce = ({ added, updated }: { added: Array<{ id: string; label: string; does: string[] }>; updated: Array<{ id: string; label: string }> }) => {
       if (updated.length) {
         void syncAgentPlugins();
         toast.success(`Updated ${updated.map((a) => a.label).join(", ")} for this version of Hivemind.`);
@@ -601,7 +624,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
         duration: 15000,
         action: { label: "Agents", onClick: () => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "agents" } })) },
       });
-    }).catch(() => {}), 4000);
+    };
     return () => { live = false; clearTimeout(timer); };
   }, []);
   const activeViewId = resolveViewId(useViewMode());

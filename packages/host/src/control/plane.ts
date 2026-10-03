@@ -221,7 +221,14 @@ export class ControlPlane {
     if (method === "agent.screen") {
       // A daemon read an agent's screen: its status until the agent's hooks report.
       const r = (params ?? {}) as { tileId?: string; state?: ScreenState };
-      if (r.tileId && r.state && SCREEN_STATES.has(r.state)) this.status.screen(toBareId(r.tileId), r.state);
+      if (!r.tileId || !r.state || !SCREEN_STATES.has(r.state)) return;
+      const bare = toBareId(r.tileId);
+      const was = this.status.get(bare)?.state;
+      this.status.screen(bare, r.state);
+      // A hooked turn the screen showed ending (it died on a limit, so no Stop came):
+      // messages held for its end go out now.
+      const now = this.status.get(bare);
+      if (now?.source === "hooks" && now.state === "idle" && was !== "idle") this.mailbox.setIdle(toPtyId(r.tileId));
       return;
     }
     if (method === "agent.reply") {

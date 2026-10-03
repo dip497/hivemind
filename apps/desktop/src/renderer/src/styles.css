@@ -337,6 +337,17 @@ html.glass-on .hm-toast {
   border-radius: 10px;
   box-shadow: var(--hm-shadow-2), var(--hm-highlight);
 }
+/* A menu takes the Layers panel's material: never thinner than the panel it opens from. */
+.hm-menu {
+  background: var(--surface-2);
+  color: var(--color-fg);
+  border-color: var(--color-line2);
+  font-size: 12px;
+}
+html.glass-on:not([data-wallpaper="none"]) .hm-menu {
+  background: color-mix(in srgb, var(--surface-2) clamp(68%, var(--glass-opacity), 92%), transparent);
+  backdrop-filter: blur(var(--glass-blur)) saturate(130%);
+}
 .hm-surface-3 {
   /* A modal is a destination, not a panel in the scene: it stays opaque in glass mode, the same
      rule the settings page follows, so the canvas never reads through the text on top of it. */
@@ -899,6 +910,7 @@ html.glass-on .react-flow__node-browser {
    (the translucent tint stays); gradient/photo wallpapers change slowly, so they
    keep their blur. Over moving video the blur is barely missed. */
 html.glass-on[data-wallpaper="video"] .hm-island,
+html.glass-on[data-wallpaper="video"] .hm-menu,
 html.glass-on[data-wallpaper="video"] .hm-layers,
 html.glass-on[data-wallpaper="video"] .react-flow__node-terminal,
 html.glass-on[data-wallpaper="video"] .react-flow__node-diff,

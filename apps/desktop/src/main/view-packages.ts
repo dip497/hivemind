@@ -13,6 +13,7 @@ import path from "node:path";
  * an arbitrary path from a URL), and (d) lets us stamp a strict CSP on every
  * response so plugin code cannot reach the network or embed anything.
  */
+import { dialogStart, rememberPick } from "./dialog-start";
 import { app, net, protocol, dialog, type BrowserWindow, type WebFrameMain } from "electron";
 import { handle, handleEffect } from "./app-ipc.js";
 import { appWindowOf } from "./windows.js";
@@ -157,8 +158,9 @@ export function installViewManagementIpc(): void {
     const win = appWindowOf(event.sender)!; // the gate answers app windows only
     if (pending?.staged) await rm(pending.dir, { recursive: true, force: true }).catch(() => {});
     pending = null;
-    const result = await dialog.showOpenDialog(win, { title: "Choose a view extension", buttonLabel: "Review extension", properties: ["openDirectory"] });
+    const result = await dialog.showOpenDialog(win, { title: "Choose a view extension", buttonLabel: "Review extension", defaultPath: dialogStart("view", app.getPath("home")), properties: ["openDirectory"] });
     if (result.canceled || !result.filePaths[0]) return null;
+    rememberPick("view", result.filePaths[0]);
     return reviewViewDir(result.filePaths[0], false);
   });
   handleEffect("views:install", (token) => ({ target: pending && token === pending.token ? pending.id : undefined }), async (_event, token: string) => {

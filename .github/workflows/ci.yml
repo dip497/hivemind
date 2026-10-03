@@ -12,6 +12,10 @@ on:
   # By hand, on any branch (Actions → ci → Run workflow).
   workflow_dispatch:
 
+# Read-only: nothing here writes to the repository.
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest

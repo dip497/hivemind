@@ -200,8 +200,9 @@ test("each agent shows its own launch options, and a choice is saved for that ag
   await mode.selectOption("plan");
   await expect.poll(() => page.evaluate(() => window.hive.settingsGet().then((s) => s.agents.options))).toEqual({ acme: { mode: "plan" } });
 
+  // A published agent's own option, mapped to its CLI's flag rather than passed through.
   await openAgent("kiro");
-  await expect(detail()).toContainText("has nothing to set at launch");
+  await expect(page.locator("#agent-kiro-mode option")).toHaveText(["Kiro decides", "yolo"]);
 });
 
 test("switching an agent off in Settings removes it everywhere, and back on restores it", async () => {

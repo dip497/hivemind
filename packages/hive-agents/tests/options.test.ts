@@ -89,6 +89,16 @@ describe("argv from chosen values", () => {
     expect(optionArgs(flagless, { mode: "anything-else" })).toEqual([]);
   });
 
+  test("yolo means the agent's unattended value, unless the agent names its own", () => {
+    const withUnattended = { ...def, options: [{ ...def.options![0]!, unattended: "bypassPermissions" }] } as AgentProviderDef;
+    expect(optionArgs(withUnattended, { mode: "yolo" })).toEqual(["--dangerously-skip-permissions"]);
+    const passthrough = { ...def, options: [{ id: "mode", label: "Mode", flag: "--approval-mode", unattended: "full-auto" }] } as AgentProviderDef;
+    expect(optionArgs(passthrough, { mode: "yolo" })).toEqual(["--approval-mode", "full-auto"]);
+    const own = { ...def, options: [{ id: "mode", label: "Mode", flag: "--mode", values: { yolo: ["--yolo"] }, unattended: "safe" }] } as AgentProviderDef;
+    expect(optionArgs(own, { mode: "yolo" })).toEqual(["--yolo"]);
+    expect(optionChoices(withUnattended.options![0]!, [])).toContain("yolo");
+  });
+
   test("offered choices include special values and the default even when discovery finds none", () => {
     expect(optionChoices(def.options![0]!, [])).toEqual(["bypassPermissions"]);
     expect(optionChoices(def.options![1]!, ["read-only"])).toEqual(["read-only", "workspace-write"]);

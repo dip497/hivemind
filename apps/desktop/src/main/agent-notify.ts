@@ -54,6 +54,9 @@ export function registerAgentNotifications(getWin: () => BrowserWindow | null): 
       w.focus();
       try { w.webContents.send("notify:focus-tile", rec!.tileId); } catch { /* mid-teardown */ }
     });
+    // macOS shows notifications only for a code-signed app; unsigned, the dock bounce below
+    // is what remains, and the log says why the banner did not appear.
+    n.on("failed", (_e, error) => console.warn("[notify] the OS did not show it:", error));
     n.show();
     // Persistent attention until the user looks (cleared on window 'focus').
     try { win?.flashFrame(true); } catch { /* unsupported DE */ }

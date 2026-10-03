@@ -95,21 +95,32 @@ export function installPluginCatalogIpc(): void {
   });
 
   // Once per launch, asked for by the workspace once it is up, so the result has a listener.
-  let autoInstalled = false;
+  // A check that FAILED does not count: the registry is on the other side of someone's
+  // network, and latching a socket that closed mid-fetch leaves an agent this version cannot
+  // load broken until the app is restarted — which is exactly when nothing works.
+  let checkedCatalog = false;
+  let checking: Promise<{ added: Array<{ id: string; label: string; does: string[] }>; updated: Array<{ id: string; label: string }> }> | null = null;
   // What it installed or updated, if anything, is the person's standing choice (agents.autoInstall) carried out.
   const installedIds = (r: { added: Array<{ id: string }>; updated: Array<{ id: string }> }) => [...r.added, ...r.updated].map((a) => a.id).join(", ") || undefined;
   handleEffect("agents:auto-install", () => ({ target: installedIds }), async () => {
-    if (autoInstalled) return { added: [], updated: [] };
-    autoInstalled = true;
+    if (checkedCatalog) return { added: [], updated: [] };
     // Settings → Network: with the update check off, the catalog is not asked either (R16).
     if (!getSettings().network.updateCheck) return { added: [], updated: [] };
-    try {
+    if (checking) return checking; // a second ask while the first is in flight rides along
+    checking = (async () => {
       await applyShellEnvToProcess();
       const listed = await fetchCatalog();
       return { added: await autoInstallDetectedAgents(listed), updated: await autoUpdateCatalogAgents(listed) };
+    })();
+    try {
+      const out = await checking;
+      checkedCatalog = true;
+      return out;
     } catch (e) {
-      console.warn("[agents] catalog check skipped:", (e as Error).message);
+      console.warn("[agents] catalog check failed, will try again:", (e as Error).message);
       return { added: [], updated: [] };
+    } finally {
+      checking = null;
     }
   });
 
