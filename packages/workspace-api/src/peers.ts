@@ -164,7 +164,7 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     if (v && typeof v === "object" && !Array.isArray(v) && typeof (v as { cwd?: unknown }).cwd === "string") {
       return { ...(v as object), cwd: inbound((v as { cwd: string }).cwd) };
     }
-    if (peer.actor.access === "owner") return v;
+    return v;
   };
   // What leaves for a peer names the workspace by its id: the host's folder never reaches it, in
   // an answer, an error or an event; what a terminal prints is shared as printed.
@@ -175,7 +175,7 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     if (typeof v === "string") return v.includes(peer.repo) ? v.replace(hostPath, url) : v;
     if (Array.isArray(v)) return v.map(egress);
     if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, egress(x)]));
-    if (peer.actor.access === "owner") return v;
+    return v;
   };
   const outbound = (event: EventMessage): EventMessage | null => {
     const out = routed(event);
