@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.10.1] — 2026-10-03
+
 ### Changed
 
 - **Breaking:** Electron 44 (Chromium 152, Node 24), from 39. macOS 12 is no longer supported; macOS 13 or later is needed. Fixes four high-severity Electron advisories (popup sandbox inheritance, cross-origin reads through protocol handlers, Node in `<webview>` workers).
@@ -1388,7 +1390,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.10.0...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.10.1...HEAD
+[2026.10.1]: https://github.com/dip497/hivemind/releases/tag/v2026.10.1
 [2026.10.0]: https://github.com/dip497/hivemind/releases/tag/v2026.10.0
 [2026.9.9]: https://github.com/dip497/hivemind/releases/tag/v2026.9.9
 [2026.9.8]: https://github.com/dip497/hivemind/releases/tag/v2026.9.8
