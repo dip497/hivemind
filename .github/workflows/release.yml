@@ -76,7 +76,7 @@ jobs:
           cache: true
 
       - name: Cache Electron downloads and builder tools
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ${{ env.electron_config_cache }}
@@ -259,7 +259,7 @@ jobs:
           cache: true
 
       - name: Cache Electron downloads and builder tools
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ${{ env.electron_config_cache }}
@@ -391,7 +391,7 @@ jobs:
           cache: true
 
       - name: Cache Electron downloads and builder tools
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ${{ env.electron_config_cache }}
