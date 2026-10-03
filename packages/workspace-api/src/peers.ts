@@ -53,6 +53,15 @@ const BY_TILE = /^(terminal\.(write|show|resize|flow|close|detach|keyboard\.(ask
 const BY_WORKSPACE = /^(store|git|worktree|file|issue|review|people)\.|^(plan\.list|presence\.set|agent\.(startable|start))$/;
 /** Methods whose second param names the workspace, after what they open there (a view, P8). */
 const BY_WORKSPACE_SECOND = /^view\.open$/;
+/** The workspace a call names, if it names one. A desktop's view listing and files name it
+ *  optionally (first and third), so repo-shipped views are found. */
+function placeOf(method: string, params: unknown[]): unknown {
+  if (BY_WORKSPACE.test(method)) return params[0];
+  if (BY_WORKSPACE_SECOND.test(method)) return params[1];
+  if (method === "view.list") return params[0] ?? null;
+  if (method === "view.file") return params[2] ?? null;
+  return null;
+}
 
 /** Whether `place`, as the host reads a param, is the workspace's repo `repo` or inside it: a
  *  peer names the workspace by its id, and nothing else on the host, no other folder and no other
@@ -204,18 +213,12 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     // Showing a terminal that is running already is watching it; starting one is not.
     const attaching = method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true;
     if (peer.allows && !(typeof method === "string" && peer.allows(method, params))) return `${String(method)} is not open to this device`;
-    // Desktop view discovery names a workspace so repo-shipped packages are available. A guest
-    // may not use that optional name to read another folder's view files on the host.
-    if (peer.actor.access !== "owner" && (method === "view.list" || method === "view.file")) {
-      const place = method === "view.list" ? params[0] : params[2];
-      if (place !== undefined && !(typeof place === "string" && inWorkspace(peer.repo, place))) return "that view is not of this workspace";
-    }
     if (method === "terminal.open" && !peer.holds(String((params[0] as { tileId?: unknown } | null)?.tileId))) return "that tile is not of this workspace";
     if (typeof method !== "string" || !(attaching || mayCall(peer.actor.access, method))) return `${String(method)} is not open to your role on this workspace`;
     if (BY_TILE.test(method) && !peer.holds(String(params[0]))) return `${String(params[0])} is not a tile of this workspace`;
     // A guest names this workspace, by its id, and nothing else on the host. The person's own
     // devices are the owner, there as here.
-    const place = BY_WORKSPACE.test(method) ? params[0] : BY_WORKSPACE_SECOND.test(method) ? params[1] : null;
+    const place = placeOf(method, params);
     if (peer.actor.access !== "owner" && place != null && !(typeof place === "string" && inWorkspace(peer.repo, place))) {
       return "name this workspace by its id: nothing else of the host's is open to you";
     }
@@ -274,7 +277,7 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     const params = Array.isArray(m.params) ? m.params.map(inbound) : [];
     const why = check(m.method, params);
     const cwd = (params[0] as { cwd?: unknown; attachOnly?: unknown } | null)?.cwd;
-    const place = BY_WORKSPACE.test(String(m.method)) ? params[0] : BY_WORKSPACE_SECOND.test(String(m.method)) ? params[1] : null;
+    const place = placeOf(String(m.method), params);
     const checked = async (): Promise<string | null> => {
       if (why) return why;
       if (m.method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly !== true) {

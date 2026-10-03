@@ -34,7 +34,7 @@ import { CanvasEmptyState, Toasts } from "../../canvas-overlays";
 import { nodeTypes, PinnedLayerContext } from "../../canvas-nodes";
 import { pipeEdgeTypes } from "../../canvas-pipe-edge";
 import { ArrowDraft, BoardArrows, BoardPointer } from "../../board-objects/Arrows";
-import { PresenceLayer, followPerson, useFollowing, usePeopleHere } from "../../multiplayer/presence";
+import { PresenceLayer, followPerson, onHost, useFollowing, usePeopleHere } from "../../multiplayer/presence";
 import { BoardContext } from "../../board-objects/board-context";
 import { isBoxType } from "../../board-objects/board-model";
 import { useOnViewportChange, useReactFlow, useStore } from "@xyflow/react";
@@ -73,7 +73,7 @@ function FollowCamera({ repo }: { repo: string }) {
   const person = useFollowing(repo);
   const people = usePeopleHere(repo);
   const flow = useReactFlow();
-  const viewport = person ? people.find((p) => p.person === person)?.viewport : null;
+  const viewport = person ? people.find((p) => p.person === person && onHost(p))?.viewport : null;
   const dom = useStore((s) => s.domNode);
   useEffect(() => {
     if (viewport) void flow.setViewport(viewport, { duration: 80 });

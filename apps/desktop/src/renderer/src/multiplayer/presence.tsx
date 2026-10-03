@@ -19,7 +19,9 @@ const SEND_EVERY_MS = 50;
 const STILL_HERE_EVERY_MS = 20_000;
 const NOBODY: Participant[] = [];
 /** Someone else in a workspace, one per person, as their face shows them. */
-export type Face = Pick<Participant, "person" | "name" | "color">;
+/** `host`: one of their windows is on the host itself (its id there is `window:<n>`, which no peer
+ *  can claim), so their camera is the host's. */
+export type Face = Pick<Participant, "person" | "name" | "color"> & { host: boolean };
 const NO_FACES: Face[] = [];
 /** A device of someone else's in a workspace now (its connection is `peer:<device>`), and theirs. */
 export type DeviceHere = { device: string; person: string; name: string };
@@ -36,13 +38,16 @@ const devices = new Map<string, DeviceHere[]>();
 const listeners = new Set<() => void>();
 let listening = false;
 
+/** A window on the host itself, not a peer's device. */
+export const onHost = (p: Participant): boolean => p.id.startsWith("window:");
+
 /** Whether who else is in `repo` changed. */
 function sift(repo: string): boolean {
   const next = me ? (heard.get(repo) ?? NOBODY).filter((p) => p.person !== me!.personId) : NOBODY;
   const prev = others.get(repo);
   if (prev && JSON.stringify(prev) === JSON.stringify(next)) return false;
   others.set(repo, next);
-  const nextFaces = [...new Map(next.map((p) => [p.person, { person: p.person, name: p.name, color: p.color }])).values()];
+  const nextFaces = [...new Map(next.map((p) => [p.person, { person: p.person, name: p.name, color: p.color, host: next.some((q) => q.person === p.person && onHost(q)) }])).values()];
   if (JSON.stringify(nextFaces) !== JSON.stringify(faces.get(repo) ?? NO_FACES)) faces.set(repo, nextFaces);
   const nextDevices = next.filter((p) => p.id.startsWith("peer:")).map((p) => ({ device: p.id.slice("peer:".length), person: p.person, name: p.name }));
   if (JSON.stringify(nextDevices) !== JSON.stringify(devices.get(repo) ?? NO_DEVICES)) devices.set(repo, nextDevices);
@@ -263,7 +268,7 @@ function SelectionRing({ id, who }: { id: string; who: Participant }) {
 
 /** The faces of everyone else in `repo`, one per person, by Share; `onManage`, when given, opens
  *  the People panel from them. */
-export function PeopleHere({ repo, onManage, hostName }: { repo: string; onManage?: () => void; hostName?: string }) {
+export function PeopleHere({ repo, onManage, follow }: { repo: string; onManage?: () => void; follow?: boolean }) {
   const persons = useFacesHere(repo);
   const followed = useFollowing(repo);
   if (persons.length === 0) return null;
@@ -275,7 +280,7 @@ export function PeopleHere({ repo, onManage, hostName }: { repo: string; onManag
       title={onManage ? "People" : undefined}
     >
       {persons.slice(0, 5).map((p) => (
-        hostName && p.name === hostName ? <button
+        follow && p.host ? <button
           key={p.person}
           type="button"
           title={followed === p.person ? `Stop following ${p.name}` : `Follow ${p.name}`}

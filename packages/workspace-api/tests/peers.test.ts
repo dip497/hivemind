@@ -194,6 +194,8 @@ test("a peer cannot name a symlink outside the workspace as a nested repo", asyn
   fs.symlinkSync(elsewhere, path.join(repo, "outside-link"));
   const viewer = connect("view", undefined, repo);
   expect(await code(viewer.client.call("file.read", `${workspaceUrl(W)}/outside-link`, "secret.txt"))).toBe("FORBIDDEN");
+  expect(await code(viewer.client.call("view.list", `${workspaceUrl(W)}/outside-link`, "desktop"))).toBe("FORBIDDEN");
+  expect(await code(viewer.client.call("view.file", "board", "index.html", `${workspaceUrl(W)}/outside-link`))).toBe("FORBIDDEN");
   expect(ran).toEqual([]);
 });
 

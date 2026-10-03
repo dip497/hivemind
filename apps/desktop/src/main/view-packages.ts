@@ -19,7 +19,7 @@ import { handle, handleEffect } from "./app-ipc.js";
 import { appWindowOf } from "./windows.js";
 import { pathToFileURL } from "node:url";
 import { listInstalledViews, readViewPackage, installView, removeView, type InstalledView } from "@hivemind/core/views";
-import { VIEW_SCHEME, entryUrl, newNonce, serveViewFile } from "@hivemind/core/view-files";
+import { VIEW_SCHEME, entryUrl, newNonce, pluginCsp, serveViewFile } from "@hivemind/core/view-files";
 import { viewHost } from "@hivemind/view-sdk/manifest";
 import type { ViewFile, ViewListing } from "@hivemind/workspace-api/views";
 import { elsewhere } from "./shared-workspaces.js";
@@ -102,8 +102,11 @@ export function handleViewProtocol(): void {
       const rel = decodeURIComponent(u.pathname.replace(/^\/+/, ""));
       if (source.repo) {
         const file = await remoteCall<ViewFile>("view.file", [source.id, rel, source.repo]);
+        // The policy is ours, not the host's: only the nonce its page was made with is taken.
+        const nonce = /'nonce-([\w+/=-]+)'/.exec(file.csp)?.[1];
+        if (!nonce) return new Response("bad view file", { status: 400 });
         return new Response(Buffer.from(file.data, "base64"), { status: 200, headers: {
-          "Content-Security-Policy": file.csp, "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
+          "Content-Security-Policy": pluginCsp(nonce), "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
           "Access-Control-Allow-Origin": "*", "Content-Type": file.type,
         } });
       }
