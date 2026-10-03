@@ -164,9 +164,24 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     if (v && typeof v === "object" && !Array.isArray(v) && typeof (v as { cwd?: unknown }).cwd === "string") {
       return { ...(v as object), cwd: inbound((v as { cwd: string }).cwd) };
     }
-    return v;
+    if (peer.actor.access === "owner") return v;
+  };
+  // What leaves for a peer names the workspace by its id: the host's folder never reaches it, in
+  // an answer, an error or an event; what a terminal prints is shared as printed.
+  const hostPath = new RegExp(`${peer.repo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=$|[\\/'"\\s:])`, "g");
+  // The person's own devices are the owner, and keep the host's paths.
+  const egress = (v: unknown): unknown => {
+    if (peer.actor.access === "owner") return v;
+    if (typeof v === "string") return v.includes(peer.repo) ? v.replace(hostPath, url) : v;
+    if (Array.isArray(v)) return v.map(egress);
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, egress(x)]));
+    if (peer.actor.access === "owner") return v;
   };
   const outbound = (event: EventMessage): EventMessage | null => {
+    const out = routed(event);
+    return out && out.event !== "terminal.data" && out.event !== "agent.said" ? { event: out.event, params: egress(out.params) as unknown[] } : out;
+  };
+  const routed = (event: EventMessage): EventMessage | null => {
     if (event.event === "store.changed") return null; // the document reaches peers by its own sync
     if (event.event === "file.changed" || event.event === "presence.changed" || event.event === "people.asked" || event.event === "people.answered") {
       return event.params[0] === peer.repo ? { event: event.event, params: [url, ...event.params.slice(1)] } : null;
@@ -266,7 +281,8 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
   /** What the host answers of every agent it runs, narrowed to those of this workspace: a peer
    *  learns nothing of another workspace's agents, their statuses, titles or links. */
   const scoped = (method: unknown, answer: Answer): Answer => {
-    if ("error" in answer) return answer;
+    if ("error" in answer) return { error: { ...answer.error, message: egress(answer.error.message) as string } };
+    if ("result" in answer) answer = { result: egress(answer.result) };
     if (method === "status.all") return { result: (answer.result as Array<{ tileId: string }>).filter((s) => peer.holds(s.tileId)) };
     if (method !== "link.list") return answer;
     const { pipes, spawns } = answer.result as Links;

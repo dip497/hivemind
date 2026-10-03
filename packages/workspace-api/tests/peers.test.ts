@@ -26,6 +26,8 @@ const gone: Connection[] = [];
 const domain = {
   answers: {
     "file.read": (from: Connection, repo: unknown, file: unknown) => { ran.push({ what: "file.read", by: from.actor, args: [repo, file] }); return `${String(file)} in ${String(repo)}`; },
+    "git.status": () => { throw new Error(`ENOENT: no such file or directory, open '${REPO}/.git/HEAD'`); },
+    "worktree.list": () => [{ path: `${REPO}/wt`, other: "/work/api2" }],
     "store.setCore": (from: Connection, repo: unknown) => { ran.push({ what: "store.setCore", by: from.actor, args: [repo] }); },
     "git.commit": (from: Connection, repo: unknown) => { ran.push({ what: "git.commit", by: from.actor, args: [repo] }); return { sha: "x" }; },
     "terminal.open": (from: Connection, opts: unknown) => {
@@ -125,7 +127,7 @@ test("what may be started in its workspace and what an agent changed, anyone wit
 
 test("a peer's calls run as the peer, with the workspace it names read as its repo here; what its role does not allow never runs", async () => {
   const viewer = connect("view");
-  expect(await viewer.client.call("file.read", workspaceUrl(W), "a.ts")).toBe("a.ts in /work/api");
+  expect(await viewer.client.call("file.read", workspaceUrl(W), "a.ts")).toBe(`a.ts in ${workspaceUrl(W)}`);
   expect(ran).toEqual([{ what: "file.read", by: viewer.actor, args: [REPO, "a.ts"] }]);
   expect(await code(viewer.client.call("store.setCore", workspaceUrl(W), {}))).toBe("FORBIDDEN");
   expect(await code(viewer.client.call("git.commit", workspaceUrl(W), "m"))).toBe("FORBIDDEN");
@@ -207,8 +209,8 @@ test("a guest names this workspace, by its id, and nothing else on the host: ano
   viewer.client.notice("presence.set", `hive://${"f".repeat(32)}`, null);
   await new Promise((r) => setTimeout(r, PEER_FRAME_MS * 2));
   expect(ran).toEqual([]);
-  expect(await viewer.client.call("file.read", `${url}/src`, "a.ts")).toBe("a.ts in /work/api/src");
-  expect(await viewer.client.call("file.read", "/work/api", "a.ts")).toBe("a.ts in /work/api");
+  expect(await viewer.client.call("file.read", `${url}/src`, "a.ts")).toBe(`a.ts in ${url}/src`);
+  expect(await viewer.client.call("file.read", "/work/api", "a.ts")).toBe(`a.ts in ${workspaceUrl(W)}`);
 
   const mine = connect("owner");
   expect(await mine.client.call("file.read", "/elsewhere", "a.ts")).toBe("a.ts in /elsewhere");
@@ -481,4 +483,16 @@ test("a call waiting when the connection goes fails, and the host lets go of the
   close("the peer left");
   await Bun.sleep(10);
   expect(gone).toHaveLength(1);
+});
+
+test("the host's folder never reaches a peer: answers, errors and events name the workspace by its id", async () => {
+  const { server, client, guest } = connect("view");
+  expect(await client.call("worktree.list", workspaceUrl(W))).toEqual([{ path: `${workspaceUrl(W)}/wt`, other: "/work/api2" }]);
+  expect(await client.call("git.status", workspaceUrl(W)).catch((e: ApiError) => e.message)).toBe(`ENOENT: no such file or directory, open '${workspaceUrl(W)}/.git/HEAD'`);
+  const heard: string[] = [];
+  guest.on((t) => heard.push(t));
+  server.publish("status.changed", { tileId: "in-1", status: { state: "working", title: `in ${REPO}/src` } } as never);
+  await new Promise((r) => setTimeout(r, PEER_FRAME_MS * 2));
+  expect(heard.join()).not.toContain(REPO);
+  expect(heard.join()).toContain(`in ${workspaceUrl(W)}/src`);
 });
