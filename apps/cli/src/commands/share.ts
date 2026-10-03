@@ -1,7 +1,7 @@
 /**
- * Sharing from the command line, for a machine that runs `hive host` and no window: the same
- * `people.*` calls the app's Share and People panel make, answered by the running host and
- * recorded in its audit log as the person at this machine.
+ * Sharing from the command line: the same `people.*` calls the app's Share and People panel make,
+ * answered by the running `hive host`, or by the running app when no host runs here, and recorded
+ * in its audit log as the person at this machine.
  *
  *   hive share <workspace> [--role view|edit|terminals] [--uses n] [--expires 7d]
  *   hive people requests | allow <req> [--role] | deny <req> | list | role <person> <role>
@@ -14,7 +14,7 @@ import type { JoinRequests, PersonHere } from "@hivemind/workspace-api/people";
 import type { JoinReply } from "@hivemind/workspace-host/join";
 import { appData } from "../app-data.js";
 import { err, ok, type OutCtx } from "../format.js";
-import { EXIT } from "../hcp.js";
+import { EXIT, HcpCliError, hcpCall } from "../hcp.js";
 import { askHost, controlSocket, HostNotRunning } from "../host-control.js";
 
 const LINK_ROLES = ["view", "edit", "terminals"];
@@ -27,11 +27,21 @@ export function duration(text: string): number | null {
   return Number(m[1]) * { "": 1, s: 1, m: 60, h: 3600, d: 86_400 }[m[2] as "" | "s" | "m" | "h" | "d"] * 1000;
 }
 
-async function ask(ctx: OutCtx, cmd: string, args: Record<string, unknown>, ms?: number): Promise<unknown> {
+/** Ask `hive host`; with none here, the running app, on its control-plane socket. */
+async function ask(ctx: OutCtx, cmd: string, args: Record<string, unknown>, ms = 10_000): Promise<unknown> {
   try {
-    return await askHost(controlSocket(appData()), cmd, args, ms);
+    try {
+      return await askHost(controlSocket(appData()), cmd, args, ms);
+    } catch (e) {
+      if (!(e instanceof HostNotRunning)) throw e;
+      try {
+        return await hcpCall(`host.${cmd}`, args, ms);
+      } catch (a) {
+        if (a instanceof HcpCliError && a.code === "UNAVAILABLE") return err(ctx, "host_not_running", `${e.message}; nor is the hivemind app (${a.message})`, EXIT.unavailable);
+        throw a;
+      }
+    }
   } catch (e) {
-    if (e instanceof HostNotRunning) return err(ctx, "host_not_running", e.message, EXIT.unavailable);
     return err(ctx, "refused", e instanceof Error ? e.message : String(e));
   }
 }

@@ -215,7 +215,7 @@ inside that folder, or when the host serves only one. `<person>` is their name o
 their id from `hive people list`. A link never lets someone drive agents: give that with `hive
 people role` once they are here. Someone asking to join waits up to three minutes for your
 answer: run `hive people requests`, or answer from the notification on your paired phone. Every
-command takes `--json`.
+command takes `--json`. With no `hive host` but the app running, they ask the app instead.
 
 On the host, `hive ctl` drives its agents as it does the app's. Run on that machine, by you or by
 an agent in one of its terminals, `hive ctl spawn` starts an agent there with no window, in the

@@ -25,7 +25,7 @@ import { customDataProblem, isCustomEventName } from "@hivemind/view-sdk/protoco
 import { AGENT_TILE_KIND, isTerminalKind, type CoreLayout, type FrameRecord, type TileRecord } from "@hivemind/workspace-doc/shapes";
 import { defaultFrame, frameFor, listFrames, listTiles, type TileFacts } from "@hivemind/workspace-doc/tile-list";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
-import { Refused, type Intent, type Intents } from "@hivemind/workspace-host/intents";
+import { Refused, type Actor, type Intent, type Intents } from "@hivemind/workspace-host/intents";
 import type { StatusStore } from "@hivemind/agent-host/status-store";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
 
@@ -173,7 +173,7 @@ export interface MethodDeps {
   awaitingApproval: (tileId: string, waiting: boolean) => void;
   /** The workspaces main has open. The canvas verbs read them, and write them as `control`;
    *  their windows follow. */
-  workspaces: Pick<WorkspaceStore, "workspaceOf" | "getCore" | "addTile" | "renameTile" | "removeTile">;
+  workspaces: Pick<WorkspaceStore, "workspaceOf" | "getCore" | "addTile" | "renameTile" | "removeTile" | "repos" | "ownership">;
   /** The workspace the window the user is at shows, and the frame the user is in there, if
    *  any: what a caller in no tile (a terminal, a script) acts on. */
   shownWorkspace: () => { repo: string; frame: string | null } | null;
@@ -188,6 +188,10 @@ export interface MethodDeps {
   endSession: (ptyId: string) => void;
   /** Whether main holds a session by this pty id (a window showed it, here or remote). */
   sessionHeld: (ptyId: string) => boolean;
+  /** Call the workspace API as `actor` (`hive share`, `hive people` with no `hive host` here). */
+  workspaceApi?: (method: string, params: unknown[], actor: Actor) => Promise<unknown>;
+  /** Ask the host an invite link names to let this person in, as the Join dialog does. */
+  join?: (link: string) => Promise<unknown>;
   /** Carries out every verb with an effect, and records it in the audit log (R7). */
   intents: Pick<Intents, "perform">;
 }
@@ -921,6 +925,18 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           deps.disconnect(src, p.dstTileId ? String(p.dstTileId) : undefined);
           return { ok: true };
         });
+
+      // `hive share`, `hive people`, `hive join` where the app, not `hive host`, serves this machine.
+      case "host.status":
+        return { workspaces: deps.workspaces.repos().map((repo) => ({ repo, workspace: deps.workspaces.ownership(repo)?.workspaceId ?? null })) };
+      case "host.people": {
+        const verb = String(p.method ?? "");
+        if (!verb.startsWith("people.") || !deps.workspaceApi) throw new HcpError("BAD_REQUEST", `host.people answers people.*, not ${verb}`);
+        return await deps.workspaceApi(verb, Array.isArray(p.params) ? p.params : [], call.actor);
+      }
+      case "host.join":
+        if (!deps.join) throw new HcpError("UNSUPPORTED", "joining is not served here");
+        return await deps.join(String(p.link ?? ""));
 
       default:
         throw new HcpError("UNKNOWN_METHOD", `unknown method: ${method}`);
