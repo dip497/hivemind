@@ -27,7 +27,9 @@ const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../ou
 // Re-baselined for multiplayer (M1): others' pointers and faces, and the banner over a workspace
 // joined from elsewhere, are drawn on the first frame; Share, People, joining and the reach
 // chooser load when opened (they had been on this path, 989 290 bytes, which this test caught).
-const ENTRY_BASELINE = 972_156;
+// Re-baselined for tailwind-merge 3: cn() is on every first-frame component and v3 carries
+// Tailwind v4's class grammar (~29 kB over v2; 1 009 683 before).
+const ENTRY_BASELINE = 1_038_883;
 const ENTRY_MARGIN = 0.04;
 
 test("the default renderer path stays small, and three.js is gone from the build", (t) => {

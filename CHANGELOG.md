@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: a component's own Tailwind classes and the ones a caller passes merge by Tailwind v4's rules (tailwind-merge 3), so an override written in v4 syntax wins as it should.
 - `hive --help` is printed by citty 0.2: plainer layout, and an unknown command's error is shown once.
 - Fixed: rejoining an open shared workspace replaces its old connection and role; repeated Join submissions for the same invite ask the host once.
 
