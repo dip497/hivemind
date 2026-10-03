@@ -43,7 +43,7 @@ import type { PlanReview } from "@hivemind/workspace-api/plans";
 import { participantAt } from "@hivemind/host/device-sessions";
 import type { TerminalMachine } from "@hivemind/host/terminals";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
-import { forgetShared, handOffTo, leaveShared, machineGrant, openShared, setMachineGrant, sharedStatus, type SharedStatus } from "./shared-workspaces.js";
+import { forgetShared, handOffTo, leaveShared, machineGrant, openShared, setMachineGrant, sharedLooks, sharedStatus, type SharedStatus } from "./shared-workspaces.js";
 import { GRANTS, type Grant } from "@hivemind/host/machine-share";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
@@ -405,6 +405,7 @@ export async function openJoined(workspace: string, publish: (event: EventMessag
       else if (status.state === "connected" && status.access !== "owner") joinedList().update(ws, { role: status.access });
       broadcast("net:shared-status", ws, status);
     },
+    looks: (ws, appearance) => broadcast("net:shared-looks", ws, appearance),
   });
 }
 
@@ -634,6 +635,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
 
   // How a workspace joined here is: whose, and where its connection is.
   handle("net:shared-status", (_e, workspace: unknown) => (typeof workspace === "string" ? joinedStatus(workspace) : null));
+  handle("net:shared-looks", (_e, workspace: unknown) => (typeof workspace === "string" ? sharedLooks(workspace) : null));
 
   // The person's devices this app paired with (Settings → Devices).
   handle("net:devices", () => pairedDevices().list().map(summary));

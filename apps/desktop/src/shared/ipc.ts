@@ -175,7 +175,7 @@ export interface UpdateStatus {
   staged: string | null;
 }
 
-import type { Settings } from "@hivemind/core/settings-schema";
+import type { Appearance, Settings } from "@hivemind/core/settings-schema";
 import type { CatalogEntry } from "@hivemind/core/plugin-catalog";
 
 /** One community view package as the main process sees it (see main/view-packages.ts). */
@@ -313,6 +313,10 @@ export interface HiveIpc {
   sharedStatus(workspace: string): Promise<({ names: { workspace: string; host: string } } & SharedStatus) | null>;
   /** A joined workspace's connection changed. */
   onSharedStatus(cb: (workspace: string, status: SharedStatus) => void): () => void;
+  /** How the joined workspace `workspace`'s host looks, checked; null before it says. */
+  sharedLooks(workspace: string): Promise<Appearance | null>;
+  /** A joined workspace's host changed how it looks. */
+  onSharedLooks(cb: (workspace: string, appearance: Appearance) => void): () => void;
   /** Leave a joined workspace: its connection closes, and the last copy is kept to read. */
   leave(workspace: string): Promise<void>;
   /** What this person lets the people in the joined workspace `workspace` do on this computer, in

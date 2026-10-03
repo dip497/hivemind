@@ -2,10 +2,12 @@
  * The workspace a window shows, for what is drawn inside it far from where the window chose it (a
  * terminal's keyboard, in a tile the tile host draws; the banner over one joined from elsewhere):
  * its repo, and when it was joined from elsewhere, where the connection to its host is and what
- * this person may do there. Asked once per window, here.
+ * this person may do there. Asked once per window, here. A joined workspace is shown in its host's
+ * look; this person's own, and leaving one, in theirs.
  */
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { SharedStatus } from "../../../shared/ipc";
+import { showHostLook } from "../theme-store";
 
 export type Shared = { names: { workspace: string; host: string } } & SharedStatus;
 
@@ -36,6 +38,13 @@ export function ShownWorkspaceProvider({ repo, children }: { repo: string | null
       if (ws === workspace) setShared((prev) => (prev ? { ...prev, ...s } : prev));
     });
     return () => { live = false; off(); };
+  }, [workspace]);
+  useEffect(() => {
+    if (!workspace) return showHostLook(null);
+    let live = true;
+    void window.hive.sharedLooks(workspace).then((look) => { if (live && look) showHostLook(look); }, () => {});
+    const off = window.hive.onSharedLooks((ws, look) => { if (ws === workspace) showHostLook(look); });
+    return () => { live = false; off(); showHostLook(null); };
   }, [workspace]);
   const value = useMemo(() => ({ repo, shared }), [repo, shared]);
   return <ShownWorkspace.Provider value={value}>{children}</ShownWorkspace.Provider>;

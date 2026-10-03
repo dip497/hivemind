@@ -406,6 +406,22 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
   };
 }
 
+/** A host's look as a guest shows it, from anything (a peer's message is untrusted): checked as
+ *  settings are, with nothing that names a file on the host's disk. A picture or video wallpaper
+ *  becomes the default one, and overlays go: their media is the host's alone. Fonts are not the
+ *  look: a guest reads in their own, so the host's are not sent. */
+export function sharedAppearance(raw: unknown): Appearance {
+  const a = mergeAppearance(raw);
+  const media = a.wallpaper.kind === "image" || a.wallpaper.kind === "video";
+  return {
+    ...a,
+    uiFont: DEFAULT_APPEARANCE.uiFont,
+    monoFont: DEFAULT_APPEARANCE.monoFont,
+    wallpaper: { kind: media ? DEFAULT_APPEARANCE.wallpaper.kind : a.wallpaper.kind, brightness: a.wallpaper.brightness },
+    overlayMedia: [],
+  };
+}
+
 /** A registered view id: a built-in or folder-installed name, or `@owner/name` from HiveHub. */
 const VIEW_ID_RE = /^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-9][a-z0-9-]{0,63}$/;
 /** No toolbar can name more actions than the catalog holds. */
@@ -557,6 +573,12 @@ export function flattenAppearance(a: Appearance): FlatTheme {
     accent: a.accent, overlayMedia: a.overlayMedia,
     preset: a.preset, mode: a.mode, palette: a.palette, radius: a.radius, uiFont: a.uiFont, monoFont: a.monoFont, terminal: a.terminal, pluginSurfaces: a.pluginSurfaces,
   };
+}
+
+/** What a guest paints while a host's workspace is shown: the host's look (`sharedAppearance`),
+ *  read in the guest's own fonts. */
+export function guestTheme(own: FlatTheme, host: Appearance): FlatTheme {
+  return { ...flattenAppearance(host), uiFont: own.uiFont, monoFont: own.monoFont };
 }
 
 export function nestAppearance(f: FlatTheme): Appearance {

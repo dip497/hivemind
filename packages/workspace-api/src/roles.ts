@@ -27,6 +27,8 @@ const LEAST: Record<string, Role> = {
   // Handing a branch of one's own to the host: it lands as a branch of its own, and a Diff tile
   // shows it (M4). Nothing of the host's is changed.
   "git.handOff": "edit",
+  // How the host looks: a guest shows its workspace that way.
+  "appearance.get": "view",
   // Being there: where one's pointer is, and what one has selected.
   "presence.set": "view",
   // Watching terminals, and no longer watching one.

@@ -1,4 +1,4 @@
-# Workspace API (0.16)
+# Workspace API (0.17)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -180,6 +180,7 @@ log.
 
 | `status.all` | | `[{tileId, status}]`, every agent session's status (`spec/status.md`) | read |
 | `link.list` | | `{pipes: [{src, dst}], spawns: [{parent, child}]}` | read |
+| `appearance.get` | | the host's look as its guests show its workspaces (0.17): its settings' `appearance`, checked, with nothing that names a file on its disk (a picture or video wallpaper is the default one, no overlays) and the default fonts (a guest reads in its own). A `view` peer may ask | read |
 | `terminal.open` | `{tileId, tile?, cwd, cmd, args?, cols, rows, env?, initialPrompt?, attachOnly?, liveOnly?}` (`tile`: the tile it is the session of, when `tileId` is not `hm:<tile>`) | `{pid, joined}`: the first client to open a session starts it; one that opens it after joins it (`joined`), sent the host's screen of it first | target the tile, detail the program, when it starts a session the host did not ask for itself and the client did not only attach to |
 | `plan.list` | `repo` | the plans the workspace's agents wait on a person for: `[{requestId, tileId, plan, cwd}]`; each after it is a `plan.review` event | |
 | `agent.answer` | `tile`, `since`, `{text}` or `{decision, feedback?}` | `{answered}`: what the agent waits on the person for is answered, a plan decided, a permission allowed or denied with the agent's own keys, or a line typed into its terminal, only while it still waits on that wait (`since`) and once (`needs.md`, "Answering") | target the agent's tile |
@@ -274,6 +275,7 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `file.changed` | `repo`, `{paths}` | to each client watching the repo (the app's window watches the one it opens), at most one every 300 ms |
 | `store.changed` | `{repo, part}` (`core`, `board` or `view:<id>`) | to every client but the one whose write it was, on each change to a workspace's layouts |
 | `presence.changed` | `repo`, `[{id, person, name, color, cursor, over, selection}]` | to every client, as someone in the workspace moves, selects, arrives or leaves (at once after a quiet spell, and at most every 50 ms): everyone there now, one per connection (`id`), `person` their key |
+| `appearance.changed` | `appearance` | to every client, when what `appearance.get` answers changes (0.17); a client checks it as settings are, whoever sent it |
 | `people.asked` | `repo`, `{req, workspace, profile, role}` | to the owner's clients, as someone asks to join with a link: `workspace` the workspace's name, `profile` `{name, color}` as they gave it, `role` the link's |
 | `people.answered` | `repo`, `req` | to the owner's clients, as the question `req` is answered, or nobody answered it in time |
 | `view.said` | `session`, `message` | to the caller of a view session alone, each view protocol message its host says to the view |

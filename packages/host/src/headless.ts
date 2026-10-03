@@ -28,7 +28,8 @@ import { agentForCmd, preferredAgent, setCatalog, spawnableAgents } from "@hivem
 import { findBin } from "@hivemind/agents/discover";
 import { loadAgents, userAgentsDir } from "@hivemind/agents/load";
 import { readSettings } from "@hivemind/core/settings";
-import type { Settings } from "@hivemind/core/settings-schema";
+import { appearance } from "./appearance.js";
+import { DEFAULT_APPEARANCE, type Appearance, type Settings } from "@hivemind/core/settings-schema";
 import { AccessLists } from "@hivemind/workspace-host/access";
 import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
 import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, PairingOffer, parseCode, parsePairLink, type Pairing, type PairingDevice } from "@hivemind/workspace-host/pairing";
@@ -269,6 +270,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     whose: (device) => participantNamed(lists, device),
     saved: (id) => savedMachines.list.find((m) => m.id === id)?.label,
   };
+  // How this host looks to its guests: its settings' theme, once they are read.
+  let appearanceNow = (): Appearance => DEFAULT_APPEARANCE;
   const api: WorkspaceServer = new WorkspaceServer([
     ...workspaceDomains,
     layouts.domain,
@@ -276,6 +279,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     terminals.domain,
     plans.domain,
     presence(() => api, () => keys.personId),
+    // Nothing changes a headless host's theme while it runs: it answers, and has nothing to tell.
+    appearance({ current: () => appearanceNow(), onChange: () => {}, server: () => api }),
     peopleHere.domain,
     // A participant's branch, handed off from their machine (M4).
     handOff({ who, place: (repo, tile, name) => { store.addTile(repo, tile, { name }, HANDED_OFF); } }),
@@ -326,6 +331,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   // The control plane (`hive ctl`): the verbs that need no window, for the agents here and for
   // whoever is at this machine. The agents and settings are the app's, read from this data folder.
   const catalog = agentCatalog(path.join(o.dir, "settings.json"));
+  appearanceNow = () => { try { return catalog.settings().appearance; } catch { return DEFAULT_APPEARANCE; } };
   await catalog.current();
   const control: ControlPlane = new ControlPlane({
     dir: () => o.dir,

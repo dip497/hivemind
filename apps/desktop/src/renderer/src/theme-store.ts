@@ -15,8 +15,8 @@
  */
 import { useSyncExternalStore } from "react";
 import {
-  ACCENTS, ANCHORS, PALETTE_KEYS, WALLPAPERS, flattenAppearance, nestAppearance,
-  type AccentId, type FlatTheme, type MediaAnchor, type MediaFit, type MediaLayer, type WallpaperId,
+  ACCENTS, ANCHORS, PALETTE_KEYS, WALLPAPERS, flattenAppearance, guestTheme, nestAppearance,
+  type AccentId, type Appearance, type FlatTheme, type MediaAnchor, type MediaFit, type MediaLayer, type WallpaperId,
 } from "@hivemind/core/settings-schema";
 import { getSettings, patchSettingsMany, subscribeSettings } from "./settings-store";
 
@@ -27,10 +27,24 @@ export type ThemeState = FlatTheme;
 /** Legible-over-video defaults (one preset of glass settings, not a theme). */
 export const CINEMATIC: Partial<ThemeState> = { glass: true, blur: 20, opacity: 0.78, videoBrightness: 0.55, contentGlass: false, animate: true };
 
-let state: ThemeState = flattenAppearance(getSettings().appearance);
+/** The person's own theme, as their settings say. */
+let own: ThemeState = flattenAppearance(getSettings().appearance);
+/** The look of the host whose workspace is shown, while one is; null for this person's own. */
+let host: Appearance | null = null;
+/** What is painted: the host's look while its workspace is shown, else the person's own. */
+let state: ThemeState = own;
 const listeners = new Set<() => void>();
+const shown = (): ThemeState => (host ? guestTheme(own, host) : own);
 subscribeSettings(() => {
-  const next = flattenAppearance(getSettings().appearance);
+  own = flattenAppearance(getSettings().appearance);
+  show(shown());
+});
+/** Show a joined workspace in its host's look (`null`: this person's own workspace, own look). */
+export function showHostLook(look: Appearance | null): void {
+  host = look;
+  show(shown());
+}
+function show(next: ThemeState): void {
   if (JSON.stringify(next) === JSON.stringify(state)) return;
   // Unchanged fields keep their object, so field subscribers skip the render.
   for (const k of Object.keys(next) as (keyof ThemeState)[]) {
@@ -39,7 +53,7 @@ subscribeSettings(() => {
   state = next;
   applyTheme(state);
   for (const l of listeners) l();
-});
+}
 
 // ── the runtime gate ────────────────────────────────────────────────────────
 let fullWallpaper = true;
@@ -149,14 +163,16 @@ function paintTheme(t: ThemeState): void {
 export function getTheme(): ThemeState { return state; }
 
 export function setTheme(patch: Partial<ThemeState>): void {
-  const before = nestAppearance(state);
-  state = { ...state, ...patch };
+  // An edit is to the person's own theme, whatever is shown: a host's look is never saved as theirs.
+  const before = nestAppearance(own);
+  own = { ...own, ...patch };
+  state = shown();
   applyTheme(state);
   for (const l of listeners) l();
   // Persist only the appearance sections this edit actually changed. A glass
   // slider then writes `appearance.glass` alone, so a `hive theme use` landing
   // mid-drag keeps its palette/terminal instead of being reverted wholesale.
-  const after = nestAppearance(state);
+  const after = nestAppearance(own);
   const changed = (Object.keys(after) as (keyof typeof after)[])
     .filter((k) => JSON.stringify(after[k]) !== JSON.stringify(before[k]))
     .map((k) => ({ path: `appearance.${k}`, value: after[k] }));

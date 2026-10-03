@@ -201,6 +201,12 @@ const api: HiveIpc & {
     ipcRenderer.on("net:shared-status", h);
     return () => { ipcRenderer.removeListener("net:shared-status", h); };
   },
+  sharedLooks: (workspace) => ipcRenderer.invoke("net:shared-looks", workspace),
+  onSharedLooks: (cb) => {
+    const h = (_e: Electron.IpcRendererEvent, workspace: string, appearance: Parameters<typeof cb>[1]) => cb(workspace, appearance);
+    ipcRenderer.on("net:shared-looks", h);
+    return () => { ipcRenderer.removeListener("net:shared-looks", h); };
+  },
   leave: (workspace) => ipcRenderer.invoke("net:leave", workspace),
   machineGrant: (workspace) => ipcRenderer.invoke("net:machine-grant", workspace),
   setMachineGrant: (workspace, grant) => ipcRenderer.invoke("net:set-machine-grant", workspace, grant),

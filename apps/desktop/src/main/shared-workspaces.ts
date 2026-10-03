@@ -38,6 +38,7 @@ import type { HandedOff } from "@hivemind/workspace-api/git";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
 import type { Duplex } from "node:stream";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
+import { sharedAppearance, type Appearance } from "@hivemind/core/settings-schema";
 
 /** Where the connection to a workspace's host is. */
 export type SharedState = "connecting" | "connected" | "reconnecting" | "offline" | "left" | "removed";
@@ -55,6 +56,8 @@ export interface Reach {
   publish(event: EventMessage): void;
   /** Its connection changed, or the host gave another role. */
   told(workspace: string, status: SharedStatus): void;
+  /** How its host looks, checked: the windows show its workspace that way. */
+  looks?(workspace: string, appearance: Appearance): void;
   /** It is hosted elsewhere now: keep where, so the next dial goes there. Whether it is followed
    *  (a notice that does not hold up is not). */
   moved?(notice: Moved): Promise<boolean>;
@@ -68,6 +71,8 @@ export interface Reach {
 
 interface Open {
   status: SharedStatus;
+  /** How its host last said it looks, checked; null until it says. */
+  looks: Appearance | null;
   api: ClientTransport | null;
   link: Link | null;
   retry: ReturnType<typeof setTimeout> | null;
@@ -102,13 +107,18 @@ const idOf = (v: unknown): string | null => {
 export async function openShared(workspace: string, access: Access, reach: Reach): Promise<void> {
   if (open.has(workspace)) return;
   const repo = workspaceUrl(workspace);
-  const entry: Open = { status: { state: "connecting", access }, api: null, link: null, retry: null, tries: 0 };
+  const entry: Open = { status: { state: "connecting", access }, looks: null, api: null, link: null, retry: null, tries: 0 };
   open.set(workspace, entry);
   const set = (state: SharedState, given = entry.status.access): void => {
     entry.status = { state, access: given };
     reach.told(workspace, entry.status);
   };
   const log = (m: string): void => console.warn(`[shared] ${workspace}: ${m}`);
+  /** The host said how it looks: kept, checked, and told. */
+  const looked = (raw: unknown): void => {
+    entry.looks = sharedAppearance(raw);
+    reach.looks?.(workspace, entry.looks);
+  };
   const again = (state: SharedState): void => {
     set(state);
     const wait = backoff(entry.tries++);
@@ -143,6 +153,8 @@ export async function openShared(workspace: string, access: Access, reach: Reach
     // A tile in a frame of this person's on this machine runs here, whoever put it there: what is
     // said of it (a task for it, its keyboard, its size) is this machine's, never its host's (M4).
     entry.api.events((event) => {
+      // The host's look is this workspace's, not every window's: it goes to the reach, checked.
+      if (event.event === "appearance.changed") return looked(event.params[0]);
       const tile = tileNamed(event.params);
       if (tile && guestIn(workspace) && (placesHere().placed(workspace, tile) || onThisMachine(repo, tile))) return;
       reach.publish(event);
@@ -157,6 +169,8 @@ export async function openShared(workspace: string, access: Access, reach: Reach
         entry.tries = 0;
         log(`connected (${given})`);
         set("connected", given);
+        // A host from before workspace API 0.17 has no look to give: the window keeps its own.
+        void entry.api?.call("appearance.get", []).then((answer) => { if ("result" in answer) looked(answer.result); }, () => {});
         // Welcomed as the owner's: the list is kept in step with the host's (M3).
         stopList();
         if (given === "owner" && reach.lists) stopList = followList(reach.lists, workspace, streamOf(link, "list"), (why) => console.warn(`[shared] ${workspace}: ${why}`));
@@ -222,6 +236,11 @@ export function leaveShared(workspace: string): void {
 export function forgetShared(workspace: string): void {
   leaveShared(workspace);
   sharedStore().forget(workspaceUrl(workspace));
+}
+
+/** How `workspace`'s host looks, as it last said, while the workspace is open here; null before. */
+export function sharedLooks(workspace: string): Appearance | null {
+  return open.get(workspace)?.looks ?? null;
 }
 
 /** Where the connection to `workspace`'s host is, while it is open here. */

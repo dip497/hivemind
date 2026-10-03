@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, PRESETS, UBUNTU, SIGNAL, applyPreset, flattenAppearance, getPath, mergeSettings, nestAppearance, setPath, terminalThemeFor,
+  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, PRESETS, UBUNTU, SIGNAL, applyPreset, flattenAppearance, getPath, mergeSettings, nestAppearance, setPath, sharedAppearance, terminalThemeFor,
 } from "./settings-schema.js";
 import { BUILTIN_TOOLBAR_ACTIONS, resolveToolbar } from "./toolbar.js";
 import { SettingsLockError, breakSettingsLock, patchSettingsExtras, patchSettingsFile, readSettings, settingsPath, updateSettings, writeSettings } from "./settings.js";
@@ -39,6 +39,20 @@ describe("settings schema", () => {
       expect(a.preset).toBe(p.id);
       expect(mergeSettings({ appearance: a }).appearance).toEqual(a); // survives validation unchanged
     }
+  });
+
+  test("a host's look as a guest gets it names no file on the host, and junk from a peer is dropped", () => {
+    const host = {
+      ...DEFAULT_APPEARANCE, preset: "nord", accent: "ice", mode: "light", uiFont: "Host Sans", monoFont: "Host Mono",
+      wallpaper: { kind: "video", videoSrc: "hm-media://v/%2Fhome%2Fhost%2Fclip.mp4", brightness: 0.7 },
+      overlayMedia: [{ id: "o", url: "hivemedia://cat.png", kind: "image", opacity: 1, fit: "cover", size: 1, anchor: "center" }],
+    };
+    const got = sharedAppearance(host);
+    expect(got).toMatchObject({ preset: "nord", accent: "ice", mode: "light", overlayMedia: [], uiFont: DEFAULT_APPEARANCE.uiFont, monoFont: DEFAULT_APPEARANCE.monoFont });
+    expect(got.wallpaper).toEqual({ kind: DEFAULT_APPEARANCE.wallpaper.kind, brightness: 0.7 });
+    expect(JSON.stringify(got)).not.toContain("host");
+    expect(sharedAppearance({ ...host, wallpaper: { kind: "aurora", imageSrc: "file:///etc/passwd" } }).wallpaper).toEqual({ kind: "aurora", brightness: DEFAULT_APPEARANCE.wallpaper.brightness });
+    expect(sharedAppearance({ accent: "<script>", radius: 9999, palette: { bg: "url(x)" } })).toMatchObject({ accent: DEFAULT_APPEARANCE.accent, radius: 24, palette: { bg: DEFAULT_APPEARANCE.palette.bg } });
   });
 
   test("views.chrome: every island placement round-trips, junk is dropped", () => {

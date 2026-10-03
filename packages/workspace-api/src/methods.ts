@@ -16,6 +16,7 @@ import type { Answering, LinkRole, Role } from "@hivemind/workspace-host/access"
 import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
+import type { Appearance } from "@hivemind/core/settings-schema";
 
 /** A workspace's layouts as a client that holds them opens it. */
 export interface StoreSnapshot {
@@ -146,6 +147,8 @@ export interface WorkspaceMethods {
   /** Take back the client's last board edit, or make it again: whether there was one. */
   "store.undo": (repo: string) => boolean;
   "store.redo": (repo: string) => boolean;
+  /** (0.17) The host's look, as a guest shows its workspaces: nothing on the host's disk. */
+  "appearance.get": () => Appearance;
 }
 
 /** What a client tells a host and asks no answer to: a host never answers a notice. */
@@ -219,6 +222,8 @@ export interface WorkspaceEvents {
   "store.changed": (change: Pick<WorkspaceChange, "repo" | "part">) => void;
   /** Who is in the workspace `repo` now, each as they last said (`presence.set`). */
   "presence.changed": (repo: string, people: Participant[]) => void;
+  /** (0.17) The host's look changed (`appearance.get`). */
+  "appearance.changed": (appearance: Appearance) => void;
   /** Someone asks to join `repo`: to its owner's clients, the first answer counting (M3). */
   "people.asked": (repo: string, question: JoinQuestion) => void;
   /** The question `req` about `repo` was answered, or nobody answered it in time. */

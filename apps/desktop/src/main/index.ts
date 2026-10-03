@@ -72,7 +72,7 @@ import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js
 import { hcpSockPath } from "@hivemind/agent-host/hooks/token";
 import { HcpError } from "@hivemind/host/control/protocol";
 import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog, viewSdk } from "./view-packages.js";
-import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
+import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, onSettingsChange, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
@@ -90,6 +90,7 @@ import { agents } from "@hivemind/host/agents";
 import { Terminals, type SessionOutput } from "@hivemind/host/terminals";
 import { Layouts, type Shown } from "@hivemind/host/store";
 import { presence } from "@hivemind/host/presence";
+import { appearance } from "@hivemind/host/appearance";
 import { Plans } from "@hivemind/host/plans";
 import { answers } from "@hivemind/host/answers";
 import { heldBoards, manifestOf, permissionKeys, runsIn } from "@hivemind/host/needs";
@@ -1281,6 +1282,8 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     onWarn: (m) => console.warn(`[views] ${m}`),
   }),
   presence(() => workspaceServer, () => machineIdentity().personId),
+  // How this host looks to its guests, as its theme changes.
+  appearance({ current: () => getAppSettings().appearance, onChange: (l) => { onSettingsChange((s) => l(s.appearance)); }, server: () => workspaceServer }),
   peopleHere.domain,
   // A participant's branch, handed off from their machine (M4).
   handOff({ who: whoIs, place: (repo, tile, name) => { workspaceStore().addTile(repo, tile, { name }, HANDED_OFF); } }),
