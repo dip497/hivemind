@@ -165,6 +165,17 @@ Rules core follows:
    data — unless it is user data a person chose (a label, a state, a manual rank they set).
    Status is a fact; "the Doing column" is a UI's reading of it.
 
+**Where core stands against these rules today** (refs checked 2026-10-03):
+
+| Area | Reads | Writes | Views | Verdict |
+|---|---|---|---|---|
+| Issues | `issue.list` / `issue.read` RPC (`workspace-api/src/methods.ts:56-57`), **no change event**; the window stays fresh only by invalidating its own cache after its own writes (`renderer/src/queries.ts:86,103`), so edits from the CLI or an agent are not pushed. Model `hive-core/src/types.ts:55-104` (zod frontmatter), **no schema version**. Grouping, sorting and filtering live in React (`renderer/src/issues/grouping.tsx:36-79`). | Good: validated `issue.*` actions (`methods.ts:58-68`) | None: protocol only lets a view open an issues tile (`hive-view-sdk/src/protocol.ts:280`) | Rules 1, 2 broken |
+| Agents / tiles | **The template**: `status.all` snapshot + `status.changed` stream (`methods.ts:74,193`); views get projection, status and events | Commands gated by `VIEW_PERMISSIONS` (`protocol.ts:23-24`, `hello` at :235) | Yes | Follows the rules; copy it |
+| Board objects | Window reads the whole board through the store client (`renderer/src/board-objects/useBoard.ts:15,78`); `store.changed` (`methods.ts:222`) says only *which part* changed, so a reader re-reads everything | Whole-array, debounced save (`useBoard.ts:97,224`) → `store.setObjects` whole-array replace (`methods.ts:139,144`); no per-object validated actions | None | Rules 2, 3 broken |
+
+A community Timeline or Kanban cannot be built until the issue and board rows match the agents
+row, so these three gaps open the phased plan (§7).
+
 **Example: one contract, two community UIs.**
 
 Contract `issues/v1` (core): record `{ id, title, state, labels, assignee, parent, created,
@@ -301,22 +312,33 @@ export default definePlugin({
 | Logic half runtime | none | worker host + grants + SDK |
 | Render tree | none | schema + canvas renderer + phone renderer |
 | Agent manifests as data | `hive-agents/src/manifest.ts` | stays as is; agents become a contribution point later |
-| Headless reads | `workspace-api/src/methods.ts:56` `issue.list` returns everything; writes are already actions (:58–68); `IssueSummary` holds no presentation fields (`hive-core/src/types.ts:102`) | query + subscribe with core indexes and change events; `ext.<plugin>` namespace; built-in issues UI moved onto the contract |
+| Headless reads | see the table in §2.9 | `issue.changed` + query; per-object board actions + events; view scopes for issues and board |
 | Compaction | none | host-side shallow snapshot on a schedule |
 
 ## 7. Phased plan
 
+**Phase 0 — make core headless where a community view needs it** (template: `status.all` +
+`status.changed`).
+1. Issues: `issue.changed` pushed for every write (CLI, agent, window, peer), `issue.query`
+   with filter/sort done in core, schema version on the record. The built-in issues list moves
+   onto it and drops its own cache invalidation.
+2. Board objects: per-object validated actions (`board.add/update/move/remove`) and per-object
+   change events, replacing whole-array `store.setObjects` as the write path.
+3. View protocol scopes `issues:read`, `issues:write`, `board:read`, `board:write`, gated like
+   `VIEW_PERMISSIONS`. Done when: a community Timeline and a Kanban (§2.9) run on them and see an
+   agent's `hive ctl set-state` without a reload.
+
 **Phase 1 — prove the split** (usage meter, water reminder, desk pet).
-0. Query + subscribe for `agents/v1` (the meter consumes it) — the first headless contract.
-1. `plugin` board-object kind + `plugins/<instance>` records in `workspace-doc`, with a byte cap
+1. Query + subscribe for `agents/v1` (the meter consumes it), on the Phase 0 pattern.
+2. `plugin` board-object kind + `plugins/<instance>` records in `workspace-doc`, with a byte cap
    in `writeObjects` *and* in `edit-rules` for imported changes. Tests: oversize write refused
    locally and from a peer.
-2. Render-tree schema (`packages/hive-plugin-sdk`) + canvas renderer + missing-plugin placeholder.
-3. Logic-half worker host in main: load, grants (`notify`, `service:agents/v1` only), budgets,
+3. Render-tree schema (`packages/hive-plugin-sdk`) + canvas renderer + missing-plugin placeholder.
+4. Logic-half worker host in main: load, grants (`notify`, `service:agents/v1` only), budgets,
    one instance per placed object.
-4. Action intents through `IntentGate`, role-checked at the home device.
-5. Per-plugin ephemeral slot on presence (pet).
-6. The three plugins as packages in `.hivemind/plugins/`. Done when: a guest sees all three
+5. Action intents through `IntentGate`, role-checked at the home device.
+6. Per-plugin ephemeral slot on presence (pet).
+7. The three plugins as packages in `.hivemind/plugins/`. Done when: a guest sees all three
    move and can click the meter's reset (with `edit`), without the package on their machine, and
    uninstalling on the host leaves greyed last renders.
 
