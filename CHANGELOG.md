@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: rejoining an open shared workspace replaces its old connection and role; repeated Join submissions for the same invite ask the host once.
+
 - Docs: explain sharing over a Tailscale-hosted network and mark the built-in Hosted network unavailable until its server names resolve.
 - Fixed: script-entry community views on Android no longer clip their content and controls when the web view resolves a zero page height.
 - Fixed: the Share dialog keeps a long invite link inside it, its dropdowns follow the theme instead of showing white, and its buttons line up on the left.

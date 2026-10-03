@@ -7,7 +7,7 @@ import { test, expect, type ElectronApplication, type Page } from "@playwright/t
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { hiveNetBuilt, note, notes, person, sharedWorkspace } from "./helpers/multiplayer";
+import { hiveNetBuilt, join, note, notes, person, share, sharedWorkspace } from "./helpers/multiplayer";
 
 let root: string;
 const apps: ElectronApplication[] = [];
@@ -59,6 +59,19 @@ test("the host changes a guest's role and removes them: the guest works under th
   await expect.poll(() => notes(guest), { timeout: 10_000 }).toEqual([]);
   await guest.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-recent")));
   await expect(guest.locator("[data-shared-workspace]")).toHaveCount(0); // the one open is not listed
+});
+
+test("a second approved invite replaces an open guest session and its role", async () => {
+  test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
+  const { host, guest } = await sharedWorkspace(root, apps, "view");
+  await expect(banner(guest)).toHaveAttribute("data-access", "view");
+
+  const link = await share(host, "terminals");
+  await join(guest, host, link);
+  await guest.locator("[data-join-open]").click();
+
+  await expect(banner(guest)).toHaveAttribute("data-state", "connected", { timeout: 15_000 });
+  await expect(banner(guest)).toHaveAttribute("data-access", "terminals", { timeout: 15_000 });
 });
 
 test("the host goes away and comes back: the guest keeps the board, what they wrote meanwhile reaches the host by itself; a guest who leaves is gone from the host's board", async () => {

@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { person, share } from "./helpers/multiplayer";
 
 const HIVE_NET = path.resolve("../../crates/hive-net/target/debug/hive-net");
 
@@ -77,4 +78,29 @@ test("a person with an invite link asks to join; denied they are not let in, all
   await ask();
   await expect(guest.locator('[data-join-result="out"]')).toContainText("expired or was used");
   await expect(request).toHaveCount(0);
+});
+
+test("two join calls for one invite produce one approval request", async () => {
+  test.skip(!fs.existsSync(HIVE_NET), "build hive-net first: cargo build in crates/hive-net");
+  const repo = path.join(root, "api");
+  fs.mkdirSync(repo);
+  execFileSync("git", ["init", "-q"], { cwd: repo });
+  const host = await person(root, "host", repo, apps);
+  await host.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
+  const guestDir = path.join(root, "elsewhere");
+  fs.mkdirSync(guestDir);
+  const guest = await person(root, "guest", guestDir, apps);
+  const link = await share(host, "view");
+
+  const first = guest.evaluate((invite) => window.hive.join(invite), link);
+  const second = guest.evaluate((invite) => window.hive.join(invite), link);
+  const requests = host.locator(".hm-join-request");
+  await expect(requests).toHaveCount(1);
+  await host.waitForTimeout(500);
+  await expect(requests).toHaveCount(1);
+  await requests.getByRole("button", { name: "Allow" }).click();
+  expect(await Promise.all([first, second])).toEqual([
+    expect.objectContaining({ ok: true }),
+    expect.objectContaining({ ok: true }),
+  ]);
 });

@@ -591,30 +591,48 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     return link && { workspace: link.names.workspace, host: link.names.host };
   });
 
+  // The same invite can be submitted from two windows, or after the join dialog is reopened
+  // while its first request is still waiting. Both callers get the one answer from the host.
+  const joining = new Map<string, Promise<JoinReply>>();
   // Ask the host a link names to let this person in.
   handleEffect("net:join", () => ({}), async (_e, text: unknown): Promise<JoinReply> => {
     const link = typeof text === "string" ? parseJoinLink(text) : null;
     if (!link) throw new Error("join: that is not an invite link");
-    const hn = await network();
-    // Onto the host network's relays first, as its link says.
-    if (link.admission) {
-      try {
-        if (link.admission.voucher) await networkProfiles().redeem(link.admission.access, link.admission.voucher);
-        else await networkProfiles().register(link.admission.access);
-      } catch (e) {
-        return { ok: false, error: "not-admitted", message: e instanceof Error ? e.message : String(e) };
+    const key = `${link.host}:${link.workspace}:${link.secret}`;
+    const pending = joining.get(key);
+    if (pending) return pending;
+    const attempt = (async (): Promise<JoinReply> => {
+      const hn = await network();
+      // Onto the host network's relays first, as its link says.
+      if (link.admission) {
+        try {
+          if (link.admission.voucher) await networkProfiles().redeem(link.admission.access, link.admission.voucher);
+          else await networkProfiles().register(link.admission.access);
+        } catch (e) {
+          return { ok: false, error: "not-admitted", message: e instanceof Error ? e.message : String(e) };
+        }
       }
-    }
-    const { certificate } = machineIdentity();
-    const profile = await shownProfile();
-    const reply = (await hn.pair(link.host, link.where, { v: 1, workspace: link.workspace, secret: link.secret, certificate, profile })) as PairReply;
-    if (reply?.ok) {
-      joinedList().add({
-        workspace: link.workspace, host: link.host, where: link.where, role: reply.role, names: link.names, joinedAt: Date.now(),
-        ...(link.hosting ? { hosting: link.hosting } : {}),
-      });
-    }
-    return reply;
+      const { certificate } = machineIdentity();
+      const profile = await shownProfile();
+      const reply = (await hn.pair(link.host, link.where, { v: 1, workspace: link.workspace, secret: link.secret, certificate, profile })) as PairReply;
+      if (reply?.ok) {
+        joinedList().add({
+          workspace: link.workspace, host: link.host, where: link.where, role: reply.role, names: link.names, joinedAt: Date.now(),
+          ...(link.hosting ? { hosting: link.hosting } : {}),
+        });
+        // A window may still show this workspace. Replace its old link so the new grant and
+        // invite address take effect even when opening the same hive:// path changes no query key.
+        if (sharedStatus(link.workspace)) {
+          leaveShared(link.workspace);
+          void openJoined(link.workspace, (event) => server.relay(event)).catch((e: unknown) =>
+            console.warn(`[network] could not reopen ${link.workspace.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`));
+        }
+      }
+      return reply;
+    })();
+    joining.set(key, attempt);
+    try { return await attempt; }
+    finally { if (joining.get(key) === attempt) joining.delete(key); }
   });
 
   // The workspaces this person joined elsewhere.
