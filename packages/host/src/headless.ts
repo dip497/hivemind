@@ -34,6 +34,9 @@ import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
 import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, PairingOffer, parseCode, parsePairLink, type Pairing, type PairingDevice } from "@hivemind/workspace-host/pairing";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { Sharing } from "@hivemind/workspace-host/sharing";
+import { join, type JoinReply } from "@hivemind/workspace-host/join";
+import { parseJoinLink } from "@hivemind/workspace-host/join-link";
+import { JoinedList } from "@hivemind/workspace-host/joined";
 import { HiveNet, type Link, type Ready } from "@hivemind/workspace-host/hive-net";
 import { HostRecords, type Hosted } from "@hivemind/workspace-host/host-records";
 import { idOf, workspaceSeed } from "@hivemind/workspace-host/identity";
@@ -103,6 +106,11 @@ export interface HeadlessHost {
   /** Enter the code or link another device offers. Resolves with that device once paired, when the
    *  host must be started again, as that person. */
   enterPairing(text: string): Promise<PairedDevice>;
+  /** Call the workspace API as the person at this machine (`hive share`, `hive people`): as a
+   *  window of the app's calls it, its effects in the audit log. */
+  call(method: string, params: unknown[]): Promise<unknown>;
+  /** Join a workspace with its invite link (`hive join`): resolves once its owner answered. */
+  join(text: string): Promise<JoinReply>;
   stop(): Promise<void>;
 }
 
@@ -310,6 +318,9 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       onWarn: o.onWarn,
     }),
   ], intents, o.onWarn);
+
+  // The person at this machine's command line: never closed, told nothing.
+  const atCommandLine: Connection = { actor: { kind: "person" }, send: () => {}, closed: new AbortController().signal };
 
   // The control plane (`hive ctl`): the verbs that need no window, for the agents here and for
   // whoever is at this machine. The agents and settings are the app's, read from this data folder.
@@ -557,6 +568,21 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       const offering = link?.device ?? (await offeringNearby(code, () => on.nearby()));
       const where = link ? { addrs: link.addrs, relay: link.relay } : { addrs: [], relay: null };
       return keep(await enterPairing({ me: me(), code, offering, ask: (hello) => on.pair(offering, where, hello) }));
+    },
+    call: async (method, params) => {
+      const answer = await api.answer(method, params, atCommandLine);
+      if ("error" in answer) throw new Error(answer.error.message);
+      return answer.result;
+    },
+    join: async (text) => {
+      const link = parseJoinLink(text);
+      if (!link) throw new Error("that is not an invite link");
+      if (!net || !profiles) throw new Error("this host is not on the network yet: is hive-net installed beside hive?");
+      const { name, color } = catalog.settings().profile;
+      return join(link, {
+        net, profiles, certificate: keys.certificate, profile: { name: name || deviceName(), color },
+        joined: new JoinedList(path.join(o.dir, "joined.json")),
+      });
     },
     stop: async () => {
       stopping = true;

@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: share from a host with no window: `hive share <workspace>` prints an invite link (`--role`, `--uses`, `--expires`), `hive people` lists who is asking and lets them in or turns them away (at another role with `--role`), changes roles and takes people off, and `hive join <link>` asks to join a workspace; each acts through the running `hive host` and lands in its audit log (workspace API 0.16: `people.invite … uses`, `people.answer … role`).
 - New: a shared workspace can let in anyone with a valid invite at once, at the invite's role, instead of asking you each time (`hive people rule invite`); with no window of yours open, someone asking to join is sent to your phone (workspace API 0.16: `people.requests`, `people.answering`; push 0.5: `join`).
 - Fixed: rejoining an open shared workspace replaces its old connection and role; repeated Join submissions for the same invite ask the host once.
 

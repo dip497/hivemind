@@ -15,11 +15,11 @@ let dir: string;
 beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "sharing-")); });
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-function host(answers: boolean[] = []) {
+function host(answers: Array<boolean | "view"> = []) {
   const lists = new AccessLists({ dir: path.join(dir, "access"), owner: newSeed() });
   const asked: JoinRequest[] = [];
   const admitted: string[][] = [];
-  const sharing = new Sharing(lists, async (r) => { asked.push(r); return answers.shift() ?? true; }, (d) => admitted.push(d));
+  const sharing = new Sharing(lists, async (r) => { asked.push(r); const a = answers.shift() ?? true; return a === true ? r.role : a || null; }, (d) => admitted.push(d));
   return { lists, sharing, asked, admitted };
 }
 function guest() {
@@ -106,4 +106,17 @@ test("an invite link carries the host, the workspace, the secret, where to reach
   for (const bad of ["", "https://example.com", `hivemind://join/${"a".repeat(64)}`, `hivemind://join/${"a".repeat(63)}#e30`, `hivemind://join/${"a".repeat(64)}#e30`]) {
     expect(parseJoinLink(bad)).toBeNull();
   }
+});
+
+test("the person may let someone in at another role than the invite's; a reusable invite made for so many lets that many in", async () => {
+  const { lists, sharing } = host(["view"]);
+  const ws = newWorkspaceId();
+  const secret = lists.invite(ws, "/work/api", "terminals", 60_000, true, 2);
+  const priya = guest();
+  expect(await sharing.answer(priya.device, hello(ws, secret, priya))).toEqual({ ok: true, role: "view", workspace: ws });
+  expect(lists.accessOf(ws, priya.device)).toBe("view");
+  const sam = guest();
+  expect((await sharing.answer(sam.device, hello(ws, secret, sam))).ok).toBe(true);
+  const kim = guest();
+  expect(await sharing.answer(kim.device, hello(ws, secret, kim))).toEqual({ ok: false, error: "expired" });
 });

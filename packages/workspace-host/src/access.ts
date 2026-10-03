@@ -88,6 +88,8 @@ interface Invite {
   /** ms since the epoch. */
   expires: number;
   reusable: boolean;
+  /** How many more it lets in, a reusable one made for so many; none: as many as come. */
+  left?: number;
   used: boolean;
 }
 
@@ -214,13 +216,15 @@ export class AccessLists {
   }
 
   /** A new invite to `workspace` (the repo `repo` here) for `role`, for `expiresIn` ms, used once
-   *  unless `reusable`: its secret, which only the link carries. */
-  invite(workspace: string, repo: string, role: LinkRole, expiresIn: number, reusable = false): string {
+   *  unless `reusable`, then by `uses` people at most when given: its secret, which only the link
+   *  carries. */
+  invite(workspace: string, repo: string, role: LinkRole, expiresIn: number, reusable = false, uses?: number): string {
     if (!isHex(workspace, 16)) throw new TypeError("access: a workspace is named by its 16-byte id in hex");
     if (!LINK_ROLES.includes(role)) throw new TypeError(`access: an invite cannot carry ${String(role)}`);
     if (!(expiresIn > 0)) throw new TypeError("access: an invite expires after it is made");
+    if (uses !== undefined && !(Number.isSafeInteger(uses) && uses >= 1)) throw new TypeError("access: an invite lets one person in or more");
     const secret = randomBytes(32).toString("hex");
-    const invite: Invite = { role, expires: Date.now() + expiresIn, reusable, used: false };
+    const invite: Invite = { role, expires: Date.now() + expiresIn, reusable, ...(reusable && uses !== undefined ? { left: uses } : {}), used: false };
     this.edit(workspace, (doc) => {
       doc.getMap("meta").set("repo", repo);
       doc.getMap("invites").set(hashOf(secret), invite);
@@ -246,6 +250,7 @@ export class AccessLists {
     this.edit(workspace, (doc) => {
       doc.getMap("via").set(person, key);
       if (!invite.reusable) doc.getMap("invites").set(key, { ...invite, used: true });
+      else if (invite.left !== undefined) doc.getMap("invites").set(key, { ...invite, left: invite.left - 1, used: invite.left <= 1 });
     });
   }
 

@@ -184,10 +184,36 @@ changed on it meanwhile.
 
 While the host has it, you manage who is in it from your computer as before: **Share** makes a
 link that brings people to the host, **People** changes roles and takes people off there, and
-someone asking to join is asked about in each of your windows with it open (nobody at one: they
-are told no). Your computer keeps the list as the host has it, so **Host it here** carries it on
+someone asking to join is asked about in each of your windows with it open, or, with none open,
+on your phone. Your computer keeps the list as the host has it, so **Host it here** carries it on
 with whoever was let in or taken off meanwhile. A link made there names you as the host's profile
 does (`hive config set profile.name '"Your Name"'` on the host), or by the machine's name.
+
+### Sharing from the host itself
+
+With no window anywhere, share straight from the host's command line. These ask the running
+`hive host`, act as you, and are written to its audit log like the app's **Share** and **People**:
+
+```text
+hive share <workspace> [--role view|edit|terminals] [--uses n] [--expires 7d]
+                                 # print an invite link (default: edit, one person, 7 days)
+hive people requests             # who is asking to join now, by number
+hive people allow <n> [--role view|edit|terminals]   # let them in, at their link's role or this one
+hive people deny <n>             # turn them away
+hive people list                 # who is on the list, their roles, who is here now
+hive people role <person> <role> # view, edit, terminals, or agents (only while they are here)
+hive people remove <person>      # take them off; their link stops working
+hive people rule [ask|invite]    # ask (default): you answer each request;
+                                 #   invite: anyone with a valid link is let in at once
+hive join <link>                 # join a workspace someone shared, waiting while they decide
+```
+
+`<workspace>` (or `--workspace` / `-w`) is a folder the host serves or its name; leave it out
+inside that folder, or when the host serves only one. `<person>` is their name or the start of
+their id from `hive people list`. A link never lets someone drive agents: give that with `hive
+people role` once they are here. Someone asking to join waits up to three minutes for your
+answer: run `hive people requests`, or answer from the notification on your paired phone. Every
+command takes `--json`.
 
 On the host, `hive ctl` drives its agents as it does the app's. Run on that machine, by you or by
 an agent in one of its terminals, `hive ctl spawn` starts an agent there with no window, in the

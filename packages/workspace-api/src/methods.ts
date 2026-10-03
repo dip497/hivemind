@@ -121,8 +121,10 @@ export interface WorkspaceMethods {
   "people.list": (repo: string) => PersonHere[];
   "people.role": (repo: string, person: string, role: Role) => void;
   "people.remove": (repo: string, person: string) => void;
-  "people.invite": (repo: string, role: LinkRole, expiresIn: number, reusable?: boolean) => string;
-  "people.answer": (repo: string, req: number, allow: boolean) => { answered: boolean };
+  /** A join link; `uses` (0.16): how many people a reusable one lets in at most. */
+  "people.invite": (repo: string, role: LinkRole, expiresIn: number, reusable?: boolean, uses?: number) => string;
+  /** `role` (0.16): let them in at this role in place of the link's. */
+  "people.answer": (repo: string, req: number, allow: boolean, role?: LinkRole) => { answered: boolean };
   /** The questions about `repo` waiting on its owner now, and how it lets in someone with a valid
    *  invite. */
   "people.requests": (repo: string) => JoinRequests;

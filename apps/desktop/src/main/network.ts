@@ -15,7 +15,8 @@ import { createHash } from "node:crypto";
 import type { Duplex } from "node:stream";
 import { HiveNet, type Link } from "@hivemind/workspace-host/hive-net";
 import { AccessLists } from "@hivemind/workspace-host/access";
-import { Sharing, type PairReply } from "@hivemind/workspace-host/sharing";
+import { Sharing } from "@hivemind/workspace-host/sharing";
+import { join, type JoinReply } from "@hivemind/workspace-host/join";
 import { parseJoinLink } from "@hivemind/workspace-host/join-link";
 import { JoinedList } from "@hivemind/workspace-host/joined";
 import { NetworkProfiles } from "@hivemind/workspace-host/network-profile";
@@ -446,7 +447,6 @@ function keepPaired(device: PairedDevice): void {
 
 /** What asking to join answers: the host's reply, or that this device could not get onto the
  *  host network's relays. */
-type JoinReply = PairReply | { ok: false; error: "not-admitted"; message: string };
 
 /** The person's devices paired here that frames run on, workspaces are held on and hosting moves
  *  to: their computers and hosts. A phone runs nothing (spec/pairing.md 0.3). */
@@ -609,24 +609,11 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     const pending = joining.get(key);
     if (pending) return pending;
     const attempt = (async (): Promise<JoinReply> => {
-      const hn = await network();
-      // Onto the host network's relays first, as its link says.
-      if (link.admission) {
-        try {
-          if (link.admission.voucher) await networkProfiles().redeem(link.admission.access, link.admission.voucher);
-          else await networkProfiles().register(link.admission.access);
-        } catch (e) {
-          return { ok: false, error: "not-admitted", message: e instanceof Error ? e.message : String(e) };
-        }
-      }
-      const { certificate } = machineIdentity();
-      const profile = await shownProfile();
-      const reply = (await hn.pair(link.host, link.where, { v: 1, workspace: link.workspace, secret: link.secret, certificate, profile })) as PairReply;
+      const reply = await join(link, {
+        net: await network(), profiles: networkProfiles(), certificate: machineIdentity().certificate,
+        profile: await shownProfile(), joined: joinedList(),
+      });
       if (reply?.ok) {
-        joinedList().add({
-          workspace: link.workspace, host: link.host, where: link.where, role: reply.role, names: link.names, joinedAt: Date.now(),
-          ...(link.hosting ? { hosting: link.hosting } : {}),
-        });
         // A window may still show this workspace. Replace its old link so the new grant and
         // invite address take effect even when opening the same hive:// path changes no query key.
         if (sharedStatus(link.workspace)) {

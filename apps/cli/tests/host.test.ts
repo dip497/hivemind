@@ -9,7 +9,10 @@
 // follows it home; moved there again and the host gone, the laptop hosts it from the copy it kept,
 // and the host, back, hands over what it had. Its owner, at the laptop, manages who is in a
 // workspace it hosts (the workspace API's people.*), is asked there about someone joining, and
-// keeps its list in step. Here the laptop is this test, with keys and a hive-net of its own.
+// keeps its list in step. Here the laptop is this test, with keys and a hive-net of its own. With
+// no window, its person shares from the command line: `hive share` makes the link, another host
+// asks with `hive join`, and `hive people` answers, at another role if they choose; a workspace
+// that lets in anyone with a valid link asks nobody.
 // Needs crates/hive-net's build.
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import fs from "node:fs";
@@ -25,7 +28,7 @@ import { WorkspaceStore, type WorkspaceChange } from "@hivemind/workspace-host/s
 import { replicate } from "@hivemind/workspace-host/doc-sync";
 import { followList } from "@hivemind/workspace-host/list-sync";
 import { parseJoinLink } from "@hivemind/workspace-host/join-link";
-import type { JoinQuestion } from "@hivemind/workspace-api/people";
+import type { JoinQuestion, JoinRequests, PersonHere } from "@hivemind/workspace-api/people";
 import type { Access } from "@hivemind/workspace-host/access";
 import { peerTransport, workspaceUrl } from "@hivemind/workspace-api/peers";
 import { WorkspaceClient } from "@hivemind/workspace-api/client";
@@ -562,10 +565,14 @@ describe.skipIf(!built)("hive host", () => {
       const atHost = await until(() => enter(guest, offered.device, offered.addrs).then((r) => (r.access ? r : null)), "the guest to be let in at the host");
       expect(atHost.access).toBe("edit");
 
-      // Someone with a link asks to join while none of the owner's devices is connected there: no,
-      // at once, with nobody to ask.
+      // Someone with a link asks to join while none of the owner's devices is connected there: the
+      // host has no window, so the question waits for its person at its command line, who says no.
       const ask = (secret: string) => newcomer.pair(offered.device, where!, { v: 1, workspace, secret, certificate: newKeys.certificate, profile: { name: "Noor", color: "#22aa66" } });
-      expect(await ask(early)).toEqual({ ok: false, error: "declined" });
+      const turnedAway = ask(early);
+      const waiting = await until(() => data<JoinRequests>(hive(["people", "requests", "-w", "team", "--json"], { env: own })).asking[0], "the question at the host");
+      expect(waiting).toMatchObject({ workspace: "team", profile: { name: "Noor" }, role: "view" });
+      expect(hive(["people", "deny", String(waiting.req), "-w", "team"], { env: own }).code).toBe(0);
+      expect(await turnedAway).toEqual({ ok: false, error: "declined" });
 
       // The laptop opens it from the host as its owner, keeping its list in step, and sees who is in it.
       const opened = await laptop.dial(offered.device, where);
@@ -617,6 +624,50 @@ describe.skipIf(!built)("hive host", () => {
       newcomer.stop();
       hive(["host", "stop"], { env: own });
       hive(["daemon", "stop"], { env: own });
+    }
+  });
+
+  test("shares from the command line with no window: `hive share` makes a link, another host asks with `hive join`, `hive people` lets it in at another role; with the rule `invite` a link lets in at once; each answer is audited", async () => {
+    const own = { ...env, HIVEMIND_APP_DATA: path.join(dir, "data6"), HIVEMIND_PTY_SOCK: path.join(dir, "d6.sock") };
+    const other = { ...env, HIVEMIND_APP_DATA: path.join(dir, "data7"), HIVEMIND_PTY_SOCK: path.join(dir, "d7.sock") };
+    runHost(own);
+    runHost(other);
+    const owner = await until(() => status(own)?.network && status(own), "the owner's host on the network");
+    const guest = await until(() => status(other)?.network && status(other), "the guest's host on the network");
+    const repo = path.join(dir, "shared6");
+    fs.mkdirSync(repo);
+    expect(hive(["host", "add", repo], { env: own }).code).toBe(0);
+    try {
+      const shared = data<{ link: string; role: string; answering: string }>(hive(["share", "shared6", "--role", "terminals", "--expires", "1h", "--json"], { env: own }));
+      expect(shared).toMatchObject({ role: "terminals", answering: "ask" });
+      expect(parseJoinLink(shared.link)).toMatchObject({ host: owner.device, names: { workspace: "shared6" } });
+
+      const joining = hiveAsync(["join", shared.link, "--json"], { env: other });
+      const asking = await until(() => data<JoinRequests>(hive(["people", "requests", "-w", "shared6", "--json"], { env: own })).asking[0], "the request at the owner's host");
+      expect(asking).toMatchObject({ workspace: "shared6", role: "terminals" });
+      expect(hive(["people", "allow", String(asking.req), "--role", "view", "-w", "shared6", "--json"], { env: own }).json).toMatchObject({ ok: true });
+      expect((await joining).json).toMatchObject({ ok: true, data: { ok: true, role: "view" } });
+      expect(data<PersonHere[]>(hive(["people", "list", "-w", "shared6", "--json"], { env: own })).map((p) => [p.person, p.role])).toEqual([[guest.person, "view"]]);
+      // Kept in the guest's joined list, as the app keeps a workspace it joined.
+      expect(JSON.parse(fs.readFileSync(path.join(other.HIVEMIND_APP_DATA, "joined.json"), "utf8"))).toMatchObject([{ host: owner.device, role: "view", names: { workspace: "shared6" } }]);
+
+      // Anyone with a valid link let in at once: nobody is asked.
+      expect(hive(["people", "rule", "invite", "-w", "shared6"], { env: own }).code).toBe(0);
+      const again = data<{ link: string }>(hive(["share", "shared6", "--json"], { env: own }));
+      expect(hive(["join", again.link, "--json"], { env: other }).json).toMatchObject({ ok: true, data: { role: "edit" } });
+      // Unknown answers say so, and a link never lets in to drive agents.
+      expect(hive(["people", "allow", "99", "-w", "shared6", "--json"], { env: own }).json).toMatchObject({ ok: false, code: "not_waiting" });
+      expect(hive(["share", "shared6", "--role", "agents"], { env: own }).code).toBe(2);
+
+      const audited = fs.readFileSync(path.join(own.HIVEMIND_APP_DATA, "audit.jsonl"), "utf8").split("\n").filter(Boolean)
+        .map((l) => JSON.parse(l) as { verb: string; detail?: string; outcome: string })
+        .filter((e) => e.verb.startsWith("people.")).map((e) => `${e.verb} ${e.detail ?? ""} ${e.outcome}`);
+      expect(audited).toEqual(["people.invite terminals ok", "people.answer allow as view ok", "people.answering invite ok", "people.invite edit ok", "people.answer allow ok"]);
+    } finally {
+      for (const on of [own, other]) {
+        hive(["host", "stop"], { env: on });
+        hive(["daemon", "stop"], { env: on });
+      }
     }
   });
 
