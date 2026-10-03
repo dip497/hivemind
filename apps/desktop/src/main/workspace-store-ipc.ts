@@ -12,6 +12,7 @@ import path from "node:path";
 import { app, type IpcMainEvent, type WebContents } from "electron";
 import type { Connection } from "@hivemind/workspace-api/server";
 import { WorkspaceStore, type WorkspaceChange } from "@hivemind/workspace-host/store";
+import { changeHub } from "@hivemind/workspace-host/doc-sync";
 import { answer } from "./app-ipc.js";
 import { machineIdentity } from "./identity.js";
 import type { Layouts } from "@hivemind/host/store";
@@ -21,10 +22,10 @@ let shared: WorkspaceStore | null = null;
 /** Who hears of each change: set when the channels are installed. */
 let tell: (change: WorkspaceChange) => void = () => {};
 /** Who else hears of each change (a workspace's peers, M1). */
-const listeners = new Set<(change: WorkspaceChange) => void>();
+const others = changeHub((m) => console.warn(`[workspace-store] ${m}`));
 const told = (change: WorkspaceChange): void => {
   tell(change);
-  for (const l of listeners) l(change);
+  others.tell(change);
 };
 
 /** The app's one store: the windows', and main's own writers' (the control plane). */
@@ -52,10 +53,7 @@ export function storeFor(repo: string): WorkspaceStore {
 }
 
 /** Hear each change either store makes; the function returned stops. */
-export function onWorkspaceChange(listener: (change: WorkspaceChange) => void): () => void {
-  listeners.add(listener);
-  return () => { listeners.delete(listener); };
-}
+export const onWorkspaceChange = others.changes;
 
 /** Serve the store's synchronous channels from `layouts`, each window as its `connection`, and
  *  hand each change the store makes to `changed`. */

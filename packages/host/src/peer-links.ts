@@ -284,7 +284,8 @@ export class PeerLinks {
   constructor(private readonly o: PeerLinksOptions) {
     // The list changes with the boards here, and with each status and plan the workspace API
     // tells its clients of: heard as one of them, which never calls.
-    o.changes(() => this.agentsChanged());
+    const agentsFollowed = () => this.agentsChanged();
+    o.changes(agentsFollowed);
     o.server.connect({ actor: { kind: "person" }, send: (e) => { if (LIST_EVENTS.has(e.event)) this.agentsChanged(); }, closed: new AbortController().signal });
   }
 
@@ -372,7 +373,9 @@ export class PeerLinks {
       });
       const entry: Served = { workspace: hello.workspace, person, link, stop };
       this.served.add(entry);
-      void link.closed.then(() => { this.served.delete(entry); this.machines.delete(link); stop(); });
+      const who = `${link.peer.slice(0, 8)}… in ${hello.workspace.slice(0, 8)}…`;
+      this.o.onWarn?.(`${who} connected (${access})`);
+      void link.closed.then((why) => { this.o.onWarn?.(`${who} disconnected: ${why || "no reason"}`); this.served.delete(entry); this.machines.delete(link); stop(); });
     });
   }
 

@@ -22,6 +22,24 @@ export interface SyncChannel {
 /** Hear each change a store makes. */
 export type Changes = (listener: (change: WorkspaceChange) => void) => () => void;
 
+/** Each change told to every listener, one failing listener told of to `onError` (by its name)
+ *  without keeping the change from the rest: a replica's sync listens after the others. */
+export function changeHub(onError: (message: string) => void): { tell: (change: WorkspaceChange) => void; changes: Changes } {
+  const listeners = new Set<(change: WorkspaceChange) => void>();
+  return {
+    tell: (change) => {
+      for (const l of listeners) {
+        try {
+          l(change);
+        } catch (e) {
+          onError(`change listener ${l.name || "(anonymous)"} failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+    },
+    changes: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+  };
+}
+
 export type SyncMessage =
   | { t: "hello"; workspace: string; seen: string | null }
   | { t: "welcome"; access: Access; data: string; seen: string }
@@ -68,9 +86,13 @@ export function serveReplica(
     theirs = store.version(repo);
     return b64(data);
   };
-  const stopChanges = opts.changes((change) => {
+  const stopChanges = opts.changes(function sendToReplica(change) {
     if (change.repo !== repo || (theirs && b64(theirs) === b64(store.version(repo)))) return;
-    channel.send(JSON.stringify({ t: "update", data: lacking() }));
+    try {
+      channel.send(JSON.stringify({ t: "update", data: lacking() }));
+    } catch (e) {
+      opts.onDropped?.(`an update to it could not be sent (${e instanceof Error ? e.message : String(e)})`);
+    }
   });
   const stopFrames = channel.on((text) => {
     const m = parseSync(text);
@@ -118,7 +140,7 @@ export function replicate(
     }
     hostHas = store.version(repo);
   });
-  const stopChanges = opts.changes((change) => {
+  const stopChanges = opts.changes(function sendToHost(change) {
     if (change.repo !== repo || change.writer === HOST) return;
     const now = store.version(repo);
     if (b64(now) === b64(hostHas)) return;

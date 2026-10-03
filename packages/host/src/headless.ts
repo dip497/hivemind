@@ -40,7 +40,8 @@ import { idOf, workspaceSeed } from "@hivemind/workspace-host/identity";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { adoptPerson, machineKeys } from "@hivemind/workspace-host/keyring";
 import { NetworkProfiles } from "@hivemind/workspace-host/network-profile";
-import { WorkspaceStore, type WorkspaceChange } from "@hivemind/workspace-host/store";
+import { WorkspaceStore } from "@hivemind/workspace-host/store";
+import { changeHub } from "@hivemind/workspace-host/doc-sync";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { agents } from "./agents.js";
@@ -147,7 +148,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     devices: () => devices.list().map((d) => d.certificate),
     onWarn: o.onWarn,
   });
-  const heard = new Set<(change: WorkspaceChange) => void>();
+  const heard = changeHub((m) => o.onWarn(m));
   const workspacesDir = path.join(o.dir, "workspaces");
   // A change is made by a client, so after the server below is there to tell the others.
   const store = new WorkspaceStore({
@@ -156,7 +157,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     onWarn: o.onWarn,
     onChange: (change) => {
       api.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part });
-      for (const l of heard) l(change);
+      heard.tell(change);
     },
   });
   const layouts = new Layouts(() => store);
@@ -379,7 +380,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   });
   const peers = new PeerLinks({
     store,
-    changes: (listener) => { heard.add(listener); return () => { heard.delete(listener); }; },
+    changes: heard.changes,
     lists,
     server: api,
     // The person's devices run terminals here, in frames on this machine (M3).
@@ -414,7 +415,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     me: () => ({ device: keys.deviceId, name: deviceName() }),
     boards: () => heldBoards(store),
     decides: (tile) => !!permissionKeys(heldBoards(store), tile),
-    changes: (listener) => { heard.add(listener); return () => { heard.delete(listener); }; },
+    changes: heard.changes,
     subscriptions: pushSubscriptions,
     post: (endpoint, body, urgency, sign) => postNotice(endpoint, body, urgency, sign ? keys.device : null),
     onWarn: (m) => o.onWarn(`push: ${m}`),

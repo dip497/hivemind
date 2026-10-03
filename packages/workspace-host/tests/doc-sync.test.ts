@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { WorkspaceStore, type WorkspaceChange } from "../src/store.ts";
-import { parseSync, replicate, serveReplica, type SyncChannel } from "../src/doc-sync.ts";
+import { changeHub, parseSync, replicate, serveReplica, type SyncChannel } from "../src/doc-sync.ts";
 import type { Access } from "../src/access.ts";
 import { newSeed } from "../src/identity.ts";
 
@@ -123,4 +123,16 @@ test("a guest who edits the board changes it, but what would start something on 
   const now = driving.store.getCore("hive://w")!;
   driving.store.setCore("hive://w", { ...now, tiles: [...now.tiles, { id: "t8", kind: "shell", label: "sh", cmd: "/bin/sh" }] }, { writer: "window", base: now });
   expect(host.store.getCore("/a")!.tiles.map((t) => t.id)).toEqual(["t1", "t8"]);
+});
+
+test("a listener that throws keeps no change from the replica listening after it", () => {
+  const errors: string[] = [];
+  const hub = changeHub((m) => errors.push(m));
+  const store = new WorkspaceStore({ dir: path.join(tmp, "hub"), person: newSeed(), onChange: hub.tell });
+  hub.changes(function brokenNotices() { throw new Error("boom"); });
+  const heard: WorkspaceChange[] = [];
+  hub.changes((c) => heard.push(c));
+  store.setCore("/a", core("one"));
+  expect(heard.length).toBeGreaterThan(0);
+  expect(errors[0]).toContain("brokenNotices failed: boom");
 });
