@@ -344,9 +344,17 @@ export default definePlugin({
 
 **Phase 2** — services between plugins, phone cards, UI half (MCP Apps iframe on focus),
 per-instance upgrade + migrations, shallow-snapshot compaction.
-**Phase 3** — trusted middleware + untrusted declarative rules; first built-in migration
-(issues), then browser, editor, agents. Each keeps its id and settings keys and is
-disable-able, not uninstallable.
+**Phase 3** — trusted middleware + untrusted declarative rules, then built-ins go out.
+
+"Going out" means shipping as a **built-in plugin**: in the box, disable-able and replaceable by a
+community one, same id and settings keys, using the public contract only. Nothing is removed.
+
+- **Pure UI over data moves out whole.** Issues first (on the Phase 0 contract), editor second:
+  the CodeMirror UI becomes a plugin; file, git and LSP reads stay core services it consumes.
+- **Anything that owns a native engine keeps the engine in the kernel.** The PTY and the
+  browser's `WebContentsView` (with its cookies and sessions) stay kernel surfaces behind a
+  contract; only their chrome — tabs, toolbar, share-tab — becomes plugin UI. Agents follow the
+  terminal: the manifest is already data, the session stays a PTY.
 
 ## 8. Where this departs from the agreed direction
 
