@@ -108,7 +108,7 @@ const spawn = sub("spawn", "Spawn an agent tile; prints { tileId, … }", {
   prompt: { type: "string", description: "initial task" },
   name: { type: "string", description: "tile title" },
   frame: { type: "string", description: "frame to spawn into (id, repo/worktree name, or title); default: the caller's frame" },
-  mode: { type: "string", description: "claude permission mode" },
+  mode: { type: "string", description: "permission mode; yolo = ask nothing" },
   model: { type: "string", description: "model override" },
   report: { type: "boolean", description: "worker auto-reports its finished reply to the caller (--no-report to disable)" },
   supervise: { type: "string", description: "broker the worker's tool permissions to this CLI/agent: 'all', or a comma-list of tools" },

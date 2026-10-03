@@ -6,10 +6,13 @@ export function agentOption(def: AgentProviderDef, id: string): AgentOption | un
   return def.options?.find((o) => o.id === id);
 }
 
+/** One name for "ask nothing" across agents: an agent's own `yolo` value, else its `unattended` one. */
+export const YOLO = "yolo";
+
 /** "default" means not chosen (`hive ctl spawn --mode default`). A value starting
  *  with "-" would read as another flag, so it is dropped. */
 function valueOf(o: AgentOption, opts: SpawnOptions): string | undefined {
-  const chosen = opts[o.id];
+  const chosen = opts[o.id] === YOLO && !Object.hasOwn(o.values ?? {}, YOLO) ? o.unattended : opts[o.id];
   const v = chosen && chosen !== "default" ? chosen : o.default;
   return v && !v.startsWith("-") ? v : undefined;
 }
@@ -74,5 +77,5 @@ export function choicesFromList(out: string, spec: { skip?: number; format?: str
 
 /** Discovered values plus any the agent maps specially and hivemind's default. */
 export function optionChoices(o: AgentOption, discovered: readonly string[]): string[] {
-  return [...new Set([...discovered, ...Object.keys(o.values ?? {}), ...(o.default ? [o.default] : [])])];
+  return [...new Set([...discovered, ...Object.keys(o.values ?? {}), ...(o.default ? [o.default] : []), ...(o.unattended ? [YOLO] : [])])];
 }

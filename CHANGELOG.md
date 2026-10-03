@@ -9,6 +9,15 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- `yolo` is one launch mode for every agent (`hive ctl spawn --mode yolo`, Settings ▸ Agents): it runs the agent without asking, using the agent's own flag. Antigravity, Codex, Copilot and Kiro gain it; Cline gains `ask`, since it approves everything by default.
+
+### Fixed
+
+- The Layers rail's right-click menu: Spawn agent's per-agent choices can be clicked again, and the menu reads over a wallpaper like the panel it opens from.
+- Moving between tiles on the canvas is a straight 220ms glide instead of a 400ms zoom-out-and-back that blurred every terminal on the way.
+
 ## [2026.9.9] — 2026-09-29
 
 - Fixed: after an upgrade, agents the new version cannot load are repaired from the registry even when the first attempt fails or the workspace never settles. The check ran once per launch and counted a failed attempt as the run, and it waited for every restored tile to start — but an agent this version cannot load is a tile that may never start, so a machine could sit with every agent unavailable until it was restarted. It now waits at most a minute, tries again while an agent is still broken, and only stops asking once a check has actually succeeded.

@@ -35,6 +35,15 @@ export function snapViewportCrisp(vp: { x: number; y: number; zoom: number }): {
 // than zoom — that fought the frame layout and is deferred.)
 // A browser tile is an out-of-process <webview>: the page draws at 100% and the canvas
 // scales the finished image, so any other zoom blurs it — focus pins it too.
+/** One camera move between tiles: a straight, short ease-out. The default "smooth" path zooms
+ *  out mid-flight and back in, so going terminal to terminal at 100% dipped, blurred every
+ *  terminal and took 400ms. Reduced motion jumps. */
+const reduceMotion = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+export const FLY = {
+  duration: reduceMotion ? 0 : 220,
+  interpolate: "linear" as const,
+  ease: (t: number) => 1 - (1 - t) ** 3,
+};
 const PIXEL_EXACT_NODE_TYPES = new Set(["terminal", "diff", "workbench", "browser"]);
 
 export function FocusMode({ req }: { req: { id: string | null; n: number } | null }) {
@@ -46,11 +55,11 @@ export function FocusMode({ req }: { req: { id: string | null; n: number } | nul
       void fitView({
         nodes: [{ id: req.id }],
         padding: 0.05,
-        duration: 400,
+        ...FLY,
         ...(exact ? { minZoom: 1, maxZoom: 1 } : { maxZoom: 1.6 }),
       });
     } else {
-      void fitView({ padding: 0.2, duration: 400 });
+      void fitView({ padding: 0.2, ...FLY });
     }
   }, [req, fitView, getNode]);
   return null;
@@ -94,7 +103,7 @@ export function FocusOnTile({
       // pane leaves the text on a half pixel (blurred) with nothing left to snap it.
       if (paneW > 0) tx = paneW / 2 - Math.round(paneW / 2 - tx);
       if (paneH > 0) ty = paneH / 2 - Math.round(paneH / 2 - ty);
-      void setCenter(tx, ty, { zoom: 1, duration: 400 });
+      void setCenter(tx, ty, { zoom: 1, ...FLY });
       return;
     }
     // One flight to a target computed from the request's own rect — it needs no
@@ -105,7 +114,7 @@ export function FocusOnTile({
     // Same whole-pixel landing as the exact path, at whatever zoom the fit chose.
     const cx = paneW > 0 ? (paneW / 2 - Math.round(paneW / 2 - req.cx * zoom)) / zoom : req.cx;
     const cy = paneH > 0 ? (paneH / 2 - Math.round(paneH / 2 - req.cy * zoom)) / zoom : req.cy;
-    void setCenter(cx, cy, { zoom, duration: 400 });
+    void setCenter(cx, cy, { zoom, ...FLY });
     // Pane size is read, not depended on: a window resize must not re-fly an old request.
   }, [req, setCenter]);
   return null;
@@ -218,7 +227,7 @@ export function useTileFocus(): (id: string, opts?: { exact?: boolean }) => void
       void fitView({
         nodes: [{ id }],
         padding: 0.3,
-        duration: 400,
+        ...FLY,
         maxZoom: 1,
         ...(opts?.exact ? { minZoom: 1 } : {}),
       });

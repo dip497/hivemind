@@ -14,11 +14,11 @@ import { MachineDot, statusWords } from "./machines/status";
 import { hostIdOfUri, machineByHost, openMachines, statusOf, useMachines } from "./machines/store";
 import type { MachineInfo } from "../../shared/ipc";
 import { memo, useEffect, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { createPortal } from "react-dom";
 import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Globe, Monitor, Plus, RefreshCw, MoreHorizontal, ServerCog, X, Pencil, Trash2 } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon } from "./agents";
 import { FrameRailMenu, type FrameActions } from "./FrameRailMenu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "./components/ui/dropdown-menu";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { AGENT_TILE_KIND } from "./tile-kinds";
@@ -687,29 +687,23 @@ function TileRailMenu({ tile, x, y, onCloseTile, onRequestRename, close }: {
   onRequestRename: (id: string, draft: string) => void;
   close: () => void;
 }) {
-  const left = Math.min(x, window.innerWidth - 230);
-  const top = Math.min(y, window.innerHeight - 120);
-  return createPortal(
-    <>
-      <div className="fixed inset-0 z-[9998]" onClick={close} onContextMenu={(e) => { e.preventDefault(); close(); }} />
-      <div
-        className="fixed z-[9999] w-[170px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-lg p-1 shadow-2xl"
-        style={{ top, left }}
-        onClick={(e) => e.stopPropagation()}
-        role="menu"
-      >
-        <div className="px-2 pt-1 pb-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold truncate">{tile.name}</div>
-        <MenuItem onClick={() => onRequestRename(tile.id, tile.name)}>
+  return (
+    <DropdownMenu open onOpenChange={(o) => { if (!o) close(); }}>
+      <DropdownMenuTrigger asChild>
+        <span aria-hidden style={{ position: "fixed", left: x, top: y, width: 0, height: 0 }} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" side="bottom" sideOffset={0} className="w-[170px]">
+        <DropdownMenuLabel className="px-2 pt-1 pb-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold truncate">{tile.name}</DropdownMenuLabel>
+        <DropdownMenuItem onSelect={() => onRequestRename(tile.id, tile.name)}>
           <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]"><Pencil size={13} /></span>
           <span className="truncate">Rename</span>
-        </MenuItem>
-        <MenuItem variant="destructive" onClick={() => onCloseTile(tile.id)}>
-          <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]"><Trash2 size={13} /></span>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onCloseTile(tile.id)} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+          <span className="shrink-0 grid place-items-center size-4"><Trash2 size={13} /></span>
           <span className="truncate">Close tile</span>
-        </MenuItem>
-      </div>
-    </>,
-    document.body,
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

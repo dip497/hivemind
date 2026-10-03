@@ -30,6 +30,9 @@ options:
 - id: mode
   label: Mode
   flag: --mode
+  values:
+    yolo:
+    - --yolo
 install:
   url: https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli
   command: "npm install -g @github/copilot"

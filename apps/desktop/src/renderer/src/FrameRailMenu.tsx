@@ -6,8 +6,7 @@
  *
  * Hierarchical: top-level items open nested submenus (Spawn agent ▸, Open ▸,
  * Git ▸, Worktree ▸, Workspace ▸, Arrange ▸) so the menu scales as more agents
- * and actions are added instead of growing into one long flat list. A submenu
- * opens on hover/focus to the right (clamped to the viewport).
+ * and actions are added instead of growing into one long flat list.
  *
  * It reuses the SAME plumbing the header uses:
  *   • spawn a tile/agent → `hivemind:frame-open` {frameId, kind} (Canvas listens
@@ -18,15 +17,18 @@
  *   • bind workspace / arrange / rename / color / delete → callbacks.
  */
 import { FRAME_SWATCHES } from "./frame-color";
-import { useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import type { ReactNode } from "react";
 import {
   GitBranch, FolderGit2, Server, LayoutGrid, Plus, Pencil, Trash2, Palette,
-  Bot, GitCommitHorizontal, ChevronRight, ArrowUp, ArrowDown,
+  Bot, GitCommitHorizontal, ArrowUp, ArrowDown,
 } from "lucide-react";
+import { optionChoices } from "@hivemind/agents";
 import { useAgents } from "./agents";
 import { WorktreePicker } from "./WorktreePicker";
-import { MenuItem } from "./components/ui/menu-item";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator,
+  DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
+} from "./components/ui/dropdown-menu";
 import type { LayerFrame } from "./LayersPanel";
 
 /** Everything the rail needs to drive a frame — supplied by Canvas. */
@@ -57,51 +59,31 @@ export interface FrameActions {
 // Identity colours, shared with the rail menu and the default generator (frame-color.ts).
 const COLORS = FRAME_SWATCHES;
 
-function Item({ icon, label, onClick, danger }: { icon: ReactNode; label: string; onClick: () => void; danger?: boolean }) {
+const ICON = "shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]";
+
+function Item({ icon, label, onSelect, danger }: { icon: ReactNode; label: string; onSelect: () => void; danger?: boolean }) {
   return (
-    <MenuItem onClick={onClick} variant={danger ? "destructive" : "default"}>
-      <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]">{icon}</span>
+    <DropdownMenuItem onSelect={onSelect} className={danger ? "text-destructive focus:bg-destructive/10 focus:text-destructive" : undefined}>
+      <span className={ICON}>{icon}</span>
       <span className="truncate">{label}</span>
-    </MenuItem>
+    </DropdownMenuItem>
   );
 }
 
-/** A row that opens a nested submenu to its right on hover/focus. */
-function SubmenuRow({
-  icon,
-  label,
-  open,
-  onOpen,
-  children,
-}: {
-  icon: ReactNode;
-  label: string;
-  open: boolean;
-  onOpen: () => void;
-  children: ReactNode;
-}) {
+function Sub({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
   return (
-    <div className="relative" onMouseEnter={onOpen} onFocus={onOpen}>
-      <MenuItem onClick={onOpen} selected={open} aria-haspopup="menu" aria-expanded={open}>
-        <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]">{icon}</span>
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <span className={ICON}>{icon}</span>
         <span className="truncate flex-1">{label}</span>
-        <ChevronRight className="shrink-0 text-[var(--color-fg3)]" />
-      </MenuItem>
-      {open && (
-        // Nested panel — sits to the right, overlapping slightly so the mouse can
-        // travel into it without crossing a gap that would close it.
-        <div className="absolute top-0 left-full -ml-1 min-w-[190px] max-h-[70vh] overflow-y-auto bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-lg p-1 shadow-2xl">
-          {children}
-        </div>
-      )}
-    </div>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="min-w-[190px]">{children}</DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
 
-function Sep() {
-  return <div className="my-1 border-t border-[var(--color-line2)]" />;
-}
-
+/** Opens at the pointer: a zero-size trigger stands where the right-click was, so Radix
+ *  places the menu and its submenus, flipping them at the screen edge. */
 export function FrameRailMenu({
   frame,
   x,
@@ -119,58 +101,46 @@ export function FrameRailMenu({
   onRequestRename: (frameId: string) => void;
 }) {
   const agents = useAgents();
-  // Which top-level submenu is expanded (only one at a time). null = none.
-  const [sub, setSub] = useState<null | string>(null);
   const isWorktreeChild = !!frame.parentFrameId;
   const repoPath = actions.repoPathForFrame(frame.id);
   const fid = frame.id;
-  const close = onClose;
 
-  // Clamp so the root menu never spills off the right/bottom edge (submenus open
-  // leftward-of-right via left-full; the root stays clear of the right gutter to
-  // leave room for a submenu).
-  const left = Math.min(x, window.innerWidth - 420);
-  const top = Math.min(y, window.innerHeight - 340);
+  return (
+    <DropdownMenu open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DropdownMenuTrigger asChild>
+        <span aria-hidden style={{ position: "fixed", left: x, top: y, width: 0, height: 0 }} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" side="bottom" sideOffset={0} className="w-[210px]">
+        <DropdownMenuLabel className="px-2 pt-1 pb-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold truncate">{frame.title}</DropdownMenuLabel>
 
-  return createPortal(
-    <>
-      <div className="fixed inset-0 z-[9998]" onClick={close} onContextMenu={(e) => { e.preventDefault(); close(); }} />
-      <div
-        className="fixed z-[9999] w-[210px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-lg p-1 shadow-2xl"
-        style={{ top, left }}
-        onClick={(e) => e.stopPropagation()}
-        role="menu"
-      >
-        <div className="px-2 pt-1 pb-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold truncate">{frame.title}</div>
-
-        <SubmenuRow icon={<Bot size={13} />} label="Spawn agent" open={sub === "agent"} onOpen={() => setSub("agent")}>
+        <Sub icon={<Bot size={13} />} label="Spawn agent">
           {agents.filter((a) => a.enabled).map((a) => {
-            const options = a.def.options ?? [];
-            if (!options.some((o) => Object.keys(o.values ?? {}).length)) {
-              return <Item key={a.id} icon={<a.icon size={13} />} label={a.label} onClick={() => { actions.onOpenInFrame(fid, a.id); close(); }} />;
+            // Per-launch choices (yolo, plan…) skip the Settings default for this one tile.
+            const choices = (a.def.options ?? [])
+              .filter((o) => o.values || o.unattended)
+              .map((o) => ({ o, values: optionChoices(o, []) }))
+              .filter((c) => c.values.length);
+            if (!choices.length) {
+              return <Item key={a.id} icon={<a.icon size={13} />} label={a.label} onSelect={() => actions.onOpenInFrame(fid, a.id)} />;
             }
-            // Agents with built-in per-value options (claude's permission mode,
-            // pi's yolo…) get a nested list: one entry per value of each option,
-            // so a one-off launch skips the Settings default.
             return (
-              <SubmenuRow key={a.id} icon={<a.icon size={13} />} label={a.label} open={sub === `agent-${a.id}`} onOpen={() => setSub(`agent-${a.id}`)}>
-                <Item icon={<a.icon size={13} />} label={`${a.label} (default options)`} onClick={() => { actions.onOpenInFrame(fid, a.id); close(); }} />
-                {options.map((o) =>
-                  Object.keys(o.values ?? {}).map((v) => (
-                    <Item
-                      key={`${o.id}-${v}`}
-                      icon={<a.icon size={13} />}
-                      label={`${o.label}: ${v}`}
-                      onClick={() => { actions.onOpenInFrame(fid, a.id, { [o.id]: v }); close(); }}
-                    />
-                  )),
-                )}
-              </SubmenuRow>
+              <Sub key={a.id} icon={<a.icon size={13} />} label={a.label}>
+                <Item icon={<a.icon size={13} />} label="Default" onSelect={() => actions.onOpenInFrame(fid, a.id)} />
+                {choices.map(({ o, values }) => (
+                  <div key={o.id}>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="px-2 py-1 text-[10px] font-medium text-[var(--color-fg3)]">{o.label}</DropdownMenuLabel>
+                    {values.map((v) => (
+                      <Item key={v} icon={null} label={v} onSelect={() => actions.onOpenInFrame(fid, a.id, { [o.id]: v })} />
+                    ))}
+                  </div>
+                ))}
+              </Sub>
             );
           })}
-        </SubmenuRow>
+        </Sub>
 
-        <SubmenuRow icon={<Plus size={13} />} label="Open" open={sub === "open"} onOpen={() => setSub("open")}>
+        <Sub icon={<Plus size={13} />} label="Open">
           {([
             ["shell", "Terminal"],
             ["tree", "Editor"],
@@ -178,73 +148,71 @@ export function FrameRailMenu({
             ["issues", "Issues"],
             ["browser", "Browser"],
           ] as const).map(([kind, label]) => (
-            <Item key={kind} icon={<Plus size={13} />} label={label} onClick={() => { actions.onOpenInFrame(fid, kind); close(); }} />
+            <Item key={kind} icon={<Plus size={13} />} label={label} onSelect={() => actions.onOpenInFrame(fid, kind)} />
           ))}
-        </SubmenuRow>
+        </Sub>
 
-        <SubmenuRow icon={<GitCommitHorizontal size={13} />} label="Git" open={sub === "git"} onOpen={() => setSub("git")}>
-          <Item
-            icon={<GitCommitHorizontal size={13} />}
-            label="Commit…"
-            onClick={() => { actions.onGit(fid); close(); }}
-          />
-          <Item icon={<ArrowUp size={13} />} label="Push" onClick={() => { actions.onPush(fid); close(); }} />
-          <Item icon={<ArrowDown size={13} />} label="Pull" onClick={() => { actions.onPull(fid); close(); }} />
-        </SubmenuRow>
+        <Sub icon={<GitCommitHorizontal size={13} />} label="Git">
+          <Item icon={<GitCommitHorizontal size={13} />} label="Commit…" onSelect={() => actions.onGit(fid)} />
+          <Item icon={<ArrowUp size={13} />} label="Push" onSelect={() => actions.onPush(fid)} />
+          <Item icon={<ArrowDown size={13} />} label="Pull" onSelect={() => actions.onPull(fid)} />
+        </Sub>
 
-        <Sep />
+        <DropdownMenuSeparator />
 
         {!isWorktreeChild && (
           <>
-            <SubmenuRow icon={<GitBranch size={13} />} label="Worktree" open={sub === "worktree"} onOpen={() => setSub("worktree")}>
+            <Sub icon={<GitBranch size={13} />} label="Worktree">
               {repoPath ? (
-                <WorktreePicker
-                  repoPath={repoPath}
-                  onAttach={(entry) => { actions.onAttachWorktree(fid, entry); close(); }}
-                  onCreate={(branch) => { actions.onCreateWorktree(fid, branch); close(); }}
-                />
+                // A text field inside a menu: keys go to the field, not to menu typeahead.
+                <div onKeyDown={(e) => e.stopPropagation()}>
+                  <WorktreePicker
+                    repoPath={repoPath}
+                    onAttach={(entry) => { actions.onAttachWorktree(fid, entry); onClose(); }}
+                    onCreate={(branch) => { actions.onCreateWorktree(fid, branch); onClose(); }}
+                  />
+                </div>
               ) : (
                 <div className="px-3 py-2 text-[11px] text-[var(--color-fg3)]">no git repo</div>
               )}
-            </SubmenuRow>
-            <SubmenuRow icon={<FolderGit2 size={13} />} label="Workspace" open={sub === "workspace"} onOpen={() => setSub("workspace")}>
-              <Item icon={<FolderGit2 size={13} />} label="Bind folder…" onClick={() => { actions.onBindWorkspace(fid); close(); }} />
-              <Item icon={<Server size={13} />} label="Attach remote…" onClick={() => { actions.onAttachRemote(fid); close(); }} />
-            </SubmenuRow>
-            <Sep />
+            </Sub>
+            <Sub icon={<FolderGit2 size={13} />} label="Workspace">
+              <Item icon={<FolderGit2 size={13} />} label="Bind folder…" onSelect={() => actions.onBindWorkspace(fid)} />
+              <Item icon={<Server size={13} />} label="Attach remote…" onSelect={() => actions.onAttachRemote(fid)} />
+            </Sub>
+            <DropdownMenuSeparator />
           </>
         )}
 
-        <SubmenuRow icon={<LayoutGrid size={13} />} label="Arrange" open={sub === "arrange"} onOpen={() => setSub("arrange")}>
+        <Sub icon={<LayoutGrid size={13} />} label="Arrange">
           {([
             ["columns", "Columns"],
             ["rows", "Rows"],
             ["grid", "Grid"],
           ] as const).map(([mode, label]) => (
-            <Item key={mode} icon={<LayoutGrid size={13} />} label={label} onClick={() => { actions.onArrange(fid, mode); close(); }} />
+            <Item key={mode} icon={<LayoutGrid size={13} />} label={label} onSelect={() => actions.onArrange(fid, mode)} />
           ))}
-        </SubmenuRow>
+        </Sub>
 
-        <Sep />
+        <DropdownMenuSeparator />
 
-        <Item icon={<Pencil size={13} />} label="Rename" onClick={() => { onRequestRename(fid); close(); }} />
-        <SubmenuRow icon={<Palette size={13} />} label="Color" open={sub === "color"} onOpen={() => setSub("color")}>
+        <Item icon={<Pencil size={13} />} label="Rename" onSelect={() => onRequestRename(fid)} />
+        <Sub icon={<Palette size={13} />} label="Color">
           <div className="flex flex-wrap gap-1.5 p-1.5 w-[150px]">
             {COLORS.map((c) => (
-              <button
+              <DropdownMenuItem
                 key={c.value}
-                onClick={() => { actions.onColor(fid, c.value); close(); }}
-                className="size-6 rounded-full border border-[var(--color-line2)] hover:scale-110 transition-transform"
+                onSelect={() => actions.onColor(fid, c.value)}
+                className="size-6 p-0 rounded-full border border-[var(--color-line2)] hover:scale-110 focus:scale-110 transition-transform"
                 style={{ background: c.value }}
                 title={c.name}
                 aria-label={`Set color ${c.name}`}
               />
             ))}
           </div>
-        </SubmenuRow>
-        <Item icon={<Trash2 size={13} />} label="Delete frame" danger onClick={() => { actions.onDelete(fid); close(); }} />
-      </div>
-    </>,
-    document.body,
+        </Sub>
+        <Item icon={<Trash2 size={13} />} label="Delete frame" danger onSelect={() => actions.onDelete(fid)} />
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
