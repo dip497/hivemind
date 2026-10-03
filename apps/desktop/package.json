@@ -118,7 +118,7 @@
     "clsx": "catalog:",
     "cmdk": "catalog:",
     "codemirror": "^6.0.2",
-    "dompurify": "^3.4.15",
+    "dompurify": "^3.4.16",
     "lucide-react": "catalog:",
     "marked": "^18.0.12",
     "mermaid": "^11.17.2",
