@@ -94,12 +94,20 @@ test("right-click a frame in the rail opens the actions menu and spawns into it"
   const titleBtn = rail.locator('button[title^="Focus"]').first();
   await expect(titleBtn).toBeVisible();
   await titleBtn.click({ button: "right" });
-  // Menu appears; hover the "Open" submenu, then click "Terminal".
-  await expect(page.getByText("Spawn agent")).toBeVisible();
-  await page.getByRole("menu").getByRole("button", { name: "Open" }).click();
-  // Scope to the menu: the workspace toolbar now renders its own "Terminal"
-  // button, so a page-wide query matches two elements (strict-mode violation).
-  const terminalItem = page.getByRole("menu").getByRole("button", { name: "Terminal", exact: true });
+  // Menu appears. A nested submenu keeps its parent open: hovering an agent with launch
+  // choices must not close "Spawn agent" under the pointer.
+  const menu = page.getByRole("menu").first();
+  await expect(menu.getByRole("menuitem", { name: "Spawn agent" })).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Spawn agent" }).hover();
+  const nested = page.getByRole("menu").nth(1).locator('[role="menuitem"][aria-haspopup="menu"]').first();
+  if (await nested.count()) {
+    await nested.hover();
+    await expect(page.getByRole("menuitem", { name: "Default", exact: true })).toBeVisible();
+    await expect(nested).toBeVisible();
+  }
+  await menu.getByRole("menuitem", { name: "Open" }).click();
+  // Scope to menu items: the workspace toolbar renders its own "Terminal" button.
+  const terminalItem = page.getByRole("menuitem", { name: "Terminal", exact: true });
   await expect(terminalItem).toBeVisible();
   const beforeTerms = await page.locator(".react-flow__node-terminal").count();
   await terminalItem.click();
@@ -113,7 +121,7 @@ test("rename a frame inline from the rail context menu", async () => {
   const titleBtn = rail.locator('button[title^="Focus"]').first();
   await titleBtn.click({ button: "right" });
   // Click the Rename item in the just-opened menu (last portal if any stacked).
-  await page.getByRole("button", { name: "Rename" }).last().click();
+  await page.getByRole("menuitem", { name: "Rename" }).click();
   // An input appears in the row; type a new name + Enter.
   const input = rail.getByRole("textbox", { name: "Rename frame" }).first();
   await expect(input).toBeVisible();
@@ -127,18 +135,18 @@ test("Git submenu in the rail menu opens the commit modal", async () => {
   const rail = page.locator('aside[aria-label="Layers"]');
   await rail.locator('button[title^="Focus"]').first().click({ button: "right" });
   // The menu has a "Git" submenu row.
-  const gitRow = page.getByRole("menu").getByRole("button", { name: "Git" });
+  const gitRow = page.getByRole("menu").getByRole("menuitem", { name: "Git" });
   await expect(gitRow.first()).toBeVisible();
   await gitRow.first().click();
-  const commit = page.getByRole("button", { name: "Commit…" });
+  const commit = page.getByRole("menuitem", { name: "Commit…" });
   await expect(commit.first()).toBeVisible();
   // Push + Pull live in the same submenu.
-  await expect(page.getByRole("button", { name: "Push", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Pull", exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Push", exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Pull", exact: true })).toBeVisible();
   await commit.first().click();
   await expect(page.getByRole("textbox", { name: "Commit summary" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Commit & Push/ })).toBeVisible();
-  await page.mouse.click(5, 5); // dismiss via backdrop
+  await page.keyboard.press("Escape");
 });
 
 test("frame header shows a git button", async () => {
