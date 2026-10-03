@@ -206,6 +206,8 @@ hive people remove <person>      # take them off; their link stops working
 hive people rule [ask|invite]    # ask (default): you answer each request;
                                  #   invite: anyone with a valid link is let in at once
 hive join <link>                 # join a workspace someone shared, waiting while they decide
+hive network enrol-link [--data <dir>] [--uses n] [--expires 7d]
+                                 # on your network's server: a link that puts a device on it
 ```
 
 `<workspace>` (or `--workspace` / `-w`) is a folder the host serves or its name; leave it out

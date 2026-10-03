@@ -99,7 +99,7 @@ hive-net serve --all --data ~/hive-net --url http://<tailscale-ip>:3340 --bind <
 On the owner's computer, make an enrolment link and use it in **Settings → Network → Change…**:
 
 ```bash
-hive-net access enrol-link ~/hive-net/network.json --admin ~/hive-net/admin.key
+hive network enrol-link --data ~/hive-net
 ```
 
 The owner then shares the workspace from **Share**. The friend opens that workspace invite link;
@@ -114,13 +114,16 @@ enrolled. As the admin, make an enrolment link — the network's link with a one
 and give it to the device's owner:
 
 ```bash
+hive network enrol-link          # on the server: reads /var/lib/hive-net (--data <dir> otherwise)
+# without hive installed there:
 hive-net access enrol-link /var/lib/hive-net/network.json --admin /var/lib/hive-net/admin.key
 # in Docker:
 docker compose -f infra/compose.yml exec hive-net /usr/local/bin/hive-net \
   access enrol-link /data/network.json --admin /data/admin.key
 ```
 
-It enrols one device and lasts seven days (`--uses <n>`, `--expires-in <seconds>`). Once a device
+It enrols one device and lasts seven days (`--uses <n>`, and `--expires 12h` for `hive network`,
+`--expires-in <seconds>` for `hive-net`). Once a device
 is on the network, people it invites get in through the invite itself: your device vouches for
 theirs, for as long as their invite lasts.
 
@@ -129,6 +132,24 @@ server and the access service answer, and when the relay turns this computer awa
 
 To take a device off: `hive-net access revoke https://hive.example.com/access <device id> --admin
 admin.key`. To leave the network: **Settings → Network → Change… → Local network**.
+
+## Sharing from a machine with no screen
+
+A VM can host workspaces and share them with nobody at a window. On it:
+
+```bash
+hive network use <the network's link>   # or an enrolment link from `hive network enrol-link`
+hive host install                       # hive host runs at boot (or `hive host run`)
+hive host add ~/work/api                # serve a folder as a workspace
+hive share api --role edit --expires 2d # print an invite link to send
+hive people requests                    # who asks to join; then `hive people allow <n>`
+```
+
+Someone with the link asks to join and waits up to three minutes while you answer with `hive
+people allow` or `deny`, or from the notification on your phone if you paired one with the host
+(`hive host pair`). To let in anyone with a valid link without being asked, `hive people rule
+invite`. `hive people list`, `role` and `remove` change who is in it later. To join someone
+else's workspace from the VM, `hive join <link>`. See the [CLI guide](../cli/) for every option.
 
 ## Who may use it
 
