@@ -28,7 +28,7 @@ beforeAll(() => {
     join: async (link) => ({ ok: link === "hivemind://join/x", role: "edit" }),
   } as unknown as MethodDeps);
   server = startHcpServer(sock, {
-    authenticate: (t) => (t === TOKEN ? { kind: "person" } : null),
+    authenticate: (t) => (t === TOKEN ? { kind: "person" } : t === "tile-token" ? { kind: "tile", tile: "w-1" } : null),
     rendererUp: () => true,
     onEvent: () => {},
     dispatch,
@@ -51,6 +51,16 @@ describe.skipIf(!unix)("hive share/people/join with the app running", () => {
   test("join goes to the app", async () => {
     const r = await hive(["join", "hivemind://join/x", "--json"], { env: env() });
     expect(r.json).toEqual({ ok: true, data: { ok: true, role: "edit" } });
+  });
+
+  test("an agent's token may not share or join", async () => {
+    const asTile = { ...env(), HCP_TOKEN: "tile-token" };
+    const n = asked.length;
+    for (const args of [["people", "list", "-w", "team"], ["join", "hivemind://join/x"]]) {
+      const r = await hive([...args, "--json"], { env: asTile });
+      expect(r.json).toMatchObject({ ok: false, code: "refused" });
+    }
+    expect(asked.length).toBe(n);
   });
 
   test("with neither running, the error names both", async () => {
