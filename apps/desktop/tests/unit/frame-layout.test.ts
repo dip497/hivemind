@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   resolveFrameCollisions,
   nextSlotInFrame,
+  reserveTileSlot,
   computeFrameLayout,
   arrangeBoxes,
   frameAtPoint,
@@ -102,6 +103,18 @@ test("tile wraps to a new row when the row would exceed maxRowWidth", () => {
   const slot = nextSlotInFrame(origin, m, { w: 1480, h: 1000 }, PACK);
   assert.equal(slot.x, 124, "wraps back to the left pad");
   assert.equal(slot.y, 248 + 1000 + 24, "drops below the tallest in the row");
+});
+
+test("three tile spawns before state settles reserve non-overlapping boxes", () => {
+  const pending = new Map<string, ReturnType<typeof rect>>();
+  const staleMembers: ReturnType<typeof rect>[] = [];
+  const boxes = ["first", "second", "third"].map((id) => {
+    const slot = reserveTileSlot(id, { x: 100, y: 200 }, staleMembers, pending, { w: 1100, h: 740 }, PACK);
+    return rect(id, slot.x, slot.y, 1100, 740);
+  });
+  for (let i = 0; i < boxes.length; i++)
+    for (let j = i + 1; j < boxes.length; j++)
+      assert.equal(overlap(boxes[i]!, boxes[j]!), false, `${boxes[i]!.id} overlaps ${boxes[j]!.id}`);
 });
 
 // ── computeFrameLayout (nesting-aware auto-fit) ──────────────────────────────

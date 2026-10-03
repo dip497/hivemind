@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { frameColorFor } from "./frame-color";
-import { nextSlotInFrame, FRAME_ROW_MAX, FRAME_GAP } from "./frame-layout";
+import { reserveTileSlot, FRAME_ROW_MAX, FRAME_GAP, type LayoutRect } from "./frame-layout";
 import { defaultSizeForKind, defaultTileSize, FRAME_PAD, FRAME_HEADER } from "./canvas-sizing";
 import { agentById } from "./agents";
 import { agentById as catalogAgentById, agentLaunch, defaultAgent, nextOrdinal, type AgentProviderDef, type SpawnOptions } from "@hivemind/agents";
@@ -101,7 +101,12 @@ export function useSpawn(ctx: SpawnCtx) {
   const issue = (label: string): string => { issued.current.push(label); return label; };
   const ordinalLabel = useCallback((labelFor: (n: number) => string): string => issue(labelFor(nextOrdinal(labelsInUse(), labelFor))), [labelsInUse]);
 
-  const placeInFrame = useCallback((id: string, frame: FrameState, opts?: { background?: boolean }) => {
+  // React applies setTiles/setPositions later. Keep each uncommitted box visible to the next
+  // spawn in the same event burst (including control-plane arrivals).
+  const pendingSlots = useRef(new Map<string, Map<string, LayoutRect>>());
+  useEffect(() => { pendingSlots.current.clear(); }, [repoPath]);
+
+  const placeInFrame = useCallback((id: string, frame: FrameState, opts?: { background?: boolean; kind?: TileKind }) => {
     // CRITICAL: these MUST match the auto-fit derivation in `tileBox`
     // (frame.x = minTileX − FRAME_PAD, frame.y = minTileY − FRAME_HEADER). If
     // they diverge, the auto-fit effect recomputes the frame's box a few px off
@@ -139,10 +144,17 @@ export function useSpawn(ctx: SpawnCtx) {
     for (const o of boardRef.current) {
       if (isBox(o) && o.frame === frame.id) members.push({ id: o.id, x: o.x, y: o.y, w: o.w, h: o.h });
     }
-    const me = sizeOf(id);
-    const slot = nextSlotInFrame(
+    const me = sizesRef.current[id] ?? (opts?.kind ? defaultSizeForKind(opts.kind) : sizeOf(id));
+    let pending = pendingSlots.current.get(frame.id);
+    if (!pending) { pending = new Map(); pendingSlots.current.set(frame.id, pending); }
+    for (const tid of pending.keys()) {
+      if (pos[tid] && tilesRef.current.some((t) => t.id === tid) && frameOfRef.current[tid] === frame.id) pending.delete(tid);
+    }
+    const slot = reserveTileSlot(
+      id,
       { x: frame.x, y: frame.y },
       members,
+      pending,
       { w: me.width, h: me.height },
       { padX, padTop, gap, maxRowWidth: FRAME_ROW_MAX },
     );
@@ -278,7 +290,7 @@ export function useSpawn(ctx: SpawnCtx) {
       } else {
         label = kind === "editor" ? "Editor" : kind === "diff" ? "Diff" : "Issues";
       }
-      placeInFrame(newId, frame);
+      placeInFrame(newId, frame, { kind });
       setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args, ...(kind === "browser" && opts?.url ? { url: opts.url } : {}), ...(kind === "shell" && opts?.session ? { session: opts.session.id } : {}), ...(task ? { task } : {}) }]);
       // "Work on this": hand the fresh claude tile its prompt. It delivers it to
       // itself the first time it's ready (see work-queue).
@@ -370,7 +382,7 @@ export function useSpawn(ctx: SpawnCtx) {
       const frame =
         (agentFrameId ? framesRef.current.find((f) => f.id === agentFrameId) : undefined) ?? ensureFrame();
       const newId = mintId("tile-planReview");
-      placeInFrame(newId, frame);
+      placeInFrame(newId, frame, { kind: "planReview" });
       setTiles((cur) => [
         ...cur,
         {

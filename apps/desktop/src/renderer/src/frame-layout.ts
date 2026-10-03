@@ -211,6 +211,20 @@ export function nextSlotInFrame(
   return { x: startX, y: botY + opts.gap };
 }
 
+/** Reserve a tile's box before React commits the tile and canvas position. */
+export function reserveTileSlot(
+  id: string,
+  origin: { x: number; y: number },
+  members: LayoutRect[],
+  pending: Map<string, LayoutRect>,
+  tile: { w: number; h: number },
+  opts: { padX: number; padTop: number; gap: number; maxRowWidth?: number },
+): { x: number; y: number } {
+  const slot = nextSlotInFrame(origin, [...members, ...[...pending.values()].filter((r) => r.id !== id)], tile, opts);
+  pending.set(id, { id, ...slot, ...tile });
+  return slot;
+}
+
 // ── opt-in arrange (Columns / Rows / Grid) ──────────────────────────────────
 
 export type ArrangeMode = "columns" | "rows" | "grid";
