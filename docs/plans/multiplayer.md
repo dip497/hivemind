@@ -177,16 +177,16 @@ networked parts fit together, decided now so every step builds toward it:
 | # | Item | Status |
 |---|---|---|
 | H0 | Peer egress: answers, errors and events to a guest name the workspace by id | ☑ (2026-10-03, 708a0e4) |
-| H1 | Document fields declare scope; host-private fields (paths, `cmd`/`args`/`task`, `editorTabs`, browser `url`) never replicate to guests | ☐ |
-| H2 | `file.read`/`git.fileContents` refuse git-ignored and secret files to non-owners; share dialog says terminals show as printed | ☐ |
-| H3 | `agents`/`terminals` named as code execution; `peerEnv()` scrubs peer-started terminals; browser CDP per-tab token, shared tabs only | ☐ |
-| H4 | One command registry (role, actors, since); `may` required; parity test incl. headless (`appearance` onChange no-op) | ☐ |
-| H5 | Versioned file writes (`CONFLICT`), editor reload/overwrite | ☐ |
-| H6 | Host-assigned tile slots (no local-only `pendingSlots`) | ☐ |
-| H7 | Connection state machine owns the guest cache; host chooses "remove and wipe" | ☐ (decision) |
-| H8 | Hello carries API version + methods; client degrades on missing method | ☐ |
-| H9 | `git.handOff` bundle cap, no hooks/config | ☐ |
-| H10 | Two-app specs from the guest's eyes + privacy probe (host tmp root absent) | ☐ |
+| H1 | Host-private fields kept out of the document | parked: a guest is someone the host let in (work kept in `git stash` "parked H1") |
+| H2 | Guests refused git-ignored/secret files, owner approves per file | parked: same reason (branch `parked/h2-file-approvals`) |
+| H3 | Share dialog says `agents`/`terminals` run commands on this computer | ☐ wording only |
+| H4 | One command registry every surface reads, deny-by-default | ☐ grow it method by method as surfaces are touched |
+| H5 | A stale file save is refused (`CONFLICT`) instead of overwriting | ☐ |
+| H6 | The host places tiles, so two people spawning never stack | ☐ |
+| H7 | Wipe a removed guest's cache | parked |
+| H8 | Hello carries the API version; a missing method is hidden, not an error | ☐ |
+| H9 | `git.handOff` bundle size cap | parked |
+| H10 | Two-app tests assert what the guest's window shows | ☐ next |
 
 **Before M5:** an Apple Developer Program membership and a Firebase project (design §12.4).
 
