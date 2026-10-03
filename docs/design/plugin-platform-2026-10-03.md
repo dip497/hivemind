@@ -137,6 +137,54 @@ The terminal stays a kernel surface. Plugins get a **contract** (open, write a c
 resize, status, line-level or rate-limited output events) and never bytes inline. Bytes go
 through the kernel stream with today's interest model: only shown terminals get bytes.
 
+### 2.9 Core is headless
+
+Key principle. Core owns the data structures, contracts, actions, validation and permissions.
+How anything is *shown* — grouped by time, recency or status, laid out, sorted — is entirely a
+plugin's choice. Our built-in issues list, agent sidebar and canvas are the default plugins on
+the same contract, with no private API (privileged APIs only behind a flag, as in research §4).
+
+Rules core follows:
+
+1. **Stable ids, versioned schemas.** A record's id never changes; each record type has a schema
+   version and a migration. A plugin declares the version it reads (`consumes: ["issues/v1"]`).
+2. **Read via query + subscribe.** `query(type, { filter, sort, limit })` returns a snapshot plus
+   a cursor; `subscribe(query)` streams incremental changes (`added | changed{fields} | removed`).
+   Core keeps the indexes (state, assignee, labels, updated) so ten plugins do not each rescan
+   every record on every change.
+3. **Writes only through actions.** `issue.setState`, `issue.update`, … validated and
+   role-checked by core and routed through `IntentGate`. A plugin never writes doc records
+   directly; the edit rules refuse it on import if it tries.
+4. **Per-plugin metadata namespace.** Every core record has `ext.<pluginId>` — a small,
+   capped map only that plugin writes (its own tags, groups, card colours, swimlane overrides).
+   Core stores and syncs it, never interprets it. Removing the plugin clears its namespace.
+5. **View choice is local.** Which UI a person uses, and its settings (sort, collapsed
+   columns), is local state (§2.5). It becomes shared only when the person shares it, e.g. by
+   saving it as a named board view in the doc.
+6. **Core never encodes presentation.** No `group`, `column`, `lane` or `order` field in core
+   data — unless it is user data a person chose (a label, a state, a manual rank they set).
+   Status is a fact; "the Doing column" is a UI's reading of it.
+
+**Example: one contract, two community UIs.**
+
+Contract `issues/v1` (core): record `{ id, title, state, labels, assignee, parent, created,
+updated, ext }`; actions `create, update, setState, comment, link`; events from
+`subscribe`. Same for `agents/v1`: `{ id, tile, agent, status, task, lastActivity }`, actions
+`prompt, approve, stop`.
+
+- **Timeline** (`@ana/timeline`): `subscribe(issues, { sort: "-updated", limit: 200 })` merged
+  with `subscribe(agents, { sort: "-lastActivity" })`. Groups by "Today / Yesterday / This
+  week" in its own code. Writes nothing to core except through actions (a "done" button calls
+  `issue.setState`).
+- **Kanban** (`@raj/kanban`): `subscribe(issues, { filter: { state: ["todo", "in_progress",
+  "in_review"] } })`; columns are `state` values. Dragging a card between columns calls
+  `issue.setState`. Manual order *within* a column is kanban's own data, stored in
+  `ext["@raj/kanban"].rank` — the timeline never sees it, core never sorts by it.
+
+Both run side by side on the same workspace. A guest using the timeline and a host using kanban
+see the same move the moment `setState` lands, because both are views of one subscribed query.
+Uninstalling kanban drops its ranks and nothing else.
+
 ## 3. The examples, end to end
 
 **Usage meter** (logic + render; no iframe).
@@ -253,11 +301,13 @@ export default definePlugin({
 | Logic half runtime | none | worker host + grants + SDK |
 | Render tree | none | schema + canvas renderer + phone renderer |
 | Agent manifests as data | `hive-agents/src/manifest.ts` | stays as is; agents become a contribution point later |
+| Headless reads | `workspace-api/src/methods.ts:56` `issue.list` returns everything; writes are already actions (:58–68); `IssueSummary` holds no presentation fields (`hive-core/src/types.ts:102`) | query + subscribe with core indexes and change events; `ext.<plugin>` namespace; built-in issues UI moved onto the contract |
 | Compaction | none | host-side shallow snapshot on a schedule |
 
 ## 7. Phased plan
 
 **Phase 1 — prove the split** (usage meter, water reminder, desk pet).
+0. Query + subscribe for `agents/v1` (the meter consumes it) — the first headless contract.
 1. `plugin` board-object kind + `plugins/<instance>` records in `workspace-doc`, with a byte cap
    in `writeObjects` *and* in `edit-rules` for imported changes. Tests: oversize write refused
    locally and from a peer.
