@@ -9,6 +9,11 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** Electron 44 (Chromium 152, Node 24), from 39. macOS 12 is no longer supported; macOS 13 or later is needed. Fixes four high-severity Electron advisories (popup sandbox inheritance, cross-origin reads through protocol handlers, Node in `<webview>` workers).
+- File pickers open where you last picked, not in Downloads.
+
 ### Security
 
 - dompurify 3.4.16 (the app's Markdown sanitizer).

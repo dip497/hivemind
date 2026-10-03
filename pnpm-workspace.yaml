@@ -41,7 +41,7 @@ catalog:
   tailwindcss: ^4.3.3
   '@tailwindcss/vite': ^4.3.3
   vite: ^6.4.3
-  electron: ^39.8.10
+  electron: ^44.5.1
   electron-vite: ^5.0.0
   '@electron/rebuild': ^4.2.0
   electron-builder: ^26.15.3
