@@ -4,9 +4,11 @@
  * and, for an agent that reports nothing, the screen.
  *
  * One authority per session. Until an agent's hooks have spoken, the screen stands in; from
- * the first hook event on, the hooks alone decide and screen reports are ignored. An agent
- * whose hooks never fire (not installed, or it has none) therefore stays on the screen,
- * and every status says which source it came from.
+ * the first hook event on, the hooks decide. An agent whose hooks never fire (not installed,
+ * or it has none) therefore stays on the screen, and every status says which source it came
+ * from. One exception: a turn the hooks call working while the screen shows the agent's own
+ * chooser (a model switch, a limit notice) is waiting on the user — no hook reports that —
+ * so the screen's reading stands until the screen moves on or a hook speaks again.
  */
 import { INITIAL_STATUS, foldStatus, type AgentStatus, type SessionState, type StatusInput } from "@hivemind/agents";
 
@@ -35,6 +37,8 @@ const INTERRUPT_KEYS = new Set(["\x1b", "\x03"]);
 
 export class StatusStore {
   private sessions = new Map<string, SessionStatus>();
+  /** Sessions whose hook-reported turn the screen is overriding (see the header). */
+  private screenHeld = new Set<string>();
   private log: StatusChange[] = [];
   private seq = 0;
   private listeners = new Set<(c: StatusChange) => void>();
@@ -70,13 +74,24 @@ export class StatusStore {
   event(tileId: string, input: StatusInput): void {
     const cur = this.sessions.get(tileId);
     const fromScreen = cur?.source !== "hooks" && cur?.state !== "exited";
+    this.screenHeld.delete(tileId);
     this.apply(tileId, "hooks", (s) => foldStatus(fromScreen ? { ...s, ...INITIAL_STATUS, kind: undefined } : s, input));
   }
 
   /** The screen, read by whoever renders it. Ignored once the session's hooks have spoken. */
   screen(tileId: string, state: ScreenState): void {
     const cur = this.sessions.get(tileId);
-    if (cur?.source === "hooks" || cur?.state === "exited") return;
+    if (cur?.state === "exited") return;
+    if (cur?.source === "hooks") {
+      const waiting = state !== "idle" && state !== "working";
+      if (this.screenHeld.has(tileId)) {
+        // The chooser closed: what the screen shows now is the truth until a hook speaks.
+        if (!waiting) this.screenHeld.delete(tileId);
+      } else if (!(waiting && cur.state === "working")) return;
+      else this.screenHeld.add(tileId);
+      this.apply(tileId, "hooks", (s) => (waiting ? { ...s, state: "waiting", kind: SCREEN_KIND[state] } : { ...s, state, kind: undefined }));
+      return;
+    }
     this.apply(tileId, "screen", (s) => (state === "idle" || state === "working"
       ? { ...s, state, kind: undefined }
       : { ...s, state: "waiting", kind: SCREEN_KIND[state] }));
@@ -102,7 +117,7 @@ export class StatusStore {
     this.apply(tileId, cur?.source ?? null, (s) => ({ ...s, title: title || undefined }));
   }
 
-  forget(tileId: string): void { this.sessions.delete(tileId); }
+  forget(tileId: string): void { this.sessions.delete(tileId); this.screenHeld.delete(tileId); }
 
   private apply(tileId: string, source: StatusSource | null, fold: (s: AgentStatus) => AgentStatus): void {
     const prev = this.sessions.get(tileId);
