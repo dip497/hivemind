@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- `hive --help` is printed by citty 0.2: plainer layout, and an unknown command's error is shown once.
 - Fixed: rejoining an open shared workspace replaces its old connection and role; repeated Join submissions for the same invite ask the host once.
 
 - Docs: explain sharing over a Tailscale-hosted network and mark the built-in Hosted network unavailable until its server names resolve.
