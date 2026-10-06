@@ -4,7 +4,7 @@
  * network again when it changes.
  *
  *   hive network show                 which network, who signed it, its servers
- *   hive network use <local|hosted|link|file>   use another; an update to the network in use
+ *   hive network use <local|link|file>   use another; an update to the network in use
  *                                     must be signed by its admin
  *   hive network doctor               whether its relays answer this computer
  *   hive network enrol-link [--data <dir>]   on the network's server: a link that puts one more
@@ -57,7 +57,7 @@ const showCmd = defineCommand({
 });
 
 const useCmd = defineCommand({
-  meta: { name: "use", description: "Use another network: local, hosted, a network link or a signed profile's file" },
+  meta: { name: "use", description: "Use another network: local, a network link or a signed profile's file" },
   args: { network: { type: "positional", required: true }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };

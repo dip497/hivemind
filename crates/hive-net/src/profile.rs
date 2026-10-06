@@ -23,7 +23,7 @@ pub const LINK_PREFIX: &str = "hivemind://network/";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Policy {
-    /// Any device that registers its key with a small proof of work (our hosted network).
+    /// Any device that registers its key with a small proof of work.
     OpenPow,
     /// Devices enrolled by the admin or by an enrolled device, and those vouched for.
     Closed,
@@ -101,7 +101,7 @@ pub struct Signed {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Verified {
     pub profile: Profile,
-    /// "local" or "hosted" for a built-in profile.
+    /// "local" for the built-in profile.
     pub builtin: Option<&'static str>,
     /// The admin key that signed it; none for a built-in profile.
     pub admin: Option<PublicKey>,
@@ -158,7 +158,7 @@ impl Profile {
     }
 }
 
-/// The profiles built in: `local` (the default) and `hosted`.
+/// The profile built in: `local`, the default. Any other network is one its admin signed.
 pub fn builtin(name: &str) -> Option<Verified> {
     let profile = match name {
         "local" => Profile {
@@ -172,35 +172,11 @@ pub fn builtin(name: &str) -> Option<Verified> {
             local: Local { mdns: true },
             issued_at: 0,
         },
-        "hosted" => Profile {
-            v: 1,
-            name: "hivemind".into(),
-            relays: ["euw1", "use1", "aps1"]
-                .iter()
-                .map(|r| Relay {
-                    url: format!("https://{r}.relay.hivemind.griiken.com"),
-                })
-                .collect(),
-            lookup: Some("https://dns.hivemind.griiken.com/pkarr".into()),
-            access: Some(AccessService {
-                url: "https://access.hivemind.griiken.com".into(),
-                policy: Policy::OpenPow,
-            }),
-            push: Some(PushService {
-                url: "https://push.hivemind.griiken.com/push".into(),
-                kinds: vec!["apns".into(), "fcm".into(), "unifiedpush".into()],
-                vapid: None,
-            }),
-            admin: None,
-            local: Local { mdns: true },
-            issued_at: 0,
-        },
         _ => return None,
     };
-    let builtin = if name == "local" { "local" } else { "hosted" };
     Some(Verified {
         profile,
-        builtin: Some(builtin),
+        builtin: Some("local"),
         admin: None,
     })
 }
@@ -254,6 +230,8 @@ pub fn verify(file: &Signed) -> Result<Verified> {
 
 /// A profile from what someone gave: a built-in name, a link, or a signed file's text.
 pub fn load(given: &str) -> Result<Verified> {
+    // `hosted` named servers that were never run: a device that chose it is on the local network.
+    let given = if given.trim() == "hosted" { "local" } else { given };
     match builtin(given.trim()) {
         Some(found) => Ok(found),
         None => verify(&signed(given)?),

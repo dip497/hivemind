@@ -1,7 +1,7 @@
 /**
  * This device's network (R16, spec/network-profile.md): the profile it uses, kept in one file,
  * `<data>/network/profile`, holding what hive-net's `--profile` takes: a built-in's name (`local`,
- * which is also what no file means, or `hosted`) or a profile its network's admin signed. hive-net
+ * which is also what no file means) or a profile its network's admin signed. hive-net
  * verifies profiles, and whether a new one may replace the one in use (an update to a network must
  * come from its admin); this keeps the active one and asks hive-net what it is and whether its
  * servers answer. The app and the `hive` CLI both use it.
@@ -11,8 +11,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 export interface NetworkProfile {
-  /** "local" or "hosted" for a built-in profile. */
-  builtin: "local" | "hosted" | null;
+  /** "local" for the built-in profile. */
+  builtin: "local" | null;
   /** The admin key that signed it; null for a built-in one. */
   admin: string | null;
   profile: {
@@ -39,7 +39,7 @@ export interface NetworkHealth {
   mdns: boolean;
 }
 
-const BUILTIN = new Set(["local", "hosted"]);
+const BUILTIN = new Set(["local"]);
 const LINK = "hivemind://network/";
 
 /** How this device was let onto a network's relays when it was chosen. */

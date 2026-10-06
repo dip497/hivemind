@@ -18,7 +18,6 @@ const messageOf = (e: unknown): string => (e instanceof Error ? e.message : Stri
 /** What the network is, in a sentence. */
 function about(net: NetworkProfile): string {
   if (net.builtin === "local") return "Devices find each other on this network. Nothing leaves it. Devices outside it can't connect.";
-  if (net.builtin === "hosted") return "hivemind's servers forward encrypted traffic and help devices find each other. They never see your work.";
   return `Run by its admin, who signed it (${net.admin?.slice(0, 8)}…). Only its servers are used.`;
 }
 

@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Removed: the "Use hivemind's servers" network choice, whose servers were never run. Reach devices elsewhere through your own server or a VPN such as Tailscale; a device that chose it is on the local network.
 - Fixed: an agent no longer keeps showing "approve?" and "needs you" after you allow what it asked; before, it stayed until the allowed command finished, minutes for a long one.
 - New: a message one agent sends another (`hive ctl send`, a worker's report, an approval request) reaches a working Claude Code agent at once, read at its next step, instead of waiting for its turn to end. An agent's file says it reads messages typed while it works with `steer: true`; other agents get theirs when the turn ends, as before.
 - Fixed: a message from another agent no longer lands in what you are typing to an agent and gets sent with it; it waits until you send or clear your text (Enter, Ctrl-C, Ctrl-U).

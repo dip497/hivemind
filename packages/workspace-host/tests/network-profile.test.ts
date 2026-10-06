@@ -30,8 +30,11 @@ test.skipIf(!built)("none kept is the local network; a built-in one, or a signed
   expect((await profiles.active()).builtin).toBe("local");
   expect(profiles.arg()).toBe("local");
 
-  expect((await profiles.use("hosted")).profile.name).toBe("hivemind");
-  expect((await profiles.active()).builtin).toBe("hosted");
+  // A device that chose the old `hosted` network is on the local one.
+  fs.mkdirSync(path.join(dir, "network"), { recursive: true });
+  fs.writeFileSync(profiles.file, "hosted");
+  expect((await profiles.active()).builtin).toBe("local");
+  await expect(profiles.use("hosted")).rejects.toThrow();
 
   const admin = newSeed();
   const used = await profiles.use(link("Example Corp", admin));
