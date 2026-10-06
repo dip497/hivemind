@@ -48,9 +48,9 @@ test.afterAll(async () => {
 });
 
 async function openDiff() {
-  if ((await page.locator(".react-flow__node-diff").count()) === 0) {
+  if ((await page.locator(".react-flow__node-workbench").count()) === 0) {
     await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "diff" })));
-    await page.waitForSelector(".react-flow__node-diff", { timeout: 6_000 });
+    await page.waitForSelector(".react-flow__node-workbench", { timeout: 6_000 });
   }
   // Poll for actual diff content — git status + per-file content fetch + parse
   // + CodeView render takes a beat (longer under xvfb than a fixed sleep covers).
@@ -72,7 +72,7 @@ test("diff tile renders per-file headers with +/- counts and review controls", a
   expect(await page.getByRole("button", { name: "search diff" }).count()).toBeGreaterThan(0);
   // both changed files counted in the tile chrome (CodeView virtualizes the
   // off-screen file out of the DOM, so assert the count chip, not its header).
-  const chrome = await page.evaluate(() => document.querySelector(".react-flow__node-diff")?.textContent || "");
+  const chrome = await page.evaluate(() => document.querySelector(".react-flow__node-workbench")?.textContent || "");
   expect(chrome).toMatch(/2f/);
 });
 
@@ -127,11 +127,11 @@ test("commit bar stages and commits from the diff", async () => {
   await commitBtn.click();
   // after commit the working tree is clean (no changed files) -> empty state
   await page.waitForFunction(
-    () => (document.querySelector(".react-flow__node-diff")?.textContent || "").includes("working tree clean"),
+    () => (document.querySelector(".react-flow__node-workbench")?.textContent || "").includes("working tree clean"),
     undefined,
     { timeout: 8_000 },
   );
-  expect(await page.evaluate(() => (document.querySelector(".react-flow__node-diff")?.textContent || "").includes("working tree clean"))).toBe(true);
+  expect(await page.evaluate(() => (document.querySelector(".react-flow__node-workbench")?.textContent || "").includes("working tree clean"))).toBe(true);
 });
 
 test("branch mode renders against origin/main", async () => {
@@ -210,7 +210,7 @@ test("switching diff modes survives comments arriving after the first render", a
     // Clicked in-page: the tile can sit outside the canvas viewport, and this
     // test is about what re-rendering does, not about hit-testing.
     const hit = await page.evaluate((label) => {
-      const node = document.querySelector(".react-flow__node-diff");
+      const node = document.querySelector(".react-flow__node-workbench");
       const b = [...(node?.querySelectorAll("button") ?? [])].find((x) => x.textContent?.trim() === label);
       b?.click();
       return !!b;

@@ -114,15 +114,23 @@ async function folderHash(dir: string): Promise<string> {
   return h.digest("hex");
 }
 
-const granted = new Map<string, Set<string>>();
+/** What each listed plugin may run, and the hash of the files that was allowed for. */
+const granted = new Map<string, { bins: Set<string>; hash: string }>();
+
+/** Arguments that make an allowed program run code it was handed: refused whatever the plugin. */
+const ESCAPES: Record<string, (args: string[]) => boolean> = {
+  gh: (a) => ["extension", "ext", "extensions", "alias", "config", "codespace", "cs"].includes(a[0] ?? ""),
+  git: (a) => a.some((x) => /^(-c|--config-env|--exec-path|--upload-pack|--receive-pack|-u)(=|$)/.test(x) || /^--?(ext-diff|textconv)$/.test(x))
+    || ["config", "submodule", "filter-branch", "difftool", "mergetool", "bisect", "rebase", "am", "daemon", "web--browse"].includes(a[0] ?? ""),
+};
 
 /** Ask once per plugin and per change in what it asks for; a refusal leaves it installed but unable to run anything. */
-async function approve(p: TilePluginPackage, dir: string, saved: Record<string, Approval>): Promise<Set<string>> {
+async function approve(p: TilePluginPackage, dir: string, saved: Record<string, Approval>): Promise<{ bins: Set<string>; hash: string }> {
   const asks = [...p.permissions.exec].sort();
-  if (!asks.length) return new Set();
   const hash = await folderHash(path.join(dir, p.id));
+  if (!asks.length) return { bins: new Set(), hash };
   const had = saved[p.id];
-  if (had?.hash === hash && asks.every((b) => had.bins.includes(b))) return new Set(asks);
+  if (had?.hash === hash && asks.every((b) => had.bins.includes(b))) return { bins: new Set(asks), hash };
   const { response } = await dialog.showMessageBox({
     type: "question",
     buttons: ["Allow", "Don't allow"],
@@ -135,14 +143,15 @@ async function approve(p: TilePluginPackage, dir: string, saved: Record<string, 
   });
   saved[p.id] = { bins: response === 0 ? asks : [], hash };
   await writeFile(approvalsFile(), JSON.stringify(saved, null, 2)).catch(() => {});
-  return new Set(saved[p.id]!.bins);
+  return { bins: new Set(saved[p.id]!.bins), hash };
 }
 
 export async function listTilePlugins(dir = tilePluginsDir()): Promise<TilePluginPackage[]> {
   const ids = (await readdir(dir).catch(() => [] as string[])).filter((id) => !id.startsWith(".")).sort();
   const found = (await Promise.all(ids.map((id) => readPlugin(dir, id)))).filter((p): p is TilePluginPackage => p !== null);
   const saved = await approvals();
-  for (const p of found) granted.set(p.id, await approve(p, dir, saved));
+  granted.clear();
+  for (const p of found) granted.set(p.id, await approve(p, dir, saved).catch(() => ({ bins: new Set<string>(), hash: "" })));
   return found;
 }
 
@@ -179,8 +188,15 @@ function run(bin: string, args: string[], cwd: string): Promise<{ code: number; 
 export async function callTilePlugin(call: TilePluginCall): Promise<unknown> {
   if (call.method !== "exec") throw new Error(`a tile plugin has no "${call.method}"`);
   const { bin, args, maxAgeMs } = call;
-  if (!granted.get(call.plugin)?.has(bin)) throw new Error(`"${call.plugin}" may not run ${bin}: it was not declared, or not allowed`);
+  const grant = granted.get(call.plugin);
+  if (!grant?.bins.has(bin)) throw new Error(`"${call.plugin}" may not run ${bin}: it was not declared, or not allowed`);
   if (!Array.isArray(args) || args.some((a) => typeof a !== "string")) throw new Error("args must be a list of strings");
+  if (ESCAPES[bin.toLowerCase()]?.(args)) throw new Error(`a tile plugin may not run "${bin} ${args[0] ?? ""}": it runs code of its own`);
+  // The allowance is for the files the person saw: changed since, it holds no longer.
+  if (!grant.hash || await folderHash(path.join(tilePluginsDir(), call.plugin)).catch(() => "") !== grant.hash) {
+    grant.bins.clear();
+    throw new Error(`"${call.plugin}" changed since it was allowed; restart the app to review it again`);
+  }
   if (!call.cwd || !path.isAbsolute(call.cwd) || !(await stat(call.cwd).catch(() => null))?.isDirectory()) {
     throw new Error("a tile plugin runs in its tile's folder, and this tile has none");
   }
