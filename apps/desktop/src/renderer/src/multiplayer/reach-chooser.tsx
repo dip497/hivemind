@@ -40,9 +40,9 @@ export function ReachChooser({ onChosen, onCancel, current }: { onChosen: (net: 
       </Button>
       {serving && (
         <p className="rounded bg-[var(--color-bg3)] p-2 text-[var(--color-fg2)]" data-reach-serve-how>
-          On a machine the others can reach (a public address, a forwarded port or a VPN), run{" "}
-          <code className="break-all font-mono">hive-net serve --relay --access --admin-id &lt;your key&gt; --data ~/hive-network</code>, sign a
-          profile naming it with <code className="font-mono">hive-net profile sign</code>, and paste its link above.
+          On a machine the others can reach (a public address, a forwarded port or a VPN such as Tailscale), run{" "}
+          <code className="break-all font-mono">hive-net serve --all --url https://&lt;its address&gt; --data ~/hive-network</code>, then{" "}
+          <code className="break-all font-mono">hive network enrol-link --data ~/hive-network --uses 5</code> and paste that link above on each device.
         </p>
       )}
       {onCancel && (
