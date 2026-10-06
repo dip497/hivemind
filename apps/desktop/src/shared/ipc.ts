@@ -53,7 +53,7 @@ import type { WidgetPackage } from "@hivemind/core/widget-format";
 
 /** One kind of tile a tile plugin draws, as its manifest declares it. */
 export interface TilePluginKind { title: string; glyph?: string; size: { width: number; height: number }; needsRepo: boolean; singleton: boolean }
-/** A tile plugin: its folder name, its kinds, the programs it asks to run, and the page its tiles show. */
+/** A tile plugin: its folder name, its kinds, what it asks to run (each "program subcommand"), and the page its tiles show. */
 export interface TilePluginPackage { id: string; name: string; kinds: Record<string, TilePluginKind>; permissions: { exec: string[] }; entry: string }
 /** A tile plugin asking the machine for something: run a program it declared, in its tile's folder.
  *  `maxAgeMs` lets tiles asking the same thing share one answer that young. */

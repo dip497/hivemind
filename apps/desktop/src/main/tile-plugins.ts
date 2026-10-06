@@ -50,7 +50,8 @@ export function handleTileProtocol(): void {
     }
   });
 }
-const BIN = /^[A-Za-z0-9._-]{1,64}$/;
+/** One thing a plugin may run: a program and the one subcommand it may start with ("gh pr"). */
+const GRANT = /^([A-Za-z0-9._-]{1,64}) ([a-z][a-z0-9-]{0,31})$/;
 /** Programs that run whatever code they are handed: granting one would grant everything. */
 const INTERPRETERS = new Set([
   "sh", "bash", "zsh", "fish", "dash", "ksh", "csh", "tcsh", "cmd", "powershell", "pwsh", "env", "xargs", "sudo", "doas", "su",
@@ -85,7 +86,10 @@ async function readPlugin(dir: string, id: string): Promise<TilePluginPackage | 
     if (!kinds) return null;
     const perms = (meta.permissions ?? {}) as Record<string, unknown>;
     const exec = Array.isArray(perms.exec)
-      ? perms.exec.filter((b): b is string => typeof b === "string" && BIN.test(b) && !INTERPRETERS.has(b.toLowerCase().replace(/\.(exe|cmd|bat|com)$/, "")))
+      ? perms.exec.filter((g): g is string => {
+        const m = typeof g === "string" ? GRANT.exec(g) : null;
+        return !!m && !INTERPRETERS.has(m[1]!.toLowerCase().replace(/\.(exe|cmd|bat|com)$/, "")) && !ESCAPES[m[1]!.toLowerCase()]?.([m[2]!]);
+      })
       : [];
     await readFile(path.join(dir, id, "index.html"));
     return { id, name: typeof meta.name === "string" ? meta.name.slice(0, 60) : id, kinds, permissions: { exec }, entry: `${TILE_SCHEME}://${id}/index.html` };
@@ -119,7 +123,9 @@ const granted = new Map<string, { bins: Set<string>; hash: string }>();
 
 /** Arguments that make an allowed program run code it was handed: refused whatever the plugin. */
 const ESCAPES: Record<string, (args: string[]) => boolean> = {
-  gh: (a) => ["extension", "ext", "extensions", "alias", "config", "codespace", "cs"].includes(a[0] ?? ""),
+  // A file named in an argument is read and posted (--body-file, -F), or an editor started (-e).
+  gh: (a) => ["extension", "ext", "extensions", "alias", "config", "codespace", "cs", "api", "secret", "auth", "ssh-key", "gpg-key"].includes(a[0] ?? "")
+    || a.some((x) => /^(--body-file|-F|--field|--raw-field|--template|--editor|-e|--input|--recover)(=|$)/.test(x) || /^-[A-Za-z]{0,3}[Fe]$/.test(x)),
   git: (a) => a.some((x) => /^(-c|--config-env|--exec-path|--upload-pack|--receive-pack|-u)(=|$)/.test(x) || /^--?(ext-diff|textconv)$/.test(x))
     || ["config", "submodule", "filter-branch", "difftool", "mergetool", "bisect", "rebase", "am", "daemon", "web--browse"].includes(a[0] ?? ""),
 };
@@ -137,9 +143,9 @@ async function approve(p: TilePluginPackage, dir: string, saved: Record<string, 
     defaultId: 1,
     cancelId: 1,
     message: `"${p.name}" wants to run programs on this machine`,
-    detail: `It asks to run: ${asks.join(", ")}\n\nIt can then do anything those programs can do, as you, with any arguments: `
-      + `for gh, act on GitHub with your login. It runs them in its tile's folder, never through a shell. `
-      + `If its files change, you will be asked again.`,
+    detail: `It asks to run: ${asks.join(", ")}\n\nIt can then do anything those commands can do, as you: `
+      + `"gh pr", for example, can comment on and merge pull requests with your GitHub login. It runs them in its tile's folder, `
+      + `never through a shell, and nothing else. If its files change, you will be asked again.`,
   });
   saved[p.id] = { bins: response === 0 ? asks : [], hash };
   await writeFile(approvalsFile(), JSON.stringify(saved, null, 2)).catch(() => {});
@@ -189,8 +195,8 @@ export async function callTilePlugin(call: TilePluginCall): Promise<unknown> {
   if (call.method !== "exec") throw new Error(`a tile plugin has no "${call.method}"`);
   const { bin, args, maxAgeMs } = call;
   const grant = granted.get(call.plugin);
-  if (!grant?.bins.has(bin)) throw new Error(`"${call.plugin}" may not run ${bin}: it was not declared, or not allowed`);
   if (!Array.isArray(args) || args.some((a) => typeof a !== "string")) throw new Error("args must be a list of strings");
+  if (!grant?.bins.has(`${bin} ${args[0] ?? ""}`)) throw new Error(`"${call.plugin}" may not run ${bin} ${args[0] ?? ""}: it was not declared, or not allowed`);
   if (ESCAPES[bin.toLowerCase()]?.(args)) throw new Error(`a tile plugin may not run "${bin} ${args[0] ?? ""}": it runs code of its own`);
   // The allowance is for the files the person saw: changed since, it holds no longer.
   if (!grant.hash || await folderHash(path.join(tilePluginsDir(), call.plugin)).catch(() => "") !== grant.hash) {

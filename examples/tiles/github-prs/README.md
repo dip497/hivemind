@@ -1,7 +1,7 @@
 # GitHub pull requests
 
 A tile plugin: the open pull requests of the tile's repo, each with its conversation, files and
-checks, and comment, approve, request changes and merge. It runs `gh` and nothing else, so
+checks, and comment, approve, request changes and merge. It runs `gh pr` and nothing else, so
 `gh auth login` once on the machine is all it needs.
 
 Install it by copying this folder to the app's tiles folder and restarting the app:
@@ -11,15 +11,15 @@ cp -r examples/tiles/github-prs ~/.config/hivemind/tiles/          # Linux
 cp -r examples/tiles/github-prs ~/Library/Application\ Support/hivemind/tiles/   # macOS
 ```
 
-The first load asks whether it may run `gh`. Open it from a frame's **Open → Pull requests**.
+The first load asks whether it may run `gh pr`. Open it from a frame's **Open → Pull requests**.
 
 ## Writing a tile plugin
 
 A folder with two files:
 
 - `tile.json`: its `name`, the `kinds` of tile it draws (each a `title`, an optional one-character
-  `glyph`, a `size`, and whether it `needsRepo` or is a `singleton`), and the programs it asks to
-  run under `permissions.exec`.
+  `glyph`, a `size`, and whether it `needsRepo` or is a `singleton`), and what it asks to run under
+  `permissions.exec`: each a program and the one subcommand it may start with, such as `"gh pr"`.
 - `index.html`: the page each tile shows. It runs sandboxed, with no network. Other files in the
   folder load from the page by relative path.
 
@@ -33,5 +33,5 @@ The page talks to the app with `postMessage`:
 | page → app | `{ type: "hive:close" }` |
 | page → app | `{ type: "hive:open", kind }` · `{ url }` · `{ file }`: another tile in this frame, a page in its browser, a repo file in its editor |
 
-`exec` runs only a program the manifest declared and the person allowed, in the tile's own repo,
+`exec` runs only a program and subcommand the manifest declared and the person allowed, in the tile's own repo,
 never through a shell. Tiles asking the same thing within `maxAgeMs` share one answer.

@@ -9,5 +9,5 @@
       "singleton": true
     }
   },
-  "permissions": { "exec": ["gh"] }
+  "permissions": { "exec": ["gh pr"] }
 }
