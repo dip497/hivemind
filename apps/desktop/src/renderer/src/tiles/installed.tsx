@@ -91,7 +91,7 @@ export function registerInstalled(pkg: TilePluginPackage): void {
       openUrl: (url) => h.openUrlInBrowser(t.id, url),
       openFile: (file) => h.openFileFromTerminal(t.id, s.repoPath ? `${s.repoPath}/${file}` : file),
     }),
-    body: async () => ({ default: Body }),
+    body: Body,
     minSize: { width: 240, height: 160 },
   });
 }

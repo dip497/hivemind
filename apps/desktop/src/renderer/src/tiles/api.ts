@@ -80,8 +80,10 @@ export interface TilePlugin<D = unknown> {
   kinds: Record<string, TileKindSpec>;
   /** The body's props for one tile, or null when it has nothing to show. */
   data: (tile: TileInstance, scope: TileScope, host: TileHostState) => D | null;
-  /** Loaded the first time a tile of this plugin is shown. */
-  body: () => Promise<{ default: ComponentType<TileBodyArgs<D>> }>;
+  /** The body: ready now, or loaded the first time a tile of this plugin is shown. */
+  body: ComponentType<TileBodyArgs<D>> | (() => Promise<{ default: ComponentType<TileBodyArgs<D>> }>);
+  /** `body` is the loader, not the component. */
+  lazy?: boolean;
   /** Shown while the body loads. */
   fallback?: ComponentType;
   /** Mount even when no view shows it, so what it runs keeps running. */

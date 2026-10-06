@@ -37,6 +37,7 @@ import { createPortal } from "react-dom";
 import { TileErrorBoundary } from "../TileErrorBoundary";
 import type { TileSurface } from "./tile-surfaces";
 import { tileKind, tilePlugin, type TileBodyArgs, type TilePlugin } from "../tiles";
+import "../tiles/bodies";
 
 export type TileBodyProps = { type: string; data: unknown; selected: boolean };
 
@@ -44,7 +45,10 @@ export type TileBodyProps = { type: string; data: unknown; selected: boolean };
 const bodies = new WeakMap<TilePlugin, ComponentType<TileBodyArgs<unknown>>>();
 function bodyOf(plugin: TilePlugin): ComponentType<TileBodyArgs<unknown>> {
   let body = bodies.get(plugin);
-  if (!body) bodies.set(plugin, body = lazy(plugin.body));
+  if (!body) {
+    body = plugin.lazy ? lazy(plugin.body as () => Promise<{ default: ComponentType<TileBodyArgs<unknown>> }>) : plugin.body as ComponentType<TileBodyArgs<unknown>>;
+    bodies.set(plugin, body);
+  }
   return body;
 }
 

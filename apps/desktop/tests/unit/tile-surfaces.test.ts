@@ -200,7 +200,7 @@ test("a tile whose plugin is not installed still has a body: the missing-plugin 
 test("a kind registered by a plugin is drawn by that plugin, with the tile's scope", () => {
   registerTile<{ repo: string | null }>({
     surface: "test-surface", name: "Test", kinds: { "test-kind": { size: { width: 300, height: 200 } } },
-    data: (_t, scope) => ({ repo: scope.repoPath }), body: async () => ({ default: () => null }),
+    data: (_t, scope) => ({ repo: scope.repoPath }), body: () => null,
   });
   const s = buildTileSurfaces(ctx({ tiles: [tile({ id: "p", kind: "test-kind" })] }));
   assert.equal(byId(s, "p").type, "test-surface");

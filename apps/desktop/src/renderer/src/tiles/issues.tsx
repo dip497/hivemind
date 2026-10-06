@@ -1,5 +1,5 @@
 import { ListTodo } from "lucide-react";
-import type { TilePlugin, PinRect } from "./api";
+import type { TilePlugin, PinRect, TileBodyArgs } from "./api";
 
 export type IssuesTileData = {
   root: string | null;
@@ -15,5 +15,6 @@ export const issuesTile: TilePlugin<IssuesTileData> = {
   kinds: { issues: { size: { width: 680, height: 460 }, label: "Issues", singleton: true, title: "Issues", icon: ListTodo, glyph: "◔" } },
   data: (_t, s) => ({ root: s.root, onClose: s.onClose, ...s.pin }),
   minSize: { width: 280 },
-  body: () => import("../IssuesTile").then((m) => ({ default: ({ data, selected }) => <m.IssuesTile {...data} selected={selected} /> })),
+  lazy: true,
+  body: () => import("../IssuesTile").then((m) => ({ default: ({ data, selected }: TileBodyArgs<IssuesTileData>) => <m.IssuesTile {...data} selected={selected} /> })),
 };

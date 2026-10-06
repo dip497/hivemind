@@ -62,5 +62,6 @@ export const terminalTile: TilePlugin<TerminalTileData> = {
       ...s.pin,
     };
   },
+  lazy: true,
   body: () => import("./terminal-body"),
 };

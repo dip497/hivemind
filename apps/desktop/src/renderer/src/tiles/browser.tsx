@@ -1,6 +1,6 @@
 import { Globe } from "lucide-react";
 import { BrowserSkeleton } from "../workspace/tile-skeletons";
-import type { TilePlugin, PinRect } from "./api";
+import type { TilePlugin, PinRect, TileBodyArgs } from "./api";
 
 export type BrowserTileData = {
   tileId: string;
@@ -26,7 +26,8 @@ export const browserTile: TilePlugin<BrowserTileData> = {
     tileId: t.id, frameId: s.frameId, url: t.url,
     openReq: h.browserOpenReqs[t.id] ?? null, onClose: s.onClose, ...s.pin,
   }),
-  body: () => import("../BrowserTile").then((m) => ({ default: ({ data, selected }) => <m.BrowserTile {...data} selected={selected} /> })),
+  lazy: true,
+  body: () => import("../BrowserTile").then((m) => ({ default: ({ data, selected }: TileBodyArgs<BrowserTileData>) => <m.BrowserTile {...data} selected={selected} /> })),
   fallback: BrowserSkeleton,
   minSize: { width: 420, height: 280 },
 };

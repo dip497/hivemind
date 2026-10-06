@@ -14,8 +14,6 @@ import { Button } from "./components/ui/button";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { FileTreeTile } from "./FileTreeTile";
 import { EditorTile } from "./EditorTile";
-import { CommitBar } from "./code/CommitBar";
-import { useGitStatus } from "./queries";
 
 const DiffTile = lazy(() => import("./DiffTile").then((m) => ({ default: m.DiffTile })));
 
@@ -78,11 +76,6 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
   useEffect(() => { localStorage.setItem(SIDEBAR_KEY, String(sidebarW)); }, [sidebarW]);
   const dragRef = useRef<{ startX: number; startW: number } | null>(null);
   const repoName = repoPath.split("/").filter(Boolean).pop() ?? "workbench";
-
-  // Git status drives the Changes-mode commit bar (stage/commit/push).
-  const { data: status } = useGitStatus(repoPath);
-  const showCommit = panel === "changes" && !collapsed && !!status &&
-    (status.files.length > 0 || status.ahead > 0);
 
   // Activity-bar icon: switch panel; clicking the ALREADY-active panel collapses
   // the side panel (VSCode behavior).
@@ -189,8 +182,6 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
           )}
         </div>
       </div>
-      {/* Commit/push bar — only in Changes mode, full width below the body. */}
-      {showCommit && status && <CommitBar repoPath={repoPath} status={status} />}
     </div>
   );
 }

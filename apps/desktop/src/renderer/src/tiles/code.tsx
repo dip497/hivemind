@@ -1,6 +1,6 @@
 import { Folder } from "lucide-react";
 import { EditorSkeleton } from "../workspace/tile-skeletons";
-import type { TilePlugin, PinRect, TileKindSpec } from "./api";
+import type { TilePlugin, PinRect, TileKindSpec, TileBodyArgs } from "./api";
 
 export type WorkbenchTileData = {
   repoPath: string;
@@ -41,7 +41,8 @@ export const codeTile: TilePlugin<WorkbenchTileData> = {
     ...(t.kind === "diff" ? { startOnChanges: true } : {}),
     ...(t.compare ? { compare: t.compare } : {}),
   },
-  body: () => import("../WorkbenchTile").then((m) => ({ default: ({ data }) => <m.WorkbenchTile {...data} /> })),
+  lazy: true,
+  body: () => import("../WorkbenchTile").then((m) => ({ default: ({ data }: TileBodyArgs<WorkbenchTileData>) => <m.WorkbenchTile {...data} /> })),
   fallback: EditorSkeleton,
   minSize: { width: 520, height: 360 },
 };

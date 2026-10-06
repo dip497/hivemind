@@ -1,4 +1,4 @@
-import type { TilePlugin } from "./api";
+import type { TilePlugin, TileBodyArgs } from "./api";
 
 /** The kind an agent's plan hand-off opens. */
 export const PLAN_REVIEW = "planReview";
@@ -28,5 +28,6 @@ export const planReviewTile: TilePlugin<PlanReviewTileData> = {
     };
   },
   minSize: { width: 420, height: 300 },
-  body: () => import("../PlanReviewTile").then((m) => ({ default: ({ data }) => <m.PlanReviewTile {...data} /> })),
+  lazy: true,
+  body: () => import("../PlanReviewTile").then((m) => ({ default: ({ data }: TileBodyArgs<PlanReviewTileData>) => <m.PlanReviewTile {...data} /> })),
 };
