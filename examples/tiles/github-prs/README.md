@@ -31,6 +31,7 @@ The page talks to the app with `postMessage`:
 | page → app | `{ type: "hive:call", id, method: "exec", bin, args, maxAgeMs? }` |
 | app → page | `{ type: "hive:reply", id, ok, value: { code, stdout, stderr } \| error }` |
 | page → app | `{ type: "hive:close" }` |
+| page → app | `{ type: "hive:open", kind }` · `{ url }` · `{ file }`: another tile in this frame, a page in its browser, a repo file in its editor |
 
 `exec` runs only a program the manifest declared and the person allowed, in the tile's own repo,
 never through a shell. Tiles asking the same thing within `maxAgeMs` share one answer.

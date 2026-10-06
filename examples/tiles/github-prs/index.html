@@ -137,7 +137,7 @@ function renderConversation(pr) {
   ].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
   const open = pr.state === "OPEN";
   return `
-    <div class="meta" style="margin-bottom:10px">${esc(pr.author?.login)} wants to merge <b>${esc(pr.headRefName)}</b> into <b>${esc(pr.baseRefName)}</b> · ${esc(pr.state.toLowerCase())}${pr.isDraft ? " · draft" : ""} ${checksBadge(pr.statusCheckRollup)}</div>
+    <div class="meta" style="margin-bottom:10px"><a href="#" data-url="${esc(pr.url)}" style="color:var(--brand)">Open on GitHub</a> · ${esc(pr.author?.login)} wants to merge <b>${esc(pr.headRefName)}</b> into <b>${esc(pr.baseRefName)}</b> · ${esc(pr.state.toLowerCase())}${pr.isDraft ? " · draft" : ""} ${checksBadge(pr.statusCheckRollup)}</div>
     <div class="card"><div class="h">${esc(pr.author?.login)}</div><div class="b">${esc(pr.body) || '<span class="meta">No description</span>'}</div></div>
     ${events.map((e) => `<div class="card"><div class="h">${esc(e.who)} ${esc(e.what)} · ${ago(e.at)} ago</div>${e.body ? `<div class="b">${esc(e.body)}</div>` : ""}</div>`).join("")}
     ${open ? `
@@ -203,8 +203,9 @@ window.addEventListener("message", (e) => {
 });
 
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-n],[data-tab],[data-act]");
+  const t = e.target.closest("[data-n],[data-tab],[data-act],[data-url]");
   if (!t) return;
+  if (t.dataset.url) { e.preventDefault(); parent.postMessage({ type: "hive:open", url: t.dataset.url }, "*"); return; }
   if (t.dataset.n) open(Number(t.dataset.n));
   else if (t.dataset.tab) { tab = t.dataset.tab; open(current); }
   else if (t.dataset.act) act(t.dataset.act);

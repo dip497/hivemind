@@ -7,18 +7,32 @@
  *   host → page  { type: "hive:reply", id, ok, value | error }
  *   host → page  { type: "hive:init", tile: { id, kind, repoPath, root }, theme }   (and again on change)
  *   page → host  { type: "hive:close" }
+ *   page → host  { type: "hive:open", kind }       a tile of any installed kind, in this tile's frame
+ *   page → host  { type: "hive:open", url }        a page, in the frame's browser
+ *   page → host  { type: "hive:open", file }       a repo file, in the frame's editor
  */
 import { useEffect, useRef } from "react";
 import type { TilePluginPackage } from "../../../shared/ipc";
-import { registerTile, type TileBodyArgs } from "./api";
+import { MISSING, pluginOfKind, registerTile, type TileBodyArgs } from "./api";
 
-type PluginTileData = { plugin: string; tileId: string; kind: string; repoPath: string | null; cwd: string; root: string | null; onClose: () => void };
+type PluginTileData = {
+  plugin: string; tileId: string; kind: string; frameId: string | null; repoPath: string | null; cwd: string; root: string | null;
+  onClose: () => void; openUrl: (url: string) => void; openFile: (path: string) => void;
+};
 
 const THEME_VARS = ["--color-bg", "--color-bg2", "--color-bg3", "--color-fg", "--color-fg2", "--color-fg3", "--color-line", "--color-brand", "--color-err", "--font-mono"];
 const theme = (): Record<string, string> => {
   const css = getComputedStyle(document.documentElement);
   return Object.fromEntries(THEME_VARS.map((v) => [v, css.getPropertyValue(v).trim()]));
 };
+
+function open(d: PluginTileData, m: Record<string, unknown>) {
+  if (typeof m.url === "string" && /^https?:\/\//i.test(m.url)) d.openUrl(m.url);
+  else if (typeof m.file === "string" && !m.file.startsWith("/") && !m.file.split(/[\\/]/).includes("..")) d.openFile(m.file);
+  else if (typeof m.kind === "string" && pluginOfKind(m.kind)?.surface !== MISSING && d.frameId) {
+    window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: d.frameId, kind: m.kind } }));
+  }
+}
 
 function PluginFrame({ src, data }: { src: string; data: PluginTileData }) {
   const ref = useRef<HTMLIFrameElement>(null);
@@ -36,6 +50,7 @@ function PluginFrame({ src, data }: { src: string; data: PluginTileData }) {
       if (e.source !== ref.current?.contentWindow) return;
       const m = e.data as { type?: unknown; id?: unknown; method?: unknown; bin?: unknown; args?: unknown; maxAgeMs?: unknown };
       if (m?.type === "hive:close") { dataRef.current.onClose(); return; }
+      if (m?.type === "hive:open") { open(dataRef.current, m as Record<string, unknown>); return; }
       if (m?.type !== "hive:call" || typeof m.id !== "number") return;
       const d = dataRef.current;
       // The folder is the tile's, never one the page names.
@@ -71,7 +86,11 @@ export function registerInstalled(pkg: TilePluginPackage): void {
     kinds: Object.fromEntries(Object.entries(pkg.kinds).map(([kind, k]) => [kind, {
       size: k.size, label: k.title, title: k.title, glyph: k.glyph, needsRepo: k.needsRepo, singleton: k.singleton,
     }])),
-    data: (t, s) => ({ plugin: pkg.id, tileId: t.id, kind: t.kind, repoPath: s.repoPath, cwd: s.cwd, root: s.root, onClose: s.onClose }),
+    data: (t, s, h) => ({
+      plugin: pkg.id, tileId: t.id, kind: t.kind, frameId: s.frameId, repoPath: s.repoPath, cwd: s.cwd, root: s.root, onClose: s.onClose,
+      openUrl: (url) => h.openUrlInBrowser(t.id, url),
+      openFile: (file) => h.openFileFromTerminal(t.id, s.repoPath ? `${s.repoPath}/${file}` : file),
+    }),
     body: async () => ({ default: Body }),
     minSize: { width: 240, height: 160 },
   });
