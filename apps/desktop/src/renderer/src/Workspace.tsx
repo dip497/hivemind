@@ -43,7 +43,7 @@ import type { PinRect } from "./workspace/tile-surfaces";
 import { clampAnchor } from "./pin-anchor";
 import { pickEditorTile } from "./workspace/editor-target";
 import type { TileKind } from "./tile-kinds";
-import { kindsThatOpen, tileKind } from "./tiles";
+import { kindsThatOpen, tileKind, useTilesVersion } from "./tiles";
 import {
   loadLayout,
   reloadLayout,
@@ -1125,7 +1125,9 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // the memo below must list EVERY input that can change a body — the builder
   // diffs per tile and reuses the rest (callbacks included, so a changed
   // handler can never leave a stale closure behind).
-  const buildSurfaces = useMemo(() => createTileSurfaceBuilder(), [persistKey]);
+  const tilesVersion = useTilesVersion();
+  // A plugin registering changes what a tile shows without changing the tile: start the cache afresh.
+  const buildSurfaces = useMemo(() => createTileSurfaceBuilder(), [persistKey, tilesVersion]);
   const surfaces = useMemo(() => buildSurfaces({
     repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, tileNames, agentTitles,
     openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, renameTile,

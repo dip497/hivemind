@@ -14,5 +14,6 @@ export const issuesTile: TilePlugin<IssuesTileData> = {
   name: "Issues",
   kinds: { issues: { size: { width: 680, height: 460 }, label: "Issues", singleton: true, title: "Issues", icon: ListTodo, glyph: "◔" } },
   data: (_t, s) => ({ root: s.root, onClose: s.onClose, ...s.pin }),
+  minSize: { width: 280 },
   body: () => import("../IssuesTile").then((m) => ({ default: ({ data, selected }) => <m.IssuesTile {...data} selected={selected} /> })),
 };

@@ -51,6 +51,14 @@ import type { AgentChange, AgentEvent, AgentItem } from "@hivemind/workspace-api
 export type { WidgetOption, WidgetPackage } from "@hivemind/core/widget-format";
 import type { WidgetPackage } from "@hivemind/core/widget-format";
 
+/** One kind of tile a tile plugin draws, as its manifest declares it. */
+export interface TilePluginKind { title: string; glyph?: string; size: { width: number; height: number }; needsRepo: boolean; singleton: boolean }
+/** A tile plugin: its folder name, its kinds, the programs it asks to run, and the page its tiles show. */
+export interface TilePluginPackage { id: string; name: string; kinds: Record<string, TilePluginKind>; permissions: { exec: string[] }; entry: string }
+/** A tile plugin asking the machine for something: run a program it declared, in its tile's folder.
+ *  `maxAgeMs` lets tiles asking the same thing share one answer that young. */
+export type TilePluginCall = { plugin: string; method: "exec"; bin: string; args: string[]; cwd: string; maxAgeMs?: number };
+
 // IssuePatch is owned by @hivemind/core/types (node-free) — re-export so renderer
 // modules keep importing it from the IPC contract, with no hand-maintained copy.
 export type { IssuePatch };
@@ -301,6 +309,10 @@ export interface HiveIpc {
   onAgentEvent(cb: (repo: string, event: AgentEvent) => void): () => void;
   /** The installed widget packages changed. */
   onWidgetsChanged(cb: () => void): () => void;
+  /** The tile plugins installed on this machine (each approved, or refused, on first load). */
+  listTilePlugins(): Promise<TilePluginPackage[]>;
+  /** A tile plugin's call to the machine, checked against what it declared and was allowed. */
+  callTilePlugin(call: TilePluginCall): Promise<unknown>;
   /** Ids of installed agents whose manifest differs from the one the catalog lists. */
   outdatedAgents(): Promise<string[]>;
   /** Download and verify a catalog plugin, then return it for review. A view installs with

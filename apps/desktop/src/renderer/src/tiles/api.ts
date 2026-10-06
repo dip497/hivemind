@@ -2,7 +2,7 @@
  * Tile plugins: everything a tile is — its size, its rules and its body — comes from the plugin
  * that registers its kind. The tiles that ship with the app register through this same API.
  */
-import type { ComponentType } from "react";
+import { useSyncExternalStore, type ComponentType } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { TileInstance } from "../canvas-persistence";
 
@@ -86,10 +86,17 @@ export interface TilePlugin<D = unknown> {
   fallback?: ComponentType;
   /** Mount even when no view shows it, so what it runs keeps running. */
   runsUnseen?: boolean;
+  /** The smallest a person can resize it to. */
+  minSize?: { width?: number; height?: number };
 }
 
 const bySurface = new Map<string, TilePlugin>();
 const byKind = new Map<string, { plugin: TilePlugin; spec: TileKindSpec }>();
+let version = 0;
+const listeners = new Set<() => void>();
+const subscribe = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
+/** Bumps whenever a plugin registers, so what was drawn without it is drawn again. */
+export const useTilesVersion = (): number => useSyncExternalStore(subscribe, () => version);
 
 export function registerTile<D>(plugin: TilePlugin<D>): void {
   const p = plugin as TilePlugin;
@@ -99,10 +106,18 @@ export function registerTile<D>(plugin: TilePlugin<D>): void {
   }
   bySurface.set(p.surface, p);
   for (const [kind, spec] of Object.entries(p.kinds)) byKind.set(kind, { plugin: p, spec });
+  version++;
+  for (const fn of listeners) fn();
 }
 
+/** Every installed plugin's surface. */
+export const tileSurfaces = (): string[] => [...bySurface.keys()];
+
 export const tilePlugin = (surface: string): TilePlugin | undefined => bySurface.get(surface);
-export const pluginOfKind = (kind: string): TilePlugin | undefined => byKind.get(kind)?.plugin;
+/** The plugin that draws a kind; a kind nothing installed draws gets the missing-plugin card,
+ *  so a guest without it, or a phone, sees what the tile is instead of nothing. */
+export const pluginOfKind = (kind: string): TilePlugin | undefined => byKind.get(kind)?.plugin ?? bySurface.get(MISSING);
+export const MISSING = "missing";
 
 /** Every kind installed, in the order its plugin registered. */
 export const tileKinds = (): [string, TileKindSpec][] => [...byKind].map(([kind, { spec }]) => [kind, spec]);

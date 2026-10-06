@@ -27,5 +27,6 @@ export const planReviewTile: TilePlugin<PlanReviewTileData> = {
       onClose: s.onClose,
     };
   },
+  minSize: { width: 420, height: 300 },
   body: () => import("../PlanReviewTile").then((m) => ({ default: ({ data }) => <m.PlanReviewTile {...data} /> })),
 };

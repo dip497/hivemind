@@ -3,6 +3,7 @@ import { disabledPlugins, pluginOptions, stringOptions } from "@hivemind/core/pl
 import { toolPreferences } from "@hivemind/core/settings-schema";
 import { installWidgetIpc, widgetAsset, widgetsChanged } from "./widgets.js";
 import { listWidgets } from "@hivemind/core/widgets";
+import { installTilePluginIpc, handleTileProtocol, TILE_SCHEME } from "./tile-plugins.js";
 import { appShortcut, menuKey } from "./shortcuts";
 import { recoverOnProcessLoss } from "./recover";
 import desktopPkg from "../../package.json" with { type: "json" };
@@ -1469,12 +1470,15 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // and confined to userData/media. `stream: true` is REQUIRED so <video>
     // range-requests (seek/loop) work.
     { scheme: "hivemedia", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+    // Tile plugins' pages, to sandboxed frames; corsEnabled so their module scripts load.
+    { scheme: TILE_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
   ]);
   // Community view packages: hm-view://<id>/… served to sandboxed iframes.
   registerViewScheme();
   app.whenReady().then(async () => {
     refreshWindowsStartMenuShortcut();
     handleViewProtocol();
+    handleTileProtocol();
     installSettingsIpc(broadcast);
     installIdentityIpc();
     // The person's other devices run terminals here in this computer's daemon, when it has one.
@@ -1495,6 +1499,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     }).catch((e: unknown) => console.warn("[machines] init failed:", e));
     installViewManagementIpc();
     installWidgetIpc();
+    installTilePluginIpc();
     installPluginCatalogIpc();
     handle("views:list", wrap(async (_e, repoRoot: string | null) => listViewPackages(repoRoot ? String(repoRoot) : null)));
 

@@ -291,6 +291,8 @@ const api: HiveIpc & {
     ipcRenderer.on("widgets:changed", listener);
     return () => ipcRenderer.removeListener("widgets:changed", listener);
   },
+  listTilePlugins: () => ipcRenderer.invoke("tiles:list"),
+  callTilePlugin: (call) => ipcRenderer.invoke("tiles:call", call),
   outdatedAgents: () => ipcRenderer.invoke("plugins:outdated"),
   reviewCatalogPlugin: (type, id) => ipcRenderer.invoke("plugins:review", type, id),
   installCatalogAgent: (token) => ipcRenderer.invoke("plugins:install-agent", token),

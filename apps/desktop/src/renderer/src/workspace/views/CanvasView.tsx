@@ -31,7 +31,7 @@ import { LayersPanel } from "../../LayersPanel";
 import { ZoomIsland } from "../../canvas-islands";
 import { setChromeSuppressed } from "../chrome-store";
 import { CanvasEmptyState, Toasts } from "../../canvas-overlays";
-import { nodeTypes, PinnedLayerContext } from "../../canvas-nodes";
+import { useNodeTypes, PinnedLayerContext } from "../../canvas-nodes";
 import { pipeEdgeTypes } from "../../canvas-pipe-edge";
 import { ArrowDraft, BoardArrows, BoardPointer } from "../../board-objects/Arrows";
 import { PresenceLayer, followPerson, onHost, useFollowing, usePeopleHere } from "../../multiplayer/presence";
@@ -42,7 +42,7 @@ import { snapViewportCrisp, FocusMode, FocusOnTile, PanMomentum, ViewportSnap } 
 import { buildBaseNodes, reuseNodes } from "../../canvas-node-build";
 import type { WorkspaceViewPlugin, WorkspaceViewProps } from "../workspace-view";
 import { useCanvasRuntime } from "./canvas-runtime";
-import { tileKind } from "../../tiles";
+import { tileKind, useTilesVersion } from "../../tiles";
 import { agentById, useAgents } from "../../agents";
 import { notReady, useAgentPresence } from "../../agent-plugins";
 
@@ -151,6 +151,8 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
   // below shallow-clones only the selected node so a click doesn't churn
   // React.memo on the heavy wrappers. Pure — see canvas-node-build.ts.
   const lastBuiltRef = useRef<ReadonlyMap<string, Node>>(new Map());
+  const nodeTypes = useNodeTypes();
+  const tilesVersion = useTilesVersion();
   const baseNodes: Node[] = useMemo(() => {
     const built = reuseNodes(lastBuiltRef.current, buildBaseNodes({
     repoPath, tiles, frames, frameOf, pins: rt.pins, sizes: rt.sizes, positions: rt.positions,
@@ -167,7 +169,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
     repoPath, tiles, frames, frameOf, rt.pins, rt.sizes, rt.positions, rt.board.objects, rt.frameTiles,
     rt.updateFrameTitle, rt.updateFrameColor, rt.deleteFrame, rt.arrangeFrame, rt.bringFrameToFront,
     rt.onAttachWorktree, rt.onCreateWorktree, rt.unbindBranch, rt.bindWorkspace, rt.unbindWorkspace,
-    closeTile, rt.onNodeResizeCommit, rt.togglePin, rt.onPinChange,
+    closeTile, rt.onNodeResizeCommit, rt.togglePin, rt.onPinChange, tilesVersion,
   ]);
   // Derive selection-aware nodes from baseNodes. Shallow-clones ONLY the
   // currently-selected tile so other nodes keep their object identity →

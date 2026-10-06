@@ -43,4 +43,5 @@ export const codeTile: TilePlugin<WorkbenchTileData> = {
   },
   body: () => import("../WorkbenchTile").then((m) => ({ default: ({ data }) => <m.WorkbenchTile {...data} /> })),
   fallback: EditorSkeleton,
+  minSize: { width: 520, height: 360 },
 };

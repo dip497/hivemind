@@ -28,4 +28,5 @@ export const browserTile: TilePlugin<BrowserTileData> = {
   }),
   body: () => import("../BrowserTile").then((m) => ({ default: ({ data, selected }) => <m.BrowserTile {...data} selected={selected} /> })),
   fallback: BrowserSkeleton,
+  minSize: { width: 420, height: 280 },
 };
