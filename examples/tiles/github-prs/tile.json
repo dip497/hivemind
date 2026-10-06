@@ -1,0 +1,13 @@
+{
+  "name": "GitHub pull requests",
+  "kinds": {
+    "github-prs": {
+      "title": "Pull requests",
+      "glyph": "⇅",
+      "size": { "width": 1100, "height": 760 },
+      "needsRepo": true,
+      "singleton": true
+    }
+  },
+  "permissions": { "exec": ["gh"] }
+}

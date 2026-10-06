@@ -1,0 +1,218 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root { --bg: #111318; --bg2: #16181e; --bg3: #1c1f26; --fg: #e7e9ee; --fg2: #b4b8c2; --fg3: #7d828d; --line: #2a2e37; --brand: #7c6cff; --err: #e5484d; --ok: #30a46c; --warn: #f5a524; --mono: ui-monospace, "JetBrains Mono", monospace; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg2); color: var(--fg); font: 13px/1.45 system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; }
+  button { font: inherit; color: var(--fg); background: var(--bg3); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  button:hover { border-color: var(--fg3); }
+  button.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  button.danger { color: var(--err); }
+  button:disabled { opacity: .5; cursor: default; }
+  textarea { width: 100%; min-height: 72px; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; resize: vertical; }
+  header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--bg3); }
+  header h1 { font-size: 13px; margin: 0; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  main { flex: 1; min-height: 0; display: flex; }
+  #list { width: 320px; border-right: 1px solid var(--line); overflow: auto; flex-shrink: 0; }
+  #detail { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .pr { padding: 8px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .pr:hover { background: var(--bg3); }
+  .pr.active { background: color-mix(in srgb, var(--brand) 16%, transparent); }
+  .pr .t { font-weight: 500; }
+  .meta { color: var(--fg3); font-size: 11px; }
+  .tabs { display: flex; gap: 2px; padding: 6px 12px 0; border-bottom: 1px solid var(--line); }
+  .tab { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 6px 10px; color: var(--fg2); }
+  .tab.on { color: var(--fg); border-bottom-color: var(--brand); }
+  .pane { flex: 1; overflow: auto; padding: 12px; }
+  .card { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; background: var(--bg); }
+  .card .h { padding: 6px 10px; border-bottom: 1px solid var(--line); color: var(--fg2); font-size: 12px; }
+  .card .b { padding: 10px; white-space: pre-wrap; word-break: break-word; }
+  .badge { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--fg2); }
+  .badge.ok { color: var(--ok); border-color: var(--ok); } .badge.err { color: var(--err); border-color: var(--err); } .badge.warn { color: var(--warn); border-color: var(--warn); }
+  .file { margin-bottom: 12px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .file .name { padding: 6px 10px; background: var(--bg3); font-family: var(--mono); font-size: 12px; position: sticky; top: 0; }
+  .file pre { margin: 0; font: 12px/1.5 var(--mono); overflow-x: auto; }
+  .file pre div { padding: 0 10px; white-space: pre; }
+  .add { background: color-mix(in srgb, var(--ok) 14%, transparent); }
+  .del { background: color-mix(in srgb, var(--err) 14%, transparent); }
+  .hunk { color: var(--fg3); background: var(--bg3); }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .empty, .error { padding: 24px; color: var(--fg3); text-align: center; }
+  .error { color: var(--err); white-space: pre-wrap; text-align: left; font-family: var(--mono); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Pull requests</h1>
+  <select id="state" title="Which pull requests">
+    <option value="open">Open</option><option value="merged">Merged</option><option value="closed">Closed</option><option value="all">All</option>
+  </select>
+  <button id="refresh" title="Refresh">↻</button>
+</header>
+<main>
+  <div id="list"><div class="empty">Loading…</div></div>
+  <div id="detail"><div class="empty">Pick a pull request</div></div>
+</main>
+<script>
+"use strict";
+// The host answers each call; the tile's folder and what may run are the host's to decide.
+let seq = 0;
+const waiting = new Map();
+function call(bin, args, maxAgeMs) {
+  const id = ++seq;
+  parent.postMessage({ type: "hive:call", id, method: "exec", bin, args, maxAgeMs }, "*");
+  return new Promise((resolve, reject) => waiting.set(id, { resolve, reject }));
+}
+async function gh(args, maxAgeMs) {
+  const r = await call("gh", args, maxAgeMs);
+  if (r.code !== 0) throw new Error(r.stderr.trim() || `gh exited ${r.code}`);
+  return r.stdout;
+}
+const ghJson = async (args, maxAgeMs) => JSON.parse(await gh(args, maxAgeMs));
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ago = (iso) => { const m = Math.round((Date.now() - Date.parse(iso)) / 60000); return m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`; };
+
+let ready = false, current = null, tab = "conversation", prs = [];
+
+function checksBadge(rollup) {
+  if (!rollup || !rollup.length) return "";
+  const states = rollup.map((c) => (c.conclusion || c.state || c.status || "").toUpperCase());
+  if (states.some((s) => ["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT"].includes(s))) return '<span class="badge err">checks failing</span>';
+  if (states.every((s) => ["SUCCESS", "NEUTRAL", "SKIPPED"].includes(s))) return '<span class="badge ok">checks pass</span>';
+  return '<span class="badge warn">checks running</span>';
+}
+
+async function loadList() {
+  const state = $("#state").value;
+  $("#list").innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    prs = await ghJson(["pr", "list", "--state", state, "--limit", "50", "--json", "number,title,author,headRefName,updatedAt,isDraft,reviewDecision,statusCheckRollup"], 30000);
+    renderList();
+  } catch (e) { $("#list").innerHTML = `<div class="error">${esc(e.message)}</div>`; }
+}
+
+function renderList() {
+  if (!prs.length) { $("#list").innerHTML = '<div class="empty">No pull requests</div>'; return; }
+  $("#list").innerHTML = prs.map((p) => `
+    <div class="pr ${current === p.number ? "active" : ""}" data-n="${p.number}">
+      <div class="t">${esc(p.title)}</div>
+      <div class="meta">#${p.number} · ${esc(p.author?.login)} · ${esc(p.headRefName)} · ${ago(p.updatedAt)}</div>
+      <div class="row" style="margin-top:4px">${p.isDraft ? '<span class="badge">draft</span>' : ""}${p.reviewDecision === "APPROVED" ? '<span class="badge ok">approved</span>' : p.reviewDecision === "CHANGES_REQUESTED" ? '<span class="badge err">changes requested</span>' : ""}${checksBadge(p.statusCheckRollup)}</div>
+    </div>`).join("");
+}
+
+async function open(n) {
+  current = n; renderList();
+  $("#detail").innerHTML = `
+    <div class="tabs">${["conversation", "files", "checks"].map((t) => `<button class="tab ${t === tab ? "on" : ""}" data-tab="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
+    <div class="pane" id="pane"><div class="empty">Loading…</div></div>`;
+  await renderTab();
+}
+
+async function renderTab() {
+  const n = current, pane = $("#pane");
+  try {
+    if (tab === "files") {
+      const diff = await gh(["pr", "diff", String(n)], 60000);
+      if (current !== n || tab !== "files") return;
+      pane.innerHTML = renderDiff(diff) || '<div class="empty">No changes</div>';
+      return;
+    }
+    const pr = await ghJson(["pr", "view", String(n), "--json", "number,title,body,author,state,isDraft,mergeable,url,headRefName,baseRefName,comments,reviews,statusCheckRollup"], 15000);
+    if (current !== n) return;
+    $("#title").textContent = `#${pr.number} ${pr.title}`;
+    pane.innerHTML = tab === "checks" ? renderChecks(pr) : renderConversation(pr);
+  } catch (e) { pane.innerHTML = `<div class="error">${esc(e.message)}</div>`; }
+}
+
+function renderConversation(pr) {
+  const events = [
+    ...pr.comments.map((c) => ({ at: c.createdAt, who: c.author?.login, what: "commented", body: c.body })),
+    ...pr.reviews.map((r) => ({ at: r.submittedAt, who: r.author?.login, what: ({ APPROVED: "approved", CHANGES_REQUESTED: "requested changes", COMMENTED: "reviewed" })[r.state] || r.state.toLowerCase(), body: r.body })),
+  ].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  const open = pr.state === "OPEN";
+  return `
+    <div class="meta" style="margin-bottom:10px">${esc(pr.author?.login)} wants to merge <b>${esc(pr.headRefName)}</b> into <b>${esc(pr.baseRefName)}</b> · ${esc(pr.state.toLowerCase())}${pr.isDraft ? " · draft" : ""} ${checksBadge(pr.statusCheckRollup)}</div>
+    <div class="card"><div class="h">${esc(pr.author?.login)}</div><div class="b">${esc(pr.body) || '<span class="meta">No description</span>'}</div></div>
+    ${events.map((e) => `<div class="card"><div class="h">${esc(e.who)} ${esc(e.what)} · ${ago(e.at)} ago</div>${e.body ? `<div class="b">${esc(e.body)}</div>` : ""}</div>`).join("")}
+    ${open ? `
+    <div class="card"><div class="b">
+      <textarea id="reply" placeholder="Leave a comment"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="primary" data-act="comment">Comment</button>
+        <button data-act="approve">Approve</button>
+        <button data-act="changes">Request changes</button>
+        <span style="flex:1"></span>
+        <select id="how"><option value="--squash">Squash and merge</option><option value="--merge">Merge commit</option><option value="--rebase">Rebase and merge</option></select>
+        <button data-act="merge" ${pr.mergeable === "CONFLICTING" ? 'disabled title="Has conflicts"' : ""}>Merge</button>
+      </div>
+      <div id="actmsg" class="meta" style="margin-top:6px"></div>
+    </div></div>` : ""}`;
+}
+
+function renderChecks(pr) {
+  const checks = pr.statusCheckRollup || [];
+  if (!checks.length) return '<div class="empty">No checks</div>';
+  return checks.map((c) => {
+    const s = (c.conclusion || c.state || c.status || "").toUpperCase();
+    const cls = ["SUCCESS", "NEUTRAL", "SKIPPED"].includes(s) ? "ok" : ["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT"].includes(s) ? "err" : "warn";
+    return `<div class="card"><div class="b row"><span class="badge ${cls}">${esc(s.toLowerCase() || "pending")}</span> ${esc(c.name || c.context)} <span class="meta">${esc(c.workflowName || "")}</span></div></div>`;
+  }).join("");
+}
+
+function renderDiff(diff) {
+  const files = diff.split(/^diff --git /m).filter(Boolean);
+  return files.map((f) => {
+    const lines = f.split("\n");
+    const name = (lines[0].match(/ b\/(.+)$/) || [, lines[0]])[1];
+    const body = lines.slice(1).filter((l) => !/^(index |--- |\+\+\+ |new file|deleted file|similarity|rename )/.test(l));
+    return `<div class="file"><div class="name">${esc(name)}</div><pre>${body.map((l) =>
+      `<div class="${l.startsWith("@@") ? "hunk" : l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : ""}">${esc(l) || " "}</div>`).join("")}</pre></div>`;
+  }).join("");
+}
+
+async function act(kind) {
+  const n = String(current), body = ($("#reply")?.value || "").trim(), msg = $("#actmsg");
+  const args = {
+    comment: body ? ["pr", "comment", n, "--body", body] : null,
+    approve: ["pr", "review", n, "--approve", ...(body ? ["--body", body] : [])],
+    changes: body ? ["pr", "review", n, "--request-changes", "--body", body] : null,
+    merge: ["pr", "merge", n, $("#how")?.value || "--squash"],
+  }[kind];
+  if (!args) { msg.textContent = "Write something first."; return; }
+  msg.textContent = "Working…";
+  try { await gh(args); await renderTab(); loadList(); }
+  catch (e) { msg.textContent = e.message; }
+}
+
+window.addEventListener("message", (e) => {
+  const m = e.data || {};
+  if (m.type === "hive:reply") {
+    const w = waiting.get(m.id); if (!w) return;
+    waiting.delete(m.id);
+    m.ok ? w.resolve(m.value) : w.reject(new Error(m.error));
+  } else if (m.type === "hive:init") {
+    for (const [k, v] of Object.entries(m.theme || {})) if (v) document.documentElement.style.setProperty(k.replace("--color-", "--").replace("--font-mono", "--mono"), v);
+    if (!ready) { ready = true; loadList(); }
+  }
+});
+
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-n],[data-tab],[data-act]");
+  if (!t) return;
+  if (t.dataset.n) open(Number(t.dataset.n));
+  else if (t.dataset.tab) { tab = t.dataset.tab; open(current); }
+  else if (t.dataset.act) act(t.dataset.act);
+});
+$("#state").addEventListener("change", loadList);
+$("#refresh").addEventListener("click", () => { loadList(); if (current) renderTab(); });
+// Lists refresh on their own while the tile is open; tiles asking at once share one call.
+setInterval(() => { if (ready) loadList(); }, 60000);
+</script>
+</body>
+</html>
