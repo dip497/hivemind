@@ -1,28 +1,23 @@
 /**
- * WorkbenchTile — the IDE tile: a left ACTIVITY BAR toggles the side panel
- * between **Explorer** (the full working tree — open any file to edit) and
- * **Changes** (git-changed files — open a file as an editable inline diff vs
- * HEAD), with the tabbed CodeMirror editor on the right.
+ * WorkbenchTile — the Code tile: a left ACTIVITY BAR switches between
+ * **Explorer** (the working tree beside the tabbed editor) and **Changes** (the
+ * Diff tile itself, with its comments and send-to-agent; opening a file there
+ * edits it in the editor, in its inline-diff mode).
  *
- * It COMPOSES existing pieces rather than reimplementing them: `FileTreeTile`
- * (explorer), `ChangesPanel` (source control), and `EditorTile` in `embedded`
- * mode (tabs + editor + per-tab edit⇄diff). The Workbench owns the side-panel
- * choice + the active-file request (with an optional `diff` flag the editor
- * honors); Canvas owns the persisted open-tab list.
- *
- * The richer per-changeset review (comments, send-to-Claude, mode tabs) stays in
- * the standalone DiffTile — this is the fast in-IDE path.
+ * It COMPOSES existing pieces: `FileTreeTile`, `DiffTile` and `EditorTile`, each
+ * `embedded`. The Workbench owns the panel choice + the active-file request;
+ * Canvas owns the persisted open-tab list.
  */
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { GripVertical, Files, GitCompare } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { FileTreeTile } from "./FileTreeTile";
 import { EditorTile } from "./EditorTile";
-import { ChangesPanel } from "./code/ChangesPanel";
-import { PatchDiffSurface } from "./code/PatchDiffSurface";
 import { CommitBar } from "./code/CommitBar";
 import { useGitStatus } from "./queries";
+
+const DiffTile = lazy(() => import("./DiffTile").then((m) => ({ default: m.DiffTile })));
 
 interface Props {
   repoPath: string;
@@ -39,6 +34,10 @@ interface Props {
   /** Pin state + toggle (injected via node data) — docked in the header. */
   pinned?: boolean;
   onTogglePin?: (id: string, rect: PinRect) => void;
+  /** Open on Changes rather than the last panel used. */
+  startOnChanges?: boolean;
+  /** Changes compares these two branches (a hand-off) rather than the working tree. */
+  compare?: { base: string; head: string };
 }
 
 type Panel = "explorer" | "changes";
@@ -50,10 +49,10 @@ const SIDEBAR_KEY = "hivemind:workbench-sidebar";
 const PANEL_KEY = "hivemind:workbench-panel";
 const clampW = (w: number) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w));
 
-export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onCloseTab, onClose, pinned, onTogglePin }: Props) {
+export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onCloseTab, onClose, pinned, onTogglePin, startOnChanges, compare }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [panel, setPanel] = useState<Panel>(
-    () => (localStorage.getItem(PANEL_KEY) as Panel) || "explorer",
+    () => startOnChanges || compare ? "changes" : (localStorage.getItem(PANEL_KEY) as Panel) || "explorer",
   );
   useEffect(() => { localStorage.setItem(PANEL_KEY, panel); }, [panel]);
 
@@ -69,10 +68,6 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
     setActiveReq({ path, seq: ++reqSeq.current, diff: opts?.diff }); // and always focus it
   };
 
-  // A changed file clicked in the Changes panel opens a READ-ONLY Pierre diff as
-  // an overlay over the editor area (the editor stays mounted underneath, so
-  // unsaved edits survive). "Edit" hands the file off to an editable tab.
-  const [reviewFile, setReviewFile] = useState<string | null>(null);
 
   // Explorer width is user-resizable via the divider; persisted globally so it
   // survives reopen + applies to every workbench tile.
@@ -139,23 +134,15 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
           {railBtn("changes", "Changes (source control)", GitCompare)}
         </nav>
 
-        {!collapsed && (
+        {!collapsed && panel === "explorer" && (
           <>
             <div
               className="shrink-0 min-w-0 border-r border-[var(--color-line)]"
               style={{ width: sidebarW }}
             >
-              {panel === "explorer" ? (
                 // key on repoPath → remounts the tree when the tile gets moved into
                 // a zone bound to a different repo (stale internal cache fixed).
                 <FileTreeTile key={repoPath} repoPath={repoPath} onSelectFile={(p) => selectFile(p)} embedded />
-              ) : (
-                <ChangesPanel
-                  repoPath={repoPath}
-                  activePath={reviewFile}
-                  onOpen={(p) => setReviewFile(p)}
-                />
-              )}
             </div>
             {/* Resize handle — a WIDE (8px) grab zone with a thin centered line. */}
             <div
@@ -191,16 +178,13 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
             onOpenInBrowser={onOpenInBrowser}
             embedded
           />
-          {/* Read-only Pierre review overlay — only in Changes mode, so switching
-              back to Explorer reveals the editor underneath (kept mounted). */}
-          {reviewFile && panel === "changes" && (
-            <div className="absolute inset-0 z-10 bg-[var(--color-bg2)]">
-              <PatchDiffSurface
-                repoPath={repoPath}
-                file={reviewFile}
-                onEdit={(f) => { setReviewFile(null); selectFile(f); }}
-                onClose={() => setReviewFile(null)}
-              />
+          {/* Changes is the Diff tile itself, over the editor (kept mounted, so
+              unsaved edits survive); opening a file edits it in the editor. */}
+          {panel === "changes" && !collapsed && (
+            <div className="absolute inset-0 z-10 bg-[var(--color-bg2)] flex flex-col">
+              <Suspense fallback={null}>
+                <DiffTile repoPath={repoPath} embedded {...(compare ? { initialMode: "branch" as const, initialBase: compare.base, initialHead: compare.head } : {})} onEditFile={(f) => { setPanel("explorer"); selectFile(f, { diff: true }); }} />
+              </Suspense>
             </div>
           )}
         </div>

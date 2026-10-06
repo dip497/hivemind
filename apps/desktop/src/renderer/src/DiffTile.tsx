@@ -78,6 +78,10 @@ interface Props {
   /** Pin state + toggle (injected via node data) — docked in the header. */
   pinned?: boolean;
   onTogglePin?: (id: string, rect: PinRect) => void;
+  /** Inside another tile: no grip, title, pin or close of its own. */
+  embedded?: boolean;
+  /** Opening a file hands it to an editor instead of showing it read-only here. */
+  onEditFile?: (file: string) => void;
 }
 
 type Mode = "working" | "branch" | "unpushed";
@@ -114,7 +118,7 @@ function fileForLineEl(lineEl: HTMLElement | null, container: HTMLElement | null
   return file;
 }
 
-export function DiffTile({ repoPath, initialMode = "working", initialBase = "origin/main", initialHead, onClose, pinned, onTogglePin }: Props) {
+export function DiffTile({ repoPath, initialMode = "working", initialBase = "origin/main", initialHead, onClose, pinned, onTogglePin, embedded, onEditFile }: Props) {
   // Per-tile font size (A−/A+ + Ctrl/Cmd +/−/0) — overrides --diffs-font-size.
   const font = useTileFont(`diff:${repoPath}`, 13);
   // Fullscreen: the Pierre CodeView is React-rendered (not an imperative node), so
@@ -599,7 +603,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             if (entry?.staged) unstage({ repoPath, files: [file] });
             else stage({ repoPath, files: [file] });
           }}
-          onOpen={() => setActiveFile(file)}
+          onOpen={() => (onEditFile ? onEditFile(file) : setActiveFile(file))}
           onDiscard={() => {
             if (mode === "working" && confirm(`discard changes to ${file}?`))
               discard({ repoPath, files: [file] });
@@ -726,11 +730,13 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       }}
     >
       {/* tile chrome */}
-      <div className="tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
-        <GripVertical size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
-        <span className="font-semibold text-[var(--color-fg)]">Diff</span>
-        <span aria-hidden className="text-[var(--color-line2)]">·</span>
-        <span className="text-[var(--color-fg2)]">{repoPath.split("/").slice(-1)[0]}</span>
+      <div className={`${embedded ? "" : "tile-drag-handle cursor-grab active:cursor-grabbing "}h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)]`}>
+        {!embedded && <>
+          <GripVertical size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
+          <span className="font-semibold text-[var(--color-fg)]">Diff</span>
+          <span aria-hidden className="text-[var(--color-line2)]">·</span>
+          <span className="text-[var(--color-fg2)]">{repoPath.split("/").slice(-1)[0]}</span>
+        </>}
 
         <div className="nodrag ml-2.5 inline-flex rounded-md overflow-hidden bg-[var(--color-bg)] border border-[var(--color-line2)]">
           {modeTabs.map((t) => (
@@ -1009,17 +1015,19 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           >
             <Maximize2 />
           </Button>
-          <HeaderPinButton pinned={pinned} onToggle={onTogglePin} />
-          <Button
-            variant="ghost"
-            size="icon-micro"
-            className="nodrag"
-            aria-label="close tile"
-            title="close"
-            onClick={onClose}
-          >
-            <X />
-          </Button>
+          {!embedded && <>
+            <HeaderPinButton pinned={pinned} onToggle={onTogglePin} />
+            <Button
+              variant="ghost"
+              size="icon-micro"
+              className="nodrag"
+              aria-label="close tile"
+              title="close"
+              onClick={onClose}
+            >
+              <X />
+            </Button>
+          </>}
         </div>
       </div>
 
