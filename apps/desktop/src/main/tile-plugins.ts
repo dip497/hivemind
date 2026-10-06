@@ -126,7 +126,7 @@ const ESCAPES: Record<string, (args: string[]) => boolean> = {
   // A file named in an argument is read and posted (--body-file, -F), or an editor started (-e).
   gh: (a) => ["extension", "ext", "extensions", "alias", "config", "codespace", "cs", "api", "secret", "auth", "ssh-key", "gpg-key"].includes(a[0] ?? "")
     || a.some((x) => /^(--body-file|-F|--field|--raw-field|--template|--editor|-e|--input|--recover)(=|$)/.test(x) || /^-[A-Za-z]{0,3}[Fe]$/.test(x)),
-  git: (a) => a.some((x) => /^(-c|--config-env|--exec-path|--upload-pack|--receive-pack|-u)(=|$)/.test(x) || /^--?(ext-diff|textconv)$/.test(x))
+  git: (a) => a.some((x) => /^(-c|--config-env|--exec-path|--upload-pack|--receive-pack|-u)(=|$)/.test(x) || /^--?(ext-diff|textconv)$/.test(x) || /^(--output|--exec|-x|--run|--open-files-in-pager|-O)(=|$)/.test(x))
     || ["config", "submodule", "filter-branch", "difftool", "mergetool", "bisect", "rebase", "am", "daemon", "web--browse"].includes(a[0] ?? ""),
 };
 
