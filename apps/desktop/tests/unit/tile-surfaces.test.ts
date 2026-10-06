@@ -7,6 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildTileSurfaces, createTileSurfaceBuilder, effectiveRepoOf, type TileSurfaceCtx } from "../../src/renderer/src/workspace/tile-surfaces.ts";
 import type { FrameState, TileInstance } from "../../src/renderer/src/canvas-persistence.ts";
+import { registerTile } from "../../src/renderer/src/tiles/index.ts";
 
 const noop = () => {};
 function ctx(over: Partial<TileSurfaceCtx>): TileSurfaceCtx {
@@ -185,4 +186,23 @@ test("surface type follows the tile kind; a terminal is called its rename, else 
   assert.deepEqual(data(s, "ed").tabs, ["src/a.ts"]);
   assert.deepEqual(data(s, "b").openReq, { url: "https://x", seq: 3 });
   assert.equal(data(s, "pr").cwd, "/x");
+});
+
+// A board can name a kind this machine has no plugin for (a guest's, a phone's, one not yet
+// installed). The tile keeps a body that says so, rather than dropping out of the board.
+test("a tile whose plugin is not installed still has a body: the missing-plugin card", () => {
+  const s = buildTileSurfaces(ctx({ tiles: [tile({ id: "x", kind: "not-installed-anywhere" })] }));
+  assert.equal(byId(s, "x").type, "missing");
+  assert.equal(data(s, "x").kind, "not-installed-anywhere");
+});
+
+// The registry is open: a kind registered after the app started is drawn by its plugin.
+test("a kind registered by a plugin is drawn by that plugin, with the tile's scope", () => {
+  registerTile<{ repo: string | null }>({
+    surface: "test-surface", name: "Test", kinds: { "test-kind": { size: { width: 300, height: 200 } } },
+    data: (_t, scope) => ({ repo: scope.repoPath }), body: async () => ({ default: () => null }),
+  });
+  const s = buildTileSurfaces(ctx({ tiles: [tile({ id: "p", kind: "test-kind" })] }));
+  assert.equal(byId(s, "p").type, "test-surface");
+  assert.equal(data(s, "p").repo, "/base/repo");
 });
