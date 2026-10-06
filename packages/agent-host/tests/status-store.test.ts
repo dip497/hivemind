@@ -62,6 +62,25 @@ test("a lone Esc or Ctrl+C during a hook-reported turn interrupts it; anything e
   expect(s.get("b")!.state).toBe("working");
 });
 
+test("answering the permission an agent waits on sets it working at once, not when the allowed tool finishes", () => {
+  const s = store();
+  s.event("a", { event: "turn.started" });
+  s.event("a", { event: "input.requested", kind: "permission" });
+  s.input("a", "\x1b[B"); // moving the selection answers nothing
+  s.input("a", "y");
+  expect(s.get("a")).toMatchObject({ state: "waiting", kind: "permission" });
+  s.input("a", "1");
+  expect(s.get("a")!.state).toBe("working");
+  expect(s.get("a")!.kind).toBeUndefined();
+  s.event("a", { event: "input.requested", kind: "permission" });
+  s.input("a", "\r");
+  expect(s.get("a")!.state).toBe("working");
+  // A question is answered with text: its keys are not an answer until the agent says so.
+  s.event("a", { event: "input.requested", kind: "question" });
+  s.input("a", "1");
+  expect(s.get("a")).toMatchObject({ state: "waiting", kind: "question" });
+});
+
 test("exit is final whatever the source says next", () => {
   const s = store();
   s.screen("a", "working");

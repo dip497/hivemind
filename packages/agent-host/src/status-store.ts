@@ -39,6 +39,10 @@ const SCREEN_KIND = { permission: "permission", question: "question", blocked: "
 /** Bytes that interrupt an agent's turn when typed on their own: Esc, Ctrl+C. */
 const INTERRUPT_KEYS = new Set(["\x1b", "\x03"]);
 
+/** Keys that answer an agent's own permission prompt: a numbered choice, or Enter on the one
+ *  selected. */
+const ANSWER_KEY = /^[1-9\r]$/;
+
 /** A status as a host sends it: what a mirror takes, nothing else. */
 export function isSessionStatus(x: unknown): x is SessionStatus {
   const s = x as Partial<SessionStatus> | null;
@@ -116,12 +120,18 @@ export class StatusStore {
       : { ...s, state: "waiting", kind: SCREEN_KIND[state] }));
   }
 
-  /** What the user typed into the session. A lone interrupt key during a turn ends it. */
+  /** What the user typed into the session. A lone interrupt key during a turn ends it; a key
+   *  that answers the permission it waits on sets it working again, since the agent says
+   *  nothing until what was allowed has finished running. */
   input(tileId: string, data: string): void {
     if (this.mirrored.has(tileId)) return;
     const cur = this.sessions.get(tileId);
-    if (!cur || cur.source !== "hooks" || !INTERRUPT_KEYS.has(data)) return;
-    this.apply(tileId, "hooks", (s) => foldStatus(s, { fact: "interrupt" }));
+    if (!cur || cur.source !== "hooks") return;
+    if (INTERRUPT_KEYS.has(data)) this.apply(tileId, "hooks", (s) => foldStatus(s, { fact: "interrupt" }));
+    else if (cur.state === "waiting" && cur.kind === "permission" && ANSWER_KEY.test(data)) {
+      this.screenHeld.delete(tileId);
+      this.apply(tileId, "hooks", (s) => foldStatus(s, { event: "input.resolved" }));
+    }
   }
 
   /** The process ended: nothing it was doing is still true. */
