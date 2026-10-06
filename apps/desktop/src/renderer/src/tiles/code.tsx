@@ -27,8 +27,8 @@ export const codeTile: TilePlugin<WorkbenchTileData> = {
   name: "Code",
   kinds: {
     editor: CODE,
-    diff: { ...CODE, label: "Changes", title: "Changes", glyph: "±", opens: undefined },
-    workbench: { ...CODE, title: undefined, opens: undefined },
+    diff: { ...CODE, label: "Changes", title: "Changes", glyph: "±" },
+    workbench: { ...CODE, title: undefined },
   },
   data: (t, s, h) => s.repoPath === null ? null : {
     repoPath: s.repoPath,
