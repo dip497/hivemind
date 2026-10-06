@@ -14,7 +14,7 @@ import { snapToGrid } from "../canvas-sizing";
 import { useDebouncedSave } from "../workspace/view-layout-store";
 import { readBoard, redoBoard, rereadBoard, undoBoard, writeBoard } from "../workspace/workspace-store-client";
 import {
-  duplicateBox, facingSides, frameAt, frontZ, isBox, newBox, toCanvas, toStored, withoutObject,
+  duplicateBox, facingSides, frameAt, frontZ, isBox, newBox, newWidget, toCanvas, toStored, withoutObject,
   type BoxKind, type Point, type Rect,
 } from "./board-model";
 
@@ -35,7 +35,9 @@ export interface Board {
   arrowFrom: ArrowTarget | null | undefined;
   select: (id: string | null) => void;
   edit: (id: string | null) => void;
-  add: (kind: BoxKind, at: Point) => void;
+  add: (kind: Exclude<BoxKind, "widget">, at: Point) => void;
+  /** Put a widget from `pkg` on the board at `at`. */
+  addWidget: (pkg: { id: string; w: number; h: number }, at: Point) => void;
   update: (id: string, change: (o: BoardObject) => BoardObject) => void;
   remove: (id: string) => void;
   duplicate: (id: string) => void;
@@ -125,11 +127,17 @@ export function useBoard({ persistKey, frames, framesRef, onSelect }: {
     });
   }, [set]);
 
-  const add = useCallback((kind: BoxKind, at: Point) => {
+  const add = useCallback((kind: Exclude<BoxKind, "widget">, at: Point) => {
     const box = newBox(kind, mintId(kind), at, framesRef.current, frontZ(latest.current));
     set((board) => [...board, box]);
     edit(box.id);
   }, [set, edit, framesRef]);
+
+  const addWidget = useCallback((pkg: { id: string; w: number; h: number }, at: Point) => {
+    const box = newWidget(pkg, mintId("widget"), at, framesRef.current, frontZ(latest.current));
+    set((board) => [...board, box]);
+    select(box.id);
+  }, [set, select, framesRef]);
 
   const remove = useCallback((id: string) => {
     set((board) => withoutObject(board, id));
@@ -248,11 +256,11 @@ export function useBoard({ persistKey, frames, framesRef, onSelect }: {
 
   return useMemo(() => ({
     objects, objectsRef: latest, selectedId, editingId, arrowFrom,
-    select, edit, add, update, remove, duplicate, moveTo, resize, shiftFrames, place,
+    select, edit, add, addWidget, update, remove, duplicate, moveTo, resize, shiftFrames, place,
     startArrow, pickArrowEnd, cancelArrow, undo, redo, reload, merge,
   }), [
     objects, selectedId, editingId, arrowFrom,
-    select, edit, add, update, remove, duplicate, moveTo, resize, shiftFrames, place,
+    select, edit, add, addWidget, update, remove, duplicate, moveTo, resize, shiftFrames, place,
     startArrow, pickArrowEnd, cancelArrow, undo, redo, reload, merge,
   ]);
 }

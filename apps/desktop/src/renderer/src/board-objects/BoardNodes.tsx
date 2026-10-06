@@ -14,6 +14,7 @@ import { mintId } from "@hivemind/workspace-api/tile-id";
 import { BOX_SIZE, NOTE_COLORS, type BoxObject, type NoteColor } from "./board-model";
 import { useBoardContext } from "./board-context";
 import { TextArea, TextLine } from "./TextDraft";
+import { WidgetNode } from "./WidgetNode";
 
 interface BoxNodeProps<T extends BoxObject> {
   id: string;
@@ -207,4 +208,5 @@ export const boardNodeTypes: NodeTypes = {
   note: NoteNode as unknown as NodeTypes[string],
   text: TextNode as unknown as NodeTypes[string],
   checklist: ChecklistNode as unknown as NodeTypes[string],
+  widget: WidgetNode as unknown as NodeTypes[string],
 };

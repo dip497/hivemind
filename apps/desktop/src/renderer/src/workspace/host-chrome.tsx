@@ -21,7 +21,7 @@ import { StandardToolbar } from "./standard-toolbar";
 import { useToolEnabled } from "../tool-availability";
 import { openAppearanceSettings, useChromeState } from "./chrome-store";
 import type { ViewChrome } from "./workspace-view";
-import type { BoxKind } from "../board-objects/board-model";
+import type { BoardChoice } from "../board-objects/board-model";
 
 export interface HostChromeProps {
   chrome: ViewChrome;
@@ -34,7 +34,7 @@ export interface HostChromeProps {
   onFrame: () => void;
   onBrowser: () => void;
   /** Add to the board; absent in views that do not draw it, which then show no Board action. */
-  onBoard?: (kind: BoxKind | "arrow") => void;
+  onBoard?: (kind: BoardChoice) => void;
   updateAvailable: boolean;
   updateStaged: boolean;
   onUpgrade: () => void;

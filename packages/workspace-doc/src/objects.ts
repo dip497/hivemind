@@ -16,7 +16,7 @@ import { firstOfEachId, isObject, type Fields } from "./input.js";
 import { readOrder, writeOrder } from "./order.js";
 import { rebaseBoard } from "./rebase.js";
 import { OBJECTS, stampSchema } from "./schema.js";
-import { BOARD_OBJECT_KINDS, SIDES, type BoardObject, type ChecklistItem } from "./shapes.js";
+import { BOARD_OBJECT_KINDS, SIDES, WIDGET_FIELD_BYTES, type BoardObject, type ChecklistItem } from "./shapes.js";
 
 const TEXT = "text";
 const LABEL = "label";
@@ -139,10 +139,19 @@ function toBoardObject(x: unknown): BoardObject | null {
     return isArrowEnd(x.from) && isArrowEnd(x.to) && typeof label === "string" ? ({ ...fields, label } as BoardObject) : null;
   }
   if (![x.x, x.y, x.w, x.h].every(isNumber) || typeof text !== "string") return null;
+  if (x.kind === "widget") {
+    if (typeof x.widget !== "string" || x.widget.length === 0) return null;
+    // Too big a render or state is dropped, not the widget: it draws again on its next change.
+    for (const key of ["render", "state"] as const) if (fields[key] !== undefined && !fits(fields[key])) delete fields[key];
+  }
   if (x.kind !== "checklist") return { ...fields, text } as BoardObject;
   if (!Array.isArray(items)) return null;
   const kept = firstOfEachId(items, (item) => typeof item.text === "string" && typeof item.done === "boolean");
   return { ...fields, text, items: kept.map(({ id, text: line, done }) => ({ id, text: line, done })) } as BoardObject;
+}
+
+function fits(value: unknown): boolean {
+  try { return JSON.stringify(value).length <= WIDGET_FIELD_BYTES; } catch { return false; }
 }
 
 function isArrowEnd(x: unknown): boolean {

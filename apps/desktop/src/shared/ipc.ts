@@ -46,6 +46,9 @@ export interface SharedStatus {
 import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 export type { NotificationSettings };
 
+/** A widget package: its folder name, what it is called, its first size, and its code. */
+export interface WidgetPackage { id: string; name: string; w: number; h: number; code: string }
+
 // IssuePatch is owned by @hivemind/core/types (node-free) — re-export so renderer
 // modules keep importing it from the IPC contract, with no hand-maintained copy.
 export type { IssuePatch };
@@ -264,6 +267,8 @@ export interface HiveIpc {
   previewViewInstall(): Promise<{ token: string; package: ViewPackageInfo; replacesVersion: string | null } | null>;
   /** The published plugin catalog (hash-pinned agents and views). */
   pluginCatalog(): Promise<CatalogEntry[]>;
+  /** The widget packages installed on this machine. */
+  listWidgets(): Promise<WidgetPackage[]>;
   /** Ids of installed agents whose manifest differs from the one the catalog lists. */
   outdatedAgents(): Promise<string[]>;
   /** Download and verify a catalog plugin, then return it for review. A view installs with

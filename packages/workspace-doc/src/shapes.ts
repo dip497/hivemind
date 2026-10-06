@@ -77,7 +77,7 @@ export interface CoreLayout {
 }
 
 /** What a board object is (design §4.2 G). */
-export const BOARD_OBJECT_KINDS = ["note", "checklist", "text", "arrow"] as const;
+export const BOARD_OBJECT_KINDS = ["note", "checklist", "text", "arrow", "widget"] as const;
 export type BoardObjectKind = (typeof BOARD_OBJECT_KINDS)[number];
 
 /** The sides of a tile, frame or board object an arrow can meet. */
@@ -123,6 +123,12 @@ export interface NoteObject extends BoxFields { kind: "note" }
 export interface TextObject extends BoxFields { kind: "text" }
 /** `text` is the checklist's title. */
 export interface ChecklistObject extends BoxFields { kind: "checklist"; items: ChecklistItem[] }
+/**
+ * A widget: a box a plugin draws. `widget` names its package; `render` is what its code last
+ * drew (a tree every viewer draws with the app's own code, so nobody runs the widget to see it);
+ * `state` is what it keeps. Each is capped at `WIDGET_FIELD_BYTES`.
+ */
+export interface WidgetObject extends BoxFields { kind: "widget"; widget: string; render?: unknown; state?: unknown }
 export interface ArrowObject extends BoardObjectFields { kind: "arrow"; from: ArrowEnd; to: ArrowEnd; label: string }
 
 /**
@@ -130,4 +136,7 @@ export interface ArrowObject extends BoardObjectFields { kind: "arrow"; from: Ar
  * item's `text`) by character and a checklist's items one by one; other fields are kept as
  * given, and the last write of each wins.
  */
-export type BoardObject = NoteObject | TextObject | ChecklistObject | ArrowObject;
+export type BoardObject = NoteObject | TextObject | ChecklistObject | ArrowObject | WidgetObject;
+
+/** The most a widget's `render` or `state` may take, as JSON. */
+export const WIDGET_FIELD_BYTES = 16_384;

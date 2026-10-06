@@ -1,4 +1,5 @@
 import { installViewManagementIpc } from "./view-packages.js";
+import { installWidgetIpc } from "./widgets.js";
 import { appShortcut, menuKey } from "./shortcuts";
 import { recoverOnProcessLoss } from "./recover";
 import desktopPkg from "../../package.json" with { type: "json" };
@@ -1484,6 +1485,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       version: app.getVersion(),
     }).catch((e: unknown) => console.warn("[machines] init failed:", e));
     installViewManagementIpc();
+    installWidgetIpc();
     installPluginCatalogIpc();
     handle("views:list", wrap(async (_e, repoRoot: string | null) => listViewPackages(repoRoot ? String(repoRoot) : null)));
 

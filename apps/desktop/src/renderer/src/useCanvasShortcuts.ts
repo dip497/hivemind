@@ -10,7 +10,7 @@ import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } 
 import { inEditable } from "./dom-focus";
 import type { TileInstance } from "./canvas-persistence";
 import type { Board } from "./board-objects/useBoard";
-import type { BoxKind } from "./board-objects/board-model";
+import type { BoardChoice } from "./board-objects/board-model";
 
 type FocusModeReq = { id: string | null; n: number } | null;
 
@@ -34,7 +34,7 @@ export interface CanvasShortcutsCtx {
   tilesRef: MutableRefObject<TileInstance[]>;
   /** The board as last rendered: the handler is installed once, so it reads through this. */
   boardRef: MutableRefObject<Board>;
-  addBoard: (kind: BoxKind | "arrow") => void;
+  addBoard: (kind: BoardChoice) => void;
   /** The board is the canvas's: its keys do nothing in another view. */
   onCanvas: () => boolean;
 }

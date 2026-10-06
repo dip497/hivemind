@@ -268,6 +268,7 @@ const api: HiveIpc & {
   verifyAgent: (id) => ipcRenderer.invoke("agents:verify", id),
   previewViewInstall: () => ipcRenderer.invoke("views:preview-install"),
   pluginCatalog: () => ipcRenderer.invoke("plugins:catalog"),
+  listWidgets: () => ipcRenderer.invoke("widgets:list"),
   outdatedAgents: () => ipcRenderer.invoke("plugins:outdated"),
   reviewCatalogPlugin: (type, id) => ipcRenderer.invoke("plugins:review", type, id),
   installCatalogAgent: (token) => ipcRenderer.invoke("plugins:install-agent", token),

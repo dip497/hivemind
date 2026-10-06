@@ -15,6 +15,8 @@ import type { FrameState } from "../canvas-persistence";
 export type BoxObject = Exclude<BoardObject, { kind: "arrow" }>;
 export type ArrowObject = Extract<BoardObject, { kind: "arrow" }>;
 export type BoxKind = BoxObject["kind"];
+/** What the Board menu adds: a box, an arrow, or a widget from the package named after `widget:`. */
+export type BoardChoice = Exclude<BoxKind, "widget"> | "arrow" | `widget:${string}`;
 
 export interface Point { x: number; y: number }
 export interface Rect { x: number; y: number; w: number; h: number }
@@ -28,6 +30,7 @@ export const BOX_SIZE: Record<BoxKind, { w: number; h: number; minW: number; min
   note: { w: 220, h: 180, minW: 120, minH: 80 },
   checklist: { w: 260, h: 200, minW: 180, minH: 96 },
   text: { w: 320, h: 64, minW: 80, minH: 36 },
+  widget: { w: 220, h: 140, minW: 100, minH: 60 },
 };
 
 export function isBox(o: BoardObject): o is BoxObject {
@@ -68,7 +71,13 @@ export function frameAt(frames: FrameState[], p: Point): string | undefined {
 }
 
 /** A new, empty box of `kind` centred on `at`, in the frame there if there is one. */
-export function newBox(kind: BoxKind, id: string, at: Point, frames: FrameState[], z: number): BoxObject {
+/** A widget from `pkg`, centred on `at`, in the frame there if there is one. */
+export function newWidget(pkg: { id: string; w: number; h: number }, id: string, at: Point, frames: FrameState[], z: number): BoxObject {
+  const frame = frameAt(frames, at);
+  return { id, kind: "widget", widget: pkg.id, x: Math.round(at.x - pkg.w / 2), y: Math.round(at.y - pkg.h / 2), w: pkg.w, h: pkg.h, z, text: "", ...(frame ? { frame } : {}) };
+}
+
+export function newBox(kind: Exclude<BoxKind, "widget">, id: string, at: Point, frames: FrameState[], z: number): BoxObject {
   const { w, h } = BOX_SIZE[kind];
   const frame = frameAt(frames, at);
   const base = { id, x: Math.round(at.x - w / 2), y: Math.round(at.y - h / 2), w, h, z, text: "", ...(frame ? { frame } : {}) };

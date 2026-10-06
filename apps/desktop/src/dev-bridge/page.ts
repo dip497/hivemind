@@ -150,6 +150,7 @@ const machine: Partial<Hive> = {
   autoInstallAgents: async () => ({ added: [], updated: [] }),
   outdatedAgents: async () => [],
   pluginCatalog: async () => [],
+  listWidgets: async () => [],
   checkForUpdate: async () => ({ current: "dev", latest: null, updateAvailable: false, ok: false, staged: null }),
   machinesGet: async () => ({ machines: [], status: {} }),
   machineSessions: async () => [],

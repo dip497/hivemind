@@ -52,7 +52,8 @@ import {
 } from "./canvas-persistence";
 import { useStateWithRef } from "./use-state-with-ref";
 import { useBoard } from "./board-objects/useBoard";
-import type { BoxKind, Point } from "./board-objects/board-model";
+import type { BoardChoice, Point } from "./board-objects/board-model";
+import { useWidgetPackages, useWidgetRuntime } from "./board-objects/widget-runtime";
 import { markRestored, whenBootIdle } from "./boot-queue";
 /** How long the catalog check waits for restored tiles to start before going anyway: an agent
  *  this version cannot load is a tile that may never start, and the check is its repair. */
@@ -389,12 +390,18 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // A new box goes where the canvas says: under the pointer, or in the middle of the view when
   // the pointer is elsewhere. "arrow" starts drawing one.
   const canvasPointRef = useRef<(() => Point) | null>(null);
-  const { add: addBox, startArrow } = board;
-  const addBoard = useCallback((kind: BoxKind | "arrow") => {
+  const { add: addBox, addWidget, startArrow, update: updateBoard } = board;
+  const widgetPackages = useWidgetPackages();
+  useWidgetRuntime(board.objects, widgetPackages, updateBoard, !!joinedId(repoPath ?? null));
+  const addBoard = useCallback((kind: BoardChoice) => {
     if (kind === "arrow") { startArrow(); return; }
     const at = canvasPointRef.current?.();
-    if (at) addBox(kind, at);
-  }, [addBox, startArrow]);
+    if (!at) return;
+    if (kind.startsWith("widget:")) {
+      const pkg = widgetPackages.find((p) => `widget:${p.id}` === kind);
+      if (pkg) addWidget(pkg, at);
+    } else addBox(kind as Exclude<BoardChoice, "arrow" | `widget:${string}`>, at);
+  }, [addBox, addWidget, startArrow, widgetPackages]);
 
   // Reload when the repo changes — each repo has its own workspace + view
   // layouts. Skip on first mount (initial values already came from the memos).

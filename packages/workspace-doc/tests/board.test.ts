@@ -141,3 +141,13 @@ test("a record another writer left without what its kind needs is skipped when r
   doc.getMap("objects").ensureMergeableMap("n2").set("kind", "note"); // no box, no text
   expect(readObjects(doc)).toEqual([note("n1", "kept")]);
 });
+
+test("a widget keeps what it drew and what it keeps; one without its package, or too big a render, is not kept whole", () => {
+  const doc = new LoroDoc();
+  const render = { type: "meter", value: 3, max: 10, label: "agents" };
+  const widget = { id: "w1", kind: "widget", x: 0, y: 0, w: 200, h: 120, text: "", widget: "meter", render, state: { resets: 1 } } as BoardObject;
+  const big = { id: "w2", kind: "widget", x: 0, y: 0, w: 200, h: 120, text: "", widget: "meter", render: { type: "text", text: "x".repeat(20_000) } } as BoardObject;
+  writeObjects(doc, [widget, big, { id: "w3", kind: "widget", x: 0, y: 0, w: 1, h: 1, text: "" }]);
+  doc.commit();
+  expect(readObjects(doc)).toEqual([widget, { id: "w2", kind: "widget", x: 0, y: 0, w: 200, h: 120, text: "", widget: "meter" } as BoardObject]);
+});
