@@ -12,6 +12,7 @@
 import { rebaseFields, rebaseRecords } from "@hivemind/workspace-doc/rebase";
 import type { FrameRecord, TileRecord } from "@hivemind/workspace-doc/shapes";
 import type { TileKind } from "./tile-kinds";
+import { tileKind } from "./tiles";
 import { pinsOfTiles, type LegacyPin, type Pins } from "./workspace/pins";
 import { readCore, rereadCore, writeCore } from "./workspace/workspace-store-client";
 
@@ -160,7 +161,7 @@ function withoutPin(tile: TileInstance & LegacyPin): TileInstance {
  *  lives in one place. */
 export function saveLayout(repoPath: string | null, snap: LayoutSnapshot): void {
   if (!repoPath) return;
-  // planReview tiles are ephemeral (tied to a live, blocked agent hook) — drop
-  // them so a reload doesn't resurrect a dead review with a stale requestId.
-  writeCore(repoPath, { ...snap, tiles: snap.tiles.filter((t) => t.kind !== "planReview") });
+  // An ephemeral tile (a plan review tied to a live, blocked agent hook) is
+  // dropped, so a reload doesn't resurrect a dead review with a stale requestId.
+  writeCore(repoPath, { ...snap, tiles: snap.tiles.filter((t) => !tileKind(t.kind).ephemeral) });
 }

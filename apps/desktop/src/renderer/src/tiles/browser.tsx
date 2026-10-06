@@ -1,3 +1,4 @@
+import { Globe } from "lucide-react";
 import { BrowserSkeleton } from "../workspace/tile-skeletons";
 import type { TilePlugin, PinRect } from "./api";
 
@@ -15,7 +16,12 @@ export type BrowserTileData = {
 export const browserTile: TilePlugin<BrowserTileData> = {
   surface: "browser",
   name: "Browser",
-  kinds: { browser: { size: { width: 1280, height: 860 } } },
+  kinds: {
+    browser: {
+      size: { width: 1280, height: 860 }, wholePixels: true, title: "Browser", icon: Globe, opens: ["url"],
+      create: (opts, ordinal) => ({ label: ordinal((n) => `Browser #${n}`), ...(opts.url ? { url: opts.url } : {}) }),
+    },
+  },
   data: (t, s, h) => ({
     tileId: t.id, frameId: s.frameId, url: t.url,
     openReq: h.browserOpenReqs[t.id] ?? null, onClose: s.onClose, ...s.pin,

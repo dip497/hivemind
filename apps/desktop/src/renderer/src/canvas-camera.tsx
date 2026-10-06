@@ -8,6 +8,7 @@
 import { useCallback, useEffect } from "react";
 import { useReactFlow, useStore } from "@xyflow/react";
 import { focusZoom } from "./camera-fit";
+import { tilePlugin } from "./tiles";
 
 /** Snap a settled viewport so canvas-rendered text stays crisp: round the pan to
  *  whole DEVICE pixels (fractional CSS translate puts the xterm bitmap on
@@ -44,14 +45,14 @@ export const FLY = {
   interpolate: "linear" as const,
   ease: (t: number) => 1 - (1 - t) ** 3,
 };
-const PIXEL_EXACT_NODE_TYPES = new Set(["terminal", "diff", "workbench", "browser"]);
 
 export function FocusMode({ req }: { req: { id: string | null; n: number } | null }) {
   const { fitView, getNode } = useReactFlow();
   useEffect(() => {
     if (!req) return;
     if (req.id) {
-      const exact = PIXEL_EXACT_NODE_TYPES.has(getNode(req.id)?.type ?? "");
+      const plugin = tilePlugin(getNode(req.id)?.type ?? "");
+      const exact = !!plugin && Object.values(plugin.kinds).some((k) => k.wholePixels);
       void fitView({
         nodes: [{ id: req.id }],
         padding: 0.05,

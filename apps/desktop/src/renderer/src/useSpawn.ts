@@ -17,7 +17,8 @@ import { AGENT_TILE_KIND } from "./tile-kinds";
 import { defaultShell, type FrameState, type TileInstance } from "./canvas-persistence";
 import { queueWork } from "./work-queue";
 import type { TileKind } from "./tile-kinds";
-import { tileKind } from "./tiles";
+import { pluginOfKind, tileKind, type TileStart } from "./tiles";
+import { PLAN_REVIEW } from "./tiles/plan-review";
 import { checkToolCreation } from "./tool-availability";
 import { checkAgentInstalled, noAgentInstalled } from "./agent-plugins";
 import { isRemote } from "@hivemind/core/remote-uri";
@@ -275,24 +276,18 @@ export function useSpawn(ctx: SpawnCtx) {
       let args: string[] | undefined;
       let label: string;
       let task: string | undefined;
+      let start: TileStart | undefined;
       if (def) {
         const launch = agentLaunch(def, { options: launchOptions(def.id, { mode: opts?.mode, ...(opts?.launch ?? {}) }), labels: labelsInUse(), prompt: opts?.work, resume: opts?.resume });
         ({ cmd, args, task } = launch);
         label = issue(launch.label);
-      } else if (kind === "shell" && opts?.session) {
-        cmd = opts.session.cmd; args = opts.session.args;
-        label = opts.session.label;
-      } else if (kind === "shell") {
-        const sh = defaultShell();
-        cmd = sh.cmd; args = sh.args;
-        label = ordinalLabel((n) => `shell #${n}`);
-      } else if (kind === "browser") {
-        label = ordinalLabel((n) => `Browser #${n}`);
       } else {
-        label = tileKind(kind).label ?? kind;
+        const spec = tileKind(kind);
+        start = spec.create?.({ url: opts?.url, session: opts?.session }, ordinalLabel) ?? { label: spec.label ?? kind };
+        label = start.label;
       }
       placeInFrame(newId, frame, { kind });
-      setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args, ...(kind === "browser" && opts?.url ? { url: opts.url } : {}), ...(kind === "shell" && opts?.session ? { session: opts.session.id } : {}), ...(task ? { task } : {}) }]);
+      setTiles((cur) => [...cur, { id: newId, kind, cmd, args, ...start, label, ...(task ? { task } : {}) }]);
       // "Work on this": hand the fresh claude tile its prompt. It delivers it to
       // itself the first time it's ready (see work-queue).
       if (kind === AGENT_TILE_KIND && opts?.work) queueWork(newId, opts.work);
@@ -344,7 +339,7 @@ export function useSpawn(ctx: SpawnCtx) {
     [spawnInto],
   );
   const spawnVis = useCallback(
-    (which: "tree" | "shell" | "diff" | "issues") => spawnInto(which === "tree" ? "editor" : which),
+    (kind: string) => spawnInto(kind === "tree" ? "editor" : kind),
     [spawnInto],
   );
 
@@ -358,11 +353,8 @@ export function useSpawn(ctx: SpawnCtx) {
       spawnTile(AGENT_TILE_KIND, frameId, { agent: { id: agent.id, cmd: agent.cmd, args: agent.defaultArgs, label: agent.label }, launch });
       return;
     }
-    const k: TileKind =
-      kind === "tree" ? "editor"
-      : kind === AGENT_TILE_KIND || kind === "shell" || kind === "diff" || kind === "issues" || kind === "browser" ? kind
-      : "shell";
-    spawnTile(k, frameId);
+    const k = kind === "tree" ? "editor" : kind;
+    spawnTile(pluginOfKind(k) ? k : "shell", frameId);
   }, [spawnTile]);
 
   // Open a plan-review tile for an agent's plan handoff. Places it in the SAME
@@ -383,12 +375,12 @@ export function useSpawn(ctx: SpawnCtx) {
       const frame =
         (agentFrameId ? framesRef.current.find((f) => f.id === agentFrameId) : undefined) ?? ensureFrame();
       const newId = mintId("tile-planReview");
-      placeInFrame(newId, frame, { kind: "planReview" });
+      placeInFrame(newId, frame, { kind: PLAN_REVIEW });
       setTiles((cur) => [
         ...cur,
         {
           id: newId,
-          kind: "planReview",
+          kind: PLAN_REVIEW,
           label: "Plan review",
           review: { requestId: payload.requestId, hcpCmdId: payload.hcpCmdId, plan: payload.plan, cwd: payload.cwd, agentTileId: callerTile },
         },

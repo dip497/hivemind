@@ -14,7 +14,7 @@ import { MachineDot, statusWords } from "./machines/status";
 import { A_DEVICE, GONE_MACHINE, openMachines, placeOf, statusOf, useMachines } from "./machines/store";
 import type { MachineInfo } from "../../shared/ipc";
 import { memo, useEffect, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Globe, Monitor, Plus, RefreshCw, Ellipsis, ServerCog, X, Pencil, Trash } from "lucide-react";
+import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Monitor, Plus, RefreshCw, Ellipsis, ServerCog, X, Pencil, Trash } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon } from "./agents";
 import { FrameRailMenu, type FrameActions } from "./FrameRailMenu";
@@ -22,9 +22,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { AGENT_TILE_KIND } from "./tile-kinds";
+import { tileKind } from "./tiles";
+import { KindMark } from "./tiles/mark";
 import { MenuItem } from "./components/ui/menu-item";
 
-export type LayerKind = typeof AGENT_TILE_KIND | "terminal" | "editor" | "diff" | "issues" | "browser" | "planReview" | "workbench";
+/** The tile's kind, as its plugin registered it. */
+export type LayerKind = string;
 
 export interface LayerTile {
   id: string;
@@ -100,19 +103,6 @@ const STATUS_RANK: Record<TileStatusKind, number> = {
 const NEEDS_YOU = (s: TileStatusKind | null): boolean =>
   s === "blocked" || s === "permission" || s === "question" || s === "plan_review" || s === "awaiting_approval";
 
-const KIND_GLYPH: Record<LayerKind, string> = {
-  claude: "✦",
-  terminal: "›_",
-  editor: "{}",
-  diff: "±",
-  issues: "◔",
-  // NOT the 🌐 emoji: the OS renders emoji in its own colour, so the browser row
-  // was the one blue glyph in a column of monochrome ones — colour implying a
-  // meaning that doesn't exist. A lucide icon inherits currentColor like the rest.
-  browser: "",
-  planReview: "▤",
-  workbench: "▥",
-};
 
 /** Workspace identity glyph, keyed to the frame color — no boxed chip (the solid
  *  square read as an ugly block). A repo frame is a FOLDER that opens/closes with
@@ -240,7 +230,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   // header AND the badge on the collapsed pill (so a hidden panel still signals
   // "an agent needs you" / "agents are working"). needs-you wins over working.
   const needsYou = tiles.filter((t) => {
-    if (t.kind === "planReview") return true; // a blocked agent is waiting on your review
+    if (tileKind(t.kind).waitsOnPerson) return true; // e.g. a blocked agent waiting on your review
     return NEEDS_YOU(status.get(t.id) ?? null);
   }).length;
   const working = tiles.filter((t) => status.get(t.id) === "working").length;
@@ -309,19 +299,19 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       const r = STATUS_RANK[s] ?? 0;
       if (r > bestRank) { bestRank = r; best = s; }
     };
-    for (const t of tilesOf(fid)) consider(t.kind === "planReview" ? "question" : (status.get(t.id) ?? "idle"));
+    for (const t of tilesOf(fid)) consider(tileKind(t.kind).waitsOnPerson ? "question" : (status.get(t.id) ?? "idle"));
     for (const k of childFramesOf(fid)) { const s = frameAgg(k.id); if (s) consider(s); }
     return best;
   };
 
   const needsYouIn = (fid: string): number =>
-    tilesOf(fid).filter((t) => t.kind === "planReview" || NEEDS_YOU(status.get(t.id) ?? null)).length
+    tilesOf(fid).filter((t) => tileKind(t.kind).waitsOnPerson || NEEDS_YOU(status.get(t.id) ?? null)).length
     + childFramesOf(fid).reduce((n, k) => n + needsYouIn(k.id), 0);
 
   const renderTile = (t: LayerTile, depth: number): ReactNode => {
     // A plan-review tile is inherently a "needs you" state (an agent is blocked
     // on your review) — surface it as warn + pulse with a "review" tag.
-    const isPlan = t.kind === "planReview";
+    const isPlan = !!tileKind(t.kind).waitsOnPerson;
     const st: TileStatusKind = isPlan ? "question" : (status.get(t.id) ?? "idle");
     const sel = t.id === selectedTileId;
     if (renamingTile?.id === t.id) {
@@ -392,11 +382,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         title={`${t.name} · ${st}`}
       >
         <span aria-hidden className="w-4 shrink-0 grid place-items-center font-mono text-[11px] text-[var(--color-fg3)]">
-          {t.kind === AGENT_TILE_KIND
-            ? <AgentIcon id={t.agent} size={14} />
-            : t.kind === "browser"
-              ? <Globe size={12} />
-              : KIND_GLYPH[t.kind]}
+          {t.kind === AGENT_TILE_KIND ? <AgentIcon id={t.agent} size={14} /> : <KindMark kind={t.kind} />}
         </span>
         {/* Name first, so every row's text starts at the same x. The badge used to
             lead, which pushed each name right by however wide its status happened

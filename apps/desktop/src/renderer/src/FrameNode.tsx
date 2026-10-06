@@ -23,6 +23,7 @@ import { MachineChip } from "./machines/MachineChip";
 import { useAgents } from "./agents";
 import type { ArrangeMode } from "./frame-layout";
 import type { WorktreeEntry } from "../../shared/ipc";
+import { tileKinds } from "./tiles";
 
 /** Dropdown anchored under a trigger button, rendered in a portal to
  *  document.body. Frame nodes have a low zIndex (≤90, BELOW tiles), and a
@@ -423,13 +424,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
               {a.label}
             </MenuItem>
           ))}
-          {([
-            ["shell", "Terminal"],
-            ["tree", "Editor"],
-            ["diff", "Diff"],
-            ["issues", "Issues"],
-            ["browser", "Browser"],
-          ] as const).map(([kind, label]) => (
+          {tileKinds().filter(([, spec]) => spec.title).map(([kind, { title: label }]) => (
             <MenuItem
               key={kind}
               size="sm"

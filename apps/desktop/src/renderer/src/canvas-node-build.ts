@@ -52,8 +52,6 @@ export interface NodeBuildCtx {
   onPinChange: (id: string, patch: { anchor?: { sx: number; sy: number }; size?: { w: number; h: number } }) => void;
 }
 
-/** react-flow node type per tile kind — doubles as the `.react-flow__node-<type>`
- *  CSS hook and matches the surface `type` the TileHost renders. */
 
 export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
   const {
@@ -93,9 +91,8 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
       onTogglePin,
       onPinChange,
       // Every tile with its own header docks the pin button there (next to close),
-      // so the shell/panel must not also draw the floating chip. planReview is
-      // ephemeral (never pinned); frames aren't tiles — both excluded.
-      headerPin: pinTile ? pinTile.kind !== "planReview" : false,
+      // so the shell/panel must not also draw the floating chip; an unpinnable tile and a frame (not a tile) are excluded.
+      headerPin: pinTile ? !tileKind(pinTile.kind).unpinnable : false,
     };
     const data = { ...(base.data as Record<string, unknown>), ...pinData };
     const parentFrame = frameOf[base.id] ? frames.find((f) => f.id === frameOf[base.id]) : undefined;

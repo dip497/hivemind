@@ -1,5 +1,6 @@
+import { Folder } from "lucide-react";
 import { EditorSkeleton } from "../workspace/tile-skeletons";
-import type { TilePlugin, PinRect } from "./api";
+import type { TilePlugin, PinRect, TileKindSpec } from "./api";
 
 export type WorkbenchTileData = {
   repoPath: string;
@@ -12,13 +13,16 @@ export type WorkbenchTileData = {
   onTogglePin?: (id: string, rect: PinRect) => void;
 };
 
-const CODE = { size: { width: 1400, height: 900 }, label: "Editor", needsRepo: true, singleton: true, pixelExact: true };
+const CODE: TileKindSpec = {
+  size: { width: 1400, height: 900 }, label: "Editor", needsRepo: true, singleton: true, pixelExact: true, wholePixels: true,
+  title: "Editor", icon: Folder, glyph: "{}", opens: ["file"],
+};
 
 /** The file tree, the editor and the working tree's changes. */
 export const codeTile: TilePlugin<WorkbenchTileData> = {
   surface: "workbench",
   name: "Editor",
-  kinds: { workbench: CODE, editor: CODE },
+  kinds: { editor: CODE, workbench: { ...CODE, title: undefined, glyph: "▥" } },
   data: (t, s, h) => s.repoPath === null ? null : {
     repoPath: s.repoPath,
     tabs: h.editorTabs[t.id] ?? [],

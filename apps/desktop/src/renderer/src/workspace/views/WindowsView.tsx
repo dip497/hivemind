@@ -23,7 +23,8 @@
  * versioned per-repo layout blob (windows-layout.ts).
  */
 import { useCallback, useEffect, useMemo, type CSSProperties, type ReactNode } from "react";
-import { X, Minus, Globe, PanelsTopLeft } from "lucide-react";
+import { X, Minus, PanelsTopLeft } from "lucide-react";
+import { KindMark } from "../../tiles/mark";
 import { Button } from "../../components/ui/button";
 import { LayersPanel, type LayerTile } from "../../LayersPanel";
 import { AgentIcon } from "../../agents";
@@ -40,27 +41,10 @@ import { AGENT_TILE_KIND } from "../../tile-kinds";
 // clicks/keys meant for the active one.
 const HIDDEN_TAB_STYLE: CSSProperties = { visibility: "hidden", pointerEvents: "none" };
 
-/** Same monochrome kind glyphs the Layers panel uses, so a tab and its rail row
- *  read as the same object. Agent + browser get real icons (see below). */
-const KIND_GLYPH: Record<LayerTile["kind"], string> = {
-  claude: "✦",
-  terminal: "›_",
-  editor: "{}",
-  diff: "±",
-  issues: "◔",
-  browser: "",
-  planReview: "▤",
-  workbench: "▥",
-};
 
 function TabGlyph({ tile }: { tile: LayerTile }): ReactNode {
   if (tile.kind === AGENT_TILE_KIND) return <AgentIcon id={tile.agent} size={13} />;
-  if (tile.kind === "browser") return <Globe size={12} />;
-  return (
-    <span aria-hidden className="font-mono text-[11px] text-[var(--color-fg3)]">
-      {KIND_GLYPH[tile.kind]}
-    </span>
-  );
+  return <KindMark kind={tile.kind} />;
 }
 
 export function WindowsView({ model, commands }: WorkspaceViewProps) {

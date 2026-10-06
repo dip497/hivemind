@@ -30,6 +30,7 @@ import {
   DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 import type { LayerFrame } from "./LayersPanel";
+import { tileKinds } from "./tiles";
 
 /** Everything the rail needs to drive a frame — supplied by Canvas. */
 export interface FrameActions {
@@ -141,14 +142,8 @@ export function FrameRailMenu({
         </Sub>
 
         <Sub icon={<Plus size={13} />} label="Open">
-          {([
-            ["shell", "Terminal"],
-            ["tree", "Editor"],
-            ["diff", "Diff"],
-            ["issues", "Issues"],
-            ["browser", "Browser"],
-          ] as const).map(([kind, label]) => (
-            <Item key={kind} icon={<Plus size={13} />} label={label} onSelect={() => actions.onOpenInFrame(fid, kind)} />
+          {tileKinds().filter(([, spec]) => spec.title).map(([kind, spec]) => (
+            <Item key={kind} icon={<Plus size={13} />} label={spec.title!} onSelect={() => actions.onOpenInFrame(fid, kind)} />
           ))}
         </Sub>
 

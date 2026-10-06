@@ -58,8 +58,9 @@ export interface TileRecord {
  *  layouts. The only place a provider's name appears as a literal outside its own definition. */
 export const AGENT_TILE_KIND = "claude" as const;
 
-/** What a tile is. */
-export type TileKind = typeof AGENT_TILE_KIND | "shell" | "editor" | "diff" | "issues" | "browser" | "planReview" | "workbench";
+/** What a tile is: the kind a tile plugin registered. A board keeps a kind no installed
+ *  plugin draws, so installing the plugin later brings its tiles back. */
+export type TileKind = string;
 
 /** A tile that runs in a terminal, an agent's or a shell: the kinds with a session. */
 export const isTerminalKind = (kind: string): boolean => kind === AGENT_TILE_KIND || kind === "shell";

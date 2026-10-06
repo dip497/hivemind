@@ -3,6 +3,7 @@
  * that registers its kind. The tiles that ship with the app register through this same API.
  */
 import type { ComponentType } from "react";
+import type { LucideIcon } from "lucide-react";
 import type { TileInstance } from "../canvas-persistence";
 
 /** Screen-space rect captured from a tile's DOM at pin time (SCREEN pixels). */
@@ -45,7 +46,28 @@ export interface TileKindSpec {
   singleton?: boolean;
   /** Text rasterized crisply only at 1:1, so focusing it snaps to 100%. */
   pixelExact?: boolean;
+  /** The camera lands on whole pixels when it flies to it. */
+  wholePixels?: boolean;
+  /** What a person calls it, in menus that open one. Absent: it is not opened from a menu. */
+  title?: string;
+  /** Its mark in tab strips and the Layers panel: an icon, or a monochrome glyph. */
+  icon?: LucideIcon;
+  glyph?: string;
+  /** What another tile can hand it: a path to open, a page to show. */
+  opens?: readonly TileIntent[];
+  /** Exists only while something waits on it, so a saved layout leaves it out. */
+  ephemeral?: boolean;
+  /** Has no pin in its header. */
+  unpinnable?: boolean;
+  /** Its existence means someone is waiting on the person. */
+  waitsOnPerson?: boolean;
+  /** The fields a fresh tile starts with. `ordinal` numbers it among its kind ("shell #2"). */
+  create?: (opts: TileCreateOpts, ordinal: (name: (n: number) => string) => string) => TileStart;
 }
+
+export type TileIntent = "file" | "url";
+export interface TileCreateOpts { url?: string; session?: { id: string; cmd: string; args?: string[]; label: string } }
+export type TileStart = Pick<TileInstance, "label"> & Partial<Pick<TileInstance, "cmd" | "args" | "url" | "session">>;
 
 export interface TileBodyArgs<D> { data: D; selected: boolean }
 
@@ -81,6 +103,13 @@ export function registerTile<D>(plugin: TilePlugin<D>): void {
 
 export const tilePlugin = (surface: string): TilePlugin | undefined => bySurface.get(surface);
 export const pluginOfKind = (kind: string): TilePlugin | undefined => byKind.get(kind)?.plugin;
+
+/** Every kind installed, in the order its plugin registered. */
+export const tileKinds = (): [string, TileKindSpec][] => [...byKind].map(([kind, { spec }]) => [kind, spec]);
+
+/** The kinds that take what another tile hands over, first registered first. */
+export const kindsThatOpen = (intent: TileIntent): string[] =>
+  tileKinds().filter(([, spec]) => spec.opens?.includes(intent)).map(([kind]) => kind);
 
 const UNKNOWN: TileKindSpec = { size: { width: 1200, height: 820 } };
 /** A kind no installed plugin draws still has a box, so a board that names one still loads. */

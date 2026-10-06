@@ -43,7 +43,7 @@ import type { PinRect } from "./workspace/tile-surfaces";
 import { clampAnchor } from "./pin-anchor";
 import { pickEditorTile } from "./workspace/editor-target";
 import type { TileKind } from "./tile-kinds";
-import { tileKind } from "./tiles";
+import { kindsThatOpen, tileKind } from "./tiles";
 import {
   loadLayout,
   reloadLayout,
@@ -571,7 +571,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       const owner = fo[t.id] ? frames.find((f) => f.id === fo[t.id]) : undefined;
       const effRepo = owner?.worktreePath ?? owner?.workspacePath ?? repoPath ?? null;
       if (tileKind(t.kind).needsRepo && !effRepo) continue;
-      const kind: LayerTile["kind"] = t.kind === "shell" ? "terminal" : t.kind;
+      const kind = t.kind;
       const agent = agentOfTile(t);
       out.push({ id: t.id, kind, name: tileName(tileNames, agentTitles, t), frameId: fo[t.id] ?? null, agent });
     }
@@ -842,13 +842,14 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     }
     // No editor in that frame: the fresh one must still open the file the user
     // clicked — spawnTile mints its id, so the path rides in `opts.file`.
-    spawnTile("editor", sourceFrameId ?? null, { file: path });
+    const kind = kindsThatOpen("file")[0];
+    if (kind) spawnTile(kind, sourceFrameId ?? null, { file: path });
   }, [openFileInTile, focusTile, spawnTile]);
 
   const openUrlInBrowser = useCallback((sourceTileId: string, url: string) => {
     const sourceFrameId = frameOfRef.current[sourceTileId] ?? selectedFrameIdRef.current;
     const existing = tilesRef.current.find((t) => (
-      t.kind === "browser" && (!sourceFrameId || frameOfRef.current[t.id] === sourceFrameId)
+      tileKind(t.kind).opens?.includes("url") && (!sourceFrameId || frameOfRef.current[t.id] === sourceFrameId)
     ));
     if (existing) {
       const browserFrameId = frameOfRef.current[existing.id] ?? null;
@@ -863,7 +864,8 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       }, 0);
       return;
     }
-    spawnTile("browser", sourceFrameId ?? null, { url });
+    const kind = kindsThatOpen("url")[0];
+    if (kind) spawnTile(kind, sourceFrameId ?? null, { url });
   }, [focusTile, spawnTile]);
 
   // Plan review: an agent hit ExitPlanMode and waits on a person (M2). Every window showing the

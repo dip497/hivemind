@@ -1,3 +1,4 @@
+import { GitCompare } from "lucide-react";
 import { DiffSkeleton } from "../workspace/tile-skeletons";
 import type { TilePlugin, PinRect } from "./api";
 
@@ -15,7 +16,7 @@ export type DiffTileData = {
 export const diffTile: TilePlugin<DiffTileData> = {
   surface: "diff",
   name: "Diff",
-  kinds: { diff: { size: { width: 1400, height: 900 }, label: "Diff", needsRepo: true, singleton: true, pixelExact: true } },
+  kinds: { diff: { size: { width: 1400, height: 900 }, label: "Diff", needsRepo: true, singleton: true, pixelExact: true, wholePixels: true, title: "Diff", icon: GitCompare, glyph: "±" } },
   data: (t, s) => s.repoPath === null ? null
     // One opened to compare two branches (a hand-off) opens on them.
     : t.compare

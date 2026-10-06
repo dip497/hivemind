@@ -1,4 +1,5 @@
 import { AGENT_TILE_KIND } from "@hivemind/workspace-doc/shapes";
+import { Terminal } from "lucide-react";
 import { tileName } from "@hivemind/workspace-doc/tile-list";
 import { defaultShell } from "../canvas-persistence";
 import { identifyAgent } from "../agent-state";
@@ -36,8 +37,13 @@ export const terminalTile: TilePlugin<TerminalTileData> = {
   surface: "terminal",
   name: "terminal",
   kinds: {
-    [AGENT_TILE_KIND]: { size: { width: 1100, height: 740 }, pixelExact: true },
-    shell: { size: { width: 1200, height: 820 }, pixelExact: true },
+    [AGENT_TILE_KIND]: { size: { width: 1100, height: 740 }, pixelExact: true, wholePixels: true, glyph: "✦" },
+    shell: {
+      size: { width: 1200, height: 820 }, pixelExact: true, wholePixels: true, title: "Terminal", icon: Terminal, glyph: "›_",
+      create: (opts, ordinal) => opts.session
+        ? { cmd: opts.session.cmd, args: opts.session.args, label: opts.session.label, session: opts.session.id }
+        : { ...defaultShell(), label: ordinal((n) => `shell #${n}`) },
+    },
   },
   runsUnseen: true,
   data: (t, s, h) => {

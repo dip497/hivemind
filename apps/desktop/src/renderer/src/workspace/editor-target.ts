@@ -8,14 +8,13 @@
  * path, which is the case that used to silently drop the file.
  */
 import type { TileInstance } from "../canvas-persistence";
-
-const EDITOR_KINDS = new Set(["editor", "workbench"]);
+import { tileKind } from "../tiles";
 
 export function pickEditorTile(
   tiles: readonly TileInstance[],
   frameOf: Readonly<Record<string, string>>,
   frameId: string | null,
 ): string | null {
-  const hit = tiles.find((t) => EDITOR_KINDS.has(t.kind) && (!frameId || frameOf[t.id] === frameId));
+  const hit = tiles.find((t) => !!tileKind(t.kind).opens?.includes("file") && (!frameId || frameOf[t.id] === frameId));
   return hit?.id ?? null;
 }

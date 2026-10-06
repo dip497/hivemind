@@ -1,5 +1,8 @@
 import type { TilePlugin } from "./api";
 
+/** The kind an agent's plan hand-off opens. */
+export const PLAN_REVIEW = "planReview";
+
 export type PlanReviewTileData = {
   requestId?: string;
   hcpCmdId?: string;
@@ -13,7 +16,7 @@ export type PlanReviewTileData = {
 export const planReviewTile: TilePlugin<PlanReviewTileData> = {
   surface: "planReview",
   name: "Plan review",
-  kinds: { planReview: { size: { width: 1280, height: 920 } } },
+  kinds: { [PLAN_REVIEW]: { size: { width: 1280, height: 920 }, label: "Plan review", glyph: "▤", ephemeral: true, unpinnable: true, waitsOnPerson: true } },
   data: (t, s) => {
     // Guard a stale/malformed saved tile so it never crashes the build.
     const r = t.review ?? { plan: "", cwd: "" };
