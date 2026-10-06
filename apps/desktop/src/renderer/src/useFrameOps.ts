@@ -12,6 +12,7 @@ import { computeFrameLayout, arrangeBoxes, FRAME_ROW_MAX, FRAME_GAP, type Arrang
 import { defaultSizeForKind, defaultTileSize, FRAME_PAD, FRAME_HEADER, FRAME_EMPTY_W, FRAME_EMPTY_H } from "./canvas-sizing";
 import type { FrameState, TileInstance } from "./canvas-persistence";
 import type { TileKind } from "./tile-kinds";
+import { tileKind } from "./tiles";
 import type { BoardObject } from "@hivemind/workspace-doc/shapes";
 import { isBox, type Point } from "./board-objects/board-model";
 
@@ -170,7 +171,7 @@ export function useFrameOps(ctx: FrameOpsCtx) {
       return !!(owner?.worktreePath || owner?.workspacePath);
     };
     for (const t of tiles) {
-      if ((t.kind === "editor" || t.kind === "diff") && !repoPath && !frameProvidesRepo(t.id)) continue;
+      if (tileKind(t.kind).needsRepo && !repoPath && !frameProvidesRepo(t.id)) continue;
       present.add(t.id);
       kindOf.set(t.id, t.kind);
     }

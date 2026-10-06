@@ -43,6 +43,7 @@ import type { PinRect } from "./workspace/tile-surfaces";
 import { clampAnchor } from "./pin-anchor";
 import { pickEditorTile } from "./workspace/editor-target";
 import type { TileKind } from "./tile-kinds";
+import { tileKind } from "./tiles";
 import {
   loadLayout,
   reloadLayout,
@@ -569,7 +570,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       // frame can supply the repo even when the workspace has no global one.
       const owner = fo[t.id] ? frames.find((f) => f.id === fo[t.id]) : undefined;
       const effRepo = owner?.worktreePath ?? owner?.workspacePath ?? repoPath ?? null;
-      if ((t.kind === "editor" || t.kind === "diff") && !effRepo) continue;
+      if (tileKind(t.kind).needsRepo && !effRepo) continue;
       const kind: LayerTile["kind"] = t.kind === "shell" ? "terminal" : t.kind;
       const agent = agentOfTile(t);
       out.push({ id: t.id, kind, name: tileName(tileNames, agentTitles, t), frameId: fo[t.id] ?? null, agent });

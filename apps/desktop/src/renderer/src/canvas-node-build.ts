@@ -14,7 +14,8 @@ import { isBox } from "./board-objects/board-model";
 import type { FrameState, TileInstance } from "./canvas-persistence";
 import type { ArrangeMode } from "./frame-layout";
 import type { WorktreeEntry } from "../../shared/ipc";
-import { effectiveRepoOf, type PinRect, type TileSurfaceType } from "./workspace/tile-surfaces";
+import { effectiveRepoOf, type PinRect } from "./workspace/tile-surfaces";
+import { pluginOfKind, tileKind } from "./tiles";
 import type { CanvasTileNodeData } from "./canvas-nodes";
 import type { Pins } from "./workspace/pins";
 
@@ -53,10 +54,6 @@ export interface NodeBuildCtx {
 
 /** react-flow node type per tile kind — doubles as the `.react-flow__node-<type>`
  *  CSS hook and matches the surface `type` the TileHost renders. */
-const NODE_TYPE: Record<TileInstance["kind"], TileSurfaceType> = {
-  claude: "terminal", shell: "terminal", editor: "workbench", workbench: "workbench",
-  diff: "diff", issues: "issues", browser: "browser", planReview: "planReview",
-};
 
 export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
   const {
@@ -175,10 +172,11 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
   // repo is available (global or the owner frame's zone). Same gate as the
   // surface builder, so a node never exists without a body.
   for (const t of tiles) {
-    if ((t.kind === "editor" || t.kind === "diff") && !effectiveRepoOf(t.id, frameOf, frames, repoPath)) continue;
+    const plugin = pluginOfKind(t.kind);
+    if (!plugin || (tileKind(t.kind).needsRepo && !effectiveRepoOf(t.id, frameOf, frames, repoPath))) continue;
     const { width: w, height: h } = defaultSizeForKind(t.kind);
     const data: CanvasTileNodeData = { tileId: t.id, onClose: closeTile, onResize: onNodeResizeCommit };
-    out.push(mkTile({ id: t.id, type: NODE_TYPE[t.kind], style: sized(t.id, w, h), data, dragHandle: ".tile-drag-handle" }, x, y));
+    out.push(mkTile({ id: t.id, type: plugin.surface, style: sized(t.id, w, h), data, dragHandle: ".tile-drag-handle" }, x, y));
     x += (sizes[t.id]?.width ?? w) + gap;
   }
 

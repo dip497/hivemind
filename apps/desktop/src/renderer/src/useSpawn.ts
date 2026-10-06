@@ -17,6 +17,7 @@ import { AGENT_TILE_KIND } from "./tile-kinds";
 import { defaultShell, type FrameState, type TileInstance } from "./canvas-persistence";
 import { queueWork } from "./work-queue";
 import type { TileKind } from "./tile-kinds";
+import { tileKind } from "./tiles";
 import { checkToolCreation } from "./tool-availability";
 import { checkAgentInstalled, noAgentInstalled } from "./agent-plugins";
 import { isRemote } from "@hivemind/core/remote-uri";
@@ -26,8 +27,6 @@ import type { BoardObject } from "@hivemind/workspace-doc/shapes";
 import { defaultFrame } from "@hivemind/workspace-doc/tile-list";
 import { isBox } from "./board-objects/board-model";
 
-/** Kinds that are one-per-frame (spawn → focus existing). claude/shell are not. */
-const SINGLETON_KINDS: ReadonlySet<TileKind> = new Set(["editor", "diff", "issues"]);
 
 type FocusReq = { id: string; cx: number; cy: number; w: number; h: number; n: number; exact?: boolean } | null;
 type SpawnOpts = {
@@ -264,7 +263,7 @@ export function useSpawn(ctx: SpawnCtx) {
       }
       const frame = target ?? ensureFrame();
       const fid = frame.id;
-      if (SINGLETON_KINDS.has(kind)) {
+      if (tileKind(kind).singleton) {
         const existing = tilesRef.current.find((t) => t.kind === kind && frameOfRef.current[t.id] === fid);
         if (existing) {
           if (opts?.file) openFileInTile(existing.id, opts.file);
@@ -290,7 +289,7 @@ export function useSpawn(ctx: SpawnCtx) {
       } else if (kind === "browser") {
         label = ordinalLabel((n) => `Browser #${n}`);
       } else {
-        label = kind === "editor" ? "Editor" : kind === "diff" ? "Diff" : "Issues";
+        label = tileKind(kind).label ?? kind;
       }
       placeInFrame(newId, frame, { kind });
       setTiles((cur) => [...cur, { id: newId, kind, label, cmd, args, ...(kind === "browser" && opts?.url ? { url: opts.url } : {}), ...(kind === "shell" && opts?.session ? { session: opts.session.id } : {}), ...(task ? { task } : {}) }]);

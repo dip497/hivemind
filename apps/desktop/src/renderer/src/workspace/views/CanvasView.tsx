@@ -42,7 +42,7 @@ import { snapViewportCrisp, FocusMode, FocusOnTile, PanMomentum, ViewportSnap } 
 import { buildBaseNodes, reuseNodes } from "../../canvas-node-build";
 import type { WorkspaceViewPlugin, WorkspaceViewProps } from "../workspace-view";
 import { useCanvasRuntime } from "./canvas-runtime";
-import { AGENT_TILE_KIND } from "../../tile-kinds";
+import { tileKind } from "../../tiles";
 import { agentById, useAgents } from "../../agents";
 import { notReady, useAgentPresence } from "../../agent-plugins";
 
@@ -137,7 +137,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
     // tiles (terminal/shell/diff/editor) snap to 100% with the content-corner
     // clamp; the rest get the framed focus. Mirrors the onNodeClick decision.
     const kind = tiles.find((x) => x.id === id)?.kind;
-    const exact = kind === AGENT_TILE_KIND || kind === "shell" || kind === "diff" || kind === "editor";
+    const exact = !!kind && !!tileKind(kind).pixelExact;
     focusTile(id, { exact });
   }, [selectTile, focusTile, tiles]);
   const focusFrameFromPanel = useCallback((id: string) => {
@@ -429,12 +429,8 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
         // only rasterizes crisply at 1:1. Snap all of them to 100% AND
         // frame the tile in one move (exact focus recentres on the tile,
         // anchoring the content corner when it's bigger than the viewport).
-        if (
-          node.type === "terminal" ||
-          node.type === "diff" ||
-          node.type === "editor" ||
-          node.type === "workbench"
-        ) {
+        const kind = tiles.find((x) => x.id === node.id)?.kind;
+        if (kind && tileKind(kind).pixelExact) {
           focusTile(node.id, { exact: true });
         }
       }

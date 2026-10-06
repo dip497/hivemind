@@ -32,124 +32,41 @@
  * browser guests as main-process WebContentsViews — tracked in
  * docs/design/workspace-views.md as a follow-up.
  */
-import { lazy, memo, Suspense, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
+import { lazy, memo, Suspense, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type ComponentType, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { TerminalTile } from "../TerminalTile";
-import { IssuesTile } from "../IssuesTile";
-import { PlanReviewTile } from "../PlanReviewTile";
 import { TileErrorBoundary } from "../TileErrorBoundary";
-import type { TerminalTileData, TileSurface, TileSurfaceSpec } from "./tile-surfaces";
-import { LinkBanner } from "../machines/LinkBanner";
-import { BrowserSkeleton, DiffSkeleton, EditorSkeleton } from "./tile-skeletons";
-import { isRemote } from "@hivemind/core/remote-uri";
-import { defaultSizeForKind } from "../canvas-sizing";
-import type { TileKind } from "../tile-kinds";
+import type { TileSurface } from "./tile-surfaces";
+import { tileKind, tilePlugin, type TileBodyArgs, type TilePlugin } from "../tiles";
 
-const BrowserTile = lazy(() => import("../BrowserTile").then((m) => ({ default: m.BrowserTile })));
-const DiffTile = lazy(() => import("../DiffTile").then((m) => ({ default: m.DiffTile })));
-const WorkbenchTile = lazy(() => import("../WorkbenchTile").then((m) => ({ default: m.WorkbenchTile })));
+export type TileBodyProps = { type: string; data: unknown; selected: boolean };
 
-export type TileBodyProps = TileSurfaceSpec & { selected: boolean };
-
-/** A terminal plus its machine's link banner. */
-function TerminalBody({ data, selected }: { data: TerminalTileData; selected: boolean }) {
-  return (
-    <div className="relative w-full h-full">
-      <TerminalTile {...data} selected={selected} />
-      {isRemote(data.cwd) && <LinkBanner cwd={data.cwd} />}
-    </div>
-  );
+/** One lazy component per plugin, so a body's module loads once. */
+const bodies = new WeakMap<TilePlugin, ComponentType<TileBodyArgs<unknown>>>();
+function bodyOf(plugin: TilePlugin): ComponentType<TileBodyArgs<unknown>> {
+  let body = bodies.get(plugin);
+  if (!body) bodies.set(plugin, body = lazy(plugin.body));
+  return body;
 }
 
 /**
- * TileBody — the chrome-less body for one tile kind: the pure tile component
- * (TerminalTile / DiffTile / …) with no view shell, resize handles or pin chip.
- * Rendered ONLY by the TileHost below; views never call it directly (they'd
- * create a second React instance of a live session).
+ * TileBody — the chrome-less body for one tile: its plugin's component, with no
+ * view shell, resize handles or pin chip. Rendered ONLY by the TileHost below;
+ * views never call it directly (they'd create a second React instance of a live
+ * session).
  */
-export function TileBody(props: TileBodyProps): ReactNode {
-  switch (props.type) {
-    case "terminal": {
-      const { data, selected } = props;
-      return (
-        <TileErrorBoundary label={data.label ?? "terminal"} onClose={data.onClose}>
-          <TerminalBody data={data} selected={selected} />
-        </TileErrorBoundary>
-      );
-    }
-    case "diff": {
-      const { data } = props;
-      return (
-        <TileErrorBoundary label="Diff" onClose={data.onClose}>
-          <Suspense fallback={<DiffSkeleton />}>
-            <DiffTile {...data} />
-          </Suspense>
-        </TileErrorBoundary>
-      );
-    }
-    case "workbench": {
-      const { data } = props;
-      return (
-        <TileErrorBoundary label="Editor" onClose={data.onClose}>
-          <Suspense fallback={<EditorSkeleton />}>
-            <WorkbenchTile
-              repoPath={data.repoPath}
-              tabs={data.tabs}
-              onOpenFile={data.onOpenFile}
-              onOpenInBrowser={data.onOpenInBrowser}
-              onCloseTab={data.onCloseTab}
-              onClose={data.onClose}
-              pinned={data.pinned}
-              onTogglePin={data.onTogglePin}
-            />
-          </Suspense>
-        </TileErrorBoundary>
-      );
-    }
-    case "browser": {
-      const { data, selected } = props;
-      return (
-        <TileErrorBoundary label="Browser" onClose={data.onClose}>
-          <Suspense fallback={<BrowserSkeleton />}>
-          <BrowserTile
-            tileId={data.tileId}
-            frameId={data.frameId}
-            url={data.url}
-            openReq={data.openReq}
-            selected={selected}
-            onClose={data.onClose}
-            pinned={data.pinned}
-            onTogglePin={data.onTogglePin}
-          />
-          </Suspense>
-        </TileErrorBoundary>
-      );
-    }
-    case "issues": {
-      const { data, selected } = props;
-      return (
-        <TileErrorBoundary label="Issues" onClose={data.onClose}>
-          <IssuesTile
-            root={data.root}
-            onClose={data.onClose}
-            selected={selected}
-            pinned={data.pinned}
-            onTogglePin={data.onTogglePin}
-          />
-        </TileErrorBoundary>
-      );
-    }
-    case "planReview": {
-      const { data } = props;
-      return (
-        <TileErrorBoundary label="Plan review" onClose={data.onClose}>
-          <PlanReviewTile {...data} />
-        </TileErrorBoundary>
-      );
-    }
-    default:
-      return null;
-  }
+export function TileBody({ type, data, selected }: TileBodyProps): ReactNode {
+  const plugin = tilePlugin(type);
+  if (!plugin) return null;
+  const Body = bodyOf(plugin);
+  const Fallback = plugin.fallback;
+  const onClose = (data as { onClose?: () => void }).onClose;
+  return (
+    <TileErrorBoundary label={(data as { label?: string }).label ?? plugin.name} onClose={onClose}>
+      <Suspense fallback={Fallback ? <Fallback /> : null}>
+        <Body data={data} selected={selected} />
+      </Suspense>
+    </TileErrorBoundary>
+  );
 }
 
 // ── surface elements + the parking layer ─────────────────────────────────────
@@ -273,9 +190,9 @@ export const UNSEEN_MOUNT_MS = 1500;
 /** A terminal no view shows still has to run — an agent started while another view
  *  is active, a worker spawned by another agent. Mount its body in the park at its
  *  kind's default size; the first slot that shows it adopts it and refits once. */
-function mountUnseen(tileId: string, kind: TileKind) {
+function mountUnseen(tileId: string, kind: string) {
   if (adoptedOnce.has(tileId)) return;
-  const { width, height } = defaultSizeForKind(kind);
+  const { width, height } = tileKind(kind).size;
   const el = surfaceEl(tileId);
   if (el.parentElement !== park()) return;
   el.style.cssText = `position:absolute;left:0;top:0;width:${width}px;height:${height}px;display:flex;flex-direction:column;`;
@@ -302,7 +219,7 @@ const SurfacePortal = memo(function SurfacePortal({ surface, selected }: { surfa
   // body opened at park size and resized a frame later.) Once adopted, the
   // body stays mounted for the tile's life, parked or not.
   const ready = useAdopted(surface.id);
-  const terminal = surface.type === "terminal";
+  const terminal = !!tilePlugin(surface.type)?.runsUnseen;
   useEffect(() => {
     if (ready || !terminal) return;
     const t = setTimeout(() => mountUnseen(surface.id, surface.kind), UNSEEN_MOUNT_MS);
@@ -311,8 +228,7 @@ const SurfacePortal = memo(function SurfacePortal({ surface, selected }: { surfa
   if (!ready) return null;
   // `surfaceEl` is idempotent — the same element for the same id, forever — so
   // this portal's container never changes and React reconciles in place.
-  const { id, kind: _kind, ...spec } = surface;
-  return createPortal(<TileBody {...(spec as TileSurfaceSpec)} selected={selected} />, surfaceEl(id));
+  return createPortal(<TileBody type={surface.type} data={surface.data} selected={selected} />, surfaceEl(surface.id));
 });
 
 /**
