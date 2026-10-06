@@ -1002,6 +1002,7 @@ const control: ControlPlane = new ControlPlane({
   publish: (event, ...params) => workspaceServer.publish(event, ...params),
   // Used by agent.send and pipe forwarding.
   write: writeTile,
+  steers: (bare) => !!manifestOf(heldBoards(workspaceStore()), bare)?.steer,
   // A window lays a spawned tile out, and starts its session.
   spawned: () => {},
   windowsUp: () => openWindows().length > 0,
@@ -1127,6 +1128,7 @@ const terminals = new Terminals({
     // interrupt key here is the user stopping the agent's turn.
     write: (tileId, data, paste) => {
       control.status.input(toBareId(tileId), data);
+      control.mailbox.typed(tileId, data, paste);
       if (onYourDevices.holds(tileId)) onYourDevices.write(tileId, data, paste);
       else if (hasRemotePty(tileId)) writeRemotePty(tileId, data, paste); else writePty(tileId, data, paste);
     },

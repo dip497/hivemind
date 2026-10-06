@@ -73,6 +73,9 @@ export interface AgentManifest {
   /** The keys that interrupt its turn, as the person stops it from another of their devices (a
    *  phone's Stop). Claim them only from the real binary, as `answer`. */
   interrupt?: string[];
+  /** It reads a message typed while it works, at its next step, instead of leaving it unsent in
+   *  its composer. Claim it only from the real binary. */
+  steer?: boolean;
   session?: unknown;
   assets?: unknown;
   launch?: unknown;
@@ -612,6 +615,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     }
   }
   req(m.interrupt === undefined || keyTokens(m.interrupt), "interrupt must be 1-4 key tokens");
+  req(m.steer === undefined || typeof m.steer === "boolean", "steer must be true or false");
 
   const aliases = m.aliases;
   req(aliases === undefined || (Array.isArray(aliases) && aliases.every((a) => typeof a === "string")),
@@ -660,6 +664,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     ...(dismiss.length ? { dismiss } : {}),
     ...(m.answer?.permission ? { answer: { permission: { allow: m.answer.permission.allow, deny: m.answer.permission.deny } } } : {}),
     ...(m.interrupt ? { interrupt: m.interrupt } : {}),
+    ...(m.steer ? { steer: true } : {}),
     enabled: m.enabled ?? false,
     caps: m.caps,
     ...(detect ? { detect } : {}),

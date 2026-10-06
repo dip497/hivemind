@@ -52,6 +52,9 @@ answer:
 # interrupt" while it works.
 interrupt:
 - escape
+# A message typed while it works is queued and read at its next step: claude 2.1.289 shows
+# "Press up to edit queued messages".
+steer: true
 options:
 - id: mode
   label: Permission mode

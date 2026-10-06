@@ -9,6 +9,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: an agent no longer keeps showing "approve?" and "needs you" after you allow what it asked; before, it stayed until the allowed command finished, minutes for a long one.
+- New: a message one agent sends another (`hive ctl send`, a worker's report, an approval request) reaches a working Claude Code agent at once, read at its next step, instead of waiting for its turn to end. An agent's file says it reads messages typed while it works with `steer: true`; other agents get theirs when the turn ends, as before.
+- Fixed: a message from another agent no longer lands in what you are typing to an agent and gets sent with it; it waits until you send or clear your text (Enter, Ctrl-C, Ctrl-U).
 - New: a workspace joined from another computer shows in its host's theme (preset, mode, accent, palette, glass, wallpaper), and its views too; your own fonts stay, a wallpaper from the host's files becomes a built-in one, and your workspaces keep your theme (workspace API 0.17: `appearance.get`, `appearance.changed`).
 - New: `hive share`, `hive people` and `hive join` work with the desktop app running, not only `hive host`; a `hive join` there opens the workspace in the app.
 - Fixed: a guest no longer learns where a shared workspace lives on the host: answers, errors and events name it by its id.

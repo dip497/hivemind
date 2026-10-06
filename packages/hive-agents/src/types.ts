@@ -371,6 +371,8 @@ export interface AgentProviderDef {
   /** The keys that interrupt its turn, typed from another of the person's devices (a phone's
    *  Stop). Tokens as `hive ctl keys` takes them. */
   interrupt?: readonly string[];
+  /** It reads a message typed while it works, at its next step. */
+  steer?: boolean;
 }
 
 /** The keys that allow, and the keys that deny, a permission an agent asks on its screen. */

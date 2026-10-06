@@ -27,6 +27,10 @@
  *    never drain. A tile is only serialized once we've SEEN it emit a turn signal
  *    (`managed`); until then, delivery is immediate — exactly the old behavior.
  *
+ * A PERSON'S DRAFT is the third thing typing can break: a message typed into a composer
+ * the person is writing in is merged with their words and submitted as theirs. So a
+ * message is also held while the person has typed there and not yet sent or cleared it.
+ *
  * Keyed by PTY id (`hm:<bare>`), which is what the hooks report and what writeToTile
  * takes.
  */
@@ -40,6 +44,17 @@ const MAX_QUEUED = 32;
  *  Stop; typing into the same frame can land mid-repaint. Also the coalescing window:
  *  several idle signals for one turn collapse into a single release. */
 const IDLE_SETTLE_MS = 250;
+
+/** After the person's own Enter, how long the turn it starts has to be reported before a
+ *  held message is typed: typed sooner, it lands in the turn that is starting. */
+const SUBMIT_SETTLE_MS = 2000;
+
+/** A person who typed this recently may be writing a message of their own to the working
+ *  agent: nothing is typed over it. */
+const TYPING_QUIET_MS = 5000;
+
+/** The keys that leave the composer empty: Enter, Ctrl-C, Ctrl-U. */
+const CLEARS_DRAFT = new Set(["\r", "\x03", "\x15"]);
 
 /** A held message + an optional "it actually reached the agent" callback. The callback
  *  lets an approval start its answer-timeout from DELIVERY rather than from arrival — a
@@ -56,6 +71,10 @@ export class Mailbox {
    *  else (hookless agents) delivers immediately. */
   private managed = new Set<string>();
   private queued = new Map<string, Held[]>();
+  /** Tiles whose composer holds something the person typed and has not sent. */
+  private draft = new Set<string>();
+  /** When the person last typed into each tile. */
+  private typedAt = new Map<string, number>();
   /** A pending release timer, so a burst of idle signals releases exactly one. */
   private releaseTimer = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -65,6 +84,10 @@ export class Mailbox {
     private readonly write: (ptyId: string, data: string, paste?: boolean) => boolean,
     /** Gap between the text and the Enter — claude's TUI drops a bundled newline. */
     private readonly submitDelayMs: number,
+    /** Whether the tile's agent reads a message typed while it works (its file says `steer`). */
+    private readonly steers: (ptyId: string) => boolean = () => false,
+    /** How many messages a tile has waiting changed. */
+    private readonly onHeld: (ptyId: string, held: number) => void = () => {},
   ) {}
 
   /** Turn started (UserPromptSubmit / agent_start) — hold everything from here, and
@@ -72,6 +95,27 @@ export class Mailbox {
   setBusy(ptyId: string): void {
     this.managed.add(ptyId);
     this.busy.add(ptyId);
+    this.draft.delete(ptyId); // a turn began: whatever was in the composer was sent
+    // A release waiting on the person's Enter would outlast this turn's end.
+    const t = this.releaseTimer.get(ptyId);
+    if (t) clearTimeout(t);
+    this.releaseTimer.delete(ptyId);
+  }
+
+  /**
+   * The person typed `data` into the tile. Printable text at the prompt is a draft, held
+   * around until they send or clear it. Keys typed mid-turn answer the agent's own
+   * prompts (a permission's "1"), and escape sequences are the terminal's reports.
+   * ponytail: a draft backspaced to nothing still counts, until Enter, Ctrl-C or Ctrl-U.
+   */
+  typed(ptyId: string, data: string, paste = false): void {
+    this.typedAt.set(ptyId, Date.now());
+    if (!paste && CLEARS_DRAFT.has(data)) {
+      if (this.draft.delete(ptyId)) this.scheduleRelease(ptyId, SUBMIT_SETTLE_MS);
+      return;
+    }
+    if (this.busy.has(ptyId)) return;
+    if (paste || (data[0] !== "\x1b" && /[^\x00-\x1f\x7f]/.test(data))) this.draft.add(ptyId);
   }
 
   /** Turn ended (Stop / agent_end). Coalesced: repeated calls before the release fires
@@ -89,7 +133,10 @@ export class Mailbox {
    * message returns true, because it will be delivered.
    */
   deliver(ptyId: string, text: string, onSent?: () => void): boolean {
-    if (!this.managed.has(ptyId)) {
+    // An agent that steers reads it mid-turn: typed now, into the turn that is running.
+    const steer = this.busy.has(ptyId) && !this.queued.get(ptyId)?.length && this.steers(ptyId)
+      && Date.now() - (this.typedAt.get(ptyId) ?? 0) >= TYPING_QUIET_MS;
+    if (steer || (!this.managed.has(ptyId) && !this.draft.has(ptyId))) {
       // Hookless (or not-yet-seen-a-turn) → immediate, matching the pre-mailbox path.
       const ok = this.send(ptyId, text);
       if (ok) onSent?.();
@@ -99,6 +146,7 @@ export class Mailbox {
     if (q.length >= MAX_QUEUED) q.shift(); // drop the stalest, keep the newest
     q.push({ text, onSent });
     this.queued.set(ptyId, q);
+    this.onHeld(ptyId, q.length);
     if (!this.busy.has(ptyId)) this.scheduleRelease(ptyId);
     return true;
   }
@@ -112,6 +160,8 @@ export class Mailbox {
   forget(ptyId: string): void {
     this.busy.delete(ptyId);
     this.managed.delete(ptyId);
+    this.draft.delete(ptyId);
+    this.typedAt.delete(ptyId);
     this.queued.delete(ptyId);
     const t = this.releaseTimer.get(ptyId);
     if (t) clearTimeout(t);
@@ -120,16 +170,24 @@ export class Mailbox {
 
   /** Schedule the release of ONE queued message. Idempotent while a release is pending
    *  (coalesces duplicate idle signals) and a no-op while the tile is busy or empty. */
-  private scheduleRelease(ptyId: string): void {
+  private scheduleRelease(ptyId: string, after = IDLE_SETTLE_MS): void {
     if (this.releaseTimer.has(ptyId)) return; // a release is already pending
     if (this.busy.has(ptyId)) return; // still mid-turn
+    if (this.draft.has(ptyId)) return; // the person is writing there
     if (!this.queued.get(ptyId)?.length) return; // nothing to send
     const t = setTimeout(() => {
       this.releaseTimer.delete(ptyId);
       const q = this.queued.get(ptyId);
-      if (this.busy.has(ptyId) || !q?.length) return; // raced back to busy / drained
+      if (this.busy.has(ptyId) || this.draft.has(ptyId) || !q?.length) return; // raced back to busy / drained
       const next = q.shift()!;
       if (!q.length) this.queued.delete(ptyId);
+      this.onHeld(ptyId, q.length);
+      // A hookless tile reports no turn end to wait for: the rest follow at once.
+      if (!this.managed.has(ptyId)) {
+        if (this.send(ptyId, next.text)) next.onSent?.();
+        this.scheduleRelease(ptyId);
+        return;
+      }
       // Optimistic: this delivery starts a turn, so hold the rest until it ends. A
       // managed agent always turns on a submitted prompt (claude/pi/droid), so the
       // matching setIdle WILL arrive and drain the next. If the send fails (dead pty),
@@ -141,7 +199,7 @@ export class Mailbox {
         this.busy.delete(ptyId);
         this.scheduleRelease(ptyId);
       }
-    }, IDLE_SETTLE_MS);
+    }, after);
     t.unref?.();
     this.releaseTimer.set(ptyId, t);
   }

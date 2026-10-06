@@ -127,3 +127,73 @@ test("forget() drops queue + busy so a recycled pty id starts clean", async () =
   await settle();
   assert.deepEqual(writes, [], "the dead tile's backlog is never replayed into its successor");
 });
+
+test("the person's draft: a message is held, not merged into what they are typing", async () => {
+  const { mb, writes } = harness();
+  mb.setBusy(PID); mb.setIdle(PID); // a hooked agent, at its prompt
+  mb.typed(PID, "fix the");
+  mb.deliver(PID, "report from B");
+  await settle();
+  assert.deepEqual(writes, [], "nothing typed into the person's draft");
+  assert.equal(mb.pending(PID), 1);
+
+  mb.typed(PID, "\r"); // they send it: a turn starts
+  mb.setBusy(PID);
+  await settle();
+  assert.deepEqual(writes, [], "still held through the turn their prompt started");
+  mb.setIdle(PID);
+  await settle();
+  assert.deepEqual(writes, ["report from B", "\r"]);
+});
+
+test("a hookless agent holds for a draft too, and clearing it delivers", async () => {
+  const held: number[] = [];
+  const writes: string[] = [];
+  const mb = new Mailbox((_id, data) => { writes.push(data); return true; }, 1, undefined, (_id, n) => held.push(n));
+  mb.typed(PID, "half a thou");
+  mb.deliver(PID, "one");
+  mb.deliver(PID, "two");
+  await settle();
+  assert.deepEqual(writes, []);
+  mb.typed(PID, "\x15"); // Ctrl-U
+  await new Promise((r) => setTimeout(r, 2600));
+  assert.deepEqual(writes.filter((w) => w !== "\r"), ["one", "two"]);
+  assert.deepEqual(held, [1, 2, 1, 0]);
+});
+
+test("keys that are not a draft do not hold: mid-turn answers, terminal reports", async () => {
+  const { mb, writes } = harness();
+  mb.setBusy(PID);
+  mb.typed(PID, "1"); // answers the agent's permission prompt
+  mb.setIdle(PID);
+  mb.typed(PID, "\x1b[I"); // focus report
+  mb.typed(PID, "\x1b[A"); // arrow
+  mb.deliver(PID, "hello");
+  await settle();
+  assert.deepEqual(writes, ["hello", "\r"]);
+});
+
+test("an agent that steers gets a message mid-turn at once; one that does not waits for its turn to end", async () => {
+  for (const steers of [true, false]) {
+    const writes: string[] = [];
+    const mb = new Mailbox((_id, data) => { writes.push(data); return true; }, 1, () => steers);
+    let sent = false;
+    mb.setBusy(PID);
+    mb.deliver(PID, "report from B", () => { sent = true; });
+    await settle();
+    assert.deepEqual(writes, steers ? ["report from B", "\r"] : [], `steers=${steers}`);
+    assert.equal(sent, steers);
+    assert.equal(mb.pending(PID), steers ? 0 : 1);
+  }
+});
+
+test("a steering agent the person is typing to mid-turn is not typed over", async () => {
+  const writes: string[] = [];
+  const mb = new Mailbox((_id, data) => { writes.push(data); return true; }, 1, () => true);
+  mb.setBusy(PID);
+  mb.typed(PID, "also check the");
+  mb.deliver(PID, "report from B");
+  await settle();
+  assert.deepEqual(writes, []);
+  assert.equal(mb.pending(PID), 1);
+});

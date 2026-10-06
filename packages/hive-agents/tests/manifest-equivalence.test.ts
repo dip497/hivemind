@@ -218,6 +218,12 @@ describe("manifest validation refuses what it cannot back", () => {
     bad({ answer: { permission: { allow: [1], deny: ["n"] } } }, /answer.permission.allow must be 1-4 key tokens/);
   });
 
+  test("an agent that reads a message typed while it works says so, and anything but a flag is refused at load", () => {
+    expect(defFromManifest({ ...base, steer: true }).steer).toBe(true);
+    expect(defFromManifest(base).steer).toBeUndefined();
+    bad({ steer: "yes" }, /steer must be true or false/);
+  });
+
   test("the keys that interrupt the agent's turn are carried as written, and a list that cannot be typed is refused at load", () => {
     expect(defFromManifest({ ...base, interrupt: ["escape"] }).interrupt).toEqual(["escape"]);
     expect(defFromManifest(base).interrupt).toBeUndefined();

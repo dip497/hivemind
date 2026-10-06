@@ -222,7 +222,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
         size: out.size,
       });
     },
-    write: (tile, data, paste) => { control.status.input(toBareId(tile), data); sessions.write(tile, data, paste); },
+    write: (tile, data, paste) => { control.status.input(toBareId(tile), data); control.mailbox.typed(tile, data, paste); sessions.write(tile, data, paste); },
     // A daemon tells its killer nothing of the exit: what waits on the session is answered now.
     kill: (tile) => { sessions.kill(tile); control.exited(tile); control.forget(tile); },
   };
@@ -337,6 +337,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     dir: () => o.dir,
     publish: (event, ...params) => api.publish(event, ...params),
     write: writeTile,
+    steers: (bare) => !!manifestOf(heldBoards(store), bare)?.steer,
     // Nobody lays a spawned tile out: the host starts it, once it is in its workspace.
     spawned: (spawn) => {
       control.takeSpawned(spawn.tileId);

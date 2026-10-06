@@ -40,6 +40,8 @@ export interface ControlPlaneOptions {
   publish: WorkspaceServer["publish"];
   /** Write to a tile's session at once (by its pty id); false when it has none here. */
   write(ptyId: string, data: string, paste?: boolean): boolean;
+  /** Whether a tile's agent reads a message typed while it works (its file says `steer`). */
+  steers?(bareTile: string): boolean;
   /** A tile the control plane spawned, written to its workspace: the embedder lays it out (a
    *  window) or starts it (a host). Every client has been told of it. */
   spawned(spawn: { tileId: string; repo: string; prompt?: string; background: boolean }): void;
@@ -93,7 +95,11 @@ export class ControlPlane {
       for (const agentId of left) this.status.event(tileId, { event: "subagent.stopped", agentId });
       if (left.length) o.diag?.(`[subagent-reap] tile=${tileId} drained ${left.length} ${SUBAGENT_REAP_MS}ms after the last edge`);
     });
-    this.mailbox = new Mailbox(o.write, SUBMIT_DELAY_MS);
+    this.mailbox = new Mailbox(o.write, SUBMIT_DELAY_MS, (ptyId) => {
+      // Waiting on a prompt of its own, a message typed there would answer it (Enter allows).
+      const bare = toBareId(ptyId);
+      return this.status.get(bare)?.state === "working" && (o.steers?.(bare) ?? false);
+    });
   }
 
   /** The verbs, made with the embedder's dependencies the first time they are wanted. */
