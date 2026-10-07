@@ -13,6 +13,8 @@ const xdg = path.join(root, "config");
 seedAgents(xdg);
 const repo = path.join(root, "repo");
 const fakeGh = path.join(root, "gh");
+// A worktree outside the main one's folder keeps its whole path.
+const far = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "hm-far-")), "far");
 const env = { ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_PTY_DAEMON: "0", HIVEMIND_SHELL_ENV: "0", PATH: `${fakeGh}${path.delimiter}${process.env.PATH}` } as Record<string, string>;
 delete env.ELECTRON_RUN_AS_NODE;
 const cli = path.resolve(process.cwd(), "../cli/src/index.ts");
@@ -36,6 +38,8 @@ test.beforeAll(async () => {
   git("commit -q -m 'first change'");
   git(`worktree add -q -b done ${path.join(root, "wt-merged")}`);
   git(`worktree add -q -b feat ${path.join(root, "wt-work")}`);
+  git(`worktree add -q -b far ${far}`);
+  fs.writeFileSync(path.join(far, "new.txt"), "not committed\n");
   const work = path.join(root, "wt-work");
   fs.appendFileSync(path.join(work, "a.ts"), "export const committed = 2;\n");
   git("commit -q -am 'feat: committed'", work);
@@ -50,7 +54,14 @@ test.beforeAll(async () => {
     { databaseId: 7, name: "lint", status: "completed", conclusion: "success", steps: [{ number: 1, name: "Lint", status: "completed", conclusion: "success" }] },
     { databaseId: 8, name: "typecheck", status: "completed", conclusion: "failure", steps: [{ number: 1, name: "Typecheck", status: "completed", conclusion: "failure" }] },
   ] }));
-  fs.writeFileSync(path.join(fakeGh, "log.txt"), "typecheck\tTypecheck\t2026-10-07T10:00:00.0000000Z src/a.ts(1,1): error TS2345: boom\n");
+  const setup = Array.from({ length: 300 }, (_, i) => `typecheck\tUNKNOWN STEP\t2026-10-07T10:00:00.0000000Z setting up ${i}`);
+  const cleanup = Array.from({ length: 300 }, (_, i) => `typecheck\tUNKNOWN STEP\t2026-10-07T10:00:02.0000000Z cleaning up ${i}`);
+  fs.writeFileSync(path.join(fakeGh, "log.txt"), [
+    ...setup,
+    "typecheck\tTypecheck\t2026-10-07T10:00:01.0000000Z src/a.ts(1,1): error TS2345: boom",
+    "typecheck\tTypecheck\t2026-10-07T10:00:01.0000000Z ##[error]Process completed with exit code 2.",
+    ...cleanup, "",
+  ].join("\n"));
   fs.writeFileSync(path.join(fakeGh, "gh"), [
     "#!/bin/sh",
     `d='${fakeGh}'`,
@@ -73,7 +84,11 @@ test.beforeAll(async () => {
   await expect.poll(() => fs.existsSync(path.join(userData, "hcp.token"))).toBe(true);
   hcp = { HIVE_HCP_SOCK: path.join(userData, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim() };
 });
-test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });
+test.afterAll(async () => {
+  await app?.close();
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(path.dirname(far), { recursive: true, force: true });
+});
 
 const tile = (id: string) => page.locator(`[data-tool-plugin="${id}"]`);
 // The diff view draws inside shadow roots: read the text through them.
@@ -91,6 +106,11 @@ test("CI runs lists the runs, shows a failed job's lines, and reruns the failed 
   // The failed job is the one chosen, and its failed lines are shown under its step.
   await expect(ci.locator("[data-log]")).toContainText("error TS2345: boom");
   await expect(ci.locator("[data-log]")).toContainText("── Typecheck");
+  // A long log opens at its first error line, marked, not at its top or its cleanup.
+  await expect(ci.locator("[data-error]")).toHaveText("Process completed with exit code 2.");
+  await expect(ci.locator("[data-error]")).toBeInViewport();
+  await expect(ci.locator("[data-log]").getByText("setting up 0", { exact: true })).not.toBeInViewport();
+  await expect(ci.locator("[data-log]").getByText("cleaning up 299", { exact: true })).not.toBeInViewport();
   await expect(ci).toContainText("Failed at: Typecheck");
   await expect(ci.getByRole("button", { name: "Ask an agent to fix" })).toBeVisible();
   await ci.getByRole("button", { name: "Rerun failed" }).click();
@@ -110,6 +130,7 @@ test("Worktrees shows each worktree's state, its diffs, and removes only one tha
   await expect(row("wt-work")).not.toContainText("merged");
   await expect(row("wt-merged")).toContainText("merged");
   await expect(row("repo")).toContainText("main worktree");
+  await expect(row(far)).toContainText("1 uncommitted");
 
   await row("wt-work").click();
   await expect.poll(deepText(wt), { timeout: 15_000 }).toContain("uncommitted = 3");

@@ -84,13 +84,12 @@ function Worktrees({ tile, hm, host }) {
     return () => { live = false; };
   }, [host, base, tick]);
 
-  const root = useMemo(() => {
-    const paths = (trees ?? []).map((w) => w.path);
-    if (paths.length < 2) return "";
-    let p = paths[0].slice(0, paths[0].lastIndexOf("/") + 1);
-    while (p && !paths.every((x) => x.startsWith(p))) p = p.slice(0, p.slice(0, -1).lastIndexOf("/") + 1);
-    return p;
+  // Paths are named from the folder holding the main worktree; one elsewhere keeps its whole path.
+  const home = useMemo(() => {
+    const main = trees?.find((w) => w.main)?.path ?? "";
+    return main.slice(0, main.lastIndexOf("/") + 1);
   }, [trees]);
+  const named = (p) => (home && p.startsWith(home) ? p.slice(home.length) : p);
   const counts = useMemo(() => ({
     all: trees?.length ?? 0,
     changed: trees?.filter((w) => w.changed.length).length ?? 0,
@@ -111,7 +110,7 @@ function Worktrees({ tile, hm, host }) {
 
   const choose = (path) => { setChosen(path); hm.setLayout({ chosen: path }); };
   const review = () => hm.commands.spawnAgent(null, tile.frameId, {
-    name: `Review ${tree.branch ?? tree.path.slice(root.length)}`,
+    name: `Review ${tree.branch ?? named(tree.path)}`,
     prompt: `Review the branch ${tree.branch ?? tree.head} in the worktree ${tree.path} against ${base}: read \`git -C ${tree.path} diff ${base}...HEAD\`${tree.changed.length ? ` and its uncommitted changes (\`git -C ${tree.path} diff HEAD\`)` : ""}. Report bugs, risks and missing tests, most serious first, with file:line references. Do not change any file.`,
   });
   const remove = async (w) => {
@@ -121,8 +120,8 @@ function Worktrees({ tile, hm, host }) {
     if (w.branch) {
       const b = await host.run("git", ["branch", "-d", w.branch]);
       if (b.code !== 0) toast.warning(`Removed the worktree; kept the branch ${w.branch}`, { description: b.stderr.trim() });
-      else toast.success(`Removed ${w.path.slice(root.length)} and its branch ${w.branch}`);
-    } else toast.success(`Removed ${w.path.slice(root.length)}`);
+      else toast.success(`Removed ${named(w.path)} and its branch ${w.branch}`);
+    } else toast.success(`Removed ${named(w.path)}`);
     if (chosen === w.path) setChosen(null);
     refresh();
   };
@@ -139,7 +138,7 @@ function Worktrees({ tile, hm, host }) {
         trees === null ? h("p", { style: { ...muted, padding: 12 } }, "Reading the worktrees…")
           : shown.length === 0 ? h("p", { style: { ...muted, padding: 12 } }, "None.")
             : shown.map((w) => h("button", {
-              key: w.path, onClick: () => choose(w.path), "data-worktree": w.path.slice(root.length),
+              key: w.path, onClick: () => choose(w.path), "data-worktree": named(w.path),
               style: {
                 display: "block", width: "100%", textAlign: "left", padding: "7px 12px", border: 0, cursor: "pointer", color: "var(--color-fg)",
                 borderBottom: "1px solid var(--color-line)", background: w.path === chosen ? "var(--color-bg3)" : "transparent",
@@ -155,7 +154,7 @@ function Worktrees({ tile, hm, host }) {
               removable(w) && h(Pill, { color: "var(--color-ok)", title: `nothing here that ${base} does not have` }, "merged"),
               w.prunable && h(Pill, { color: "var(--color-err)" }, "folder missing")),
             h("div", { style: { ...muted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
-              `${w.path.slice(root.length) || w.path}${w.ago ? ` · ${w.ago} · ${w.subject}` : ""}`))))),
+              `${named(w.path)}${w.ago ? ` · ${w.ago} · ${w.subject}` : ""}`))))),
     h("div", { style: { display: "flex", flexDirection: "column", minHeight: 0 } },
       !tree ? h("p", { style: { ...muted, padding: 16 } }, "Choose a worktree.") : [
         h("div", { key: "head", style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderBottom: "1px solid var(--color-line)" } },
@@ -175,7 +174,7 @@ function Worktrees({ tile, hm, host }) {
       ]),
     confirm && h(Dialog, { open: true, onOpenChange: (o) => { if (!o) setConfirm(null); } },
       h(DialogContent, null,
-        h(DialogTitle, null, `Remove ${confirm.path.slice(root.length)}?`),
+        h(DialogTitle, null, `Remove ${named(confirm.path)}?`),
         h(DialogDescription, null, `Its folder is deleted${confirm.branch ? ` and its branch ${confirm.branch} too` : ""}. It has nothing uncommitted and nothing ${base} does not have.`),
         h(DialogFooter, null,
           h(Button, { variant: "ghost", onClick: () => setConfirm(null) }, "Keep it"),

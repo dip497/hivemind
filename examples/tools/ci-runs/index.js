@@ -2,7 +2,7 @@
 // read again every 15 seconds while a run is going, every minute otherwise. A failed job's log is
 // `gh run view --job <id> --log-failed`. "Ask an agent to fix" starts one in this tile's frame with
 // a prompt you read before it is sent (permissions workspace:spawn and workspace:prompt).
-import React, { useCallback, useEffect, useState } from "hm-plugin://host/react.js";
+import React, { useCallback, useEffect, useRef, useState } from "hm-plugin://host/react.js";
 import { Button, toast } from "hm-plugin://host/ui.js";
 
 const h = React.createElement;
@@ -42,7 +42,8 @@ function readable(log) {
     last = step;
     lines.push(rest.replace(/^﻿?\S+Z\s?/, ""));
   }
-  return lines.length > LOG_LINES ? [`… ${lines.length - LOG_LINES} lines above`, ...lines.slice(-LOG_LINES)].join("\n") : lines.join("\n");
+  while (lines.length && !lines[lines.length - 1]) lines.pop();
+  return lines.length > LOG_LINES ? [`… ${lines.length - LOG_LINES} lines above`, ...lines.slice(-LOG_LINES)] : lines;
 }
 
 async function gh(host, args, maxAgeMs = 0) {
@@ -60,6 +61,7 @@ function Runs({ tile, hm, host }) {
   const [jobs, setJobs] = useState(null);
   const [job, setJob] = useState(null);
   const [log, setLog] = useState(null);
+  const logBox = useRef(null);
   const refresh = useCallback(() => setTick((t) => t + 1), []);
   useEffect(() => hm.on("settings", (s) => setOpts({ count: s.count ?? 40, branch: s.branch ?? "all" })), [hm]);
 
@@ -106,10 +108,19 @@ function Runs({ tile, hm, host }) {
     if (!failed) return;
     let live = true;
     gh(host, ["run", "view", "--job", String(job), "--log-failed"], 300_000).then(
-      (out) => { if (live) setLog(readable(out) || "No failed lines in this job's log."); },
-      (e) => { if (live) setLog(`Could not read the log: ${e.message}`); });
+      (out) => { if (live) { const lines = readable(out); setLog(lines.length ? lines : ["No failed lines in this job's log."]); } },
+      (e) => { if (live) setLog([`Could not read the log: ${e.message}`]); });
     return () => { live = false; };
   }, [host, job, failed]);
+
+  // Open the log at its first error line, which GitHub marks `##[error]`; without one, at its end.
+  useEffect(() => {
+    const box = logBox.current;
+    if (!log || !box) return;
+    const first = box.querySelector("[data-error]");
+    if (first) box.scrollTop += first.getBoundingClientRect().top - box.getBoundingClientRect().top - box.clientHeight / 3;
+    else box.scrollTop = box.scrollHeight;
+  }, [log]);
 
   const choose = (id) => { setChosen(id); setJobs(null); setJob(null); hm.setLayout({ chosen: id }); };
   const act = async (what, args) => {
@@ -166,12 +177,15 @@ function Runs({ tile, hm, host }) {
             ? `Failed at: ${theJob.steps.filter((s) => s.conclusion === "failure").map((s) => s.name).join(", ") || "a step"}`
             : `${outcome(theJob).word} · ${theJob.steps.length} steps`),
           failed && hm.capabilities.includes("workspace:spawn") && h(Button, { size: "xs", variant: "outline", onClick: fix }, "Ask an agent to fix")),
-        h("div", { key: "log", style: { flex: 1, minHeight: 0, overflow: "auto" } },
+        h("div", { key: "log", ref: logBox, "data-log-box": true, style: { flex: 1, minHeight: 0, overflow: "auto" } },
           !theJob ? h("p", { style: { ...muted, padding: 12 } }, "Choose a job.")
             : !failed ? h("ol", { style: { margin: 0, padding: "8px 12px 8px 32px", fontSize: 12 } },
               theJob.steps.map((s) => h("li", { key: s.number, style: { padding: "2px 0" } }, h(Dot, { of: s }), " ", s.name)))
             : log === null ? h("p", { style: { ...muted, padding: 12 } }, "Loading the log…")
-              : h("pre", { "data-log": true, style: { margin: 0, padding: 12, fontSize: 11.5, lineHeight: 1.45, fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap", wordBreak: "break-word" } }, log)),
+              : h("pre", { "data-log": true, style: { margin: 0, padding: 12, fontSize: 11.5, lineHeight: 1.45, fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap", wordBreak: "break-word" } },
+                log.map((line, i) => line.includes("##[error]")
+                  ? h("div", { key: i, "data-error": true, style: { color: "var(--color-err)", fontWeight: 600 } }, line.replace("##[error]", ""))
+                  : h("div", { key: i }, line)))),
       ]));
 }
 
