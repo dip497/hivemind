@@ -9,6 +9,9 @@ import { buildTileSurfaces, createTileSurfaceBuilder, effectiveRepoOf, type Tile
 import type { FrameState, TileInstance } from "../../src/renderer/src/canvas-persistence.ts";
 import { registerTile } from "../../src/renderer/src/tiles/index.ts";
 
+// An issues tile, as a tool plugin registers one: it is handed the issues root of where it sits.
+registerTile({ surface: "test-issues", name: "Issues", kinds: { issues: { size: { width: 680, height: 460 }, singleton: true } }, data: (_t, s) => ({ root: s.root }), body: () => null });
+
 const noop = () => {};
 function ctx(over: Partial<TileSurfaceCtx>): TileSurfaceCtx {
   return {

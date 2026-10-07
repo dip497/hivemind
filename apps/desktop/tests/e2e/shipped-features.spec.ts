@@ -193,9 +193,12 @@ test("motion-aware class toggles during canvas pan", async () => {
 });
 
 test("Issues tile opens on the canvas", async () => {
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "issues" })));
-  await page.waitForSelector(".react-flow__node-issues", { timeout: 6_000 });
-  const txt = await page.evaluate(() => document.querySelector(".react-flow__node-issues")?.textContent || "");
+  // The Issues plugin registers its tile a moment after the window loads: ask until it is there.
+  await expect.poll(async () => {
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "issues" })));
+    return page.locator('[data-tool-plugin="hivemind/issues"]').count();
+  }, { timeout: 15_000 }).toBeGreaterThan(0);
+  const txt = await page.evaluate(() => document.querySelector('[data-tool-plugin="hivemind/issues"]')?.textContent || "");
   expect(txt).toContain("Issues"); // header renders (fixture has no .hivemind → shows empty/no-workspace body)
 });
 

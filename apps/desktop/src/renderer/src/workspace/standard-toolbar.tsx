@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Download, Folder, GitCompare, Earth, ListTodo, LoaderCircle, MoveUpRight, Palette, RotateCw, Scan, Shapes, Terminal, Upload, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, Download, Folder, GitCompare, Earth, LoaderCircle, MoveUpRight, Palette, RotateCw, Scan, Shapes, Terminal, Upload, type LucideIcon } from "lucide-react";
 import type { ToolbarAction, ToolbarActionId } from "@hivemind/core/toolbar";
 import { Button } from "../components/ui/button";
 import { MenuItem } from "../components/ui/menu-item";
@@ -16,7 +16,7 @@ export interface StandardToolbarProps {
   labels: boolean;
   compact: boolean;
   repoPath: string | null;
-  onToggle: (kind: "tree" | "shell" | "diff" | "issues") => void;
+  onToggle: (kind: "tree" | "shell" | "diff") => void;
   agentSel: string | undefined;
   onAgentChange: (id: string) => void;
   onSpawnAgent: (agent: { id: string; cmd: string; defaultArgs?: string[]; label: string }) => void;
@@ -36,7 +36,7 @@ export interface StandardToolbarProps {
 }
 
 const icons: Record<Exclude<ToolbarActionId, "agent" | "board">, LucideIcon> = {
-  terminal: Terminal, explorer: Folder, diff: GitCompare, issues: ListTodo,
+  terminal: Terminal, explorer: Folder, diff: GitCompare,
   frame: Scan, browser: Earth, theme: Palette,
 };
 // Derived per call: the catalog is replaced when manifests load.
@@ -48,7 +48,7 @@ export function StandardToolbar(props: StandardToolbarProps) {
   const { actions, labels, compact, repoPath, onToggle, onFrame, onBrowser, onTheme } = props;
   const callbacks: Record<Exclude<ToolbarActionId, "agent" | "board">, () => void> = {
     terminal: () => onToggle("shell"), explorer: () => onToggle("tree"),
-    diff: () => onToggle("diff"), issues: () => onToggle("issues"),
+    diff: () => onToggle("diff"),
     frame: onFrame, browser: onBrowser, theme: onTheme,
   };
   return <div role="group" aria-label="Workspace tools" className={`hm-island flex max-w-[calc(100vw-32px)] flex-wrap items-center justify-center gap-0.5 ${compact ? "p-1" : "p-1.5"}`} data-tool-island>
@@ -56,7 +56,7 @@ export function StandardToolbar(props: StandardToolbarProps) {
       if (action.id === "agent") return <AgentAction key={action.id} {...props} action={action} />;
       if (action.id === "board") return props.onBoard ? <BoardAction key={action.id} action={action} labels={labels} compact={compact} onBoard={props.onBoard} boardItems={!!props.boardItems} /> : null;
       const Icon = icons[action.id];
-      const needsRepo = action.id === "explorer" || action.id === "diff" || action.id === "issues";
+      const needsRepo = action.id === "explorer" || action.id === "diff";
       return <ActionButton key={action.id} action={action} labels={labels} disabled={needsRepo && !repoPath}
         onClick={callbacks[action.id]} icon={<Icon />} />;
     })}

@@ -57,7 +57,6 @@ const api: HiveIpc & {
     repoPath: string,
     cb: (info: { paths: string[] }) => void
   ) => () => void;
-  onMenuNewIssue: (cb: () => void) => () => void;
   onMenuToggleLayers: (cb: () => void) => () => void;
   onMenuFitOverlay: (cb: () => void) => () => void;
   onMenuResetScale: (cb: () => void) => () => void;
@@ -331,14 +330,8 @@ const api: HiveIpc & {
   onPtyExit: terminalExit.on,
   onFsChanged: fileChanged.on,
 
-  // Global accelerator bridge — main intercepts Ctrl+N before the DOM (xterm
-  // would otherwise eat it) and re-emits as IPC. Renderer re-dispatches as the
-  // same CustomEvent the regular keydown listener uses.
-  onMenuNewIssue: (cb: () => void) => {
-    const listener = () => cb();
-    ipcRenderer.on("menu:new-issue", listener);
-    return () => ipcRenderer.removeListener("menu:new-issue", listener);
-  },
+  // Global accelerator bridge — main intercepts ⌘B before the DOM (xterm would otherwise eat it)
+  // and re-emits as IPC.
   onMenuToggleLayers: (cb: () => void) => {
     const listener = () => cb();
     ipcRenderer.on("menu:toggle-layers", listener);

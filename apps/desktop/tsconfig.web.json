@@ -8,10 +8,11 @@
     "jsx": "react-jsx",
     "types": ["vite/client"],
     "paths": {
-      "@/*": ["./src/renderer/src/*"]
+      "@/*": ["./src/renderer/src/*"],
+      "@hivemind/app-ui": ["./src/renderer/src/plugin-ui.ts"]
     },
     "outDir": "out/.tsc-web"
   },
-  "include": ["src/renderer/**/*", "src/shared/**/*", "views/*/src/**/*"],
+  "include": ["src/renderer/**/*", "src/shared/**/*", "views/*/src/**/*", "tools/*/src/**/*"],
   "exclude": ["node_modules", "out", "dist"]
 }

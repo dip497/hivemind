@@ -1,4 +1,4 @@
-import type { IssueSummary } from "@hivemind/core/types";
+import type { IssueSummary } from "./data";
 import { groupIssues, type GroupBy } from "./grouping";
 import { IssueRow } from "./IssueCard";
 
@@ -7,13 +7,11 @@ import { IssueRow } from "./IssueCard";
  *  as a tracker). */
 export function ListView({
   issues,
-  root,
   groupBy,
   showCancelled,
   onWork,
 }: {
   issues: IssueSummary[];
-  root: string;
   groupBy: GroupBy;
   showCancelled: boolean;
   onWork: (i: IssueSummary) => void;
@@ -33,7 +31,7 @@ export function ListView({
           </div>
           <div className="flex flex-col gap-0.5">
             {g.items.map((issue) => (
-              <IssueRow key={issue.id} issue={issue} root={root} onWork={() => onWork(issue)} />
+              <IssueRow key={issue.id} issue={issue} onWork={() => onWork(issue)} />
             ))}
           </div>
         </div>

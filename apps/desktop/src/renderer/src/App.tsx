@@ -10,7 +10,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { UPDATE_START, UPDATE_STEPS, updateProgress, type UpdateProgress } from "../../shared/update-progress";
-import { Bell, ExternalLink, LoaderCircle, Plus, Settings, X, Palette, PanelsTopLeft, Bot, Keyboard, Info } from "lucide-react";
+import { Bell, ExternalLink, LoaderCircle, Settings, X, Palette, PanelsTopLeft, Bot, Keyboard, Info } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
@@ -20,12 +20,9 @@ import type { UpdateStatus } from "../../shared/ipc";
 import {
   inElectron,
   useFsChangedInvalidation,
-  useIssues,
   useProject,
 } from "./queries";
 import { Workspace } from "./Workspace";
-import { IssuePeek } from "./components/IssuePeek";
-import { NewIssueModal } from "./components/NewIssueModal";
 import { resolveSettingsPage } from "./settings-registry";
 import { TileErrorBoundary } from "./TileErrorBoundary";
 import { flushSettings, patchSettings, saveSettingsNow } from "./settings-store";
@@ -192,17 +189,6 @@ export function App() {
   // root for older builds.
   const repoPath = project?.repoPath ?? (root ? path.dirname(root) : null);
   useFsChangedInvalidation(repoPath, root);
-  const { data: issues = [] } = useIssues(root);
-
-  // Canvas-only: the Board/List views + their sidebar/filter chrome were
-  // removed — the canvas IS the workspace (issues live as the IssuesTile, the
-  // ⌘K palette, and IssuePeek). No view switcher.
-  const [peekId, setPeekId] = useState<string | null>(null);
-  // The workspace root the peek reads from. Defaults to the app's base root,
-  // but a cross-repo link (an id whose prefix belongs to another registered
-  // workspace) resolves to that repo's root so the peek shows the right issue.
-  const [peekRoot, setPeekRoot] = useState<string | null>(null);
-  const [newOpen, setNewOpen] = useState(false);
   // Ctrl+O / Ctrl+R on the canvas (useCanvasShortcuts): VS Code's Open Folder and Open Recent.
   const [recentOpen, setRecentOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -286,51 +272,15 @@ export function App() {
     return p.length >= 2 ? p : "HIVE";
   })();
 
-  // ⌘K palette → open peek via CustomEvent (decouples palette from App state)
-  useEffect(() => {
-    const onOpen = (e: Event) => {
-      // Detail is either a bare id (⌘K palette, peek links) or {id, root} when
-      // the opener knows its root (Issues tile). An explicit root is
-      // authoritative — use it and skip the registry guess entirely.
-      const detail = (e as CustomEvent<string | { id: string; root?: string | null }>).detail;
-      const id = typeof detail === "string" ? detail : detail?.id;
-      if (typeof id !== "string") return;
-      const explicitRoot = typeof detail === "object" && detail ? detail.root ?? null : null;
-      setPeekId(id);
-      if (explicitRoot) {
-        setPeekRoot(explicitRoot);
-        return;
-      }
-      // No root supplied: optimistically read from the base root; if the id
-      // belongs to another registered workspace, repoint once resolved.
-      setPeekRoot(root);
-      void window.hive
-        .resolveIssueRoot(id)
-        .then((r) => { if (r.root) setPeekRoot(r.root); })
-        .catch(() => { /* fall back to base root */ });
-    };
-    const onNew = () => setNewOpen(true);
-    // Canvas is always mounted now (canvas-only), so spawn-agent is handled
-    // directly by Canvas's own listener — no view-switch bridge needed.
-    window.addEventListener("hivemind:open-issue", onOpen as EventListener);
-    window.addEventListener("hivemind:new-issue", onNew);
-    return () => {
-      window.removeEventListener("hivemind:open-issue", onOpen as EventListener);
-      window.removeEventListener("hivemind:new-issue", onNew);
-    };
-  }, [root]);
-
-  // Ctrl+N new issue, Ctrl+B Layers — only when nothing is typed into: a terminal's textarea keeps them.
+  // Ctrl+B Layers — only when nothing is typed into: a terminal's textarea keeps it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
-      const k = e.key.toLowerCase();
-      if (k !== "n" && k !== "b") return;
+      if (e.key.toLowerCase() !== "b") return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       e.preventDefault();
-      if (k === "n") setNewOpen(true);
-      else window.dispatchEvent(new CustomEvent("hivemind:toggle-layers"));
+      window.dispatchEvent(new CustomEvent("hivemind:toggle-layers"));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -378,7 +328,6 @@ export function App() {
   useEffect(() => {
     const w = window as unknown as {
       hive?: {
-        onMenuNewIssue?: (cb: () => void) => () => void;
         onMenuToggleLayers?: (cb: () => void) => () => void;
         onMenuFitOverlay?: (cb: () => void) => () => void;
         onMenuResetScale?: (cb: () => void) => () => void;
@@ -386,8 +335,7 @@ export function App() {
         onMenuShortcut?: (cb: (action: string) => void) => () => void;
       };
     };
-    if (!w.hive?.onMenuNewIssue) return;
-    const offNew = w.hive.onMenuNewIssue(() => setNewOpen(true));
+    if (!w.hive?.onMenuToggleLayers) return;
     // ⌘/Ctrl+B toggles the Layers panel (LayersPanel listens for the event).
     const offLayers = w.hive.onMenuToggleLayers?.(() =>
       window.dispatchEvent(new CustomEvent("hivemind:toggle-layers")),
@@ -407,7 +355,6 @@ export function App() {
       window.dispatchEvent(new CustomEvent("hivemind:shortcut", { detail: action })),
     );
     return () => {
-      offNew?.();
       offLayers?.();
       offFit?.();
       offResetScale?.();
@@ -441,19 +388,6 @@ export function App() {
           <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
             <SharedBanner onMoved={openMoved} />
             <WorkspaceActions onShare={() => setShareOpen(true)} onPeople={() => setPeopleOpen(true)} />
-            {root && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setNewOpen(true)}
-                className="pointer-events-auto"
-                title="New issue (⌘N)"
-              >
-                <Plus />
-                <span>New issue</span>
-                <kbd className="font-mono text-[9.5px] ml-0.5">⌘N</kbd>
-              </Button>
-            )}
             <Button
               variant="secondary"
               size="icon"
@@ -470,7 +404,6 @@ export function App() {
           </div>
         </div>
 
-        <IssuePeek root={peekRoot ?? root} id={peekId} onClose={() => setPeekId(null)} />
         <RecentProjects
           open={recentOpen}
           recents={recents}
@@ -484,12 +417,6 @@ export function App() {
           {repoPath && shareOpen && <ShareDialog repo={repoPath} open onClose={() => setShareOpen(false)} onPeople={() => { setShareOpen(false); setPeopleOpen(true); }} onMoved={(uri) => { setShareOpen(false); openMoved(uri); }} />}
           {repoPath && peopleOpen && <PeopleDialog repo={repoPath} open onClose={() => setPeopleOpen(false)} />}
         </Suspense>
-        <NewIssueModal
-          root={root}
-          open={newOpen}
-          onOpenChange={setNewOpen}
-          onCreated={setPeekId}
-        />
         <InitWorkspacePrompt
           open={initOpen}
           onOpenChange={setInitOpen}

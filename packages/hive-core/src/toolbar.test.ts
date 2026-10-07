@@ -11,7 +11,6 @@ describe("toolbar catalog", () => {
       ["agent", "Agent", "2"],
       ["explorer", "Explorer", "3"],
       ["diff", "Diff", "4"],
-      ["issues", "Issues", "5"],
       ["frame", "Frame", "6"],
       ["browser", "Browser", "7"],
       ["board", "Add", ""],

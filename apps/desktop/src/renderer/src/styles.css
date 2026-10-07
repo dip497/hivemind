@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* The tool plugins that come with the app draw with the app's classes too. */
+@source "../../../tools";
 @import "tw-animate-css";
 @import "@xterm/xterm/css/xterm.css";
 @import "@xyflow/react/dist/style.css";

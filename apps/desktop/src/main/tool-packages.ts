@@ -9,10 +9,10 @@ import { execFile } from "node:child_process";
 import { constants } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, dialog, net, protocol } from "electron";
 import { isPluginEnabled } from "@hivemind/core/plugin-settings";
-import { isToolId } from "@hivemind/core/tool-format";
+import { isToolId, type ToolPackage } from "@hivemind/core/tool-format";
 import { installToolPackage, listToolPackages, removeToolPackage, toolFile } from "@hivemind/core/tool-packages";
 import { handle } from "./app-ipc.js";
 import { appWindowOf } from "./windows.js";
@@ -20,6 +20,16 @@ import { getSettings, reloadSettings } from "./settings-store.js";
 import type { ToolRun, ToolRunResult } from "../shared/ipc.js";
 
 export const PLUGIN_SCHEME = "hm-plugin";
+/** The tool plugins that come with the app, built beside its main bundle (scripts/build-views.mjs). */
+export const appToolsDir = (): string => fileURLToPath(new URL("../tools", import.meta.url));
+/** The packages from the last listing, by id: which folder each is served from. */
+const listed = new Map<string, ToolPackage>();
+const list = async (): Promise<ToolPackage[]> => {
+  const packages = await listToolPackages(undefined, appToolsDir());
+  listed.clear();
+  for (const p of packages) if (!listed.has(p.id)) listed.set(p.id, p);
+  return packages;
+};
 export const safeMode = (): boolean => process.env.HIVEMIND_SAFE_MODE === "1";
 
 const TYPES: Record<string, string> = {
@@ -53,8 +63,10 @@ export function handleToolProtocol(): void {
         return code ? served(code, "text/javascript") : served("no such host module", "text/plain", 404);
       }
       const id = u.host.replace("--", "/");
-      if (safeMode() || !isToolId(id) || !isPluginEnabled(getSettings().plugins.state, "tool", id, false)) return served("not switched on", "text/plain", 404);
-      const file = toolFile(id, decodeURIComponent(u.pathname.replace(/^\/+/, "")));
+      const pkg = isToolId(id) ? listed.get(id) ?? (await list()).find((p) => p.id === id) : undefined;
+      const app = pkg?.source === "app";
+      if (!pkg || (safeMode() && !app) || !isPluginEnabled(getSettings().plugins.state, "tool", id, app)) return served("not switched on", "text/plain", 404);
+      const file = toolFile(id, decodeURIComponent(u.pathname.replace(/^\/+/, "")), app ? appToolsDir() : undefined);
       const type = file ? TYPES[path.extname(file).toLowerCase()] : undefined;
       if (!file || !type) return served("not served", "text/plain", 403);
       const res = await net.fetch(pathToFileURL(file).toString());
@@ -135,7 +147,7 @@ export async function runTool(call: ToolRun): Promise<ToolRunResult> {
 }
 
 export function installToolPackageIpc(): void {
-  handle("tools:list", async () => ({ packages: await listToolPackages(), safeMode: safeMode() }));
+  handle("tools:list", async () => ({ packages: await list(), safeMode: safeMode() }));
   handle("tools:host-exports", (_e, map: unknown) => {
     if (typeof map !== "object" || map === null) return;
     hostExports = Object.fromEntries(Object.entries(map as Record<string, unknown>)
@@ -159,4 +171,5 @@ export function installToolPackageIpc(): void {
     toolsChanged();
   });
   handle("tools:run", (_e, call: ToolRun) => runTool(call));
+
 }

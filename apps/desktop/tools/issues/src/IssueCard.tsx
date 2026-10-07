@@ -1,14 +1,8 @@
 import type { DragEvent, KeyboardEvent } from "react";
 import { Play } from "lucide-react";
-import type { IssueSummary } from "@hivemind/core/types";
-import { StateIcon, LabelChip, Avatar } from "../components/StateMeta";
-import { Button } from "../components/ui/button";
-
-/** Open the full detail peek for an issue (App.tsx listens). Carry `root` — it's
- *  authoritative, so the peek doesn't re-guess via the registry. */
-export function openIssue(id: string, root: string): void {
-  window.dispatchEvent(new CustomEvent("hivemind:open-issue", { detail: { id, root } }));
-}
+import { useOpenIssue, type IssueSummary } from "./data";
+import { StateIcon, LabelChip, Avatar } from "./StateMeta";
+import { Button } from "@hivemind/app-ui";
 
 const onActivate = (fn: () => void) => (e: KeyboardEvent) => {
   if (e.key === "Enter" || e.key === " ") {
@@ -21,20 +15,19 @@ const onActivate = (fn: () => void) => (e: KeyboardEvent) => {
  *  only when the tile is focused (so it doesn't fight canvas pan). */
 export function IssueCard({
   issue,
-  root,
   onWork,
   draggable = false,
   onDragStart,
   onDragEnd,
 }: {
   issue: IssueSummary;
-  root: string;
   onWork: () => void;
   draggable?: boolean;
   onDragStart?: (e: DragEvent) => void;
   onDragEnd?: (e: DragEvent) => void;
 }) {
-  const open = () => openIssue(issue.id, root);
+  const openIssue = useOpenIssue();
+  const open = () => openIssue(issue.id);
   return (
     <div
       role="button"
@@ -88,8 +81,9 @@ export function IssueCard({
 }
 
 /** Compact one-line row for the list view. */
-export function IssueRow({ issue, root, onWork }: { issue: IssueSummary; root: string; onWork: () => void }) {
-  const open = () => openIssue(issue.id, root);
+export function IssueRow({ issue, onWork }: { issue: IssueSummary; onWork: () => void }) {
+  const openIssue = useOpenIssue();
+  const open = () => openIssue(issue.id);
   return (
     <div
       role="button"

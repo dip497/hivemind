@@ -48,7 +48,7 @@ test("no workspace: empty-state offers Initialize, no New-issue button", async (
   await expect(page.getByRole("button", { name: /Initialize workspace here/ })).toBeVisible();
 });
 
-test("Initialize workspace writes config + reveals New button", async () => {
+test("Initialize workspace writes config, and its issues can be made", async () => {
   // Trigger init from the canvas empty-state button (the canonical no-workspace UX).
   await page.getByRole("button", { name: /Initialize workspace here/ }).first().click();
 
@@ -66,20 +66,21 @@ test("Initialize workspace writes config + reveals New button", async () => {
     { timeout: 8_000 },
   ).toMatch(/prefix:\s*TST/);
 
-  // Then the re-resolve should reveal the New-issue button.
-  await expect(page.getByRole("button", { name: /New issue/ })).toBeVisible({ timeout: 10_000 });
-
   const cfg = await fs.readFile(path.join(workspace, ".hivemind", "config.yaml"), "utf8");
   expect(cfg).toMatch(/next_id:\s*1/);
 
-  // Now the create flow should work end-to-end.
-  await page.getByRole("button", { name: /New issue/ }).first().click();
+  // Now the create flow works end-to-end, from the Issues plugin's tile.
+  const tile = page.locator('[data-tool-plugin="hivemind/issues"]');
+  await expect.poll(async () => {
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "issues" })));
+    return tile.count();
+  }, { timeout: 10_000 }).toBeGreaterThan(0);
+  await tile.getByRole("button", { name: /New issue/ }).first().click();
   await expect(page.getByRole("heading", { name: "New issue" })).toBeVisible();
   await page.keyboard.type("First issue after init", { delay: 4 });
   await page.getByRole("button", { name: "Create issue" }).click();
-  // The create dialog closes and the new issue opens in the peek dialog
-  // (App: onCreated → setPeekId), so "no dialog at all" never holds. Wait for
-  // the CREATE dialog's heading to go, then dismiss the peek.
+  // The create dialog closes and the new issue opens in the issue dialog, so "no dialog at all"
+  // never holds. Wait for the CREATE dialog's heading to go, then dismiss the issue dialog.
   await expect(page.getByRole("heading", { name: "New issue" })).toBeHidden({ timeout: 3_000 });
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 3_000 });

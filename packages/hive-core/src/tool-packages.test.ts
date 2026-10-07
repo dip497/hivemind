@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createToolRegistry } from "./tool-registry.js";
+import { parseToolManifest } from "./tool-format.js";
 import { BUNDLED_TOOL_PLUGINS } from "./tool-plugins.js";
 import { installToolPackage, listToolPackages, readToolPackage, removeToolPackage } from "./tool-packages.js";
 import { readSettings } from "./settings.js";
@@ -90,4 +91,16 @@ test("an update is installed off: switching one on trusted the code that was the
   expect(isPluginEnabled(state, "tool", "acme/prs", false)).toBe(false);
   // What the person set it to stays.
   expect(state["tool:acme/prs"]).toEqual({ options: { prs: false } });
+});
+
+test("a tool plugin that comes with the app is the tool core says ships, and only the app's own may be hivemind/", async () => {
+  const root = path.resolve(import.meta.dir, "../../../apps/desktop/tools");
+  for (const name of fs.readdirSync(root)) {
+    const raw = JSON.parse(fs.readFileSync(path.join(root, name, "hivemind-tool.json"), "utf8"));
+    const p = parseToolManifest(raw, path.join(root, name), null, "app");
+    const shipped = BUNDLED_TOOL_PLUGINS.find((b) => b.id === p.id);
+    expect(shipped, p.id).toBeDefined();
+    for (const t of p.tools) expect(shipped!.tools.map((x) => [x.key, x.label, x.tileKind])).toContainEqual([t.key, t.label, t.tileKind]);
+    expect(() => parseToolManifest(raw, path.join(root, name), null, "you")).toThrow("kept for the plugins that come with the app");
+  }
 });

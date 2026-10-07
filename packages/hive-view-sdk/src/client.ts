@@ -134,8 +134,10 @@ export interface ViewIssues {
   /** Relate it to `other`, which may be in another of the host's workspaces. */
   link(id: string, other: string, type: string): Promise<unknown>;
   unlink(id: string, other: string): Promise<{ removed: number }>;
-  /** Into the host's workspace with prefix `prefix`. */
-  move(id: string, prefix: string, mode: "move" | "copy"): Promise<unknown>;
+  /** Into the host's workspace with prefix `prefix`; the result names the issue there (`newId`). */
+  move(id: string, prefix: string, mode: "move" | "copy"): Promise<{ newId: string; mode: "move" | "copy"; from: string }>;
+  /** The host's other workspaces an issue can go to: their prefix and title. */
+  workspaces(): Promise<{ prefix: string; title: string }[]>;
 }
 
 export interface ConnectOptions {

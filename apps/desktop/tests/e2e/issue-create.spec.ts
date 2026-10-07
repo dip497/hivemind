@@ -51,13 +51,19 @@ test.afterAll(async () => {
   await fs.rm(workspace, { recursive: true, force: true }).catch(() => {/*ignored*/});
 });
 
-test("project resolves: the floating New-issue button is visible", async () => {
-  // Canvas-only: New lives in the floating top-right chrome, not a header bar.
-  await expect(page.getByRole("button", { name: /New issue/ })).toBeVisible();
+const issuesTile = () => page.locator('[data-tool-plugin="hivemind/issues"]');
+
+test("the Issues plugin's tile opens, with New in it", async () => {
+  // The Issues plugin registers its tile a moment after the window loads: ask until it is there.
+  await expect.poll(async () => {
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "issues" })));
+    return page.locator('[data-tool-plugin="hivemind/issues"]').count();
+  }, { timeout: 15_000 }).toBeGreaterThan(0);
+  await expect(issuesTile().getByRole("button", { name: /New issue/ })).toBeVisible({ timeout: 10_000 });
 });
 
 test("creates an issue via the modal and persists it to disk", async () => {
-  await page.getByRole("button", { name: /New issue/ }).first().click();
+  await issuesTile().getByRole("button", { name: /New issue/ }).first().click();
   await page.waitForSelector('[role="dialog"]', { timeout: 3_000 });
   // The dialog should contain the heading "New issue" — disambiguates from
   // the ⌘K palette which also opens dialogs.
@@ -74,12 +80,8 @@ test("creates an issue via the modal and persists it to disk", async () => {
   // Submit. The submit button reads "Create issue".
   await page.getByRole("button", { name: "Create issue" }).click();
 
-  // Dialog closes on submit. (Canvas-only: there's no board view to render the
-  // card into — the issue lives on disk + in the IssuesTile when opened. The
-  // on-disk assertions below are the source of truth.)
-  // The create dialog closes and the new issue opens in the peek dialog
-  // (App: onCreated → setPeekId), so "no dialog at all" never holds. Wait for
-  // the CREATE dialog's heading to go, then dismiss the peek.
+  // The create dialog closes and the new issue opens in the issue dialog, so "no dialog at all"
+  // never holds. Wait for the CREATE dialog's heading to go, then dismiss the issue dialog.
   await expect(page.getByRole("heading", { name: "New issue" })).toBeHidden({ timeout: 3_000 });
   // The peek can mount after the create dialog goes, so an Escape can land between the two.
   await expect.poll(async () => {
@@ -100,10 +102,6 @@ test("creates an issue via the modal and persists it to disk", async () => {
   // The config's next_id should now be 2.
   const cfg = await fs.readFile(path.join(workspace, ".hivemind", "config.yaml"), "utf8");
   expect(cfg).toMatch(/next_id:\s*2/);
-});
-
-test("Ctrl+N opens the same modal", async () => {
-  await page.keyboard.press("Control+n");
-  await expect(page.getByRole("heading", { name: "New issue" })).toBeVisible({ timeout: 2_000 });
-  await page.keyboard.press("Escape");
+  // The tile's board shows it, live: the plugin hears the workspace's issues change.
+  await expect(issuesTile()).toContainText(title, { timeout: 5_000 });
 });

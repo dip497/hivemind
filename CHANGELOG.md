@@ -9,6 +9,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Changed: Issues is a tool plugin that comes with the app (`hivemind/issues`), built on the same SDK as anyone's: the Issues tile, with New issue and each issue's dialog in it, opened from a frame's Open menu. **Breaking:** the title bar's New issue button, ⌘N, and the toolbar's Issues button and its 5 key are gone; the issues themselves, and `hive new | list | show | update`, are unchanged.
+- New: view protocol 1.9 — a view, a tool's tile or a widget reads the workspace's issues live (`hm.onIssues`) and calls its issue methods (`hm.issues.read | create | update | setState | comment | delete | link | unlink | move | workspaces`); anything that writes needs the permission `workspace:issues`.
+- New: a tool plugin draws with the app's own UI kit (buttons, inputs, dialogs, popovers, menus, Markdown, notifications), imported from `hm-plugin://host/ui.js`, so it looks like the app.
 - Changed: the Windows view is a view package that comes with the app, built on the same protocol as anyone's, with the app's Layers rail beside it. Installing a view with the id `windows` replaces it. Which tabs you minimized starts afresh once.
 - New: a view's manifest can ask for the app's Layers rail beside it (`"layers": true`), with every frame action, and keep what it saves on this device instead of in the shared workspace (`"layout": "personal"`).
 - **Breaking:** a widget reads and acts on the workspace through `hive.hm`, the client a view and a tool's tile have, held to its widget.json's permissions: `hive.hm.on("structure")`, `subscribeStatus`, `onEvents`, `commands.spawnAgent`, `prompt`. `hive.workspace` and the `agents` and `agent` events are gone.

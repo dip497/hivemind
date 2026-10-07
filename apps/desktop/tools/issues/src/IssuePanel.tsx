@@ -1,53 +1,29 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+/**
+ * The issue panel: one issue in full, edited in place — title, description, acceptance criteria,
+ * sub-issues, relations, activity, and its state, assignee, parent and labels. Opened from a card,
+ * a link or "New issue"; it reads and writes through the plugin's `hm`.
+ */
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Play, FileQuestionMark, X } from "lucide-react";
-import type { AcceptanceItem, Issue, IssueState, LinkType } from "@hivemind/core/types";
-import { Button } from "./ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "./ui/dialog";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { MenuItem } from "./ui/menu-item";
-import { Textarea } from "./ui/textarea";
-import {
-  useCommentOnIssue,
-  useDeleteIssue,
-  useIssue,
-  useIssues,
-  useLinkIssue,
-  useMoveIssue,
-  useUnlinkIssue,
-  useUpdateIssue,
-  useUpdateState,
-  useWorkspaces,
-} from "../queries";
+import { Button, Dialog, DialogContent, DialogTitle, Input, Label, MarkdownPreview, MenuItem, Textarea } from "@hivemind/app-ui";
+import { useIssue, useIssueList, write, type AcceptanceItem, type Issue, type IssueState } from "./data";
+import type { PanelProps } from "./data";
 import { STATE_COLOR, STATE_LABEL, STATE_ORDER, StateIcon } from "./StateMeta";
-import { AssigneePicker, LabelPicker, ParentPicker } from "../issues/pickers";
-import { SubIssueTree } from "../issues/SubIssueTree";
+import { AssigneePicker, LabelPicker, ParentPicker } from "./pickers";
+import { SubIssueTree } from "./SubIssueTree";
+import { workPrompt } from "./IssuesTile";
 
-// Lazy: marked + DOMPurify (+ mermaid on demand) load only when a description
-// actually renders. Reuses the editor's renderer.
-const MarkdownPreview = lazy(() =>
-  import("../markdown-preview").then((m) => ({ default: m.MarkdownPreview })),
-);
+type LinkType = "relates" | "blocks" | "blocked-by" | "duplicates" | "parent-of" | "child-of";
 
-interface Props {
-  root: string | null;
-  id: string | null;
-  onClose: () => void;
-}
-
-export function IssuePeek({ root, id, onClose }: Props) {
-  const { data: issue, isLoading, isError, error } = useIssue(root, id ?? undefined);
-  const update = useUpdateState();
-  const patch = useUpdateIssue();
-  const comment = useCommentOnIssue();
-  const del = useDeleteIssue();
+export function IssuePanel({ hm, params, close: onClose, openPanel }: PanelProps) {
+  const id = (params as { id?: string } | null)?.id ?? null;
+  const { issue, loading: isLoading, error } = useIssue(id);
+  const isError = !!error;
+  const [busy, setBusy] = useState(false);
+  const patch = (p: Record<string, unknown>) => { if (issue) void write("Saving the issue", hm.issues.update(issue.id, p)); };
 
   // Workspace-wide issue list powers the editable pickers + sub-issue tree.
-  const { data: allIssues = [] } = useIssues(root);
+  const allIssues = useIssueList() ?? [];
   const allLabels = useMemo(() => Array.from(new Set(allIssues.flatMap((i) => i.labels))).sort(), [allIssues]);
   const allAssignees = useMemo(
     () => Array.from(new Set(allIssues.map((i) => i.assignee?.id).filter((x): x is string => !!x))).sort(),
@@ -79,7 +55,7 @@ export function IssuePeek({ root, id, onClose }: Props) {
               </div>
               <p className="text-[11.5px] text-[var(--color-fg3)] break-words">
                 {isError
-                  ? (error instanceof Error ? error.message : String(error))
+                  ? error
                   : `"${id}" isn't in this workspace — it may belong to a different frame or have been deleted.`}
               </p>
               <Button variant="outline" onClick={onClose}>
@@ -96,37 +72,29 @@ export function IssuePeek({ root, id, onClose }: Props) {
               )}
               <div className="ml-auto flex items-center gap-1">
                 <Button
-                  onClick={async () => {
-                    const repoDir = root ? root.replace(/\/\.hivemind\/?$/, "") : null;
-                    if (repoDir) {
-                      try { await window.hive.installAgentic(repoDir); } catch { /* best-effort */ }
-                    }
-                    const work = `Work on ${issue.id}: load it via hive_get_issue, complete the acceptance criteria, and end with hive_set_state. Title: "${issue.title}".`;
-                    window.dispatchEvent(
-                      new CustomEvent("hivemind:deliver-to-claude", { detail: { text: work } }),
-                    );
+                  onClick={() => {
+                    void write("Starting an agent", Promise.resolve().then(() => hm.commands.spawnAgent(null, null, { prompt: workPrompt(issue), name: issue.id })));
                     onClose();
                   }}
-                  title="Set up agents (if needed), spawn claude, and tell it to work on this issue"
+                  title="Start an agent and tell it to work on this issue (you send or cancel it)"
                 >
                   <Play fill="currentColor" strokeWidth={0} />
                   Work on this
                 </Button>
                 <span aria-hidden className="mx-0.5 h-5 w-px bg-[var(--color-line2)]" />
                 <Button
-                  onClick={() => {
-                    if (!root) return;
+                  onClick={async () => {
                     if (!confirm(`Delete ${issue.id}? This removes the markdown file.`)) return;
-                    del.mutate(
-                      { root, id: issue.id },
-                      { onSuccess: onClose },
-                    );
+                    setBusy(true);
+                    const done = await write("Deleting the issue", hm.issues.delete(issue.id).then(() => true));
+                    setBusy(false);
+                    if (done) onClose();
                   }}
                   variant="ghost"
                   size="icon-sm"
                   title="Delete issue"
                   aria-label="Delete issue"
-                  disabled={del.isPending}
+                  disabled={busy}
                 >
                   <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden><path d="M3 4h8M5 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M4 4l1 8a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1l1-8" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </Button>
@@ -136,36 +104,25 @@ export function IssuePeek({ root, id, onClose }: Props) {
               <div className="px-7 py-6 border-r border-[var(--color-line)] min-w-0 overflow-y-auto">
                 <EditableTitle
                   value={issue.title}
-                  onSave={(v) => root && patch.mutate({ root, id: issue.id, patch: { title: v } })}
+                  onSave={(v) => patch({ title: v })}
                 />
                 <Section title="Description">
                   <EditableDescription
                     value={issue.sections.description}
-                    onSave={(v) =>
-                      root && patch.mutate({ root, id: issue.id, patch: { description: v } })
-                    }
+                    onSave={(v) => patch({ description: v })}
                   />
                 </Section>
                 <Section title="Acceptance criteria">
                   <AcEditor
                     items={issue.sections.acceptanceCriteria}
-                    onChange={(next) =>
-                      root &&
-                      patch.mutate({
-                        root,
-                        id: issue.id,
-                        patch: { acceptanceCriteria: next },
-                      })
-                    }
+                    onChange={(next) => patch({ acceptanceCriteria: next })}
                   />
                 </Section>
-                {root && (
-                  <Section title="Sub-issues">
-                    <SubIssueTree root={root} parentId={issue.id} items={subIssues} />
-                  </Section>
-                )}
+                <Section title="Sub-issues">
+                  <SubIssueTree parentId={issue.id} items={subIssues} />
+                </Section>
                 <Section title="Relations">
-                  <RelationsSection root={root} issue={issue} onClose={onClose} />
+                  <RelationsSection issue={issue} onClose={onClose} openIssue={(other) => openPanel("issue", { id: other })} hm={hm} />
                 </Section>
                 <Section title="Activity">
                   {issue.sections.activity.length > 0 && (
@@ -182,10 +139,8 @@ export function IssuePeek({ root, id, onClose }: Props) {
                     </ol>
                   )}
                   <CommentComposer
-                    pending={comment.isPending}
-                    onSubmit={(msg) =>
-                      root && comment.mutate({ root, id: issue.id, message: msg })
-                    }
+                    pending={false}
+                    onSubmit={(msg) => { void write("Posting the comment", hm.issues.comment(issue.id, msg)); }}
                   />
                 </Section>
               </div>
@@ -193,28 +148,28 @@ export function IssuePeek({ root, id, onClose }: Props) {
                 <PropRow label="State">
                   <StateSelect
                     value={issue.state}
-                    onChange={(s) => root && update.mutate({ root, id: issue.id, state: s, note: "set from peek" })}
+                    onChange={(s) => { void write("Changing the state", hm.issues.setState(issue.id, s, "set from the issue panel")); }}
                   />
                 </PropRow>
                 <PropRow label="Assignee">
                   <AssigneePicker
                     value={issue.assignee}
                     allAssignees={allAssignees}
-                    onChange={(a) => root && patch.mutate({ root, id: issue.id, patch: { assignee: a } })}
+                    onChange={(a) => patch({ assignee: a })}
                   />
                 </PropRow>
                 <PropRow label="Parent">
                   <ParentPicker
                     value={issue.parent}
                     candidates={parentCandidates}
-                    onChange={(p) => root && patch.mutate({ root, id: issue.id, patch: { parent: p } })}
+                    onChange={(p) => patch({ parent: p })}
                   />
                 </PropRow>
                 <PropRow label="Labels">
                   <LabelPicker
                     value={issue.labels}
                     allLabels={allLabels}
-                    onChange={(l) => root && patch.mutate({ root, id: issue.id, patch: { labels: l } })}
+                    onChange={(l) => patch({ labels: l })}
                   />
                 </PropRow>
                 <PropRow label="Created">
@@ -237,7 +192,7 @@ export function IssuePeek({ root, id, onClose }: Props) {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="mt-5">
       <div className="u-eyebrow mb-2">{title}</div>
@@ -246,7 +201,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function PropRow({ label, children }: { label: string; children: React.ReactNode }) {
+function PropRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
       <Label className="mb-1">{label}</Label>
@@ -345,9 +300,7 @@ function EditableDescription({ value, onSave }: { value: string; onSave: (v: str
     return (
       <div className="group relative">
         {value.trim() ? (
-          <Suspense fallback={<p className="text-[11.5px] text-[var(--color-fg3)]">rendering…</p>}>
-            <MarkdownPreview source={value} className="md-preview" />
-          </Suspense>
+          <MarkdownPreview source={value} className="md-preview" />
         ) : (
           <p className="text-[12px] text-[var(--color-fg2)] italic">No description.</p>
         )}
@@ -492,11 +445,10 @@ function CommentComposer({
 // transfer). Reciprocal is recorded automatically on the other issue.
 const LINK_TYPES: LinkType[] = ["relates", "blocks", "blocked-by", "duplicates", "parent-of", "child-of"];
 
-function RelationsSection({ root, issue, onClose }: { root: string | null; issue: Issue; onClose: () => void }) {
-  const workspaces = useWorkspaces().data ?? [];
-  const move = useMoveIssue();
-  const link = useLinkIssue();
-  const unlink = useUnlinkIssue();
+function RelationsSection({ issue, onClose, openIssue, hm }: { issue: Issue; onClose: () => void; openIssue: (id: string) => void; hm: PanelProps["hm"] }) {
+  const [workspaces, setWorkspaces] = useState<{ prefix: string; title: string }[]>([]);
+  useEffect(() => { void hm.issues.workspaces().then(setWorkspaces, () => setWorkspaces([])); }, [hm]);
+  const [pending, setPending] = useState(false);
   const [linking, setLinking] = useState(false);
   const [linkId, setLinkId] = useState("");
   const [linkType, setLinkType] = useState<LinkType>("relates");
@@ -506,13 +458,21 @@ function RelationsSection({ root, issue, onClose }: { root: string | null; issue
   const myPrefix = issue.id.split("-")[0];
   const otherWorkspaces = workspaces.filter((w) => w.prefix !== myPrefix);
 
-  function submitLink() {
+  async function submitLink() {
     const other = linkId.trim().toUpperCase();
-    if (!root || !/^[A-Z][A-Z0-9]{1,9}-\d+(\.\d+)*$/.test(other)) return;
-    link.mutate(
-      { root, id: issue.id, otherId: other, type: linkType },
-      { onSuccess: () => { setLinkId(""); setLinking(false); } },
-    );
+    if (!/^[A-Z][A-Z0-9]{1,9}-\d+(\.\d+)*$/.test(other)) return;
+    setPending(true);
+    const done = await write("Linking the issue", hm.issues.link(issue.id, other, linkType));
+    setPending(false);
+    if (done !== null) { setLinkId(""); setLinking(false); }
+  }
+  async function transfer(mode: "move" | "copy") {
+    if (!dest) return;
+    setPending(true);
+    const res = await write(mode === "move" ? "Moving the issue" : "Copying the issue", hm.issues.move(issue.id, dest, mode));
+    setPending(false);
+    // Moved: the source is gone, so open the issue where it went.
+    if (res && mode === "move") { onClose(); setTimeout(() => openIssue(res.newId), 60); }
   }
 
   return (
@@ -527,14 +487,14 @@ function RelationsSection({ root, issue, onClose }: { root: string | null; issue
               <button
                 className="font-mono text-[11.5px] text-[var(--color-info)] hover:underline truncate"
                 title={`open ${l.id}`}
-                onClick={() => window.dispatchEvent(new CustomEvent<string>("hivemind:open-issue", { detail: l.id }))}
+                onClick={() => openIssue(l.id)}
               >
                 {l.id}
               </button>
               <Button
                 variant="ghost"
                 size="icon-xs"
-                onClick={() => root && unlink.mutate({ root, id: issue.id, otherId: l.id })}
+                onClick={() => { void write("Removing the link", hm.issues.unlink(issue.id, l.id)); }}
                 aria-label={`Remove link to ${l.id}`}
                 reveal="dim"
                 className="ml-auto"
@@ -553,7 +513,7 @@ function RelationsSection({ root, issue, onClose }: { root: string | null; issue
             autoFocus
             value={linkId}
             onChange={(e) => setLinkId(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") submitLink(); if (e.key === "Escape") setLinking(false); }}
+            onKeyDown={(e) => { if (e.key === "Enter") void submitLink(); if (e.key === "Escape") setLinking(false); }}
             placeholder="OTHER-ID"
             font="mono"
             className="flex-1"
@@ -565,7 +525,7 @@ function RelationsSection({ root, issue, onClose }: { root: string | null; issue
           >
             {LINK_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-          <Button size="xs" onClick={submitLink} disabled={link.isPending}>Add</Button>
+          <Button size="xs" onClick={() => void submitLink()} disabled={pending}>Add</Button>
         </div>
       ) : (
         <Button variant="outline" size="xs" onClick={() => setLinking(true)}>+ Link issue</Button>
@@ -582,32 +542,10 @@ function RelationsSection({ root, issue, onClose }: { root: string | null; issue
             <option value="">workspace…</option>
             {otherWorkspaces.map((w) => <option key={w.prefix} value={w.prefix}>{w.title} ({w.prefix})</option>)}
           </select>
-          <Button
-            variant="secondary"
-            size="xs"
-            disabled={!root || !dest || move.isPending}
-            onClick={() => root && dest && move.mutate({ root, id: issue.id, destPrefix: dest, mode: "copy" })}
-            title="Copy this issue into the selected workspace (source kept, linked)"
-          >Copy</Button>
-          <Button
-            variant="secondary"
-            size="xs"
-            disabled={!root || !dest || move.isPending}
-            onClick={() =>
-              root && dest && move.mutate(
-                { root, id: issue.id, destPrefix: dest, mode: "move" },
-                {
-                  // Source is gone after a move — close this peek and open the
-                  // freshly-created issue in its new workspace.
-                  onSuccess: (res) => {
-                    onClose();
-                    setTimeout(() => window.dispatchEvent(new CustomEvent<string>("hivemind:open-issue", { detail: res.newId })), 60);
-                  },
-                },
-              )
-            }
-            title="Move this issue into the selected workspace (source deleted)"
-          >Move</Button>
+          <Button variant="secondary" size="xs" disabled={!dest || pending} onClick={() => void transfer("copy")}
+            title="Copy this issue into the selected workspace (source kept, linked)">Copy</Button>
+          <Button variant="secondary" size="xs" disabled={!dest || pending} onClick={() => void transfer("move")}
+            title="Move this issue into the selected workspace (source deleted)">Move</Button>
         </div>
       )}
     </div>

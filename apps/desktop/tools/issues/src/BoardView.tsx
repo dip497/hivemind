@@ -1,8 +1,7 @@
 import { useRef, useState } from "react";
-import type { IssueSummary } from "@hivemind/core/types";
+import { useIssuesPlugin, write, type IssueSummary } from "./data";
 import { groupIssues, type GroupBy, type IssueGroup } from "./grouping";
 import { IssueCard } from "./IssueCard";
-import { useUpdateState, useUpdateIssue } from "../queries";
 
 const canDrop = (g: IssueGroup): boolean =>
   g.dropState !== undefined || g.dropAssignee !== undefined || g.dropParent !== undefined;
@@ -13,22 +12,19 @@ const canDrop = (g: IssueGroup): boolean =>
  *  columns are multi-membership and have no drop target. */
 export function BoardView({
   issues,
-  root,
   groupBy,
   showCancelled,
   selected,
   onWork,
 }: {
   issues: IssueSummary[];
-  root: string;
   groupBy: GroupBy;
   showCancelled: boolean;
   selected: boolean;
   onWork: (i: IssueSummary) => void;
 }) {
   const groups = groupIssues(issues, groupBy, showCancelled);
-  const updateState = useUpdateState();
-  const updateIssue = useUpdateIssue();
+  const { hm } = useIssuesPlugin();
   const dragId = useRef<string | null>(null);
   const [overKey, setOverKey] = useState<string | null>(null);
 
@@ -41,16 +37,12 @@ export function BoardView({
     if (!issue) return;
     if (g.dropState !== undefined) {
       if (issue.state !== g.dropState)
-        updateState.mutate({ root, id, state: g.dropState, note: `moved to ${g.dropState} via board` });
+        void write("Moving the issue", hm.issues.setState(id, g.dropState, `moved to ${g.dropState} via board`));
     } else if (g.dropAssignee !== undefined) {
       if ((issue.assignee?.id ?? null) !== (g.dropAssignee ?? null))
-        updateIssue.mutate({
-          root,
-          id,
-          patch: { assignee: g.dropAssignee ? { type: "member", id: g.dropAssignee } : null },
-        });
+        void write("Assigning the issue", hm.issues.update(id, { assignee: g.dropAssignee ? { type: "member", id: g.dropAssignee } : null }));
     } else if (g.dropParent !== undefined) {
-      if ((issue.parent ?? null) !== g.dropParent) updateIssue.mutate({ root, id, patch: { parent: g.dropParent } });
+      if ((issue.parent ?? null) !== g.dropParent) void write("Moving the issue", hm.issues.update(id, { parent: g.dropParent }));
     }
   };
 
@@ -81,7 +73,6 @@ export function BoardView({
                 <IssueCard
                   key={issue.id}
                   issue={issue}
-                  root={root}
                   onWork={() => onWork(issue)}
                   draggable={selected}
                   onDragStart={(e) => {

@@ -1,4 +1,4 @@
-import { Button } from "./ui/button";
+import { Button } from "@hivemind/app-ui";
 
 export type ViewKind = "board" | "list" | "canvas";
 

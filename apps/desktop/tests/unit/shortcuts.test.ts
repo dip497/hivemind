@@ -37,11 +37,11 @@ test("no modifier, Alt, or Ctrl+0 is not an app shortcut", () => {
   assert.equal(ctrl("0"), null);         // canvas zoom, or the tile's font — decided in the renderer
 });
 
-test("Ctrl+B and Ctrl+N stay with the terminal; ⌘B / ⌘N are the app's", () => {
+test("Ctrl+B and Ctrl+N stay with the terminal; ⌘B is the app's, ⌘N is not", () => {
   const base = { control: false, meta: false, shift: false, alt: false };
   assert.equal(menuKey({ ...base, key: "b", control: true }), null);
   assert.equal(menuKey({ ...base, key: "n", control: true }), null);
   assert.equal(menuKey({ ...base, key: "b", meta: true }), "toggle-layers");
-  assert.equal(menuKey({ ...base, key: "N", meta: true }), "new-issue");
+  assert.equal(menuKey({ ...base, key: "N", meta: true }), null);
   assert.equal(menuKey({ ...base, key: "b", meta: true, shift: true }), null);
 });

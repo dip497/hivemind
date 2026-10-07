@@ -16,7 +16,7 @@ import type { ToolPackage } from "@hivemind/core/tool-format";
 
 /** A tool plugin you added, by id; undefined for one that comes with the app. */
 function useAdded(pluginId: string): ToolPackage | undefined {
-  return useToolPackages().packages.find((p) => p.id === pluginId);
+  return useToolPackages().packages.find((p) => p.id === pluginId && p.source === "you");
 }
 
 function useToolEnabled(pluginId: string): [boolean, () => void] {
@@ -87,7 +87,7 @@ export function ToolsSection({ matches }: { matches: (text: string) => boolean }
   const optional = shown.filter((p) => !p.builtin);
   const builtin = shown.filter((p) => p.builtin);
   const { packages, safeMode } = useToolPackages();
-  const added = packages.filter((p) => matches(`${p.name} ${p.id} ${p.description}`));
+  const added = packages.filter((p) => p.source === "you" && matches(`${p.name} ${p.id} ${p.description}`));
   if (!shown.length && !added.length) return null;
   return <section className="settings-stack plugins-kind" aria-label="Tools" data-plugins-kind="tool">
     <h3 className="plugins-kind-heading">Tools</h3>

@@ -107,7 +107,8 @@ export function usePlugins(catalog: CatalogEntry[] | null): PluginRecord[] {
         origin: "app", installed: true, can: [], readme: null,
       });
     }
-    for (const t of tools) {
+    // The app's own are listed with the tools that ship, above; these are the ones you added.
+    for (const t of tools.filter((x) => x.source === "you")) {
       out.push({
         kind: "tool", id: t.id, name: t.name, description: t.description, origin: "you", installed: true,
         enabled: isPluginEnabled(state, "tool", t.id, false), ...(t.version ? { version: t.version } : {}),

@@ -10,6 +10,7 @@ import { parsePatchFiles, type CodeViewItem } from "@pierre/diffs";
 import { CodeView } from "@pierre/diffs/react";
 import { TILE_API_VERSION, type HostSdk } from "@hivemind/tile-sdk";
 import { Button } from "../components/ui/button";
+import * as ui from "../plugin-ui";
 
 const MarkdownPreview = lazy(() => import("../markdown-preview").then((m) => ({ default: m.MarkdownPreview })));
 
@@ -40,7 +41,7 @@ export const hostSdk: HostSdk = {
   Markdown: Markdown as HostSdk["Markdown"],
 };
 
-const MODULES: Record<string, object> = { react: React, "react-jsx-runtime": jsxRuntime, sdk: hostSdk };
+const MODULES: Record<string, object> = { react: React, "react-jsx-runtime": jsxRuntime, sdk: hostSdk, ui };
 
 let exposed: Promise<void> | null = null;
 /** Put the host modules where main's re-exports read them, once, before the first plugin loads. */

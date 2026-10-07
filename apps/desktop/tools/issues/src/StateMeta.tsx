@@ -1,4 +1,4 @@
-import type { IssueState } from "@hivemind/core/types";
+import type { IssueState } from "./data";
 
 export const STATE_COLOR: Record<IssueState, string> = {
   backlog: "var(--color-state-backlog)",

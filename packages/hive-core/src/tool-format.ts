@@ -11,9 +11,9 @@
  *                 "needsRepo": true, "singleton": true, "glyph": "⇅" }]
  *   }
  *
- * The module's default export is `{ tiles: { [tileKind]: Component } }`; what the component is
- * handed is `@hivemind/tile-sdk`'s contract, versioned by `apiVersion`. `permissions` and
- * `settings` are a view's: the same `hm` client, held to the same words. No I/O here.
+ * The module's default export is `{ tiles: { [tileKind]: Component } }`; what each is handed is
+ * `@hivemind/tile-sdk`'s contract, versioned by `apiVersion`. `permissions` and `settings` are a
+ * view's: the same `hm` client, held to the same words. No I/O here.
  */
 import { VIEW_PERMISSIONS, type ViewPermission } from "@hivemind/view-sdk/protocol";
 import { parseSettingFields, type SettingField } from "@hivemind/view-sdk/settings";
@@ -39,6 +39,8 @@ export interface ToolTile {
 }
 
 export interface ToolPackage extends ToolPluginContribution {
+  /** "app": it comes with the app; "you": you added it. */
+  source: "app" | "you";
   name: string;
   description: string;
   version?: string;
@@ -65,19 +67,20 @@ const text = (v: unknown, max: number): string | undefined => (typeof v === "str
  * A package from its `hivemind-tool.json`, or why it is not one. `folderId` is the id its folder
  * stands for; a manifest naming another id is refused, so a folder cannot pass for a plugin it is not.
  */
-export function parseToolManifest(raw: unknown, dir: string, folderId: string | null): ToolPackage {
+export function parseToolManifest(raw: unknown, dir: string, folderId: string | null, source: "app" | "you" = "you"): ToolPackage {
   if (!isObj(raw)) throw new Error("hivemind-tool.json is not an object");
   const id = typeof raw.id === "string" ? raw.id : "";
   if (!isToolId(id)) throw new Error(`"${id}" is not a tool plugin id: it is owner/name, like acme/prs`);
-  if (id.startsWith(`${RESERVED_OWNER}/`)) throw new Error(`${RESERVED_OWNER}/ is kept for the plugins that come with the app`);
+  if (id.startsWith(`${RESERVED_OWNER}/`) !== (source === "app")) throw new Error(source === "app" ? `a plugin that comes with the app is ${RESERVED_OWNER}/<name>` : `${RESERVED_OWNER}/ is kept for the plugins that come with the app`);
   if (folderId !== null && folderId !== id) throw new Error(`its hivemind-tool.json says it is ${id}, not ${folderId}`);
   const entry = typeof raw.entry === "string" ? raw.entry : "index.js";
   if (!/^[A-Za-z0-9_.-]+(\/[A-Za-z0-9_.-]+)*\.m?js$/.test(entry) || entry.split("/").includes("..")) throw new Error(`entry "${entry}" is not a .js file inside its folder`);
-  if (!Array.isArray(raw.tools) || raw.tools.length === 0) throw new Error("it lists no tools");
-  if (raw.tools.length > 16) throw new Error("it lists more than 16 tools");
+  const listed = Array.isArray(raw.tools) ? raw.tools : [];
+  if (listed.length === 0) throw new Error("it lists no tools");
+  if (listed.length > 16) throw new Error("it lists more than 16 tools");
   const tools: { key: string; label: string; description?: string; tileKind: string }[] = [];
   const tiles: Record<string, ToolTile> = {};
-  for (const t of raw.tools) {
+  for (const t of listed) {
     if (!isObj(t)) throw new Error("a tool is not an object");
     const key = typeof t.key === "string" ? t.key : "";
     if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(key)) throw new Error(`tool key "${key}" is not lowercase letters, digits and dashes`);
@@ -103,7 +106,7 @@ export function parseToolManifest(raw: unknown, dir: string, folderId: string | 
   const version = typeof raw.version === "string" && /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(raw.version) ? raw.version : undefined;
   const minAppVersion = text(raw.minAppVersion, 40);
   return {
-    id, tools, tiles, entry, dir, apiVersion,
+    id, source, tools, tiles, entry, dir, apiVersion,
     permissions: Array.isArray(raw.permissions)
       ? [...new Set(raw.permissions.filter((p): p is ViewPermission => (VIEW_PERMISSIONS as readonly unknown[]).includes(p)))] : [],
     settings,
@@ -116,3 +119,4 @@ export function parseToolManifest(raw: unknown, dir: string, folderId: string | 
       : `it does not say which tool API it is written for ("apiVersion": ${TOOL_API_VERSION})`,
   };
 }
+

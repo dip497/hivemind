@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import type { IssueState, IssueSummary } from "@hivemind/core/types";
+import type { IssueState, IssueSummary } from "./data";
 import { STATE_LABEL, STATE_ORDER, StateIcon, LabelChip, Avatar } from "./StateMeta";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { MenuItem } from "./ui/menu-item";
-import { Popover } from "./ui/popover";
+import { Button } from "@hivemind/app-ui";
+import { Input } from "@hivemind/app-ui";
+import { MenuItem } from "@hivemind/app-ui";
+import { Popover } from "@hivemind/app-ui";
 
 export interface Filters {
   q: string;

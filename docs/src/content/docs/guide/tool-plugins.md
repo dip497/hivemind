@@ -99,6 +99,15 @@ It imports the app's own React and parts from `hm-plugin://host/`, so it bundles
 | `selected` | it has the person's focus |
 
 `sdk.js` gives `Button`, `PatchView` (a unified diff drawn by the app's diff view) and `Markdown`.
+`ui.js` is the app's whole UI kit, so a plugin looks like the app: `Button`, `Input`, `Textarea`,
+`Label`, `Dialog…`, `Popover`, `DropdownMenu…`, `MenuItem`, `Switch`, `Tooltip…`, `Badge`,
+`Skeleton`, `MarkdownPreview`, and `toast` for notifications. With a bundler, map
+`@hivemind/app-ui` to it. The Issues tile that comes with the app (`apps/desktop/tools/issues`) is
+built this way, and is the fullest example there is.
+
+A tile reads the workspace's issues through `hm` like any plugin: `hm.onIssues(cb)` for the list,
+live, and `hm.issues.read(id)`, `create`, `update`, `setState`, `comment`, `delete`, `link`,
+`unlink`, `move`, `workspaces()`. Anything that writes needs `"workspace:issues"`.
 
 Reach the app only through these, never `window.hive`: that is the app's own and changes without
 notice. This contract changes only with `apiVersion`; a plugin written for a newer one is listed

@@ -6,6 +6,7 @@
  * fit-all, F2 rename, and the board's keys (8 note, 9 checklist, ⌫ delete,
  * ⌘D duplicate, ⌘Z / ⌘⇧Z undo and redo) — with the same text-field guards.
  */
+import { canSpawnKind } from "./tiles/api";
 import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { inEditable } from "./dom-focus";
 import type { TileInstance } from "./canvas-persistence";
@@ -19,7 +20,7 @@ export interface CanvasShortcutsCtx {
   spawnDefaultAgent: (mode?: string, work?: string) => void;
   /** Spawn the tool island's currently-selected agent (claude/codex/opencode). */
   spawnSelectedAgent: () => void;
-  spawnVis: (which: "tree" | "shell" | "diff" | "issues") => void;
+  spawnVis: (which: string) => void;
   /** Spawn a Browser tile into the active/resolved frame. */
   spawnBrowser: () => void;
   addFrame: () => void;
@@ -52,11 +53,10 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
       const obj = d && typeof d === "object" ? (d as { mode?: string; work?: string }) : undefined;
       spawnDefaultAgent(obj?.mode, obj?.work);
     };
+    // "tree" is the Code tile on its files; any other is a kind a plugin draws.
     const onToggle = (e: Event) => {
-      const which = (e as CustomEvent<"tree" | "shell" | "diff" | "issues">).detail;
-      if (which === "tree" || which === "shell" || which === "diff" || which === "issues") {
-        spawnVis(which);
-      }
+      const which = (e as CustomEvent<string>).detail;
+      if (typeof which === "string" && (which === "tree" || canSpawnKind(which))) spawnVis(which);
     };
     const onKey = (e: KeyboardEvent) => {
       // ── modifier shortcuts ── VS Code's app-wide keys (new terminal, explorer, diff, agent,
@@ -133,7 +133,6 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
         case "2": e.preventDefault(); spawnSelectedAgent(); break;
         case "3": if (repoPath) { e.preventDefault(); spawnVis("tree"); } break;
         case "4": if (repoPath) { e.preventDefault(); spawnVis("diff"); } break;
-        case "5": if (repoPath) { e.preventDefault(); spawnVis("issues"); } break;
         case "6": e.preventDefault(); addFrame(); break;
         case "7": e.preventDefault(); spawnBrowser(); break;
         case "Backspace":

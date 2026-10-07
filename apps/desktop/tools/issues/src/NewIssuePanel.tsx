@@ -1,10 +1,9 @@
 /**
- * NewIssueModal — create an issue with the full metadata the backend supports:
- * title, state, description, labels, assignee, parent. Acceptance criteria are
- * still added in the peek after create (kept out to keep this form quick).
+ * New issue: title, state, description, labels, assignee and parent. Acceptance criteria are added
+ * in the issue panel, which opens on the new issue once it is made (kept out to keep this quick).
  */
-import { useEffect, useMemo, useState } from "react";
-import { Button } from "./ui/button";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Button } from "@hivemind/app-ui";
 import {
   Dialog,
   DialogContent,
@@ -12,21 +11,13 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "./ui/dialog";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { Textarea } from "./ui/textarea";
-import { useCreateIssue, useIssues } from "../queries";
-import type { Assignee, IssueState } from "@hivemind/core/types";
-import { AssigneePicker, LabelPicker, ParentPicker } from "../issues/pickers";
-
-interface Props {
-  root: string | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  /** Optional: set on submit so the new issue's peek opens immediately. */
-  onCreated?: (id: string) => void;
-}
+} from "@hivemind/app-ui";
+import { Input } from "@hivemind/app-ui";
+import { Label } from "@hivemind/app-ui";
+import { Textarea } from "@hivemind/app-ui";
+import { useIssueList, write, type Assignee, type IssueState } from "./data";
+import type { PanelProps } from "./data";
+import { AssigneePicker, LabelPicker, ParentPicker } from "./pickers";
 
 const STATES: { value: IssueState; label: string }[] = [
   { value: "backlog", label: "Backlog" },
@@ -36,7 +27,7 @@ const STATES: { value: IssueState; label: string }[] = [
   { value: "done", label: "Done" },
 ];
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid gap-1.5">
       <Label>{label}</Label>
@@ -44,7 +35,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
-function PickerBox({ children }: { children: React.ReactNode }) {
+function PickerBox({ children }: { children: ReactNode }) {
   return (
     <div className="bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-lg px-2.5 py-1.5 min-h-[38px] flex items-center hm-soft focus-within:border-[var(--color-brand)]">
       {children}
@@ -52,9 +43,9 @@ function PickerBox({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function NewIssueModal({ root, open, onOpenChange, onCreated }: Props) {
-  const create = useCreateIssue();
-  const { data: allIssues = [] } = useIssues(root);
+export function NewIssuePanel({ hm, close, openPanel }: PanelProps) {
+  const allIssues = useIssueList() ?? [];
+  const [pending, setPending] = useState(false);
   const allLabels = useMemo(() => Array.from(new Set(allIssues.flatMap((i) => i.labels))).sort(), [allIssues]);
   const allAssignees = useMemo(
     () => Array.from(new Set(allIssues.map((i) => i.assignee?.id).filter((x): x is string => !!x))).sort(),
@@ -68,39 +59,22 @@ export function NewIssueModal({ root, open, onOpenChange, onCreated }: Props) {
   const [assignee, setAssignee] = useState<Assignee | null>(null);
   const [parent, setParent] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (open) {
-      setTitle("");
-      setState("todo");
-      setDescription("");
-      setLabels([]);
-      setAssignee(null);
-      setParent(null);
-    }
-  }, [open]);
-
-  function submit(e: React.FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!root || !title.trim()) return;
-    create.mutate(
-      {
-        root,
-        opts: {
-          title: title.trim(),
-          state,
-          description: description.trim() || undefined,
-          labels: labels.length ? labels : undefined,
-          assignee: assignee ?? undefined,
-          parent: parent ?? undefined,
-        },
-      },
-      {
-        onSuccess: (issue) => {
-          onOpenChange(false);
-          if (onCreated) onCreated(issue.id);
-        },
-      },
-    );
+    if (!title.trim()) return;
+    setPending(true);
+    const issue = await write("Creating the issue", hm.issues.create({
+      title: title.trim(),
+      state,
+      description: description.trim() || undefined,
+      labels: labels.length ? labels : undefined,
+      assignee: assignee ?? undefined,
+      parent: parent ?? undefined,
+    }));
+    setPending(false);
+    if (!issue) return;
+    close();
+    openPanel("issue", { id: issue.id });
   }
 
   // Only the native <select> still uses this — the shadcn primitives own the text fields.
@@ -108,9 +82,9 @@ export function NewIssueModal({ root, open, onOpenChange, onCreated }: Props) {
     "w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-lg px-3 py-2 text-[13px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)]";
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open onOpenChange={(o) => { if (!o) close(); }}>
       <DialogContent className="sm:max-w-[480px]">
-        <form onSubmit={submit}>
+        <form onSubmit={(e) => void submit(e)}>
           <DialogHeader>
             <DialogTitle>New issue</DialogTitle>
             <DialogDescription>
@@ -170,11 +144,11 @@ export function NewIssueModal({ root, open, onOpenChange, onCreated }: Props) {
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="ghost" onClick={close}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!title.trim() || create.isPending}>
-              {create.isPending ? "Creating…" : "Create issue"}
+            <Button type="submit" disabled={!title.trim() || pending}>
+              {pending ? "Creating…" : "Create issue"}
             </Button>
           </DialogFooter>
         </form>

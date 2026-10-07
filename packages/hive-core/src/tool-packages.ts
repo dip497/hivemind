@@ -19,28 +19,32 @@ export function userToolsDir(): string {
 }
 
 /** The package in `dir`. `folderId` is the id its folder stands for, if any. */
-export async function readToolPackage(dir: string, folderId: string | null): Promise<ToolPackage> {
+export async function readToolPackage(dir: string, folderId: string | null, source: "app" | "you" = "you"): Promise<ToolPackage> {
   let raw: unknown;
   try { raw = JSON.parse(await readFile(path.join(dir, TOOL_MANIFEST), "utf8")); } catch { throw new Error(`no readable ${TOOL_MANIFEST} in that folder`); }
-  const pkg = parseToolManifest(raw, dir, folderId);
+  const pkg = parseToolManifest(raw, dir, folderId, source);
   if (!(await stat(path.join(dir, pkg.entry)).catch(() => null))?.isFile()) throw new Error(`its entry ${pkg.entry} is missing`);
   return pkg;
 }
 
-/** Every tool plugin installed; one that cannot be read is listed under its folder's id with why. */
-export async function listToolPackages(dir = userToolsDir()): Promise<ToolPackage[]> {
-  const folders = (await readdir(dir).catch(() => [] as string[])).filter((f) => !f.startsWith(".") && f.includes("--")).sort();
-  return Promise.all(folders.map(async (f) => {
-    const id = f.replace("--", "/");
-    try {
-      return await readToolPackage(path.join(dir, f), id);
-    } catch (e) {
-      return {
-        id, name: id, description: "", tools: [], tiles: {}, permissions: [], settings: [], entry: "", apiVersion: 0, dir: path.join(dir, f),
-        problem: e instanceof Error ? e.message : String(e),
-      } satisfies ToolPackage;
-    }
-  }));
+/** Every tool plugin: the app's own (in `appRoot`, which the app names) first, then the ones you
+ *  added. One that cannot be read is listed under its folder's id with why. */
+export async function listToolPackages(dir = userToolsDir(), appRoot?: string | null): Promise<ToolPackage[]> {
+  const scan = async (root: string, source: "app" | "you") => {
+    const folders = (await readdir(root).catch(() => [] as string[])).filter((f) => !f.startsWith(".") && f.includes("--")).sort();
+    return Promise.all(folders.map(async (f) => {
+      const id = f.replace("--", "/");
+      try {
+        return await readToolPackage(path.join(root, f), id, source);
+      } catch (e) {
+        return {
+          id, source, name: id, description: "", tools: [], tiles: {}, permissions: [], settings: [], entry: "", apiVersion: 0,
+          dir: path.join(root, f), problem: e instanceof Error ? e.message : String(e),
+        } satisfies ToolPackage;
+      }
+    }));
+  };
+  return [...(appRoot ? await scan(appRoot, "app") : []), ...await scan(dir, "you")];
 }
 
 /** Copy the tool plugin in `src` into the tools folder, replacing one with the same id. It is

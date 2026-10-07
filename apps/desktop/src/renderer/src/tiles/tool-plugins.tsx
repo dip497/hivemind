@@ -9,7 +9,7 @@
 import { useEffect, useRef, useSyncExternalStore, type ComponentType } from "react";
 import { isPluginEnabled, pluginOptions } from "@hivemind/core/plugin-settings";
 import { toolFolder, type ToolPackage } from "@hivemind/core/tool-format";
-import { toolModuleProblem, type TileProps } from "@hivemind/tile-sdk";
+import { toolModuleProblem, type TileProps, type ToolModule } from "@hivemind/tile-sdk";
 import { useSettings } from "../settings-store";
 import { registerTile, unregisterTile, type TileBodyArgs } from "./api";
 import type { ToolTileData } from "./tool-tile";
@@ -66,17 +66,36 @@ export function useToolProblem(id: string): string | null {
 
 const surfaceOf = (id: string) => `tool:${id}`;
 
+/** A switched-on plugin's module, imported once per install: what its tiles come from. */
+const modules = new Map<string, Promise<ToolModule>>();
+export function loadToolModule(pkg: ToolPackage): Promise<ToolModule> {
+  const url = `hm-plugin://${toolFolder(pkg.id)}/${pkg.entry}?g=${generation}`;
+  let m = modules.get(url);
+  if (!m) {
+    m = (async () => {
+      // The app's parts a plugin imports load with the first plugin, not with the app.
+      await (await import("./host-sdk")).exposeHostModules();
+      const mod: unknown = await import(/* @vite-ignore */ url);
+      const why = toolModuleProblem(mod, pkg.tools.flatMap((t) => (t.tileKind ? [t.tileKind] : [])));
+      if (why) { setProblem(pkg.id, why); throw new Error(why); }
+      return (mod as { default: ToolModule }).default;
+    })();
+    modules.set(url, m);
+  }
+  return m;
+}
+
+/** Whether a plugin is on: one that comes with the app is, until switched off; one you added is
+ *  not, until switched on. */
+export const toolOn = (state: Parameters<typeof isPluginEnabled>[0], pkg: ToolPackage): boolean =>
+  isPluginEnabled(state, "tool", pkg.id, pkg.source === "app");
+
 function register(pkg: ToolPackage, off: Set<string>): void {
   const tools = pkg.tools.filter((t) => t.tileKind && !off.has(t.key));
-  const url = `hm-plugin://${toolFolder(pkg.id)}/${pkg.entry}?g=${generation}`;
+  if (!tools.length) return;
   const body = async () => {
-    // The app's parts a plugin imports load with the first plugin, not with the app.
-    const [{ exposeHostModules }, { ToolTile }] = await Promise.all([import("./host-sdk"), import("./tool-tile")]);
-    await exposeHostModules();
-    const mod: unknown = await import(/* @vite-ignore */ url);
-    const why = toolModuleProblem(mod, tools.map((t) => t.tileKind!));
-    if (why) { setProblem(pkg.id, why); throw new Error(why); }
-    const tiles = (mod as { default: { tiles: Record<string, ComponentType<TileProps>> } }).default.tiles;
+    const [{ ToolTile }, module] = await Promise.all([import("./tool-tile"), loadToolModule(pkg)]);
+    const tiles = module.tiles as Record<string, ComponentType<TileProps>>;
     return { default: ({ data, selected }: TileBodyArgs<ToolTileData>) => <ToolTile data={data} selected={selected} Draw={tiles[data.kind]!} /> };
   };
   registerTile<ToolTileData>({
@@ -107,7 +126,8 @@ export function ToolPlugins(): null {
     if (!loaded) return;
     const want = new Map<string, { pkg: ToolPackage; off: Set<string>; key: string }>();
     for (const pkg of packages) {
-      if (safeMode || pkg.problem || !isPluginEnabled(state, "tool", pkg.id, false)) continue;
+      // Safe mode stops what you added; what comes with the app is part of it.
+      if ((safeMode && pkg.source !== "app") || pkg.problem || !toolOn(state, pkg)) continue;
       const off = new Set(Object.entries(pluginOptions(state, "tool", pkg.id)).filter(([, v]) => v === false).map(([k]) => k));
       want.set(pkg.id, { pkg, off, key: `${generation}:${[...off].sort().join(",")}` });
     }

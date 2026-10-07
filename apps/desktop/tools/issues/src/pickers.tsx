@@ -1,9 +1,9 @@
 import { useState } from "react";
-import type { Assignee, IssueSummary } from "@hivemind/core/types";
-import { Avatar, LabelChip } from "../components/StateMeta";
-import { Input } from "../components/ui/input";
-import { MenuItem } from "../components/ui/menu-item";
-import { Popover } from "../components/ui/popover";
+import type { Assignee, IssueSummary } from "./data";
+import { Avatar, LabelChip } from "./StateMeta";
+import { Input } from "@hivemind/app-ui";
+import { MenuItem } from "@hivemind/app-ui";
+import { Popover } from "@hivemind/app-ui";
 
 const Check = () => (
   <svg width="9" height="9" viewBox="0 0 10 10">

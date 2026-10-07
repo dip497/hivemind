@@ -222,7 +222,8 @@ export type ShareOutcome = "copied" | "saved" | "cancelled";
 // `issues` in `hello.features`: after `subscribeIssues` the view is sent the workspace's issues
 // (`issues`), again whenever one changes, and may call the workspace's issue methods (`issue`
 // requests): reading is open, everything that writes needs `workspace:issues`. The workspace is
-// the one the view shows (a tool's tile: its frame's); the host names it, never the view.
+// the one the view shows (a tool's tile: its frame's); the host names it, never the view. An
+// issue of another of the host's workspaces (a link's other end) is found by its prefix.
 
 export const ISSUE_STATES = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"] as const;
 export type ViewIssueState = (typeof ISSUE_STATES)[number];
@@ -249,7 +250,7 @@ export interface ViewIssue extends ViewIssueSummary {
   };
 }
 /** The issue calls a view can make, and which of them write. */
-export const ISSUE_CALLS = ["read", "create", "update", "setState", "comment", "delete", "link", "unlink", "move"] as const;
+export const ISSUE_CALLS = ["read", "create", "update", "setState", "comment", "delete", "link", "unlink", "move", "workspaces"] as const;
 export type IssueCall = (typeof ISSUE_CALLS)[number];
 export const ISSUE_WRITES: ReadonlySet<IssueCall> = new Set(["create", "update", "setState", "comment", "delete", "link", "unlink", "move"]);
 /** The most an `issue` request's arguments may take, as JSON. */

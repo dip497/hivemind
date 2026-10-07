@@ -11,7 +11,8 @@ const summary = ({ path: _, ...rest }: IssueSummary): ViewIssueSummary => rest;
 const full = ({ path: _, raw: __, ...rest }: Issue): ViewIssue => rest;
 const parent = (dir: string) => dir.slice(0, Math.max(dir.lastIndexOf("/"), dir.lastIndexOf("\\"))) || dir;
 
-/** The issues service for the workspace whose `.hivemind` is `root()`, as asked each time. */
+/** The issues service for the workspace whose `.hivemind` is `root()`, as asked each time. An id
+ *  of another of the host's workspaces is called in that one, found by its prefix. */
 export function issueService(root: () => string | null): NonNullable<LinkServices["issues"]> {
   const listeners = new Set<() => void>();
   const changed = () => { for (const l of listeners) l(); };
@@ -38,8 +39,13 @@ export function issueService(root: () => string | null): NonNullable<LinkService
       return () => { live = false; if (timer) clearTimeout(timer); listeners.delete(load); off(); };
     },
     async call(call: IssueCall, args: unknown[]) {
-      const r = need();
+      const here = need();
       const [a, b, c] = args;
+      if (call === "workspaces") {
+        return (await window.hive.listWorkspaces()).map((w) => ({ prefix: w.prefix, title: w.title }));
+      }
+      // Another workspace's issue (a link's other end) lives where its prefix says.
+      const r = call !== "create" && typeof a === "string" ? (await window.hive.resolveIssueRoot(a).catch(() => ({ root: null }))).root ?? here : here;
       const wrote = <T>(p: Promise<T>) => p.then((v) => { changed(); return v; });
       switch (call) {
         case "read": return full(await window.hive.readIssue(r, str(a, "id")));

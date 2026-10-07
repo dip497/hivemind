@@ -27,7 +27,7 @@ export interface HostChromeProps {
   chrome: ViewChrome;
   toolbar?: ToolbarPreferences;
   repoPath: string | null;
-  onToggle: (k: "tree" | "shell" | "diff" | "issues") => void;
+  onToggle: (k: "tree" | "shell" | "diff") => void;
   agentSel: string | undefined;
   onAgentChange: (id: string) => void;
   onSpawnAgent: (agent: { id: string; cmd: string; defaultArgs?: string[]; label: string }) => void;

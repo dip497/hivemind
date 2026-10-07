@@ -15,7 +15,7 @@
  */
 
 export type ToolbarActionId =
-  | "terminal" | "agent" | "explorer" | "diff" | "issues" | "frame" | "browser" | "board" | "theme";
+  | "terminal" | "agent" | "explorer" | "diff" | "frame" | "browser" | "board" | "theme";
 
 export interface ToolbarAction {
   readonly id: ToolbarActionId;
@@ -31,7 +31,6 @@ export const BUILTIN_TOOLBAR_ACTIONS: readonly ToolbarAction[] = Object.freeze([
   Object.freeze({ id: "agent", label: "Agent", hint: "2" }),
   Object.freeze({ id: "explorer", label: "Explorer", hint: "3" }),
   Object.freeze({ id: "diff", label: "Diff", hint: "4" }),
-  Object.freeze({ id: "issues", label: "Issues", hint: "5" }),
   Object.freeze({ id: "frame", label: "Frame", hint: "6" }),
   Object.freeze({ id: "browser", label: "Browser", hint: "7" }),
   Object.freeze({ id: "board", label: "Add", hint: "" }),

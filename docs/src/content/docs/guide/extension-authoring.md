@@ -189,6 +189,14 @@ textarea, list), `text` and `items` what people wrote in it, `images` the pictur
 permission `workspace:widgets`: the widget's code hears it wherever it runs, and does what it does
 then as you, so pressing is asked for at install. `@dip497/widgets` on HiveHub is such a view.
 
+A view reads the workspace's issues (protocol 1.9, feature `issues`): `hm.onIssues((issues) => …)`
+hears the list now and whenever an issue changes (an agent's `hive update` included), each
+`{ id, title, state, parent, labels, assignee, created, updated }`. `hm.issues.read(id)` gives one in
+full, with its description, acceptance criteria and activity; `create`, `update`, `setState`,
+`comment`, `delete`, `link`, `unlink` and `move` change them, with the permission
+`workspace:issues`; `workspaces()` names the host's other workspaces. An id of another workspace
+(a link's other end) is found by its prefix; nothing a view is given says where a workspace is.
+
 ## Settings
 
 A view declares what the person can set it to in its manifest's `settings`; the app draws the
@@ -214,7 +222,8 @@ Declared in the manifest, refused at install if unknown:
 `workspace:close` → `closeTile`; `workspace:spawn` → `spawnTile` / `spawnVis` /
 `spawnClaude` / `addFrame` / `spawnAgent`; `workspace:edit` → `renameTile` / `openFolder`;
 `workspace:prompt` → `prompt` and `spawnAgent` with a `prompt`; `workspace:sessions` →
-`sessions` and `spawnAgent` with `resume`; `workspace:widgets` → `pressWidget` / `clickWidget`. Selection and focus need none.
+`sessions` and `spawnAgent` with `resume`; `workspace:widgets` → `pressWidget` / `clickWidget`;
+`workspace:issues` → the `hm.issues` calls that write. Selection, focus and reading issues need none.
 
 `spawnAgent(agent, frameId, { prompt?, name?, resume? })` starts an agent by its catalog id (`null` is
 the user's default); a `prompt` becomes its first message once the user sends it. An id that isn't installed is

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import type { IssueState, IssueSummary } from "@hivemind/core/types";
-import { STATE_ORDER, STATE_LABEL, StateIcon, Avatar, LabelChip } from "../components/StateMeta";
+import type { IssueState, IssueSummary } from "./data";
+import { STATE_ORDER, STATE_LABEL, StateIcon, Avatar, LabelChip } from "./StateMeta";
 
 /** What the board columns / list sections are grouped by. */
 export type GroupBy = "state" | "assignee" | "label" | "parent";
