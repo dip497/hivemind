@@ -133,9 +133,8 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
               className="shrink-0 min-w-0 border-r border-[var(--color-line)]"
               style={{ width: sidebarW }}
             >
-                // key on repoPath → remounts the tree when the tile gets moved into
-                // a zone bound to a different repo (stale internal cache fixed).
-                <FileTreeTile key={repoPath} repoPath={repoPath} onSelectFile={(p) => selectFile(p)} embedded />
+              {/* Keyed on repoPath: moved into a frame of another repo, the tree starts over. */}
+              <FileTreeTile key={repoPath} repoPath={repoPath} onSelectFile={(p) => selectFile(p)} embedded />
             </div>
             {/* Resize handle — a WIDE (8px) grab zone with a thin centered line. */}
             <div
