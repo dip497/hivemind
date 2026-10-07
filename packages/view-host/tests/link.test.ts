@@ -23,7 +23,7 @@ function harness(caps: LinkDeps["capabilities"] = [], tiles = ["t1", "t2"], serv
     },
   }) as LinkDeps["commands"];
   const link = new CommunityLink({
-    pluginId: "p", capabilities: caps, commands,
+    pluginId: "p", capabilities: caps, commands, canSpawn: (kind) => kind !== "planReview",
     hasTile: (id) => tiles.includes(id), hasFrame: (id) => id === "f1",
     onReady: () => events.push("ready"),
     ...(lacks.includes("surfaceRects") ? {} : { onSurfaceRects: (r: Array<{ tileId: string }>) => events.push(`rects:${r.map((x) => x.tileId).join(",")}`) }),

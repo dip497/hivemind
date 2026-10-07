@@ -32,6 +32,7 @@ import { Button } from "./components/ui/button";
 import { MenuItem } from "./components/ui/menu-item";
 import type { LayerTile, LayerFrame } from "./LayersPanel";
 import { forgetStatus, statusOf, setHostedStatus, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
+import { ToolPlugins, WorkspacePropsContext } from "./tiles/tool-plugins";
 import { tileName } from "@hivemind/workspace-doc/tile-list";
 import { cleanName } from "@hivemind/agents";
 import { frameAtPoint } from "./frame-layout";
@@ -1207,6 +1208,8 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     pins, togglePin, onPinChange, board, agentSel, spawnAgent, spawnBrowser, onInitWorkspace, updateAvailable, updateStaged, onUpgrade, onRestart, upgrading,
   ]);
 
+  const viewProps = useMemo(() => ({ model, commands }), [model, commands]);
+
   return (
     <CanvasRuntimeContext.Provider value={canvasRuntime}>
     <div className="relative h-full w-full flex flex-col" data-active-view={activeViewId ?? ""}>
@@ -1223,7 +1226,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       <ViewHost
         viewId={activeViewId}
         attempt={viewAttempt}
-        props={{ model, commands }}
+        props={viewProps}
         onError={onViewError}
         failed={viewFailure && viewFailure.id === activeViewId ? viewFailure.error : null}
         onSwitch={switchView}
@@ -1258,7 +1261,10 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       {/* Shared-layer selection: a body's native pointerdown selects its tile
           (React synthetic events from a portaled body never reach a view's own
           handlers — see tile-host.tsx). */}
-      <TileHost surfaces={surfaces} selectedTileId={selectedTileId} onSurfacePointerDown={setSelectedTileId} />
+      <WorkspacePropsContext.Provider value={viewProps}>
+        <ToolPlugins />
+        <TileHost surfaces={surfaces} selectedTileId={selectedTileId} onSurfacePointerDown={setSelectedTileId} />
+      </WorkspacePropsContext.Provider>
 
       {/* Spawn-target picker — asks WHERE a new agent runs when 2+ workspaces
           are open. Lives here (not in a view) so spawning works the same in

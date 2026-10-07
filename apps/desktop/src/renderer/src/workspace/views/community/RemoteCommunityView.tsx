@@ -7,7 +7,7 @@ import type { ViewPackageInfo } from "../../../../../shared/ipc";
 import type { WorkspaceViewProps } from "../../workspace-view";
 import { TileSlot } from "../../tile-host";
 import { SlotBar } from "../../slot-chrome";
-import { readTheme } from "./CommunityView";
+import { readTheme } from "../../plugin-theme";
 
 export function RemoteCommunityView({ pkg, model, commands }: WorkspaceViewProps & { pkg: ViewPackageInfo }) {
   const root = useRef<HTMLDivElement>(null);

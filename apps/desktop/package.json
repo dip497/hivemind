@@ -92,6 +92,7 @@
     "@hivemind/core": "workspace:*",
     "@hivemind/host": "workspace:*",
     "@hivemind/view-host": "workspace:*",
+    "@hivemind/tile-sdk": "workspace:*",
     "@hivemind/view-sdk": "workspace:*",
     "@hivemind/workspace-api": "workspace:*",
     "@hivemind/workspace-doc": "workspace:*",

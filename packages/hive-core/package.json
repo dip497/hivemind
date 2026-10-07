@@ -28,7 +28,10 @@
     "./plugin-settings": "./src/plugin-settings.ts",
     "./widget-api": "./src/widget-api.ts",
     "./widget-format": "./src/widget-format.ts",
-    "./widgets": "./src/widgets.ts"
+    "./widgets": "./src/widgets.ts",
+    "./tool-format": "./src/tool-format.ts",
+    "./tool-packages": "./src/tool-packages.ts",
+    "./tool-registry": "./src/tool-registry.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

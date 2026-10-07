@@ -25,12 +25,9 @@ import {
   type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewWidget,
   type ViewAgent, type ViewAgentStatus, type ViewSession, type ViewStatus,
 } from "@hivemind/view-sdk/protocol";
-import { AGENT_TILE_KIND, type TileKind } from "@hivemind/workspace-doc/shapes";
+import type { TileKind } from "@hivemind/workspace-doc/shapes";
 import type { TileStatusKind } from "@hivemind/agent-host/tile-status";
 import { bucketTileStatus } from "./status.js";
-
-/** Kinds a plugin may spawn (no planReview: that is opened by the control plane). */
-const SPAWNABLE: readonly string[] = [AGENT_TILE_KIND, "shell", "editor", "diff", "issues", "browser", "workbench"];
 
 /** What the link asks of the workspace it shows: the protocol's commands, and each tile's status.
  *  A host leaves out what it cannot do (a remote screen: tiles other than agents', frames, folder
@@ -117,6 +114,9 @@ export interface LinkDeps {
   pluginId: string;
   capabilities: ViewPermission[];
   commands: LinkCommands;
+  /** Whether a tile of `kind` can be started here: the host's tile plugins say. Absent: any kind
+   *  the host's `spawnTile` takes. */
+  canSpawn?: (kind: string) => boolean;
   /** Ids the plugin may name in commands (the current tiles). */
   hasTile: (id: string) => boolean;
   hasFrame: (id: string) => boolean;
@@ -530,7 +530,7 @@ export class CommunityLink {
       case "focusTile": c.focusTile(args[0] as string, args[1] as { exact?: boolean } | undefined); return;
       case "closeTile": c.closeTile(args[0] as string); return;
       case "spawnTile":
-        if (!SPAWNABLE.includes(args[0] as string)) { this.refuse(`spawnTile: unknown kind ${String(args[0])}`); return; }
+        if (this.deps.canSpawn && !this.deps.canSpawn(args[0] as string)) { this.refuse(`spawnTile: unknown kind ${String(args[0])}`); return; }
         if (!c.spawnTile) { this.unsupported("spawnTile"); return; }
         c.spawnTile(args[0] as TileKind, args[1] as string | null);
         return;

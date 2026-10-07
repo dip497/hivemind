@@ -6,6 +6,7 @@ import { defFromManifest } from "@hivemind/agents";
 import { getAgentEntries } from "./agent-plugins";
 import { useViews } from "./workspace/workspace-view";
 import { useWidgetPackages } from "./board-objects/widget-runtime";
+import { getToolPackages } from "./tiles/tool-plugins";
 import { SETTINGS_GROUPS, SETTINGS_PAGES, pluginPage, type SettingsGroup } from "./settings-registry";
 
 export interface SettingsNavItem { id: string; label: string; icon: ReactNode }
@@ -18,7 +19,8 @@ function agentLabel(id: string): string {
 }
 
 export const toolLabel = (pluginId: string): string =>
-  BUNDLED_TOOL_PLUGINS.find((p) => p.id === pluginId)?.tools.map((t) => t.label).join(", ") ?? pluginId;
+  getToolPackages().find((p) => p.id === pluginId)?.name
+  ?? BUNDLED_TOOL_PLUGINS.find((p) => p.id === pluginId)?.tools.map((t) => t.label).join(", ") ?? pluginId;
 
 export function useSettingsNav(): { groups: SettingsNavGroup[]; titleOf: (id: string) => string; describe: (id: string) => string; selected: (page: string) => string } {
   const views = useViews();

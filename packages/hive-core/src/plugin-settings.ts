@@ -11,7 +11,7 @@
 
 import type { AgentProviderDef } from "@hivemind/agents";
 import { FIELD_ID, MAX_TEXT, parseSettingFields, type SettingField } from "@hivemind/view-sdk/settings";
-import type { ToolPluginContribution } from "./tool-registry.js";
+import { TOOL_ID_RE, type ToolPluginContribution } from "./tool-registry.js";
 import { isWidgetId } from "./widget-format.js";
 
 export * from "@hivemind/view-sdk/settings";
@@ -39,7 +39,7 @@ const ID_OF: Record<PluginKind, { test(id: string): boolean }> = {
   agent: /^[a-z0-9][a-z0-9-]{0,31}$/,
   view: /^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-9][a-z0-9-]{0,63}$/,
   widget: { test: isWidgetId },
-  tool: /^[a-z0-9][a-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{1,39}$/,
+  tool: TOOL_ID_RE,
 };
 /** Whether `id` is an id a plugin of `kind` can have. */
 export const isPluginId = (kind: PluginKind, id: string): boolean => ID_OF[kind].test(id);

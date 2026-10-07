@@ -392,6 +392,9 @@ importers:
       '@hivemind/host':
         specifier: workspace:*
         version: link:../../packages/host
+      '@hivemind/tile-sdk':
+        specifier: workspace:*
+        version: link:../../packages/tile-sdk
       '@hivemind/view-host':
         specifier: workspace:*
         version: link:../../packages/view-host
@@ -739,6 +742,19 @@ importers:
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/tile-sdk:
+    dependencies:
+      '@hivemind/view-sdk':
+        specifier: workspace:*
+        version: link:../hive-view-sdk
+    devDependencies:
+      '@hivemind/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

@@ -2,78 +2,28 @@
  * CommunityView — the host side of an isolated community view: a sandboxed
  * iframe (its own `hm-view://<id>` origin, no `allow-same-origin`, strict CSP
  * stamped by main/view-packages.ts, no preload → no `window.hive`, no node),
- * one MessagePort to it (`@hivemind/view-host/link`), and an overlay of real `<TileSlot>`s
- * positioned wherever the plugin punches a hole (`surfaceRects`).
+ * one MessagePort to it (the plugin link every plugin's `hm` client talks to,
+ * `../../plugin-link`), and an overlay of real `<TileSlot>`s positioned wherever
+ * the plugin punches a hole (`surfaceRects`).
  *
- * The plugin never receives the model: it gets a projection — frames + tiles +
- * membership with colours pre-resolved to hex (`structure`), names on their
- * own (`names`), selection with a "fresh since mount" flag, per-tile status on
- * subscription — and everything it sends back is validated before it touches
- * a command. Misbehaviour (malformed traffic, floods, a runaway render loop
- * attributed to its iframe) disables it for the session; the registry then
- * resolves the active view to the fallback (canvas) with the sessions intact.
+ * Misbehaviour (malformed traffic, floods, a runaway render loop attributed to
+ * its iframe) disables it for the session; the registry then resolves the
+ * active view to the fallback (canvas) with the sessions intact.
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, type HostMessage, type SurfaceRect, type ViewPermission, type ViewTheme } from "@hivemind/view-sdk/protocol";
-import { CommunityLink } from "@hivemind/view-host/link";
-import { viewStructure } from "@hivemind/view-host/structure";
-import { frameMachine, useMachines } from "../../../machines/store";
-import { useMachineOwners } from "../../../machines/owners";
-import { useShown } from "../../../multiplayer/shown";
+import { PORT_HANDSHAKE, type SurfaceRect, type ViewPermission } from "@hivemind/view-sdk/protocol";
+import type { CommunityLink } from "@hivemind/view-host/link";
 import type { ViewPackageInfo } from "../../../../../shared/ipc";
 import type { WorkspaceViewProps } from "../../workspace-view";
 import { TileSlot } from "../../tile-host";
 import { SlotBar } from "../../slot-chrome";
 import { Wallpaper } from "../../../Wallpaper";
-import { ACCENTS, effectiveGlass, getTheme, useSurfacePolicy } from "../../../theme-store";
-import { loadViewLayout, saveViewLayout, type ViewLayoutSpec } from "../../view-layout-store";
-import { cssColorToHexString } from "../../css-color";
-import { ShareDialog, type ShareChoice } from "./ShareDialog";
-import { PromptDialog, type PromptAsk } from "./PromptDialog";
-import { isRemote } from "@hivemind/core/remote-uri";
-import { agentById as catalogAgentById, defaultAgent } from "@hivemind/agents";
-import { AGENT_TILE_KIND } from "../../../tile-kinds";
-import { viewLinkServices } from "../../view-services";
-import type { SharePrepared } from "../../../../../shared/ipc";
-import type { ShareOutcome } from "@hivemind/view-sdk/protocol";
+import { useSurfacePolicy } from "../../../theme-store";
+import { usePluginLink } from "../../plugin-link";
 import { disableCommunityView } from "./registry";
-import { pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
-import { useSettings } from "../../../settings-store";
 import { edgeBandClip } from "./edge-band";
 import { RemoteCommunityView } from "./RemoteCommunityView";
-
-const THEME_VARS = ["bg", "bg2", "bg3", "bg4", "fg", "fg2", "fg3", "line", "line2", "brand", "err", "ok", "warn", "info", "accent"];
-
-export function readTheme(): ViewTheme {
-  const cs = getComputedStyle(document.documentElement);
-  const colors: Record<string, string> = {};
-  for (const k of THEME_VARS) {
-    const v = cs.getPropertyValue(`--color-${k}`).trim();
-    if (v) colors[k] = cssColorToHexString(v);
-  }
-  const t = getTheme();
-  return {
-    colors,
-    mode: t.mode,
-    accent: cssColorToHexString(ACCENTS[t.accent].brand),
-    radius: t.radius,
-    fonts: { ui: t.uiFont, mono: t.monoFont },
-    surface: cssColorToHexString(t.palette.bg2),
-    terminalBackground: cssColorToHexString(t.terminal.background),
-    glass: effectiveGlass(t),
-    // The same status tokens every surface of the app paints with, resolved for the view.
-    status: Object.fromEntries(STATUS_TONES.flatMap((tone) => {
-      const v = cs.getPropertyValue(`--color-status-${tone}`).trim();
-      return v ? [[tone, cssColorToHexString(v)]] : [];
-    })),
-  };
-}
-
-/** Plugin layout blobs are opaque to the host: `{ v: 1, data: <whatever the plugin sent> }`. */
-function layoutSpec(pluginId: string): ViewLayoutSpec<unknown> {
-  return { viewId: pluginId, version: 1, initial: () => null };
-}
 
 /** The host for one package. Rendered through the lazy wrapper in registry.ts
  *  (`pkg` is fixed per registered view; the props are the view contract). */
@@ -87,111 +37,25 @@ export function CommunityViewHost({ pkg, model, commands }: WorkspaceViewProps &
 
 function CommunityView({ pkg, url, manifest, capabilities, model, commands }: WorkspaceViewProps & { pkg: ViewPackageInfo; url: string; manifest: NonNullable<ViewPackageInfo["manifest"]>; capabilities: ViewPermission[] }) {
   {
-    const { frames, tiles, frameOf, layerTiles, links, selectedTileId, selectedFrameId, layoutKey } = model;
     const rootRef = useRef<HTMLDivElement>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
-    const linkRef = useRef<CommunityLink | null>(null);
-    const [ready, setReady] = useState(false);
     const [rects, setRects] = useState<SurfaceRect[]>([]);
-    const commandsRef = useRef(commands);
-    commandsRef.current = commands;
-    const tilesRef = useRef(tiles);
-    tilesRef.current = tiles;
-    const framesRef = useRef(frames);
-    framesRef.current = frames;
-    const layerTilesRef = useRef(layerTiles);
-    layerTilesRef.current = layerTiles;
-    const repoRef = useRef(model.repoPath);
-    repoRef.current = model.repoPath;
-
-    // ── the link: created once per mount, attached when the iframe loads ─────
-    // Plugin messages arrive one task each, so "selectTile(null)" + "rects: []"
-    // (an undock) would be two React commits: the first deselects the tile
-    // while it is still visible in its slot — which, on a low-DPI screen, swaps
-    // it from the DOM renderer back to WebGL (a GL context + atlas, 0.5 s on
-    // software GL) — and only the second parks it. Everything a plugin sends
-    // within one animation frame is applied together instead, in one commit,
-    // exactly like the built-in views' own handlers; the ≤16 ms is invisible.
-    const batch = useRef<Array<() => void>>([]);
-    const batchRaf = useRef(0);
-    const enqueue = (fn: () => void) => {
-      batch.current.push(fn);
-      if (batchRaf.current) return;
-      batchRaf.current = requestAnimationFrame(() => {
-        batchRaf.current = 0;
-        const fns = batch.current; batch.current = [];
-        for (const f of fns) f();
-      });
-    };
-    useEffect(() => () => { if (batchRaf.current) cancelAnimationFrame(batchRaf.current); }, []);
-    const layoutKeyRef = useRef(layoutKey);
-    layoutKeyRef.current = layoutKey;
-    // A share waits here for the user's choice in the host dialog.
-    const [shareImage, setShareImage] = useState<SharePrepared | null>(null);
-    const shareAnswer = useRef<((c: ShareChoice) => void) | null>(null);
-    const share = async (png: ArrayBuffer, suggestedName?: string): Promise<ShareOutcome> => {
-      const prepared = await window.hive.viewSharePrepare(png);
-      const choice = await new Promise<ShareChoice>((resolve) => { shareAnswer.current = resolve; setShareImage(prepared); });
-      shareAnswer.current = null;
-      setShareImage(null);
-      return window.hive.viewShareCommit(prepared.token, choice, suggestedName ?? manifest.name);
-    };
-    // A prompt the view wrote waits here for the user to read it and send or cancel it.
-    const [promptAsk, setPromptAsk] = useState<PromptAsk | null>(null);
-    const promptAnswer = useRef<((send: boolean) => void) | null>(null);
-    const confirmPrompt = async (req: { agent: string | null; tileId?: string; frameId: string | null; text: string }): Promise<boolean> => {
-      const tile = req.tileId ? layerTilesRef.current.find((t) => t.id === req.tileId) : undefined;
-      const frameId = tile?.frameId ?? req.frameId;
-      const frame = frameId ? framesRef.current.find((f) => f.id === frameId) : undefined;
-      const agentId = tile?.agent ?? req.agent;
-      const agent = (agentId ? catalogAgentById(agentId) : defaultAgent())?.label ?? "an agent";
-      const where = tile ? `To the tile “${tile.name}”` : `A new ${agent} tile${frame ? ` in “${frame.title}”` : ""}`;
-      const send = await new Promise<boolean>((resolve) => { promptAnswer.current = resolve; setPromptAsk({ viewName: manifest.name, agent, where, text: req.text }); });
-      promptAnswer.current = null;
-      setPromptAsk(null);
-      return send;
-    };
-    const link = useMemo(() => new CommunityLink({
-      pluginId: pkg.id,
-      capabilities,
-      commands: new Proxy({} as WorkspaceViewProps["commands"], {
-        get: (_t, k) => {
-          const name = k as keyof WorkspaceViewProps["commands"];
-          // Status subscriptions are not state changes — keep them immediate.
-          if (name === "subscribeTileStatus" || name === "tileStatus") return commandsRef.current[name];
-          // Its answer (was the agent found?) is what the link checks, so it cannot wait for the batch.
-          if (name === "spawnAgent") return (...args: Parameters<WorkspaceViewProps["commands"]["spawnAgent"]>) => commandsRef.current.spawnAgent(...args);
-          return (...args: unknown[]) => enqueue(() => (commandsRef.current[name] as (...a: unknown[]) => void)(...args));
-        },
-      }),
-      hasTile: (id) => tilesRef.current.some((t) => t.id === id),
-      hasFrame: (id) => framesRef.current.some((f) => f.id === id),
-      onReady: () => setReady(true),
-      onSurfaceRects: (r) => enqueue(() => setRects(r)),
-      onLayout: (data) => saveViewLayout(layoutSpec(pkg.id), layoutKey, data),
-      onFramesDrawn: () => { /* read from stats by the test seam / perf harness */ },
-      onError: (message) => console.warn(`[hivemind] view "${pkg.id}": ${message}`),
-      services: viewLinkServices({
-        layoutKey: () => layoutKeyRef.current,
-        repo: () => repoRef.current,
-        share,
-        frameFolder: (frameId) => {
-          const f = framesRef.current.find((x) => x.id === frameId);
-          // Same rule as a tile's working directory: the frame's own folder, else the workspace's.
-          const folder = f ? f.worktreePath ?? f.workspacePath ?? repoRef.current : null;
-          return folder && !isRemote(folder) ? folder : null;
-        },
-        isAgentTile: (tileId) => tilesRef.current.some((t) => t.id === tileId && t.kind === AGENT_TILE_KIND),
-        confirmPrompt,
-      }),
+    const { link, ready, send, dialogs } = usePluginLink({
+      pluginId: pkg.id, record: { kind: "view", id: pkg.id }, name: manifest.name, capabilities,
+      fields: manifest.settings ?? [], layoutId: pkg.id, props: { model, commands }, root: rootRef,
+      onSurfaceRects: setRects,
       onDisable: (reason) => {
         toast.error(`The ${manifest.name} view was disabled: ${reason}. Switched back to Canvas — your tiles are untouched.`);
         disableCommunityView(pkg.id, reason);
       },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), []);
+    });
+    const linkRef = useRef<CommunityLink>(link);
     linkRef.current = link;
-    useEffect(() => () => { shareAnswer.current?.("cancel"); promptAnswer.current?.(false); link.dispose(); }, [link]);
+    const nameOf = useMemo(() => new Map(model.layerTiles.map((t) => [t.id, t.name])), [model.layerTiles]);
+    const box = () => {
+      const r = rootRef.current?.getBoundingClientRect();
+      return { w: Math.round(r?.width ?? 0), h: Math.round(r?.height ?? 0) };
+    };
 
     const onLoad = useCallback(() => {
       const win = iframeRef.current?.contentWindow;
@@ -202,104 +66,6 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
       // the only valid target is "*"; nothing but the port travels with it.
       win.postMessage({ type: PORT_HANDSHAKE }, "*", [ch.port2]);
     }, [link]);
-
-    // ── hello + projection ──────────────────────────────────────────────────
-    const send = useCallback((m: HostMessage) => linkRef.current?.send(m), []);
-    const box = () => {
-      const r = rootRef.current?.getBoundingClientRect();
-      return { w: Math.round(r?.width ?? 0), h: Math.round(r?.height ?? 0) };
-    };
-    // What the person set this view to (Settings ▸ Plugins), one value per field it declares.
-    const stored = useSettings().plugins.state;
-    const settings = useMemo(() => resolveSettings(manifest.settings ?? [], pluginOptions(stored, "view", pkg.id)), [manifest, stored, pkg.id]);
-    const settingsKey = JSON.stringify(settings);
-    const settingsRef = useRef(settings);
-    settingsRef.current = settings;
-    useEffect(() => {
-      if (!ready) return;
-      send({
-        type: "hello", v: PROTOCOL_VERSION, pluginId: pkg.id, capabilities, settings: settingsRef.current,
-        theme: readTheme(), layout: loadViewLayout(layoutSpec(pkg.id), layoutKey),
-        viewport: box(), visible: !document.hidden, features: [...link.features, "settings"],
-        // A desktop: whether its pointer is a finger, never a phone's screen.
-        device: { touch: matchMedia("(pointer: coarse)").matches, compact: false },
-      });
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ready]);
-    const sentSettings = useRef(settingsKey);
-    useEffect(() => {
-      if (!ready || sentSettings.current === settingsKey) return;
-      sentSettings.current = settingsKey;
-      send({ type: "settings", settings: settingsRef.current });
-    }, [ready, settingsKey, send]);
-
-    // A frame bound to a machine carries that machine's name and link state; a local one carries nothing.
-    const machines = useMachines();
-    const owners = useMachineOwners(useShown().repo);
-    const machineOf = useCallback((workspacePath?: string) => frameMachine(machines, workspacePath, owners), [machines, owners]);
-
-    // Structure: frames / tiles / membership (+ current names). Colours resolved.
-    const nameOf = useMemo(() => new Map(layerTiles.map((t) => [t.id, t.name])), [layerTiles]);
-    const nameRef = useRef(nameOf);
-    nameRef.current = nameOf;
-    const agentOf = useMemo(() => new Map(layerTiles.flatMap((t) => (t.agent ? [[t.id, t.agent] as const] : []))), [layerTiles]);
-    useEffect(() => {
-      if (!ready) return;
-      send(viewStructure({
-        frames, tiles, frameOf,
-        name: (t) => nameRef.current.get(t.id),
-        agent: (t) => agentOf.get(t.id),
-        links: { pipes: links.pipes, spawns: links.spawnLinks },
-        color: (f) => cssColorToHexString(f.color),
-        machine: (f) => machineOf(f.workspacePath),
-      }));
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ready, frames, tiles, frameOf, machineOf, agentOf, links]);
-    // Names on their own — a title tick must not look structural to the plugin.
-    const lastNames = useRef("");
-    useEffect(() => {
-      if (!ready) return;
-      const names: Record<string, string> = {};
-      for (const [id, n] of nameOf) names[id] = n;
-      const key = JSON.stringify(names);
-      if (key === lastNames.current) return;
-      lastNames.current = key;
-      send({ type: "names", names });
-    }, [ready, nameOf, send]);
-    // Selection, with "fresh": the selection you arrive with is not.
-    const selSent = useRef(false);
-    useEffect(() => {
-      if (!ready) return;
-      send({ type: "selection", tileId: selectedTileId, frameId: selectedFrameId, fresh: selSent.current });
-      selSent.current = true;
-    }, [ready, selectedTileId, selectedFrameId, send]);
-    // Closed tiles drop their status subscription; the plugin sees them go in `structure`.
-    const prevTiles = useRef(new Set<string>());
-    useEffect(() => {
-      const now = new Set(tiles.map((t) => t.id));
-      for (const id of prevTiles.current) if (!now.has(id)) link.dropTile(id);
-      prevTiles.current = now;
-    }, [tiles, link]);
-
-    // ── viewport / visibility / theme ───────────────────────────────────────
-    useLayoutEffect(() => {
-      const el = rootRef.current;
-      if (!el) return;
-      const ro = new ResizeObserver(() => { if (linkRef.current?.stats.ready) send({ type: "resize", ...box() }); });
-      ro.observe(el);
-      const onVis = () => { linkRef.current?.setVisible(!document.hidden); send({ type: "visibility", visible: !document.hidden }); };
-      document.addEventListener("visibilitychange", onVis);
-      // Any appearance change (a preset from Settings, `hive theme use`, a
-      // slider) lands on <html>'s style/class; coalesce to one theme message.
-      let themeTimer = 0;
-      const mo = new MutationObserver(() => {
-        if (!linkRef.current?.stats.ready) return;
-        if (themeTimer) return;
-        themeTimer = window.setTimeout(() => { themeTimer = 0; send({ type: "theme", theme: readTheme() }); }, 50);
-      });
-      mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme", "data-preset", "style"] });
-      return () => { ro.disconnect(); document.removeEventListener("visibilitychange", onVis); mo.disconnect(); if (themeTimer) clearTimeout(themeTimer); };
-    }, [send]);
 
     // ── runaway watchdog: long tasks attributed to THIS iframe ──────────────
     useEffect(() => {
@@ -384,8 +150,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
             </div>
           ))}
         </div>
-        <ShareDialog viewName={manifest.name} image={shareImage} onChoose={(c) => shareAnswer.current?.(c)} />
-        <PromptDialog ask={promptAsk} onChoose={(send) => promptAnswer.current?.(send)} />
+        {dialogs}
         {!ready && (
           <div className="pointer-events-none absolute inset-0 grid place-items-center text-[12px] text-[var(--color-fg3)]">
             Loading {manifest.name}…

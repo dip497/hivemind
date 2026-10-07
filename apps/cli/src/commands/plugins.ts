@@ -18,6 +18,7 @@ import {
 } from "@hivemind/core/plugin-settings";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
 import { listWidgets } from "@hivemind/core/widgets";
+import { listToolPackages } from "@hivemind/core/tool-packages";
 import { err, ok } from "../format.js";
 import { hcpCall } from "../hcp.js";
 
@@ -32,18 +33,21 @@ interface Plugin {
   problem: string | null;
 }
 
-/** Every plugin this machine has: agents, installed views, widgets (built in and added), tools. */
+/** Every plugin this machine has: agents, installed views, widgets (built in and added), tools
+ *  (built in and added). */
 async function inventory(): Promise<Plugin[]> {
   const repoRoot = await findRoot().catch(() => null);
   const { loadAgents } = await import("@hivemind/agents/load");
   const agents = (await loadAgents({ repoRoot: repoRoot ?? undefined, disabled: [] })).loaded;
   const views = await listInstalledViews(repoRoot);
   const widgets = await listWidgets();
+  const added = await listToolPackages();
   const out: Plugin[] = [
     ...agents.map((a): Plugin => ({ key: pluginKey("agent", a.id), kind: "agent", id: a.id, name: a.def?.label ?? a.id, enabledByDefault: true, fields: a.def ? agentSettingFields(a.def) : [], problem: a.error })),
     ...views.map((v): Plugin => ({ key: pluginKey("view", v.id), kind: "view", id: v.id, name: v.manifest?.name ?? v.id, enabledByDefault: true, fields: v.manifest?.settings ?? [], problem: v.error })),
     ...widgets.map((w): Plugin => ({ key: pluginKey("widget", w.id), kind: "widget", id: w.id, name: w.name, enabledByDefault: true, fields: [], problem: null })),
     ...BUNDLED_TOOL_PLUGINS.map((t): Plugin => ({ key: pluginKey("tool", t.id), kind: "tool", id: t.id, name: t.tools.map((x) => x.label).join(", "), enabledByDefault: !!t.builtin, fields: toolSettingFields(t), problem: null })),
+    ...added.map((t): Plugin => ({ key: pluginKey("tool", t.id), kind: "tool", id: t.id, name: t.name, enabledByDefault: false, fields: [...toolSettingFields(t), ...t.settings], problem: t.problem })),
   ];
   return out;
 }

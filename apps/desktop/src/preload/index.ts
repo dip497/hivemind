@@ -291,8 +291,16 @@ const api: HiveIpc & {
     ipcRenderer.on("widgets:changed", listener);
     return () => ipcRenderer.removeListener("widgets:changed", listener);
   },
-  listTilePlugins: () => ipcRenderer.invoke("tiles:list"),
-  callTilePlugin: (call) => ipcRenderer.invoke("tiles:call", call),
+  toolPackages: () => ipcRenderer.invoke("tools:list"),
+  toolHostExports: (map) => ipcRenderer.invoke("tools:host-exports", map),
+  installToolPackage: () => ipcRenderer.invoke("tools:install"),
+  removeToolPackage: (id) => ipcRenderer.invoke("tools:remove", id),
+  toolRun: (call) => ipcRenderer.invoke("tools:run", call),
+  onToolsChanged: (cb) => {
+    const listener = () => cb();
+    ipcRenderer.on("tools:changed", listener);
+    return () => ipcRenderer.removeListener("tools:changed", listener);
+  },
   outdatedAgents: () => ipcRenderer.invoke("plugins:outdated"),
   reviewCatalogPlugin: (type, id) => ipcRenderer.invoke("plugins:review", type, id),
   installCatalogAgent: (token) => ipcRenderer.invoke("plugins:install-agent", token),

@@ -3,7 +3,8 @@ import { disabledPlugins, pluginOptions, stringOptions } from "@hivemind/core/pl
 import { toolPreferences } from "@hivemind/core/settings-schema";
 import { installWidgetIpc, widgetAsset, widgetsChanged } from "./widgets.js";
 import { listWidgets } from "@hivemind/core/widgets";
-import { installTilePluginIpc, handleTileProtocol, TILE_SCHEME } from "./tile-plugins.js";
+import { installToolPackageIpc, handleToolProtocol, PLUGIN_SCHEME, safeMode, toolsChanged } from "./tool-packages.js";
+import { listToolPackages } from "@hivemind/core/tool-packages";
 import { appShortcut, menuKey } from "./shortcuts";
 import { recoverOnProcessLoss } from "./recover";
 import desktopPkg from "../../package.json" with { type: "json" };
@@ -1021,6 +1022,8 @@ const control: ControlPlane = new ControlPlane({
     toolsSettings: () => toolPreferences(getAppSettings()),
     reloadSettings: () => reloadSettings().then((s) => ({ ok: true, preset: s.appearance.preset })),
     widgetsChanged,
+    toolsChanged,
+    addedTools: async () => (safeMode() ? [] : (await listToolPackages()).filter((t) => !t.problem)),
     // A worker of a remote agent runs on that host: this PATH says nothing about it.
     defaultAgentId: async () => {
       await shellEnvReady;
@@ -1470,15 +1473,15 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // and confined to userData/media. `stream: true` is REQUIRED so <video>
     // range-requests (seek/loop) work.
     { scheme: "hivemedia", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
-    // Tile plugins' pages, to sandboxed frames; corsEnabled so their module scripts load.
-    { scheme: TILE_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
+    // Tool plugins' modules, imported into the app's windows; corsEnabled so module scripts load.
+    { scheme: PLUGIN_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
   ]);
   // Community view packages: hm-view://<id>/… served to sandboxed iframes.
   registerViewScheme();
   app.whenReady().then(async () => {
     refreshWindowsStartMenuShortcut();
     handleViewProtocol();
-    handleTileProtocol();
+    handleToolProtocol();
     installSettingsIpc(broadcast);
     installIdentityIpc();
     // The person's other devices run terminals here in this computer's daemon, when it has one.
@@ -1499,7 +1502,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     }).catch((e: unknown) => console.warn("[machines] init failed:", e));
     installViewManagementIpc();
     installWidgetIpc();
-    installTilePluginIpc();
+    installToolPackageIpc();
     installPluginCatalogIpc();
     handle("views:list", wrap(async (_e, repoRoot: string | null) => listViewPackages(repoRoot ? String(repoRoot) : null)));
 

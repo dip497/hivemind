@@ -18,7 +18,8 @@ import type { TileOpened } from "@hivemind/workspace-api/agents";
 import { labelOf as labelIn } from "./names.js";
 import { agentById, agentForCmd, agentLaunch, agentOption, cleanName, isSessionId, nextOrdinal, spawnableAgents, workerAgents, type AgentProviderDef, type SpawnOptions } from "@hivemind/agents";
 import { canListSessions, listSessions } from "@hivemind/agents/node";
-import { BROWSER_TOOL_ID, tileKindAvailability } from "@hivemind/core/tool-plugins";
+import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
+import { createToolRegistry, type ToolPluginContribution } from "@hivemind/core/tool-registry";
 import type { ToolsSettings } from "@hivemind/core/settings-schema";
 import { SUBMIT_DELAY_MS } from "@hivemind/agent-host/agent-io";
 import { customDataProblem, isCustomEventName } from "@hivemind/view-sdk/protocol";
@@ -123,6 +124,8 @@ function summarizeTool(tool: string, inp: Record<string, unknown>): string {
 export interface MethodDeps {
   /** Settled main-process tool preferences; absent means no optional tools enabled. */
   toolsSettings?: () => ToolsSettings;
+  /** The tool plugins added on this machine that can load (none in safe mode). */
+  addedTools?: () => Promise<readonly ToolPluginContribution[]>;
   /** Provider id of a (user-spawned) tile, from its command — for the
    *  capability checks on read/workflow. Optional: HCP-spawned tiles are
    *  tracked internally. */
@@ -134,6 +137,8 @@ export interface MethodDeps {
   reloadSettings: () => Promise<unknown>;
   /** Re-list the installed widgets (`hive widgets install|remove`) and tell every window. */
   widgetsChanged?: () => void;
+  /** Re-list the installed tool plugins (`hive tools install|remove`) and tell every window. */
+  toolsChanged?: () => void;
   /** Write to a tile's pty RIGHT NOW. Returns false if the tile has no live pty.
    *  Raw bytes only (key sequences) — for anything the agent must READ, use
    *  `deliverToTile`, which waits for it to be at its prompt. */
@@ -823,9 +828,15 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // ── canvas verbs (renderer) ──────────────────────────────────────────
       case "tool.open":
         return effect(call, { verb: method, target: (r) => r.tileId }, async () => {
-          if (p.tool !== BROWSER_TOOL_ID) throw new HcpError("UNSUPPORTED", "Unknown tool id");
-          const availability = tileKindAvailability("browser", deps.toolsSettings?.() ?? { enabledPlugins: [], disabledTools: [] });
-          if (!availability?.available) throw new HcpError("UNAUTHORIZED", "Browser is disabled; switch it on in Settings ▸ Plugins, or `hive plugins enable tool:hivemind/web`");
+          if (typeof p.tool !== "string") throw new HcpError("BAD_REQUEST", "tool must be an id: owner/name/tool");
+          let registry;
+          try { registry = createToolRegistry([...BUNDLED_TOOL_PLUGINS, ...(await deps.addedTools?.() ?? [])]); }
+          catch { registry = createToolRegistry(BUNDLED_TOOL_PLUGINS); }
+          const tool = registry.tools.find((t) => t.id === p.tool);
+          if (!tool?.tileKind) throw new HcpError("UNSUPPORTED", "Unknown tool id: `hive tools list` shows them");
+          const availability = registry.resolve(deps.toolsSettings?.() ?? { enabledPlugins: [], disabledTools: [] }).availability(tool.id);
+          if (!availability.available) throw new HcpError("UNAUTHORIZED", `${tool.label} is disabled; switch it on in Settings ▸ Plugins, or \`hive plugins enable tool:${tool.pluginId}\``);
+          const kind = tool.tileKind;
           if (p.frame !== undefined && (typeof p.frame !== "string" || !p.frame || p.frame.length > 256)) throw new HcpError("BAD_REQUEST", "frame must be an id");
           if (p.url !== undefined) {
             if (typeof p.url !== "string" || p.url.length > 8192) throw new HcpError("BAD_REQUEST", "Invalid URL");
@@ -836,8 +847,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
           const url = typeof p.url === "string" ? p.url : undefined;
           const tileId = openTile(p.callerTile, p.frame, (ws) => ({
-            id: mintId("tile-browser"), kind: "browser",
-            label: `Browser #${nextOrdinal(ws.tiles.map((t) => t.label), (n) => `Browser #${n}`)}`,
+            id: mintId(`tile-${kind.replace(/[^A-Za-z0-9-]/g, "")}`), kind,
+            label: `${tool.label} #${nextOrdinal(ws.tiles.map((t) => t.label), (n) => `${tool.label} #${n}`)}`,
             ...(url ? { url } : {}),
           }), { background: false });
           return { tileId };
@@ -874,6 +885,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // `hive widgets install|remove` changed the widgets folder: every window lists them again.
       case "widgets.rescan":
         return effect(call, { verb: method }, async () => { deps.widgetsChanged?.(); return { ok: true }; });
+      // `hive tools install|remove` changed the tools folder: every window loads them again.
+      case "tools.rescan":
+        return effect(call, { verb: method }, async () => { deps.toolsChanged?.(); return { ok: true }; });
       // `hive config set` / `hive theme use` edited settings.json: re-read it
       // and push the result to the renderer (main owns the file while running).
       case "settings.reload":

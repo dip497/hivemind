@@ -12,6 +12,9 @@ import { useAgentEntries } from "../agent-plugins";
 import { useCommunityReport } from "../workspace/views/community/registry";
 import { useViews } from "../workspace/workspace-view";
 import { useWidgetPackages } from "../board-objects/widget-runtime";
+import { useToolPackages } from "../tiles/tool-plugins";
+import { isPluginEnabled } from "@hivemind/core/plugin-settings";
+import { useSettings } from "../settings-store";
 
 export type PluginKind = "agent" | "view" | "widget" | "tool";
 export const PLUGIN_KINDS: readonly PluginKind[] = ["agent", "view", "widget", "tool"];
@@ -59,6 +62,8 @@ export function usePlugins(catalog: CatalogEntry[] | null): PluginRecord[] {
   const report = useCommunityReport();
   const views = useViews();
   const widgets = useWidgetPackages();
+  const tools = useToolPackages().packages;
+  const state = useSettings().plugins.state;
   return useMemo(() => {
     const listed = new Map((catalog ?? []).map((e) => [`${e.type}:${e.id}`, e]));
     const out: PluginRecord[] = [];
@@ -102,6 +107,15 @@ export function usePlugins(catalog: CatalogEntry[] | null): PluginRecord[] {
         origin: "app", installed: true, can: [], readme: null,
       });
     }
+    for (const t of tools) {
+      out.push({
+        kind: "tool", id: t.id, name: t.name, description: t.description, origin: "you", installed: true,
+        enabled: isPluginEnabled(state, "tool", t.id, false), ...(t.version ? { version: t.version } : {}),
+        can: ["Runs inside the app, with the access it has: your files, your programs and your logins.", ...permissionWords(t.permissions)],
+        readme: { dir: t.dir }, problem: t.problem, dir: t.dir,
+        ...(listed.get(`tool:${t.id}`) ? { catalog: listed.get(`tool:${t.id}`)! } : {}),
+      });
+    }
     const have = new Set(out.map((p) => `${p.kind}:${p.id}`));
     for (const e of catalog ?? []) {
       if (have.has(`${e.type}:${e.id}`)) continue;
@@ -111,5 +125,5 @@ export function usePlugins(catalog: CatalogEntry[] | null): PluginRecord[] {
       });
     }
     return out;
-  }, [agents, report, views, widgets, catalog]);
+  }, [agents, report, views, widgets, tools, state, catalog]);
 }

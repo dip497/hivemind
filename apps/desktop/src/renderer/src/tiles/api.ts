@@ -112,6 +112,23 @@ export function registerTile<D>(plugin: TilePlugin<D>): void {
   for (const fn of listeners) fn();
 }
 
+/** Take a plugin's kinds away again (switched off, removed): a tile of them shows the missing card. */
+export function unregisterTile(surface: string): void {
+  const p = bySurface.get(surface);
+  if (!p) return;
+  bySurface.delete(surface);
+  for (const [kind, v] of byKind) if (v.plugin === p) byKind.delete(kind);
+  version++;
+  for (const fn of listeners) fn();
+}
+
+/** Whether a plugin may start a tile of `kind`: one an installed plugin draws, that is not opened
+ *  only by something waiting on the person. */
+export const canSpawnKind = (kind: string): boolean => {
+  const k = byKind.get(kind);
+  return !!k && !k.spec.ephemeral;
+};
+
 /** Every installed plugin's surface. */
 export const tileSurfaces = (): string[] => [...bySurface.keys()];
 

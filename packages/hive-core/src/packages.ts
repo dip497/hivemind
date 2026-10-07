@@ -6,6 +6,7 @@ import { z } from "zod";
 import { validateViewManifest, isSafeRelativePath } from "@hivemind/view-sdk/manifest";
 import { PROTOCOL_VERSION } from "@hivemind/view-sdk/protocol";
 import { HiveError } from "./storage.js";
+import { TOOL_ID_RE } from "./tool-registry.js";
 
 export const PACKAGE_MANIFEST = "hivemind-package.json";
 export const PACKAGE_LIMITS = { files: 4096, bytes: 128 * 1024 * 1024, fileBytes: 16 * 1024 * 1024, jsonBytes: 64 * 1024, depth: 16 } as const;
@@ -15,7 +16,7 @@ const label = z.string().min(1).max(120).refine((s) => !/[\x00-\x1f\x7f]/.test(s
 const relative = z.string().refine((s) => isSafeRelativePath(s) && !/[\x00-\x1f\x7f]/.test(s), "expected a relative path inside the package");
 const schema = z.strictObject({
   apiVersion: z.literal(1),
-  id: z.string().regex(/^[a-z0-9][a-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{1,39}$/),
+  id: z.string().regex(TOOL_ID_RE),
   name: label,
   version: z.string().regex(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/),
   views: z.array(z.strictObject({ path: relative })).max(8).default([]),
