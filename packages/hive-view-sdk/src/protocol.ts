@@ -23,7 +23,7 @@ export const PROTOCOL_VERSION = 1;
 /** `workspace:edit` (protocol 1.2): rename a tile, bind a frame to a folder.
  *  `workspace:prompt` (1.4): give an agent an instruction the view wrote; the user confirms each one.
  *  `workspace:sessions` (1.4): see past agent sessions in a frame's folder and continue one. */
-export const VIEW_PERMISSIONS = ["workspace:spawn", "workspace:close", "workspace:edit", "workspace:prompt", "workspace:sessions", /** 1.8 */ "workspace:widgets"] as const;
+export const VIEW_PERMISSIONS = ["workspace:spawn", "workspace:close", "workspace:edit", "workspace:prompt", "workspace:sessions", /** 1.8 */ "workspace:widgets", /** 1.9 */ "workspace:issues"] as const;
 export type ViewPermission = (typeof VIEW_PERMISSIONS)[number];
 
 /** What each permission lets a plugin do, in the words shown before it is installed (the app's
@@ -36,6 +36,7 @@ const PERMISSION_WORDS: Record<ViewPermission, string> = {
   "workspace:sessions": "see past agent sessions and continue one",
   // A widget's button can do what the widget may (start or close agents): pressing is asked for.
   "workspace:widgets": "press the workspace's widgets, as you would (what a widget does then, it does as you)",
+  "workspace:issues": "create, change and delete the workspace's issues",
 };
 /** The permissions a plugin asks for, said as what they let it do; a name not known here is left out. */
 export const permissionWords = (perms: readonly string[]): string[] =>
@@ -118,7 +119,7 @@ export interface ViewTheme {
 
 /** What a host implements beyond 1.2, sent in `hello.features`. A host that predates 1.3 sends
  *  none, so read the field (`hm.hello.features ?? []`), never probe for a client method. */
-export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets"] as const;
+export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues"] as const;
 export type ViewFeature = (typeof VIEW_FEATURES)[number];
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
@@ -217,6 +218,43 @@ export interface ViewHistoryDay {
 export type RequestErrorCode = "UNSUPPORTED" | "BAD_REQUEST" | "BUSY" | "DECLINED" | "INTERNAL";
 export type ShareOutcome = "copied" | "saved" | "cancelled";
 
+// ── protocol 1.9 (additive) ─────────────────────────────────────────────────
+// `issues` in `hello.features`: after `subscribeIssues` the view is sent the workspace's issues
+// (`issues`), again whenever one changes, and may call the workspace's issue methods (`issue`
+// requests): reading is open, everything that writes needs `workspace:issues`. The workspace is
+// the one the view shows (a tool's tile: its frame's); the host names it, never the view.
+
+export const ISSUE_STATES = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"] as const;
+export type ViewIssueState = (typeof ISSUE_STATES)[number];
+export interface ViewIssueAssignee { type: "agent" | "member"; id: string; model?: string }
+/** An issue as a list shows it. */
+export interface ViewIssueSummary {
+  id: string;
+  title: string;
+  state: ViewIssueState;
+  parent: string | null;
+  labels: string[];
+  assignee: ViewIssueAssignee | null;
+  github?: number | null;
+  created: string;
+  updated: string;
+}
+/** An issue in full: its description, acceptance criteria and activity. */
+export interface ViewIssue extends ViewIssueSummary {
+  links?: { id: string; type: string }[];
+  sections: {
+    description: string;
+    acceptanceCriteria: { done: boolean; text: string }[];
+    activity: { at: string; who: string; message: string }[];
+  };
+}
+/** The issue calls a view can make, and which of them write. */
+export const ISSUE_CALLS = ["read", "create", "update", "setState", "comment", "delete", "link", "unlink", "move"] as const;
+export type IssueCall = (typeof ISSUE_CALLS)[number];
+export const ISSUE_WRITES: ReadonlySet<IssueCall> = new Set(["create", "update", "setState", "comment", "delete", "link", "unlink", "move"]);
+/** The most an `issue` request's arguments may take, as JSON. */
+export const ISSUE_ARGS_MAX = 256 * 1024;
+
 // ── protocol 1.8 (additive) ─────────────────────────────────────────────────
 // `widgets` in `hello.features`: after `subscribeWidgets` the view is sent every widget in the
 // workspace (`widgets`), again whenever one changes, and with the permission `workspace:widgets`
@@ -314,6 +352,8 @@ export type HostMessage =
   | { type: "settings"; settings: Record<string, SettingValue> }
   /** 1.8, after `subscribeWidgets`: every widget in the workspace, whenever one changes. */
   | { type: "widgets"; widgets: ViewWidget[] }
+  /** 1.9, after `subscribeIssues`: the workspace's issues, whenever one changes. */
+  | { type: "issues"; issues: ViewIssueSummary[] }
   /** The user undocked a surface from the host's bar (or Shift+Esc): the
    *  host has already released the tile; drop the rect on your side. */
   | { type: "undock"; tileId: string };
@@ -383,6 +423,9 @@ export type PluginMessage =
   /** 1.8 */
   | { type: "subscribeWidgets" }
   | { type: "unsubscribeWidgets" }
+  /** 1.9 */
+  | { type: "subscribeIssues" }
+  | { type: "unsubscribeIssues" }
   /** 1.8: press one of a widget's buttons (its `action`), or its card (`click`). */
   | { type: "pressWidget"; id: string; action?: unknown; click?: true }
   /** 1.3: answered by one `response` with the same id. The share buffer is the one non-JSON value. */
@@ -393,7 +436,9 @@ export type PluginMessage =
   /** 1.4, `workspace:sessions`: result `{ sessions: ViewSession[] }`, newest first. */
   | { type: "request"; requestId: number; name: "sessions"; args: [{ agent: string; frameId: string }] }
   /** 1.4, `workspace:prompt`: result `{ outcome: PromptOutcome }` once the user chose. */
-  | { type: "request"; requestId: number; name: "prompt"; args: [{ tileId: string; text: string }] };
+  | { type: "request"; requestId: number; name: "prompt"; args: [{ tileId: string; text: string }] }
+  /** 1.9: one of the workspace's issue methods; a writing one needs `workspace:issues`. Result: what it returns. */
+  | { type: "request"; requestId: number; name: "issue"; args: [{ call: IssueCall; args: unknown[] }] };
 
 export const MAX_SURFACE_RECTS = 16;
 /** 1.2 argument caps: a tile name, and an agent's first prompt. */
@@ -571,6 +616,8 @@ export function parsePluginMessage(raw: unknown): ParseResult<PluginMessage> {
     case "unsubscribeParticipants":
     case "subscribeWidgets":
     case "unsubscribeWidgets":
+    case "subscribeIssues":
+    case "unsubscribeIssues":
       return { ok: true, msg: { type: raw.type } };
     case "pressWidget": {
       if (!isId(raw.id)) return bad("id must be a widget id");
@@ -609,6 +656,14 @@ export function parsePluginMessage(raw: unknown): ParseResult<PluginMessage> {
         if (why) return bad(why);
         return { ok: true, msg: { type: "request", requestId: raw.requestId, name: "prompt", args: [{ tileId: o.tileId, text: o.text as string }] } };
       }
+      if (raw.name === "issue") {
+        if (!(ISSUE_CALLS as readonly unknown[]).includes(o.call)) return bad(`call must be one of ${ISSUE_CALLS.join(", ")}`);
+        if (!Array.isArray(o.args) || o.args.length > 8) return bad("args must be at most 8 arguments");
+        let size = Infinity;
+        try { size = JSON.stringify(o.args).length; } catch { /* not JSON */ }
+        if (size > ISSUE_ARGS_MAX) return bad(`args must be JSON of at most ${ISSUE_ARGS_MAX} bytes`);
+        return { ok: true, msg: { type: "request", requestId: raw.requestId, name: "issue", args: [{ call: o.call as IssueCall, args: o.args as unknown[] }] } };
+      }
       return bad(`unknown request ${JSON.stringify(raw.name)}`);
     }
     default:
@@ -629,7 +684,7 @@ export interface HostScope {
 /** The feature a subscription needs. */
 const SUBSCRIPTION_FEATURE: Partial<Record<PluginMessage["type"], ViewFeature>> = {
   subscribeEvents: "events", watchActivity: "activity", subscribePresence: "presence", subscribeParticipants: "participants",
-  subscribeWidgets: "widgets", pressWidget: "widgets",
+  subscribeWidgets: "widgets", pressWidget: "widgets", subscribeIssues: "issues",
 };
 
 /** Host side: why a well-formed message from a view is refused, or null when it is taken. A command
@@ -649,6 +704,10 @@ function refused(m: PluginMessage, host: HostScope): string | null {
   switch (m.type) {
     case "pressWidget":
       return host.capabilities.includes("workspace:widgets") ? null : 'pressWidget needs permission "workspace:widgets"';
+    case "request":
+      if (m.name !== "issue") return null;
+      if (!host.features.includes("issues")) return "issue: not supported";
+      return ISSUE_WRITES.has(m.args[0].call) && !host.capabilities.includes("workspace:issues") ? `issue ${m.args[0].call} needs permission "workspace:issues"` : null;
     case "command": {
       const need = COMMAND_PERMISSION[m.name];
       if (need && !host.capabilities.includes(need)) return `${m.name} needs permission "${need}"`;
@@ -723,6 +782,9 @@ export function parseHostMessage(raw: unknown): ParseResult<HostMessage> {
         ? { ok: true, msg: raw as unknown as HostMessage } : bad("widgets must be an array of widgets");
     case "settings":
       return isObj(raw.settings) ? { ok: true, msg: raw as unknown as HostMessage } : bad("settings must be an object");
+    case "issues":
+      return Array.isArray(raw.issues) && raw.issues.every((i) => isObj(i) && typeof i.id === "string" && typeof i.title === "string")
+        ? { ok: true, msg: raw as unknown as HostMessage } : bad("issues must be an array of issues");
     case "undock":
       return isId(raw.tileId) ? { ok: true, msg: raw as unknown as HostMessage } : bad("tileId must be a string");
     default:

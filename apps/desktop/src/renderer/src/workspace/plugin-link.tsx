@@ -49,6 +49,8 @@ export interface PluginLinkOptions {
   props: WorkspaceViewProps;
   /** The box it draws in, for `viewport` and `resize`. */
   root: RefObject<HTMLElement | null>;
+  /** The `.hivemind` root whose issues it is given: a tool's tile, its frame's; absent, the workspace's. */
+  issueRoot?: () => string | null;
   /** Where it asks for live surfaces; absent: it places none. */
   onSurfaceRects?: (rects: SurfaceRect[]) => void;
   onDisable: (reason: string) => void;
@@ -79,6 +81,8 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
   layerTilesRef.current = layerTiles;
   const repoRef = useRef(model.repoPath);
   repoRef.current = model.repoPath;
+  const rootRef = useRef(model.root);
+  rootRef.current = model.root;
   const layoutKeyRef = useRef(layoutKey);
   layoutKeyRef.current = layoutKey;
 
@@ -156,6 +160,7 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
       },
       isAgentTile: (tileId) => tilesRef.current.some((t) => t.id === tileId && t.kind === AGENT_TILE_KIND),
       confirmPrompt,
+      issueRoot: () => optsRef.current.issueRoot?.() ?? rootRef.current,
     }),
     onDisable: (reason) => optsRef.current.onDisable(reason),
   // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -17,6 +17,7 @@ import {
   COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
   type ActivityLevel, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect,
   type ViewCommands, type ViewDevice, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme, type ViewWidget,
+  ISSUE_CALLS, ISSUE_WRITES, type IssueCall, type ViewIssue, type ViewIssueAssignee, type ViewIssueState, type ViewIssueSummary,
 } from "./protocol.js";
 
 /** A request the host refused or could not answer (`UNSUPPORTED` when it lacks the feature). */
@@ -79,6 +80,10 @@ export interface ViewClient {
   pressWidget(id: string, action: unknown): void;
   /** 1.8: click a widget's card, not on a button. */
   clickWidget(id: string): void;
+  /** 1.9: the workspace's issues, now and whenever one changes. A host before 1.9 sends none. */
+  onIssues(cb: (issues: ViewIssueSummary[]) => void): () => void;
+  /** 1.9: the workspace's issue methods. Reading is open; the rest need `workspace:issues`. */
+  readonly issues: ViewIssues;
   /** 1.3: per-tile status intervals for a local day (YYYY-MM-DD). */
   history(day: string): Promise<ViewHistoryDay>;
   /** 1.3: ask the user to copy or save this PNG; resolves with what they chose. */
@@ -111,10 +116,27 @@ export interface ViewClient {
  *  by name, and the values it holds, which the other side keeps a copy of. Surfaces and reveals
  *  are a view's own and are not among them. */
 export const CLIENT_CALLS = [
-  "on", "subscribeStatus", "supports", "onEvents", "onCustom", "activity", "onPresence", "onParticipants", "onWidgets",
+  "on", "subscribeStatus", "supports", "onEvents", "onCustom", "activity", "onPresence", "onParticipants", "onWidgets", "onIssues",
   "pressWidget", "clickWidget", "history", "share", "agents", "sessions", "prompt", "setLayout", "error",
 ] as const satisfies readonly (keyof ViewClient)[];
 export const CLIENT_VALUES = ["hello", "capabilities", "viewport", "visible", "device", "settings", "features"] as const satisfies readonly (keyof ViewClient)[];
+
+/** The workspace's issue methods (1.9), each answered with what the workspace's own returns. */
+export interface ViewIssues {
+  read(id: string): Promise<ViewIssue>;
+  create(issue: { title: string; state?: ViewIssueState; parent?: string; labels?: string[]; assignee?: ViewIssueAssignee | null; description?: string; acceptanceCriteria?: { done: boolean; text: string }[] }): Promise<ViewIssue>;
+  /** Change its fields: title, labels, assignee, parent, description, acceptance criteria. */
+  update(id: string, patch: Record<string, unknown>): Promise<ViewIssue>;
+  /** A new state, with a note in the same activity entry. */
+  setState(id: string, state: ViewIssueState, note?: string): Promise<ViewIssue>;
+  comment(id: string, message: string): Promise<ViewIssue>;
+  delete(id: string): Promise<void>;
+  /** Relate it to `other`, which may be in another of the host's workspaces. */
+  link(id: string, other: string, type: string): Promise<unknown>;
+  unlink(id: string, other: string): Promise<{ removed: number }>;
+  /** Into the host's workspace with prefix `prefix`. */
+  move(id: string, prefix: string, mode: "move" | "copy"): Promise<unknown>;
+}
 
 export interface ConnectOptions {
   /** Where to listen for the handshake (default `window`). */
@@ -165,6 +187,9 @@ class Client implements ViewClient {
   private participantCbs = new Set<(p: ViewParticipant[]) => void>();
   private participants: ViewParticipant[] | null = null;
   private widgets: ViewWidget[] | null = null;
+  private issueList: ViewIssueSummary[] | null = null;
+  private issueCbs = new Set<(issues: ViewIssueSummary[]) => void>();
+  readonly issues: ViewIssues = Object.fromEntries(ISSUE_CALLS.map((call) => [call, (...args: unknown[]) => this.issueCall(call, args)])) as unknown as ViewIssues;
   private widgetCbs = new Set<(widgets: ViewWidget[]) => void>();
   private requests = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer?: ReturnType<typeof setTimeout> }>();
   private nextRequest = 1;
@@ -233,6 +258,10 @@ class Client implements ViewClient {
       case "widgets":
         this.widgets = m.widgets;
         for (const cb of this.widgetCbs) cb(m.widgets);
+        break;
+      case "issues":
+        this.issueList = m.issues;
+        for (const cb of this.issueCbs) cb(m.issues);
         break;
       case "participants":
         this.participants = m.participants;
@@ -394,6 +423,22 @@ class Client implements ViewClient {
     return () => {
       if (this.widgetCbs.delete(cb) && this.widgetCbs.size === 0) { this.widgets = null; this.send({ type: "unsubscribeWidgets" }); }
     };
+  }
+
+  onIssues(cb: (issues: ViewIssueSummary[]) => void): () => void {
+    if (!this.supports("issues")) return () => {};
+    this.issueCbs.add(cb);
+    if (this.issueCbs.size === 1) this.send({ type: "subscribeIssues" });
+    else if (this.issueList) cb(this.issueList);
+    return () => {
+      if (this.issueCbs.delete(cb) && this.issueCbs.size === 0) { this.issueList = null; this.send({ type: "unsubscribeIssues" }); }
+    };
+  }
+
+  private issueCall(call: IssueCall, args: unknown[]): Promise<unknown> {
+    if (ISSUE_WRITES.has(call)) this.need("workspace:issues", `issues.${call}`);
+    if (!this.supports("issues")) return Promise.reject(new HostError("UNSUPPORTED", "this host has no issues"));
+    return this.request((requestId) => ({ type: "request", requestId, name: "issue", args: [{ call, args }] }), 30_000);
   }
 
   pressWidget(id: string, action: unknown): void {

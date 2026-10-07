@@ -66,6 +66,7 @@ export interface FakeHost {
     readonly presence: boolean;
     readonly participants: boolean;
     readonly widgets: boolean;
+    readonly issues: boolean;
   };
   /** 1.8: every widget the view pressed (`action`) or clicked, in order. */
   readonly pressed: readonly ({ id: string; action: unknown } | { id: string; click: true })[];
@@ -105,7 +106,7 @@ export function fakeHost(opts: FakeHostOptions = {}): FakeHost {
     received, refused, commands,
     rects: [] as SurfaceRect[],
     layout: undefined as unknown,
-    subscribed: { status, events: null as { kinds: ViewEventKind[]; custom: string[] } | null, activity: [] as string[], presence: false, participants: false, widgets: false },
+    subscribed: { status, events: null as { kinds: ViewEventKind[]; custom: string[] } | null, activity: [] as string[], presence: false, participants: false, widgets: false, issues: false },
     pressed: [] as ({ id: string; action: unknown } | { id: string; click: true })[],
   };
   const post = (msg: HostMessage) => port.postMessage(msg);
@@ -166,6 +167,8 @@ export function fakeHost(opts: FakeHostOptions = {}): FakeHost {
       case "unsubscribeParticipants": s.participants = false; return;
       case "subscribeWidgets": s.widgets = true; return;
       case "unsubscribeWidgets": s.widgets = false; return;
+      case "subscribeIssues": s.issues = true; return;
+      case "unsubscribeIssues": s.issues = false; return;
       case "pressWidget": host.pressed.push(m.click ? { id: m.id, click: true } : { id: m.id, action: m.action }); return;
       case "request": void answer(m); return;
       default: return;

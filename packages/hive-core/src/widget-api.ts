@@ -22,8 +22,9 @@ export const WIDGET_PRELUDE = `const hive = (() => {
     return new Promise((resolve, reject) => waiting.set(req, { resolve, reject }));
   };
   const commands = new Proxy({}, { get: (_, name) => (...a) => call(["commands", String(name)], a) });
+  const issues = new Proxy({}, { get: (_, name) => (...a) => call(["issues", String(name)], a) });
   // Not a promise, nor anything a symbol names: \`await hive.hm\` and logging it stay plain.
-  const hm = new Proxy({}, { get: (_, k) => (typeof k !== "string" || k === "then" ? undefined : k === "commands" ? commands : k in values ? values[k] : (...a) => call([k], a)) });
+  const hm = new Proxy({}, { get: (_, k) => (typeof k !== "string" || k === "then" ? undefined : k === "commands" ? commands : k === "issues" ? issues : k in values ? values[k] : (...a) => call([k], a)) });
   const fire = (t, p) => (on[t] || []).forEach((f) => { try { f(p); } catch (e) { console.error(e); } });
   self.onmessage = (e) => {
     const m = e.data;
@@ -103,6 +104,11 @@ interface Hm {
     spawnAgent(agent: string | null, frameId: string | null, opts?: { prompt?: string; name?: string }): Promise<void>;
     [name: string]: (...args: any[]) => Promise<unknown>;
   };
+  /** The workspace's issues, now and on each change. */
+  onIssues(cb: (issues: any[]) => void): () => void;
+  /** Its issue methods: \`read\` is open; \`create\`, \`update\`, \`setState\`, \`comment\`, \`delete\`,
+   *  \`link\`, \`unlink\`, \`move\` need "workspace:issues". */
+  issues: { [call: string]: (...args: any[]) => Promise<any> };
   [name: string]: any;
 }
 

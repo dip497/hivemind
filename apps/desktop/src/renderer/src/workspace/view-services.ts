@@ -16,6 +16,7 @@ import { colorOf } from "../multiplayer/people";
 import { ViewEventHub } from "./view-events";
 import { clickWidget, pressWidget, watchViewWidgets } from "../board-objects/widget-runtime";
 import type { HcpStatusEvent } from "../../../shared/ipc";
+import { issueService } from "./issue-service";
 
 const TURN_ENDS = new Set(["done", "failed", "interrupted", "limited"]);
 
@@ -128,8 +129,11 @@ export function viewLinkServices(opts: {
   frameFolder: (frameId: string) => string | null;
   isAgentTile: (tileId: string) => boolean;
   confirmPrompt: LinkServices["confirmPrompt"];
+  /** The `.hivemind` root whose issues the plugin is given (protocol 1.9), or null for none. */
+  issueRoot: () => string | null;
 }): LinkServices {
   return {
+    issues: issueService(opts.issueRoot),
     agentStatus: (tileId, cb) => subscribeHostedStatus(tileId, (s) => cb(viewAgentStatus(s))),
     widgets: {
       subscribe: (cb) => {

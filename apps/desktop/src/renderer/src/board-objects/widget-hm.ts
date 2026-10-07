@@ -1,10 +1,10 @@
 /**
  * A widget's `hive.hm`, window side: the worker names a call of the view client the window holds
- * for it (`CLIENT_CALLS`, or one of its commands), with callbacks as ids; the answer, each
+ * for it (`CLIENT_CALLS`, one of its commands, or one of its issue calls), with callbacks as ids; the answer, each
  * callback's calls and the client's values go back by message. Nothing else of the client, nor
  * of anything it leads to, can be named: the worker's names are checked against those lists.
  */
-import { CLIENT_CALLS, CLIENT_VALUES, COMMAND_PERMISSION, type ViewClient } from "@hivemind/view-sdk";
+import { CLIENT_CALLS, CLIENT_VALUES, COMMAND_PERMISSION, ISSUE_CALLS, type ViewClient } from "@hivemind/view-sdk";
 
 type FromWorker =
   | { type: "hm-call"; req: number; path: unknown; args: unknown }
@@ -12,6 +12,7 @@ type FromWorker =
 
 const CALLS = new Set<string>(CLIENT_CALLS);
 const COMMANDS = new Set<string>(Object.keys(COMMAND_PERMISSION));
+const ISSUES = new Set<string>(ISSUE_CALLS);
 
 /** What of `client` the worker may call by `path`, or null. */
 function callable(client: ViewClient, path: unknown): ((...a: unknown[]) => unknown) | null {
@@ -20,6 +21,9 @@ function callable(client: ViewClient, path: unknown): ((...a: unknown[]) => unkn
   if (path.length === 1 && first && CALLS.has(first)) return (client[first as (typeof CLIENT_CALLS)[number]] as (...a: unknown[]) => unknown).bind(client);
   if (path.length === 2 && first === "commands" && second && COMMANDS.has(second)) {
     return client.commands[second as keyof ViewClient["commands"]] as (...a: unknown[]) => unknown;
+  }
+  if (path.length === 2 && first === "issues" && second && ISSUES.has(second)) {
+    return client.issues[second as keyof ViewClient["issues"]] as (...a: unknown[]) => unknown;
   }
   return null;
 }

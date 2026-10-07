@@ -15,6 +15,7 @@ function fakeClient() {
     subscribeStatus: (tileId: string, cb: (s: string) => void) => { calls.push(`status ${tileId}`); cb("idle"); return () => calls.push(`unsub ${tileId}`); },
     send: () => calls.push("send"),
     commands: { spawnAgent: (a: string | null) => { calls.push(`spawn ${a}`); } },
+    issues: { read: async (id: string) => { calls.push(`read ${id}`); return { id }; } },
   };
   return { client: client as unknown as ViewClient, calls };
 }
@@ -26,10 +27,11 @@ test("a call the worker names is the client's, answered by message, values sent 
   assert.deepEqual(out[0], { type: "hm-values", values: { hello: { pluginId: "w" }, capabilities: ["workspace:spawn"], viewport: { w: 0, h: 0 }, visible: true, device: { touch: false, compact: false }, settings: { a: 1 }, features: ["agents"] } });
   b.handle({ type: "hm-call", req: 1, path: ["agents"], args: [] } as never);
   b.handle({ type: "hm-call", req: 2, path: ["commands", "spawnAgent"], args: ["codex"] } as never);
+  b.handle({ type: "hm-call", req: 3, path: ["issues", "read"], args: ["HM-1"] } as never);
   await new Promise((r) => setTimeout(r, 0));
-  assert.deepEqual(calls, ["agents", "spawn codex"]);
+  assert.deepEqual(calls, ["agents", "spawn codex", "read HM-1"]);
   const replies = out.slice(1).sort((x, y) => Number(x.req) - Number(y.req));
-  assert.deepEqual(replies, [{ type: "hm-reply", req: 1, ok: true, value: [{ id: "claude" }] }, { type: "hm-reply", req: 2, ok: true, value: null }]);
+  assert.deepEqual(replies, [{ type: "hm-reply", req: 1, ok: true, value: [{ id: "claude" }] }, { type: "hm-reply", req: 2, ok: true, value: null }, { type: "hm-reply", req: 3, ok: true, value: { id: "HM-1" } }]);
 });
 
 test("a callback is called back by id, and its unsubscribe ends it", () => {
@@ -46,7 +48,7 @@ test("nothing but the client's public calls and its commands can be named", asyn
   const { client, calls } = fakeClient();
   const out: Array<Record<string, unknown>> = [];
   const b = bridgeClient(client, (m) => out.push(m as Record<string, unknown>));
-  const refused = [["send"], ["constructor"], ["agents", "constructor"], ["commands", "constructor"], ["__proto__"], ["commands"], "agents"];
+  const refused = [["send"], ["constructor"], ["agents", "constructor"], ["commands", "constructor"], ["issues", "constructor"], ["issues", "issueCall"], ["__proto__"], ["commands"], "agents"];
   refused.forEach((path, i) => b.handle({ type: "hm-call", req: 100 + i, path, args: [] } as never));
   await new Promise((r) => setTimeout(r, 0));
   assert.deepEqual(calls, []);

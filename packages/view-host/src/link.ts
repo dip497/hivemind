@@ -23,7 +23,7 @@ import {
   ACTIVITY_MIN_INTERVAL_MS, EVENT_REPLAY_MAX, PROTOCOL_VERSION, customNameMatches, parsePluginMessage, refusal,
   type ActivityLevel, type CommandName, type HostMessage, type HostScope, type PluginMessage, type RequestErrorCode, type ShareOutcome, type SurfaceRect, type ViewEvent,
   type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewWidget,
-  type ViewAgent, type ViewAgentStatus, type ViewSession, type ViewStatus,
+  type ViewAgent, type ViewAgentStatus, type ViewSession, type ViewStatus, type IssueCall, type ViewIssueSummary,
 } from "@hivemind/view-sdk/protocol";
 import type { TileKind } from "@hivemind/workspace-doc/shapes";
 import type { TileStatusKind } from "@hivemind/agent-host/tile-status";
@@ -83,6 +83,9 @@ export interface LinkServices {
   /** 1.8: every widget in the workspace, now and on each change; and a press of one, as the
    *  person's where it is drawn. */
   widgets?: { subscribe(cb: (widgets: ViewWidget[]) => void): () => void; press(id: string, press: { action: unknown } | { click: true }): void };
+  /** 1.9: the issues of the workspace the view shows, now and on each change; and one of its
+   *  issue methods, called for the view (the link has checked what writes). */
+  issues?: { subscribe(cb: (issues: ViewIssueSummary[]) => void): () => void; call(call: IssueCall, args: unknown[]): Promise<unknown> };
 }
 
 export const SHARE_DECLINES_MAX = 3;
@@ -106,6 +109,7 @@ export function linkFeatures(s: LinkServices, placesSurfaces = false): ViewFeatu
   if (s.confirmPrompt && s.sendPrompt) f.push("prompt");
   if (s.participants) f.push("participants");
   if (s.widgets) f.push("widgets");
+  if (s.issues) f.push("issues");
   if (placesSurfaces) f.push("surfaces");
   return f;
 }
@@ -179,6 +183,7 @@ export class CommunityLink {
   private readonly scope: HostScope;
   private participantsUnsub: (() => void) | null = null;
   private widgetsUnsub: (() => void) | null = null;
+  private issuesUnsub: (() => void) | null = null;
   private people: ViewParticipant[] | null = null;
   private lastParticipants = "";
   /** What this host cannot do that the view asked for, said once each. */
@@ -250,6 +255,7 @@ export class CommunityLink {
     this.presenceUnsub?.(); this.presenceUnsub = null;
     this.participantsUnsub?.(); this.participantsUnsub = null;
     this.widgetsUnsub?.(); this.widgetsUnsub = null;
+    this.issuesUnsub?.(); this.issuesUnsub = null;
     for (const u of this.statusUnsubs.values()) u();
     this.statusUnsubs.clear();
     this.stats.statusSubscriptions = 0;
@@ -365,6 +371,11 @@ export class CommunityLink {
         return;
       }
       case "unsubscribeWidgets": this.widgetsUnsub?.(); this.widgetsUnsub = null; return;
+      case "subscribeIssues": {
+        if (!this.issuesUnsub) this.issuesUnsub = this.services.issues!.subscribe((issues) => this.send({ type: "issues", issues }));
+        return;
+      }
+      case "unsubscribeIssues": this.issuesUnsub?.(); this.issuesUnsub = null; return;
       case "pressWidget": this.services.widgets!.press(m.id, m.click ? { click: true } : { action: m.action }); return;
       case "request": this.request(m); return;
     }
@@ -454,6 +465,12 @@ export class CommunityLink {
       },
     );
     const granted = (p: ViewPermission) => (this.deps.capabilities.includes(p) ? true : (this.fail(m.requestId, "DECLINED", `${m.name} needs permission "${p}"`), false));
+    if (m.name === "issue") {
+      const issues = this.services.issues;
+      if (!issues) { this.fail(m.requestId, "UNSUPPORTED", "this host has no issues"); return; }
+      void reply(issues.call(m.args[0].call, m.args[0].args));
+      return;
+    }
     if (m.name === "agents") {
       const agents = this.services.agents;
       if (!agents) { this.fail(m.requestId, "UNSUPPORTED", "agents are not listed here"); return; }

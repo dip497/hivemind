@@ -19,6 +19,8 @@ import type { PinRect } from "./api";
 export type ToolTileData = {
   pkg: ToolPackage; tileId: string; kind: string; name: string; frameId: string | null;
   repoPath: string | null; cwd: string;
+  /** The `.hivemind` root of its frame, whose issues its `hm` is given. */
+  root: string | null;
   glyph?: string;
   openUrl: (url: string) => void; openFile: (path: string) => void;
   onClose: () => void; pinned?: boolean; onTogglePin?: (id: string, rect: PinRect) => void;
@@ -52,7 +54,7 @@ function LinkedTile({ data, selected, Draw, props }: { data: ToolTileData; selec
   const [failed, setFailed] = useState<string | null>(null);
   const { link, dialogs } = usePluginLink({
     pluginId: data.pkg.id, record: { kind: "tool", id: data.pkg.id }, name: data.pkg.name,
-    capabilities: data.pkg.permissions, fields: data.pkg.settings, layoutId: `tile:${data.tileId}`,
+    capabilities: data.pkg.permissions, fields: data.pkg.settings, layoutId: `tile:${data.tileId}`, issueRoot: () => dataRef.current.root,
     props, root, onDisable: (reason) => setFailed(reason),
   });
   useEffect(() => {
