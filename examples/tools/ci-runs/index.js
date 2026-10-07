@@ -3,7 +3,7 @@
 // `gh run view --job <id> --log-failed`. "Ask an agent to fix" starts one in this tile's frame with
 // a prompt you read before it is sent (permissions workspace:spawn and workspace:prompt).
 import React, { useCallback, useEffect, useRef, useState } from "hm-plugin://host/react.js";
-import { Loading } from "hm-plugin://host/sdk.js";
+import { Loading, useTileState } from "hm-plugin://host/sdk.js";
 import { Button, toast } from "hm-plugin://host/ui.js";
 
 const h = React.createElement;
@@ -58,9 +58,9 @@ function Runs({ tile, hm, host }) {
   const [runs, setRuns] = useState(null);
   const [error, setError] = useState(null);
   const [tick, setTick] = useState(0);
-  const [chosen, setChosen] = useState(hm.hello.layout?.chosen ?? null);
+  const [chosen, setChosen] = useTileState(hm, "chosen", null);
   const [jobs, setJobs] = useState(null);
-  const [job, setJob] = useState(null);
+  const [job, setJob] = useTileState(hm, "job", null);
   const [log, setLog] = useState(null);
   const logBox = useRef(null);
   const refresh = useCallback(() => setTick((t) => t + 1), []);
@@ -96,7 +96,7 @@ function Runs({ tile, hm, host }) {
         if (!live) return;
         const list = JSON.parse(out).jobs;
         setJobs(list);
-        setJob((j) => j ?? list.find((x) => outcome(x).color === "var(--color-err)")?.databaseId ?? null);
+        if (!list.some((x) => x.databaseId === job)) setJob(list.find((x) => outcome(x).color === "var(--color-err)")?.databaseId ?? null);
       },
       (e) => { if (live) { setJobs([]); toast.error("Could not read the run's jobs", { description: e.message }); } });
     return () => { live = false; };
@@ -123,7 +123,7 @@ function Runs({ tile, hm, host }) {
     else box.scrollTop = box.scrollHeight;
   }, [log]);
 
-  const choose = (id) => { setChosen(id); setJobs(null); setJob(null); hm.setLayout({ chosen: id }); };
+  const choose = (id) => { setChosen(id); setJobs(null); setJob(null); };
   const act = async (what, args) => {
     try { await gh(host, args); toast.success(what); refresh(); } catch (e) { toast.error(`${what} failed`, { description: e.message }); }
   };
@@ -144,7 +144,7 @@ function Runs({ tile, hm, host }) {
         h(Button, { size: "2xs", variant: "ghost", onClick: refresh }, "Refresh")),
       h("div", { style: { overflow: "auto", minHeight: 0 } },
         (runs ?? []).map((r) => h("button", {
-          key: r.databaseId, onClick: () => choose(r.databaseId), "data-run": r.databaseId,
+          key: r.databaseId, onClick: () => choose(r.databaseId), "data-run": r.databaseId, "aria-current": r.databaseId === chosen || undefined,
           style: {
             display: "flex", gap: 8, alignItems: "baseline", width: "100%", textAlign: "left", padding: "7px 12px", border: 0, cursor: "pointer",
             color: "var(--color-fg)", borderBottom: "1px solid var(--color-line)", background: r.databaseId === chosen ? "var(--color-bg3)" : "transparent",
@@ -167,7 +167,7 @@ function Runs({ tile, hm, host }) {
         h("div", { key: "jobs", style: { display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 12px", borderBottom: "1px solid var(--color-line)" } },
           jobs === null ? h(Loading, { label: "Loading the jobs", className: "min-h-0" })
             : jobs.map((j) => h("button", {
-              key: j.databaseId, onClick: () => setJob(j.databaseId), "data-job": j.name,
+              key: j.databaseId, onClick: () => setJob(j.databaseId), "data-job": j.name, "aria-pressed": j.databaseId === job,
               style: {
                 display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 8px", borderRadius: 6, cursor: "pointer", fontSize: 11.5,
                 color: "var(--color-fg)", border: "1px solid var(--color-line)", background: j.databaseId === job ? "var(--color-bg3)" : "transparent",

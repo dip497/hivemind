@@ -3,7 +3,7 @@
 // with a prompt you read before it is sent (hm.commands.spawnAgent, permissions workspace:spawn
 // and workspace:prompt).
 import React, { useEffect, useMemo, useState } from "hm-plugin://host/react.js";
-import { Button, PatchView, Loading } from "hm-plugin://host/sdk.js";
+import { Button, PatchView, Loading, useTileState } from "hm-plugin://host/sdk.js";
 
 const h = React.createElement;
 const SEP = "\u001f";
@@ -20,8 +20,8 @@ function History({ tile, hm, host }) {
   const [count, setCount] = useState(hm.settings.count ?? 300);
   const [commits, setCommits] = useState(null);
   const [error, setError] = useState(null);
-  const [query, setQuery] = useState("");
-  const [chosen, setChosen] = useState(hm.hello.layout?.chosen ?? null);
+  const [query, setQuery] = useTileState(hm, "query", "");
+  const [chosen, setChosen] = useTileState(hm, "chosen", null);
   const [patch, setPatch] = useState(null);
   useEffect(() => hm.on("settings", (s) => setCount(s.count ?? 300)), [hm]);
   useEffect(() => {
@@ -38,7 +38,7 @@ function History({ tile, hm, host }) {
     const q = query.trim().toLowerCase();
     return (commits ?? []).filter((c) => !q || `${c.subject} ${c.author} ${c.short}`.toLowerCase().includes(q));
   }, [commits, query]);
-  const choose = (hash) => { setChosen(hash); hm.setLayout({ chosen: hash }); };
+  const choose = (hash) => setChosen(hash);
   const commit = commits?.find((c) => c.hash === chosen);
   const explain = () => hm.commands.spawnAgent(null, tile.frameId, {
     name: `Explain ${commit.short}`,

@@ -79,13 +79,17 @@ test.beforeAll(async () => {
     expect(hive("tools", "install", path.join(examples, name)).status).toBe(0);
     expect(hive("plugins", "enable", `tool:dip497/${name}`).status).toBe(0);
   }
+  await launch();
+});
+
+async function launch(): Promise<void> {
   app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox"], cwd: repo, env });
   page = await app.firstWindow();
   await page.waitForSelector(".react-flow", { timeout: 30_000 });
   const userData = path.join(xdg, "hivemind-dev");
   await expect.poll(() => fs.existsSync(path.join(userData, "hcp.token"))).toBe(true);
   hcp = { HIVE_HCP_SOCK: path.join(userData, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim() };
-});
+}
 test.afterAll(async () => {
   await app?.close();
   fs.rmSync(root, { recursive: true, force: true });
@@ -93,6 +97,12 @@ test.afterAll(async () => {
 });
 
 const tile = (id: string) => page.locator(`[data-tool-plugin="${id}"]`);
+/** Bring a tile into view, as clicking it in Layers does. */
+const focus = async (el: Locator) => {
+  const id = await el.evaluate((n) => n.closest(".react-flow__node")?.getAttribute("data-id"));
+  await page.evaluate((t) => window.dispatchEvent(new CustomEvent("hivemind:focus-tile", { detail: t })), id);
+  await page.waitForTimeout(400);
+};
 // The diff view draws inside shadow roots: read the text through them.
 const deepText = (el: Locator) => () => el.evaluate((n) => {
   const walk = (x: Element | ShadowRoot): string => [...x.children].map((c) => (c.shadowRoot ? walk(c.shadowRoot) : "") + (c.children.length ? walk(c) : c.textContent ?? "")).join(" ");
@@ -209,4 +219,27 @@ test("text sent to an agent asks which one: agents by frame, searchable, a new o
   await page.keyboard.press("Enter");
   await expect(picker).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { sentTo?: string }).sentTo)).toBe(second);
+});
+
+test("a tool's tile keeps what it showed: what was chosen, its filter and its tab are there after the app restarts", async () => {
+  let wt = tile("dip497/worktrees");
+  let ci = tile("dip497/ci-runs");
+  await focus(wt);
+  await wt.getByRole("button", { name: /^Uncommitted \d/ }).first().click();
+  await wt.locator('[data-worktree="wt-work"]').click();
+  await wt.getByRole("button", { name: /^Branch vs main/ }).click();
+  await focus(ci);
+  await ci.locator('[data-run="100"]').click();
+  await ci.locator('[data-run="101"]').click();
+  await ci.locator('[data-job="lint"]').click();
+  await page.waitForTimeout(600); // what a tile saves is written a moment after its last change
+  await app.close();
+  await launch();
+  wt = tile("dip497/worktrees");
+  ci = tile("dip497/ci-runs");
+  await expect(wt.locator('[data-worktree="wt-work"]')).toHaveAttribute("aria-current", "true", { timeout: 20_000 });
+  await expect(wt.getByRole("button", { name: /^Uncommitted \d/ }).first()).toHaveAttribute("aria-pressed", "true");
+  await expect(wt.getByRole("button", { name: /^Branch vs main/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(ci.locator('[data-run="101"]')).toHaveAttribute("aria-current", "true");
+  await expect(ci.locator('[data-job="lint"]')).toHaveAttribute("aria-pressed", "true");
 });

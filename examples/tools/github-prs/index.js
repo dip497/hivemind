@@ -2,7 +2,7 @@
 // It runs `gh` in the tile's folder (host.run), draws diffs with the app's own
 // diff view (PatchView), and reads which PRs to list from its settings (hm.settings).
 import React, { useCallback, useEffect, useState } from "hm-plugin://host/react.js";
-import { Button, Markdown, PatchView, Loading } from "hm-plugin://host/sdk.js";
+import { Button, Markdown, PatchView, Loading, useTileState } from "hm-plugin://host/sdk.js";
 
 const h = React.createElement;
 const LIST = ["number", "title", "author", "headRefName", "isDraft", "updatedAt", "reviewDecision"].join(",");
@@ -36,9 +36,9 @@ function Checks({ rollup }) {
     `${c.conclusion || c.status || c.state || "?"} — ${c.name || c.context || "check"}`)));
 }
 
-function Detail({ host, number, onChanged }) {
+function Detail({ hm, host, number, onChanged }) {
   const [pr, setPr] = useState(null);
-  const [tab, setTab] = useState("conversation");
+  const [tab, setTab] = useTileState(hm, "tab", "conversation");
   const [diff, setDiff] = useState(null);
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
@@ -93,8 +93,8 @@ function PullRequests({ hm, host }) {
   const [prs, setPrs] = useState(null);
   const [error, setError] = useState(null);
   // Which PR was open comes back after a restart: the tile's saved state.
-  const [chosen, setChosen] = useState(hm.hello.layout?.chosen ?? null);
-  const choose = (n) => { setChosen(n); hm.setLayout({ chosen: n }); };
+  const [chosen, setChosen] = useTileState(hm, "chosen", null);
+  const choose = (n) => setChosen(n);
   useEffect(() => hm.on("settings", (s) => setState(s.state ?? "open")), [hm]);
   const load = useCallback(() => {
     setError(null);
@@ -110,7 +110,7 @@ function PullRequests({ hm, host }) {
       error ? h("p", { role: "alert", style: { color: "var(--color-err)", padding: 12 } }, error)
         : prs === null ? h(Loading, { label: "Loading the pull requests" })
         : h(List, { prs, chosen, onChoose: choose })),
-    chosen ? h(Detail, { host, number: chosen, onChanged: load }) : h("p", { style: { ...muted, padding: 16 } }, "Choose a pull request."));
+    chosen ? h(Detail, { hm, host, number: chosen, onChanged: load }) : h("p", { style: { ...muted, padding: 16 } }, "Choose a pull request."));
 }
 
 export default { tiles: { "github-prs": PullRequests } };

@@ -4,7 +4,7 @@
 // removed; git refuses the rest. "Ask an agent to review" starts one in this tile's frame with a
 // prompt you read before it is sent (permissions workspace:spawn and workspace:prompt).
 import React, { useCallback, useEffect, useMemo, useState } from "hm-plugin://host/react.js";
-import { PatchView, Loading } from "hm-plugin://host/sdk.js";
+import { PatchView, Loading, useTileState } from "hm-plugin://host/sdk.js";
 import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, toast } from "hm-plugin://host/ui.js";
 
 const h = React.createElement;
@@ -63,9 +63,9 @@ function Worktrees({ tile, hm, host }) {
   const [trees, setTrees] = useState(null);
   const [error, setError] = useState(null);
   const [tick, setTick] = useState(0);
-  const [filter, setFilter] = useState("all");
-  const [chosen, setChosen] = useState(hm.hello.layout?.chosen ?? null);
-  const [mode, setMode] = useState("changes");
+  const [filter, setFilter] = useTileState(hm, "filter", "all");
+  const [chosen, setChosen] = useTileState(hm, "chosen", null);
+  const [mode, setMode] = useTileState(hm, "mode", "changes");
   const [patch, setPatch] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const refresh = useCallback(() => setTick((t) => t + 1), []);
@@ -108,7 +108,7 @@ function Worktrees({ tile, hm, host }) {
     return () => { live = false; };
   }, [host, chosen, mode, base, treeState]);
 
-  const choose = (path) => { setChosen(path); hm.setLayout({ chosen: path }); };
+  const choose = (path) => setChosen(path);
   const review = () => hm.commands.spawnAgent(null, tile.frameId, {
     name: `Review ${tree.branch ?? named(tree.path)}`,
     prompt: `Review the branch ${tree.branch ?? tree.head} in the worktree ${tree.path} against ${base}: read \`git -C ${tree.path} diff ${base}...HEAD\`${tree.changed.length ? ` and its uncommitted changes (\`git -C ${tree.path} diff HEAD\`)` : ""}. Report bugs, risks and missing tests, most serious first, with file:line references. Do not change any file.`,
@@ -127,7 +127,7 @@ function Worktrees({ tile, hm, host }) {
   };
 
   if (error && !trees) return h("p", { role: "alert", style: { color: "var(--color-err)", padding: 16 } }, error);
-  const tab = (id, label) => h(Button, { key: id, size: "2xs", variant: filter === id ? "secondary" : "ghost", onClick: () => setFilter(id) }, `${label} ${counts[id]}`);
+  const tab = (id, label) => h(Button, { key: id, size: "2xs", variant: filter === id ? "secondary" : "ghost", "aria-pressed": filter === id, onClick: () => setFilter(id) }, `${label} ${counts[id]}`);
   return h("div", { style: { display: "grid", gridTemplateColumns: "minmax(300px, 38%) 1fr", height: "100%", color: "var(--color-fg)" } },
     h("div", { style: { display: "flex", flexDirection: "column", minHeight: 0, borderRight: "1px solid var(--color-line)" } },
       h("div", { style: { display: "flex", alignItems: "center", gap: 4, padding: "6px 10px", borderBottom: "1px solid var(--color-line)" } },
@@ -138,7 +138,7 @@ function Worktrees({ tile, hm, host }) {
         trees === null ? h(Loading, { label: "Reading the worktrees" })
           : shown.length === 0 ? h("p", { style: { ...muted, padding: 12 } }, "None.")
             : shown.map((w) => h("button", {
-              key: w.path, onClick: () => choose(w.path), "data-worktree": named(w.path),
+              key: w.path, onClick: () => choose(w.path), "data-worktree": named(w.path), "aria-current": w.path === chosen || undefined,
               style: {
                 display: "block", width: "100%", textAlign: "left", padding: "7px 12px", border: 0, cursor: "pointer", color: "var(--color-fg)",
                 borderBottom: "1px solid var(--color-line)", background: w.path === chosen ? "var(--color-bg3)" : "transparent",
@@ -165,8 +165,8 @@ function Worktrees({ tile, hm, host }) {
           h(Button, { size: "xs", variant: "ghost", onClick: () => navigator.clipboard.writeText(tree.path).then(() => toast.success("Copied the path")) }, "Copy path"),
           removable(tree) && h(Button, { size: "xs", variant: "ghost-destructive", onClick: () => setConfirm(tree) }, "Remove")),
         h("div", { key: "modes", style: { display: "flex", gap: 4, padding: "6px 12px", borderBottom: "1px solid var(--color-line)" } },
-          h(Button, { size: "2xs", variant: mode === "changes" ? "secondary" : "ghost", onClick: () => setMode("changes") }, `Uncommitted ${tree.changed.length}`),
-          h(Button, { size: "2xs", variant: mode === "branch" ? "secondary" : "ghost", onClick: () => setMode("branch") }, `Branch vs ${base}${tree.ahead ? ` ↑${tree.ahead}` : ""}`),
+          h(Button, { size: "2xs", variant: mode === "changes" ? "secondary" : "ghost", "aria-pressed": mode === "changes", onClick: () => setMode("changes") }, `Uncommitted ${tree.changed.length}`),
+          h(Button, { size: "2xs", variant: mode === "branch" ? "secondary" : "ghost", "aria-pressed": mode === "branch", onClick: () => setMode("branch") }, `Branch vs ${base}${tree.ahead ? ` ↑${tree.ahead}` : ""}`),
           mode === "changes" && tree.changed.some((l) => l.startsWith("??")) && h("span", { style: { ...muted, alignSelf: "center", marginLeft: 8 } },
             `New, not shown: ${tree.changed.filter((l) => l.startsWith("??")).map((l) => l.slice(3)).join(", ")}`)),
         h("div", { key: "diff", style: { flex: 1, minHeight: 0, overflow: "auto" } },

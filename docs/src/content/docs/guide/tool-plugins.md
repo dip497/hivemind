@@ -107,7 +107,9 @@ It imports the app's own React and parts from `hm-plugin://host/`, so it bundles
 | `selected` | it has the person's focus |
 
 `sdk.js` gives `Button`, `PatchView` (a unified diff drawn by the app's diff view), `Markdown` and
-`Loading` (a spinner in the middle of the space it fills: `h(Loading, { label: "Loading the runs" })`).
+`Loading` (a spinner in the middle of the space it fills: `h(Loading, { label: "Loading the runs" })`)
+and `useTileState(hm, key, initial)`: React's `useState`, kept with the tile, so what it showed
+(what was chosen, a filter, a tab) is there again when the app starts.
 `ui.js` is the app's whole UI kit, so a plugin looks like the app: `Button`, `Input`, `Textarea`,
 `Label`, `Dialog…`, `Popover`, `DropdownMenu…`, `MenuItem`, `Switch`, `Tooltip…`, `Badge`,
 `Skeleton`, `MarkdownPreview`, and `toast` for notifications. With a bundler, map

@@ -2,7 +2,7 @@
 // files stay out. A note opens in the editor beside the tile (host.openFile); "Hand to an agent"
 // starts one with a prompt you read first (hm.commands.spawnAgent). Its markers are a setting.
 import React, { useCallback, useEffect, useMemo, useState } from "hm-plugin://host/react.js";
-import { Button, Loading } from "hm-plugin://host/sdk.js";
+import { Button, Loading, useTileState } from "hm-plugin://host/sdk.js";
 
 const h = React.createElement;
 const muted = { color: "var(--color-fg3)", fontSize: 11 };
@@ -24,7 +24,7 @@ function Todos({ tile, hm, host }) {
   const [pattern, setPattern] = useState(hm.settings.pattern ?? "TODO|FIXME|HACK|XXX");
   const [notes, setNotes] = useState(null);
   const [error, setError] = useState(null);
-  const [only, setOnly] = useState(null);
+  const [only, setOnly] = useTileState(hm, "only", null);
   useEffect(() => hm.on("settings", (s) => setPattern(s.pattern ?? "TODO|FIXME|HACK|XXX")), [hm]);
   const markers = useMemo(() => words(pattern), [pattern]);
   const scan = useCallback(() => {

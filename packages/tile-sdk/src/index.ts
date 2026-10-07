@@ -94,6 +94,9 @@ export interface HostSdk {
   Markdown: (props: { text: string; className?: string }) => unknown;
   /** A spinner in the middle of the space it fills, with what it waits for ("Loading" when unsaid). */
   Loading: (props: { label?: string; className?: string }) => unknown;
+  /** `useState` kept with the tile: the value is saved under `key` in the tile's own state
+   *  (`hm.setLayout`) and is there again when the app starts. Keys of one tile are kept together. */
+  useTileState: <T>(hm: unknown, key: string, initial: T) => [T, (value: T) => void];
 }
 
 /** Check a module a plugin's entry exported; why it is not one, or null. */

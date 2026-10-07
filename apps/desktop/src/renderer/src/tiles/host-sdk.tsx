@@ -5,10 +5,11 @@
  */
 import * as React from "react";
 import * as jsxRuntime from "react/jsx-runtime";
-import { lazy, Suspense, useMemo } from "react";
+import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { parsePatchFiles, type CodeViewItem } from "@pierre/diffs";
 import { CodeView } from "@pierre/diffs/react";
 import { TILE_API_VERSION, type HostSdk } from "@hivemind/tile-sdk";
+import type { ViewClient } from "@hivemind/view-sdk";
 import { Button } from "../components/ui/button";
 import { Loading } from "../components/ui/loading";
 import * as ui from "../plugin-ui";
@@ -35,12 +36,31 @@ function Markdown({ text, className }: { text: string; className?: string }) {
   return <Suspense fallback={null}><MarkdownPreview source={text} className={className ?? "md-preview"} /></Suspense>;
 }
 
+/** What each tile has saved, as it is now: its keys are written to `hm.setLayout` together. */
+const saved = new WeakMap<ViewClient, Record<string, unknown>>();
+function useTileState<T>(hm: ViewClient, key: string, initial: T): [T, (value: T) => void] {
+  const all = () => {
+    let s = saved.get(hm);
+    if (!s) { s = { ...((hm.hello.layout ?? {}) as Record<string, unknown>) }; saved.set(hm, s); }
+    return s;
+  };
+  const [value, setValue] = useState<T>(() => (Object.hasOwn(all(), key) ? all()[key] as T : initial));
+  const set = useCallback((next: T) => {
+    setValue(next);
+    const s = all();
+    s[key] = next;
+    hm.setLayout(s);
+  }, [hm, key]);
+  return [value, set];
+}
+
 export const hostSdk: HostSdk = {
   TILE_API_VERSION,
   Button: Button as HostSdk["Button"],
   PatchView: PatchView as HostSdk["PatchView"],
   Markdown: Markdown as HostSdk["Markdown"],
   Loading: Loading as HostSdk["Loading"],
+  useTileState: useTileState as HostSdk["useTileState"],
 };
 
 const MODULES: Record<string, object> = { react: React, "react-jsx-runtime": jsxRuntime, sdk: hostSdk, ui };
