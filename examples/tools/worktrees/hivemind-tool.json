@@ -6,9 +6,19 @@
   "category": "git",
   "description": "Every git worktree of the repository: its branch, uncommitted changes and how far it is from the base; review one with an agent, remove the merged ones.",
   "entry": "index.js",
-  "permissions": ["workspace:spawn", "workspace:prompt"],
+  "permissions": [
+    "workspace:spawn",
+    "workspace:prompt"
+  ],
   "settings": [
-    { "id": "base", "label": "Base branch", "type": "text", "default": "main", "maxLength": 200, "description": "What each branch is compared with, and merged into." }
+    {
+      "id": "base",
+      "label": "Base branch",
+      "type": "text",
+      "default": "main",
+      "maxLength": 200,
+      "description": "What each branch is compared with, and merged into."
+    }
   ],
   "tools": [
     {
@@ -16,10 +26,14 @@
       "label": "Worktrees",
       "description": "The repository's worktrees and their branches.",
       "tileKind": "worktrees",
-      "size": { "width": 1100, "height": 720 },
+      "size": {
+        "width": 1100,
+        "height": 720
+      },
       "needsRepo": true,
       "singleton": true,
-      "glyph": "⑂"
+      "glyph": "⑂",
+      "icon": "icon.svg"
     }
   ]
 }

@@ -110,3 +110,13 @@ test("its category is what its manifest says, from the list; none is other, and 
   expect((await readToolPackage(plugin(), null)).category).toBe("other");
   await expect(readToolPackage(plugin({ category: "games" }), null)).rejects.toThrow('"category" must be one of');
 });
+
+test("a tool's icon is the .svg its manifest names, carried as a data URL; one that is not there, or not an .svg inside it, is none", async () => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg>';
+  const tool = (icon: string) => ({ tools: [{ key: "prs", label: "PRs", tileKind: "acme-prs", icon }] });
+  const p = await readToolPackage(plugin(tool("icon.svg"), { "index.js": "export default { tiles: {} };", "icon.svg": svg }), null);
+  expect(p.tiles["acme-prs"]!.icon).toBe(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
+  expect((await readToolPackage(plugin(tool("missing.svg")), null)).tiles["acme-prs"]!.icon).toBeUndefined();
+  expect((await readToolPackage(plugin(tool("../outside.svg")), null)).tiles["acme-prs"]!.icon).toBeUndefined();
+  expect((await readToolPackage(plugin(tool("icon.png")), null)).tiles["acme-prs"]!.icon).toBeUndefined();
+});

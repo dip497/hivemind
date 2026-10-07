@@ -6,9 +6,19 @@
   "category": "git",
   "description": "The repository's commits: search them, read each one's diff, and ask an agent to explain one.",
   "entry": "index.js",
-  "permissions": ["workspace:spawn", "workspace:prompt"],
+  "permissions": [
+    "workspace:spawn",
+    "workspace:prompt"
+  ],
   "settings": [
-    { "id": "count", "label": "Commits to list", "type": "number", "min": 20, "max": 2000, "default": 300 }
+    {
+      "id": "count",
+      "label": "Commits to list",
+      "type": "number",
+      "min": 20,
+      "max": 2000,
+      "default": 300
+    }
   ],
   "tools": [
     {
@@ -16,10 +26,14 @@
       "label": "Git history",
       "description": "Commits of the repository, with their diffs.",
       "tileKind": "git-history",
-      "size": { "width": 1100, "height": 720 },
+      "size": {
+        "width": 1100,
+        "height": 720
+      },
       "needsRepo": true,
       "singleton": true,
-      "glyph": "⎇"
+      "glyph": "⎇",
+      "icon": "icon.svg"
     }
   ]
 }

@@ -55,7 +55,7 @@ A tool plugin is a folder with `hivemind-tool.json` and an ES module:
     {
       "key": "prs", "label": "Pull requests", "description": "What its tile shows.",
       "tileKind": "acme-prs", "size": { "width": 1100, "height": 760 },
-      "needsRepo": true, "singleton": true, "glyph": "⇅"
+      "needsRepo": true, "singleton": true, "glyph": "⇅", "icon": "icon.svg"
     }
   ]
 }
@@ -64,6 +64,9 @@ A tool plugin is a folder with `hivemind-tool.json` and an ES module:
 - `id` is `owner/name`; `hivemind/` is kept for the app's own.
 - `category` is what it is for: `code`, `git`, `agents`, `productivity`, `monitoring`, `team`, `web`, `fun` or `other` (the default). The Add menu groups tools and widgets by it, and
   HiveHub lists plugins by it.
+- A tool's `icon` is an `.svg` in the folder (32 KB at most), drawn in the menu's text colour
+  wherever the app shows the tool: the Add menu, the Open menu, tabs and Layers. Without one, its
+  `glyph` is shown.
 - Each tool is one kind of tile. `needsRepo` hides it in a frame with no repository;
   `singleton` focuses the open one instead of opening a second.
 - `permissions` and `settings` are a view's, word for word ([Views](./views/)): the same

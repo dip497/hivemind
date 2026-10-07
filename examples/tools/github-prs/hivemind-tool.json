@@ -8,7 +8,24 @@
   "entry": "index.js",
   "permissions": [],
   "settings": [
-    { "id": "state", "label": "Show", "type": "choice", "values": ["open", "closed", "merged", "all"], "labels": ["Open", "Closed", "Merged", "All"], "default": "open" }
+    {
+      "id": "state",
+      "label": "Show",
+      "type": "choice",
+      "values": [
+        "open",
+        "closed",
+        "merged",
+        "all"
+      ],
+      "labels": [
+        "Open",
+        "Closed",
+        "Merged",
+        "All"
+      ],
+      "default": "open"
+    }
   ],
   "tools": [
     {
@@ -16,10 +33,14 @@
       "label": "Pull requests",
       "description": "The repository's pull requests, through gh.",
       "tileKind": "github-prs",
-      "size": { "width": 1100, "height": 760 },
+      "size": {
+        "width": 1100,
+        "height": 760
+      },
       "needsRepo": true,
       "singleton": true,
-      "glyph": "⇅"
+      "glyph": "⇅",
+      "icon": "icon.svg"
     }
   ]
 }

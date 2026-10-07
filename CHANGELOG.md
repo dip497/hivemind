@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: a tool plugin can ship an icon (`"icon": "icon.svg"` on each tool), drawn in the text colour wherever the app shows the tool. Issues and the example tools have one.
+- Changed: the Add menu has a category panel beside its list, and keeps one size: the list scrolls.
 - Changed: a plugin tile that is loading shows a spinner in the middle of it, saying what it waits for, instead of "Loading…" at the top. Plugins get it as `Loading` from `sdk.js` and the UI kit.
 - New: a view, tool or widget says what it is for with `"category"` in its manifest: code, git, agents, productivity, monitoring, team, web, fun or other (the default). A value not on the list is refused.
 - Changed: the Add menu offers every tool beside the widgets, grouped by category, with a search box and All, Tools and Widgets tabs, on the Layers panel's material instead of the see-through toolbar's. Popovers take the same material.

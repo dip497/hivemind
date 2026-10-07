@@ -4,7 +4,8 @@
  */
 import type { PluginCategory } from "@hivemind/view-sdk/category";
 import { useSyncExternalStore, type ComponentType } from "react";
-import type { LucideIcon } from "lucide-react";
+/** A kind's icon: a lucide icon, or a plugin's drawn the same way. */
+export type KindIcon = ComponentType<{ size?: number; className?: string }>;
 import type { TileInstance } from "../canvas-persistence";
 
 /** Screen-space rect captured from a tile's DOM at pin time (SCREEN pixels). */
@@ -56,7 +57,7 @@ export interface TileKindSpec {
   /** What it is for: the Add menu groups what it offers by it. */
   category?: PluginCategory;
   /** Its mark in tab strips and the Layers panel: an icon, or a monochrome glyph. */
-  icon?: LucideIcon;
+  icon?: KindIcon;
   glyph?: string;
   /** What another tile can hand it: a path to open, a page to show. */
   opens?: readonly TileIntent[];

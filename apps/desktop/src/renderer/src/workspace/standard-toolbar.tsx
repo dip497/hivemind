@@ -154,19 +154,21 @@ function BoardAction({ action, labels, compact, repoPath, onBoard, onTile, board
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [tab, setTab] = useState<(typeof ADD_TABS)[number][0]>("all");
-  useEffect(() => { if (open) { setQuery(""); setActive(0); } }, [open]);
+  const [shelf, setShelf] = useState<PluginCategory | "all">("all");
+  useEffect(() => { if (open) { setQuery(""); setActive(0); setShelf("all"); } }, [open]);
   const choices: AddChoice[] = [
     ...(onTile ? tileKinds().filter(([, spec]) => spec.title).map(([kind, spec]): AddChoice => ({
       id: `tile:${kind}`, name: spec.title!, type: "tool", category: spec.category ?? "other",
-      icon: spec.icon ? <spec.icon /> : <span className="text-[11px] leading-none">{spec.glyph ?? "▢"}</span>,
+      icon: spec.icon ? <spec.icon size={14} /> : <span className="text-[12px] leading-none">{spec.glyph ?? "▢"}</span>,
       disabled: !!spec.needsRepo && !repoPath, pick: () => onTile(kind),
     })) : []),
-    ...widgets.map((w): AddChoice => ({ id: `widget:${w.id}`, name: w.name, type: "widget", category: w.category ?? "other", icon: <WidgetIcon pkg={w} />, pick: () => onBoard(`widget:${w.id}`) })),
+    ...widgets.map((w): AddChoice => ({ id: `widget:${w.id}`, name: w.name, type: "widget", category: w.category ?? "other", icon: <WidgetIcon pkg={w} size={14} />, pick: () => onBoard(`widget:${w.id}`) })),
   ];
   const q = query.trim().toLowerCase();
   const found = choices.filter((c) => (tab === "all" || c.type === tab) && (!q || `${c.name} ${CATEGORY_LABELS[c.category]}`.toLowerCase().includes(q)));
-  const groups = PLUGIN_CATEGORIES.map((cat) => [cat, found.filter((c) => c.category === cat)] as const).filter(([, list]) => list.length);
-  const arrow = boardItems && tab !== "tool" && (!q || "arrow".includes(q));
+  const shelves = PLUGIN_CATEGORIES.map((cat) => [cat, found.filter((c) => c.category === cat)] as const).filter(([, list]) => list.length);
+  const groups = shelf === "all" ? shelves : shelves.filter(([cat]) => cat === shelf);
+  const arrow = boardItems && tab !== "tool" && shelf === "all" && (!q || "arrow".includes(q));
   const order = [...groups.flatMap(([, list]) => list), ...(arrow ? [{ id: "arrow", pick: () => onBoard("arrow") } as AddChoice] : [])];
   // What was added takes the focus, to be written in: none goes back to the trigger.
   const choose = (c: AddChoice) => { if (c.disabled) return; setOpen(false); c.pick(); };
@@ -184,35 +186,48 @@ function BoardAction({ action, labels, compact, repoPath, onBoard, onTile, board
       <span className="flex-1 truncate">{c.name}</span>
     </MenuItem>;
   };
+  const side = (id: PluginCategory | "all", label: string, count: number) =>
+    <button key={id} type="button" data-add-shelf={id} aria-pressed={shelf === id} onClick={() => { setShelf(id); setActive(0); }}
+      className={`flex w-full items-center rounded-md px-2 py-1 text-left text-[12px] ${shelf === id ? "bg-[var(--color-bg3)] text-[var(--color-fg)]" : "text-[var(--color-fg2)] hover:bg-[var(--color-bg3)]/60"}`}>
+      <span className="flex-1 truncate">{label}</span><span className="tabular-nums text-[10.5px] text-[var(--color-fg3)]">{count}</span>
+    </button>;
   return <div ref={root} className="relative flex items-center">
     <Button ref={trigger} variant="ghost" size={labels ? "lg" : "icon-lg"} className="relative" onClick={() => setOpen((value) => !value)}
       aria-label={action.label} aria-expanded={open} data-toolbar-action={action.id} title={action.label}>
       <Shapes />{labels && <span data-toolbar-label className="text-[12px]">{action.label}</span>}
     </Button>
     {open && <div role="menu" onKeyDown={onKeyDown} data-add-menu
-      className={`hm-popover absolute left-0 z-30 flex w-[260px] flex-col ${compact ? "bottom-full mb-1" : "top-full mt-1"}`}>
-      <Input autoFocus value={query} onChange={(e) => { setQuery(e.target.value); setActive(0); }}
-        placeholder="Search tools and widgets" aria-label="Search tools and widgets" className="h-7 text-[12px]" />
-      <div role="tablist" aria-label="Show" className="my-1 flex gap-0.5 rounded-md bg-[var(--color-bg3)] p-0.5">
-        {ADD_TABS.map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} data-add-tab={id}
-          onClick={() => { setTab(id); setActive(0); }}
-          className={`flex-1 rounded px-2 py-0.5 text-[11px] ${tab === id ? "bg-[var(--color-bg)] text-[var(--color-fg)] shadow-sm" : "text-[var(--color-fg3)] hover:text-[var(--color-fg)]"}`}>
-          {label} <span className="tabular-nums opacity-60">{id === "all" ? choices.length : choices.filter((c) => c.type === id).length}</span>
-        </button>)}
+      className={`hm-popover absolute left-0 z-30 flex h-[min(420px,70vh)] w-[min(500px,calc(100vw-24px))] flex-col ${compact ? "bottom-full mb-1" : "top-full mt-1"}`}>
+      <div className="flex items-center gap-1.5 pb-1">
+        <Input autoFocus value={query} onChange={(e) => { setQuery(e.target.value); setActive(0); }}
+          placeholder="Search tools and widgets" aria-label="Search tools and widgets" className="h-7 flex-1 text-[12px]" />
+        <div role="tablist" aria-label="Show" className="flex gap-0.5 rounded-md bg-[var(--color-bg3)] p-0.5">
+          {ADD_TABS.map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} data-add-tab={id}
+            onClick={() => { setTab(id); setActive(0); }}
+            className={`rounded px-2 py-0.5 text-[11px] ${tab === id ? "bg-[var(--color-bg)] text-[var(--color-fg)] shadow-sm" : "text-[var(--color-fg3)] hover:text-[var(--color-fg)]"}`}>
+            {label}
+          </button>)}
+        </div>
       </div>
-      <div className="max-h-[min(460px,65vh)] overflow-y-auto">
-        {groups.map(([cat, list]) => <div key={cat} role="group" aria-label={CATEGORY_LABELS[cat]} data-add-category={cat}>
-          <div className="px-2 pb-0.5 pt-1.5 text-[10px] uppercase tracking-wide text-[var(--color-fg3)]">{CATEGORY_LABELS[cat]}</div>
-          {list.map(item)}
-        </div>)}
-        {arrow && <>
-          <div role="separator" className="my-1 h-px bg-[var(--color-line)]" />
-          <MenuItem variant="muted" selected={order.length - 1 === active} data-board-choice="arrow"
-            onMouseEnter={() => setActive(order.length - 1)} onClick={() => { setOpen(false); onBoard("arrow"); }}>
-            <MoveUpRight /><span className="flex-1">Arrow</span>
-          </MenuItem>
-        </>}
-        {order.length === 0 && <p className="px-2 py-3 text-[12px] text-[var(--color-fg3)]">Nothing matches.</p>}
+      <div className="grid min-h-0 flex-1 grid-cols-[132px_1fr] gap-1 border-t border-[var(--color-line)] pt-1">
+        <nav aria-label="Categories" className="min-h-0 overflow-y-auto border-r border-[var(--color-line)] pr-1">
+          {side("all", "All", found.length)}
+          {shelves.map(([cat, list]) => side(cat, CATEGORY_LABELS[cat], list.length))}
+        </nav>
+        <div className="min-h-0 overflow-y-auto">
+          {groups.map(([cat, list]) => <div key={cat} role="group" aria-label={CATEGORY_LABELS[cat]} data-add-category={cat}>
+            {shelf === "all" && <div className="px-2 pb-0.5 pt-1.5 text-[10px] uppercase tracking-wide text-[var(--color-fg3)] first:pt-0.5">{CATEGORY_LABELS[cat]}</div>}
+            {list.map(item)}
+          </div>)}
+          {arrow && <>
+            <div className="px-2 pb-0.5 pt-1.5 text-[10px] uppercase tracking-wide text-[var(--color-fg3)]">Board</div>
+            <MenuItem variant="muted" selected={order.length - 1 === active} data-board-choice="arrow"
+              onMouseEnter={() => setActive(order.length - 1)} onClick={() => { setOpen(false); onBoard("arrow"); }}>
+              <span className="grid size-4 shrink-0 place-items-center [&>svg]:size-3.5"><MoveUpRight /></span><span className="flex-1">Arrow</span>
+            </MenuItem>
+          </>}
+          {order.length === 0 && <p className="px-2 py-3 text-[12px] text-[var(--color-fg3)]">Nothing matches.</p>}
+        </div>
       </div>
     </div>}
   </div>;

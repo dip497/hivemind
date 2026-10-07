@@ -37,6 +37,9 @@ export interface ToolTile {
   needsRepo: boolean;
   singleton: boolean;
   glyph?: string;
+  /** Its icon: an .svg in the package as the manifest names it, which reading the package turns
+   *  into a data URL of the file (dropped when there is no such file). */
+  icon?: string;
 }
 
 export interface ToolPackage extends ToolPluginContribution {
@@ -96,9 +99,10 @@ export function parseToolManifest(raw: unknown, dir: string, folderId: string | 
     const size = isObj(t.size) ? t.size : {};
     const n = (v: unknown, d: number) => (typeof v === "number" && v >= 160 && v <= 4000 ? Math.round(v) : d);
     const glyph = text(t.glyph, 2);
+    const icon = typeof t.icon === "string" && /^[A-Za-z0-9_-][A-Za-z0-9._/-]{0,120}\.svg$/.test(t.icon) && !t.icon.split("/").includes("..") ? t.icon : undefined;
     tiles[kind] = {
       size: { width: n(size.width, 900), height: n(size.height, 640) },
-      needsRepo: t.needsRepo === true, singleton: t.singleton === true, ...(glyph ? { glyph } : {}),
+      needsRepo: t.needsRepo === true, singleton: t.singleton === true, ...(glyph ? { glyph } : {}), ...(icon ? { icon } : {}),
     };
   }
   // A tool switched off is stored as its key, false, beside the settings: one name, one meaning.

@@ -6,9 +6,19 @@
   "category": "code",
   "description": "Every TODO, FIXME and HACK in the repository, by file: open one in the editor, or hand it to an agent.",
   "entry": "index.js",
-  "permissions": ["workspace:spawn", "workspace:prompt"],
+  "permissions": [
+    "workspace:spawn",
+    "workspace:prompt"
+  ],
   "settings": [
-    { "id": "pattern", "label": "Markers", "type": "text", "default": "TODO|FIXME|HACK|XXX", "maxLength": 200, "description": "What to look for: words separated by |" }
+    {
+      "id": "pattern",
+      "label": "Markers",
+      "type": "text",
+      "default": "TODO|FIXME|HACK|XXX",
+      "maxLength": 200,
+      "description": "What to look for: words separated by |"
+    }
   ],
   "tools": [
     {
@@ -16,10 +26,14 @@
       "label": "TODOs",
       "description": "The repository's TODO and FIXME notes.",
       "tileKind": "todo-finder",
-      "size": { "width": 760, "height": 600 },
+      "size": {
+        "width": 760,
+        "height": 600
+      },
       "needsRepo": true,
       "singleton": true,
-      "glyph": "☐"
+      "glyph": "☐",
+      "icon": "icon.svg"
     }
   ]
 }

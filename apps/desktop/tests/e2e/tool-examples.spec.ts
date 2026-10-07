@@ -173,6 +173,13 @@ test("the Add menu offers every tool beside the widgets, by category, found by s
   await expect(menu).toContainText("Sticky note");
   await expect(menu).not.toContainText("Worktrees");
   await menu.locator('[data-add-tab="all"]').click();
+  // Its side panel shows one category at a time, with how many each has.
+  await expect(menu.locator('[data-add-shelf="git"]')).toContainText("1");
+  await menu.locator('[data-add-shelf="git"]').click();
+  await expect(menu.locator("[data-board-choice]")).toHaveText([/Worktrees/]);
+  await menu.locator('[data-add-shelf="all"]').click();
+  // A tool's icon is the .svg it ships, drawn in the menu's text colour.
+  expect(await menu.locator('[data-board-choice="tile:ci-runs"] span[aria-hidden]').first().evaluate((el) => getComputedStyle(el).maskImage)).toContain("data:image/svg+xml");
   await menu.getByRole("textbox").focus();
   await page.keyboard.type("work");
   await expect(menu.locator("[data-board-choice]")).toHaveText([/Worktrees/]);

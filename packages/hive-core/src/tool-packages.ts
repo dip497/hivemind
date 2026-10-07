@@ -18,12 +18,20 @@ export function userToolsDir(): string {
   return path.join(base, "hivemind", "tools");
 }
 
+const ICON_MAX = 32 * 1024;
+
 /** The package in `dir`. `folderId` is the id its folder stands for, if any. */
 export async function readToolPackage(dir: string, folderId: string | null, source: "app" | "you" = "you"): Promise<ToolPackage> {
   let raw: unknown;
   try { raw = JSON.parse(await readFile(path.join(dir, TOOL_MANIFEST), "utf8")); } catch { throw new Error(`no readable ${TOOL_MANIFEST} in that folder`); }
   const pkg = parseToolManifest(raw, dir, folderId, source);
   if (!(await stat(path.join(dir, pkg.entry)).catch(() => null))?.isFile()) throw new Error(`its entry ${pkg.entry} is missing`);
+  for (const tile of Object.values(pkg.tiles)) {
+    if (!tile.icon) continue;
+    const svg = await readFile(path.join(dir, tile.icon)).catch(() => null);
+    if (svg && svg.length <= ICON_MAX) tile.icon = `data:image/svg+xml;base64,${svg.toString("base64")}`;
+    else delete tile.icon;
+  }
   return pkg;
 }
 

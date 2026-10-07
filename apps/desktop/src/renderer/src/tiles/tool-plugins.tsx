@@ -12,7 +12,7 @@ import { isPluginEnabled, pluginOptions } from "@hivemind/core/plugin-settings";
 import { toolFolder, type ToolPackage } from "@hivemind/core/tool-format";
 import { toolModuleProblem, type TileProps, type ToolModule } from "@hivemind/tile-sdk";
 import { useSettings } from "../settings-store";
-import { registerTile, unregisterTile, type TileBodyArgs } from "./api";
+import { registerTile, unregisterTile, type KindIcon, type TileBodyArgs } from "./api";
 import type { ToolTileData } from "./tool-tile";
 
 export { WorkspacePropsContext } from "../workspace/workspace-props";
@@ -104,7 +104,7 @@ function register(pkg: ToolPackage, off: Set<string>): void {
     name: pkg.name,
     kinds: Object.fromEntries(tools.map((t) => {
       const tile = pkg.tiles[t.tileKind!]!;
-      return [t.tileKind!, { size: tile.size, label: t.label, title: t.label, glyph: tile.glyph, needsRepo: tile.needsRepo, singleton: tile.singleton, category: pkg.category }];
+      return [t.tileKind!, { size: tile.size, label: t.label, title: t.label, glyph: tile.glyph, ...(tile.icon ? { icon: maskIcon(tile.icon) } : {}), needsRepo: tile.needsRepo, singleton: tile.singleton, category: pkg.category }];
     })),
     data: (t, s, h) => ({
       pkg, tileId: t.id, kind: t.kind, name: h.tileNames[t.id] ?? t.label ?? t.kind, frameId: s.frameId,
@@ -117,6 +117,14 @@ function register(pkg: ToolPackage, off: Set<string>): void {
     fallback: () => <Loading label={`Loading ${pkg.name}`} />,
     minSize: { width: 240, height: 160 },
   });
+}
+
+/** A plugin's .svg drawn as a lucide icon is: its shape in the text's colour, at the size asked. */
+function maskIcon(url: string): KindIcon {
+  const mask = `url("${url}") center / contain no-repeat`;
+  return function PluginIcon({ size = 16, className }) {
+    return <span aria-hidden className={className} style={{ display: "inline-block", width: size, height: size, flex: "none", background: "currentColor", mask, WebkitMask: mask }} />;
+  };
 }
 
 /** Keeps the registered tool plugins to those switched on: mounted once, by the app. */

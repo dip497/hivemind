@@ -48,5 +48,6 @@ for (const name of readdirSync(path.join(root, "tools"))) {
   const dist = path.join(root, "out/tools", folder);
   await bundle({ src: path.join(dir, "src"), dist, name: manifest.entry.replace(/\.m?js$/, ""), external: Object.keys(HOST), paths: HOST });
   cpSync(path.join(dir, "hivemind-tool.json"), path.join(dist, "hivemind-tool.json"));
+  for (const f of readdirSync(dir).filter((f) => f.endsWith(".svg"))) cpSync(path.join(dir, f), path.join(dist, f));
   console.log(`built out/tools/${folder}`);
 }

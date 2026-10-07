@@ -22,7 +22,8 @@
         "height": 460
       },
       "singleton": true,
-      "glyph": "◔"
+      "glyph": "◔",
+      "icon": "icon.svg"
     }
   ]
 }
