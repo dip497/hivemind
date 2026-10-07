@@ -3,6 +3,7 @@
   "name": "Pull requests",
   "version": "1.0.0",
   "apiVersion": 1,
+  "category": "git",
   "description": "The repository's GitHub pull requests: read the conversation and the diff, comment, approve or merge.",
   "entry": "index.js",
   "permissions": [],

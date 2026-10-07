@@ -45,6 +45,7 @@ A tool plugin is a folder with `hivemind-tool.json` and an ES module:
   "version": "1.0.0",
   "apiVersion": 1,
   "description": "One line, shown in Settings.",
+  "category": "git",
   "entry": "index.js",
   "permissions": ["workspace:spawn"],
   "settings": [
@@ -61,6 +62,8 @@ A tool plugin is a folder with `hivemind-tool.json` and an ES module:
 ```
 
 - `id` is `owner/name`; `hivemind/` is kept for the app's own.
+- `category` is what it is for: `code`, `git`, `agents`, `productivity`, `monitoring`, `team`, `web`, `fun` or `other` (the default). The Add menu groups tools and widgets by it, and
+  HiveHub lists plugins by it.
 - Each tool is one kind of tile. `needsRepo` hides it in a frame with no repository;
   `singleton` focuses the open one instead of opening a second.
 - `permissions` and `settings` are a view's, word for word ([Views](./views/)): the same

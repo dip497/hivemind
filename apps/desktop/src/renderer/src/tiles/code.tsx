@@ -17,7 +17,7 @@ export type WorkbenchTileData = {
 
 const CODE: TileKindSpec = {
   size: { width: 1400, height: 900 }, label: "Code", needsRepo: true, singleton: true, pixelExact: true, wholePixels: true,
-  title: "Code", icon: Folder, glyph: "{}", opens: ["file"],
+  title: "Code", icon: Folder, glyph: "{}", opens: ["file"], category: "code",
 };
 
 /** The file tree, the editor and the working tree's changes, in one tile, opened as `editor`.

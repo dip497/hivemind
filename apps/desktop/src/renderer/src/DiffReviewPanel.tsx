@@ -1,7 +1,7 @@
 /**
  * DiffReviewPanel — a GitHub-style review surface for the DiffTile. Lists every
  * review comment GROUPED BY FILE (unresolved first), each a thread you can
- * reply to, resolve, jump to in the diff, or send to claude. Rendered as a
+ * reply to, resolve, jump to in the diff, or send to an agent. Rendered as a
  * collapsible right column inside the DiffTile; DiffTile owns the comment data
  * + actions.
  */
@@ -47,7 +47,7 @@ export function DiffReviewPanel({ comments, onJump, onReply, onResolve, onDelete
           className="ml-auto"
           onClick={onSendAll}
           disabled={unresolved === 0}
-          title="Send all unresolved comments to claude"
+          title="Send all unresolved comments to an agent"
         >
           send all
         </Button>
@@ -134,7 +134,7 @@ function CommentThread({
         <Button variant="outline" size="2xs" onClick={onResolve}>
           {c.resolved ? "reopen" : "resolve"}
         </Button>
-        <Button variant="outline" size="2xs" onClick={onSend} title="Send this comment to claude">
+        <Button variant="outline" size="2xs" onClick={onSend} title="Send this comment to an agent">
           → claude
         </Button>
         <Button variant="destructive" size="2xs" className="ml-auto" onClick={onDelete} title="Delete comment">

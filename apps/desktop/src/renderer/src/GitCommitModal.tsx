@@ -110,7 +110,7 @@ export function GitCommitModal({
   return (
     <div className="fixed inset-0 z-[10000] grid place-items-center bg-black/50" onClick={() => onOpenChange(false)}>
       <div
-        className="w-[460px] max-w-[92vw] bg-[var(--color-bg2)] border border-[var(--color-line2)] rounded-lg shadow-2xl p-4"
+        className="hm-surface-3 w-[460px] max-w-[92vw] p-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2">

@@ -38,7 +38,7 @@ export async function listToolPackages(dir = userToolsDir(), appRoot?: string | 
         return await readToolPackage(path.join(root, f), id, source);
       } catch (e) {
         return {
-          id, source, name: id, description: "", tools: [], tiles: {}, permissions: [], settings: [], entry: "", apiVersion: 0,
+          id, source, name: id, description: "", tools: [], tiles: {}, permissions: [], category: "other", settings: [], entry: "", apiVersion: 0,
           dir: path.join(root, f), problem: e instanceof Error ? e.message : String(e),
         } satisfies ToolPackage;
       }

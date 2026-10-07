@@ -36,6 +36,8 @@ export interface HostChromeProps {
   /** Add something: widgets in every view, board items where the board is drawn. */
   onBoard?: (kind: BoardChoice) => void;
   boardItems?: boolean;
+  /** Open a tool's tile from the Add menu. */
+  onTile?: (kind: string) => void;
   updateAvailable: boolean;
   updateStaged: boolean;
   onUpgrade: () => void;

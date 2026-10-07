@@ -39,7 +39,7 @@ export const terminalTile: TilePlugin<TerminalTileData> = {
   kinds: {
     [AGENT_TILE_KIND]: { size: { width: 1100, height: 740 }, pixelExact: true, wholePixels: true, glyph: "✦" },
     shell: {
-      size: { width: 1200, height: 820 }, pixelExact: true, wholePixels: true, title: "Terminal", icon: Terminal, glyph: "›_",
+      size: { width: 1200, height: 820 }, pixelExact: true, wholePixels: true, title: "Terminal", icon: Terminal, glyph: "›_", category: "code",
       create: (opts, ordinal) => opts.session
         ? { cmd: opts.session.cmd, args: opts.session.args, label: opts.session.label, session: opts.session.id }
         : { ...defaultShell(), label: ordinal((n) => `shell #${n}`) },

@@ -11,6 +11,7 @@
     "./protocol": "./src/protocol.ts",
     "./manifest": "./src/manifest.ts",
     "./settings": "./src/settings.ts",
+    "./category": "./src/category.ts",
     "./testing": "./src/testing.ts"
   },
   "scripts": {

@@ -27,6 +27,9 @@ pulse/
   dist/                what you install and publish
 ```
 
+A manifest may say what the view is for with `"category"`: `code`, `git`, `agents`, `productivity`, `monitoring`, `team`, `web`, `fun` or `other` (the default). Any other value is
+refused.
+
 `hive views install <dir>` validates the manifest and copies it to
 `$XDG_CONFIG_HOME/hivemind/views/<id>`; `hive views list` reports load errors. In the app,
 Settings ▸ Plugins ▸ Installed → Install from folder shows a review step first.

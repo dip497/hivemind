@@ -16,7 +16,7 @@ export async function saveComments(repoPath: string, list: ReviewComment[]): Pro
   await window.hive.reviewSave(repoPath, list).catch(() => { /* keep the UI usable */ });
 }
 
-/** Send review text to claude via the target picker (Canvas routes the event). */
+/** Send review text to an agent via the target picker (Canvas routes the event). */
 export function deliverToAgent(text: string): void {
-  window.dispatchEvent(new CustomEvent("hivemind:deliver-to-claude", { detail: { text } }));
+  window.dispatchEvent(new CustomEvent("hivemind:deliver-to-agent", { detail: { text } }));
 }

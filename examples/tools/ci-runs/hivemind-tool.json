@@ -3,6 +3,7 @@
   "name": "CI runs",
   "version": "1.0.0",
   "apiVersion": 1,
+  "category": "monitoring",
   "description": "The repository's GitHub Actions runs: read why one failed, rerun it, or hand the failure to an agent.",
   "entry": "index.js",
   "permissions": ["workspace:spawn", "workspace:prompt"],

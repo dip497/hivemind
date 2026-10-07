@@ -18,7 +18,7 @@ export const browserTile: TilePlugin<BrowserTileData> = {
   name: "Browser",
   kinds: {
     browser: {
-      size: { width: 1280, height: 860 }, wholePixels: true, title: "Browser", icon: Globe, opens: ["url"],
+      size: { width: 1280, height: 860 }, wholePixels: true, title: "Browser", icon: Globe, opens: ["url"], category: "web",
       create: (opts, ordinal) => ({ label: ordinal((n) => `Browser #${n}`), ...(opts.url ? { url: opts.url } : {}) }),
     },
   },

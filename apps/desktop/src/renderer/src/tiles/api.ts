@@ -2,6 +2,7 @@
  * Tile plugins: everything a tile is — its size, its rules and its body — comes from the plugin
  * that registers its kind. The tiles that ship with the app register through this same API.
  */
+import type { PluginCategory } from "@hivemind/view-sdk/category";
 import { useSyncExternalStore, type ComponentType } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { TileInstance } from "../canvas-persistence";
@@ -52,6 +53,8 @@ export interface TileKindSpec {
   wholePixels?: boolean;
   /** What a person calls it, in menus that open one. Absent: it is not opened from a menu. */
   title?: string;
+  /** What it is for: the Add menu groups what it offers by it. */
+  category?: PluginCategory;
   /** Its mark in tab strips and the Layers panel: an icon, or a monochrome glyph. */
   icon?: LucideIcon;
   glyph?: string;

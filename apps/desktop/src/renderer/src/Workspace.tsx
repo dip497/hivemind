@@ -29,7 +29,8 @@ import { clearWork, queueWork } from "./work-queue";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
-import { MenuItem } from "./components/ui/menu-item";
+import { Plus } from "lucide-react";
+import { PickerDialog } from "./picker-dialog";
 import type { LayerTile, LayerFrame } from "./LayersPanel";
 import { forgetStatus, statusOf, setHostedStatus, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
 import { ToolPlugins, WorkspacePropsContext } from "./tiles/tool-plugins";
@@ -1011,8 +1012,8 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       if (agentTiles.length === 0) { spawnDefaultAgent(undefined, text); return; }
       setAgentPick({ text });
     };
-    window.addEventListener("hivemind:deliver-to-claude", onDeliver as EventListener);
-    return () => window.removeEventListener("hivemind:deliver-to-claude", onDeliver as EventListener);
+    window.addEventListener("hivemind:deliver-to-agent", onDeliver as EventListener);
+    return () => window.removeEventListener("hivemind:deliver-to-agent", onDeliver as EventListener);
   }, [spawnDefaultAgent]);
 
   // Spawn the island's CURRENTLY-selected agent (key "2").
@@ -1237,6 +1238,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
         onFrame={addFrame}
         onBrowser={spawnBrowser}
         onBoard={addBoard}
+        onTile={spawnInto}
         boardItems={activeViewId === "canvas"}
         updateAvailable={updateAvailable}
         updateStaged={updateStaged}
@@ -1253,50 +1255,22 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
         <TileHost surfaces={surfaces} selectedTileId={selectedTileId} onSurfacePointerDown={setSelectedTileId} />
       </WorkspacePropsContext.Provider>
 
-      {/* Spawn-target picker — asks WHERE a new agent runs when 2+ workspaces
-          are open. Lives here (not in a view) so spawning works the same in
-          every view. */}
+      {/* Where a new tile runs, when 2+ workspaces are open: asked here, so every view spawns alike. */}
       {spawnPick && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[60]">
-          <div className="hm-island rounded-xl p-1.5 min-w-[240px] pointer-events-auto">
-            <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)]">
-              Spawn claude in
-            </div>
-            {/* Each repo frame followed by its worktree children — reads as a tree. */}
-            {frames
-              .filter((f) => !f.parentFrameId)
-              .flatMap((p) => [p, ...frames.filter((c) => c.parentFrameId === p.id)])
-              .map((f) => {
-                const isSel = f.id === selectedFrameId;
-                const isWt = !!f.parentFrameId;
-                return (
-                  <MenuItem
-                    key={f.id}
-                    autoFocus={isSel}
-                    selected={isSel}
-                    onClick={() => { spawnTile(spawnPick.kind, f.id, { mode: spawnPick.mode, work: spawnPick.work, url: spawnPick.url, agent: spawnPick.agent }); setSpawnPick(null); }}
-                    style={isWt ? { paddingLeft: 20 } : undefined}
-                  >
-                    <span aria-hidden className="size-2 rounded-full shrink-0" style={{ background: f.color }} />
-                    <span className="truncate">{f.title}</span>
-                    <span className="ml-auto text-[10px] text-[var(--color-fg3)]">
-                      {isSel ? "selected" : isWt ? "worktree" : "workspace"}
-                    </span>
-                  </MenuItem>
-                );
-              })}
-            <Button
-              variant="ghost"
-              size="xs"
-              className="w-full justify-start"
-              onClick={() => setSpawnPick(null)}
-            >
-              cancel
-            </Button>
-          </div>
-        </div>
+        <PickerDialog
+          title={`Start ${spawnPick.agent?.label ?? tileKind(spawnPick.kind).title ?? "it"} in`}
+          rows={frames
+            .filter((f) => !f.parentFrameId)
+            .flatMap((p) => [p, ...frames.filter((c) => c.parentFrameId === p.id)])
+            .map((f) => ({
+              id: f.id, label: f.title, indent: !!f.parentFrameId,
+              icon: <span aria-hidden className="size-2 rounded-full" style={{ background: f.color }} />,
+              detail: f.id === selectedFrameId ? "selected" : f.parentFrameId ? "worktree" : undefined,
+            }))}
+          onPick={(id) => spawnTile(spawnPick.kind, id, { mode: spawnPick.mode, work: spawnPick.work, url: spawnPick.url, agent: spawnPick.agent })}
+          onClose={() => setSpawnPick(null)}
+        />
       )}
-
       {machinesReq && (
         <Suspense fallback={null}>
           <MachinesHub
@@ -1311,58 +1285,16 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
         </Suspense>
       )}
       {agentPick && (
-        // z above the tile fullscreen overlay (z-[9999]) so the picker shows ON
-        // TOP of a fullscreened diff/editor instead of behind it.
-        <div className="fixed inset-0 z-[10000] grid place-items-center" onClick={() => setAgentPick(null)}>
-          <div className="absolute inset-0 bg-black/40" />
-          <div className="relative w-[340px] max-w-[90vw] rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] shadow-2xl p-1.5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center px-2 py-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)]">
-                Send to claude
-              </span>
-              <Button
-                variant="ghost"
-                size="icon-micro"
-                className="ml-auto"
-                onClick={() => setAgentPick(null)}
-                aria-label="cancel"
-                title="cancel (Esc)"
-              >
-                ×
-              </Button>
-            </div>
-            {tiles.filter((t) => t.kind === AGENT_TILE_KIND).map((t) => {
-              const name = tileName(tileNames, agentTitles, t);
-              const frame = frames.find((f) => f.id === frameOf[t.id]);
-              return (
-                <MenuItem
-                  key={t.id}
-                  variant="muted"
-                  onClick={() => { deliverToAgent(agentPick.text, t.id); setAgentPick(null); }}
-                >
-                  <AgentIcon id={agentForCmd(t.cmd)?.id} size={13} className="text-[var(--color-fg3)]" />
-                  <span className="truncate flex-1">{name}</span>
-                  {frame && <span className="shrink-0 text-[10px] text-[var(--color-fg3)]">{frame.title}</span>}
-                </MenuItem>
-              );
-            })}
-            <div className="my-1 border-t border-[var(--color-line2)]" />
-            <MenuItem
-              onClick={() => { deliverToAgent(agentPick.text, "new"); setAgentPick(null); }}
-            >
-              <span className="shrink-0 grid place-items-center size-3.5 text-[var(--color-fg3)]">+</span>
-              <span className="flex-1">New claude</span>
-            </MenuItem>
-            <Button
-              variant="ghost"
-              size="xs"
-              className="w-full justify-start"
-              onClick={() => setAgentPick(null)}
-            >
-              cancel
-            </Button>
-          </div>
-        </div>
+        <PickerDialog
+          title="Send to agent"
+          description={agentPick.text}
+          rows={frames.flatMap((f) => tiles
+            .filter((t) => t.kind === AGENT_TILE_KIND && frameOf[t.id] === f.id)
+            .map((t) => ({ id: t.id, label: tileName(tileNames, agentTitles, t), group: f.title, icon: <AgentIcon id={agentForCmd(t.cmd)?.id} size={13} /> })))}
+          extra={[{ id: "new", label: `New ${defaultAgent()?.label ?? "agent"}`, icon: <Plus size={13} /> }]}
+          onPick={(id) => deliverToAgent(agentPick.text, id)}
+          onClose={() => setAgentPick(null)}
+        />
       )}
       {/* Git commit/sync modal — opened per-frame via hivemind:frame-git, in
           every view. */}

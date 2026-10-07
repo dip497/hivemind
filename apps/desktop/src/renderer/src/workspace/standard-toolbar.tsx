@@ -10,6 +10,9 @@ import { setViewMode, useViewMode } from "./view-mode-store";
 import type { BoardChoice } from "../board-objects/board-model";
 import { useEnabledWidgetPackages } from "../board-objects/widget-runtime";
 import { WidgetIcon } from "../plugins/WidgetIcon";
+import { Input } from "../components/ui/input";
+import { tileKinds, useTilesVersion } from "../tiles";
+import { CATEGORY_LABELS, PLUGIN_CATEGORIES, type PluginCategory } from "@hivemind/view-sdk/category";
 
 export interface StandardToolbarProps {
   actions: readonly ToolbarAction[];
@@ -26,6 +29,8 @@ export interface StandardToolbarProps {
   onBoard?: (kind: BoardChoice) => void;
   /** The board is drawn here (the canvas): its items are offered too. */
   boardItems?: boolean;
+  /** Open a tool's tile, offered in the Add menu beside the widgets. */
+  onTile?: (kind: string) => void;
   onTheme: () => void;
   updateAvailable: boolean;
   /** A version is downloaded and waiting: restarting is all that is left. */
@@ -53,7 +58,7 @@ export function StandardToolbar(props: StandardToolbarProps) {
   return <div role="group" aria-label="Workspace tools" className={`hm-island flex max-w-[calc(100vw-32px)] flex-wrap items-center justify-center gap-0.5 ${compact ? "p-1" : "p-1.5"}`} data-tool-island>
     {actions.map((action) => {
       if (action.id === "agent") return <AgentAction key={action.id} {...props} action={action} />;
-      if (action.id === "board") return props.onBoard ? <BoardAction key={action.id} action={action} labels={labels} compact={compact} onBoard={props.onBoard} boardItems={!!props.boardItems} /> : null;
+      if (action.id === "board") return props.onBoard ? <BoardAction key={action.id} action={action} labels={labels} compact={compact} repoPath={repoPath} onBoard={props.onBoard} onTile={props.onTile} boardItems={!!props.boardItems} /> : null;
       const Icon = icons[action.id];
       const needsRepo = action.id === "explorer";
       return <ActionButton key={action.id} action={action} labels={labels} disabled={needsRepo && !repoPath}
@@ -135,27 +140,80 @@ function AgentAction({ action, labels, agentSel, onAgentChange, onSpawnAgent, co
 
 /** Add something: any widget (the app's own sticky note, checklist and text among them), in every
  *  view, and on the canvas an arrow between two things. */
-function BoardAction({ action, labels, compact, onBoard, boardItems }: {
-  action: ToolbarAction; labels: boolean; compact: boolean; onBoard: (kind: BoardChoice) => void; boardItems: boolean;
+/** One thing the Add menu offers: a tool's tile, a widget, or the board's arrow. */
+interface AddChoice { id: string; name: string; type: "tool" | "widget"; category: PluginCategory; icon: React.ReactNode; disabled?: boolean; pick: () => void }
+const ADD_TABS = [["all", "All"], ["tool", "Tools"], ["widget", "Widgets"]] as const;
+
+function BoardAction({ action, labels, compact, repoPath, onBoard, onTile, boardItems }: {
+  action: ToolbarAction; labels: boolean; compact: boolean; repoPath: string | null;
+  onBoard: (kind: BoardChoice) => void; onTile?: (kind: string) => void; boardItems: boolean;
 }) {
   const { open, setOpen, root, trigger } = useDropdown();
   const widgets = useEnabledWidgetPackages();
+  useTilesVersion();
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const [tab, setTab] = useState<(typeof ADD_TABS)[number][0]>("all");
+  useEffect(() => { if (open) { setQuery(""); setActive(0); } }, [open]);
+  const choices: AddChoice[] = [
+    ...(onTile ? tileKinds().filter(([, spec]) => spec.title).map(([kind, spec]): AddChoice => ({
+      id: `tile:${kind}`, name: spec.title!, type: "tool", category: spec.category ?? "other",
+      icon: spec.icon ? <spec.icon /> : <span className="text-[11px] leading-none">{spec.glyph ?? "▢"}</span>,
+      disabled: !!spec.needsRepo && !repoPath, pick: () => onTile(kind),
+    })) : []),
+    ...widgets.map((w): AddChoice => ({ id: `widget:${w.id}`, name: w.name, type: "widget", category: w.category ?? "other", icon: <WidgetIcon pkg={w} />, pick: () => onBoard(`widget:${w.id}`) })),
+  ];
+  const q = query.trim().toLowerCase();
+  const found = choices.filter((c) => (tab === "all" || c.type === tab) && (!q || `${c.name} ${CATEGORY_LABELS[c.category]}`.toLowerCase().includes(q)));
+  const groups = PLUGIN_CATEGORIES.map((cat) => [cat, found.filter((c) => c.category === cat)] as const).filter(([, list]) => list.length);
+  const arrow = boardItems && tab !== "tool" && (!q || "arrow".includes(q));
+  const order = [...groups.flatMap(([, list]) => list), ...(arrow ? [{ id: "arrow", pick: () => onBoard("arrow") } as AddChoice] : [])];
+  // What was added takes the focus, to be written in: none goes back to the trigger.
+  const choose = (c: AddChoice) => { if (c.disabled) return; setOpen(false); c.pick(); };
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive((i) => Math.min(i + 1, order.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
+    else if (e.key === "Enter" && order[active]) { e.preventDefault(); choose(order[active]!); }
+  };
+  const item = (c: AddChoice) => {
+    const i = order.indexOf(c);
+    return <MenuItem key={c.id} variant="muted" selected={i === active} disabled={c.disabled} data-board-choice={c.id}
+      title={c.disabled ? `${c.name} needs a repository` : undefined}
+      onMouseEnter={() => setActive(i)} onClick={() => choose(c)}>
+      <span className="grid size-4 shrink-0 place-items-center [&>svg]:size-3.5">{c.icon}</span>
+      <span className="flex-1 truncate">{c.name}</span>
+    </MenuItem>;
+  };
   return <div ref={root} className="relative flex items-center">
     <Button ref={trigger} variant="ghost" size={labels ? "lg" : "icon-lg"} className="relative" onClick={() => setOpen((value) => !value)}
       aria-label={action.label} aria-expanded={open} data-toolbar-action={action.id} title={action.label}>
       <Shapes />{labels && <span data-toolbar-label className="text-[12px]">{action.label}</span>}
     </Button>
-    {open && <div role="menu" className={`hm-island absolute left-0 z-30 min-w-[170px] rounded-lg p-1 ${compact ? "bottom-full mb-1" : "top-full mt-1"}`}>
-      <div className="px-2 pb-0.5 pt-1 text-[10px] uppercase tracking-wide text-[var(--color-fg3)]">Widgets</div>
-      {/* No focus back to the trigger: what was added takes it, to be written in. */}
-      {widgets.map((w) => <MenuItem key={w.id} variant="muted" data-board-choice={`widget:${w.id}`}
-        onClick={() => { setOpen(false); onBoard(`widget:${w.id}`); }}>
-        <WidgetIcon pkg={w} /><span className="flex-1">{w.name}</span>
-      </MenuItem>)}
-      {boardItems && <div role="separator" className="my-1 h-px bg-[var(--color-line)]" />}
-      {boardItems && <MenuItem variant="muted" data-board-choice="arrow" onClick={() => { setOpen(false); onBoard("arrow"); }}>
-        <MoveUpRight /><span className="flex-1">Arrow</span>
-      </MenuItem>}
+    {open && <div role="menu" onKeyDown={onKeyDown} data-add-menu
+      className={`hm-popover absolute left-0 z-30 flex w-[260px] flex-col ${compact ? "bottom-full mb-1" : "top-full mt-1"}`}>
+      <Input autoFocus value={query} onChange={(e) => { setQuery(e.target.value); setActive(0); }}
+        placeholder="Search tools and widgets" aria-label="Search tools and widgets" className="h-7 text-[12px]" />
+      <div role="tablist" aria-label="Show" className="my-1 flex gap-0.5 rounded-md bg-[var(--color-bg3)] p-0.5">
+        {ADD_TABS.map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} data-add-tab={id}
+          onClick={() => { setTab(id); setActive(0); }}
+          className={`flex-1 rounded px-2 py-0.5 text-[11px] ${tab === id ? "bg-[var(--color-bg)] text-[var(--color-fg)] shadow-sm" : "text-[var(--color-fg3)] hover:text-[var(--color-fg)]"}`}>
+          {label} <span className="tabular-nums opacity-60">{id === "all" ? choices.length : choices.filter((c) => c.type === id).length}</span>
+        </button>)}
+      </div>
+      <div className="max-h-[min(460px,65vh)] overflow-y-auto">
+        {groups.map(([cat, list]) => <div key={cat} role="group" aria-label={CATEGORY_LABELS[cat]} data-add-category={cat}>
+          <div className="px-2 pb-0.5 pt-1.5 text-[10px] uppercase tracking-wide text-[var(--color-fg3)]">{CATEGORY_LABELS[cat]}</div>
+          {list.map(item)}
+        </div>)}
+        {arrow && <>
+          <div role="separator" className="my-1 h-px bg-[var(--color-line)]" />
+          <MenuItem variant="muted" selected={order.length - 1 === active} data-board-choice="arrow"
+            onMouseEnter={() => setActive(order.length - 1)} onClick={() => { setOpen(false); onBoard("arrow"); }}>
+            <MoveUpRight /><span className="flex-1">Arrow</span>
+          </MenuItem>
+        </>}
+        {order.length === 0 && <p className="px-2 py-3 text-[12px] text-[var(--color-fg3)]">Nothing matches.</p>}
+      </div>
     </div>}
   </div>;
 }

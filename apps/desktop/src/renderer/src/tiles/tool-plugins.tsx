@@ -103,7 +103,7 @@ function register(pkg: ToolPackage, off: Set<string>): void {
     name: pkg.name,
     kinds: Object.fromEntries(tools.map((t) => {
       const tile = pkg.tiles[t.tileKind!]!;
-      return [t.tileKind!, { size: tile.size, label: t.label, title: t.label, glyph: tile.glyph, needsRepo: tile.needsRepo, singleton: tile.singleton }];
+      return [t.tileKind!, { size: tile.size, label: t.label, title: t.label, glyph: tile.glyph, needsRepo: tile.needsRepo, singleton: tile.singleton, category: pkg.category }];
     })),
     data: (t, s, h) => ({
       pkg, tileId: t.id, kind: t.kind, name: h.tileNames[t.id] ?? t.label ?? t.kind, frameId: s.frameId,

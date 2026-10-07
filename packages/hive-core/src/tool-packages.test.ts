@@ -104,3 +104,9 @@ test("a tool plugin that comes with the app is the tool core says ships, and onl
     expect(() => parseToolManifest(raw, path.join(root, name), null, "you")).toThrow("kept for the plugins that come with the app");
   }
 });
+
+test("its category is what its manifest says, from the list; none is other, and one not on the list is refused", async () => {
+  expect((await readToolPackage(plugin({ category: "git" }), null)).category).toBe("git");
+  expect((await readToolPackage(plugin(), null)).category).toBe("other");
+  await expect(readToolPackage(plugin({ category: "games" }), null)).rejects.toThrow('"category" must be one of');
+});

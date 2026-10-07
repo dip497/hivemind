@@ -35,3 +35,10 @@ test("its version is what its widget.json says, when it looks like one: what an 
   expect((await readWidget(widget({ version: "soon" }))).version).toBeUndefined();
   expect((await readWidget(widget({}))).version).toBeUndefined();
 });
+
+test("its category is what its widget.json says, from the list; none is other, and one not on the list is refused", async () => {
+  expect((await readWidget(widget({ category: "fun" }))).category).toBe("fun");
+  expect((await readWidget(widget({}))).category).toBe("other");
+  await expect(readWidget(widget({ category: "games" }))).rejects.toThrow('"category" must be one of');
+  for (const w of BUILTIN_WIDGETS) expect(w.category).toBe("productivity");
+});

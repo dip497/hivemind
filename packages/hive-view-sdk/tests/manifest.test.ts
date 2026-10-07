@@ -54,3 +54,13 @@ describe("what a view asks of the app around it", () => {
     expect(read({ layout: "mine" })).toEqual(['"layout" must be "shared" or "personal"']);
   });
 });
+
+describe("what a plugin is for", () => {
+  const base = { id: "view", name: "V", version: "1.0.0", entry: "index.html", protocol: 1, permissions: [] };
+  it("keeps a category from the list, is `other` without one, and refuses one not on it", () => {
+    const category = (extra: object) => { const r = validateViewManifest({ ...base, ...extra }); return r.ok ? r.manifest.category : r.errors; };
+    expect(category({ category: "git" })).toBe("git");
+    expect(category({})).toBe("other");
+    expect(category({ category: "games" })).toEqual(['"category" must be one of code, git, agents, productivity, monitoring, team, web, fun, other']);
+  });
+});

@@ -1216,7 +1216,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
               size="xs"
               className="ml-auto"
               onClick={sendReview}
-              title="Send all review comments to claude (spawns one if none is running)"
+              title="Send all review comments to an agent (starts one if none is running)"
             >
               <Play fill="currentColor" strokeWidth={0} />
               Send review to Claude

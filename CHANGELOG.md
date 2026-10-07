@@ -9,6 +9,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: a view, tool or widget says what it is for with `"category"` in its manifest: code, git, agents, productivity, monitoring, team, web, fun or other (the default). A value not on the list is refused.
+- Changed: the Add menu offers every tool beside the widgets, grouped by category, with a search box and All, Tools and Widgets tabs, on the Layers panel's material instead of the see-through toolbar's. Popovers take the same material.
+- Changed: text sent to an agent asks which one in an opaque card: agents grouped by frame, searchable when there are many, the new one below, chosen by click or by arrows and Enter. "Send to claude" is now "Send to agent", and the frame picker is the same card.
 - Fixed: text on the board read blurred after scrolling it with a trackpad: the board now comes to rest on whole pixels.
 - Changed: one Code tile. The separate Diff tile is gone: its review is the Code tile's **Changes**, and the toolbar's Explorer button is now **Code**. A Diff or Workbench tile on a board opens as the Code tile, and opening Code in a frame that has one focuses it instead of adding a second. A branch handed off to you opens in a Code tile on its changes.
 - **Breaking:** the Diff toolbar action, the `4` key, Ctrl/⌘+Shift+G and a view's `spawnVis("diff")` are removed.

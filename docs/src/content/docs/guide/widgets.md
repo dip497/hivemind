@@ -166,6 +166,9 @@ version and everyone who has it is offered the update in Settings ▸ Plugins:
 hivehub publish widgets/counter
 ```
 
+A `"category"` in `widget.json` says what it is for: `code`, `git`, `agents`, `productivity`, `monitoring`, `team`, `web`, `fun` or `other` (the default). The Add menu
+groups widgets by it, beside the tools.
+
 A `README.md` beside `widget.json` is shown on its page, on HiveHub and in Settings ▸ Plugins,
 before anyone installs it. People install it from Settings ▸ Plugins ▸ On HiveHub, or with:
 

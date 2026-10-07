@@ -773,7 +773,7 @@ function InitWorkspacePrompt({
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50" onClick={() => onOpenChange(false)}>
       <div
-        className="w-[420px] bg-[var(--color-bg2)] border border-[var(--color-line2)] rounded-lg shadow-2xl p-4"
+        className="hm-surface-3 w-[420px] p-4"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-[15px] font-semibold text-[var(--color-fg)]">Initialize workspace</h2>

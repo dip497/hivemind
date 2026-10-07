@@ -339,14 +339,15 @@ html.glass-on .hm-toast {
   border-radius: 10px;
   box-shadow: var(--hm-shadow-2), var(--hm-highlight);
 }
-/* A menu takes the Layers panel's material: never thinner than the panel it opens from. */
-.hm-menu {
+/* A menu or popover takes the Layers panel's material: never thinner than the panel it opens from. */
+.hm-menu, .hm-popover {
   background: var(--surface-2);
   color: var(--color-fg);
   border-color: var(--color-line2);
   font-size: 12px;
 }
-html.glass-on:not([data-wallpaper="none"]) .hm-menu {
+html.glass-on:not([data-wallpaper="none"]) .hm-menu,
+html.glass-on:not([data-wallpaper="none"]) .hm-popover {
   background: color-mix(in srgb, var(--surface-2) clamp(68%, var(--glass-opacity), 92%), transparent);
   backdrop-filter: blur(var(--glass-blur)) saturate(130%);
 }
@@ -363,7 +364,6 @@ html.glass-on:not([data-wallpaper="none"]) .hm-menu {
 /* Anchored popover shell — shared by FilterBar dropdowns, peek StateSelect,
    and all pickers. Same padding + radius + shadow so every dropdown matches. */
 .hm-popover {
-  background: var(--color-bg3);
   border: 1px solid var(--color-line2);
   border-radius: 10px;
   box-shadow: var(--hm-shadow-2), var(--hm-highlight);

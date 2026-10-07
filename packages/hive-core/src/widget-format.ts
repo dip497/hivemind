@@ -6,6 +6,7 @@
  */
 import { resolveSettings, type SettingField } from "@hivemind/view-sdk/settings";
 import type { ViewWidget } from "@hivemind/view-sdk/protocol";
+import type { PluginCategory } from "@hivemind/view-sdk/category";
 
 /** A widget's id: a bare name (a built-in, or one added from a folder), or `@owner/name` for one
  *  published on HiveHub, the owner being the account that published it. */
@@ -23,6 +24,8 @@ export type WidgetOption = SettingField;
  *  ("none": no card, for a pet), what it may do in the workspace (a view's permission names), its images (by file name, as data URLs) and its code. */
 export interface WidgetPackage {
   id: string; name: string; options: WidgetOption[]; chrome: "card" | "none"; permissions: string[]; assets: Record<string, string>;
+  /** What it is for; the Add menu groups widgets by it. */
+  category: PluginCategory;
   /** Where it goes when added: on the board (moving with it), or floating over every view; and its first size on the board. */
   placement: "board" | "screen"; size: { w: number; h: number };
   /** Its code; "" for a widget drawn from `draw` alone. */
@@ -55,21 +58,21 @@ const NOTE_COLORS = ["yellow", "peach", "pink", "violet", "blue", "green"];
  *  One installed under the same id replaces it. */
 export const BUILTIN_WIDGETS: WidgetPackage[] = [
   {
-    id: "note", name: "Sticky note", builtin: true, description: "A coloured note on the board that anyone in the workspace can write in.",
+    id: "note", name: "Sticky note", builtin: true, category: "productivity", description: "A coloured note on the board that anyone in the workspace can write in.",
     readme: "# Sticky note\n\nA note on the board. Double-click it to write; two people can write in one at once and both keep their words. Pick its colour from the dots above it when it is selected.\n\nIt is a widget like any other: data and a drawing, no code. Install a widget with the id `note` to replace it.", placement: "board", size: { w: 220, h: 180 }, chrome: "card",
     icon: mark('<path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v4a2 2 0 0 0 2 2h4"/>'), permissions: [], assets: {}, code: "",
     options: [{ id: "color", label: "Colour", type: "choice", values: NOTE_COLORS, default: "yellow" }],
     draw: { type: "stack", fill: true, tint: "$options.color", children: [{ type: "textarea", placeholder: "Write something" }] },
   },
   {
-    id: "checklist", name: "Checklist", builtin: true, description: "A titled list of lines to tick, add and reorder.",
+    id: "checklist", name: "Checklist", builtin: true, category: "productivity", description: "A titled list of lines to tick, add and reorder.",
     readme: "# Checklist\n\nA list on the board. Double-click to write its title; press Enter for a new line, Backspace on an empty line to remove it, and drag the grip to reorder. Ticks and lines merge when two people edit at once.\n\nIt is a widget like any other. Install a widget with the id `checklist` to replace it.", placement: "board", size: { w: 260, h: 200 }, chrome: "card",
     icon: mark('<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>'), permissions: [], assets: {}, code: "",
     options: [],
     draw: { type: "stack", fill: true, children: [{ type: "list", title: true, placeholder: "Checklist" }] },
   },
   {
-    id: "text", name: "Text", builtin: true, description: "A large text label on the board, with no card.",
+    id: "text", name: "Text", builtin: true, category: "productivity", description: "A large text label on the board, with no card.",
     readme: "# Text\n\nA heading on the board. Double-click to write.\n\nIt is a widget like any other. Install a widget with the id `text` to replace it.", placement: "board", size: { w: 320, h: 64 }, chrome: "none",
     icon: mark('<path d="M12 4v16"/><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"/><path d="M9 20h6"/>'), permissions: [], assets: {}, code: "",
     options: [],

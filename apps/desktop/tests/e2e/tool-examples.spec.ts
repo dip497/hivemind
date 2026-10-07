@@ -72,6 +72,8 @@ test.beforeAll(async () => {
     '  *) echo "unexpected: $*" >&2; exit 1 ;;',
     "esac",
   ].join("\n"), { mode: 0o755 });
+  // An agent to send to: what the app starts as `claude`, waiting on its input.
+  fs.writeFileSync(path.join(fakeGh, "claude"), "#!/bin/sh\nexec cat\n", { mode: 0o755 });
 
   for (const name of ["ci-runs", "worktrees"]) {
     expect(hive("tools", "install", path.join(examples, name)).status).toBe(0);
@@ -147,4 +149,51 @@ test("Worktrees shows each worktree's state, its diffs, and removes only one tha
   await expect.poll(() => git("branch --list done").trim()).toBe("");
   await expect(wt.locator("[data-worktree]")).toHaveCount(0);
   expect(fs.existsSync(path.join(root, "wt-work"))).toBe(true);
+});
+
+test("the Add menu offers every tool beside the widgets, by category, found by search, on the Layers panel's material", async () => {
+  await page.locator('[data-toolbar-action="board"]').first().click();
+  const menu = page.locator("[data-add-menu]");
+  await expect(menu.locator('[data-add-category="git"]')).toContainText("Worktrees");
+  await expect(menu.locator('[data-add-category="monitoring"]')).toContainText("CI runs");
+  await expect(menu.locator('[data-add-category="productivity"]')).toContainText("Sticky note");
+  // Its material is the Layers panel's, never thinner (the toolbar's island let the board read through).
+  expect(await menu.evaluate((el) => el.classList.contains("hm-popover"))).toBe(true);
+  // Its tabs show one type at a time.
+  await menu.locator('[data-add-tab="tool"]').click();
+  await expect(menu).toContainText("Worktrees");
+  await expect(menu).not.toContainText("Sticky note");
+  await menu.locator('[data-add-tab="widget"]').click();
+  await expect(menu).toContainText("Sticky note");
+  await expect(menu).not.toContainText("Worktrees");
+  await menu.locator('[data-add-tab="all"]').click();
+  await menu.getByRole("textbox").focus();
+  await page.keyboard.type("work");
+  await expect(menu.locator("[data-board-choice]")).toHaveText([/Worktrees/]);
+  // A tool opens from it as from a frame's Open menu.
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type("code");
+  await expect(page.locator(".react-flow__node-workbench")).toHaveCount(0);
+  await menu.locator('[data-board-choice="tile:editor"]').click();
+  await expect(menu).toHaveCount(0);
+  await expect(page.locator(".react-flow__node-workbench")).toHaveCount(1);
+});
+
+test("text sent to an agent asks which one: agents by frame, searchable, a new one below, chosen by keyboard", async () => {
+  expect(hive("ctl", "spawn", "--agent", "claude", "--name", "first").status).toBe(0);
+  const second = hive("ctl", "spawn", "--agent", "claude", "--name", "second").data.tileId as string;
+  await page.evaluate(() => {
+    (window as unknown as { sentTo?: string }).sentTo = undefined;
+    window.addEventListener("hivemind:send-to-agent", (e) => { (window as unknown as { sentTo?: string }).sentTo = (e as CustomEvent<{ target: string }>).detail.target; });
+  });
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:deliver-to-agent", { detail: { text: "Fix the failing test in src/a.ts" } })));
+  const picker = page.getByRole("dialog", { name: "Send to agent" });
+  await expect(picker).toContainText("Fix the failing test in src/a.ts");
+  await expect(picker.locator("[data-picker-row]")).toHaveText([/first/, /second/, /New Claude/i]);
+  // Opaque, as a modal is: the board never reads through what it asks.
+  expect(await picker.evaluate((el) => el.classList.contains("hm-surface-3"))).toBe(true);
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(picker).toHaveCount(0);
+  expect(await page.evaluate(() => (window as unknown as { sentTo?: string }).sentTo)).toBe(second);
 });
