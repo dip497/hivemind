@@ -65,7 +65,8 @@ const PRO_OPTIONS = { hideAttribution: true };
 function ViewportMirror({ target }: { target: { current: { x: number; y: number; zoom: number } } }) {
   // Stable: the hook writes these into react-flow's store whenever they change.
   const mirror = useCallback((vp: { x: number; y: number; zoom: number }) => { target.current = vp; }, [target]);
-  useOnViewportChange({ onChange: mirror, onEnd: mirror });
+  // Not onEnd: a scroll's end carries the viewport from before it, and the crisp snap would stand down.
+  useOnViewportChange({ onChange: mirror });
   return null;
 }
 

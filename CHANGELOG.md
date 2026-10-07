@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: text on the board read blurred after scrolling it with a trackpad: the board now comes to rest on whole pixels.
 - Changed: one Code tile. The separate Diff tile is gone: its review is the Code tile's **Changes**, and the toolbar's Explorer button is now **Code**. A Diff or Workbench tile on a board opens as the Code tile, and opening Code in a frame that has one focuses it instead of adding a second. A branch handed off to you opens in a Code tile on its changes.
 - **Breaking:** the Diff toolbar action, the `4` key, Ctrl/⌘+Shift+G and a view's `spawnVis("diff")` are removed.
 - New: two example tool plugins in `examples/tools`: CI runs (GitHub Actions runs, a failed job's lines, rerun, hand the failure to an agent) and Worktrees (every worktree's uncommitted changes, ahead and behind the base, its diffs; remove the merged ones).
