@@ -92,6 +92,48 @@ const list = sub("list", "List tiles on the canvas grouped by frame (with agent 
   { frame: { type: "string", description: "one frame (id, repo name, or title); exit 5 when none answers to it" } },
   (a) => hcpCall("tile.list", { frame: a.frame }));
 
+type FeedAgent = { tile: string; agent: string; state: string; waiting?: { kind: string } };
+type FeedEvent = { seq: number; kind: string; tile: string; detail?: string };
+
+/** One agent as a line: its tile, name, state, and what it waits on. */
+const agentLine = (a: FeedAgent): string => `${a.tile}\t${a.agent}\t${a.state}${a.waiting ? `\twaiting: ${a.waiting.kind}` : ""}`;
+
+// The workspace's agents, as the app's agent feed says; --watch follows what happens to them.
+const agents = defineCommand({
+  meta: { name: "agents", description: "The workspace's agents and what each waits on; --watch follows what happens to them" },
+  args: {
+    repo: { type: "string", description: "the workspace's folder (default: the calling agent's own workspace)" },
+    watch: { type: "boolean", description: "keep going: print each turn ended, wait and answer as it happens (one JSON per line with --json)" },
+    ...JSON_ARG,
+  },
+  async run({ args }) {
+    const json = !!args.json;
+    const repo = args.repo ? path.resolve(String(args.repo)) : undefined;
+    try {
+      let listed = await hcpCall("agent.list", { repo }) as { seq: number; agents: FeedAgent[] };
+      if (!args.watch) {
+        if (json) return print(listed, true);
+        console.log(listed.agents.map(agentLine).join("\n") || "no agents");
+        return;
+      }
+      if (!json) for (const a of listed.agents) console.log(agentLine(a));
+      let seq = listed.seq;
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const caught = await hcpCall("agent.since", { repo, seq }) as { seq: number; events: FeedEvent[] } | null;
+        if (caught === null) {
+          // Behind what the feed keeps: list again and carry on from there.
+          listed = await hcpCall("agent.list", { repo }) as typeof listed;
+          seq = listed.seq;
+          continue;
+        }
+        for (const e of caught.events) console.log(json ? JSON.stringify(e) : `${e.tile}\t${e.kind}${e.detail ? `\t${e.detail}` : ""}`);
+        seq = caught.seq;
+      }
+    } catch (e) { fail(e, json); }
+  },
+});
+
 const frames = sub("frames", "List canvas frames (id, title, repo, branch, tile count)", {},
   () => hcpCall("tile.list_frames", {}));
 
@@ -350,7 +392,7 @@ const view = defineCommand({
 export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/workflow/report) and the issue verbs agents use" },
   subCommands: {
-    list, frames, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, report, "open-review": openReview,
+    list, agents, frames, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, report, "open-review": openReview,
     focus, close, rename, connect, disconnect, view,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,

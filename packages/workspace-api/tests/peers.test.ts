@@ -256,6 +256,8 @@ test("a peer hears only the events about its workspace, and is refused a tile ou
   client.on("store.changed", () => heard.push("store"));
   client.on("presence.changed", (repo, people) => heard.push(`here ${repo}: ${people.map((p) => p.name).join()}`));
   client.on("agent.said", (tile, entries) => heard.push(`${tile} said ${entries.length}`));
+  // Whose window runs the widgets changed: the person's devices with it open may take over.
+  client.on("widget.runner", (repo) => heard.push(`runner ${repo}`));
   await client.call("file.read", workspaceUrl(W), "a.ts"); // connected
   server.publish("terminal.data", "in-1", "hello");
   server.publish("terminal.data", "out-1", "secret");
@@ -268,8 +270,10 @@ test("a peer hears only the events about its workspace, and is refused a tile ou
   const someone = (name: string) => ({ id: "window:1", person: "o".repeat(64), name, color: "", cursor: null, selection: [] });
   server.publish("presence.changed", REPO, [someone("Ana")]);
   server.publish("presence.changed", "/work/other", [someone("Bo")]);
+  server.publish("widget.runner", REPO);
+  server.publish("widget.runner", "/work/other");
   await Bun.sleep(10);
-  expect(heard).toEqual(["in-1:hello", "in-1 said 1", `changed ${workspaceUrl(W)}`, `here ${workspaceUrl(W)}: Ana`]);
+  expect(heard).toEqual(["in-1:hello", "in-1 said 1", `changed ${workspaceUrl(W)}`, `here ${workspaceUrl(W)}: Ana`, `runner ${workspaceUrl(W)}`]);
 
   ran.length = 0;
   client.notice("terminal.show", "out-1", true);

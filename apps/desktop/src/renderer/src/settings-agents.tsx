@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronRight, Copy, ExternalLink, Store, Trash, TriangleAlert } from "lucide-react";
+import { pluginOptions, stringOptions } from "@hivemind/core/plugin-settings";
+import { Check, ChevronRight, Copy, ExternalLink, Trash, TriangleAlert } from "lucide-react";
 import {
   GENERIC_AGENT_ICON, defFromManifest, optionChoices,
   type AgentOption, type AgentProviderDef, type AgentWireEntry,
 } from "@hivemind/agents";
-import { patchSettings, useSettings } from "./settings-store";
+import { patchSettings, useSettings, setPluginOption } from "./settings-store";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { MenuItem } from "./components/ui/menu-item";
@@ -66,14 +67,16 @@ function useOptionChoices(def: AgentProviderDef): Choices | null {
   return choices;
 }
 
-export function AgentsOverview() {
-  const cards = useCards().filter((c) => c.def?.enabled || c.error);
+/** The agents on the Plugins page: ready ones (with the default), not installed, off. */
+export function AgentsSection({ matches }: { matches: (text: string) => boolean }) {
+  const all = useCards().filter((c) => c.def?.enabled || c.error);
+  const cards = all.filter((c) => matches(`${c.def?.label ?? c.id} ${c.id} ${c.def?.bin ?? ""}`));
   const go = useSettingsNavigate();
   const presence = useAgentPresence();
   const { defaultAgent: saved, autoInstall } = useSettings().agents;
   const defaultId = preferredAgent(saved, (d) => !notReady(presence, d.id))?.id;
   const missing = (c: Card) => notReady(presence, c.id);
-  const savedCard = saved && saved !== defaultId ? cards.find((c) => c.id === saved) : undefined;
+  const savedCard = saved && saved !== defaultId ? all.find((c) => c.id === saved) : undefined;
   const ready = cards.filter((c) => c.on && !missing(c));
   const notInstalled = cards.filter((c) => c.on && missing(c));
   const off = cards.filter((c) => !c.on);
@@ -90,7 +93,7 @@ export function AgentsOverview() {
     : [c.def?.bin, c.def?.caps.turnSignal ? "worker" : null].filter(Boolean).join(" · ");
   const row = (c: Card) => (
     <div key={c.id} className="plugin-row" data-agent-card={c.id} data-state={state(c)}>
-      <MenuItem className="flex-1 min-w-0" onClick={() => go(`agent:${c.id}`)}>
+      <MenuItem className="flex-1 min-w-0" data-plugin-open={`agent:${c.id}`} onClick={() => go(`plugin:agent:${c.id}`)}>
         <SvgMark icon={c.def?.icon ?? GENERIC_AGENT_ICON} />
         <span className="plugin-row-text">
           <span className="plugin-row-name">{label(c)}</span>
@@ -111,12 +114,15 @@ export function AgentsOverview() {
       <div className="plugin-rows" role={list === ready ? "radiogroup" : undefined} aria-label={list === ready ? "Default agent" : undefined}>{list.map(row)}</div>
     </section>
   );
+  // Searching hides it when nothing matches; otherwise the switch below stays, even with no agents.
+  if (!cards.length && !matches("")) return null;
   return (
-    <div className="settings-stack">
+    <section className="settings-stack plugins-kind" aria-label="Agents" data-plugins-kind="agent">
+      <h3 className="plugins-kind-heading">Agents</h3>
       {group("Installed", ready, "The default is what the toolbar button and ⌘\\ start")}
       {savedCard ? (
         <p role="status" className="settings-note warn">
-          {label(savedCard)} is {savedCard.on ? "not installed" : "switched off"}, so {cards.find((c) => c.id === defaultId)?.def?.label ?? defaultId} starts instead.
+          {label(savedCard)} is {savedCard.on ? "not installed" : "switched off"}, so {all.find((c) => c.id === defaultId)?.def?.label ?? defaultId} starts instead.
         </p>
       ) : !ready.some((c) => c.id === defaultId) && (
         <p role="status" className="settings-note error">Your default agent is not ready on this machine. Pick another, or install it.</p>
@@ -129,11 +135,7 @@ export function AgentsOverview() {
         <Switch id="agents-auto-install" checked={autoInstall} aria-label="Add agents found on this machine"
           onCheckedChange={() => patchSettings("agents.autoInstall", !autoInstall)} />
       </div>
-      <div className="settings-inline">
-        <Button size="sm" variant="outline" onClick={() => go("plugins")}><Store />Browse agents</Button>
-        <Button size="sm" variant="link" onClick={() => go("installed")}>Add one from a folder</Button>
-      </div>
-    </div>
+    </section>
   );
 }
 
@@ -184,7 +186,7 @@ function RemoveAgent({ id, label }: { id: string; label: string }) {
         <div className="settings-actions">
           <Button size="sm" variant="outline" onClick={() => setConfirm(false)}>Keep it</Button>
           <Button size="sm" variant="destructive" onClick={() => void window.hive.removeAgent(id)
-            .then(() => syncAgentPlugins()).then(() => go("agents"), (e: Error) => setError(e.message))}>Remove</Button>
+            .then(() => syncAgentPlugins()).then(() => go("plugins"), (e: Error) => setError(e.message))}>Remove</Button>
         </div>
       </div>}
   </section>;
@@ -253,7 +255,7 @@ function Facts({ def }: { def: AgentProviderDef }) {
 }
 
 function LaunchOptions({ def }: { def: AgentProviderDef }) {
-  const saved = useSettings().agents.options[def.id] ?? {};
+  const saved = stringOptions(pluginOptions(useSettings().plugins.state, "agent", def.id));
   const choices = useOptionChoices(def);
   if (!def.options?.length) return <p className="settings-note agent-options-empty">{def.label} has nothing to set at launch.</p>;
   return (
@@ -274,7 +276,7 @@ function OptionRow({ def, option: o, value, found }: {
 }) {
   const id = `agent-${def.id}-${o.id}`;
   const values = optionChoices(o, found?.values ?? []);
-  const set = (v: string) => patchSettings(`agents.options.${def.id}.${o.id}`, v);
+  const set = (v: string) => setPluginOption("agent", def.id, o.id, v);
   const unset = o.default ? `${o.default} (Hivemind default)` : `${def.label} decides`;
   const source = found === undefined ? `Asking ${def.bin}…`
     : found?.from === "list" ? `Listed by ${def.bin} ${o.list!.args.join(" ")}`

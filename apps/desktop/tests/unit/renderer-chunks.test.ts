@@ -32,7 +32,10 @@ const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../ou
 // Re-baselined for tailwind-merge 3: cn() is on every first-frame component and v3 carries
 // Tailwind v4's class grammar (~29 kB over v2; 1 009 683 before).
 // Re-baselined for sonner 2: the Toaster mounts with the app and v2 inlines its styles (~19 kB).
-const ENTRY_BASELINE = 1_058_031;
+// Re-baselined for widgets: notes, checklists and text are widgets now, so the canvas's first frame
+// draws through the widget body, its editable fields, the widget runtime and the agent kit (~44 kB;
+// the floating layer and the confirm dialog load later; 1 058 031 before).
+const ENTRY_BASELINE = 1_101_956;
 const ENTRY_MARGIN = 0.04;
 
 test("the default renderer path stays small, and three.js is gone from the build", (t) => {

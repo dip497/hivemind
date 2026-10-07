@@ -136,8 +136,6 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
         case "5": if (repoPath) { e.preventDefault(); spawnVis("issues"); } break;
         case "6": e.preventDefault(); addFrame(); break;
         case "7": e.preventDefault(); spawnBrowser(); break;
-        case "8": if (onCanvas() && !e.repeat) { e.preventDefault(); addBoard("note"); } break;
-        case "9": if (onCanvas() && !e.repeat) { e.preventDefault(); addBoard("checklist"); } break;
         case "Backspace":
         case "Delete": {
           const sel = boardRef.current.selectedId;

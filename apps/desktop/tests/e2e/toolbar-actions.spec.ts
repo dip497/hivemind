@@ -67,7 +67,8 @@ test("toolbar order, visibility and labels are per-view and keep live tools", as
   await expect(page.locator("[data-toolbar-label]")).toHaveCount(7);
   expect(await page.locator(".xterm").evaluate((node, old) => node === old, original)).toBe(true);
   await toView("windows");
-  await expect.poll(order).toEqual(["terminal", "agent", "explorer", "diff", "issues", "frame", "theme"]);
+  // Add is in every view: a widget can be added wherever you are.
+  await expect.poll(order).toEqual(["terminal", "agent", "explorer", "diff", "issues", "frame", "board", "theme"]);
   await expect(page.locator("[data-toolbar-label]")).toHaveCount(0);
   await toView("canvas");
   await expect.poll(order).toEqual(["agent", "explorer", "diff", "issues", "theme", "frame", "board"]);
@@ -96,7 +97,7 @@ test("selecting Browser as the only shortcut cannot activate it", async () => {
   await page.evaluate(() => window.hive.settingsSet("views.toolbars", { canvas: { actions: ["browser"] } }));
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
   await page.getByRole("button", { name: "settings", exact: true }).click();
-  await page.locator('[data-settings-page="tools"]').click();
+  await page.locator('[data-settings-page="plugins"]').click();
   await expect(page.getByRole("switch", { name: "Enable Browser", exact: true })).toHaveAttribute("aria-checked", "false");
   await page.getByRole("switch", { name: "Enable Browser", exact: true }).click();
   await close();

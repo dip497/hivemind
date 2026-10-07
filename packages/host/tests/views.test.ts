@@ -60,6 +60,7 @@ function computer() {
   let links = { pipes: [] as Array<{ src: string; dst: string }>, spawns: [] as Array<{ parent: string; child: string }> };
   const started: Array<{ repo: string; start: object }> = [];
   const closed: string[] = [];
+  const pressed: Array<{ id: string; press: unknown }> = [];
   const intents = new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") }));
   const store: WorkspaceStore = new WorkspaceStore({
     dir: path.join(dir, "workspaces"), person: newSeed(),
@@ -80,6 +81,7 @@ function computer() {
     close: async (tile) => { closed.push(tile); return store.removeTile(tile) !== null; },
     machines: { self: () => ({ device: "d1", name: "desk" }), mine: () => undefined, whose: () => undefined, saved: (id) => (id === "m1" ? "build box" : undefined) },
     intents,
+    widgets: { watch: (_repo, cb) => { cb([]); return () => {}; }, press: (_repo, id, press) => pressed.push({ id, press }) },
     onWarn: () => {},
   })], intents);
   store.setCore(repo, {
@@ -114,7 +116,7 @@ function computer() {
   const said = (c: { got: EventMessage[] }, session: string) =>
     c.got.filter((e) => e.event === "view.said" && e.params[0] === session).map((e) => e.params[1] as Record<string, unknown>);
   const audit = () => fs.readFileSync(path.join(dir, "audit.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>);
-  return { dir, repo, store, status, started, closed, caller, call, post, screen, said, audit, setLinks: (l: typeof links) => { links = l; server.publish("link.pipe", { src: "t1", dst: "t2", connected: true }); } };
+  return { pressed,  dir, repo, store, status, started, closed, caller, call, post, screen, said, audit, setLinks: (l: typeof links) => { links = l; server.publish("link.pipe", { src: "t1", dst: "t2", connected: true }); } };
 }
 const code = async (p: Promise<unknown>) => { try { await p; return "ok"; } catch (e) { return (e as { code?: string }).code; } };
 
@@ -184,7 +186,7 @@ test("a view opened on a workspace here is told, once ready, where it is (a phon
   assert.deepEqual(c.said(phone, session), [
     {
       type: "hello", v: 1, pluginId: "priya-board", capabilities: ["workspace:spawn", "workspace:close", "workspace:edit"], theme: { colors: {} },
-      layout: null, viewport: { w: 0, h: 0 }, visible: true, features: ["agentStatus"], device: { touch: true, compact: true },
+      layout: null, viewport: { w: 0, h: 0 }, visible: true, features: ["agentStatus", "widgets"], device: { touch: true, compact: true },
     },
     {
       type: "structure",
@@ -221,9 +223,9 @@ test("a screen that places live surfaces itself says so, and its view is told it
     c.post(phone, session, { type: "ready", v: 1 });
     return (c.said(phone, session).find((m) => m.type === "hello") as { features: string[] }).features;
   };
-  assert.deepEqual(await features(true), ["agentStatus", "surfaces"]);
-  assert.deepEqual(await features(false), ["agentStatus"]);
-  assert.deepEqual(await features(), ["agentStatus"]);
+  assert.deepEqual(await features(true), ["agentStatus", "widgets", "surfaces"]);
+  assert.deepEqual(await features(false), ["agentStatus", "widgets"]);
+  assert.deepEqual(await features(), ["agentStatus", "widgets"]);
   assert.equal(await code(c.call("view.open", ["priya-board", c.repo, null, "yes"], phone)), "BAD_REQUEST");
 });
 
@@ -335,4 +337,18 @@ test("a session ends when its caller closes it or goes, or when its host disable
   heard = told();
   change("idle", "Priya's last shell");
   assert.equal(told(), heard, `nothing more in ${gone}`);
+});
+
+test("a widget pressed through a view is the opener's press, held to its role: one who may only look presses nothing", async () => {
+  const c = computer();
+  installed("widgets", { name: "Widgets", phone: true });
+  const open = async (who: ReturnType<typeof c.caller>) => {
+    const { session } = await c.call("view.open", ["widgets", c.repo, { w: 400, h: 800, theme: { colors: {} } }], who) as { session: string };
+    c.post(who, session, { type: "ready", v: 1 });
+    c.post(who, session, { type: "pressWidget", id: "w1", action: "pat" });
+  };
+  await open(c.caller((m) => m !== "widget.press", { ...PHONE, access: "view" }));
+  assert.deepEqual(c.pressed, []);
+  await open(c.caller());
+  assert.deepEqual(c.pressed, [{ id: "w1", press: { action: "pat" } }]);
 });

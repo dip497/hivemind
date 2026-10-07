@@ -343,3 +343,23 @@ select option { background: var(--color-bg2); color: var(--color-fg); }
   .hm-update-bar > span { transition: none; }
   .hm-update-bar[data-busy="1"] > span::after { animation: none; }
 }
+
+/* A plugin's own page (plugins/PluginPage.tsx): what it is, then what it may do, its README, its details. */
+.plugin-page-head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.plugin-page-meta { display: flex; align-items: center; gap: 8px; color: var(--color-fg3); font-size: 12px; }
+.plugin-page-description { margin-top: 4px; font-size: 13px; color: var(--color-fg2); max-width: 65ch; }
+.plugin-readme .md-preview { border: 1px solid var(--color-line); border-radius: 10px; padding: 16px 20px; max-width: 80ch; }
+.plugin-details { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 12.5px; }
+.plugin-details dt { color: var(--color-fg3); }
+.plugin-details dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.plugin-name-link { all: unset; cursor: pointer; }
+.plugin-name-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.plugin-name-link:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 3px; }
+
+/* Plugins: one page for every kind, one page per plugin with tabs. */
+.plugins-kind-heading { font-size: 13px; font-weight: 600; color: var(--color-fg); margin: 4px 0 -4px; }
+.plugin-back { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; }
+.plugin-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--color-line); }
+.plugin-tabs > button { padding: 6px 10px; font-size: 13px; color: var(--color-fg2); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.plugin-tabs > button:hover { color: var(--color-fg); }
+.plugin-tabs > button[aria-selected="true"] { color: var(--color-fg); border-bottom-color: var(--color-select); }

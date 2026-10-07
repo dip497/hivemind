@@ -9,31 +9,10 @@ import type { InputKind } from "@hivemind/agents";
 import { machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
 import type { PlanReview } from "@hivemind/workspace-api/plans";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
+import type { AgentItem } from "@hivemind/workspace-api/agents";
 import { agentOf, folderOf, manifestOf, type HeldBoard, type WaitingStatus } from "./needs.js";
 
-/** An agent here, as the person's devices are told of it. */
-export interface AgentItem {
-  /** The workspace it is in: its id, and its name. */
-  workspace: string;
-  name: string;
-  tile: string;
-  /** What it is called (spec/needs.md). */
-  agent: string;
-  /** The agent its tile runs, by its manifest. */
-  program?: { id: string; label: string };
-  /** Its status's state, and when that last changed (ms since the epoch). */
-  state: string;
-  since: number;
-  /** What the machine it runs on is called (spec/needs.md 0.3). */
-  machine: string;
-  /** What it waits for, while it waits: on the person, or on the agent supervising it. */
-  waiting?: { kind: InputKind; since: number; plan?: string; decide?: true };
-  /** Its manifest says which keys interrupt its turn. */
-  interrupt?: true;
-  /** Its manifest maps its session file's records, so `agent.conversation` can say what it and the
-   *  person said (spec/agents.md 0.4). */
-  conversation?: true;
-}
+export type { AgentItem } from "@hivemind/workspace-api/agents";
 
 /** What this device knows of the agent each tile runs. */
 export interface AgentFacts {

@@ -14,6 +14,7 @@
  *
  * What it does not do is the app's: start tiles, or refuse a kind of tile the app cannot spawn.
  */
+import type { SettingValue } from "./settings.js";
 import { connect, type ViewClient } from "./client.js";
 import {
   PORT_HANDSHAKE, PROTOCOL_VERSION, VIEW_FEATURES, parsePluginMessage, refusal,
@@ -35,6 +36,8 @@ export interface FakeHostOptions {
   /** Default: a desktop's, no touch and not compact. */
   device?: ViewDevice;
   theme?: ViewTheme;
+  /** What the person set the view to, in `hello.settings` (1.7); `send({ type: "settings", … })` changes it. */
+  settings?: Record<string, SettingValue>;
   /** The layout the view saved last time, back in `hello.layout`. */
   layout?: unknown;
   viewport?: { w: number; h: number };
@@ -62,7 +65,10 @@ export interface FakeHost {
     readonly activity: readonly string[];
     readonly presence: boolean;
     readonly participants: boolean;
+    readonly widgets: boolean;
   };
+  /** 1.8: every widget the view pressed (`action`) or clicked, in order. */
+  readonly pressed: readonly ({ id: string; action: unknown } | { id: string; click: true })[];
   /** A client of this host, as `connect()` gives a view. */
   connect(opts?: { timeoutMs?: number }): Promise<ViewClient>;
   /** Hand the port to a page that calls `connect()` itself, on `target` (its window). */
@@ -99,7 +105,8 @@ export function fakeHost(opts: FakeHostOptions = {}): FakeHost {
     received, refused, commands,
     rects: [] as SurfaceRect[],
     layout: undefined as unknown,
-    subscribed: { status, events: null as { kinds: ViewEventKind[]; custom: string[] } | null, activity: [] as string[], presence: false, participants: false },
+    subscribed: { status, events: null as { kinds: ViewEventKind[]; custom: string[] } | null, activity: [] as string[], presence: false, participants: false, widgets: false },
+    pressed: [] as ({ id: string; action: unknown } | { id: string; click: true })[],
   };
   const post = (msg: HostMessage) => port.postMessage(msg);
   const answer = async (m: Request) => {
@@ -126,6 +133,7 @@ export function fakeHost(opts: FakeHostOptions = {}): FakeHost {
       post({
         type: "hello", v: PROTOCOL_VERSION, pluginId: opts.pluginId ?? "test-view", capabilities, theme: opts.theme ?? THEME,
         layout: opts.layout ?? null, viewport: opts.viewport ?? { w: 1280, h: 800 }, visible: opts.visible ?? true, features, device: opts.device ?? DESKTOP,
+        ...(opts.settings ? { settings: opts.settings } : {}),
       });
       return;
     }
@@ -156,6 +164,9 @@ export function fakeHost(opts: FakeHostOptions = {}): FakeHost {
       case "unsubscribePresence": s.presence = false; return;
       case "subscribeParticipants": s.participants = true; return;
       case "unsubscribeParticipants": s.participants = false; return;
+      case "subscribeWidgets": s.widgets = true; return;
+      case "unsubscribeWidgets": s.widgets = false; return;
+      case "pressWidget": host.pressed.push(m.click ? { id: m.id, click: true } : { id: m.id, action: m.action }); return;
       case "request": void answer(m); return;
       default: return;
     }

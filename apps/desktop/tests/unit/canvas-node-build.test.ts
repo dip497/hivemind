@@ -108,13 +108,13 @@ test("a board box is a node of its kind, drawn RELATIVE to its frame and in fron
     frames: [frame({ id: "f", x: 100, y: 50 })],
     tiles: [tile({ id: "sh" })],
     objects: [
-      { id: "n1", kind: "note", frame: "f", x: 130, y: 90, w: 220, h: 180, z: 1, color: "yellow", text: "in the frame" },
-      { id: "t1", kind: "text", x: 10, y: 20, w: 320, h: 64, text: "loose" },
+      { id: "n1", kind: "widget", widget: "note", placement: "board", frame: "f", x: 130, y: 90, w: 220, h: 180, z: 1, text: "in the frame" },
+      { id: "t1", kind: "widget", widget: "text", placement: "board", x: 10, y: 20, w: 320, h: 64, text: "loose" },
       { id: "a1", kind: "arrow", from: { id: "n1", side: "right" }, to: { id: "sh", side: "left" }, label: "" },
     ],
   }));
   const note = byId(nodes, "n1");
-  assert.equal(note.type, "note");
+  assert.equal(note.type, "widget");
   assert.equal(note.parentId, "f");
   assert.deepEqual(note.position, { x: 30, y: 40 });
   const z = (id: string) => (byId(nodes, id).style as { zIndex: number }).zIndex;

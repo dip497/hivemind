@@ -1,4 +1,4 @@
-# Workspace API (0.17)
+# Workspace API (0.19)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -180,6 +180,12 @@ log.
 
 | `status.all` | | `[{tileId, status}]`, every agent session's status (`spec/status.md`) | read |
 | `link.list` | | `{pipes: [{src, dst}], spawns: [{parent, child}]}` | read |
+| `agent.list` | `repo` | `{seq, agents}`: the workspace's agents as they are now, and the number of the last change (0.18) | read |
+| `agent.since` | `repo`, `seq` | `{seq, changes, events}`: each change and event after `seq`, or null when the host no longer has them all: list again (0.18) | read |
+| `widget.all` | `repo` | what each widget in the workspace last drew, by its id: never stored, drawn again when its code next runs (0.18) | read |
+| `widget.run` | `repo` | whether the caller runs the workspace's widgets: a window of the person's, on the host's machine or on another of their devices with it open, the first to ask, until it lets go (`widget.release`) or goes; someone else's device never does (0.19) | — |
+| `widget.packages` | `repo` | the widgets installed on the host, `[{id, name, version?, options, chrome, permissions, placement, size, assets, code, draw?, icon?}]`: what a window showing it offers, draws and runs; `code` is empty for anyone but the person (0.19) | read |
+| `widget.asset` | `repo`, `widget`, `name` | an image of an installed widget, as a data URL, or null (0.18) | read |
 | `appearance.get` | | the host's look as its guests show its workspaces (0.17): its settings' `appearance`, checked, with nothing that names a file on its disk (a picture or video wallpaper is the default one, no overlays) and the default fonts (a guest reads in its own). A `view` peer may ask | read |
 | `terminal.open` | `{tileId, tile?, cwd, cmd, args?, cols, rows, env?, initialPrompt?, attachOnly?, liveOnly?}` (`tile`: the tile it is the session of, when `tileId` is not `hm:<tile>`) | `{pid, joined}`: the first client to open a session starts it; one that opens it after joins it (`joined`), sent the host's screen of it first | target the tile, detail the program, when it starts a session the host did not ask for itself and the client did not only attach to |
 | `plan.list` | `repo` | the plans the workspace's agents wait on a person for: `[{requestId, tileId, plan, cwd}]`; each after it is a `plan.review` event | |
@@ -249,6 +255,9 @@ layout the store cannot hold is `BAD_REQUEST`.
 | `store.shown` | `repo` or null, `frame` or null | the workspace the client shows now, and the frame its user is in there (the control plane opens a tile there) |
 | `view.post` | `session`, `message` | what the view of the caller's session posts to its host, a view protocol message (below) |
 | `view.screen` | `session`, `screen` | the screen the view of the caller's session is shown on now, its size and look: its host tells the view what of them changed (below, 0.14) |
+| `widget.draw` | `repo`, `id`, `tree` or null | what the widget `id` draws now, from the window that runs the workspace's widgets alone; told to every client at most every 250 ms, the latest winning; null: it draws nothing (0.18) |
+| `widget.release` | `repo` | the caller no longer runs the workspace's widgets: the others are sent `widget.runner` (0.18) |
+| `widget.press` | `repo`, `id`, `{action}` or `{click: true}` | a press on the widget `id` where its code does not run (a guest's window, a view on a phone): passed to the window that runs it as `widget.pressed`; an `action` over 1 KB is dropped. Needs `edit` (0.19) |
 | `presence.set` | `repo`, `{name, color, cursor, over, selection}` or null | where the client's person is in the workspace: `cursor` `{x, y}` in board coordinates (null: off the board), `over` the id of the tile, frame or board object under it (null: none), `selection` the ids they have selected (at most 100); null: they left it. Never stored: it lasts until the connection closes, they leave, or a minute passes without another |
 
 A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch", "base"?,
@@ -260,6 +269,11 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | Event | Params | Sent |
 |---|---|---|
 | `status.changed` | `{seq, tileId, status}` | to every client, on each change to an agent session's status |
+| `agent.changed` | `repo`, `{seq, agent}` or `{seq, gone}` | to every client, an agent of the workspace as it is now, or its going (0.18) |
+| `agent.event` | `repo`, `{seq, at, kind, tile, detail?}` | to every client, what happened to an agent: `came`, `went`, `turnEnded`, `waiting`, `answered` (0.18) |
+| `widget.drawn` | `repo`, `id`, `tree` or null | to every client, what a widget draws now (0.18) |
+| `widget.runner` | `repo` | to every client of the workspace, a peer of the person's included, when no window runs its widgets: the first to ask (`widget.run`) does (0.19) |
+| `widget.pressed` | `repo`, `id`, `{action}` or `{click: true}` | to the window that runs the workspace's widgets, a press made elsewhere (0.19) |
 | `link.pipe` | `{src, dst, connected}` (`dst` null: every pipe from `src`) | to every client, as a pipe between agents is connected or cut |
 | `link.spawn` | `{child, parent, connected}` (`parent` null: every wire touching `child`) | to every client, as an agent spawns another, or the tile goes |
 | `tile.opened` | `{tileId, repo, prompt?, background}` | to every client, as the control plane opens a tile, before it reaches the layout: a client showing `repo` starts it |

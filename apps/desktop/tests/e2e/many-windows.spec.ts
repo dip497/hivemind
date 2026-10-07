@@ -4,6 +4,7 @@
 // hook injection each gets, and the PTY daemon is on: only a host that keeps each session's
 // screen can show it to a window that opens late. Its own app, so its spawns count against a
 // rate limit of their own.
+import { addFromMenu } from "./helpers/board";
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -141,7 +142,7 @@ const placeIn = (w: Page, tile: string) => w.evaluate((id) => {
   return m ? { x: Math.round(Number(m[1])), y: Math.round(Number(m[2])) } : null;
 }, tile);
 const cameraOf = (w: Page) => w.evaluate(() => (document.querySelector(".react-flow__viewport") as HTMLElement | null)?.style.transform ?? "");
-const notes = (w: Page) => w.locator(".react-flow__node-note [data-board-text]").allTextContents();
+const notes = (w: Page) => w.locator('.react-flow__node-widget:has([data-widget="note"]) [data-board-text]').allTextContents();
 /** A point on `w`'s canvas with nothing on it, away from its chrome. */
 const emptySpot = (w: Page) => w.evaluate(() => {
   const pane = document.querySelector(".react-flow__pane")!.getBoundingClientRect();
@@ -221,10 +222,8 @@ test("two windows share where tiles and notes are, and each keeps its own camera
     for (let i = 0; i < 3; i++) await zoomOut(w);
     await w.waitForTimeout(400);
     const at = (await emptySpot(w))!;
-    await w.mouse.click(at.x, at.y); // the canvas has the keys, not the shell
-    await w.keyboard.press("8");
-    await w.keyboard.type(text);
-    await w.keyboard.press("Escape");
+    await w.mouse.click(at.x, at.y);
+    await addFromMenu(w, "note", text);
     return at;
   };
   const olderBoard = await second.evaluate((r) => window.hive.workspaceObjectsSync(r), repo);

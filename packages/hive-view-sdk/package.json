@@ -10,6 +10,7 @@
     ".": "./src/index.ts",
     "./protocol": "./src/protocol.ts",
     "./manifest": "./src/manifest.ts",
+    "./settings": "./src/settings.ts",
     "./testing": "./src/testing.ts"
   },
   "scripts": {

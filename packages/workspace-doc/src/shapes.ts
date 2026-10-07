@@ -76,8 +76,8 @@ export interface CoreLayout {
   frameOf?: Record<string, string>;
 }
 
-/** What a board object is (design §4.2 G). */
-export const BOARD_OBJECT_KINDS = ["note", "checklist", "text", "arrow", "widget"] as const;
+/** What a board object is (design §4.2 G): an arrow, or a widget (notes, checklists and text labels are widgets). */
+export const BOARD_OBJECT_KINDS = ["arrow", "widget"] as const;
 export type BoardObjectKind = (typeof BOARD_OBJECT_KINDS)[number];
 
 /** The sides of a tile, frame or board object an arrow can meet. */
@@ -107,36 +107,39 @@ interface BoardObjectFields {
 }
 
 /**
- * A note, checklist or text label: a box holding text. `x` and `y` are relative to its frame's
- * top-left when it has a `frame`, so moving the frame changes nothing here; else they are on the
- * canvas. `w` and `h` are its size.
+ * A widget: what a plugin draws, the app's own sticky note, checklist and text label among them.
+ * `widget` names its package. It sits on the board (`placement: "board"`, with a box: `x` and `y`
+ * relative to its frame's top-left when it has a `frame`, so moving the frame changes nothing here,
+ * else on the canvas; `w` and `h` its size) or floats over every view (the default), where each
+ * person places it on their own screen.
+ *
+ * What people write in it is its content, merged as a note's is: `text` by character, `items` (a
+ * list's lines) one by one; changing it is an edit, taken back by undo. `state` is what its code
+ * keeps and `options` what the person set for it, each capped at `WIDGET_FIELD_BYTES`; neither is
+ * an undo step. What it draws is never stored here (the workspace API's `widget.drawn`).
  */
-interface BoxFields extends BoardObjectFields {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  text: string;
+export interface WidgetObject extends BoardObjectFields {
+  kind: "widget";
+  widget: string;
+  placement?: "board" | "screen";
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+  text?: string;
+  items?: ChecklistItem[];
+  state?: unknown;
+  options?: Record<string, unknown>;
 }
-
-export interface NoteObject extends BoxFields { kind: "note" }
-export interface TextObject extends BoxFields { kind: "text" }
-/** `text` is the checklist's title. */
-export interface ChecklistObject extends BoxFields { kind: "checklist"; items: ChecklistItem[] }
-/**
- * A widget: a box a plugin draws. `widget` names its package; `render` is what its code last
- * drew (a tree every viewer draws with the app's own code, so nobody runs the widget to see it);
- * `state` is what it keeps. Each is capped at `WIDGET_FIELD_BYTES`.
- */
-export interface WidgetObject extends BoxFields { kind: "widget"; widget: string; render?: unknown; state?: unknown }
 export interface ArrowObject extends BoardObjectFields { kind: "arrow"; from: ArrowEnd; to: ArrowEnd; label: string }
 
 /**
  * A board object as the window keeps it. The document merges its text (`text`, `label`, each
- * item's `text`) by character and a checklist's items one by one; other fields are kept as
- * given, and the last write of each wins.
+ * item's `text`) by character and a list's items one by one; other fields are kept as given, and
+ * the last write of each wins. A note, checklist or text label an older version wrote is read as
+ * the widget it is now.
  */
-export type BoardObject = NoteObject | TextObject | ChecklistObject | ArrowObject | WidgetObject;
+export type BoardObject = ArrowObject | WidgetObject;
 
-/** The most a widget's `render` or `state` may take, as JSON. */
+/** The most a widget's `state`, or what it draws, may take, as JSON. */
 export const WIDGET_FIELD_BYTES = 16_384;

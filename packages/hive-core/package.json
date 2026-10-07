@@ -24,7 +24,11 @@
     "./tool-plugins": "./src/tool-plugins.ts",
     "./toolbar": "./src/toolbar.ts",
     "./plugin-catalog": "./src/plugin-catalog.ts",
-    "./ipc": "./src/ipc.ts"
+    "./ipc": "./src/ipc.ts",
+    "./plugin-settings": "./src/plugin-settings.ts",
+    "./widget-api": "./src/widget-api.ts",
+    "./widget-format": "./src/widget-format.ts",
+    "./widgets": "./src/widgets.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -96,9 +96,9 @@ test.afterAll(async () => {
 
 const card = (id: string) => page.locator(`[data-agent-card="${id}"]`);
 const detail = () => page.locator("[data-agent-detail]");
-/** Overview → the agent's own page. */
+/** Plugins → the agent's own page (its Settings tab). */
 async function openAgent(id: string): Promise<void> {
-  await openSettings("agents");
+  await openSettings("plugins");
   await card(id).click();
   await expect(detail()).toHaveAttribute("data-agent-detail", id);
 }
@@ -113,23 +113,20 @@ async function switcherHas(id: string): Promise<boolean> {
 }
 
 test("a manifest dropped on disk becomes a real provider in the running app", async () => {
-  await openSettings("agents");
+  await openSettings("plugins");
   await expect(card("acme")).toContainText("Acme Coder");
   // The row says what it runs, not where it came from.
   await expect(card("acme")).toContainText("acme");
   await expect(card("claude")).toHaveCount(1);
-  // The Agents group folds to its overview; opening it lists installed agents.
-  await expect(page.locator('[data-settings-page="agent:acme"]')).toHaveCount(0);
-  await page.getByRole("group", { name: "Agents" }).getByRole("button", { name: "Agents", exact: true }).click();
-  await expect(page.locator('[data-settings-page="agent:acme"]')).toHaveCount(1);
+  // It has its own page, opened from its row like every plugin's.
+  await expect(page.locator('[data-plugin-open="agent:acme"]')).toHaveCount(1);
   expect(await switcherHas("acme")).toBe(true);
 });
 
 test("an agent whose CLI is missing says so, links to its install page, and is not offered as ready", async () => {
-  await openSettings("agents");
+  await openSettings("plugins");
   await expect(card("ghost")).toHaveAttribute("data-state", "missing");
   await expect(card("ghost")).toContainText("Not installed");
-  await expect(page.locator('[data-settings-page="agent:ghost"]')).toHaveCount(0);
   await openAgent("ghost");
   await expect(detail().locator(".agent-req")).toHaveAttribute("data-state", "missing");
   await expect(detail().getByRole("link", { name: /Get Ghost/ })).toHaveAttribute("href", "https://ghost.example.dev/install");
@@ -183,7 +180,7 @@ test("an agent the repository ships runs in that repository, and nowhere else", 
 });
 
 test("a manifest that claims a capability nothing backs is refused, and does not take the others down", async () => {
-  await openSettings("agents");
+  await openSettings("plugins");
   await expect(card("liar")).toHaveAttribute("data-state", "unavailable");
   await expect(card("acme")).toHaveAttribute("data-state", "on");
   await openAgent("liar");
@@ -198,7 +195,7 @@ test("each agent shows its own launch options, and a choice is saved for that ag
   // the stub CLI's --help lists nothing, so the values are the ones the manifest maps specially
   await expect(mode.locator("option")).toHaveText(["Acme Coder decides", "plan"]);
   await mode.selectOption("plan");
-  await expect.poll(() => page.evaluate(() => window.hive.settingsGet().then((s) => s.agents.options))).toEqual({ acme: { mode: "plan" } });
+  await expect.poll(() => page.evaluate(() => window.hive.settingsGet().then((s) => s.plugins.state))).toEqual({ "agent:acme": { options: { mode: "plan" } } });
 
   // A published agent's own option, mapped to its CLI's flag rather than passed through.
   await openAgent("kiro");
@@ -211,13 +208,13 @@ test("switching an agent off in Settings removes it everywhere, and back on rest
   await expect(toggle).toHaveAttribute("aria-checked", "true");
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "false");
-  await openSettings("agents");
+  await openSettings("plugins");
   await expect(card("acme")).toHaveAttribute("data-state", "off");
   expect(await switcherHas("acme")).toBe(false);
 
   await openAgent("acme");
   await detail().getByRole("switch").click();
-  await openSettings("agents");
+  await openSettings("plugins");
   await expect(card("acme")).toHaveAttribute("data-state", "on");
   expect(await switcherHas("acme")).toBe(true);
 });
@@ -226,17 +223,17 @@ test("a catalog agent can be switched off too, and any launchable agent can be t
   await openAgent("codex");
   await detail().getByRole("button", { name: "Make default" }).click();
   await expect(detail().locator(".agent-badge")).toHaveText("Default");
-  await openSettings("agents");
+  await openSettings("plugins");
   await expect(page.locator('[data-default-choice="codex"]')).toHaveAttribute("aria-checked", "true");
   await openAgent("codex");
   await detail().getByRole("switch").click();
-  await openSettings("agents");
+  await openSettings("plugins");
   await expect(card("codex")).toHaveAttribute("data-state", "off");
   expect(await switcherHas("codex")).toBe(false);
   expect(await switcherHas("claude")).toBe(true);
   await openAgent("codex");
   await detail().getByRole("switch").click();
-  await openSettings("agents");
+  await openSettings("plugins");
   await page.locator('[data-default-choice="claude"]').click();
   await expect(page.locator('[data-default-choice="claude"]')).toHaveAttribute("aria-checked", "true");
 });

@@ -5,6 +5,8 @@
  */
 import type { SessionStatus } from "@hivemind/agent-host/status-store";
 
+type InputKind = NonNullable<SessionStatus["kind"]>;
+
 /** A change to an agent session's status. `tileId` is the bare tile id; `seq` orders changes. */
 export interface StatusChange {
   seq: number;
@@ -79,3 +81,41 @@ export interface Links {
   pipes: Array<{ src: string; dst: string }>;
   spawns: Array<{ parent: string; child: string }>;
 }
+
+/** An agent here, as the person's devices are told of it. */
+export interface AgentItem {
+  /** The workspace it is in: its id, and its name. */
+  workspace: string;
+  name: string;
+  tile: string;
+  /** What it is called (spec/needs.md). */
+  agent: string;
+  /** The agent its tile runs, by its manifest. */
+  program?: { id: string; label: string };
+  /** Its status's state, and when that last changed (ms since the epoch). */
+  state: string;
+  since: number;
+  /** What the machine it runs on is called (spec/needs.md 0.3). */
+  machine: string;
+  /** What it waits for, while it waits: on the person, or on the agent supervising it. */
+  waiting?: { kind: InputKind; since: number; plan?: string; decide?: true };
+  /** Its manifest says which keys interrupt its turn. */
+  interrupt?: true;
+  /** Its manifest maps its session file's records, so `agent.conversation` can say what it and the
+   *  person said (spec/agents.md 0.4). */
+  conversation?: true;
+}
+
+/** What happened to an agent, as a reader acts on it. */
+export type AgentEventKind = "came" | "went" | "turnEnded" | "waiting" | "answered";
+export interface AgentEvent {
+  seq: number;
+  at: number;
+  kind: AgentEventKind;
+  tile: string;
+  /** turnEnded: how (done, failed, interrupted, limited). waiting: on what. */
+  detail?: string;
+}
+
+/** One numbered change: an agent as it is now, or its going. */
+export type AgentChange = { seq: number; agent: AgentItem } | { seq: number; gone: string };

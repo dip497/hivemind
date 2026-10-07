@@ -132,6 +132,8 @@ export interface MethodDeps {
   callRenderer: (method: string, params: unknown, timeoutMs: number) => Promise<unknown>;
   /** Re-read settings.json (edited by the CLI) and broadcast it. */
   reloadSettings: () => Promise<unknown>;
+  /** Re-list the installed widgets (`hive widgets install|remove`) and tell every window. */
+  widgetsChanged?: () => void;
   /** Write to a tile's pty RIGHT NOW. Returns false if the tile has no live pty.
    *  Raw bytes only (key sequences) — for anything the agent must READ, use
    *  `deliverToTile`, which waits for it to be at its prompt. */
@@ -823,7 +825,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         return effect(call, { verb: method, target: (r) => r.tileId }, async () => {
           if (p.tool !== BROWSER_TOOL_ID) throw new HcpError("UNSUPPORTED", "Unknown tool id");
           const availability = tileKindAvailability("browser", deps.toolsSettings?.() ?? { enabledPlugins: [], disabledTools: [] });
-          if (!availability?.available) throw new HcpError("UNAUTHORIZED", "Browser is disabled; enable it in Settings under Tools");
+          if (!availability?.available) throw new HcpError("UNAUTHORIZED", "Browser is disabled; switch it on in Settings ▸ Plugins, or `hive plugins enable tool:hivemind/web`");
           if (p.frame !== undefined && (typeof p.frame !== "string" || !p.frame || p.frame.length > 256)) throw new HcpError("BAD_REQUEST", "frame must be an id");
           if (p.url !== undefined) {
             if (typeof p.url !== "string" || p.url.length > 8192) throw new HcpError("BAD_REQUEST", "Invalid URL");
@@ -869,6 +871,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // the scan (through main, which refreshes its own catalog on the way).
       case "agents.rescan":
         return effect(call, { verb: method }, () => deps.callRenderer("agents.rescan", {}, RENDERER_TIMEOUT));
+      // `hive widgets install|remove` changed the widgets folder: every window lists them again.
+      case "widgets.rescan":
+        return effect(call, { verb: method }, async () => { deps.widgetsChanged?.(); return { ok: true }; });
       // `hive config set` / `hive theme use` edited settings.json: re-read it
       // and push the result to the renderer (main owns the file while running).
       case "settings.reload":
@@ -929,6 +934,15 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // `hive share`, `hive people`, `hive join` where the app, not `hive host`, serves this machine.
       case "host.status":
         return { workspaces: deps.workspaces.repos().map((repo) => ({ repo, workspace: deps.workspaces.ownership(repo)?.workspaceId ?? null })) };
+      // The agents of a workspace as its feed says (agent-feed.ts): the caller's own, or `repo`.
+      case "agent.list":
+      case "agent.since": {
+        if (!deps.workspaceApi) throw new HcpError("UNSUPPORTED", "the agent feed is not served here");
+        const repo = typeof p.repo === "string" && p.repo ? p.repo
+          : call.actor.kind === "tile" ? deps.workspaces.workspaceOf(bareOf(call.actor.tile)) : null;
+        if (!repo) throw new HcpError("BAD_REQUEST", "which workspace? give repo (a folder `hive ctl list-workspaces` lists)");
+        return await deps.workspaceApi(method, method === "agent.list" ? [repo] : [repo, Number(p.seq)], call.actor);
+      }
       case "host.people": {
         if (call.actor.kind !== "person") throw new HcpError("UNAUTHORIZED", "only the person at this machine shares and answers who joins, not an agent");
         const verb = String(p.method ?? "");

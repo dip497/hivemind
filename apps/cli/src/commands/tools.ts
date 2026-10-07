@@ -7,7 +7,7 @@
 import { defineCommand } from "citty";
 import { readSettings } from "@hivemind/core";
 import { bundledToolRegistry } from "@hivemind/core/tool-plugins";
-import type { ToolsSettings } from "@hivemind/core/settings-schema";
+import { toolPreferences, type ToolsSettings } from "@hivemind/core/settings-schema";
 import { err, ok } from "../format.js";
 
 const NO_PLUGINS: ToolsSettings = { enabledPlugins: [], disabledTools: [] };
@@ -18,7 +18,7 @@ const listCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     try {
-      const tools = await readSettings().then((s) => s.tools).catch(() => NO_PLUGINS);
+      const tools = await readSettings().then(toolPreferences).catch(() => NO_PLUGINS);
       const resolved = bundledToolRegistry.resolve(tools);
       const plugins = [...new Set(bundledToolRegistry.tools.map((t) => t.pluginId))].map((pluginId) => ({
         id: pluginId,

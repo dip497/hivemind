@@ -52,3 +52,17 @@ test("the host asks the view where a tile is, and hears its answer", async () =>
   expect(await host.reveal("t1")).toEqual({ x: 1, y: 2, w: 3, h: 4 });
   expect(await host.reveal("t2")).toBeNull();
 });
+
+test("a view reads what the person set it to, and hears each change", async () => {
+  const host = fakeHost({ settings: { columns: "todo" } });
+  const hm = await host.connect();
+  expect(hm.settings).toEqual({ columns: "todo" });
+  const heard: unknown[] = [];
+  hm.on("settings", (s) => heard.push(s));
+  host.send({ type: "settings", settings: { columns: "all" } });
+  await host.settle();
+  expect(heard).toEqual([{ columns: "all" }]);
+  expect(hm.settings).toEqual({ columns: "all" });
+  // A host before 1.7 sends none: empty, so a view reads each with its default beside it.
+  expect((await fakeHost().connect()).settings).toEqual({});
+});

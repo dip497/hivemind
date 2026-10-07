@@ -129,6 +129,16 @@ hive agents list --found                # only agents whose CLI is on this machi
 hive agents install <dir>               # dir with agent.yaml; checked before it is copied
 hive agents remove <id>                 # removes the agent from this machine; a catalog agent stays removed
 
+hive widgets list                       # the app's own widgets and the ones you added
+hive widgets install <dir>|@owner/name  # from a folder, or from HiveHub
+hive widgets remove <id>
+
+hive plugins list [--kind agent|view|widget|tool]   # every plugin on this machine, on or off
+hive plugins show agent:claude          # its settings: each one's value and what it takes
+hive plugins enable tool:hivemind/web   # or disable
+hive plugins set view:@you/board columns all   # checked against what the setting takes
+hive plugins reset view:@you/board [columns]   # back to its default
+
 hive config path
 hive config get [dotted.path]
 hive config set <path> '<json>'
@@ -141,6 +151,11 @@ hive upgrade [--dev]
 
 `hive config set` takes a JSON value (`'"nord"'` for strings) and asks a running app to
 reload; themes cover ubuntu, dracula, nord, solarized-dark, one-dark.
+
+`hive plugins` writes the same record Settings ▸ Plugins does, one per plugin under
+`plugins.state["<kind>:<id>"]` in settings.json: whether it is on, and the values set for the
+settings it declares. A value that does not fit is refused with what does
+(`columns is one of: todo, all`); a number is kept within its range.
 
 `hive agents install` and `remove` ask a running app to rescan, so the change shows up
 without a restart. `hive ctl spawn --agent` and `hive ctl workflow` accept agents added
@@ -231,14 +246,12 @@ or upgrading the host leaves its terminals and agents running.
 
 ## Optional tools
 
-Browser is an optional bundled tool. Switch it on in **Settings > Tools**, or set
-the enabled plugin list through the CLI. These commands replace the complete list;
-read `hive config get tools.enabledPlugins` first if you have other plugins enabled.
+Browser is an optional bundled tool. Switch it on in **Settings ▸ Plugins**, or from the CLI:
 
 ```sh
-hive config set tools.enabledPlugins '["hivemind/web"]'
+hive plugins enable tool:hivemind/web
 hive ctl open-tool hivemind/web/browser --url https://example.com --json
-hive config set tools.enabledPlugins '[]'
+hive plugins disable tool:hivemind/web
 ```
 
 `open-tool` accepts `--frame <frame-id>`. Browser URLs must use HTTP/HTTPS or

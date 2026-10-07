@@ -25,7 +25,7 @@ import { starterFiles } from "../view-starter.js";
 async function rescanApp(): Promise<boolean> {
   try { await hcpCall("views.rescan", {}, 5000); return true; } catch { return false; }
 }
-const afterNote = (rescanned: boolean) => (rescanned ? "app rescanned" : "app not running or unreachable — restart it, or open Settings ▸ View");
+const afterNote = (rescanned: boolean) => (rescanned ? "app rescanned" : "app not running or unreachable — restart it, or open Settings ▸ Plugins");
 
 const fail = (ctx: { json: boolean }, e: unknown, fallback: string): never =>
   err(ctx, e instanceof HiveError ? e.code : fallback, e instanceof Error ? e.message : String(e));
@@ -79,8 +79,8 @@ const removeCmd = defineCommand({
   },
 });
 
-/** The GitHub login `gh` is signed in as: a view's scope is its publisher's account. */
-function githubLogin(): string | null {
+/** The GitHub login `gh` is signed in as: a view's or widget's scope is its publisher's account. */
+export function githubLogin(): string | null {
   try { return execFileSync("gh", ["api", "user", "--jq", ".login"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null; } catch { return null; }
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Download, Folder, GitCompare, Earth, LayoutGrid, ListChecks, ListTodo, LoaderCircle, MoveUpRight, Palette, RotateCw, Scan, StickyNote, Terminal, Type, Upload, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, Download, Folder, GitCompare, Earth, ListTodo, LoaderCircle, MoveUpRight, Palette, RotateCw, Scan, Shapes, Terminal, Upload, type LucideIcon } from "lucide-react";
 import type { ToolbarAction, ToolbarActionId } from "@hivemind/core/toolbar";
 import { Button } from "../components/ui/button";
 import { MenuItem } from "../components/ui/menu-item";
@@ -8,7 +8,8 @@ import { notReady, openAgentSettings, useAgentPresence } from "../agent-plugins"
 import { resolveViewId, useViews } from "./workspace-view";
 import { setViewMode, useViewMode } from "./view-mode-store";
 import type { BoardChoice } from "../board-objects/board-model";
-import { useWidgetPackages } from "../board-objects/widget-runtime";
+import { useEnabledWidgetPackages } from "../board-objects/widget-runtime";
+import { WidgetIcon } from "../plugins/WidgetIcon";
 
 export interface StandardToolbarProps {
   actions: readonly ToolbarAction[];
@@ -21,8 +22,10 @@ export interface StandardToolbarProps {
   onSpawnAgent: (agent: { id: string; cmd: string; defaultArgs?: string[]; label: string }) => void;
   onFrame: () => void;
   onBrowser: () => void;
-  /** Add to the board; absent where the board is not drawn (every view but the canvas). */
+  /** Add something: a widget in any view; a note, checklist, text or arrow where the board is drawn. */
   onBoard?: (kind: BoardChoice) => void;
+  /** The board is drawn here (the canvas): its items are offered too. */
+  boardItems?: boolean;
   onTheme: () => void;
   updateAvailable: boolean;
   /** A version is downloaded and waiting: restarting is all that is left. */
@@ -51,7 +54,7 @@ export function StandardToolbar(props: StandardToolbarProps) {
   return <div role="group" aria-label="Workspace tools" className={`hm-island flex max-w-[calc(100vw-32px)] flex-wrap items-center justify-center gap-0.5 ${compact ? "p-1" : "p-1.5"}`} data-tool-island>
     {actions.map((action) => {
       if (action.id === "agent") return <AgentAction key={action.id} {...props} action={action} />;
-      if (action.id === "board") return props.onBoard ? <BoardAction key={action.id} action={action} labels={labels} compact={compact} onBoard={props.onBoard} /> : null;
+      if (action.id === "board") return props.onBoard ? <BoardAction key={action.id} action={action} labels={labels} compact={compact} onBoard={props.onBoard} boardItems={!!props.boardItems} /> : null;
       const Icon = icons[action.id];
       const needsRepo = action.id === "explorer" || action.id === "diff" || action.id === "issues";
       return <ActionButton key={action.id} action={action} labels={labels} disabled={needsRepo && !repoPath}
@@ -131,36 +134,29 @@ function AgentAction({ action, labels, agentSel, onAgentChange, onSpawnAgent, co
   </div>;
 }
 
-const BOARD_CHOICES: ReadonlyArray<{ kind: BoardChoice; label: string; hint?: string; icon: LucideIcon }> = [
-  { kind: "note", label: "Sticky note", hint: "8", icon: StickyNote },
-  { kind: "checklist", label: "Checklist", hint: "9", icon: ListChecks },
-  { kind: "text", label: "Text", icon: Type },
-  { kind: "arrow", label: "Arrow", icon: MoveUpRight },
-];
-
-/** Add to the board: a note, a checklist or text appears where you are writing it; an arrow is drawn between two things. */
-function BoardAction({ action, labels, compact, onBoard }: {
-  action: ToolbarAction; labels: boolean; compact: boolean; onBoard: (kind: BoardChoice) => void;
+/** Add something: any widget (the app's own sticky note, checklist and text among them), in every
+ *  view, and on the canvas an arrow between two things. */
+function BoardAction({ action, labels, compact, onBoard, boardItems }: {
+  action: ToolbarAction; labels: boolean; compact: boolean; onBoard: (kind: BoardChoice) => void; boardItems: boolean;
 }) {
   const { open, setOpen, root, trigger } = useDropdown();
-  const widgets = useWidgetPackages();
+  const widgets = useEnabledWidgetPackages();
   return <div ref={root} className="relative flex items-center">
     <Button ref={trigger} variant="ghost" size={labels ? "lg" : "icon-lg"} className="relative" onClick={() => setOpen((value) => !value)}
-      aria-label={action.label} aria-expanded={open} data-toolbar-action={action.id} title={`${action.label}  (8 note · 9 checklist)`}>
-      <StickyNote />{labels && <span data-toolbar-label className="text-[12px]">{action.label}</span>}
-      {!labels && <kbd aria-hidden className="absolute bottom-0.5 right-1 font-mono text-[8px] leading-none opacity-60">{action.hint}</kbd>}
+      aria-label={action.label} aria-expanded={open} data-toolbar-action={action.id} title={action.label}>
+      <Shapes />{labels && <span data-toolbar-label className="text-[12px]">{action.label}</span>}
     </Button>
     {open && <div role="menu" className={`hm-island absolute left-0 z-30 min-w-[170px] rounded-lg p-1 ${compact ? "bottom-full mb-1" : "top-full mt-1"}`}>
+      <div className="px-2 pb-0.5 pt-1 text-[10px] uppercase tracking-wide text-[var(--color-fg3)]">Widgets</div>
       {/* No focus back to the trigger: what was added takes it, to be written in. */}
-      {BOARD_CHOICES.map((choice) => <MenuItem key={choice.kind} variant="muted" data-board-choice={choice.kind}
-        onClick={() => { setOpen(false); onBoard(choice.kind); }}>
-        <choice.icon /><span className="flex-1">{choice.label}</span>
-        {choice.hint && <kbd aria-hidden className="font-mono text-[10px] opacity-60">{choice.hint}</kbd>}
-      </MenuItem>)}
       {widgets.map((w) => <MenuItem key={w.id} variant="muted" data-board-choice={`widget:${w.id}`}
         onClick={() => { setOpen(false); onBoard(`widget:${w.id}`); }}>
-        <LayoutGrid /><span className="flex-1">{w.name}</span>
+        <WidgetIcon pkg={w} /><span className="flex-1">{w.name}</span>
       </MenuItem>)}
+      {boardItems && <div role="separator" className="my-1 h-px bg-[var(--color-line)]" />}
+      {boardItems && <MenuItem variant="muted" data-board-choice="arrow" onClick={() => { setOpen(false); onBoard("arrow"); }}>
+        <MoveUpRight /><span className="flex-1">Arrow</span>
+      </MenuItem>}
     </div>}
   </div>;
 }

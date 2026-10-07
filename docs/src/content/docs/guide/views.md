@@ -10,7 +10,7 @@ there. A queue if you triage, a board if you lead, a city where every agent is a
 is how your head works — then publish it on [HiveHub](https://hivehub.griiken.workers.dev/) and
 everyone else can work in it too.
 
-⌘E or the Settings ▸ Views overview switches how the workspace is shown. The workspace runtime owns
+⌘E, or choosing one under Views in Settings ▸ Plugins, switches how the workspace is shown. The workspace runtime owns
 frames, tiles, and sessions; a view only arranges them — never what runs.
 
 ## Built-in views
@@ -112,7 +112,7 @@ Hivemind source. Re-run `npm run dev` to see each change in the app.
 
 The workspace toolbar (spawn, frame, browser, appearance, update) draws over the active
 view — top-centre on canvas, compact elsewhere; its position is configured on each view's
-page under Settings ▸ Views. Choose Collapsed to keep a handle or Off to use only your view’s
+page (Settings ▸ Plugins, then the view). Choose Collapsed to keep a handle or Off to use only your view’s
 controls. Settings remains accessible in the app header. A docked tile gets a host bar with name, status, pop-out, and undock.
 
 ## Appearance inside views

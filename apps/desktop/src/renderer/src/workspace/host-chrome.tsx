@@ -33,8 +33,9 @@ export interface HostChromeProps {
   onSpawnAgent: (agent: { id: string; cmd: string; defaultArgs?: string[]; label: string }) => void;
   onFrame: () => void;
   onBrowser: () => void;
-  /** Add to the board; absent in views that do not draw it, which then show no Board action. */
+  /** Add something: widgets in every view, board items where the board is drawn. */
   onBoard?: (kind: BoardChoice) => void;
+  boardItems?: boolean;
   updateAvailable: boolean;
   updateStaged: boolean;
   onUpgrade: () => void;

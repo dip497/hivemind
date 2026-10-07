@@ -15,6 +15,7 @@
  * "what the file says, plus the patches we have not persisted yet", so a
  * broadcast never yanks the control the user is dragging.
  */
+import { pluginKey, withPluginState, type PluginKind, type PluginState } from "@hivemind/core/plugin-settings";
 import { useSyncExternalStore } from "react";
 import { DEFAULT_SETTINGS, mergeSettings, setPath, type Settings } from "@hivemind/core/settings-schema";
 
@@ -132,6 +133,27 @@ function flush(): void {
 if (typeof window !== "undefined") window.addEventListener("beforeunload", flush);
 
 /** Set one dotted path (`appearance.glass.blur`), apply now, persist soon. */
+/** Change one plugin's record (`plugins.state["<kind>:<id>"]`), only that record, so an edit to
+ *  another plugin made meanwhile (another window, `hive plugins`) is kept. An empty record is dropped. */
+export function patchPluginState(kind: PluginKind, id: string, change: (s: PluginState) => PluginState): void {
+  const key = pluginKey(kind, id);
+  patchSettings(`plugins.state.${key}`, withPluginState(getSettings().plugins.state, kind, id, change)[key] ?? {});
+}
+
+/** Switch one plugin on or off, whatever its kind. */
+export function setPluginEnabled(kind: PluginKind, id: string, on: boolean): void {
+  patchPluginState(kind, id, (s) => ({ ...s, enabled: on }));
+}
+
+/** Set one of a plugin's options (undefined or empty: back to its default). */
+export function setPluginOption(kind: PluginKind, id: string, option: string, value: string | number | boolean | undefined): void {
+  patchPluginState(kind, id, (s) => {
+    const options = { ...s.options };
+    if (value === undefined || value === "") delete options[option]; else options[option] = value;
+    return { ...s, options };
+  });
+}
+
 export function patchSettings(dotted: string, value: unknown): void {
   patchSettingsMany([{ path: dotted, value }]);
 }

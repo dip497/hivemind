@@ -10,7 +10,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { UPDATE_START, UPDATE_STEPS, updateProgress, type UpdateProgress } from "../../shared/update-progress";
-import { Bell, ChevronRight, ExternalLink, LoaderCircle, Plus, Settings, X, Palette, PanelsTopLeft, Puzzle, Bot, Keyboard, Info } from "lucide-react";
+import { Bell, ExternalLink, LoaderCircle, Plus, Settings, X, Palette, PanelsTopLeft, Bot, Keyboard, Info } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
@@ -27,8 +27,9 @@ import { Workspace } from "./Workspace";
 import { IssuePeek } from "./components/IssuePeek";
 import { NewIssueModal } from "./components/NewIssueModal";
 import { resolveSettingsPage } from "./settings-registry";
+import { TileErrorBoundary } from "./TileErrorBoundary";
 import { flushSettings, patchSettings, saveSettingsNow } from "./settings-store";
-import { useExpandedGroups, useSettingsNav } from "./settings-nav";
+import { useSettingsNav } from "./settings-nav";
 import { getNotificationSettings, setNotificationSettingsCache, subscribeNotificationSettings, saveNotificationSettings } from "./notification-settings";
 import type { NotificationSettings } from "../../shared/ipc";
 const SettingsPages = lazy(() => import("./settings-panels"));
@@ -672,8 +673,8 @@ function SettingsModal({
   onRestart: () => void;
 }) {
   const [page, setPage] = useState("appearance");
-  const nav = useSettingsNav(page);
-  const [expanded, toggleGroup] = useExpandedGroups();
+  const nav = useSettingsNav();
+  const go = useCallback((id: string) => setPage(resolveSettingsPage(id) ?? id), []);
   const settingsReturnFocus = useRef<HTMLElement | null>(null);
   useEffect(() => {
     setWorkspaceOccluded(open);
@@ -712,21 +713,15 @@ function SettingsModal({
           <aside className="settings-sidebar">
             <SettingsDialog.Title className="settings-title">Settings</SettingsDialog.Title>
             <nav aria-label="Settings sections">
-              {nav.groups.map(({ group, items }) => {
-                const foldable = items.some((item) => item.plugin);
-                const open = expanded.has(group);
-                // Folded shows the overview only; the page you are on always stays in view.
-                const shown = items.filter((item) => !item.plugin || open || item.id === page);
-                return <div key={group} className="settings-nav-group" role="group" aria-label={group}>
-                <h3 className="settings-nav-heading">{foldable
-                  ? <button aria-expanded={open} onClick={() => toggleGroup(group)}><ChevronRight size={12} /><span>{group}</span></button>
-                  : <span className="settings-nav-heading-text">{group}</span>}</h3>
-                {shown.map((item) => <button key={item.id} onClick={() => setPage(item.id)} aria-current={page === item.id ? "page" : undefined}
-                  title={item.label} data-settings-page={item.id} data-plugin={item.plugin ? "" : undefined}>
-                  <span className="settings-nav-icon" aria-hidden="true">{item.icon}</span><span>{item.label}</span>
-                </button>)}
-              </div>;
-              })}
+              {nav.groups.map(({ group, items }) => (
+                <div key={group} className="settings-nav-group" role="group" aria-label={group}>
+                  <h3 className="settings-nav-heading"><span className="settings-nav-heading-text">{group}</span></h3>
+                  {items.map((item) => <button key={item.id} onClick={() => setPage(item.id)} aria-current={nav.selected(page) === item.id ? "page" : undefined}
+                    title={item.label} data-settings-page={item.id}>
+                    <span className="settings-nav-icon" aria-hidden="true">{item.icon}</span><span>{item.label}</span>
+                  </button>)}
+                </div>
+              ))}
             </nav>
             <span className="settings-sidebar-foot">Hivemind {version ? `v${version}` : ""}</span>
           </aside>
@@ -811,7 +806,10 @@ function SettingsModal({
         {page === "notifications" && <NotificationPrefs />}
 
 
-        <Suspense fallback={<p role="status" className="settings-note">Loading preferences…</p>}><SettingsPages page={page} navigate={setPage} /></Suspense>
+        {/* A page that fails is that page's failure, not the app's: the rest of Settings stays. */}
+        <TileErrorBoundary key={page} label="This settings page">
+          <Suspense fallback={<p role="status" className="settings-note">Loading preferences…</p>}><SettingsPages page={page} navigate={go} /></Suspense>
+        </TileErrorBoundary>
 
           </div>
         </div>

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, PRESETS, UBUNTU, SIGNAL, applyPreset, flattenAppearance, getPath, mergeSettings, nestAppearance, setPath, sharedAppearance, terminalThemeFor,
+  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, PRESETS, UBUNTU, SIGNAL, applyPreset, flattenAppearance, getPath, mergeSettings, nestAppearance, setPath, sharedAppearance, terminalThemeFor, toolPreferences,
 } from "./settings-schema.js";
 import { BUILTIN_TOOLBAR_ACTIONS, resolveToolbar } from "./toolbar.js";
 import { SettingsLockError, breakSettingsLock, patchSettingsExtras, patchSettingsFile, readSettings, settingsPath, updateSettings, writeSettings } from "./settings.js";
@@ -174,32 +174,11 @@ describe("settings schema", () => {
     expect(mergeSettings(undefined).views.toolbars).toEqual({});
   });
 
-  test("tools: a fresh install has every plugin off; the section, once present, is authoritative", () => {
-    // Missing file / no input at all → defaults → nothing enabled.
-    expect(mergeSettings(undefined).tools).toEqual({ enabledPlugins: [], disabledTools: [] });
-    expect(DEFAULT_SETTINGS.tools).toEqual({ enabledPlugins: [], disabledTools: [] });
-    expect(mergeSettings({}).tools.enabledPlugins).toEqual([]); // an object with no `v` is not a v:1 file
-    expect(mergeSettings({ v: 1, appearance: {} }).tools.enabledPlugins).toEqual([]);
-
-    expect(mergeSettings({ v: 1, tools: { enabledPlugins: [], disabledTools: [] } }).tools.enabledPlugins).toEqual([]);
-    expect(mergeSettings({ v: 1, tools: { enabledPlugins: ["hivemind/web"], disabledTools: ["hivemind/web/browser"] } }).tools)
-      .toEqual({ enabledPlugins: ["hivemind/web"], disabledTools: ["hivemind/web/browser"] });
-  });
-
-  test("tools: ids are validated, deduped and bounded", () => {
-    const s = mergeSettings({
-      v: 1,
-      tools: {
-        enabledPlugins: ["hivemind/web", "hivemind/web", "NoCaps/x", "noslash", "a/b/c", 7, "ok-org/ok-name"],
-        disabledTools: ["hivemind/web/browser", "hivemind/web/browser", "hivemind/web", "bad id/x/y"],
-      },
-    });
-    expect(s.tools.enabledPlugins).toEqual(["hivemind/web", "ok-org/ok-name"]); // deduped, malformed dropped
-    expect(s.tools.disabledTools).toEqual(["hivemind/web/browser"]);            // a plugin id is not a tool id
-
-    const many = mergeSettings({ v: 1, tools: { enabledPlugins: Array.from({ length: 500 }, (_, i) => `org/p${i}`) } });
-    expect(many.tools.enabledPlugins.length).toBe(200); // bounded
-    expect(mergeSettings({ v: 1, tools: { enabledPlugins: "hivemind/web" } }).tools.enabledPlugins).toEqual([]);
+  test("tools: a fresh install has every tool plugin off; a record switches one on", () => {
+    expect(toolPreferences(mergeSettings(undefined))).toEqual({ enabledPlugins: [], disabledTools: [] });
+    expect(toolPreferences(DEFAULT_SETTINGS)).toEqual({ enabledPlugins: [], disabledTools: [] });
+    const s = mergeSettings({ v: 1, plugins: { state: { "tool:hivemind/web": { enabled: true, options: { browser: false } } } } });
+    expect(toolPreferences(s)).toEqual({ enabledPlugins: ["hivemind/web"], disabledTools: ["hivemind/web/browser"] });
   });
 
   test("mergeSettings: junk falls back per field, values are clamped, unknown keys dropped", () => {
@@ -217,7 +196,7 @@ describe("settings schema", () => {
     expect(s.appearance.palette.bg).toBe(SIGNAL.palette.bg);
     expect(s.appearance.pluginSurfaces).toBe("theme");
     expect(s.views).toEqual({ defaultView: "orbit", chrome: { world: { island: "hidden" } }, toolbars: {} });
-    expect(s.plugins.disabled).toEqual(["a", "b"]);
+    expect(s.plugins.state).toEqual({ "view:a": { enabled: false }, "view:b": { enabled: false } }); // the old key, read once
     // Empty stays empty: "" means "whatever the agent catalog's default is".
     expect(s.agents.defaultAgent).toBe(DEFAULT_SETTINGS.agents.defaultAgent);
     expect("extra" in s).toBe(false);
@@ -255,9 +234,7 @@ describe("settings schema", () => {
     expect(nestAppearance(flattenAppearance(a))).toEqual(a);
   });
 
-  test("agent options: per agent, validated", () => {
-    const s = mergeSettings({ v: 1, agents: { options: { claude: { model: "opus", mode: "", "Bad Key": "x" }, "../x": { model: "y" }, codex: "nope" } } });
-    expect(s.agents.options).toEqual({ claude: { model: "opus" } });
+  test("agents: declined and autoInstall are validated", () => {
     const off = mergeSettings({ v: 1, agents: { autoInstall: false, declined: ["aider", "../x", 3] } });
     expect(off.agents.autoInstall).toBe(false);
     expect(off.agents.declined).toEqual(["aider"]);
@@ -281,21 +258,23 @@ describe("plugin ids in settings", () => {
     const cur = mergeSettings({}, DEFAULT_SETTINGS);
     let next = setPath(cur, "agents.declined", ["aider", "gemini"]);
     next = setPath(next, "agents.fromCatalog", ["amp"]);
-    next = setPath(next, "agents.options", { aider: { model: "big" } });
+    next = setPath(next, "plugins.state.agent:aider", { options: { model: "big" } });
     next = setPath(next, "views.chrome", { "@dip497/board": { island: "top" } });
     const back = mergeSettings(JSON.parse(JSON.stringify(next)), cur);
     expect(back.agents.declined).toEqual(["aider", "gemini"]);
     expect(back.agents.fromCatalog).toEqual(["amp"]);
-    expect(back.agents.options.aider).toEqual({ model: "big" });
+    expect(back.plugins.state["agent:aider"]).toEqual({ options: { model: "big" } });
     expect(Object.keys(back.views.chrome)).toContain("@dip497/board");
   });
 
   test("what is not an agent id is dropped — a scope included — and option names stay plain", () => {
     const cur = mergeSettings({}, DEFAULT_SETTINGS);
-    const next = setPath(setPath(cur, "agents.declined", ["dip497/aider", "@dip497/aider", "../x"]), "agents.options", { aider: { "@evil/opt": "x", model: "ok" } });
+    const next = setPath(setPath(cur, "agents.declined", ["dip497/aider", "@dip497/aider", "../x"]), "plugins.state", {
+      "agent:aider": { options: { "@evil/opt": "x", model: "ok" } }, "agent:../x": { enabled: false }, "agent:@dip497/aider": { enabled: false },
+    });
     const back = mergeSettings(JSON.parse(JSON.stringify(next)), cur);
     expect(back.agents.declined).toEqual([]);
-    expect(back.agents.options.aider).toEqual({ model: "ok" });
+    expect(back.plugins.state).toEqual({ "agent:aider": { options: { model: "ok" } } });
   });
 });
 
@@ -331,6 +310,42 @@ describe("settings file", () => {
   });
 });
 
+describe("plugin state from a settings.json written before it", () => {
+  let tmp: string;
+  const saved = process.env.HIVE_SETTINGS;
+  beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-plugin-state-")); process.env.HIVE_SETTINGS = path.join(tmp, "settings.json"); });
+  afterEach(() => { if (saved === undefined) delete process.env.HIVE_SETTINGS; else process.env.HIVE_SETTINGS = saved; fs.rmSync(tmp, { recursive: true, force: true }); });
+  // The shape an install had before plugin state: every switch the person made lives in its own key.
+  const OLD = {
+    v: 1, browserCdp: true,
+    agents: { defaultAgent: "claude", autoInstall: true, declined: ["aider"], fromCatalog: [], disabled: ["codex"], options: { claude: { model: "opus" } } },
+    plugins: { disabled: ["@dip497/board"] },
+    tools: { enabledPlugins: ["hivemind/web"], disabledTools: ["hivemind/web/browser"] },
+  };
+
+  test("is read into one record per plugin, and the first write keeps the old file beside it", async () => {
+    fs.writeFileSync(settingsPath(), JSON.stringify(OLD));
+    const read = await readSettings();
+    expect(read.plugins.state).toEqual({
+      "agent:codex": { enabled: false },
+      "agent:claude": { options: { model: "opus" } },
+      "view:@dip497/board": { enabled: false },
+      "tool:hivemind/web": { enabled: true, options: { browser: false } },
+    });
+    await writeSettings(setPath(read, "views.defaultView", "world"));
+    const raw = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
+    expect(raw.plugins.state).toEqual(read.plugins.state);
+    expect(raw.tools).toBeUndefined();
+    expect(raw.agents.disabled).toBeUndefined();
+    expect(raw.browserCdp).toBe(true);
+    expect(JSON.parse(fs.readFileSync(`${settingsPath()}.bak`, "utf8"))).toEqual(OLD);
+    // Once written, the record is what counts, and the backup is never replaced.
+    await writeSettings(setPath(await readSettings(), "plugins.state", {}));
+    expect((await readSettings()).plugins.state).toEqual({});
+    expect(JSON.parse(fs.readFileSync(`${settingsPath()}.bak`, "utf8"))).toEqual(OLD);
+  });
+});
+
 describe("settings concurrency", () => {
   let dir = "";
   beforeEach(() => {
@@ -361,13 +376,13 @@ describe("settings concurrency", () => {
       patchSettingsFile([{ path: "appearance.glass.blur", value: 20 }]),
       patchSettingsFile([{ path: "appearance.accent", value: "ember" }]),
       patchSettingsFile([{ path: "views.defaultView", value: "windows" }]),
-      patchSettingsFile([{ path: "agents.options.claude.model", value: "opus" }]),
+      patchSettingsFile([{ path: "plugins.state.agent:claude.options.model", value: "opus" }]),
     ]);
     const s = await readSettings();
     expect(s.appearance.glass.blur).toBe(20);
     expect(s.appearance.accent).toBe("ember");
     expect(s.views.defaultView).toBe("windows");
-    expect(s.agents.options.claude?.model).toBe("opus");
+    expect(s.plugins.state["agent:claude"]?.options?.model).toBe("opus");
   });
 
   test("a patch is validated like any other write, and unknown top-level keys survive it", async () => {
@@ -405,17 +420,17 @@ describe("settings concurrency", () => {
   });
 
   test("an extras patch leaves the schema settings untouched, and removes a key set to undefined", async () => {
-    await patchSettingsFile([{ path: "agents.options.claude.model", value: "opus" }]);
+    await patchSettingsFile([{ path: "plugins.state.agent:claude.options.model", value: "opus" }]);
     await patchSettingsExtras({ browserCdp: true, legacyThing: 1 });
     let raw = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
-    expect(raw.agents.options.claude.model).toBe("opus");
+    expect(raw.plugins.state["agent:claude"].options.model).toBe("opus");
     expect(raw.legacyThing).toBe(1);
 
     await patchSettingsExtras({ legacyThing: undefined });
     raw = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
     expect("legacyThing" in raw).toBe(false);
     expect(raw.browserCdp).toBe(true);
-    expect(raw.agents.options.claude.model).toBe("opus");
+    expect(raw.plugins.state["agent:claude"].options.model).toBe("opus");
   });
 
   test("a lock we do not own is NEVER deleted, however old it looks — the write fails safely", async () => {
@@ -428,7 +443,7 @@ describe("settings concurrency", () => {
     fs.utimesSync(lock, new Date(Date.now() - 600_000), new Date(Date.now() - 600_000));
     const before = fs.readFileSync(settingsPath(), "utf8").toString();
 
-    await expect(patchSettingsFile([{ path: "agents.options.claude.model", value: "sonnet" }])).rejects.toBeInstanceOf(SettingsLockError);
+    await expect(patchSettingsFile([{ path: "plugins.state.agent:claude.options.model", value: "sonnet" }])).rejects.toBeInstanceOf(SettingsLockError);
 
     expect(fs.readFileSync(lock, "utf8")).toBe("someone-else"); // untouched
     expect(fs.readFileSync(settingsPath(), "utf8").toString()).toBe(before); // nothing written
@@ -441,8 +456,8 @@ describe("settings concurrency", () => {
     expect(await breakSettingsLock()).toBe(true);
     expect(fs.existsSync(lock)).toBe(false);
     expect(await breakSettingsLock()).toBe(false); // nothing left to clear
-    const s = await patchSettingsFile([{ path: "agents.options.claude.model", value: "sonnet" }]);
-    expect(s.agents.options.claude?.model).toBe("sonnet");
+    const s = await patchSettingsFile([{ path: "plugins.state.agent:claude.options.model", value: "sonnet" }]);
+    expect(s.plugins.state["agent:claude"]?.options?.model).toBe("sonnet");
     expect(fs.existsSync(lock)).toBe(false); // our own lock released
   });
 

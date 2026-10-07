@@ -1,11 +1,11 @@
 /** Browse and install from the plugin catalog. Every download is hash-verified into a
  *  staging folder, then goes through the same review as a folder the user picked. */
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { app } from "electron";
 import { handle, handleEffect } from "./app-ipc.js";
-import { appMeetsMinVersion, catalogAgentNeedsUpdate, fetchCatalog, stageEntry, type CatalogEntry } from "@hivemind/core/plugin-catalog";
+import { appMeetsMinVersion, catalogAgentNeedsUpdate, fetchCatalog, fetchReadme, stageEntry, type CatalogEntry } from "@hivemind/core/plugin-catalog";
 import { installAgent, readAgentManifest, removeAgent, userAgentsDir, AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
 import { findBin, verifyAgent } from "@hivemind/agents/discover";
 import { getSettings, patchSettingsPath } from "./settings-store.js";
@@ -13,6 +13,8 @@ import { existsSync } from "node:fs";
 import { agentDisclosures, isGenericRuntime } from "@hivemind/agents";
 import { newNonce } from "@hivemind/core/view-files";
 import { reviewViewDir } from "./view-packages.js";
+import { installWidget, listWidgets, readWidget } from "@hivemind/core/widgets";
+import { widgetsChanged } from "./widgets.js";
 import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
 
 export interface AgentReview {
@@ -33,8 +35,26 @@ export interface AgentReview {
 }
 
 export function installPluginCatalogIpc(): void {
+  // A plugin's README, to read before or after installing it: from its folder here, or from the
+  // catalog for one not installed. Shown as text, never run.
+  handle("plugins:readme", async (_e, from: unknown) => {
+    const f = (from ?? {}) as { dir?: unknown; catalog?: { type?: unknown; id?: unknown } };
+    if (typeof f.dir === "string" && path.isAbsolute(f.dir)) {
+      try {
+        const file = path.join(f.dir, "README.md");
+        const st = await stat(file);
+        return st.size <= 256 * 1024 ? await readFile(file, "utf8") : null;
+      } catch { return null; }
+    }
+    if (f.catalog && typeof f.catalog.id === "string") {
+      const entry = (await fetchCatalog().catch(() => [] as CatalogEntry[])).find((e) => e.id === f.catalog!.id && e.type === f.catalog!.type);
+      return entry ? fetchReadme(entry) : null;
+    }
+    return null;
+  });
   let catalog: CatalogEntry[] = [];
   let pendingAgent: { token: string; dir: string; id: string } | null = null;
+  let pendingWidget: { token: string; dir: string; id: string } | null = null;
   handle("plugins:catalog", async () => {
     catalog = await fetchCatalog();
     return catalog;
@@ -67,6 +87,18 @@ export function installPluginCatalogIpc(): void {
       throw new Error(`${entry.name} needs Hivemind ${entry.minAppVersion} or newer; this is ${app.getVersion()}.`);
     }
     const dir = await stageEntry(entry);
+    if (entry.type === "widget") {
+      try {
+        // Checked as a folder would be, and its widget.json must name the listing it came from.
+        const meta = JSON.parse(await readFile(path.join(dir, "widget.json"), "utf8")) as { id?: unknown };
+        if (meta.id !== entry.id) throw new Error(`its widget.json says it is ${JSON.stringify(meta.id ?? null)}, not ${entry.id}`);
+        const pkg = await readWidget(dir, entry.id);
+        if (pendingWidget) await rm(pendingWidget.dir, { recursive: true, force: true }).catch(() => {});
+        pendingWidget = { token: newNonce(), dir, id: entry.id };
+        const replaces = (await listWidgets()).some((w) => w.id === entry.id && !w.builtin);
+        return { type: "widget", token: pendingWidget.token, id: entry.id, name: pkg.name, permissions: pkg.permissions, code: pkg.code !== "", replaces };
+      } catch (e) { await rm(dir, { recursive: true, force: true }); throw e; }
+    }
     if (entry.type === "view") {
       try { return { type: "view", ...(await reviewViewDir(dir, true)) }; }
       catch (e) { await rm(dir, { recursive: true, force: true }); throw e; }
@@ -128,6 +160,13 @@ export function installPluginCatalogIpc(): void {
     await removeInstalledAgent(String(id));
   });
 
+  handleEffect("plugins:install-widget", (token) => ({ target: pendingWidget && pendingWidget.token === token ? pendingWidget.id : undefined }), async (_event, token: string) => {
+    if (!pendingWidget || pendingWidget.token !== token) throw new Error("Review the widget again before installing it.");
+    const { dir, id } = pendingWidget;
+    pendingWidget = null;
+    try { await installWidget(dir, id); widgetsChanged(); }
+    finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
+  });
   handleEffect("plugins:install-agent", (token) => ({ target: pendingAgent && pendingAgent.token === token ? pendingAgent.id : undefined }), async (_event, token: string) => {
     if (!pendingAgent || pendingAgent.token !== token) throw new Error("Review the agent again before installing it.");
     const { dir } = pendingAgent;

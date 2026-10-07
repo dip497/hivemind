@@ -8,33 +8,35 @@
  * here and nowhere else. Also here: what a new object is, which sides an arrow joins, where it
  * meets them, and what a board edit takes with it.
  */
-import type { BoardObject, Side } from "@hivemind/workspace-doc/shapes";
+import type { BoardObject, Side, WidgetObject } from "@hivemind/workspace-doc/shapes";
 import { frameAtPoint } from "../frame-layout";
 import type { FrameState } from "../canvas-persistence";
 
-export type BoxObject = Exclude<BoardObject, { kind: "arrow" }>;
+/** A widget placed on the board: it has a box, and moves with its frame, as a note does. */
+export type BoardWidget = WidgetObject & { placement: "board"; x: number; y: number; w: number; h: number };
+/** What sits on the board in a box: a widget placed there (a note, a checklist and text are widgets). */
+export type BoxObject = BoardWidget;
 export type ArrowObject = Extract<BoardObject, { kind: "arrow" }>;
 export type BoxKind = BoxObject["kind"];
-/** What the Board menu adds: a box, an arrow, or a widget from the package named after `widget:`. */
-export type BoardChoice = Exclude<BoxKind, "widget"> | "arrow" | `widget:${string}`;
+/** What the Add menu adds: an arrow, or a widget of the package named after `widget:`. */
+export type BoardChoice = "arrow" | `widget:${string}`;
 
 export interface Point { x: number; y: number }
 export interface Rect { x: number; y: number; w: number; h: number }
 
-/** A sticky note's colours, in the order the picker shows them. */
-export const NOTE_COLORS = ["yellow", "peach", "pink", "violet", "blue", "green"] as const;
-export type NoteColor = (typeof NOTE_COLORS)[number];
-
-/** A new box's size, and the smallest a resize leaves it. */
-export const BOX_SIZE: Record<BoxKind, { w: number; h: number; minW: number; minH: number }> = {
-  note: { w: 220, h: 180, minW: 120, minH: 80 },
-  checklist: { w: 260, h: 200, minW: 180, minH: 96 },
-  text: { w: 320, h: 64, minW: 80, minH: 36 },
-  widget: { w: 220, h: 140, minW: 100, minH: 60 },
+/** The smallest a resize leaves a box. */
+export const BOX_SIZE: Record<BoxKind, { minW: number; minH: number }> = {
+  widget: { minW: 80, minH: 36 },
 };
 
+/** The widgets floating over every view (not placed on the board), oldest first. */
+export function widgetsOf(board: BoardObject[]): WidgetObject[] {
+  return board.filter((o): o is WidgetObject => o.kind === "widget" && o.placement !== "board")
+    .sort((a, b) => (a.z ?? 0) - (b.z ?? 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
 export function isBox(o: BoardObject): o is BoxObject {
-  return o.kind !== "arrow";
+  return o.kind === "widget" && o.placement === "board";
 }
 
 /** Whether a canvas node of this type is a board box: a box's node type is its kind. */
@@ -71,25 +73,21 @@ export function frameAt(frames: FrameState[], p: Point): string | undefined {
 }
 
 /** A new, empty box of `kind` centred on `at`, in the frame there if there is one. */
-/** A widget from `pkg`, centred on `at`, in the frame there if there is one. */
-export function newWidget(pkg: { id: string; w: number; h: number }, id: string, at: Point, frames: FrameState[], z: number): BoxObject {
+/** A new widget of the package `pkg`: on the board, `size` centred on `at` and in the frame there;
+ *  else floating over every view. */
+export function newWidget(pkg: string, id: string, z: number, board?: { at: Point; size: { w: number; h: number }; lines?: boolean; frames: FrameState[] }): WidgetObject {
+  if (!board) return { id, kind: "widget", widget: pkg, z };
+  const { at, size, frames } = board;
   const frame = frameAt(frames, at);
-  return { id, kind: "widget", widget: pkg.id, x: Math.round(at.x - pkg.w / 2), y: Math.round(at.y - pkg.h / 2), w: pkg.w, h: pkg.h, z, text: "", ...(frame ? { frame } : {}) };
-}
-
-export function newBox(kind: Exclude<BoxKind, "widget">, id: string, at: Point, frames: FrameState[], z: number): BoxObject {
-  const { w, h } = BOX_SIZE[kind];
-  const frame = frameAt(frames, at);
-  const base = { id, x: Math.round(at.x - w / 2), y: Math.round(at.y - h / 2), w, h, z, text: "", ...(frame ? { frame } : {}) };
-  if (kind === "note") return { ...base, kind, color: NOTE_COLORS[0] };
-  if (kind === "checklist") return { ...base, kind, items: [] };
-  return { ...base, kind };
+  // Its writing exists from the start, as a new note's did: one typed into later is an edit of
+  // it, which undo and redo take back and make again whole.
+  return { id, kind: "widget", widget: pkg, z, placement: "board", x: Math.round(at.x - size.w / 2), y: Math.round(at.y - size.h / 2), w: size.w, h: size.h, text: "", ...(board.lines ? { items: [] } : {}), ...(frame ? { frame } : {}) };
 }
 
 /** A copy of a box just below and right of it, with new ids for it and its items. Arrows stay with the original. */
 export function duplicateBox(o: BoxObject, id: string, z: number, itemId: () => string): BoxObject {
   const copy = { ...o, id, x: o.x + 24, y: o.y + 24, z };
-  return copy.kind === "checklist" ? { ...copy, items: copy.items.map((item) => ({ ...item, id: itemId() })) } : copy;
+  return copy.items ? { ...copy, items: copy.items.map((item) => ({ ...item, id: itemId() })) } : copy;
 }
 
 /** The board without `id`, and without any arrow that ends on it. */

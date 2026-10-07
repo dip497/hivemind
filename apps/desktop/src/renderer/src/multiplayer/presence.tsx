@@ -283,6 +283,7 @@ export function PeopleHere({ repo, onManage, follow }: { repo: string; onManage?
         follow && p.host ? <button
           key={p.person}
           type="button"
+          data-person={p.person}
           title={followed === p.person ? `Stop following ${p.name}` : `Follow ${p.name}`}
           aria-label={followed === p.person ? `Stop following ${p.name}` : `Follow ${p.name}`}
           aria-pressed={followed === p.person}

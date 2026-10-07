@@ -43,6 +43,21 @@ export type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-do
 /** Commit origins: undo skips every one that starts with `sys:`, and each writer's history skips
  *  the others' board edits. The writer is encoded, so no writer's origin begins another's. */
 const boardOf = (writer: string): string => `board:${encodeURIComponent(writer)};`;
+const WIDGETS = "sys:widgets";
+
+/** `objects` with each widget's `state` as `kept` has it. */
+function drawnAsKept(objects: unknown, kept: BoardObject[]): unknown {
+  if (!Array.isArray(objects)) return objects;
+  const byId = new Map(kept.map((o) => [o.id, o]));
+  return objects.map((o: unknown) => {
+    const x = o as { id?: unknown; kind?: unknown; state?: unknown };
+    if (typeof o !== "object" || o === null || x.kind !== "widget") return o;
+    const was = byId.get(String(x.id)) as { state?: unknown } | undefined;
+    if (!was) return o; // another writer's widget: what it keeps stays as it is
+    const { state: _s, ...rest } = x;
+    return was.state !== undefined ? { ...rest, state: was.state } : rest;
+  });
+}
 const LAYOUT = "sys:layout";
 const VIEW = "sys:view";
 const IMPORT = "sys:import";
@@ -171,7 +186,12 @@ export class WorkspaceStore {
   setObjects(repo: string, objects: unknown, from: Writer & { base?: unknown } = {}): void {
     const writer = from.writer ?? "";
     this.history(repo, writer);
-    this.write(repo, "board", boardOf(writer), from, (doc) => writeObjects(doc, objects, from.base));
+    // What widgets keep is committed apart, under `sys:`, so undo takes back only edits.
+    this.write(repo, "board", WIDGETS, from, (doc) => {
+      writeObjects(doc, drawnAsKept(objects, readObjects(doc)), from.base);
+      doc.commit({ origin: boardOf(writer) });
+      writeObjects(doc, drawnAsKept(readObjects(doc), Array.isArray(objects) ? objects as BoardObject[] : []));
+    });
   }
 
   /** The workspace this store has open that holds the tile `tileId`, or null: the control plane

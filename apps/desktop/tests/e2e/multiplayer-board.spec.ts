@@ -101,7 +101,7 @@ test("two people typing in one note at once both keep what they typed, and end w
   await note(host, "shared");
   await expect.poll(() => notes(guest), { timeout: 10_000 }).toEqual(["shared"]);
   const open = async (w: typeof host) => {
-    await w.locator(".react-flow__node-note [data-board-text]").dblclick();
+    await w.locator('.react-flow__node-widget:has([data-widget="note"]) [data-board-text]').dblclick();
     await w.keyboard.press("End");
   };
   await open(host);

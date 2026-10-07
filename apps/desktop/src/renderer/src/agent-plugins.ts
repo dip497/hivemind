@@ -1,10 +1,11 @@
 /** Main scans the disk and sends manifests; the renderer rebuilds defs from them.
  *  An empty scan is a legitimate result: nothing is compiled in, so an empty result
  *  IS the catalog. */
+import { setPluginsScope } from "./plugins/scope";
 import { useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { setCatalog, defsFromWire, type AgentWireEntry } from "@hivemind/agents";
-import { getSettings, patchSettings, saveSettingsNow } from "./settings-store";
+import { getSettings, patchSettings, saveSettingsNow, setPluginEnabled } from "./settings-store";
 
 export interface AgentScanProblem {
   id: string;
@@ -62,6 +63,7 @@ export function openAgentSettings(id: string): void {
 
 /** Open Settings ▸ Plugins — the browse/install page, where an agent is gotten. */
 export function openPluginSettings(): void {
+  setPluginsScope("hub");
   window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "plugins" } }));
 }
 
@@ -88,10 +90,7 @@ export function useAgentEntries(): AgentWireEntry[] {
 }
 
 export async function setAgentDisabled(id: string, disabled: boolean): Promise<void> {
-  const current = getSettings().agents.disabled ?? [];
-  patchSettings("agents.disabled", disabled
-    ? [...new Set([...current, id])]
-    : current.filter((x) => x !== id));
+  setPluginEnabled("agent", id, !disabled);
   // Main re-reads settings for the scan; the patch alone is a debounced write.
   await saveSettingsNow();
   await syncAgentPlugins();

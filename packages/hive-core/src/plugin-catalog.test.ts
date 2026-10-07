@@ -41,11 +41,18 @@ describe("reading the index", () => {
     expect(bad({ files: [{ path: "../../x", sha256: "0".repeat(64) }] })).toThrow(/relative path/);
     expect(bad({ files: [{ path: "a.js" }] })).toThrow(/sha256/);
     expect(bad({ files: [{ path: "NUL.js", sha256: "0".repeat(64) }] })).toThrow(/relative path/);
-    expect(bad({ type: "tool" })).toThrow(/agent or view/);
     expect(bad({ bin: "x" })).toThrow(/bare name of an agent/); // views have no CLI
     expect(bad({ type: "agent", id: "x", bin: "../bin/sh" })).toThrow(/bare name/);
     expect(bad({ id: "Bad Id" })).toThrow(/view id/);
     expect(() => parseCatalog({ version: 2, plugins: [] })).toThrow(/version 1/);
+  });
+
+  test("a widget is scoped like a view, and a kind this app does not know is left out, not the catalog", () => {
+    const view = { id: "@a/x", type: "view", name: "X", description: "d", author: "a", version: "1", path: "views/x", files: [{ path: "a.js", sha256: "0".repeat(64) }] };
+    const widget = { ...view, id: "@a/pet", type: "widget", path: "widgets/pet" };
+    const listed = parseCatalog({ version: 1, plugins: [view, widget, { ...view, id: "@a/later", type: "theme" }] });
+    expect(listed.map((e) => `${e.type}:${e.id}`)).toEqual(["view:@a/x", "widget:@a/pet"]);
+    expect(() => parseCatalog({ version: 1, plugins: [{ ...widget, id: "pet" }] })).toThrow(/a widget id — it must be @owner\/name/);
   });
 });
 

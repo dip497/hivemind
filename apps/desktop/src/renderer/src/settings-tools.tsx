@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { ChevronRight, FileCodeCorner, Earth, ListTodo } from "lucide-react";
 import { toast } from "sonner";
 import { BUNDLED_TOOL_PLUGINS, BROWSER_PLUGIN_ID, bundledToolRegistry, CODE_PLUGIN_ID, ISSUES_PLUGIN_ID } from "@hivemind/core/tool-plugins";
-import { getSettings, patchSettings, useSettings } from "./settings-store";
+import { toolPreferences } from "@hivemind/core/settings-schema";
+import { patchPluginState, useSettings } from "./settings-store";
 import { Button } from "./components/ui/button";
 import { Switch } from "./components/ui/switch";
 import { useSettingsNavigate } from "./settings-panels";
@@ -14,20 +15,17 @@ function useToolEnabled(pluginId: string): [boolean, () => void] {
   const ids = plugin?.tools.map((tool) => `${pluginId}/${tool.key}`) ?? [];
   // The registry decides: a built-in is on without being in enabledPlugins, so
   // asking it is the only way this switch agrees with what the canvas offers.
-  const resolved = bundledToolRegistry.resolve(settings.tools);
+  const resolved = bundledToolRegistry.resolve(toolPreferences(settings));
   const enabled = ids.some((id) => resolved.availability(id).available);
   const toggle = () => {
-    const current = getSettings().tools;
     if (!enabled) toast.dismiss(`${pluginId}-disabled`);
-    if (plugin?.builtin) {
-      // Nothing to enable — switching it off means disabling its own tools.
-      patchSettings("tools.disabledTools", enabled
-        ? [...new Set([...current.disabledTools, ...ids])]
-        : current.disabledTools.filter((id) => !ids.includes(id)));
-      return;
-    }
-    patchSettings("tools.enabledPlugins", enabled ? current.enabledPlugins.filter((id) => id !== pluginId) : [...new Set([...current.enabledPlugins, pluginId])]);
-    if (!enabled) patchSettings("tools.disabledTools", current.disabledTools.filter((id) => !ids.includes(id)));
+    // A tool switched off inside its plugin is that plugin's option, false; switching the plugin
+    // on clears them, and a plugin that is not built in is on only when switched on.
+    patchPluginState("tool", pluginId, (s) => {
+      const options = Object.fromEntries(Object.entries(s.options ?? {}).filter(([k]) => !plugin?.tools.some((t) => t.key === k)));
+      if (enabled && plugin?.builtin) return { ...s, options: { ...options, ...Object.fromEntries(plugin.tools.map((t) => [t.key, false])) } };
+      return { ...s, options, ...(plugin?.builtin ? {} : { enabled: !enabled }) };
+    });
   };
   return [enabled, toggle];
 }
@@ -46,27 +44,31 @@ function ToolRow({ pluginId }: { pluginId: string }) {
     <div className="settings-extension-row">
       <div className="settings-extension-icon"><ToolIcon pluginId={pluginId} size={19} /></div>
       <div className="settings-extension-label"><h4>{title}</h4>{about && <p>{about}</p>}</div>
-      <Button variant="ghost" size="icon-sm" aria-label={`${title} settings`} onClick={() => go(`tool:${pluginId}`)}><ChevronRight /></Button>
+      <Button variant="ghost" size="icon-sm" aria-label={`${title} settings`} data-plugin-open={`tool:${pluginId}`} onClick={() => go(`plugin:tool:${pluginId}`)}><ChevronRight /></Button>
       <Switch aria-label={`Enable ${title}`} checked={enabled} onCheckedChange={toggle} />
     </div>
   </div>;
 }
 
-export function ToolsOverview() {
-  const optional = BUNDLED_TOOL_PLUGINS.filter((p) => !p.builtin);
-  const builtin = BUNDLED_TOOL_PLUGINS.filter((p) => p.builtin);
-  return <div className="settings-stack">
-    <section aria-label="Tools">
+/** The tools on the Plugins page: the optional ones, then the ones included. */
+export function ToolsSection({ matches }: { matches: (text: string) => boolean }) {
+  const shown = BUNDLED_TOOL_PLUGINS.filter((p) => matches(`${toolLabel(p.id)} ${p.id} ${p.tools.map((t) => t.description ?? "").join(" ")}`));
+  const optional = shown.filter((p) => !p.builtin);
+  const builtin = shown.filter((p) => p.builtin);
+  if (!shown.length) return null;
+  return <section className="settings-stack plugins-kind" aria-label="Tools" data-plugins-kind="tool">
+    <h3 className="plugins-kind-heading">Tools</h3>
+    {optional.length > 0 && <section aria-label="Optional tools">
       <div className="settings-section-heading"><h3>Optional tools</h3></div>
       <p className="settings-note">Switch on the ones you use; switching one off keeps open panels.</p>
       <div className="settings-extension-list">{optional.map((p) => <ToolRow key={p.id} pluginId={p.id} />)}</div>
-    </section>
-    <section aria-label="Included tools">
+    </section>}
+    {builtin.length > 0 && <section aria-label="Included tools">
       <div className="settings-section-heading"><h3>Included</h3></div>
       <p className="settings-note">These come with Hivemind and are on unless you switch them off. Terminals and agent tiles are always available.</p>
       <div className="settings-extension-list">{builtin.map((p) => <ToolRow key={p.id} pluginId={p.id} />)}</div>
-    </section>
-  </div>;
+    </section>}
+  </section>;
 }
 
 export function ToolPage({ id }: { id: string }) {

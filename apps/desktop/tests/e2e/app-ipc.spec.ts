@@ -78,7 +78,7 @@ test("an app window cannot be registered as a browser tile's page, so the debugg
   await expect(page.evaluate(() => window.hive.browserCdp("tile-browser-posing", "Runtime.evaluate", { expression: "document.title", returnByValue: true })))
     .rejects.toThrow(/no browser tile registered for tile-browser-posing/);
 
-  expect(hive("config", "set", "tools.enabledPlugins", '["hivemind/web"]').status).toBe(0);
+  expect(hive("plugins", "enable", "tool:hivemind/web").status).toBe(0);
   const opened = hive("ctl", "open-tool", "hivemind/web/browser", "--url", "about:blank");
   expect(opened.status).toBe(0);
   const tile: string = opened.data.tileId;

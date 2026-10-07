@@ -43,7 +43,7 @@ folder after a restart.
 
 ## Add your own, or turn one off
 
-Any agent can be switched off in **Settings ▸ Agents**, including the ones HiveHub added
+Any agent can be switched off in **Settings ▸ Plugins** (or `hive plugins disable agent:<id>`), including the ones HiveHub added
 for you. To add an agent that is not listed on HiveHub yet, describe it in one file — see
 [Add your own agent](../agent-providers/); listing it for everyone is a pull request to
 [dip497/hivemind-plugins](https://github.com/dip497/hivemind-plugins).

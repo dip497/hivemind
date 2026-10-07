@@ -1,4 +1,5 @@
 /** `hive agents list|install|remove` — same loader as the app, so list shows what it loads. */
+import { disabledPlugins } from "@hivemind/core/plugin-settings";
 import { defineCommand } from "citty";
 import { AGENT_NAME, stageFromRegistry } from "../registry.js";
 import { findRoot, patchSettingsFile, readSettings } from "@hivemind/core";
@@ -15,14 +16,14 @@ async function rescanApp(): Promise<boolean> {
   try { await hcpCall("agents.rescan", {}, 5000); return true; } catch { return false; }
 }
 const afterNote = (rescanned: boolean): string =>
-  rescanned ? "app rescanned" : "app not running or unreachable — restart it, or open Settings ▸ Agents";
+  rescanned ? "app rescanned" : "app not running or unreachable — restart it, or open Settings ▸ Plugins";
 
 const fail = (ctx: { json: boolean }, e: unknown, code: string): never =>
   err(ctx, code, e instanceof Error ? e.message : String(e));
 
 async function scan(): Promise<Awaited<ReturnType<typeof loadAgents>>> {
   const repoRoot = await findRoot().catch(() => null);
-  const disabled = await readSettings().then((s) => s.agents.disabled).catch(() => [] as string[]);
+  const disabled = await readSettings().then((s) => disabledPlugins(s.plugins.state, "agent")).catch(() => [] as string[]);
   return loadAgents({ repoRoot: repoRoot ?? undefined, disabled });
 }
 

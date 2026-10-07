@@ -3,20 +3,32 @@ title: Widgets
 description: Small live boxes on the board, drawn from what your code renders.
 ---
 
-A widget is a box on the board whose content your code draws: a counter, a meter of busy agents,
-a reminder. Everyone who sees the board sees it, guests included, without installing anything:
-your code runs on the machine that keeps the workspace, and the board stores what it drew.
+A widget is a small live card whose content your code draws: a counter, a meter of busy agents,
+a reminder. A workspace's widgets float above every view; drag each one where you want it. Where
+they sit is yours alone (it is kept on your machine), and the eye button hides them all. Everyone in the workspace sees them, guests included, without installing anything: your
+code runs in one window of the machine that keeps the workspace, and what it draws is sent live
+to everyone, never saved. Which widgets there are, their order and their state are saved with the
+workspace, so they are there after a restart.
 
 ## Make one
 
-A widget is a folder in your profile's `widgets` folder (on Linux
-`~/.config/hivemind/widgets/<name>/`) holding two files:
+A widget is a folder holding two files. Add it in **Settings ▸ Plugins ▸ Add a widget from a
+folder** (it is copied into `~/.config/hivemind/widgets`, beside the views, so you can move the
+original). Switch one off there, or with `hive plugins disable widget:<id>`: it is no longer
+offered, and the ones placed keep what they hold but do not run.
 
 `widget.json`
 
 ```json
-{ "name": "Counter", "w": 220, "h": 140 }
+{
+  "name": "Counter",
+  "icon": "icon.svg",
+  "options": [{ "id": "step", "label": "Step", "type": "number", "default": 1 }]
+}
 ```
+
+`icon` names an image in the folder, shown in the Add menu and in Settings. A one-colour SVG on a
+24 px grid is drawn in the theme's text colour, like the app's own icons; a PNG is shown as it is.
 
 `widget.js`
 
@@ -27,11 +39,18 @@ const draw = () => hive.render({ type: "stack", children: [
 ] });
 hive.on("start", draw);
 hive.on("action", (a) => {
-  if (a === "inc") { hive.setState({ n: (hive.state?.n ?? 0) + 1 }); draw(); }
+  if (a === "inc") { hive.setState({ n: (hive.state?.n ?? 0) + (hive.options.step ?? 1) }); draw(); }
 });
 ```
 
-Restart Hivemind, then **Board → Counter** puts it on the board.
+Then the toolbar's Add menu (the shapes icon) → **Counter** adds it to the workspace, in any view. Hover a
+widget for its options (the gear) and to remove it.
+
+`options` lists what the person may set on each one placed, in the settings vocabulary every
+plugin uses: a `boolean`, a `number` (with `min` and `max`), a `text` (with `maxLength`) or a
+`choice` (`values`, and `labels` to show), each with a `default`. The gear draws the form, a
+value that does not fit reads as the default, and what they set is shared with everyone in the
+workspace.
 
 ## What your code gets
 
@@ -39,13 +58,69 @@ Restart Hivemind, then **Board → Counter** puts it on the board.
 |---|---|
 | `hive.render(tree)` | draw the widget |
 | `hive.state`, `hive.setState(value)` | what it keeps, saved in the workspace |
+| `hive.options` | its options, as set (else their defaults) |
+| `hive.on("options", fn)` | the person changed its options |
 | `hive.notify(text)` | a desktop notification |
+| `hive.moveTo({ x, y }, { over })` | move its card: `x`, `y` from 0 to 1 across the screen (`y: "bottom"`), over `over` ms; every viewer animates it |
+| `hive.spot` | where it last moved to |
+| `hive.on("click", fn)` | its card was clicked (not on a button) |
 | `hive.on("start", fn)` | it was placed or the app opened |
 | `hive.on("action", fn)` | one of its buttons was pressed; `fn` gets the button's `action` |
 | `hive.on("agents", fn)` | the agents' states changed; `fn` gets `{ tileId: state }` |
 
-It runs in a worker: no network, no files, nothing of the app but `hive`. `render` and `state`
-are each kept up to 16 KB of JSON; larger is dropped.
+It runs in a worker: no network, no files, nothing of the app but `hive`. What it draws and its
+state are each up to 16 KB of JSON; larger is dropped. Drawings reach others at most 4 times a
+second. Its state is saved with the workspace but is never an undo step.
+
+## Widgets without code
+
+A widget can be data and a drawing alone: no `widget.js`. The app's own Sticky note, Checklist
+and Text are made this way, and one you install under the same id (`note`, `checklist`, `text`)
+replaces them.
+
+```json
+{
+  "name": "Sticky note",
+  "placement": "board",
+  "size": { "w": 220, "h": 180 },
+  "options": [{ "id": "color", "label": "Colour", "type": "choice",
+                "values": ["yellow", "pink", "blue"], "default": "yellow" }],
+  "draw": { "type": "stack", "fill": true, "tint": "$options.color",
+            "children": [{ "type": "textarea", "placeholder": "Write something" }] }
+}
+```
+
+- `placement`: `board` puts it on the canvas, moving with its frame; anything else floats over
+  every view.
+- `input`, `textarea` and `list` are what people write in: the widget's text, merged by character
+  when two people type at once, and its lines, ticked, added and reordered. Writing in it is an
+  edit, so ⌘Z takes it back.
+- `"$options.<id>"` in a drawing is that option's value; `tint` colours the card as a note.
+- Options are `number`, `boolean`, `text` or `choice` (with `values`).
+
+A widget with code can draw these fields too.
+
+## The workspace
+
+A widget reads the workspace's agents and what happens to them, the same as views and the rest
+of the app do, and may act there as far as its `widget.json` asks:
+
+```json
+{ "name": "Agents at work", "permissions": ["workspace:prompt"] }
+```
+
+| | |
+|---|---|
+| `hive.workspace.agents()` | the agents: `tile`, `agent` (what it is called), `program`, `state`, `waiting` (what it waits on, since when), `machine` |
+| `hive.on("agents", fn)` | the agents changed |
+| `hive.on("agent", fn)` | something happened to an agent: `{ kind, tile, detail }`, where `kind` is `turnEnded` (detail: done, failed…), `waiting` (detail: what on), `answered`, `came` or `went` |
+| `hive.workspace.focus(tile)` | show that tile; needs nothing |
+| `hive.workspace.spawn(agent, { prompt })` | start an agent; needs `workspace:spawn` |
+| `hive.workspace.prompt(tile, text)` | tell an agent something; needs `workspace:prompt`, and you send or cancel each one |
+| `hive.workspace.close(tile)` | close a tile; needs `workspace:close` |
+
+Settings → Plugins → Widgets shows what each widget may do. A widget without permissions reads
+and points at things, nothing more.
 
 ## What it can draw
 
@@ -56,6 +131,45 @@ are each kept up to 16 KB of JSON; larger is dropped.
 | `number` | `value`, `label` |
 | `meter` | `value`, `max`, `label` |
 | `button` | `label`, `action` |
+| `image` | `src` (an image in its folder), `w`, `h` |
+| `sprite` | `src` (a sheet of frames), `frameW`, `frameH`, `row`, `frames`, `fps`, `scale`, `flip` |
 
-Buttons work on the machine that runs the widget; a guest sees the widget but its buttons do
-nothing yet.
+Images (`.png`, `.gif`, `.webp`, `.jpg`, `.svg`, up to 1 MB each) go in the widget's folder; guests
+get them from the host. `"chrome": "none"` in `widget.json` drops the card, for a pet that walks
+the screen. Buttons and clicks work on the machine that runs the widget; a guest sees the widget
+but its buttons do nothing yet.
+
+## Where they run, and on your phone
+
+A widget's code runs in one window of yours that has the workspace open: on the machine that hosts
+it, or, for a workspace on a `hive host` with no window, on your laptop or desktop that has it
+open. Nobody else's computer runs it. A press anywhere else, a guest's window or your phone, is
+passed to that window.
+
+On your phone, install the Widgets view on the computer that hosts the workspace
+(`hive views install @dip497/widgets`) and open it from the phone: it shows every widget, and its
+buttons work.
+
+## Share one on HiveHub
+
+Give it an id in your own GitHub scope and a version, and publish its folder. Publish a higher
+version and everyone who has it is offered the update in Settings ▸ Plugins:
+
+```json
+{ "id": "@you/counter", "name": "Counter", "version": "1.0.0", "icon": "icon.svg" }
+```
+
+```sh
+hivehub publish widgets/counter
+```
+
+A `README.md` beside `widget.json` is shown on its page, on HiveHub and in Settings ▸ Plugins,
+before anyone installs it. People install it from Settings ▸ Plugins ▸ On HiveHub, or with:
+
+```sh
+hive widgets install @you/counter   # every file checked against the hash HiveHub recorded
+hive widgets list
+hive widgets remove @you/counter    # what each placed one holds stays on its board
+```
+
+`hive widgets install <folder>` adds one from a folder on this computer.

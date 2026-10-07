@@ -38,6 +38,8 @@ import { viewLinkServices } from "../../view-services";
 import type { SharePrepared } from "../../../../../shared/ipc";
 import type { ShareOutcome } from "@hivemind/view-sdk/protocol";
 import { disableCommunityView } from "./registry";
+import { pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
+import { useSettings } from "../../../settings-store";
 import { edgeBandClip } from "./edge-band";
 import { RemoteCommunityView } from "./RemoteCommunityView";
 
@@ -207,17 +209,29 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
       const r = rootRef.current?.getBoundingClientRect();
       return { w: Math.round(r?.width ?? 0), h: Math.round(r?.height ?? 0) };
     };
+    // What the person set this view to (Settings ▸ Plugins), one value per field it declares.
+    const stored = useSettings().plugins.state;
+    const settings = useMemo(() => resolveSettings(manifest.settings ?? [], pluginOptions(stored, "view", pkg.id)), [manifest, stored, pkg.id]);
+    const settingsKey = JSON.stringify(settings);
+    const settingsRef = useRef(settings);
+    settingsRef.current = settings;
     useEffect(() => {
       if (!ready) return;
       send({
-        type: "hello", v: PROTOCOL_VERSION, pluginId: pkg.id, capabilities,
+        type: "hello", v: PROTOCOL_VERSION, pluginId: pkg.id, capabilities, settings: settingsRef.current,
         theme: readTheme(), layout: loadViewLayout(layoutSpec(pkg.id), layoutKey),
-        viewport: box(), visible: !document.hidden, features: link.features,
+        viewport: box(), visible: !document.hidden, features: [...link.features, "settings"],
         // A desktop: whether its pointer is a finger, never a phone's screen.
         device: { touch: matchMedia("(pointer: coarse)").matches, compact: false },
       });
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ready]);
+    const sentSettings = useRef(settingsKey);
+    useEffect(() => {
+      if (!ready || sentSettings.current === settingsKey) return;
+      sentSettings.current = settingsKey;
+      send({ type: "settings", settings: settingsRef.current });
+    }, [ready, settingsKey, send]);
 
     // A frame bound to a machine carries that machine's name and link state; a local one carries nothing.
     const machines = useMachines();

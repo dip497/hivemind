@@ -1,5 +1,8 @@
 import { installViewManagementIpc } from "./view-packages.js";
-import { installWidgetIpc } from "./widgets.js";
+import { disabledPlugins, pluginOptions, stringOptions } from "@hivemind/core/plugin-settings";
+import { toolPreferences } from "@hivemind/core/settings-schema";
+import { installWidgetIpc, widgetAsset, widgetsChanged } from "./widgets.js";
+import { listWidgets } from "@hivemind/core/widgets";
 import { appShortcut, menuKey } from "./shortcuts";
 import { recoverOnProcessLoss } from "./recover";
 import desktopPkg from "../../package.json" with { type: "json" };
@@ -77,7 +80,7 @@ import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, onSe
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
-import { dialDevice, installNetworkIpc, isYourDevice, joinLink, knownMachines, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
+import { agentFeed, dialDevice, installNetworkIpc, isYourDevice, joinLink, knownMachines, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
 import { elsewhere, mayWriteShared, onceStarted, placedRun, refusedShared, startedByOthers, wroteShared } from "./shared-workspaces.js";
 import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
@@ -91,6 +94,7 @@ import { agents } from "@hivemind/host/agents";
 import { Terminals, type SessionOutput } from "@hivemind/host/terminals";
 import { Layouts, type Shown } from "@hivemind/host/store";
 import { presence } from "@hivemind/host/presence";
+import { widgets } from "@hivemind/host/widgets";
 import { appearance } from "@hivemind/host/appearance";
 import { Plans } from "@hivemind/host/plans";
 import { answers } from "@hivemind/host/answers";
@@ -1013,8 +1017,9 @@ const control: ControlPlane = new ControlPlane({
   diag: (line) => void writeDiagLog(line),
   methods: () => ({
     callRenderer: hcpCallRenderer,
-    toolsSettings: () => getAppSettings().tools,
+    toolsSettings: () => toolPreferences(getAppSettings()),
     reloadSettings: () => reloadSettings().then((s) => ({ ok: true, preset: s.appearance.preset })),
+    widgetsChanged,
     // A worker of a remote agent runs on that host: this PATH says nothing about it.
     defaultAgentId: async () => {
       await shellEnvReady;
@@ -1027,7 +1032,7 @@ const control: ControlPlane = new ControlPlane({
     },
     workspaces: workspaceStore(),
     shownWorkspace,
-    launchOptions: (agentId) => getAppSettings().agents.options[agentId] ?? {},
+    launchOptions: (agentId) => stringOptions(pluginOptions(getAppSettings().plugins.state, "agent", agentId)),
     endSession: (tileId) => terminals.end(tileId),
     sessionHeld: (id) => hasSession(id) || hasRemotePty(id),
     intents: hostIntents(),
@@ -1246,10 +1251,12 @@ const plans = new Plans({
 
 // links, terminals, the store and who is where on it (M1). Each window is a connection to it (workspace-ipc.ts), which is
 // answered as the person at the window, and sent its events.
+// Shown on this machine's windows, run in one of the person's, and served to a phone's views.
+const widgetDomain = widgets(() => workspaceServer, widgetAsset, listWidgets, (repo) => workspaceStore().getObjects(repo));
 const workspaceServer: WorkspaceServer = new WorkspaceServer([
   ...workspaceDomains,
   layouts.domain,
-  agents({ statuses: () => control.status.all(), links: () => control.links() }),
+  agents({ statuses: () => control.status.all(), links: () => control.links(), feed: agentFeed, workspaceOf: (repo) => workspaceStore().ownership(repo)?.workspaceId ?? null }),
   terminals.domain,
   plans.domain,
   // What an agent here waits on the person for, answered from another of their devices (M5).
@@ -1293,9 +1300,11 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     machines: knownMachines,
     linkState,
     intents: hostIntents(),
+    widgets: widgetDomain,
     onWarn: (m) => console.warn(`[views] ${m}`),
   }),
   presence(() => workspaceServer, () => machineIdentity().personId),
+  widgetDomain,
   // How this host looks to its guests, as its theme changes.
   appearance({ current: () => getAppSettings().appearance, onChange: (l) => { onSettingsChange((s) => l(s.appearance)); }, server: () => workspaceServer }),
   peopleHere.domain,
@@ -1505,7 +1514,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // Only manifests come from disk — nothing agent-specific is compiled in any more.
     let lastLoaded: Awaited<ReturnType<typeof loadAgents>>["loaded"] = [];
     const scanAgents = async (repoRoot?: string) => {
-      const disabled = (getAppSettings() as { agents?: { disabled?: string[] } }).agents?.disabled ?? [];
+      const disabled = disabledPlugins(getAppSettings().plugins.state, "agent");
       const r = await loadAgents({ repoRoot, disabled });
       // Defs of switched-off agents, so their settings pages still answer.
       lastLoaded = r.loaded;

@@ -63,22 +63,28 @@ test("page ids are unique, and every page carries the fields the nav renders", (
 
 test("every kind of plugin page has a route in the lazy chunk", () => {
   const src = readFileSync(join(SRC, "settings-panels.tsx"), "utf8");
-  for (const kind of PLUGIN_PAGE_KINDS) {
-    assert.ok(src.includes(`pp?.kind === "${kind}"`), `no route renders ${kind}:<id> pages`);
-  }
+  // One component draws every kind's page; the route comment names each kind it takes.
+  for (const kind of PLUGIN_PAGE_KINDS) assert.ok(src.includes(`"${kind}"`), `no route renders plugin:${kind}:<id> pages`);
+  assert.deepEqual(pluginPage("plugin:widget:pet"), { kind: "widget", pluginId: "pet" });
+  assert.equal(pluginPage("plugin:theme:dark"), null, "a kind there is no plugin of opens nothing");
 });
 
-test("page ids resolve: fixed, per plugin, and old links", () => {
-  assert.equal(resolveSettingsPage("agents"), "agents");
-  assert.deepEqual(pluginPage("agent:claude"), { kind: "agent", pluginId: "claude" });
-  assert.deepEqual(pluginPage("tool:hivemind/web"), { kind: "tool", pluginId: "hivemind/web" });
+test("page ids resolve: fixed, per plugin, and the links of the pages Plugins replaced", () => {
+  assert.equal(resolveSettingsPage("plugins"), "plugins");
+  assert.equal(resolveSettingsPage("plugin:tool:hivemind/web"), "plugin:tool:hivemind/web");
+  // Links other code, docs and people's habits still use.
+  for (const old of ["agents", "views", "tools", "installed"]) assert.equal(resolveSettingsPage(old), "plugins");
+  assert.equal(resolveSettingsPage("agent:claude"), "plugin:agent:claude");
+  assert.equal(resolveSettingsPage("view:@dip497/board"), "plugin:view:@dip497/board");
+  assert.equal(resolveSettingsPage("tool:hivemind/web"), "plugin:tool:hivemind/web");
   assert.equal(resolveSettingsPage("extensions"), null, "an unknown page id resolves to nothing");
   assert.equal(resolveSettingsPage("agent:"), null);
+  assert.equal(resolveSettingsPage("plugin:agent:"), null);
   assert.equal(resolveSettingsPage("nope"), null);
 });
 
 test("the e2e nav contract is stable: these ids are pinned by specs", () => {
-  for (const id of ["appearance", "agents", "views", "tools", "installed"]) {
+  for (const id of ["appearance", "plugins"]) {
     assert.ok(settingsPage(id), `settings page "${id}" is pinned by an e2e spec and must keep its id`);
   }
 });

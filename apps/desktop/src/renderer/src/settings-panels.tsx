@@ -1,9 +1,8 @@
-import { ViewsOverview, ViewPage } from "./settings-views";
-import { ToolsOverview, ToolPage } from "./settings-tools";
-import { BrowsePlugins, InstalledPlugins } from "./settings-plugins";
 import { ProfilePrefs } from "./settings-profile";
 import { NetworkPrefs } from "./settings-network";
 import { DevicesPrefs } from "./settings-devices";
+import { PluginPage } from "./plugins/PluginPage";
+import { PluginsHome } from "./plugins/PluginsHome";
 /**
  * Settings pages that read and write settings.json (via settings-store /
  * theme-store): Appearance, Views (installed community packages, per-view
@@ -24,7 +23,6 @@ import { setTheme, useTheme } from "./theme-store";
 import {
   AccentPicker, BackgroundControls, GlassControls, OverlayControls, PresetRow, Section, TerminalColors,
 } from "./appearance-controls";
-import { AgentsOverview, AgentPage } from "./settings-agents";
 import { createContext, useContext } from "react";
 import { pluginPage } from "./settings-registry";
 
@@ -123,9 +121,8 @@ const SHORTCUTS_CANVAS: [string, string][] = [
   ["⌘/Ctrl + B", "Show or hide Layers (⌘ works in a terminal too)"],
   ["⌘/Ctrl + N", "New issue (⌘ works in a terminal too)"],
   ["1 … 7", "Toolbar actions"],
-  ["8 / 9", "New sticky note / checklist on the board"],
-  ["⌫", "Delete the selected note, checklist, text or arrow"],
-  ["⌘/Ctrl + D", "Duplicate the selected note, checklist or text"],
+  ["⌫", "Delete the selected widget or arrow on the board"],
+  ["⌘/Ctrl + D", "Duplicate the selected widget"],
   ["⌘/Ctrl + Z / ⇧Z", "Undo / redo on the board"],
   ["⌘/Ctrl + = / −", "Zoom in / out"],
   ["⌘/Ctrl + 0", "Zoom to 100%"],
@@ -170,7 +167,7 @@ const NavigateContext = createContext<(id: string) => void>(() => {});
 export const useSettingsNavigate = (): ((id: string) => void) => useContext(NavigateContext);
 
 /** Must match the registry's `chunk: "lazy"` pages (unit tested); plugin pages (`agent:…`) are always lazy. */
-export const LAZY_SETTINGS_PAGES = ["profile", "network", "devices", "appearance", "shortcuts", "agents", "views", "tools", "plugins", "installed"] as const;
+export const LAZY_SETTINGS_PAGES = ["profile", "network", "devices", "appearance", "shortcuts", "plugins"] as const;
 
 export default function SettingsPages({ page, navigate }: { page: string; navigate: (id: string) => void }) {
   return <NavigateContext.Provider value={navigate}>{renderPage(page)}</NavigateContext.Provider>;
@@ -182,14 +179,9 @@ function renderPage(page: string) {
   if (page === "devices") return <DevicesPrefs />;
   if (page === "appearance") return <AppearancePrefs />;
   if (page === "shortcuts") return <ShortcutPrefs />;
-  if (page === "agents") return <AgentsOverview />;
-  if (page === "views") return <ViewsOverview />;
-  if (page === "tools") return <ToolsOverview />;
-  if (page === "plugins") return <BrowsePlugins />;
-  if (page === "installed") return <InstalledPlugins />;
+  if (page === "plugins") return <PluginsHome />;
+  // Every kind's page is one component: pp?.kind === "agent" | "view" | "widget" | "tool".
   const pp = pluginPage(page);
-  if (pp?.kind === "agent") return <AgentPage id={pp.pluginId} />;
-  if (pp?.kind === "view") return <ViewPage id={pp.pluginId} />;
-  if (pp?.kind === "tool") return <ToolPage id={pp.pluginId} />;
+  if (pp) return <PluginPage key={page} kind={pp.kind} id={pp.pluginId} />;
   return null;
 }

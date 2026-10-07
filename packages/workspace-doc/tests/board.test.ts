@@ -7,9 +7,13 @@ import type { BoardObject, ChecklistItem } from "../src/shapes.ts";
 import { mulberry32 } from "./random.ts";
 
 type Fields = Record<string, unknown>;
-const note = (id: string, text: string, fields: Fields = {}) => ({ id, kind: "note", x: 0, y: 0, w: 200, h: 160, color: "yellow", text, ...fields }) as BoardObject;
+/** A sticky note: the app's `note` widget on the board, its colour an option. */
+const note = (id: string, text: string, fields: Fields = {}) => {
+  const { color = "yellow", ...rest } = fields;
+  return { id, kind: "widget", widget: "note", placement: "board", x: 0, y: 0, w: 200, h: 160, text, options: { color }, ...rest } as BoardObject;
+};
 const checklist = (id: string, text: string, items: ChecklistItem[], fields: Fields = {}) =>
-  ({ id, kind: "checklist", x: 300, y: 0, w: 240, h: 200, text, items, ...fields }) as BoardObject;
+  ({ id, kind: "widget", widget: "checklist", placement: "board", x: 300, y: 0, w: 240, h: 200, text, items, ...fields }) as BoardObject;
 const item = (id: string, text: string, done = false): ChecklistItem => ({ id, text, done });
 const arrow = (id: string, from: string, to: string, label = "") =>
   ({ id, kind: "arrow", from: { id: from, side: "right" }, to: { id: to, side: "left" }, label }) as BoardObject;
@@ -18,7 +22,7 @@ const byId = (board: BoardObject[]) => [...board].sort((a, b) => (a.id < b.id ? 
 const BOARD: BoardObject[] = [
   note("n1", "ship R15", { frame: "f1", z: 2 }),
   // A field the document does not read is kept as given.
-  { id: "t1", kind: "text", x: 0, y: 200, w: 300, h: 40, text: "Sprint board", fontSize: 24 } as BoardObject,
+  { id: "t1", kind: "widget", widget: "text", placement: "board", x: 0, y: 200, w: 300, h: 40, text: "Sprint board", fontSize: 24 } as BoardObject,
   checklist("c1", "today", [item("i1", "write tests", true), item("i2", "review")]),
   arrow("a1", "n1", "tile-1", "about"),
 ];
@@ -120,7 +124,7 @@ test("input from outside is checked: an object or item without what its kind nee
   writeObjects(doc, [
     note("n1", "kept"),
     note("n1", "a second n1"),
-    { id: "n2", kind: "note", x: 0, y: 0, w: 1, h: 1 }, // no text
+    { id: "n2", kind: "widget", widget: "note", placement: "board", text: "on the board, no box" },
     { ...note("n3", "no width"), w: "wide" },
     { ...note("s1", "not a kind"), kind: "sticker" },
     { ...arrow("a1", "n1", "n2"), from: { id: "n1", side: "middle" } },
@@ -142,12 +146,57 @@ test("a record another writer left without what its kind needs is skipped when r
   expect(readObjects(doc)).toEqual([note("n1", "kept")]);
 });
 
-test("a widget keeps what it drew and what it keeps; one without its package, or too big a render, is not kept whole", () => {
+test("a widget keeps its state and options; too big a state, options that are not a map, and a widget without its package are not kept", () => {
   const doc = new LoroDoc();
-  const render = { type: "meter", value: 3, max: 10, label: "agents" };
-  const widget = { id: "w1", kind: "widget", x: 0, y: 0, w: 200, h: 120, text: "", widget: "meter", render, state: { resets: 1 } } as BoardObject;
-  const big = { id: "w2", kind: "widget", x: 0, y: 0, w: 200, h: 120, text: "", widget: "meter", render: { type: "text", text: "x".repeat(20_000) } } as BoardObject;
-  writeObjects(doc, [widget, big, { id: "w3", kind: "widget", x: 0, y: 0, w: 1, h: 1, text: "" }]);
+  const base = { kind: "widget", z: 1, widget: "meter" };
+  writeObjects(doc, [
+    { id: "w1", ...base, state: { resets: 1 }, options: { minutes: 25 } },
+    { id: "w4", ...base, options: "not a map" },
+    { id: "w2", ...base, state: { big: "x".repeat(20_000) } },
+    { id: "w3", ...base, widget: "" },
+  ]);
   doc.commit();
-  expect(readObjects(doc)).toEqual([widget, { id: "w2", kind: "widget", x: 0, y: 0, w: 200, h: 120, text: "", widget: "meter" } as BoardObject]);
+  expect(readObjects(doc)).toEqual([{ id: "w1", ...base, state: { resets: 1 }, options: { minutes: 25 } }, { id: "w2", ...base }, { id: "w4", ...base }] as BoardObject[]);
+});
+
+test("a widget on the board has a box, and what people write in it merges as a note's does: text by character, lines one by one", () => {
+  const box = { kind: "widget", widget: "hivemind/note", placement: "board", x: 0, y: 0, w: 200, h: 160 };
+  const a = new LoroDoc();
+  writeObjects(a, [{ id: "n", ...box, text: "ship it", items: [item("i1", "tests")] }]);
+  a.commit();
+  const b = new LoroDoc();
+  b.import(a.export({ mode: "snapshot" }));
+  writeObjects(a, [{ id: "n", ...box, text: "ship it today", items: [item("i1", "tests", true)] }]);
+  writeObjects(b, [{ id: "n", ...box, text: "please ship it", items: [item("i1", "tests"), item("i2", "docs")] }]);
+  a.commit(); b.commit();
+  sync(a, b);
+  expect(readObjects(a)).toEqual(readObjects(b));
+  expect(readObjects(a)).toEqual([{ id: "n", ...box, text: "please ship it today", items: [item("i1", "tests", true), item("i2", "docs")] } as BoardObject]);
+  // On the board without its box, it is not kept.
+  const c = new LoroDoc();
+  writeObjects(c, [{ id: "x", kind: "widget", widget: "hivemind/note", placement: "board" }]);
+  expect(readObjects(c)).toEqual([]);
+});
+
+test("a note, a checklist and a text label an older version wrote are read as the widgets they are now, and written back as such", () => {
+  const doc = new LoroDoc();
+  writeObjects(doc, [
+    { id: "n1", kind: "note", x: 0, y: 0, w: 200, h: 160, color: "pink", text: "ship it", frame: "f1", z: 2 },
+    { id: "c1", kind: "checklist", x: 300, y: 0, w: 240, h: 200, text: "today", items: [item("i1", "tests", true)] },
+    { id: "t1", kind: "text", x: 0, y: 200, w: 300, h: 40, text: "Sprint" },
+    arrow("a1", "n1", "c1"),
+  ]);
+  doc.commit();
+  const board = [
+    arrow("a1", "n1", "c1"),
+    { id: "c1", kind: "widget", widget: "checklist", placement: "board", x: 300, y: 0, w: 240, h: 200, text: "today", items: [item("i1", "tests", true)] },
+    { id: "n1", kind: "widget", widget: "note", placement: "board", x: 0, y: 0, w: 200, h: 160, text: "ship it", frame: "f1", z: 2, options: { color: "pink" } },
+    { id: "t1", kind: "widget", widget: "text", placement: "board", x: 0, y: 200, w: 300, h: 40, text: "Sprint" },
+  ] as BoardObject[];
+  expect(readObjects(doc)).toEqual(board);
+  // Written back, it is the widget in the document too, and reads the same.
+  writeObjects(doc, readObjects(doc));
+  doc.commit();
+  expect((doc.getMap("objects").toJSON() as Record<string, { kind: string }>).n1!.kind).toBe("widget");
+  expect(readObjects(doc)).toEqual(board);
 });

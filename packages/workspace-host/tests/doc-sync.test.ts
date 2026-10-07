@@ -15,7 +15,7 @@ beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), "doc-sync-")); })
 afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 const core = (title: string) => ({ frames: [{ id: "f1", title }], tiles: [{ id: "t1", kind: "claude" }], tileNames: {}, editorTabs: {}, frameOf: { t1: "f1" } });
-const note = (text: string) => ({ id: "n1", kind: "note" as const, x: 10, y: 20, w: 200, h: 160, text });
+const note = (text: string) => ({ id: "n1", kind: "widget" as const, widget: "note", placement: "board" as const, x: 10, y: 20, w: 200, h: 160, text });
 
 /** A store that tells a set of listeners of its changes. */
 function storeWith(dir: string, person?: Uint8Array) {

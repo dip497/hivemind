@@ -187,7 +187,7 @@ test("a document made by another copy of loro-crdt is read and written the same"
   fs.cpSync(path.join(path.dirname(require.resolve("loro-crdt/package.json")), "nodejs"), copy, { recursive: true });
   const { LoroDoc: OtherLoroDoc } = require(path.join(copy, "index.js")) as { LoroDoc: typeof LoroDoc };
   const doc = new OtherLoroDoc();
-  const board = [{ id: "c1", kind: "checklist", x: 0, y: 0, w: 240, h: 200, text: "today", items: [{ id: "i1", text: "ship", done: true }] }];
+  const board = [{ id: "c1", kind: "widget", widget: "checklist", placement: "board", x: 0, y: 0, w: 240, h: 200, text: "today", items: [{ id: "i1", text: "ship", done: true }] }];
   writeCore(doc, LAYOUT);
   writeView(doc, "canvas", { v: 1, data: { positions: { t1: { x: 1, y: 2 } } } });
   writeObjects(doc, board);

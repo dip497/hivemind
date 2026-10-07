@@ -6,7 +6,7 @@ import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } 
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
-import type { AgentAnswer, AgentChanges, ConversationEntry, Links, PipeChange, SpawnChange, StartAgent, Startable, StatusChange, TileOpened } from "./agents.js";
+import type { AgentAnswer, AgentChange, AgentChanges, AgentEvent, AgentItem, ConversationEntry, Links, PipeChange, SpawnChange, StartAgent, Startable, StatusChange, TileOpened } from "./agents.js";
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
 import type { Answerer, PlanDecided, PlanReview } from "./plans.js";
 import type { JoinQuestion, JoinRequests, PersonHere } from "./people.js";
@@ -17,6 +17,10 @@ import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-do
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
 import type { Appearance } from "@hivemind/core/settings-schema";
+import type { WidgetPackage } from "@hivemind/core/widget-format";
+
+/** A press on a widget: one of its buttons (its `action`), or its card. */
+export type WidgetPress = { action: unknown } | { click: true };
 
 /** A workspace's layouts as a client that holds them opens it. */
 export interface StoreSnapshot {
@@ -72,6 +76,26 @@ export interface WorkspaceMethods {
   "review.save": (repo: string, comments: ReviewComment[]) => void;
   /** Every agent session's status there is. Each change after it is a `status.changed` event. */
   "status.all": () => Array<{ tileId: string; status: StatusChange["status"] }>;
+  /** (0.18) The agents in the workspace at `repo`, as a phone is told of them: name, program,
+   *  state, what each waits on and where it runs; and the feed's position. Each change after it
+   *  is an `agent.changed` and an `agent.event` numbered on from `seq`. */
+  "agent.list": (repo: string) => { seq: number; agents: AgentItem[] };
+  /** (0.18) What `repo`'s readers were told after `seq`, or null when the feed no longer keeps all
+   *  of it: list again. */
+  "agent.since": (repo: string, seq: number) => { seq: number; changes: AgentChange[]; events: AgentEvent[] } | null;
+  /** What each widget in `repo` last drew, by its id. Never stored: it is drawn again when its
+   *  code next runs. */
+  "widget.all": (repo: string) => Record<string, unknown>;
+  /** Whether the caller runs `repo`'s widgets: the first of the person's windows to ask does (on
+   *  the host's machine, or on another of their devices that has it open), until it lets go
+   *  (`widget.release`) or goes; then `widget.runner` asks the others again. */
+  "widget.run": (repo: string) => boolean;
+  /** The widgets installed where `repo` is hosted: what a window that shows it offers, draws and
+   *  runs. Their code only to the person's own devices, which may run it. */
+  "widget.packages": (repo: string) => WidgetPackage[];
+  /** An image the widget package `widget` draws, as a data URL (null: none), for a client without
+   *  the package. */
+  "widget.asset": (repo: string, widget: string, name: string) => string | null;
   /** Every link between agents there is. Each change after it is a `link.pipe` or `link.spawn` event. */
   "link.list": () => Links;
   /** Show a terminal: the first to open a session starts it; one that opens it after joins it,
@@ -181,6 +205,13 @@ export interface WorkspaceNotices {
   /** Where the client's person is in the workspace `repo`: their pointer and selection; null:
    *  they left it. */
   "presence.set": (repo: string, state: PresenceState | null) => void;
+  /** The widget `id` in `repo` drew `tree`, where its code runs (the workspace's owner). */
+  "widget.draw": (repo: string, id: string, tree: unknown) => void;
+  /** The caller stops running `repo`'s widgets. */
+  "widget.release": (repo: string) => void;
+  /** (0.19) Someone pressed a button of the widget `id` (`action`), or its card (`click`), where its
+   *  code does not run: the window that runs it hears it (`widget.pressed`). */
+  "widget.press": (repo: string, id: string, press: WidgetPress) => void;
   /** What the view of the caller's session `session` posts to its host (P8). */
   "view.post": (session: string, message: PluginMessage, workspace?: string) => void;
   /** The screen the view of the caller's session `session` is shown on now: its host tells the view
@@ -222,6 +253,17 @@ export interface WorkspaceEvents {
   "store.changed": (change: Pick<WorkspaceChange, "repo" | "part">) => void;
   /** Who is in the workspace `repo` now, each as they last said (`presence.set`). */
   "presence.changed": (repo: string, people: Participant[]) => void;
+  /** The widget `id` in `repo` drew `tree` (`widget.draw`). */
+  "widget.drawn": (repo: string, id: string, tree: unknown) => void;
+  /** (0.18) An agent in `repo` as it is now, or its going (`agent.list`). */
+  "agent.changed": (repo: string, change: AgentChange) => void;
+  /** (0.18) What happened to an agent in `repo`: a turn ended, it waits, it was answered, it came
+   *  or went. */
+  "agent.event": (repo: string, event: AgentEvent) => void;
+  /** Nobody runs `repo`'s widgets now: a window that shows it asks `widget.run`. */
+  "widget.runner": (repo: string) => void;
+  /** (0.19) To the window that runs `repo`'s widgets: someone pressed the widget `id`. */
+  "widget.pressed": (repo: string, id: string, press: WidgetPress) => void;
   /** (0.17) The host's look changed (`appearance.get`). */
   "appearance.changed": (appearance: Appearance) => void;
   /** Someone asks to join `repo`: to its owner's clients, the first answer counting (M3). */

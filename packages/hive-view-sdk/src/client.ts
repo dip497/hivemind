@@ -12,10 +12,11 @@
  * The host hands the MessagePort over with a `PORT_HANDSHAKE` window message
  * right after the iframe loads; `connect()` resolves once `hello` arrives.
  */
+import type { SettingValue } from "./settings.js";
 import {
   COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
   type ActivityLevel, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect,
-  type ViewCommands, type ViewDevice, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme,
+  type ViewCommands, type ViewDevice, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme, type ViewWidget,
 } from "./protocol.js";
 
 /** A request the host refused or could not answer (`UNSUPPORTED` when it lacks the feature). */
@@ -34,6 +35,8 @@ type EventMap = {
   resize: { w: number; h: number };
   visibility: { visible: boolean };
   theme: Extract<HostMessage, { type: "theme" }>["theme"];
+  /** 1.7: every declared setting's value, after the person changed one. */
+  settings: Record<string, SettingValue>;
   /** The host undocked this surface (its bar, or Shift+Esc); the tile is
    *  already released — forget the rect. The client drops it from what it
    *  last sent, so a plugin that ignores the event still stays consistent. */
@@ -48,6 +51,9 @@ export interface ViewClient {
   readonly visible: boolean;
   /** 1.5: what the view is shown on. A host that predates it is a desktop's: no touch, not compact. */
   readonly device: ViewDevice;
+  /** 1.7: what the person set this view to, one value per field its manifest's `settings` declares.
+   *  Empty from a host that predates it. Changes arrive as the `settings` event. */
+  readonly settings: Readonly<Record<string, SettingValue>>;
   on<K extends keyof EventMap>(event: K, cb: (payload: EventMap[K]) => void): () => void;
   /** Per-tile status. Subscribes on first listener, unsubscribes on last. */
   subscribeStatus(tileId: string, cb: (status: ViewStatus, info?: StatusInfo) => void): () => void;
@@ -65,6 +71,12 @@ export interface ViewClient {
   /** 1.5: everyone else in the workspace — who, their colour, the tile their pointer is over and
    *  what they selected, of this view's. On every change; the latest replays to a new listener. */
   onParticipants(cb: (participants: ViewParticipant[]) => void): () => void;
+  /** 1.8: every widget in the workspace, now and whenever one changes. A host before 1.8 sends none. */
+  onWidgets(cb: (widgets: ViewWidget[]) => void): () => void;
+  /** 1.8: press one of a widget's buttons, as a person pressing it where it is drawn. */
+  pressWidget(id: string, action: unknown): void;
+  /** 1.8: click a widget's card, not on a button. */
+  clickWidget(id: string): void;
   /** 1.3: per-tile status intervals for a local day (YYYY-MM-DD). */
   history(day: string): Promise<ViewHistoryDay>;
   /** 1.3: ask the user to copy or save this PNG; resolves with what they chose. */
@@ -122,6 +134,7 @@ class Client implements ViewClient {
   capabilities: readonly ViewPermission[] = [];
   viewport = { w: 0, h: 0 };
   visible = true;
+  settings: Readonly<Record<string, SettingValue>> = {};
   framesDrawn = 0;
   readonly commands: ViewCommands;
   private listeners = new Map<string, Set<(p: unknown) => void>>();
@@ -137,6 +150,8 @@ class Client implements ViewClient {
   private presence: ViewPresence | null = null;
   private participantCbs = new Set<(p: ViewParticipant[]) => void>();
   private participants: ViewParticipant[] | null = null;
+  private widgets: ViewWidget[] | null = null;
+  private widgetCbs = new Set<(widgets: ViewWidget[]) => void>();
   private requests = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer?: ReturnType<typeof setTimeout> }>();
   private nextRequest = 1;
   private revealHandler: ((tileId: string) => ViewRect | null | Promise<ViewRect | null>) | null = null;
@@ -158,7 +173,7 @@ class Client implements ViewClient {
       port.onmessage = (e) => {
         const r = parseHostMessage(e.data);
         if (!r.ok) return;
-        if (r.msg.type === "hello") { this.hello = r.msg; this.capabilities = r.msg.capabilities; this.viewport = { ...r.msg.viewport }; this.visible = r.msg.visible; res(); return; }
+        if (r.msg.type === "hello") { this.hello = r.msg; this.capabilities = r.msg.capabilities; this.viewport = { ...r.msg.viewport }; this.visible = r.msg.visible; this.settings = r.msg.settings ?? {}; res(); return; }
         this.dispatch(r.msg);
       };
     });
@@ -201,6 +216,10 @@ class Client implements ViewClient {
         this.presence = m.presence;
         for (const cb of this.presenceCbs) cb(m.presence);
         break;
+      case "widgets":
+        this.widgets = m.widgets;
+        for (const cb of this.widgetCbs) cb(m.widgets);
+        break;
       case "participants":
         this.participants = m.participants;
         for (const cb of this.participantCbs) cb(m.participants);
@@ -216,6 +235,7 @@ class Client implements ViewClient {
       case "resize": this.viewport = { w: m.w, h: m.h }; this.emit("resize", this.viewport); break;
       case "visibility": this.visible = m.visible; this.emit("visibility", { visible: m.visible }); break;
       case "theme": this.emit("theme", m.theme); break;
+      case "settings": this.settings = m.settings; this.emit("settings", m.settings); break;
       case "undock": {
         // The host has let go of it already: forget it without telling the host again.
         this.wantedRects = this.wantedRects.filter((r) => r.tileId !== m.tileId);
@@ -344,6 +364,24 @@ class Client implements ViewClient {
     return () => {
       if (this.participantCbs.delete(cb) && this.participantCbs.size === 0) { this.participants = null; this.send({ type: "unsubscribeParticipants" }); }
     };
+  }
+
+  onWidgets(cb: (widgets: ViewWidget[]) => void): () => void {
+    if (!this.supports("widgets")) return () => {};
+    this.widgetCbs.add(cb);
+    if (this.widgetCbs.size === 1) this.send({ type: "subscribeWidgets" });
+    else if (this.widgets) cb(this.widgets);
+    return () => {
+      if (this.widgetCbs.delete(cb) && this.widgetCbs.size === 0) { this.widgets = null; this.send({ type: "unsubscribeWidgets" }); }
+    };
+  }
+
+  pressWidget(id: string, action: unknown): void {
+    if (this.supports("widgets")) this.send({ type: "pressWidget", id, action });
+  }
+
+  clickWidget(id: string): void {
+    if (this.supports("widgets")) this.send({ type: "pressWidget", id, click: true });
   }
 
   private need(p: ViewPermission, what: string) {

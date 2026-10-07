@@ -129,7 +129,8 @@ function readItems(entries: Fields, order: unknown): unknown[] {
  * `x` as a board object with the fields its kind needs, or null. Fields the document does not
  * read are kept, so a newer version's additions survive an older one's writes.
  */
-function toBoardObject(x: unknown): BoardObject | null {
+function toBoardObject(raw: unknown): BoardObject | null {
+  const x = asWidget(raw);
   if (!isObject(x) || typeof x.id !== "string" || x.id.length === 0) return null;
   if (!(BOARD_OBJECT_KINDS as readonly unknown[]).includes(x.kind)) return null;
   if ((x.frame !== undefined && typeof x.frame !== "string") || (x.z !== undefined && !isNumber(x.z))) return null;
@@ -138,16 +139,39 @@ function toBoardObject(x: unknown): BoardObject | null {
   if (x.kind === "arrow") {
     return isArrowEnd(x.from) && isArrowEnd(x.to) && typeof label === "string" ? ({ ...fields, label } as BoardObject) : null;
   }
-  if (![x.x, x.y, x.w, x.h].every(isNumber) || typeof text !== "string") return null;
   if (x.kind === "widget") {
     if (typeof x.widget !== "string" || x.widget.length === 0) return null;
-    // Too big a render or state is dropped, not the widget: it draws again on its next change.
-    for (const key of ["render", "state"] as const) if (fields[key] !== undefined && !fits(fields[key])) delete fields[key];
+    if (x.placement !== undefined && x.placement !== "board" && x.placement !== "screen") return null;
+    // On the board it has a box, as a note does.
+    if (x.placement === "board" && ![x.x, x.y, x.w, x.h].every(isNumber)) return null;
+    if (text !== undefined && typeof text !== "string") return null;
+    // Too big a state is dropped, not the widget.
+    if (fields.state !== undefined && !fits(fields.state)) delete fields.state;
+    if (fields.options !== undefined && (!isObject(fields.options) || !fits(fields.options))) delete fields.options;
+    const lines = Array.isArray(items)
+      ? firstOfEachId(items, (item) => typeof item.text === "string" && typeof item.done === "boolean").map(({ id, text: line, done }) => ({ id, text: line, done }))
+      : undefined;
+    return { ...fields, ...(text !== undefined ? { text } : {}), ...(lines ? { items: lines } : {}) } as unknown as BoardObject;
   }
+  if (![x.x, x.y, x.w, x.h].every(isNumber) || typeof text !== "string") return null;
   if (x.kind !== "checklist") return { ...fields, text } as BoardObject;
   if (!Array.isArray(items)) return null;
   const kept = firstOfEachId(items, (item) => typeof item.text === "string" && typeof item.done === "boolean");
   return { ...fields, text, items: kept.map(({ id, text: line, done }) => ({ id, text: line, done })) } as BoardObject;
+}
+
+/**
+ * A note, a checklist or a text label, as the widget it is now: the app's built-in `note`,
+ * `checklist` or `text` widget on the board, with the same id (so arrows still meet it), box,
+ * frame, writing and lines; a note's colour is its widget's colour option. Anything else as given.
+ */
+function asWidget(x: unknown): unknown {
+  if (!isObject(x) || (x.kind !== "note" && x.kind !== "checklist" && x.kind !== "text")) return x;
+  const { kind, color, ...rest } = x;
+  return {
+    ...rest, kind: "widget", widget: kind, placement: "board",
+    ...(kind === "note" ? { options: { color: typeof color === "string" ? color : "yellow" } } : {}),
+  };
 }
 
 function fits(value: unknown): boolean {

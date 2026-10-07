@@ -12,7 +12,7 @@ let source: string;
 let xdg: string;
 const settings = async (id: string) => {
   if (!await page.locator(".settings-dialog").count()) await page.getByLabel("settings", { exact: true }).click();
-  // Per-plugin pages sit in folded sidebar groups; open them the way the app links to them.
+  // A plugin's page is reached from Plugins; open it the way the app links to it.
   if (id.includes(":")) await page.evaluate((p) => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: p } })), id);
   else await page.locator(`[data-settings-page="${id}"]`).click();
 };
@@ -20,7 +20,7 @@ const choose = async (dir: string) => {
   await app.evaluate(({ dialog }, selected) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selected] });
   }, dir);
-  await page.getByRole("button", { name: "Install from folder" }).click();
+  await page.getByRole("button", { name: "Add a view from a folder" }).click();
 };
 
 test.beforeAll(async () => {
@@ -63,7 +63,7 @@ test("settings has a focused dialog, view-specific automatic toolbar, and indepe
 });
 
 test("install review, cancellation, invalid packages, replacement, disabling and removal use the real package store", async () => {
-  await settings("installed");
+  await settings("plugins");
   await choose(root);
   await expect(page.getByRole("alert")).toContainText("hivemind-view.json");
   await choose(source);
@@ -72,30 +72,38 @@ test("install review, cancellation, invalid packages, replacement, disabling and
   expect(fs.existsSync(path.join(xdg, "hivemind/views/settings-demo"))).toBe(false);
   await choose(source);
   await page.getByRole("button", { name: "Install extension", exact: true }).click();
-  const pkg = page.locator('[data-community-pkg="settings-demo"]');
-  await expect(pkg).toBeVisible();
+  const row = page.locator('[data-view-row="settings-demo"]');
+  await expect(row).toBeVisible();
   expect(fs.existsSync(path.join(xdg, "hivemind/views/settings-demo/main.js"))).toBe(true);
-  await pkg.getByRole("switch").click();
-  await expect(pkg.getByRole("switch")).toHaveAttribute("aria-checked", "false");
-  await settings("views");
-  await expect(page.getByRole("button", { name: /Settings demo/ })).toHaveCount(0);
-  await settings("installed");
-  await pkg.getByRole("switch").click();
+
+  // Off on its page: it leaves the views to choose from, and stays listed to switch back on.
+  await row.locator("[data-plugin-open]").click();
+  await page.getByRole("switch", { name: "Enable Settings demo" }).click();
+  await expect(page.getByRole("switch", { name: "Enable Settings demo" })).toHaveAttribute("aria-checked", "false");
+  await settings("plugins");
+  await expect(row).toHaveAttribute("data-state", "off");
+  await expect(page.locator('[data-view-choice="settings-demo"]')).toHaveCount(0);
+  await row.locator("[data-plugin-open]").click();
+  await page.getByRole("switch", { name: "Enable Settings demo" }).click();
+  await settings("plugins");
+  await expect(row).toHaveAttribute("data-state", "ready");
+
   const manifestFile = path.join(source, "hivemind-view.json");
   const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
   fs.writeFileSync(manifestFile, JSON.stringify({ ...manifest, version: "1.1.0" }));
   await choose(source);
   await expect(page.getByRole("region", { name: "Review extension" })).toContainText("Replaces installed version 1.0.0");
   await page.getByRole("button", { name: "Replace extension" }).click();
-  await expect(pkg).toContainText("1.1.0");
+  await expect(row).toContainText("1.1.0");
   await page.screenshot({ path: "/tmp/hivemind-settings-extensions.png" });
-  await pkg.locator("summary").click();
-  await pkg.getByRole("button", { name: "Remove extension", exact: true }).click();
-  await pkg.getByRole("button", { name: "Keep extension" }).click();
-  await expect(pkg).toBeVisible();
-  await pkg.getByRole("button", { name: "Remove extension", exact: true }).click();
-  await pkg.getByRole("button", { name: "Remove extension", exact: true }).click();
-  await expect(pkg).toHaveCount(0);
+
+  await row.locator("[data-plugin-open]").click();
+  await page.getByRole("button", { name: "Remove Settings demo", exact: true }).click();
+  await page.getByRole("button", { name: "Keep it" }).click();
+  await page.getByRole("button", { name: "Remove Settings demo", exact: true }).click();
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(page.locator("[data-plugins-home]")).toBeVisible();
+  await expect(row).toHaveCount(0);
   expect(fs.existsSync(path.join(xdg, "hivemind/views/settings-demo"))).toBe(false);
   expect(fs.existsSync(source)).toBe(true);
 });
@@ -123,20 +131,20 @@ test("Appearance contains the former drawer controls and mounts terminal colours
 });
 
 test("Tools separates what ships with the app from what you switch on", async () => {
-  await settings("tools");
+  await settings("plugins");
   const included = page.getByRole("region", { name: "Included tools" });
   const code = included.locator('[data-tool-plugin="hivemind/code"]');
-  // The regression this guards: a built-in read as OFF because its switch asked
-  // enabledPlugins, which a built-in is never in.
+  // The regression this guards: a built-in read as OFF because its switch asked whether it was
+  // switched on, which a built-in never needs to be.
   await expect(code.getByRole("switch")).toHaveAttribute("aria-checked", "true");
   await expect(included.locator('[data-tool-plugin="hivemind/issues"]').getByRole("switch")).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByRole("region", { name: "Tools", exact: true }).locator('[data-tool-plugin="hivemind/web"]')).toHaveCount(1);
+  await expect(page.getByRole("region", { name: "Optional tools" }).locator('[data-tool-plugin="hivemind/web"]')).toHaveCount(1);
 
-  // Switching one off disables its own tools — there is nothing to un-enable.
+  // Switching one off switches off its own tools, in its record.
+  const state = () => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind/settings.json"), "utf8")).plugins.state["tool:hivemind/code"];
   await code.getByRole("switch").click();
   await expect(code.getByRole("switch")).toHaveAttribute("aria-checked", "false");
-  await expect.poll(() => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind/settings.json"), "utf8")).tools.disabledTools)
-    .toEqual(["hivemind/code/editor", "hivemind/code/diff"]);
+  await expect.poll(state).toEqual({ options: { editor: false, diff: false } });
   await code.getByRole("switch").click();
-  await expect.poll(() => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind/settings.json"), "utf8")).tools.disabledTools).toEqual([]);
+  await expect.poll(state).toBeUndefined();
 });

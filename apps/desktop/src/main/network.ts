@@ -7,6 +7,7 @@
  * person's other devices this app paired with (hosts, and other computers), which this app lets in
  * as the owner of everything here, and whose workspaces it opens as this person's.
  */
+import { AgentFeed } from "@hivemind/host/agent-feed";
 import { app, net, powerMonitor } from "electron";
 import fs from "node:fs";
 import os from "node:os";
@@ -326,6 +327,11 @@ export function shownFrom(device: string, tile: string): ShownMachine | null {
 }
 
 /** Stop the daemon (the app is quitting). */
+/** The agents here as one feed every reader follows (the workspace API's `agent.list`,
+ *  `agent.changed`, `agent.event`); null until the network is installed. */
+export function agentFeed(): AgentFeed | null { return feed; }
+let feed: AgentFeed | null = null;
+
 export function stopNetwork(): void {
   records?.stop();
   records = null;
@@ -781,4 +787,12 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     joinedList().update(workspace, { ended: "left" });
     broadcast("net:shared-status", workspace, { state: "left", access: joinedStatus(workspace)!.access });
   });
+  // The agents here as one feed, worked out again when a status or a board changes.
+  feed = new AgentFeed({
+    build: () => peers?.agentList().agents ?? [],
+    publish: (event, repo, payload) => server.publish(event, repo, payload as never),
+    repoOf: (workspace) => heldBoards(workspaceStore()).find((b) => b.workspace === workspace)?.repo ?? null,
+  });
+  onStatus(() => feed?.changed());
+  onWorkspaceChange((change) => { if (change.part === "core") feed?.changed(); });
 }

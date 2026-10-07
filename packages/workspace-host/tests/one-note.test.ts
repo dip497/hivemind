@@ -45,7 +45,7 @@ function lateChannel(pending: Array<Array<() => void>>): [SyncChannel, SyncChann
   ];
 }
 
-const note = (text: string): BoardObject => ({ id: "n1", kind: "note", x: 10, y: 20, w: 200, h: 160, text } as BoardObject);
+const note = (text: string): BoardObject => ({ id: "n1", kind: "widget", widget: "note", placement: "board", x: 10, y: 20, w: 200, h: 160, text } as BoardObject);
 const textOf = (board: BoardObject[]) => (board.find((o) => o.id === "n1") as { text: string } | undefined)?.text ?? "";
 
 /** A person's window on `repo` in `store`: it types into its note and writes the whole board from

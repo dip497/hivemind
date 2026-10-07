@@ -172,6 +172,35 @@ view's own tiles and frames; the person at the view is never in the list. A view
 app against `fakeHost()` from `@hivemind/view-sdk/testing` (it comes with `hive views new`): it
 greets the view as the app does, and says what the app would refuse, and why.
 
+## Widgets
+
+A view can show the workspace's widgets (protocol 1.8, feature `widgets`), which is how a phone
+shows them: `hm.onWidgets((widgets) => …)` hears every widget now and whenever one changes, each
+`{ id, widget, name, tree, card, tint?, text?, items?, images, placement }`: `tree` is what it draws,
+in the same nodes a widget renders (stack, row, text, number, meter, button, image, sprite, input,
+textarea, list), `text` and `items` what people wrote in it, `images` the pictures its tree names.
+`hm.pressWidget(id, action)` presses one of its buttons and `hm.clickWidget(id)` its card: the
+widget's code hears it wherever it runs. `@dip497/widgets` on HiveHub is such a view.
+
+## Settings
+
+A view declares what the person can set it to in its manifest's `settings`; the app draws the
+controls on its page in Settings ▸ Plugins (a view never draws its own settings screen), and
+`hive plugins set` sets them from a terminal. Each field is a `boolean`, a `number` (`min`,
+`max`), a `text` (`maxLength`) or a `choice` (`values`, `labels`), with a `label`, an optional
+`description` and a `default`:
+
+```json
+"settings": [
+  { "id": "columns", "label": "Columns", "type": "choice", "values": ["todo", "all"], "labels": ["To do", "Everything"], "default": "todo" },
+  { "id": "max", "label": "Most cards", "type": "number", "min": 1, "max": 50, "default": 20 }
+]
+```
+
+The view reads the values as `hm.settings` (protocol 1.7, feature `settings`) and hears each
+change as the `settings` event. A host before 1.7 sends none, so read each with its default
+beside it: `hm.settings.max ?? 20`.
+
 ## Permissions
 
 Declared in the manifest, refused at install if unknown:

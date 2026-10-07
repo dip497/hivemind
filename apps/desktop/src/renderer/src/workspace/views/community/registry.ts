@@ -9,6 +9,7 @@
  * newer protocol, when its id is a built-in view's, or when it was disabled
  * earlier this session for misbehaving.
  */
+import { isPluginEnabled } from "@hivemind/core/plugin-settings";
 import { Puzzle } from "lucide-react";
 import { toast } from "sonner";
 import { PROTOCOL_VERSION } from "@hivemind/view-sdk/protocol";
@@ -80,8 +81,8 @@ export async function loadCommunityViews(repoRoot: string | null): Promise<Commu
     if (!why && (!p.manifest || !p.url)) why = "no manifest";
     if (!why && p.manifest!.protocol > PROTOCOL_VERSION) why = `needs protocol ${p.manifest!.protocol}; this app speaks ${PROTOCOL_VERSION}`;
     if (!why && disabled.has(p.id)) why = `disabled: ${disabled.get(p.id)}`;
-    // The user switched it off in Settings ▸ Views (settings.json `plugins.disabled`).
-    if (!why && getSettings().plugins.disabled.includes(p.id)) why = "disabled in Settings";
+    // The user switched it off in Settings (its plugin record).
+    if (!why && !isPluginEnabled(getSettings().plugins.state, "view", p.id)) why = "disabled in Settings";
     if (!why && getView(p.id) && getView(p.id)!.source !== "community") why = `"${p.id}" is a built-in view`;
     if (!why && keep.has(p.id)) why = "duplicate id";
     if (why) { refused[p.id] = why; continue; }

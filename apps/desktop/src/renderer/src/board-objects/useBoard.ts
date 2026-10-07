@@ -14,7 +14,7 @@ import { snapToGrid } from "../canvas-sizing";
 import { useDebouncedSave } from "../workspace/view-layout-store";
 import { readBoard, redoBoard, rereadBoard, undoBoard, writeBoard } from "../workspace/workspace-store-client";
 import {
-  duplicateBox, facingSides, frameAt, frontZ, isBox, newBox, newWidget, toCanvas, toStored, withoutObject,
+  duplicateBox, facingSides, frameAt, frontZ, isBox, newWidget, toCanvas, toStored, withoutObject,
   type BoxKind, type Point, type Rect,
 } from "./board-model";
 
@@ -35,9 +35,8 @@ export interface Board {
   arrowFrom: ArrowTarget | null | undefined;
   select: (id: string | null) => void;
   edit: (id: string | null) => void;
-  add: (kind: Exclude<BoxKind, "widget">, at: Point) => void;
-  /** Put a widget from `pkg` on the board at `at`. */
-  addWidget: (pkg: { id: string; w: number; h: number }, at: Point) => void;
+  /** Add a widget of the package `pkg`: on the board at `board.at`, else floating over every view. */
+  addWidget: (pkg: string, board?: { at: Point; size: { w: number; h: number }; lines?: boolean }) => void;
   update: (id: string, change: (o: BoardObject) => BoardObject) => void;
   remove: (id: string) => void;
   duplicate: (id: string) => void;
@@ -127,17 +126,22 @@ export function useBoard({ persistKey, frames, framesRef, onSelect }: {
     });
   }, [set]);
 
-  const add = useCallback((kind: Exclude<BoxKind, "widget">, at: Point) => {
-    const box = newBox(kind, mintId(kind), at, framesRef.current, frontZ(latest.current));
-    set((board) => [...board, box]);
-    edit(box.id);
+  const addWidget = useCallback((pkg: string, place?: { at: Point; size: { w: number; h: number }; lines?: boolean }) => {
+    // Never on top of another's corner: one step down and right while another starts within a step,
+    // so the one under it can still be seen and written in.
+    let at = place?.at;
+    if (place && at) {
+      const STEP = 24;
+      const taken = (p: Point) => latest.current.some((o) => isBox(o)
+        && Math.abs(o.x - (p.x - place.size.w / 2)) < STEP && Math.abs(o.y - (p.y - place.size.h / 2)) < STEP);
+      for (let i = 0; i < 20 && taken(at); i++) at = { x: at.x + STEP, y: at.y + STEP };
+    }
+    const w = newWidget(pkg, mintId("widget"), frontZ(latest.current), place && at ? { ...place, at, frames: framesRef.current } : undefined);
+    set((board) => [...board, w]);
+    // On the board it is written in at once, as a new note is.
+    if (place) edit(w.id);
   }, [set, edit, framesRef]);
 
-  const addWidget = useCallback((pkg: { id: string; w: number; h: number }, at: Point) => {
-    const box = newWidget(pkg, mintId("widget"), at, framesRef.current, frontZ(latest.current));
-    set((board) => [...board, box]);
-    select(box.id);
-  }, [set, select, framesRef]);
 
   const remove = useCallback((id: string) => {
     set((board) => withoutObject(board, id));
@@ -256,11 +260,11 @@ export function useBoard({ persistKey, frames, framesRef, onSelect }: {
 
   return useMemo(() => ({
     objects, objectsRef: latest, selectedId, editingId, arrowFrom,
-    select, edit, add, addWidget, update, remove, duplicate, moveTo, resize, shiftFrames, place,
+    select, edit, addWidget, update, remove, duplicate, moveTo, resize, shiftFrames, place,
     startArrow, pickArrowEnd, cancelArrow, undo, redo, reload, merge,
   }), [
     objects, selectedId, editingId, arrowFrom,
-    select, edit, add, addWidget, update, remove, duplicate, moveTo, resize, shiftFrames, place,
+    select, edit, addWidget, update, remove, duplicate, moveTo, resize, shiftFrames, place,
     startArrow, pickArrowEnd, cancelArrow, undo, redo, reload, merge,
   ]);
 }

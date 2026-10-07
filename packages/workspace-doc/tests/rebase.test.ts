@@ -131,7 +131,11 @@ test("a view of another version, or whose data is not fields, is written as give
   expect(readView(doc, "list")).toEqual({ v: 1, data: ["c"] });
 });
 
-const note = (id: string, text: string, fields: Fields = {}) => ({ id, kind: "note", x: 0, y: 0, w: 200, h: 160, color: "yellow", text, ...fields }) as BoardObject;
+/** A sticky note: the app's `note` widget on the board, its colour an option. */
+const note = (id: string, text: string, fields: Fields = {}) => {
+  const { color = "yellow", ...rest } = fields;
+  return { id, kind: "widget", widget: "note", placement: "board", x: 0, y: 0, w: 200, h: 160, text, options: { color }, ...rest } as BoardObject;
+};
 const arrow = (id: string, from: string, to: string) => ({ id, kind: "arrow", from: { id: from, side: "right" }, to: { id: to, side: "left" }, label: "" }) as BoardObject;
 
 test("a board written from an older reading changes what its writer changed, field by field, and keeps what others changed since", () => {

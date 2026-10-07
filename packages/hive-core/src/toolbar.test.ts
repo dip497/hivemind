@@ -14,7 +14,7 @@ describe("toolbar catalog", () => {
       ["issues", "Issues", "5"],
       ["frame", "Frame", "6"],
       ["browser", "Browser", "7"],
-      ["board", "Board", "8"],
+      ["board", "Add", ""],
       ["theme", "Theme", ""],
     ]);
     expect(DEFAULT_TOOLBAR_ORDER).toEqual(BUILTIN_TOOLBAR_ACTIONS.map((a) => a.id));

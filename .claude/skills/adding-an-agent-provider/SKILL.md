@@ -187,7 +187,7 @@ cd apps/desktop && npx electron-vite build        # then drop it in and launch t
 ```
 
 - `hive agents list` — the agent appears, with its CLI found (or the reason it is not).
-- Settings ▸ Agents — the card shows the launch options, the install link if the CLI is
+- Settings ▸ Plugins (the agent's row, then its page) — the card shows the launch options, the install link if the CLI is
   missing, and the capability note if it is not a worker.
 - The e2e suite runs the full lifecycle for a throwaway manifest
   (`apps/desktop/tests/e2e/zz-sixth-provider.spec.ts`) — read it before claiming done.

@@ -19,9 +19,9 @@ beforeEach(() => {
 afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
 
 const core = (title: string) => ({ frames: [{ id: "f1", title }], tiles: [{ id: "t1", kind: "claude" }], tileNames: {}, editorTabs: {}, frameOf: { t1: "f1" } });
-const note = (text: string) => ({ id: "n1", kind: "note" as const, x: 10, y: 20, w: 200, h: 160, text });
+const note = (text: string) => ({ id: "n1", kind: "widget" as const, widget: "note", placement: "board" as const, x: 10, y: 20, w: 200, h: 160, text });
 const list = (...items: string[]) =>
-  ({ id: "c1", kind: "checklist" as const, x: 0, y: 200, w: 240, h: 200, text: "today", items: items.map((text, i) => ({ id: `i${i + 1}`, text, done: false })) });
+  ({ id: "c1", kind: "widget" as const, widget: "checklist", placement: "board" as const, x: 0, y: 200, w: 240, h: 200, text: "today", items: items.map((text, i) => ({ id: `i${i + 1}`, text, done: false })) });
 const restart = () => new WorkspaceStore({ dir, person });
 
 // Repo "/work/api" is stored under the first 32 hex digits of sha256("/work/api"). Files already on
@@ -470,4 +470,15 @@ test("a tile the control plane opens is kept, told with its writer, and stays wh
     { repo: "/a", part: "core", writer: "control" },
     { repo: "/a", part: "core", writer: "window:1" },
   ]);
+});
+
+test("what a widget keeps is never an undo step: undo takes back the edit before it", () => {
+  const s = new WorkspaceStore({ dir, person });
+  const widget = (fields: Record<string, unknown>) => ({ id: "w1", kind: "widget", z: 0, widget: "counter", ...fields });
+  s.setObjects("/a", [widget({})]);
+  s.setObjects("/a", [widget({ z: 5 })]);
+  s.setObjects("/a", [widget({ z: 5, state: { n: 1 } })]);
+  s.setObjects("/a", [widget({ z: 5, state: { n: 2 } })]);
+  expect(s.undo("/a")).toBe(true);
+  expect(s.getObjects("/a")).toEqual([widget({ z: 0, state: { n: 2 } })] as never);
 });

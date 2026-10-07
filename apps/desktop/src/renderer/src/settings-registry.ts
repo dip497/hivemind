@@ -1,10 +1,11 @@
-/** Settings navigation: fixed pages, grouped, plus one page per plugin (`agent:claude`,
- *  `view:canvas`, `tool:browser`). `chunk` keeps cheap pages out of the lazy Settings bundle. */
-import { Bell, Bot, Info, Keyboard, Layers, Package, Palette, Store, UserRound, Wrench, Network, MonitorSmartphone } from "lucide-react";
+/** Settings navigation: fixed pages, grouped, plus one page per plugin of any kind
+ *  (`plugin:agent:claude`, `plugin:view:canvas`, `plugin:widget:pet`, `plugin:tool:hivemind/web`).
+ *  `chunk` keeps cheap pages out of the lazy Settings bundle. */
+import { Bell, Blocks, Info, Keyboard, Palette, UserRound, Network, MonitorSmartphone } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-export type SettingsGroup = "General" | "Agents" | "Views" | "Tools" | "Plugins";
-export const SETTINGS_GROUPS: readonly SettingsGroup[] = ["General", "Agents", "Views", "Tools", "Plugins"];
+export type SettingsGroup = "General" | "Plugins";
+export const SETTINGS_GROUPS: readonly SettingsGroup[] = ["General", "Plugins"];
 
 export interface SettingsPageDef {
   id: string;
@@ -26,27 +27,32 @@ export const SETTINGS_PAGES: readonly SettingsPageDef[] = [
   { id: "notifications", group: "General", label: "Notifications", icon: Bell, description: "Alerts and sounds.", chunk: "eager" },
   { id: "shortcuts", group: "General", label: "Shortcuts", icon: Keyboard, description: "Keyboard shortcuts.", chunk: "lazy" },
   { id: "about", group: "General", label: "About", title: "About and updates", icon: Info, description: "Version and updates.", chunk: "eager" },
-  { id: "agents", group: "Agents", label: "All agents", title: "Agents", icon: Bot, description: "The default agent, and which agents this machine has.", chunk: "lazy" },
-  { id: "views", group: "Views", label: "All views", title: "Views", icon: Layers, description: "The workspace view you work in.", chunk: "lazy" },
-  { id: "tools", group: "Tools", label: "All tools", title: "Tools", icon: Wrench, description: "Tiles you can open next to your agents.", chunk: "lazy" },
-  { id: "plugins", group: "Plugins", label: "Browse", title: "Browse plugins", icon: Store, description: "Agents and views others have published.", chunk: "lazy" },
-  { id: "installed", group: "Plugins", label: "Installed", title: "Installed plugins", icon: Package, description: "Plugins you added, and adding one from a folder.", chunk: "lazy" },
+  { id: "plugins", group: "Plugins", label: "Plugins", icon: Blocks, description: "Agents, views, widgets and tools: the ones you have and the ones on HiveHub.", chunk: "lazy" },
 ] as const;
 
 export const SETTINGS_PAGE_IDS: readonly string[] = SETTINGS_PAGES.map((p) => p.id);
 
-/** Per-plugin pages, always in the lazy chunk. */
-export const PLUGIN_PAGE_KINDS = ["agent", "view", "tool"] as const;
+/** A plugin's page, always in the lazy chunk: `plugin:<kind>:<id>`. */
+export const PLUGIN_PAGE_KINDS = ["agent", "view", "widget", "tool"] as const;
 export type PluginPageKind = (typeof PLUGIN_PAGE_KINDS)[number];
 
 export function pluginPage(id: string): { kind: PluginPageKind; pluginId: string } | null {
-  const [kind, ...rest] = id.split(":");
-  const pluginId = rest.join(":");
-  return (PLUGIN_PAGE_KINDS as readonly string[]).includes(kind!) && pluginId ? { kind: kind as PluginPageKind, pluginId } : null;
+  const m = /^plugin:([a-z]+):(.+)$/.exec(id);
+  return m && (PLUGIN_PAGE_KINDS as readonly string[]).includes(m[1]!) ? { kind: m[1] as PluginPageKind, pluginId: m[2]! } : null;
 }
 
+/** Where the ids of the pages Plugins replaced lead now: the per-kind lists to Plugins, a
+ *  plugin's own settings page (`agent:claude`) to its page. */
+function moved(id: string): string | null {
+  if (["agents", "views", "tools", "installed"].includes(id)) return "plugins";
+  const m = /^(agent|view|tool):(.+)$/.exec(id);
+  return m ? `plugin:${m[1]}:${m[2]}` : null;
+}
+
+/** The page an id opens, or null when it names none. */
 export function resolveSettingsPage(id: string): string | null {
-  return SETTINGS_PAGE_IDS.includes(id) || pluginPage(id) ? id : null;
+  const to = moved(id) ?? id;
+  return SETTINGS_PAGE_IDS.includes(to) || pluginPage(to) ? to : null;
 }
 
 export function settingsPage(id: string): SettingsPageDef | undefined {

@@ -71,6 +71,10 @@ import { machines as savedMachines } from "./remote/catalog.js";
 import { People } from "./people.js";
 import { Plans } from "./plans.js";
 import { presence } from "./presence.js";
+import { widgets } from "./widgets.js";
+import { listWidgets, widgetAsset } from "@hivemind/core/widgets";
+import { disabledPlugins, pluginOptions, stringOptions } from "@hivemind/core/plugin-settings";
+import { AgentFeed } from "./agent-feed.js";
 import { makeSpawnPacer } from "./spawn-pacer.js";
 import { startSpawned } from "./spawned.js";
 import { Layouts } from "./store.js";
@@ -138,7 +142,7 @@ function agentCatalog(settingsFile: string): { current(): Promise<void>; setting
   const read = async () => {
     stamp = dirStamp();
     settings = await readSettings(settingsFile);
-    setCatalog((await loadAgents({ disabled: settings.agents.disabled })).defs);
+    setCatalog((await loadAgents({ disabled: disabledPlugins(settings.plugins.state, "agent") })).defs);
   };
   return {
     current: () => (settings && dirStamp() === stamp ? Promise.resolve() : (reading ??= read().finally(() => { reading = null; }))),
@@ -160,6 +164,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   const heard = changeHub((m) => o.onWarn(m));
   const workspacesDir = path.join(o.dir, "workspaces");
   // A change is made by a client, so after the server below is there to tell the others.
+  let agentFeed: AgentFeed | null = null;
   const store = new WorkspaceStore({
     dir: workspacesDir,
     person: keys.person,
@@ -167,6 +172,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     onChange: (change) => {
       api.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part });
       heard.tell(change);
+      if (change.part === "core") agentFeed?.changed();
     },
   });
   const layouts = new Layouts(() => store);
@@ -272,13 +278,19 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   };
   // How this host looks to its guests: its settings' theme, once they are read.
   let appearanceNow = (): Appearance => DEFAULT_APPEARANCE;
+  // Its widgets run on the person's own devices that have a workspace open: it has no window.
+  const widgetDomain = widgets(() => api, widgetAsset, listWidgets, (repo) => store.getObjects(repo));
   const api: WorkspaceServer = new WorkspaceServer([
     ...workspaceDomains,
     layouts.domain,
-    agents({ statuses: () => control.status.all(), links: () => control.links() }),
+    agents({
+      statuses: () => control.status.all(), links: () => control.links(),
+      feed: () => agentFeed, workspaceOf: (repo) => store.ownership(repo)?.workspaceId ?? null,
+    }),
     terminals.domain,
     plans.domain,
     presence(() => api, () => keys.personId),
+    widgetDomain,
     // Nothing changes a headless host's theme while it runs: it answers, and has nothing to tell.
     appearance({ current: () => appearanceNow(), onChange: () => {}, server: () => api }),
     peopleHere.domain,
@@ -321,6 +333,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       close: (bare) => control.close(bare),
       machines,
       intents,
+      widgets: widgetDomain,
       onWarn: o.onWarn,
     }),
   ], intents, o.onWarn);
@@ -359,7 +372,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       workspaces: store,
       // A caller in no tile acts on the one workspace this host serves, when it serves one.
       shownWorkspace: () => { const repos = store.repos(); return repos.length === 1 ? { repo: repos[0]!, frame: null } : null; },
-      launchOptions: (agentId) => catalog.settings().agents.options[agentId] ?? {},
+      launchOptions: (agentId) => stringOptions(pluginOptions(catalog.settings().plugins.state, "agent", agentId)),
       endSession: (ptyId) => terminals.end(ptyId),
       sessionHeld: holds,
       intents,
@@ -445,6 +458,13 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     onWarn: (m) => o.onWarn(`push: ${m}`),
   });
   control.status.subscribe((change) => notices.changed(change));
+  // The agents here as one feed every reader follows: worked out again when a status or a board changes.
+  agentFeed = new AgentFeed({
+    build: () => peers.agentList().agents,
+    publish: (event, repo, payload) => api.publish(event, repo, payload as never),
+    repoOf: (workspace) => heldBoards(store).find((b) => b.workspace === workspace)?.repo ?? null,
+  });
+  control.status.subscribe(() => agentFeed?.changed());
   /** The workspaces shared with someone that are hosted here, as their records are filed. */
   const hostedHere = (): Hosted[] => lists.workspaces().flatMap((workspace) => {
     const h = lists.hosting(workspace);

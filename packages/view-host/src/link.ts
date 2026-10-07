@@ -22,7 +22,7 @@
 import {
   ACTIVITY_MIN_INTERVAL_MS, EVENT_REPLAY_MAX, PROTOCOL_VERSION, customNameMatches, parsePluginMessage, refusal,
   type ActivityLevel, type CommandName, type HostMessage, type HostScope, type PluginMessage, type RequestErrorCode, type ShareOutcome, type SurfaceRect, type ViewEvent,
-  type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect,
+  type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewWidget,
   type ViewAgent, type ViewAgentStatus, type ViewSession, type ViewStatus,
 } from "@hivemind/view-sdk/protocol";
 import { AGENT_TILE_KIND, type TileKind } from "@hivemind/workspace-doc/shapes";
@@ -83,6 +83,9 @@ export interface LinkServices {
   /** 1.5: everyone else in the workspace, whatever they point at and select; the current ones now,
    *  then each change. The link keeps to the view's own tiles and frames. */
   participants?: { subscribe(cb: (people: ViewParticipant[]) => void): () => void };
+  /** 1.8: every widget in the workspace, now and on each change; and a press of one, as the
+   *  person's where it is drawn. */
+  widgets?: { subscribe(cb: (widgets: ViewWidget[]) => void): () => void; press(id: string, press: { action: unknown } | { click: true }): void };
 }
 
 export const SHARE_DECLINES_MAX = 3;
@@ -105,6 +108,7 @@ export function linkFeatures(s: LinkServices, placesSurfaces = false): ViewFeatu
   if (s.sessions) f.push("sessions");
   if (s.confirmPrompt && s.sendPrompt) f.push("prompt");
   if (s.participants) f.push("participants");
+  if (s.widgets) f.push("widgets");
   if (placesSurfaces) f.push("surfaces");
   return f;
 }
@@ -174,6 +178,7 @@ export class CommunityLink {
   private announced = new Set<string>();
   private readonly scope: HostScope;
   private participantsUnsub: (() => void) | null = null;
+  private widgetsUnsub: (() => void) | null = null;
   private people: ViewParticipant[] | null = null;
   private lastParticipants = "";
   /** What this host cannot do that the view asked for, said once each. */
@@ -244,6 +249,7 @@ export class CommunityLink {
     this.watched.clear();
     this.presenceUnsub?.(); this.presenceUnsub = null;
     this.participantsUnsub?.(); this.participantsUnsub = null;
+    this.widgetsUnsub?.(); this.widgetsUnsub = null;
     for (const u of this.statusUnsubs.values()) u();
     this.statusUnsubs.clear();
     this.stats.statusSubscriptions = 0;
@@ -354,6 +360,12 @@ export class CommunityLink {
         this.participantsUnsub?.(); this.participantsUnsub = null;
         this.people = null; this.lastParticipants = "";
         return;
+      case "subscribeWidgets": {
+        if (!this.widgetsUnsub) this.widgetsUnsub = this.services.widgets!.subscribe((widgets) => this.send({ type: "widgets", widgets }));
+        return;
+      }
+      case "unsubscribeWidgets": this.widgetsUnsub?.(); this.widgetsUnsub = null; return;
+      case "pressWidget": this.services.widgets!.press(m.id, m.click ? { click: true } : { action: m.action }); return;
       case "request": this.request(m); return;
     }
   }

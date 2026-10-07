@@ -12,6 +12,9 @@
  * caller may call (`Connection.may`): on a phone, what a phone may. A remote screen places no live
  * surfaces, has no folder picker nor share sheet, and starts no tile but an agent's.
  */
+import type { WidgetsForViews } from "./widgets.js";
+import type { WidgetPress } from "@hivemind/workspace-api/methods";
+import type { ViewWidget } from "@hivemind/view-sdk/protocol";
 import { randomUUID } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { cleanName, spawnableAgents, agentForCmd } from "@hivemind/agents";
@@ -76,6 +79,8 @@ export interface ViewsOptions {
   /** How this device's link to the machine a frame's folder is on is doing; none: not known here. */
   linkState?(folder: string): ViewFrameMachine["state"];
   intents: Pick<Intents, "perform">;
+  /** The workspace's widgets, for a view that shows them (1.8); none: not offered. */
+  widgets?: WidgetsForViews;
   onWarn(message: string): void;
 }
 
@@ -383,7 +388,14 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
           onFramesDrawn: () => {},
           onError: (message) => o.onWarn(`view "${view.id}" on a remote screen: ${message}`),
           onDisable: (why) => end(s, why),
-          services: { agentStatus: (tile, cb) => watch(tile, (status) => cb(viewAgentStatus(status))) },
+          services: {
+            agentStatus: (tile, cb) => watch(tile, (status) => cb(viewAgentStatus(status))),
+            // A press through a view is the opener's, held to what its role lets it do (`widget.press`).
+            ...(o.widgets ? { widgets: {
+              subscribe: (cb: (w: ViewWidget[]) => void) => o.widgets!.watch(repo, cb),
+              press: (id: string, press: WidgetPress) => { if (from.may?.("widget.press") ?? true) o.widgets!.press(repo, id, press); },
+            } } : {}),
+          },
         });
         s.link.attach({ postMessage: (message) => from.send({ event: "view.said", params: [s.id, message] }), onmessage: null });
         let mine = opened.get(from);

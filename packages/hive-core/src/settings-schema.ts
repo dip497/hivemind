@@ -12,6 +12,7 @@
  */
 
 import { isToolbarActionId, type ToolbarActionId, type ToolbarPreferences } from "./toolbar.js";
+import { parsePluginStates, pluginStatesFromLegacy, type PluginState } from "./plugin-settings.js";
 
 // ── appearance ────────────────────────────────────────────────────────────────
 
@@ -268,24 +269,20 @@ export interface ViewsSettings {
   toolbars: Record<string, ToolbarPreferences>;
 }
 export interface PluginsSettings {
-  /** Community view ids the user switched off (still installed). */
-  disabled: string[];
+  /** Every plugin's stored state, by `<kind>:<id>` (plugin-settings.ts): whether it is on, and
+   *  the values set for its fields. One record for every kind of plugin. */
+  state: Record<string, PluginState>;
 }
+/** Which tool plugins are on, and which of their tools are off: what the tool registry takes,
+ *  worked out from the plugins' stored state (`toolPreferences`). Never stored as such. */
 export interface ToolsSettings {
-  /** Tool plugins the user switched ON. Installation alone activates nothing:
-   *  an empty list means every managed tool (the Browser tile) is unavailable. */
+  /** Tool plugins switched ON. A tool plugin that is not built in is off until switched on. */
   enabledPlugins: string[];
-  /** Individual tool ids switched off inside an enabled plugin. */
+  /** Individual tool ids (`<plugin>/<tool>`) switched off inside a plugin. */
   disabledTools: string[];
 }
 export interface AgentsSettings {
-  /** Provider ids the user switched off. Built-ins included: an agent is
-   *  configuration now, so any of them can be turned off without uninstalling
-   *  anything. An unknown id here is harmless — it simply matches nothing. */
-  disabled: string[];
   defaultAgent: string;
-  /** Agent id → option id → value, e.g. { claude: { model: "opus" } }. Absent = the agent's own default. */
-  options: Record<string, Record<string, string>>;
   /** Add catalog agents whose CLI is found on this machine, without asking. */
   autoInstall: boolean;
   /** Catalog agents the user removed: never added automatically again. */
@@ -313,7 +310,6 @@ export interface Settings {
   appearance: Appearance;
   views: ViewsSettings;
   plugins: PluginsSettings;
-  tools: ToolsSettings;
   agents: AgentsSettings;
   profile: ProfileSettings;
   network: NetworkSettings;
@@ -323,12 +319,11 @@ export const DEFAULT_SETTINGS: Settings = {
   v: 1,
   appearance: DEFAULT_APPEARANCE,
   views: { defaultView: "canvas", chrome: {}, toolbars: {} },
-  plugins: { disabled: [] },
-  // Fresh install: no tool plugin is on.
-  tools: { enabledPlugins: [], disabledTools: [] },
+  // Fresh install: every plugin as it is by default (a tool plugin that is not built in: off).
+  plugins: { state: {} },
   // Empty = "the agent catalog's default" — hive-core does not depend on
   // @hivemind/agents, and the renderer resolves an unknown id to defaultAgent().
-  agents: { disabled: [], defaultAgent: "", options: {}, autoInstall: true, declined: [], fromCatalog: [] },
+  agents: { defaultAgent: "", autoInstall: true, declined: [], fromCatalog: [] },
   profile: { name: "", color: "" },
   network: { updateCheck: true },
 };
@@ -427,30 +422,31 @@ const VIEW_ID_RE = /^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-9][a-z0-9-]{0,
 /** No toolbar can name more actions than the catalog holds. */
 const TOOLBAR_MAX_ACTIONS = 32;
 
-/** Plugin id (`org/name`) and tool id (`org/name/tool`) shapes, matching
- *  tool-registry's own validation. Anything else is dropped rather than stored. */
-const PLUGIN_ID_RE = /^[a-z0-9][a-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{1,39}$/;
-const TOOL_ID_RE = /^[a-z0-9][a-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{0,63}$/;
-
-/** Validate + dedupe + bound a list of namespaced ids, order preserved. */
-function idList(raw: unknown, re: RegExp, fallback: readonly string[], max = 200): string[] {
-  const src = Array.isArray(raw) ? raw : fallback;
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const v of src) {
-    if (typeof v !== "string" || !re.test(v) || seen.has(v)) continue;
-    seen.add(v);
-    out.push(v);
-    if (out.length >= max) break;
-  }
-  return out;
-}
-
 /** Validate + fill a parsed settings.json (any junk) into a Settings.
  *
  *  Two callers share this function: a LOAD (a file just parsed from disk, no base — the
  *  defaults fill the gaps) and a PATCH (a partial object merged onto the settings already in
  *  hand, base given). */
+/** Whether a settings.json holds plugin state in the keys a version before `plugins.state` used. */
+export function hasLegacyPluginKeys(p: Record<string, unknown>): boolean {
+  const has = (o: unknown, k: string) => isObj(o) && o[k] !== undefined;
+  return has(p.agents, "disabled") || has(p.agents, "options") || has(p.plugins, "disabled") || isObj(p.tools);
+}
+
+/** What the tool registry takes, from the tool plugins' stored state: the plugins switched on,
+ *  and the tools switched off inside them (each a plugin option set to false). */
+export function toolPreferences(s: Pick<Settings, "plugins">): ToolsSettings {
+  const enabledPlugins: string[] = [];
+  const disabledTools: string[] = [];
+  for (const [key, st] of Object.entries(s.plugins.state)) {
+    if (!key.startsWith("tool:")) continue;
+    const id = key.slice(5);
+    if (st.enabled === true) enabledPlugins.push(id);
+    for (const [tool, v] of Object.entries(st.options ?? {})) if (v === false) disabledTools.push(`${id}/${tool}`);
+  }
+  return { enabledPlugins, disabledTools };
+}
+
 export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): Settings {
   const p = isObj(raw) ? raw : {};
   const views = isObj(p.views) ? p.views : {};
@@ -490,22 +486,18 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
   }
   const plugins = isObj(p.plugins) ? p.plugins : {};
   const agents = isObj(p.agents) ? p.agents : {};
-  const toolsIn = isObj(p.tools) ? p.tools : {};
-  const tools = {
-    enabledPlugins: idList(toolsIn.enabledPlugins, PLUGIN_ID_RE, base.tools.enabledPlugins),
-    disabledTools: idList(toolsIn.disabledTools, TOOL_ID_RE, base.tools.disabledTools),
-  };
+  // Plugin state as stored; else, from a settings.json written before it, made from the keys
+  // that held it then; else (a partial merge) as `base` has it.
+  const state = isObj(plugins.state) ? parsePluginStates(plugins.state)
+    : hasLegacyPluginKeys(p) ? pluginStatesFromLegacy(p)
+    : base.plugins.state;
   return {
     v: 1,
     appearance: mergeAppearance(p.appearance, base.appearance),
     views: { defaultView: str(views.defaultView, base.views.defaultView, 64), chrome, toolbars },
-    plugins: { disabled: (Array.isArray(plugins.disabled) ? plugins.disabled : base.plugins.disabled).filter((x): x is string => typeof x === "string").slice(0, 200) },
-    tools,
+    plugins: { state },
     agents: {
-      disabled: (Array.isArray(agents.disabled) ? agents.disabled : base.agents.disabled)
-        .filter((x): x is string => typeof x === "string").slice(0, 200),
       defaultAgent: str(agents.defaultAgent, base.agents.defaultAgent, 64),
-      options: isObj(agents.options) ? agentOptions(agents.options) : base.agents.options,
       autoInstall: bool(agents.autoInstall, base.agents.autoInstall),
       declined: (Array.isArray(agents.declined) ? agents.declined : base.agents.declined)
         .filter((x): x is string => typeof x === "string" && AGENT_KEY_RE.test(x)).slice(0, 200),
@@ -541,18 +533,6 @@ function profileName(v: unknown, def: string): string {
 
 /** An agent's id, which may carry a HiveHub scope — unlike the option ids inside it. */
 const AGENT_KEY_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
-const OPTION_KEY_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
-
-function agentOptions(raw: Record<string, unknown>): Record<string, Record<string, string>> {
-  const out: Record<string, Record<string, string>> = {};
-  for (const [agent, opts] of Object.entries(raw).slice(0, 64)) {
-    if (!AGENT_KEY_RE.test(agent) || !isObj(opts)) continue;
-    const kept = Object.entries(opts).slice(0, 16)
-      .filter((e): e is [string, string] => OPTION_KEY_RE.test(e[0]) && typeof e[1] === "string" && e[1].length > 0 && e[1].length <= 200);
-    if (kept.length) out[agent] = Object.fromEntries(kept);
-  }
-  return out;
-}
 
 // ── the renderer's flat theme view ──────────────────────────────────────────
 // The renderer components (customizer, wallpaper, terminal) read a FLAT shape;

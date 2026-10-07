@@ -14,6 +14,7 @@ import { AGENT_TILE_KIND } from "../tile-kinds";
 import { watchPeopleHere } from "../multiplayer/presence";
 import { colorOf } from "../multiplayer/people";
 import { ViewEventHub } from "./view-events";
+import { clickWidget, pressWidget, watchViewWidgets } from "../board-objects/widget-runtime";
 import type { HcpStatusEvent } from "../../../shared/ipc";
 
 const TURN_ENDS = new Set(["done", "failed", "interrupted", "limited"]);
@@ -130,6 +131,14 @@ export function viewLinkServices(opts: {
 }): LinkServices {
   return {
     agentStatus: (tileId, cb) => subscribeHostedStatus(tileId, (s) => cb(viewAgentStatus(s))),
+    widgets: {
+      subscribe: (cb) => {
+        const repo = opts.repo();
+        if (!repo) { cb([]); return () => {}; }
+        return watchViewWidgets(repo, cb);
+      },
+      press: (id, press) => { if ("click" in press) clickWidget(id); else pressWidget(id, press.action); },
+    },
     agents: viewAgents,
     sessions: async (agent, frameId) => {
       const def = catalogAgentById(agent);

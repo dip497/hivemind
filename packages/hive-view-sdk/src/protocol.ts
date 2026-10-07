@@ -13,6 +13,8 @@
  * with a real terminal above the iframe.
  */
 
+import type { SettingValue } from "./settings.js";
+
 export const PROTOCOL_VERSION = 1;
 
 /** What a manifest may ask for beyond the base set (projection, status,
@@ -23,6 +25,19 @@ export const PROTOCOL_VERSION = 1;
  *  `workspace:sessions` (1.4): see past agent sessions in a frame's folder and continue one. */
 export const VIEW_PERMISSIONS = ["workspace:spawn", "workspace:close", "workspace:edit", "workspace:prompt", "workspace:sessions"] as const;
 export type ViewPermission = (typeof VIEW_PERMISSIONS)[number];
+
+/** What each permission lets a plugin do, in the words shown before it is installed (the app's
+ *  review, HiveHub's page). */
+const PERMISSION_WORDS: Record<ViewPermission, string> = {
+  "workspace:spawn": "start agents in your workspace",
+  "workspace:close": "close tiles",
+  "workspace:edit": "rename tiles and point frames at folders",
+  "workspace:prompt": "tell an agent something (you send or cancel each one)",
+  "workspace:sessions": "see past agent sessions and continue one",
+};
+/** The permissions a plugin asks for, said as what they let it do; a name not known here is left out. */
+export const permissionWords = (perms: readonly string[]): string[] =>
+  perms.flatMap((p) => (Object.hasOwn(PERMISSION_WORDS, p) ? [PERMISSION_WORDS[p as ViewPermission]] : []));
 
 export type ViewStatus = "unknown" | "idle" | "working" | "blocked" | "exited";
 const STATUSES: readonly ViewStatus[] = ["unknown", "idle", "working", "blocked", "exited"];
@@ -101,7 +116,7 @@ export interface ViewTheme {
 
 /** What a host implements beyond 1.2, sent in `hello.features`. A host that predates 1.3 sends
  *  none, so read the field (`hm.hello.features ?? []`), never probe for a client method. */
-export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces"] as const;
+export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets"] as const;
 export type ViewFeature = (typeof VIEW_FEATURES)[number];
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
@@ -200,6 +215,38 @@ export interface ViewHistoryDay {
 export type RequestErrorCode = "UNSUPPORTED" | "BAD_REQUEST" | "BUSY" | "DECLINED" | "INTERNAL";
 export type ShareOutcome = "copied" | "saved" | "cancelled";
 
+// ── protocol 1.8 (additive) ─────────────────────────────────────────────────
+// `widgets` in `hello.features`: after `subscribeWidgets` the view is sent every widget in the
+// workspace (`widgets`), again whenever one changes, and may press one (`pressWidget`), as a
+// person pressing it where it is drawn. A phone shows widgets through a view that does this.
+
+/** A widget in the workspace, as a view is given it (feature `widgets`). */
+export interface ViewWidget {
+  /** The widget placed in the workspace, and the package it is. */
+  id: string;
+  widget: string;
+  name: string;
+  /** What it draws, in the app's drawing nodes (stack, row, text, number, meter, button, image,
+   *  sprite, input, textarea, list); null until its code has drawn. */
+  tree: unknown;
+  /** It sits on a card; false for one drawn bare (a pet, a text label). */
+  card: boolean;
+  /** A note colour its card is tinted (`yellow`, `pink`, …). */
+  tint?: string;
+  /** What people wrote in it: an input's or textarea's text, a list's lines. */
+  text?: string;
+  items?: Array<{ id: string; text: string; done: boolean }>;
+  /** The images its tree names, by file name, as data URLs. */
+  images: Record<string, string>;
+  placement: "board" | "screen";
+}
+
+// ── protocol 1.7 (additive) ─────────────────────────────────────────────────
+// `settings` in `hello.features`: `hello.settings` holds the value of every field the manifest
+// declares (the person's, else the field's default), and a `settings` message carries them all
+// again whenever the person changes one. A host before 1.7 sends neither: `hm.settings` is then
+// empty, so a view reads each value with its own default beside it.
+
 // ── protocol 1.6 (additive) ─────────────────────────────────────────────────
 // `surfaces` in `hello.features`: this host places the live surfaces a view asks for with
 // `surfaceRects` (a tile's terminal in the hole the view leaves). A desktop window places them; a
@@ -232,7 +279,7 @@ export interface ViewParticipant {
 // ── host → plugin ───────────────────────────────────────────────────────────
 
 export type HostMessage =
-  | { type: "hello"; v: number; pluginId: string; capabilities: ViewPermission[]; theme: ViewTheme; layout: unknown; viewport: { w: number; h: number }; visible: boolean; /** 1.3 */ features?: ViewFeature[]; /** 1.5 */ device?: ViewDevice }
+  | { type: "hello"; v: number; pluginId: string; capabilities: ViewPermission[]; theme: ViewTheme; layout: unknown; viewport: { w: number; h: number }; visible: boolean; /** 1.3 */ features?: ViewFeature[]; /** 1.5 */ device?: ViewDevice; /** 1.7 */ settings?: Record<string, SettingValue> }
   /** Frames / tiles / membership (+ the current names). Structural only. */
   | { type: "structure"; frames: ViewFrame[]; tiles: ViewTile[]; /** 1.2 */ links?: ViewLinks }
   /** Display names changed (renames, agent titles) — nothing structural did. */
@@ -259,6 +306,10 @@ export type HostMessage =
   | { type: "resize"; w: number; h: number }
   | { type: "visibility"; visible: boolean }
   | { type: "theme"; theme: ViewTheme }
+  /** 1.7: every declared setting's value, after the person changed one. */
+  | { type: "settings"; settings: Record<string, SettingValue> }
+  /** 1.8, after `subscribeWidgets`: every widget in the workspace, whenever one changes. */
+  | { type: "widgets"; widgets: ViewWidget[] }
   /** The user undocked a surface from the host's bar (or Shift+Esc): the
    *  host has already released the tile; drop the rect on your side. */
   | { type: "undock"; tileId: string };
@@ -325,6 +376,11 @@ export type PluginMessage =
   /** 1.5 */
   | { type: "subscribeParticipants" }
   | { type: "unsubscribeParticipants" }
+  /** 1.8 */
+  | { type: "subscribeWidgets" }
+  | { type: "unsubscribeWidgets" }
+  /** 1.8: press one of a widget's buttons (its `action`), or its card (`click`). */
+  | { type: "pressWidget"; id: string; action?: unknown; click?: true }
   /** 1.3: answered by one `response` with the same id. The share buffer is the one non-JSON value. */
   | { type: "request"; requestId: number; name: "history"; args: [{ day: string }] }
   | { type: "request"; requestId: number; name: "share"; args: [{ png: ArrayBuffer; suggestedName?: string }] }
@@ -509,7 +565,16 @@ export function parsePluginMessage(raw: unknown): ParseResult<PluginMessage> {
     case "unsubscribePresence":
     case "subscribeParticipants":
     case "unsubscribeParticipants":
+    case "subscribeWidgets":
+    case "unsubscribeWidgets":
       return { ok: true, msg: { type: raw.type } };
+    case "pressWidget": {
+      if (!isId(raw.id)) return bad("id must be a widget id");
+      let size = Infinity;
+      try { size = JSON.stringify(raw.action ?? null).length; } catch { /* not JSON */ }
+      if (raw.click === true) return { ok: true, msg: { type: "pressWidget", id: raw.id as string, click: true } };
+      return size <= 1024 ? { ok: true, msg: { type: "pressWidget", id: raw.id as string, action: raw.action } } : bad("action must be JSON of at most 1 KB");
+    }
     case "watchActivity": {
       if (!Array.isArray(raw.tileIds) || raw.tileIds.length > ACTIVITY_MAX_TILES || !raw.tileIds.every(isId)) return bad(`tileIds must be at most ${ACTIVITY_MAX_TILES} tile ids`);
       return { ok: true, msg: { type: "watchActivity", tileIds: [...new Set(raw.tileIds as string[])] } };
@@ -560,6 +625,7 @@ export interface HostScope {
 /** The feature a subscription needs. */
 const SUBSCRIPTION_FEATURE: Partial<Record<PluginMessage["type"], ViewFeature>> = {
   subscribeEvents: "events", watchActivity: "activity", subscribePresence: "presence", subscribeParticipants: "participants",
+  subscribeWidgets: "widgets", pressWidget: "widgets",
 };
 
 /** Host side: why a well-formed message from a view is refused, or null when it is taken. A command
@@ -646,6 +712,11 @@ export function parseHostMessage(raw: unknown): ParseResult<HostMessage> {
       return typeof raw.visible === "boolean" ? { ok: true, msg: raw as unknown as HostMessage } : bad("visible must be a boolean");
     case "theme":
       return isObj(raw.theme) ? { ok: true, msg: raw as unknown as HostMessage } : bad("theme must be an object");
+    case "widgets":
+      return Array.isArray(raw.widgets) && raw.widgets.every((w) => isObj(w) && isId(w.id) && typeof w.widget === "string")
+        ? { ok: true, msg: raw as unknown as HostMessage } : bad("widgets must be an array of widgets");
+    case "settings":
+      return isObj(raw.settings) ? { ok: true, msg: raw as unknown as HostMessage } : bad("settings must be an object");
     case "undock":
       return isId(raw.tileId) ? { ok: true, msg: raw as unknown as HostMessage } : bad("tileId must be a string");
     default:

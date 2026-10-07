@@ -53,7 +53,9 @@ import {
 import { useStateWithRef } from "./use-state-with-ref";
 import { useBoard } from "./board-objects/useBoard";
 import type { BoardChoice, Point } from "./board-objects/board-model";
-import { useWidgetPackages, useWidgetRuntime } from "./board-objects/widget-runtime";
+import { useEnabledWidgetPackages, useShownWorkspace, useWidgetRuntime } from "./board-objects/widget-runtime";
+import { BoardContext } from "./board-objects/board-context";
+import { provideKitHost } from "./workspace/workspace-kit";
 import { markRestored, whenBootIdle } from "./boot-queue";
 /** How long the catalog check waits for restored tiles to start before going anyway: an agent
  *  this version cannot load is a tile that may never start, and the check is its repair. */
@@ -65,6 +67,9 @@ const CATALOG_RETRIES = 3;
 import { defaultSizeForKind, defaultTileSize, snapToGrid } from "./canvas-sizing";
 import { useWorktrees } from "./useWorktrees";
 // Loaded when it is first opened: the dialog (add form, machine list, folder picker) is not startup work.
+// Only a workspace with floating widgets, or a plugin asking to tell an agent something, needs these.
+const WidgetLayer = lazy(() => import("./board-objects/WidgetLayer").then((m) => ({ default: m.WidgetLayer })));
+const KitConfirm = lazy(() => import("./workspace/workspace-kit-confirm").then((m) => ({ default: m.KitConfirm })));
 const MachinesHub = lazy(() => import("./machines/MachinesHub").then((m) => ({ default: m.MachinesHub })));
 import { frameMachine, placeOf, useMachines, type MachinesRequest } from "./machines/store";
 import { useMachineOwners } from "./machines/owners";
@@ -390,18 +395,22 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // A new box goes where the canvas says: under the pointer, or in the middle of the view when
   // the pointer is elsewhere. "arrow" starts drawing one.
   const canvasPointRef = useRef<(() => Point) | null>(null);
-  const { add: addBox, addWidget, startArrow, update: updateBoard } = board;
-  const widgetPackages = useWidgetPackages();
-  useWidgetRuntime(board.objects, widgetPackages, updateBoard, !!joinedId(repoPath ?? null));
+  const { addWidget, startArrow, update: updateBoard } = board;
+  const widgetPackages = useEnabledWidgetPackages();
+  useShownWorkspace(persistKey, !!joinedId(repoPath ?? null));
+  useWidgetRuntime(persistKey, board.objects, widgetPackages, updateBoard);
   const addBoard = useCallback((kind: BoardChoice) => {
-    if (kind === "arrow") { startArrow(); return; }
     const at = canvasPointRef.current?.();
-    if (!at) return;
-    if (kind.startsWith("widget:")) {
-      const pkg = widgetPackages.find((p) => `widget:${p.id}` === kind);
-      if (pkg) addWidget(pkg, at);
-    } else addBox(kind as Exclude<BoardChoice, "arrow" | `widget:${string}`>, at);
-  }, [addBox, addWidget, startArrow, widgetPackages]);
+    const widget = kind.startsWith("widget:") ? kind.slice("widget:".length) : null;
+    if (widget) {
+      const pkg = widgetPackages.find((p) => p.id === widget);
+      if (!pkg) return;
+      // A board widget goes on the board where the canvas is drawn; elsewhere, and any other, floats.
+      addWidget(pkg.id, pkg.placement === "board" && at && activeViewIdRef.current === "canvas" ? { at, size: pkg.size, lines: JSON.stringify(pkg.draw ?? null).includes('"type":"list"') } : undefined);
+      return;
+    }
+    if (kind === "arrow") startArrow();
+  }, [addWidget, startArrow, widgetPackages]);
 
   // Reload when the repo changes — each repo has its own workspace + view
   // layouts. Skip on first mount (initial values already came from the memos).
@@ -617,7 +626,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       const toastId = toast.success(`Added ${added.map((a) => a.label).join(", ")} — found on this machine.`, {
         // The registry review (by pull request) stands in for a per-user one, so what each
         // agent can do is disclosed here instead of gating the install. Remove reuses the
-        // Settings ▸ Agents path: uninstall + decline, so it is never re-added.
+        // the Remove path in Settings ▸ Plugins: uninstall + decline, so it is never re-added.
         description: (
           <div>{added.map((a) => (
             <div key={a.id} className="agent-added">
@@ -1161,6 +1170,19 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     tileStatus: statusOf,
   }), [setSelectedTileId, setSelectedFrameId, focusTile, closeTile, spawnTile, spawnVis, spawnDefaultAgent, addFrame, renameTile, bindWorkspace]);
 
+  // What in-app plugins act through: this window's commands, and what it calls each tile.
+  const layerTilesRef = useRef(layerTiles);
+  layerTilesRef.current = layerTiles;
+  useEffect(() => {
+    provideKitHost({
+      focus: (tile) => commands.focusTile(tile),
+      close: (tile) => commands.closeTile(tile),
+      spawn: (agent, frame, opts) => commands.spawnAgent(agent, frame, opts),
+      tileName: (tile) => layerTilesRef.current.find((t) => t.id === tile)?.name,
+    });
+    return () => provideKitHost(null);
+  }, [commands]);
+
   // The canvas plugin's private runtime access (milestone-1 seam).
   const canvasRuntime: CanvasRuntime = useMemo(() => ({
     positions, sizes, currentViewportRef, setViewport,
@@ -1203,6 +1225,10 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
         onRetry={() => { setViewFailure(null); setViewAttempt((n) => n + 1); }}
       />
       {repoPath && <SayHere repo={repoPath} selection={presenceSelection} />}
+      <Suspense fallback={null}>
+        <BoardContext.Provider value={board}><WidgetLayer repo={persistKey} board={board} packages={widgetPackages} /></BoardContext.Provider>
+        <KitConfirm />
+      </Suspense>
       {/* Reset transient toolbar expansion on view/placement changes without
           touching live tile bodies. Settings lives above this in App. */}
       <HostChrome
@@ -1216,7 +1242,8 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
         onSpawnAgent={spawnAgent}
         onFrame={addFrame}
         onBrowser={spawnBrowser}
-        onBoard={activeViewId === "canvas" ? addBoard : undefined}
+        onBoard={addBoard}
+        boardItems={activeViewId === "canvas"}
         updateAvailable={updateAvailable}
         updateStaged={updateStaged}
         onUpgrade={() => onUpgrade?.()}

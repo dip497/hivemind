@@ -1,4 +1,5 @@
 /** The app's agent list, for commands that need it. Lazy: the YAML loader import costs ~65 ms. */
+import { disabledPlugins } from "@hivemind/core/plugin-settings";
 import { defaultAgent } from "@hivemind/agents";
 
 let loading: Promise<void> | null = null;
@@ -22,7 +23,7 @@ export function ensureAgentCatalog(): Promise<void> {
       ]);
       const repoRoot = await core.findRoot().catch(() => null);
       const settings = await core.readSettings().catch(() => null);
-      const disabled = settings?.agents.disabled ?? [];
+      const disabled = settings ? disabledPlugins(settings.plugins.state, "agent") : [];
       const { defs } = await loadAgents({
         repoRoot: repoRoot ?? undefined,
         disabled,

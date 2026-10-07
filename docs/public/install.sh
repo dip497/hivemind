@@ -630,7 +630,7 @@ agents_check() {
     ok "agents found: $found"
   else
     warn "No agent CLI found yet. Hivemind launches fine; install one to start agents:"
-    warn "  https://docs.claude.com/en/docs/claude-code  (or codex, gemini, … — see Settings ▸ Agents)"
+    warn "  https://docs.claude.com/en/docs/claude-code  (or codex, gemini, … — see Settings ▸ Plugins)"
   fi
 }
 

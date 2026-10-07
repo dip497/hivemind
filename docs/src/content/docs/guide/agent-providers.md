@@ -109,7 +109,7 @@ Hivemind adds it at startup and says so — no questions. The notice says what t
 do, with a Remove button. It only adds when the files match their checksums, the manifest
 names the CLI that was found, and that CLI answers `--version` like one; and it can never
 replace an agent you already have. Remove one and it stays removed. Switch this off under
-**Settings ▸ Agents ▸ Add agents found on this machine**. Adding the listing itself is a
+**Settings ▸ Plugins ▸ Agents ▸ Add agents found on this machine**. Adding the listing itself is a
 pull request to [dip497/hivemind-plugins](https://github.com/dip497/hivemind-plugins).
 
 ## Install, list and remove
@@ -127,10 +127,11 @@ next start.
 
 ## Turn agents on and off
 
-**Settings ▸ Agents** lists every agent Hivemind found, grouped into the ones this
+**Settings ▸ Plugins** lists every agent Hivemind found, grouped into the ones this
 machine has, the ones it does not (each saying which command it needs), and the ones you
 switched off. The control on a row makes that agent the default; open a row for its
-launch options, or to switch it off. Turning one off removes it from
+launch options, its README, or to switch it off (`hive plugins disable agent:<id>` does the
+same). Turning one off removes it from
 every picker and from `hive ctl spawn`; turning it back on restores it. Agents HiveHub
 added can be turned off too, or removed for good.
 

@@ -34,7 +34,7 @@ export const BUILTIN_TOOLBAR_ACTIONS: readonly ToolbarAction[] = Object.freeze([
   Object.freeze({ id: "issues", label: "Issues", hint: "5" }),
   Object.freeze({ id: "frame", label: "Frame", hint: "6" }),
   Object.freeze({ id: "browser", label: "Browser", hint: "7" }),
-  Object.freeze({ id: "board", label: "Board", hint: "8" }),
+  Object.freeze({ id: "board", label: "Add", hint: "" }),
   Object.freeze({ id: "theme", label: "Theme", hint: "" }),
 ] as const);
 

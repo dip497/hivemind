@@ -132,7 +132,7 @@ test("what another writer changed comes in over what the window has not saved, w
 
 const at = (x: number, y = 0) => ({ x, y });
 const places = (positions: Record<string, { x: number; y: number }>) => ({ positions, sizes: {} });
-const note = (id: string, text: string) => ({ id, kind: "note" as const, x: 0, y: 0, w: 200, h: 160, text });
+const note = (id: string, text: string) => ({ id, kind: "widget" as const, widget: "note", placement: "board" as const, x: 0, y: 0, w: 200, h: 160, text });
 
 test("the canvas's places and the board are saved from what the window last read or wrote, so another window's change since stays", () => {
   saveViewLayout(CANVAS_LAYOUT, "/views", places({ t1: at(0), t2: at(100) }));

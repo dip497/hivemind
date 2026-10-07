@@ -31,6 +31,13 @@ const LEAST: Record<string, Role> = {
   "appearance.get": "view",
   // Being there: where one's pointer is, and what one has selected.
   "presence.set": "view",
+  "widget.all": "view",
+  "agent.list": "view",
+  "agent.since": "view",
+  "widget.asset": "view",
+  "widget.packages": "view",
+  // Pressing a widget changes what it keeps, as editing the board does.
+  "widget.press": "edit",
   // Watching terminals, and no longer watching one.
   "terminal.show": "view",
   "terminal.flow": "view",

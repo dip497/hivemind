@@ -1,5 +1,6 @@
 // Two app instances on one network, as two people (M1): each its own profile and data folder, each
 // with hive-net's daemon (crates/hive-net's debug build). And the steps of sharing and joining.
+import { addFromMenu, moveSelectedTo } from "./board";
 import { expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -65,9 +66,9 @@ export async function join(guest: Page, host: Page, link: string): Promise<void>
 }
 
 /** The tiles on a person's board (board objects aside), sorted. */
-export const tiles = (w: Page) => w.locator(".react-flow__node").evaluateAll((ns) => ns.map((n) => n.getAttribute("data-id")).filter((id) => id && !id.startsWith("note")).sort());
+export const tiles = (w: Page) => w.locator(".react-flow__node:not(.react-flow__node-widget)").evaluateAll((ns) => ns.map((n) => n.getAttribute("data-id")).filter((id) => id).sort());
 /** The text of each sticky note on a person's board. */
-export const notes = (w: Page) => w.locator(".react-flow__node-note [data-board-text]").allTextContents();
+export const notes = (w: Page) => w.locator('.react-flow__node-widget:has([data-widget="note"]) [data-board-text]').allTextContents();
 const emptySpot = (w: Page) => w.evaluate(() => {
   const pane = document.querySelector(".react-flow__pane")!.getBoundingClientRect();
   for (let y = pane.bottom - 140; y > pane.top + 100; y -= 30) {
@@ -84,9 +85,8 @@ export async function note(w: Page, text: string): Promise<void> {
   await w.waitForTimeout(400);
   const at = (await emptySpot(w))!;
   await w.mouse.click(at.x, at.y);
-  await w.keyboard.press("8");
-  await w.keyboard.type(text);
-  await w.keyboard.press("Escape");
+  await addFromMenu(w, "note", text);
+  await moveSelectedTo(w, at);
 }
 
 /** A host with a shell tile in the workspace `api`, shared for `role` with a guest who joined and

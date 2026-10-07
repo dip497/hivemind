@@ -3,7 +3,7 @@ import {
   availableCommands, BROWSER_PLUGIN_ID, BROWSER_TOOL, BROWSER_TOOL_ID, BUNDLED_TOOL_PLUGINS,
   bundledToolRegistry, bundledTools, CODE_PLUGIN_ID, ISSUES_PLUGIN_ID, tileKindAvailability, toolIdForTileKind,
 } from "./tool-plugins.js";
-import { DEFAULT_SETTINGS, mergeSettings } from "./settings-schema.js";
+import { DEFAULT_SETTINGS, mergeSettings, toolPreferences } from "./settings-schema.js";
 import { createToolRegistry } from "./tool-registry.js";
 
 const prefs = (enabledPlugins: string[], disabledTools: string[] = []) => ({ enabledPlugins, disabledTools });
@@ -63,7 +63,7 @@ describe("tile-kind availability", () => {
     // empty (or stale) enabledPlugins hide the editor behind a preferences blob.
     for (const kind of ["diff", "workbench", "issues", "planReview"]) {
       expect(tileKindAvailability(kind, prefs([]))?.available).toBe(true);
-      expect(allowed(kind, mergeSettings({ v: 1 }).tools)).toBe(true);
+      expect(allowed(kind, toolPreferences(mergeSettings({ v: 1 })))).toBe(true);
     }
     // Still per-tool switchable, unlike a legacy kind.
     expect(tileKindAvailability("diff", prefs([], [`${CODE_PLUGIN_ID}/diff`])))
@@ -107,10 +107,12 @@ describe("tile-kind availability", () => {
     ])).toThrow(/Invalid command cli/);
   });
 
-  test("it reads the preferences shape settings.json stores", () => {
+  test("it reads what settings.json stores: the plugin's record, or the key a file from before it has", () => {
     const off = mergeSettings(DEFAULT_SETTINGS);
-    expect(tileKindAvailability("browser", off.tools)?.available).toBe(false);
-    const on = mergeSettings({ ...DEFAULT_SETTINGS, tools: { enabledPlugins: [BROWSER_PLUGIN_ID], disabledTools: [] } });
-    expect(tileKindAvailability("browser", on.tools)?.available).toBe(true);
+    expect(tileKindAvailability("browser", toolPreferences(off))?.available).toBe(false);
+    const on = mergeSettings({ v: 1, plugins: { state: { [`tool:${BROWSER_PLUGIN_ID}`]: { enabled: true } } } });
+    expect(tileKindAvailability("browser", toolPreferences(on))?.available).toBe(true);
+    const old = mergeSettings({ v: 1, tools: { enabledPlugins: [BROWSER_PLUGIN_ID], disabledTools: [] } });
+    expect(tileKindAvailability("browser", toolPreferences(old))?.available).toBe(true);
   });
 });

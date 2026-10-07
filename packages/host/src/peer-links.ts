@@ -419,8 +419,9 @@ export class PeerLinks {
     }, FOLLOW_MS);
   }
 
-  /** Every agent here, and how many are at work (spec/agents.md). */
-  private agentList(): { t: "agents"; agents: AgentItem[]; working: number } {
+  /** Every agent here, and how many are at work (spec/agents.md): what a phone is told, and what
+   *  the workspace API's `agent.list` answers. */
+  agentList(): { t: "agents"; agents: AgentItem[]; working: number } {
     const held = heldBoards(this.o.store);
     const statuses = this.o.statuses?.() ?? [];
     const agents = agentsOf(held, statuses, this.o.plans?.() ?? [], this.o.machines, this.o.facts?.(held) ?? NO_FACTS);

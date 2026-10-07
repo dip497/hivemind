@@ -1,4 +1,4 @@
-/** The plugin catalog: HiveHub lists every published agent and view, with every file's
+/** The plugin catalog: HiveHub lists every published agent, view and widget, with every file's
  *  SHA-256 and the commit it came from. Content is pinned by hash, so a file that changed
  *  after listing fails the install instead of being trusted. */
 import { createHash } from "node:crypto";
@@ -11,7 +11,8 @@ import { AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
 
 export const DEFAULT_PLUGIN_INDEX = "https://hivehub.griiken.workers.dev/api/v1/index.json";
 
-export type CatalogType = "agent" | "view";
+export type CatalogType = "agent" | "view" | "widget";
+const TYPES: readonly string[] = ["agent", "view", "widget"];
 export interface CatalogFile { path: string; sha256: string }
 export interface CatalogEntry {
   id: string;
@@ -37,9 +38,10 @@ export interface CatalogEntry {
   icon?: unknown;
 }
 
-// A view carries its publisher's scope; an agent is one name for one CLI, settled in the plugins
-// repository — the same split the registry enforces when it lists them.
-const ID_RE = { view: /^(?!.*--)@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/, agent: /^[a-z0-9][a-z0-9-]{0,31}$/ };
+// A view or a widget carries its publisher's scope; an agent is one name for one CLI, settled in
+// the plugins repository — the same split the registry enforces when it lists them.
+const SCOPED = /^(?!.*--)@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
+const ID_RE: Record<CatalogType, RegExp> = { view: SCOPED, widget: SCOPED, agent: /^[a-z0-9][a-z0-9-]{0,31}$/ };
 const SEGMENT_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 const SHA_RE = /^[0-9a-f]{64}$/;
 export const MAX_FILE = 20 << 20;
@@ -56,16 +58,18 @@ const safeRelative = (p: unknown): p is string =>
   && p.split("/").every((s) => SEGMENT_RE.test(s) && s !== ".." && !DEVICE_RE.test(s));
 const text = (v: unknown, max: number): v is string => typeof v === "string" && v.length > 0 && v.length <= max;
 
+/** A version 1 index. A kind this app does not know is left out, so a registry that lists a new
+ *  kind does not take the whole catalog away. */
 export function parseCatalog(raw: unknown): CatalogEntry[] {
   const doc = raw as { version?: unknown; plugins?: unknown };
   if (!doc || doc.version !== 1 || !Array.isArray(doc.plugins)) throw new Error("not a version 1 plugin index");
   const seen = new Set<string>();
-  return doc.plugins.slice(0, 500).map((p: Record<string, unknown>, i) => {
+  const known = doc.plugins.slice(0, 500).filter((p: unknown) => !!p && typeof p === "object" && TYPES.includes((p as { type?: unknown }).type as string));
+  return known.map((p: Record<string, unknown>, i) => {
     const at = `plugins[${i}]`;
-    if (!p || typeof p !== "object") throw new Error(`${at} is not an object`);
-    if (p.type !== "agent" && p.type !== "view") throw new Error(`${at}.type must be agent or view`);
-    if (typeof p.id !== "string" || !ID_RE[p.type].test(p.id)) {
-      throw new Error(`${at}.id is not ${p.type === "view" ? "a view id — it must be @owner/name" : "an agent id — it must be one name"}`);
+    const type = p.type as CatalogType;
+    if (typeof p.id !== "string" || !ID_RE[type].test(p.id)) {
+      throw new Error(`${at}.id is not ${type === "agent" ? "an agent id — it must be one name" : `a ${type} id — it must be @owner/name`}`);
     }
     const key = `${p.type}:${p.id}`;
     if (seen.has(key)) throw new Error(`${at} lists ${key} twice`);
@@ -96,7 +100,7 @@ export function parseCatalog(raw: unknown): CatalogEntry[] {
         if (p.bin !== undefined && (p.type !== "agent" || typeof p.bin !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(p.bin))) {
       throw new Error(`${at}.bin must be the bare name of an agent's CLI`);
     }
-    return { id: p.id, type: p.type, name: p.name, description: p.description, author: p.author, version: p.version, path: p.path, files,
+    return { id: p.id, type, name: p.name, description: p.description, author: p.author, version: p.version, path: p.path, files,
       ...(homepage ? { homepage } : {}), ...(typeof p.source === "string" ? { source: p.source } : {}),
       ...(typeof p.bin === "string" ? { bin: p.bin } : {}),
       ...(typeof p.minAppVersion === "string" ? { minAppVersion: p.minAppVersion } : {}),
@@ -187,6 +191,24 @@ export async function stageEntry(entry: CatalogEntry, indexUrl = catalogIndexUrl
   } catch (e) {
     await fs.rm(stage, { recursive: true, force: true });
     throw e;
+  }
+}
+
+/** The most a plugin's README may take. */
+const MAX_README = 256 * 1024;
+
+/** A catalog plugin's README.md, read before anything is installed: checked against its hash
+ *  when the entry lists it as one of its files, else read as is (it is shown, never run), or
+ *  null when it has none. */
+export async function fetchReadme(entry: CatalogEntry, indexUrl = catalogIndexUrl()): Promise<string | null> {
+  const base = entry.source ? `${entry.source.replace(/\/$/, "")}/${entry.path}/` : `${entry.path}/`;
+  const listed = entry.files.find((f) => /^readme\.md$/i.test(f.path));
+  try {
+    const body = await read(new URL(listed?.path ?? "README.md", new URL(base, indexUrl)), MAX_README);
+    if (listed && createHash("sha256").update(body).digest("hex") !== listed.sha256) return null;
+    return body.toString("utf8");
+  } catch {
+    return null;
   }
 }
 

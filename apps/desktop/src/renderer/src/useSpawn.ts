@@ -5,6 +5,7 @@
  * spawnInto/spawnDefaultAgent/spawnVis/frameOpen wrappers. Canvas passes its state
  * refs + setters as context; the handlers read/update them exactly as before.
  */
+import { pluginOptions, stringOptions } from "@hivemind/core/plugin-settings";
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { toast } from "sonner";
 import { frameColorFor } from "./frame-color";
@@ -43,7 +44,7 @@ type SpawnPick = ({ kind: TileKind } & SpawnOpts) | null;
 
 export interface SpawnCtx {
   repoPath: string | null;
-  /** settings.agents.options: agent id → option id → value. */
+  /** An agent's saved options (its plugin record), option id → value. */
   positionsRef: MutableRefObject<Record<string, { x: number; y: number }>>;
   sizesRef: MutableRefObject<Record<string, { width: number; height: number }>>;
   tilesRef: MutableRefObject<TileInstance[]>;
@@ -78,9 +79,9 @@ export interface SpawnCtx {
  *  Read at spawn time: settings are rebuilt on every write, and as a hook dependency
  *  they rebuilt every spawn callback and every tile surface with it. */
 function launchOptions(id: string, over: SpawnOptions): SpawnOptions {
-  const saved = getSettings().agents.options;
+  const saved = stringOptions(pluginOptions(getSettings().plugins.state, "agent", id));
   const picked = Object.fromEntries(Object.entries(over).filter(([, v]) => v));
-  return { ...saved[id], ...picked };
+  return { ...saved, ...picked };
 }
 
 export function useSpawn(ctx: SpawnCtx) {

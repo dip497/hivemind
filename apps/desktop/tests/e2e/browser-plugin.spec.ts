@@ -48,13 +48,13 @@ test("Browser opt-in is shared by Settings, shortcuts, CLI, and view commands; d
   expect(await page.evaluate(() => performance.getEntriesByType("resource").some((r) => /\/BrowserTile-/.test(r.name)))).toBe(false);
   expect(hive("ctl", "open-tool", "hivemind/web/browser", "--url", "about:blank").data.code).toBe("UNAUTHORIZED");
   await page.keyboard.press("7");
-  await expect(page.getByText("Browser is disabled. Enable it in Settings under Tools.")).toBeVisible();
+  await expect(page.getByText("Browser is disabled. Switch it on in Settings ▸ Plugins.")).toBeVisible();
   await expect(browsers()).toHaveCount(0);
 
   await page.locator('[aria-label="settings"]').click();
-  await page.locator('[data-settings-page="tools"]').click();
+  await page.locator('[data-settings-page="plugins"]').click();
   await page.getByRole("switch", { name: "Enable Browser", exact: true }).click();
-  await expect.poll(() => hive("config", "get", "tools.enabledPlugins").data.data).toEqual(["hivemind/web"]);
+  await expect.poll(() => hive("config", "get", "plugins.state").data.data).toEqual({ "tool:hivemind/web": { enabled: true } });
   await page.screenshot({ path: "/tmp/hivemind-browser-plugin-settings.png" });
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.getByTitle(/^Browser  /)).toHaveCount(1);
@@ -63,7 +63,7 @@ test("Browser opt-in is shared by Settings, shortcuts, CLI, and view commands; d
   await expect(browsers()).toHaveCount(1);
   await page.waitForSelector("webview");
   const original = await page.locator("webview").elementHandle();
-  expect(hive("config", "set", "tools.enabledPlugins", "[]").status).toBe(0);
+  expect(hive("plugins", "disable", "tool:hivemind/web").status).toBe(0);
   await expect(page.getByTitle(/^Browser  /)).toHaveCount(0);
   await expect(browsers()).toHaveCount(1);
   expect(await page.locator("webview").evaluate((element, old) => element === old, original)).toBe(true);

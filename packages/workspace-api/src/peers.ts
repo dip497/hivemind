@@ -50,7 +50,7 @@ const refused = (message: string): Answer => ({ error: { code: "FORBIDDEN", mess
 /** Methods and notices whose first param names a tile. */
 const BY_TILE = /^(terminal\.(write|show|resize|flow|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.(answer|send|interrupt|close|diff|conversation))$/;
 /** Methods and notices whose first param names the workspace, or a place in it (its `.hivemind`). */
-const BY_WORKSPACE = /^(store|git|worktree|file|issue|review|people)\.|^(plan\.list|presence\.set|agent\.(startable|start))$/;
+const BY_WORKSPACE = /^(store|git|worktree|file|issue|review|people)\.|^(plan\.list|agent\.(list|since)|presence\.set|widget\.(all|draw|run|release|asset|packages|press)|agent\.(startable|start))$/;
 /** Methods whose second param names the workspace, after what they open there (a view, P8). */
 const BY_WORKSPACE_SECOND = /^view\.open$/;
 /** The workspace a call names, if it names one. A desktop's view listing and files name it
@@ -183,7 +183,7 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
   };
   const routed = (event: EventMessage): EventMessage | null => {
     if (event.event === "store.changed") return null; // the document reaches peers by its own sync
-    if (event.event === "file.changed" || event.event === "presence.changed" || event.event === "people.asked" || event.event === "people.answered") {
+    if (event.event === "file.changed" || event.event === "widget.runner" || event.event === "widget.pressed" || event.event === "presence.changed" || event.event === "widget.drawn" || event.event === "agent.changed" || event.event === "agent.event" || event.event === "people.asked" || event.event === "people.answered") {
       return event.params[0] === peer.repo ? { event: event.event, params: [url, ...event.params.slice(1)] } : null;
     }
     // A peer knows the workspace by its id, not the host's folder.

@@ -45,9 +45,11 @@ export interface SharedStatus {
 }
 import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 export type { NotificationSettings };
+export type { AgentChange, AgentEvent, AgentItem } from "@hivemind/workspace-api/agents";
+import type { AgentChange, AgentEvent, AgentItem } from "@hivemind/workspace-api/agents";
 
-/** A widget package: its folder name, what it is called, its first size, and its code. */
-export interface WidgetPackage { id: string; name: string; w: number; h: number; code: string }
+export type { WidgetOption, WidgetPackage } from "@hivemind/core/widget-format";
+import type { WidgetPackage } from "@hivemind/core/widget-format";
 
 // IssuePatch is owned by @hivemind/core/types (node-free) — re-export so renderer
 // modules keep importing it from the IPC contract, with no hand-maintained copy.
@@ -226,6 +228,21 @@ export interface HiveIpc {
   boardPresenceSet(repo: string, state: PresenceState | null): void;
   /** Who is in a workspace now, each as they last said, as it changes: every workspace's. */
   onBoardPresence(cb: (repo: string, people: Participant[]) => void): () => void;
+  /** The widget `id` in `repo` drew `tree` (its code runs in this window). */
+  widgetDraw(repo: string, id: string, tree: unknown): void;
+  /** What each widget in `repo` last drew, by id. */
+  widgetsDrawn(repo: string): Promise<Record<string, unknown>>;
+  onWidgetDrawn(cb: (repo: string, id: string, tree: unknown) => void): () => void;
+  /** A widget pressed where its code does not run: told to the window that runs it. */
+  widgetPress(repo: string, id: string, press: { action: unknown } | { click: true }): void;
+  onWidgetPressed(cb: (repo: string, id: string, press: { action?: unknown; click?: true }) => void): () => void;
+  /** Whether this window runs `repo`'s widgets (one window per workspace does). */
+  widgetRun(repo: string): Promise<boolean>;
+  /** The widgets installed where `repo` is hosted (its host's, for one joined from elsewhere). */
+  widgetPackagesOf(repo: string): Promise<WidgetPackage[]>;
+  widgetRelease(repo: string): void;
+  /** Nobody runs `repo`'s widgets now. */
+  onWidgetRunner(cb: (repo: string) => void): () => void;
 
   // ── settings.json (main owns it; see main/settings-store.ts) ──
   /** The whole settings object, synchronously (boot: no theme flash). */
@@ -267,17 +284,35 @@ export interface HiveIpc {
   previewViewInstall(): Promise<{ token: string; package: ViewPackageInfo; replacesVersion: string | null } | null>;
   /** The published plugin catalog (hash-pinned agents and views). */
   pluginCatalog(): Promise<CatalogEntry[]>;
+  /** A plugin's README: from its folder here (`dir`), or from the catalog for one not installed. */
+  pluginReadme(from: { dir: string } | { catalog: { type: CatalogEntry["type"]; id: string } }): Promise<string | null>;
   /** The widget packages installed on this machine. */
   listWidgets(): Promise<WidgetPackage[]>;
+  /** Add a widget package from a folder the person picks; null when they pick none. */
+  installWidget(): Promise<{ id: string; name: string } | null>;
+  removeWidget(id: string): Promise<void>;
+  /** An image of the widget package `widget`, as the host of `repo` has it: for a guest without it. */
+  widgetAsset(repo: string, widget: string, name: string): Promise<string | null>;
+  /** The agents in the workspace at `repo`, and the feed's position (the workspace API's `agent.list`). */
+  agentList(repo: string): Promise<{ seq: number; agents: AgentItem[] }>;
+  /** What `repo`'s agent readers were told after `seq`; null: list again. */
+  agentSince(repo: string, seq: number): Promise<{ seq: number; changes: AgentChange[]; events: AgentEvent[] } | null>;
+  onAgentChanged(cb: (repo: string, change: AgentChange) => void): () => void;
+  onAgentEvent(cb: (repo: string, event: AgentEvent) => void): () => void;
+  /** The installed widget packages changed. */
+  onWidgetsChanged(cb: () => void): () => void;
   /** Ids of installed agents whose manifest differs from the one the catalog lists. */
   outdatedAgents(): Promise<string[]>;
   /** Download and verify a catalog plugin, then return it for review. A view installs with
-   *  `installViewPackage(token)`, an agent with `installCatalogAgent(token)`. */
+   *  `installViewPackage(token)`, an agent with `installCatalogAgent(token)`, a widget with
+   *  `installCatalogWidget(token)`. */
   reviewCatalogPlugin(type: CatalogEntry["type"], id: string): Promise<
     | ({ type: "view" } & { token: string; package: ViewPackageInfo; replacesVersion: string | null })
     | { type: "agent"; token: string; id: string; label: string; bin: string; command: string; flags: string[]; worker: boolean; replaces: boolean; does: string[]; reads?: string; install?: { url: string; command?: string } }
+    | { type: "widget"; token: string; id: string; name: string; permissions: string[]; code: boolean; replaces: boolean }
   >;
   installCatalogAgent(token: string): Promise<void>;
+  installCatalogWidget(token: string): Promise<void>;
   /** Remove an agent you installed; a catalog one is then never added automatically again. */
   removeAgent(id: string): Promise<void>;
   /** Add catalog agents whose CLI was found; what was added and what each can do. Runs once per launch. */
