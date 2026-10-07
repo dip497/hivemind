@@ -694,7 +694,6 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
             repoPath={repoPath}
             onShowTree={() => spawnVis("tree")}
             onShowShell={() => spawnVis("shell")}
-            onShowDiff={() => spawnVis("diff")}
             agentLabel={anyAgentReady ? agentById(rt.agentSel)?.label ?? null : null}
             onSpawnAgent={() => {
               const a = anyAgentReady ? agentById(rt.agentSel) : undefined;

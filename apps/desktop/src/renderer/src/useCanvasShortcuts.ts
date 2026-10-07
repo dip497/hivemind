@@ -132,7 +132,6 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
         case "1": e.preventDefault(); spawnVis("shell"); break;
         case "2": e.preventDefault(); spawnSelectedAgent(); break;
         case "3": if (repoPath) { e.preventDefault(); spawnVis("tree"); } break;
-        case "4": if (repoPath) { e.preventDefault(); spawnVis("diff"); } break;
         case "6": e.preventDefault(); addFrame(); break;
         case "7": e.preventDefault(); spawnBrowser(); break;
         case "Backspace":
@@ -178,7 +177,6 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
       };
       if (action === "new-terminal") spawnVis("shell");
       else if (action === "explorer") { if (repoPath) spawnVis("tree"); }
-      else if (action === "diff") { if (repoPath) spawnVis("diff"); }
       else if (action === "agent") spawnSelectedAgent();
       else if (action === "new-frame") addFrame();
       else if (action === "settings") window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: {} }));

@@ -213,7 +213,6 @@ export function CanvasEmptyState({
   repoPath,
   onShowTree,
   onShowShell,
-  onShowDiff,
   agentLabel,
   onSpawnAgent,
   onInitWorkspace,
@@ -221,7 +220,6 @@ export function CanvasEmptyState({
   repoPath: string | null;
   onShowTree: () => void;
   onShowShell: () => void;
-  onShowDiff: () => void;
   /** The default agent's name; null when no agent CLI is installed here. */
   agentLabel: string | null;
   /** Start the default agent, or open Settings to get one. */
@@ -234,8 +232,7 @@ export function CanvasEmptyState({
   // clear weight reads as designed, not generated.
   const secondary = [
     { label: "Open terminal", hint: "1", action: onShowShell, disabled: false },
-    { label: "Open workbench", hint: "3", action: onShowTree, disabled: !repoPath },
-    { label: "Open diff", hint: "4", action: onShowDiff, disabled: !repoPath },
+    { label: "Open code", hint: "3", action: onShowTree, disabled: !repoPath },
     { label: "Machines", hint: "", action: () => openMachines({ kind: "manage" }), disabled: false },
   ];
   return (

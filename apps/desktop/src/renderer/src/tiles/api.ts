@@ -44,6 +44,8 @@ export interface TileKindSpec {
   needsRepo?: boolean;
   /** One per frame: spawning again focuses the existing one. */
   singleton?: boolean;
+  /** A kind a board saved before, drawn as this other kind and counted as it. */
+  sameAs?: string;
   /** Text rasterized crisply only at 1:1, so focusing it snaps to 100%. */
   pixelExact?: boolean;
   /** The camera lands on whole pixels when it flies to it. */
@@ -126,7 +128,7 @@ export function unregisterTile(surface: string): void {
  *  only by something waiting on the person. */
 export const canSpawnKind = (kind: string): boolean => {
   const k = byKind.get(kind);
-  return !!k && !k.spec.ephemeral;
+  return !!k && !k.spec.ephemeral && !k.spec.sameAs;
 };
 
 /** Every installed plugin's surface. */

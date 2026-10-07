@@ -60,8 +60,7 @@ export const BUNDLED_TOOL_PLUGINS: readonly ToolPluginContribution[] = Object.fr
     id: CODE_PLUGIN_ID,
     builtin: true,
     tools: Object.freeze([
-      Object.freeze({ key: "editor", label: "Editor", description: "Open and edit files from the workspace.", tileKind: "workbench" }),
-      Object.freeze({ key: "diff", label: "Diff", description: "Review what changed, and leave comments on it.", tileKind: "diff" }),
+      Object.freeze({ key: "editor", label: "Code", description: "The workspace's files and what changed in them: edit, review, and leave comments.", tileKind: "editor" }),
     ]),
     // The review loop an agent cannot reach from a shell: comments live in the app.
     commands: Object.freeze([

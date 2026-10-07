@@ -443,7 +443,7 @@ test("what a host cannot do at all (a remote screen: no surfaces, no folder pick
     h.link.handle({ type: "surfaceRects", rects: [{ tileId: "t1", x: 0, y: 0, w: 10, h: 10 }] });
     h.link.handle({ type: "command", name: "openFolder", args: ["f1"] });
     h.link.handle({ type: "command", name: "spawnTile", args: ["shell", "f1"] });
-    h.link.handle({ type: "command", name: "spawnVis", args: ["diff"] });
+    h.link.handle({ type: "command", name: "spawnVis", args: ["tree"] });
     h.link.handle({ type: "command", name: "addFrame", args: [] });
   }
   assert.deepEqual([h.link.stats.refused, h.link.stats.disabled], [0, null]);

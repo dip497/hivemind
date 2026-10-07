@@ -126,7 +126,7 @@ for (const entered of ["words", "link"] as const) test(`the app pairs with a hos
   await expect.poll(() => read(path.join(api, "after.txt")), { timeout: 30_000 }).toBe("finished");
 });
 
-test("a frame of the app's own workspace runs on the paired host: placed on one of its folders, a shell there runs in the host's daemon, on after the app quits, and a Diff tile there shows the host's folder's changes", async () => {
+test("a frame of the app's own workspace runs on the paired host: placed on one of its folders, a shell there runs in the host's daemon, on after the app quits, and the Code tile there shows the host's folder's changes", async () => {
   test.skip(!hiveNetBuilt() || !hostable, "needs hive-net (cargo build in crates/hive-net) and a current apps/cli/dist/hive (cd apps/cli && bun scripts/build.ts)");
   test.setTimeout(120_000);
   const builds = path.join(root, "builds");
@@ -167,12 +167,13 @@ test("a frame of the app's own workspace runs on the paired host: placed on one 
   // The frame says where it runs: the host, by its name.
   await expect(laptop.locator('.react-flow__node-frame button[aria-label^="machine "]')).toBeVisible({ timeout: 10_000 });
 
-  // Its files and git are the host's folder's: a Diff tile in it shows the change made there.
+  // Its files and git are the host's folder's: the Code tile's Changes in it show the change made there.
   const shown = await tiles(laptop);
-  await laptop.evaluate((id) => window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: id, kind: "diff" } })), frameId);
+  await laptop.evaluate((id) => window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: id, kind: "editor" } })), frameId);
   let diff = "";
   await expect.poll(async () => (diff = (await tiles(laptop)).find((t) => !shown.includes(t)) ?? ""), { timeout: 20_000 }).not.toBe("");
   await laptop.evaluate((id) => window.dispatchEvent(new CustomEvent("hivemind:focus-tile", { detail: id })), diff);
+  await laptop.locator(`.react-flow__node[data-id="${diff}"]`).getByRole("button", { name: "Changes (source control)" }).click();
   await expect(laptop.locator(`.react-flow__node[data-id="${diff}"] [data-diff-file="notes.md"]`)).toHaveCount(1, { timeout: 30_000 });
 
   // A shell in it runs in the host's daemon, in the host's folder.

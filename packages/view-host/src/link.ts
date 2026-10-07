@@ -38,7 +38,7 @@ export interface LinkCommands {
   focusTile: (id: string, opts?: { exact?: boolean }) => void;
   closeTile: (id: string) => void;
   spawnTile?: (kind: TileKind, frameId: string | null) => unknown;
-  spawnVis?: (which: "tree" | "shell" | "diff" | "issues") => void;
+  spawnVis?: (which: "tree" | "shell" | "issues") => void;
   /** Starts the person's default agent, whichever that is. */
   spawnClaude: () => void;
   addFrame?: () => void;
@@ -553,7 +553,7 @@ export class CommunityLink {
         return;
       case "spawnVis":
         if (!c.spawnVis) { this.unsupported("spawnVis"); return; }
-        c.spawnVis(args[0] as "tree" | "shell" | "diff" | "issues");
+        c.spawnVis(args[0] as "tree" | "shell" | "issues");
         return;
       case "spawnClaude": c.spawnClaude(); return;
       case "addFrame":

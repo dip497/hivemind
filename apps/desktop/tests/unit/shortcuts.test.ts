@@ -10,7 +10,7 @@ test("VS Code's app keys map to actions", () => {
   assert.equal(ctrl("~", true), "new-terminal"); // Shift+` reports its shifted key
   assert.equal(ctrl("`", true), "new-terminal");
   assert.equal(ctrl("E", true), "explorer");
-  assert.equal(ctrl("G", true), "diff");
+  assert.equal(ctrl("G", true), null, "the Code tile's Changes replaced the Diff tile and its key");
   assert.equal(ctrl("A", true), "agent");
   assert.equal(ctrl("N", true), "new-frame");
   assert.equal(ctrl("Tab"), "next-tile");

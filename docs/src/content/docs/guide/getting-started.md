@@ -81,8 +81,8 @@ The installed skill drives the agent through the execution contract: load the is
 (`hive show MYP-1 --json`), set `in_progress` and claim it, tick criteria with
 `hive ctl mark-acceptance`, and end every session with a final `hive ctl set-state`.
 Each state change is a markdown write; the board tile updates from filesystem events.
-Open a diff tile (`4`) beside the agent to watch edits land, review per-file, and send
-line comments back to the agent.
+Open the Code tile (`3`) beside the agent and switch it to **Changes** to watch edits land,
+review per-file, and send line comments back to the agent.
 
 ## Where to go next
 

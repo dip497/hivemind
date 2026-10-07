@@ -17,7 +17,7 @@ import { AGENT_TILE_KIND } from "./tile-kinds";
 import { defaultShell, type FrameState, type TileInstance } from "./canvas-persistence";
 import { queueWork } from "./work-queue";
 import type { TileKind } from "./tile-kinds";
-import { pluginOfKind, tileKind, type TileStart } from "./tiles";
+import { canSpawnKind, pluginOfKind, tileKind, type TileStart } from "./tiles";
 import { PLAN_REVIEW } from "./tiles/plan-review";
 import { checkToolCreation } from "./tool-availability";
 import { checkAgentInstalled, noAgentInstalled } from "./agent-plugins";
@@ -265,7 +265,8 @@ export function useSpawn(ctx: SpawnCtx) {
       const frame = target ?? ensureFrame();
       const fid = frame.id;
       if (tileKind(kind).singleton) {
-        const existing = tilesRef.current.find((t) => t.kind === kind && frameOfRef.current[t.id] === fid);
+        const same = (k: string) => tileKind(k).sameAs ?? k;
+        const existing = tilesRef.current.find((t) => same(t.kind) === same(kind) && frameOfRef.current[t.id] === fid);
         if (existing) {
           if (opts?.file) openFileInTile(existing.id, opts.file);
           setSelectedTileId(existing.id); focusTile(existing.id); return;
@@ -354,7 +355,7 @@ export function useSpawn(ctx: SpawnCtx) {
       return;
     }
     const k = kind === "tree" ? "editor" : kind;
-    spawnTile(pluginOfKind(k) ? k : "shell", frameId);
+    spawnTile(canSpawnKind(k) ? k : "shell", frameId);
   }, [spawnTile]);
 
   // Open a plan-review tile for an agent's plan handoff. Places it in the SAME

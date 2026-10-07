@@ -14,7 +14,7 @@ describe("parsePluginMessage", () => {
       { type: "command", name: "selectTile", args: [null] },
       { type: "command", name: "focusTile", args: ["t1", { exact: true }] },
       { type: "command", name: "spawnTile", args: ["shell", null] },
-      { type: "command", name: "spawnVis", args: ["diff"] },
+      { type: "command", name: "spawnVis", args: ["tree"] },
       { type: "command", name: "addFrame" },
       { type: "command", name: "spawnAgent", args: [null, null] },
       { type: "command", name: "spawnAgent", args: ["codex", "f1", { prompt: "fix the build", name: "fixer" }] },
@@ -43,6 +43,7 @@ describe("parsePluginMessage", () => {
       { type: "command", name: "selectTile", args: ["a", "b"] },
       { type: "command", name: "spawnTile", args: ["shell"] },
       { type: "command", name: "spawnVis", args: ["browser"] },
+      { type: "command", name: "spawnVis", args: ["diff"] }, // the Code tile's Changes replaced it
       { type: "command", name: "spawnAgent", args: [null] },
       { type: "command", name: "spawnAgent", args: [null, null, null] },
       { type: "command", name: "spawnAgent", args: [null, null, { prompt: 5 }] },

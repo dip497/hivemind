@@ -9,8 +9,7 @@ describe("toolbar catalog", () => {
     expect(BUILTIN_TOOLBAR_ACTIONS.map((a) => [a.id, a.label, a.hint])).toEqual([
       ["terminal", "Terminal", "1"],
       ["agent", "Agent", "2"],
-      ["explorer", "Explorer", "3"],
-      ["diff", "Diff", "4"],
+      ["explorer", "Code", "3"],
       ["frame", "Frame", "6"],
       ["browser", "Browser", "7"],
       ["board", "Add", ""],
@@ -51,8 +50,8 @@ describe("resolveToolbar", () => {
     const r = resolveToolbar({ actions: ["theme", "terminal", "theme"] });
     expect(r.map((a) => a.id)).toEqual(["theme", "terminal"]);
     // A hand-edited file cannot inject an action that does not exist.
-    expect(resolveToolbar({ actions: ["agent", "ghost", "diff"] as never }).map((a) => a.id))
-      .toEqual(["agent", "diff"]);
+    expect(resolveToolbar({ actions: ["agent", "ghost", "diff", "explorer"] as never }).map((a) => a.id))
+      .toEqual(["agent", "explorer"]);
     // Resolved entries are the catalog's own frozen metadata.
     expect(r[0]).toBe(toolbarAction("theme")!);
   });

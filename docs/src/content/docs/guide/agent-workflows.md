@@ -34,7 +34,7 @@ tile.
    or `cancelled --note "<why>"`.
 
 A session without a final `set-state` leaves the issue stale. Review comments from the
-diff tile arrive as prompts (`Review comment on src/x.ts:42 …`); record, fix, re-verify,
+Code tile's Changes arrive as prompts (`Review comment on src/x.ts:42 …`); record, fix, re-verify,
 and return to `in_review`.
 
 ## Control plane

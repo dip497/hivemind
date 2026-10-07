@@ -111,7 +111,7 @@ test("a participant's branch lands in the host's repository as handoff/<who>/<br
   assert.equal(h.placed.length, 1);
   assert.equal(h.placed[0]!.repo, r.host);
   assert.equal(h.placed[0]!.name, "Priya: feature");
-  assert.equal(h.placed[0]!.tile.kind, "diff");
+  assert.equal(h.placed[0]!.tile.kind, "editor");
   assert.deepEqual((h.placed[0]!.tile as TileRecord & { compare?: unknown }).compare, { base: "main", head: "handoff/priya/feature" });
 });
 

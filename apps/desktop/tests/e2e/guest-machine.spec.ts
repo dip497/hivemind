@@ -8,7 +8,7 @@
 // placed, and shows the host nothing else; until they let the others run terminals and agents
 // there, when one the host puts there runs on their computer, in their folder, started by the
 // host, and their window shows it. The host's board names their computer by them, there or not. A
-// branch of theirs, handed off, lands in the host's repository, and a Diff tile shows it there.
+// branch of theirs, handed off, lands in the host's repository, and the Code tile shows it there, on its Changes.
 import { test, expect, type ElectronApplication, type Page } from "@playwright/test";
 import { execFileSync, execSync } from "node:child_process";
 import fs from "node:fs";
@@ -207,7 +207,7 @@ test("a guest puts a frame of their own on their computer: a shell they open in 
   }, { timeout: 30_000, intervals: [2_000] }).toBe("guest-42");
 
   // They hand off a branch of theirs: it lands in the host's repository as a branch of its own, at
-  // their tip, and a Diff tile on the host's board shows what it adds.
+  // their tip, and a Code tile on the host's board shows what it adds.
   git(folder, "checkout", "-q", "-b", "feature");
   fs.writeFileSync(path.join(folder, "feature.txt"), "from priya\n");
   git(folder, "add", "feature.txt");
@@ -221,7 +221,7 @@ test("a guest puts a frame of their own on their computer: a shell they open in 
   expect(git(repo, "rev-parse", "handoff/priya/feature")).toBe(git(folder, "rev-parse", "feature"));
   expect({ head: git(repo, "rev-parse", "HEAD"), status: git(repo, "status", "--porcelain") }).toEqual(hostsOwn);
   let review = "";
-  await expect.poll(async () => (review = (await tiles(host)).find((t) => !before.includes(t) && t!.startsWith("tile-diff")) ?? ""), { timeout: 15_000 }).not.toBe("");
+  await expect.poll(async () => (review = (await tiles(host)).find((t) => !before.includes(t) && t!.startsWith("tile-editor")) ?? ""), { timeout: 15_000 }).not.toBe("");
   await focusTile(host, review);
   await expect(host.locator(`.react-flow__node[data-id="${review}"] [data-diff-file="feature.txt"]`)).toHaveCount(1, { timeout: 30_000 });
 

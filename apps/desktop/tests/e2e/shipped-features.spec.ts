@@ -49,8 +49,11 @@ test.afterAll(async () => {
 
 async function openDiff() {
   if ((await page.locator(".react-flow__node-workbench").count()) === 0) {
-    await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "diff" })));
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "editor" })));
     await page.waitForSelector(".react-flow__node-workbench", { timeout: 6_000 });
+    const id = await page.locator(".react-flow__node-workbench").getAttribute("data-id");
+    await page.evaluate((t) => window.dispatchEvent(new CustomEvent("hivemind:focus-tile", { detail: t })), id);
+    await page.locator(".react-flow__node-workbench").getByRole("button", { name: "Changes (source control)" }).click();
   }
   // Poll for actual diff content — git status + per-file content fetch + parse
   // + CodeView render takes a beat (longer under xvfb than a fixed sleep covers).

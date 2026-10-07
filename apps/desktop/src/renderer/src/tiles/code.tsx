@@ -20,15 +20,15 @@ const CODE: TileKindSpec = {
   title: "Code", icon: Folder, glyph: "{}", opens: ["file"],
 };
 
-/** The file tree, the editor and the working tree's changes, in one tile. `diff` is the same
- *  tile opened on its changes, and `workbench` the kind boards saved before. */
+/** The file tree, the editor and the working tree's changes, in one tile, opened as `editor`.
+ *  A board may hold it as `workbench` or `diff` (that one opened on its changes). */
 export const codeTile: TilePlugin<WorkbenchTileData> = {
   surface: "workbench",
   name: "Code",
   kinds: {
     editor: CODE,
-    diff: { ...CODE, label: "Changes", title: "Changes", glyph: "±" },
-    workbench: { ...CODE, title: undefined },
+    diff: { ...CODE, title: undefined, sameAs: "editor" },
+    workbench: { ...CODE, title: undefined, sameAs: "editor" },
   },
   data: (t, s, h) => s.repoPath === null ? null : {
     repoPath: s.repoPath,
@@ -38,7 +38,7 @@ export const codeTile: TilePlugin<WorkbenchTileData> = {
     onCloseTab: (file: string) => h.closeTabInTile(t.id, file),
     onClose: s.onClose,
     ...s.pin,
-    ...(t.kind === "diff" ? { startOnChanges: true } : {}),
+    ...(t.kind === "diff" || t.compare ? { startOnChanges: true } : {}),
     ...(t.compare ? { compare: t.compare } : {}),
   },
   lazy: true,

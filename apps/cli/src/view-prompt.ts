@@ -86,7 +86,7 @@ is on is exactly what a person needs to see.
 |---|---|
 | \`selectTile(id)\`, \`selectFrame(id)\`, \`focusTile(id)\` | — |
 | \`closeTile(id)\` | \`workspace:close\` |
-| \`spawnTile(kind, frameId)\`, \`spawnVis("tree"\\|"shell"\\|"diff"\\|"issues")\`, \`spawnClaude()\`, \`addFrame()\` | \`workspace:spawn\` |
+| \`spawnTile(kind, frameId)\`, \`spawnVis("tree"\\|"shell"\\|"issues")\`, \`spawnClaude()\`, \`addFrame()\` | \`workspace:spawn\` |
 | \`spawnAgent(agentId \\| null, frameId \\| null, { prompt?, name? })\` — start an agent with a first prompt | \`workspace:spawn\` |
 | \`renameTile(id, name)\`, \`openFolder(frameId)\` (the user picks the folder) | \`workspace:edit\` |
 

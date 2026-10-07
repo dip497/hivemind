@@ -82,7 +82,7 @@ export function handOff(o: HandOffOptions): Domain<"git.handOff"> {
           }
         }, Buffer.from(data, "base64"));
         const base = (await gitListBranches(r)).current ?? "HEAD";
-        const tile: CompareTile = { id: mintId("tile-diff"), kind: "diff", label: "Diff", compare: { base, head: as } };
+        const tile: CompareTile = { id: mintId("tile-editor"), kind: "editor", label: "Code", compare: { base, head: as } };
         o.place(r, tile, `${name || "Hand-off"}: ${b}`);
         return { branch: as, base };
       },

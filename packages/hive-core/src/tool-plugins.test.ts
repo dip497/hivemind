@@ -19,7 +19,7 @@ describe("bundled tool plugins", () => {
     expect(BROWSER_TOOL).toEqual({ toolId: BROWSER_TOOL_ID, tileKind: "browser" });
     expect(BUNDLED_TOOL_PLUGINS.filter((p) => p.builtin).map((p) => p.id)).toEqual([ISSUES_PLUGIN_ID, CODE_PLUGIN_ID]);
     expect(toolIdForTileKind("browser")).toBe(BROWSER_TOOL_ID);
-    expect(toolIdForTileKind("diff")).toBe(`${CODE_PLUGIN_ID}/diff`);
+    expect(toolIdForTileKind("editor")).toBe(`${CODE_PLUGIN_ID}/editor`);
     expect(toolIdForTileKind("shell")).toBeNull();
   });
 
@@ -51,7 +51,7 @@ describe("tile-kind availability", () => {
   });
 
   test("kinds no plugin contributes answer null (the caller treats that as always available)", () => {
-    for (const kind of ["shell", "editor", "claude", "terminal"]) {
+    for (const kind of ["shell", "workbench", "diff", "claude", "terminal"]) {
       expect(tileKindAvailability(kind, prefs([]))).toBeNull();
       expect(tileKindAvailability(kind, prefs([BROWSER_PLUGIN_ID], [BROWSER_TOOL_ID]))).toBeNull();
       expect(allowed(kind, prefs([]))).toBe(true);
@@ -59,14 +59,14 @@ describe("tile-kind availability", () => {
   });
 
   test("a built-in tile stays available on settings that enable nothing", () => {
-    // The regression this guards: making diff/issues managed must not let an
+    // The regression this guards: making the Code tile and issues managed must not let an
     // empty (or stale) enabledPlugins hide the editor behind a preferences blob.
-    for (const kind of ["diff", "workbench", "issues", "planReview"]) {
+    for (const kind of ["editor", "issues", "planReview"]) {
       expect(tileKindAvailability(kind, prefs([]))?.available).toBe(true);
       expect(allowed(kind, toolPreferences(mergeSettings({ v: 1 })))).toBe(true);
     }
     // Still per-tool switchable, unlike a legacy kind.
-    expect(tileKindAvailability("diff", prefs([], [`${CODE_PLUGIN_ID}/diff`])))
+    expect(tileKindAvailability("editor", prefs([], [`${CODE_PLUGIN_ID}/editor`])))
       .toEqual({ available: false, reason: "tool-disabled" });
   });
 

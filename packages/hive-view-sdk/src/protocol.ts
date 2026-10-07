@@ -372,7 +372,7 @@ export interface ViewCommands {
   /** permission `workspace:spawn` */
   spawnTile: (kind: string, frameId: string | null) => void;
   /** permission `workspace:spawn` */
-  spawnVis: (which: "tree" | "shell" | "diff" | "issues") => void;
+  spawnVis: (which: "tree" | "shell" | "issues") => void;
   /** permission `workspace:spawn` */
   spawnClaude: () => void;
   /** permission `workspace:spawn` */
@@ -541,7 +541,7 @@ const COMMAND_ARGS: Record<CommandName, (args: unknown[]) => boolean> = {
   focusTile: (a) => (a.length === 1 || a.length === 2) && isId(a[0]) && (a[1] === undefined || (isObj(a[1]) && (a[1].exact === undefined || typeof a[1].exact === "boolean"))),
   closeTile: (a) => a.length === 1 && isId(a[0]),
   spawnTile: (a) => a.length === 2 && isId(a[0]) && isIdOrNull(a[1]),
-  spawnVis: (a) => a.length === 1 && ["tree", "shell", "diff", "issues"].includes(a[0] as string),
+  spawnVis: (a) => a.length === 1 && ["tree", "shell", "issues"].includes(a[0] as string),
   spawnClaude: (a) => a.length === 0,
   addFrame: (a) => a.length === 0,
   spawnAgent: (a) => (a.length >= 2 && a.length <= 3) && (a[0] === null || isId(a[0])) && isIdOrNull(a[1])
