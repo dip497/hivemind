@@ -341,13 +341,20 @@ test("a session ends when its caller closes it or goes, or when its host disable
 
 test("a widget pressed through a view is the opener's press, held to its role: one who may only look presses nothing", async () => {
   const c = computer();
-  installed("widgets", { name: "Widgets", phone: true });
+  installed("widgets", { name: "Widgets", phone: true, permissions: ["workspace:widgets"] });
+  installed("lookout", { name: "Look only", phone: true });
   const open = async (who: ReturnType<typeof c.caller>) => {
     const { session } = await c.call("view.open", ["widgets", c.repo, { w: 400, h: 800, theme: { colors: {} } }], who) as { session: string };
     c.post(who, session, { type: "ready", v: 1 });
     c.post(who, session, { type: "pressWidget", id: "w1", action: "pat" });
   };
   await open(c.caller((m) => m !== "widget.press", { ...PHONE, access: "view" }));
+  assert.deepEqual(c.pressed, []);
+  // A view that did not ask to press widgets presses none, whoever opened it.
+  const owner = c.caller();
+  const { session } = await c.call("view.open", ["lookout", c.repo, { w: 400, h: 800, theme: { colors: {} } }], owner) as { session: string };
+  c.post(owner, session, { type: "ready", v: 1 });
+  c.post(owner, session, { type: "pressWidget", id: "w1", action: "pat" });
   assert.deepEqual(c.pressed, []);
   await open(c.caller());
   assert.deepEqual(c.pressed, [{ id: "w1", press: { action: "pat" } }]);

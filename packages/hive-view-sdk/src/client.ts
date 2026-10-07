@@ -73,7 +73,7 @@ export interface ViewClient {
   onParticipants(cb: (participants: ViewParticipant[]) => void): () => void;
   /** 1.8: every widget in the workspace, now and whenever one changes. A host before 1.8 sends none. */
   onWidgets(cb: (widgets: ViewWidget[]) => void): () => void;
-  /** 1.8: press one of a widget's buttons, as a person pressing it where it is drawn. */
+  /** 1.8, `workspace:widgets`: press one of a widget's buttons, as a person pressing it where it is drawn. */
   pressWidget(id: string, action: unknown): void;
   /** 1.8: click a widget's card, not on a button. */
   clickWidget(id: string): void;
@@ -377,10 +377,12 @@ class Client implements ViewClient {
   }
 
   pressWidget(id: string, action: unknown): void {
+    this.need("workspace:widgets", "pressWidget");
     if (this.supports("widgets")) this.send({ type: "pressWidget", id, action });
   }
 
   clickWidget(id: string): void {
+    this.need("workspace:widgets", "clickWidget");
     if (this.supports("widgets")) this.send({ type: "pressWidget", id, click: true });
   }
 

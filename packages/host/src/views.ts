@@ -54,6 +54,7 @@ const SERVED: Partial<Record<ViewPermission, string>> = {
   "workspace:spawn": "agent.start",
   "workspace:close": "agent.close",
   "workspace:edit": "store.setCore",
+  "workspace:widgets": "widget.press",
 };
 
 export interface ViewsOptions {

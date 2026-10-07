@@ -23,7 +23,7 @@ export const PROTOCOL_VERSION = 1;
 /** `workspace:edit` (protocol 1.2): rename a tile, bind a frame to a folder.
  *  `workspace:prompt` (1.4): give an agent an instruction the view wrote; the user confirms each one.
  *  `workspace:sessions` (1.4): see past agent sessions in a frame's folder and continue one. */
-export const VIEW_PERMISSIONS = ["workspace:spawn", "workspace:close", "workspace:edit", "workspace:prompt", "workspace:sessions"] as const;
+export const VIEW_PERMISSIONS = ["workspace:spawn", "workspace:close", "workspace:edit", "workspace:prompt", "workspace:sessions", /** 1.8 */ "workspace:widgets"] as const;
 export type ViewPermission = (typeof VIEW_PERMISSIONS)[number];
 
 /** What each permission lets a plugin do, in the words shown before it is installed (the app's
@@ -34,6 +34,8 @@ const PERMISSION_WORDS: Record<ViewPermission, string> = {
   "workspace:edit": "rename tiles and point frames at folders",
   "workspace:prompt": "tell an agent something (you send or cancel each one)",
   "workspace:sessions": "see past agent sessions and continue one",
+  // A widget's button can do what the widget may (start or close agents): pressing is asked for.
+  "workspace:widgets": "press the workspace's widgets, as you would (what a widget does then, it does as you)",
 };
 /** The permissions a plugin asks for, said as what they let it do; a name not known here is left out. */
 export const permissionWords = (perms: readonly string[]): string[] =>
@@ -217,8 +219,10 @@ export type ShareOutcome = "copied" | "saved" | "cancelled";
 
 // ── protocol 1.8 (additive) ─────────────────────────────────────────────────
 // `widgets` in `hello.features`: after `subscribeWidgets` the view is sent every widget in the
-// workspace (`widgets`), again whenever one changes, and may press one (`pressWidget`), as a
-// person pressing it where it is drawn. A phone shows widgets through a view that does this.
+// workspace (`widgets`), again whenever one changes, and with the permission `workspace:widgets`
+// may press one (`pressWidget`), as a person pressing it where it is drawn: a widget's button can
+// do whatever the widget may, so pressing is asked for at install. A phone shows widgets through
+// a view that does this.
 
 /** A widget in the workspace, as a view is given it (feature `widgets`). */
 export interface ViewWidget {
@@ -643,6 +647,8 @@ export function refusal(m: PluginMessage, host: HostScope): { why: string; partl
 
 function refused(m: PluginMessage, host: HostScope): string | null {
   switch (m.type) {
+    case "pressWidget":
+      return host.capabilities.includes("workspace:widgets") ? null : 'pressWidget needs permission "workspace:widgets"';
     case "command": {
       const need = COMMAND_PERMISSION[m.name];
       if (need && !host.capabilities.includes(need)) return `${m.name} needs permission "${need}"`;

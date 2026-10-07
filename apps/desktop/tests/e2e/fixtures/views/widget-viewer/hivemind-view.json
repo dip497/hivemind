@@ -1,1 +1,1 @@
-{ "id": "widget-viewer", "name": "Widget viewer", "version": "0.0.1", "entry": "index.html" }
+{ "id": "widget-viewer", "name": "Widget viewer", "version": "0.0.1", "entry": "index.html", "permissions": ["workspace:widgets"] }

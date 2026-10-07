@@ -179,8 +179,9 @@ shows them: `hm.onWidgets((widgets) => …)` hears every widget now and whenever
 `{ id, widget, name, tree, card, tint?, text?, items?, images, placement }`: `tree` is what it draws,
 in the same nodes a widget renders (stack, row, text, number, meter, button, image, sprite, input,
 textarea, list), `text` and `items` what people wrote in it, `images` the pictures its tree names.
-`hm.pressWidget(id, action)` presses one of its buttons and `hm.clickWidget(id)` its card: the
-widget's code hears it wherever it runs. `@dip497/widgets` on HiveHub is such a view.
+`hm.pressWidget(id, action)` presses one of its buttons and `hm.clickWidget(id)` its card, with the
+permission `workspace:widgets`: the widget's code hears it wherever it runs, and does what it does
+then as you, so pressing is asked for at install. `@dip497/widgets` on HiveHub is such a view.
 
 ## Settings
 
@@ -207,7 +208,7 @@ Declared in the manifest, refused at install if unknown:
 `workspace:close` → `closeTile`; `workspace:spawn` → `spawnTile` / `spawnVis` /
 `spawnClaude` / `addFrame` / `spawnAgent`; `workspace:edit` → `renameTile` / `openFolder`;
 `workspace:prompt` → `prompt` and `spawnAgent` with a `prompt`; `workspace:sessions` →
-`sessions` and `spawnAgent` with `resume`. Selection and focus need none.
+`sessions` and `spawnAgent` with `resume`; `workspace:widgets` → `pressWidget` / `clickWidget`. Selection and focus need none.
 
 `spawnAgent(agent, frameId, { prompt?, name?, resume? })` starts an agent by its catalog id (`null` is
 the user's default); a `prompt` becomes its first message once the user sends it. An id that isn't installed is
