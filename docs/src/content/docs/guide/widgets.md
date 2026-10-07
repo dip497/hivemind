@@ -66,7 +66,7 @@ workspace.
 | `hive.on("click", fn)` | its card was clicked (not on a button) |
 | `hive.on("start", fn)` | it was placed or the app opened |
 | `hive.on("action", fn)` | one of its buttons was pressed; `fn` gets the button's `action` |
-| `hive.on("agents", fn)` | the agents' states changed; `fn` gets `{ tileId: state }` |
+| `hive.hm` | the workspace, as a view sees it: see below |
 
 It runs in a worker: no network, no files, nothing of the app but `hive`. What it draws and its
 state are each up to 16 KB of JSON; larger is dropped. Drawings reach others at most 4 times a
@@ -102,22 +102,25 @@ A widget with code can draw these fields too.
 
 ## The workspace
 
-A widget reads the workspace's agents and what happens to them, the same as views and the rest
-of the app do, and may act there as far as its `widget.json` asks:
+`hive.hm` is the client a view and a tool's tile have ([Views](./views/)): the workspace's frames
+and tiles, its agents' status and what happens to them, and the commands and requests a view
+has, each held to the permissions its `widget.json` asks for, as a view's are:
 
 ```json
-{ "name": "Agents at work", "permissions": ["workspace:prompt"] }
+{ "name": "Agents at work", "permissions": ["workspace:spawn", "workspace:prompt"] }
 ```
 
-| | |
-|---|---|
-| `hive.workspace.agents()` | the agents: `tile`, `agent` (what it is called), `program`, `state`, `waiting` (what it waits on, since when), `machine` |
-| `hive.on("agents", fn)` | the agents changed |
-| `hive.on("agent", fn)` | something happened to an agent: `{ kind, tile, detail }`, where `kind` is `turnEnded` (detail: done, failed…), `waiting` (detail: what on), `answered`, `came` or `went` |
-| `hive.workspace.focus(tile)` | show that tile; needs nothing |
-| `hive.workspace.spawn(agent, { prompt })` | start an agent; needs `workspace:spawn` |
-| `hive.workspace.prompt(tile, text)` | tell an agent something; needs `workspace:prompt`, and you send or cancel each one |
-| `hive.workspace.close(tile)` | close a tile; needs `workspace:close` |
+```js
+hive.hm.on("structure", ({ tiles }) => {
+  const agents = tiles.filter((t) => t.agent);
+  for (const t of agents) hive.hm.subscribeStatus(t.id, (status, info) => { /* info.agent.waitingFor … */ });
+});
+hive.hm.onEvents(["turn", "needsInput"], (e) => hive.notify(`${e.kind} in ${e.tileId}`));
+await hive.hm.commands.spawnAgent(null, null, { prompt: "run the tests" }); // you send or cancel it
+```
+
+In a widget every call returns a promise, and one given a callback returns its unsubscribe at
+once. Its values (`hive.hm.hello`, `settings`, `capabilities`, `features`) are there to read.
 
 Settings → Plugins → Widgets shows what each widget may do. A widget without permissions reads
 and points at things, nothing more.

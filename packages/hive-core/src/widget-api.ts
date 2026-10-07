@@ -3,23 +3,35 @@
  * widget's own, in a worker, by the app's window or by `hive host`), and its type declarations,
  * for an author's editor (`hive widgets new` writes them beside the widget). One owner, so what
  * the declarations say is what runs.
+ *
+ * What it reads of the workspace and does there is `hive.hm`: the client a view and a tool's tile
+ * have (`@hivemind/view-sdk`), held in the window and reached from the worker by message. Its
+ * calls return promises; one given a callback returns its unsubscribe at once.
  */
 
 /** Run first in a widget's worker: defines `hive` over the messages its runner sends and takes. */
 export const WIDGET_PRELUDE = `const hive = (() => {
-  const on = {}; let state; let options = {}; let spot = { x: 1, y: 0 }; let agents = [];
-  const waiting = new Map(); let asks = 0;
-  const ask = (verb, args) => new Promise((resolve, reject) => {
-    const req = ++asks; waiting.set(req, { resolve, reject });
-    postMessage({ type: "act", req, verb, args });
-  });
+  const on = {}; let state; let options = {}; let spot = { x: 1, y: 0 };
+  // hive.hm: each call goes to the client the window holds for this widget, by name.
+  const waiting = new Map(); const fns = new Map(); let n = 0; let values = {};
+  const call = (path, args) => {
+    const req = ++n; let sub = false;
+    const wire = args.map((a) => { if (typeof a !== "function") return a; sub = true; const id = ++n; fns.set(id, a); return { __fn: id }; });
+    postMessage({ type: "hm-call", req, path, args: wire });
+    if (sub) return () => postMessage({ type: "hm-unsub", req });
+    return new Promise((resolve, reject) => waiting.set(req, { resolve, reject }));
+  };
+  const commands = new Proxy({}, { get: (_, name) => (...a) => call(["commands", String(name)], a) });
+  // Not a promise, nor anything a symbol names: \`await hive.hm\` and logging it stay plain.
+  const hm = new Proxy({}, { get: (_, k) => (typeof k !== "string" || k === "then" ? undefined : k === "commands" ? commands : k in values ? values[k] : (...a) => call([k], a)) });
   const fire = (t, p) => (on[t] || []).forEach((f) => { try { f(p); } catch (e) { console.error(e); } });
   self.onmessage = (e) => {
     const m = e.data;
     if (m.type === "init") { state = m.state; options = m.options; }
     if (m.type === "options") options = m.payload;
-    if (m.type === "agents") agents = m.payload;
-    if (m.type === "acted") { const w = waiting.get(m.req); waiting.delete(m.req); if (w) m.ok ? w.resolve(m.result) : w.reject(new Error(m.error)); return; }
+    if (m.type === "hm-values") { values = m.values; return; }
+    if (m.type === "hm-reply") { const w = waiting.get(m.req); waiting.delete(m.req); if (w) m.ok ? w.resolve(m.value) : w.reject(new Error(m.error)); return; }
+    if (m.type === "hm-cb") { const f = fns.get(m.fn); if (f) try { f(...m.args); } catch (e) { console.error(e); } return; }
     fire(m.type === "init" ? "start" : m.type, m.type === "options" ? options : m.payload);
   };
   return {
@@ -33,14 +45,7 @@ export const WIDGET_PRELUDE = `const hive = (() => {
       postMessage({ type: "move", x, y, over: Math.min(60000, Math.max(0, Number(how && how.over) || 0)) });
     },
     get spot() { return spot; },
-    /** The workspace: its agents, and what the widget may do there (as its manifest asked). */
-    workspace: {
-      agents: () => agents,
-      focus: (tile) => ask("focus", [tile]),
-      spawn: (agent, opts) => ask("spawn", [agent ?? null, opts ?? {}]),
-      prompt: (tile, text) => ask("prompt", [tile, text]),
-      close: (tile) => ask("close", [tile]),
-    },
+    hm,
     get state() { return state; },
     get options() { return options; },
     setState: (s) => { state = s; postMessage({ type: "state", state: s }); },
@@ -70,19 +75,36 @@ type Node =
   /** Lines to tick, add and reorder: the widget's own \`items\`. */
   | { type: "list"; title?: boolean; placeholder?: string };
 
-/** An agent in the workspace, as \`hive.workspace.agents()\` and the \`agents\` event give it. */
-interface Agent {
-  tile: string;
-  agent: string;
-  program?: { id: string; label: string };
-  state: string;
-  since: number;
-  machine: string;
-  waiting?: { kind: string; since: number };
+/** \`hive.hm\`: the client a view has (\`@hivemind/view-sdk\` ViewClient), reached from the
+ *  worker. Its values (\`hello\`, \`settings\`, \`capabilities\`, \`features\`…) are there to read;
+ *  every call returns a promise, and one given a callback returns its unsubscribe at once. */
+interface Hm {
+  readonly hello: any;
+  readonly capabilities: readonly string[];
+  readonly features: readonly string[];
+  readonly settings: Record<string, string | number | boolean>;
+  /** The workspace's frames and tiles (\`structure\`), their names, what is selected. */
+  on(event: "structure" | "names" | "selection" | "settings" | "theme", cb: (payload: any) => void): () => void;
+  /** An agent tile's status, now and on each change, with what it is doing (\`info.agent\`). */
+  subscribeStatus(tileId: string, cb: (status: string, info?: any) => void): () => void;
+  /** What happens: a turn ended, an agent needs input, a tile closed. */
+  onEvents(kinds: string[], cb: (event: any) => void): () => void;
+  supports(feature: string): Promise<boolean>;
+  agents(): Promise<any[]>;
+  /** Tell an agent something; the person sends or cancels it. Needs "workspace:prompt". */
+  prompt(tileId: string, text: string): Promise<"sent" | "cancelled">;
+  commands: {
+    focusTile(id: string): Promise<void>;
+    selectTile(id: string | null): Promise<void>;
+    /** Needs "workspace:close". */
+    closeTile(id: string): Promise<void>;
+    /** Start an agent (null: the person's default) in a frame (null: the host picks). Needs
+     *  "workspace:spawn"; a \`prompt\` also "workspace:prompt", and the person sends or cancels it. */
+    spawnAgent(agent: string | null, frameId: string | null, opts?: { prompt?: string; name?: string }): Promise<void>;
+    [name: string]: (...args: any[]) => Promise<unknown>;
+  };
+  [name: string]: any;
 }
-
-/** What happened to an agent: it came, went, ended a turn, started waiting, was answered. */
-interface AgentEvent { seq: number; at: number; kind: "came" | "went" | "turnEnded" | "waiting" | "answered"; tile: string; detail?: string }
 
 interface Hive {
   /** Draw this. Every viewer of the workspace sees it. */
@@ -97,24 +119,14 @@ interface Hive {
   readonly options: Record<string, string | number | boolean>;
   /** A desktop notification on the machine that runs it. */
   notify(text: string): void;
-  /** The workspace. Starting, closing or telling an agent something needs the permission in widget.json. */
-  workspace: {
-    agents(): Agent[];
-    focus(tile: string): Promise<null>;
-    /** Start an agent (null: the person's default); a \`prompt\` is sent only once the person agrees. */
-    spawn(agent: string | null, opts?: { frame?: string; prompt?: string }): Promise<{ started: boolean }>;
-    /** Tell an agent something; the person sends or cancels it first. */
-    prompt(tile: string, text: string): Promise<{ sent: boolean }>;
-    close(tile: string): Promise<null>;
-  };
+  /** The workspace, as a view sees it, held to the permissions in widget.json. */
+  readonly hm: Hm;
   on(event: "start", f: () => void): void;
   /** A button was pressed: its \`action\`. */
   on(event: "action", f: (action: any) => void): void;
   /** The card was clicked, not on a button. */
   on(event: "click", f: () => void): void;
   on(event: "options", f: (options: Record<string, string | number | boolean>) => void): void;
-  on(event: "agents", f: (agents: Agent[]) => void): void;
-  on(event: "agent", f: (event: AgentEvent) => void): void;
 }
 
 declare const hive: Hive;

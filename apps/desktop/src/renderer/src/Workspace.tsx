@@ -57,7 +57,6 @@ import { useBoard } from "./board-objects/useBoard";
 import type { BoardChoice, Point } from "./board-objects/board-model";
 import { useEnabledWidgetPackages, useShownWorkspace, useWidgetRuntime } from "./board-objects/widget-runtime";
 import { BoardContext } from "./board-objects/board-context";
-import { provideKitHost } from "./workspace/workspace-kit";
 import { markRestored, whenBootIdle } from "./boot-queue";
 /** How long the catalog check waits for restored tiles to start before going anyway: an agent
  *  this version cannot load is a tile that may never start, and the check is its repair. */
@@ -71,7 +70,7 @@ import { useWorktrees } from "./useWorktrees";
 // Loaded when it is first opened: the dialog (add form, machine list, folder picker) is not startup work.
 // Only a workspace with floating widgets, or a plugin asking to tell an agent something, needs these.
 const WidgetLayer = lazy(() => import("./board-objects/WidgetLayer").then((m) => ({ default: m.WidgetLayer })));
-const KitConfirm = lazy(() => import("./workspace/workspace-kit-confirm").then((m) => ({ default: m.KitConfirm })));
+const WidgetLinks = lazy(() => import("./board-objects/WidgetLinks").then((m) => ({ default: m.WidgetLinks })));
 const MachinesHub = lazy(() => import("./machines/MachinesHub").then((m) => ({ default: m.MachinesHub })));
 import { frameMachine, placeOf, useMachines, type MachinesRequest } from "./machines/store";
 import { useMachineOwners } from "./machines/owners";
@@ -1176,18 +1175,6 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     tileStatus: statusOf,
   }), [setSelectedTileId, setSelectedFrameId, focusTile, closeTile, spawnTile, spawnVis, spawnDefaultAgent, addFrame, renameTile, bindWorkspace]);
 
-  // What in-app plugins act through: this window's commands, and what it calls each tile.
-  const layerTilesRef = useRef(layerTiles);
-  layerTilesRef.current = layerTiles;
-  useEffect(() => {
-    provideKitHost({
-      focus: (tile) => commands.focusTile(tile),
-      close: (tile) => commands.closeTile(tile),
-      spawn: (agent, frame, opts) => commands.spawnAgent(agent, frame, opts),
-      tileName: (tile) => layerTilesRef.current.find((t) => t.id === tile)?.name,
-    });
-    return () => provideKitHost(null);
-  }, [commands]);
 
   // The canvas plugin's private runtime access (milestone-1 seam).
   const canvasRuntime: CanvasRuntime = useMemo(() => ({
@@ -1235,7 +1222,6 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       {repoPath && <SayHere repo={repoPath} selection={presenceSelection} />}
       <Suspense fallback={null}>
         <BoardContext.Provider value={board}><WidgetLayer repo={persistKey} board={board} packages={widgetPackages} /></BoardContext.Provider>
-        <KitConfirm />
       </Suspense>
       {/* Reset transient toolbar expansion on view/placement changes without
           touching live tile bodies. Settings lives above this in App. */}
@@ -1263,6 +1249,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
           handlers — see tile-host.tsx). */}
       <WorkspacePropsContext.Provider value={viewProps}>
         <ToolPlugins />
+        <Suspense fallback={null}><WidgetLinks /></Suspense>
         <TileHost surfaces={surfaces} selectedTileId={selectedTileId} onSurfacePointerDown={setSelectedTileId} />
       </WorkspacePropsContext.Provider>
 

@@ -75,3 +75,53 @@ test("a widget is offered, added, drawn in every view, and its button changes wh
     fs.rmSync(ud, { recursive: true, force: true });
   }
 });
+
+// A widget's `hive.hm` is the client a view has: it reads the workspace (here, its tiles) and
+// is held to the permissions its widget.json asks for (here, none: closing a tile is refused).
+const TILES = `
+let ids = [];
+const draw = (why) => hive.render({ type: "stack", children: [
+  { type: "number", value: ids.length, label: "tiles" },
+  { type: "text", text: why || "-" },
+  { type: "button", label: "Close one", action: "close" },
+] });
+hive.on("start", () => {
+  draw();
+  hive.hm.on("structure", (s) => { ids = s.tiles.map((t) => t.id); draw(); });
+});
+hive.on("action", () => {
+  hive.hm.commands.closeTile(ids[0]).then(() => draw("closed"), (e) => draw("refused: " + e.message));
+});
+`;
+
+test("a widget reads the workspace through hive.hm, held to what its widget.json asks for", async () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "hm-widget-hm-repo-"));
+  const ud = fs.mkdtempSync(path.join(os.tmpdir(), "hm-widget-hm-ud-"));
+  execSync("git init -q -b main && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init", { cwd: repo });
+  const dir = path.join(ud, "config", "hivemind", "widgets", "tiles");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "widget.json"), JSON.stringify({ name: "Tiles" }));
+  fs.writeFileSync(path.join(dir, "widget.js"), TILES);
+  const env = { ...process.env, HIVEMIND_PTY_DAEMON: "0", XDG_CONFIG_HOME: path.join(ud, "config") };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=${ud}`], cwd: repo, env });
+  try {
+    const page = await app.firstWindow();
+    await page.waitForSelector(".react-flow", { timeout: 30_000 });
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
+    await expect(page.locator(".react-flow__node-terminal")).toHaveCount(1, { timeout: 15_000 });
+    await page.locator('[data-toolbar-action="board"]').first().click();
+    await page.locator('[data-board-choice="widget:tiles"]').click();
+    const widget = page.locator('[data-widget-layer] [data-widget="tiles"]');
+    await expect(widget).toContainText("tiles", { timeout: 15_000 });
+    await expect.poll(() => widget.locator("text=/^\\d+$/").first().textContent(), { timeout: 15_000 }).toBe("1");
+    await widget.getByRole("button", { name: "Close one" }).click();
+    await expect(widget).toContainText("refused", { timeout: 10_000 });
+    await expect(widget).toContainText("workspace:close");
+    await expect(page.locator(".react-flow__node-terminal")).toHaveCount(1);
+  } finally {
+    await app.close();
+    fs.rmSync(repo, { recursive: true, force: true });
+    fs.rmSync(ud, { recursive: true, force: true });
+  }
+});

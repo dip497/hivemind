@@ -54,6 +54,8 @@ export interface ViewClient {
   /** 1.7: what the person set this view to, one value per field its manifest's `settings` declares.
    *  Empty from a host that predates it. Changes arrive as the `settings` event. */
   readonly settings: Readonly<Record<string, SettingValue>>;
+  /** What the host says. One that says how things are now (structure, names, selection, resize,
+   *  visibility, theme, settings) replays its latest to a new listener, at once. */
   on<K extends keyof EventMap>(event: K, cb: (payload: EventMap[K]) => void): () => void;
   /** Per-tile status. Subscribes on first listener, unsubscribes on last. */
   subscribeStatus(tileId: string, cb: (status: ViewStatus, info?: StatusInfo) => void): () => void;
@@ -105,6 +107,15 @@ export interface ViewClient {
   error(message: string): void;
 }
 
+/** What a client gives that runs elsewhere than where it is used (a widget's worker): the calls,
+ *  by name, and the values it holds, which the other side keeps a copy of. Surfaces and reveals
+ *  are a view's own and are not among them. */
+export const CLIENT_CALLS = [
+  "on", "subscribeStatus", "supports", "onEvents", "onCustom", "activity", "onPresence", "onParticipants", "onWidgets",
+  "pressWidget", "clickWidget", "history", "share", "agents", "sessions", "prompt", "setLayout", "error",
+] as const satisfies readonly (keyof ViewClient)[];
+export const CLIENT_VALUES = ["hello", "capabilities", "viewport", "visible", "device", "settings", "features"] as const satisfies readonly (keyof ViewClient)[];
+
 export interface ConnectOptions {
   /** Where to listen for the handshake (default `window`). */
   target?: Window;
@@ -126,6 +137,9 @@ export function connect(opts: ConnectOptions = {}): Promise<ViewClient> {
     target.addEventListener("message", onWindow);
   });
 }
+
+/** Events that say how things are now (not that something happened): replayed to a late listener. */
+const STATE_EVENTS = new Set<string>(["structure", "names", "selection", "resize", "visibility", "theme", "settings"]);
 
 interface EventListener { kinds: Set<ViewEventKind>; custom: string[]; cb: (e: ViewEvent) => void; lastSeq: number }
 
@@ -248,7 +262,12 @@ class Client implements ViewClient {
     }
   }
 
-  private emit(event: string, payload: unknown) { for (const cb of this.listeners.get(event) ?? []) cb(payload); }
+  /** The last of each event that says how things are now, which a listener added later is told first. */
+  private latest = new Map<string, unknown>();
+  private emit(event: string, payload: unknown) {
+    if (STATE_EVENTS.has(event)) this.latest.set(event, payload);
+    for (const cb of this.listeners.get(event) ?? []) cb(payload);
+  }
 
   private async answerReveal(requestId: number, tileId: string) {
     let rect: ViewRect | null = null;
@@ -273,6 +292,7 @@ class Client implements ViewClient {
     let set = this.listeners.get(event);
     if (!set) this.listeners.set(event, (set = new Set()));
     set.add(cb as (p: unknown) => void);
+    if (this.latest.has(event)) cb(this.latest.get(event) as EventMap[K]);
     return () => { set!.delete(cb as (p: unknown) => void); };
   }
 

@@ -3,9 +3,9 @@
  * (`widget.drawn`). One window per workspace also runs their code, the one the host chose
  * (`widget.run`): a worker per widget, which reaches no network (the page's CSP) and nothing of
  * the app but what `hive` gives it: draw, move its card, keep state, read its options, notify,
- * hear its buttons and clicks on it, and read and act on the workspace through the workspace kit
- * (workspace/workspace-kit.tsx), as its manifest's permissions allow. A joined workspace's widgets run on its
- * host.
+ * hear its buttons and clicks on it, and read and act on the workspace through `hive.hm`: the
+ * client a view has, held here for it (WidgetLinks.tsx) and held to its manifest's permissions.
+ * A joined workspace's widgets run on its host.
  *
  * What a widget shows travels as one drawing: what it draws, how its card looks, and the last move
  * it asked for. A move is said once ("go there over 3 s") and every window animates it itself, so
@@ -20,7 +20,7 @@ import type { ViewWidget } from "@hivemind/view-sdk/protocol";
 import { onStoreChange, readBoard } from "../workspace/workspace-store-client";
 import { WIDGET_PRELUDE } from "@hivemind/core/widget-api";
 import { useSettings } from "../settings-store";
-import { act, watchAgents, watchEvents, type AgentItem } from "../workspace/workspace-kit";
+import type { WidgetBridge } from "./widget-hm";
 
 
 type Update = (id: string, change: (o: BoardObject) => BoardObject) => void;
@@ -77,6 +77,29 @@ export function useDrawn(id: string): Drawing | undefined {
 // ── running their code ──────────────────────────────────────────────────────
 
 const workers = new Map<string, Worker>();
+
+/** The widgets whose code runs in this window, with their packages: what WidgetLinks links. */
+let runningWidgets: { id: string; pkg: WidgetPackage }[] = [];
+const runningListeners = new Set<() => void>();
+const announceRunning = () => {
+  runningWidgets = [...workers.keys()].flatMap((id) => { const pkg = packageOf.get(id); return pkg ? [{ id, pkg }] : []; });
+  for (const l of runningListeners) l();
+};
+const packageOf = new Map<string, WidgetPackage>();
+export function useRunningWidgets(): { id: string; pkg: WidgetPackage }[] {
+  return useSyncExternalStore((l) => { runningListeners.add(l); return () => { runningListeners.delete(l); }; }, () => runningWidgets);
+}
+
+/** Each running widget's `hive.hm`, once its link is up; what its worker asks before then waits. */
+const bridges = new Map<string, WidgetBridge>();
+const early = new Map<string, Array<{ type: string }>>();
+export function setWidgetBridge(id: string, bridge: WidgetBridge | null): void {
+  if (!bridge) { bridges.delete(id); return; }
+  bridges.set(id, bridge);
+  for (const m of early.get(id) ?? []) bridge.handle(m);
+  early.delete(id);
+}
+export const postToWidget = (id: string, m: unknown): void => workers.get(id)?.postMessage(m);
 /** The options each running widget was last given, as JSON. */
 const sentOptions = new Map<string, string>();
 
@@ -230,32 +253,20 @@ function useRunner(repo: string | null): boolean {
  *  devices with it open; a `hive host` has no window of its own). */
 export function useWidgetRuntime(repo: string | null, objects: BoardObject[], packages: WidgetPackage[], update: Update): void {
   useEffect(() => (repo ? followDrawn(repo) : undefined), [repo]);
-  const running = useRunner(repo);
-  const agents = useRef<AgentItem[]>([]);
+  const runner = useRunner(repo);
   const onBoard = useRef(new Set<string>());
   onBoard.current = new Set(objects.map((o) => o.id));
 
   // A press from wherever else it is shown (another window, a guest, a phone's view).
   useEffect(() => {
-    if (!repo || !running) return;
+    if (!repo || !runner) return;
     return window.hive.onWidgetPressed((r, id, press) => {
       if (r !== repo) return;
       if (press.click) clickWidget(id); else pressWidget(id, press.action);
     });
-  }, [repo, running]);
+  }, [repo, runner]);
 
-  // What widgets hear of the workspace: its agents as they change, and what happens to them.
-  useEffect(() => {
-    if (!repo || !running) return;
-    const stopAgents = watchAgents(repo, (list) => {
-      agents.current = list;
-      for (const w of workers.values()) w.postMessage({ type: "agents", payload: list });
-    });
-    const stopEvents = watchEvents(repo, (e) => { for (const w of workers.values()) w.postMessage({ type: "agent", payload: e }); });
-    return () => { stopAgents(); stopEvents(); };
-  }, [repo, running]);
-
-  const widgets = running ? objects.filter((o): o is WidgetObject => o.kind === "widget") : [];
+  const widgets = runner ? objects.filter((o): o is WidgetObject => o.kind === "widget") : [];
   const key = widgets.map((w) => `${w.id}:${w.widget}`).join(",") + "|" + packages.map((p) => p.id).join(",");
   useEffect(() => {
     if (!repo) return;
@@ -276,10 +287,9 @@ export function useWidgetRuntime(repo: string | null, objects: BoardObject[], pa
       const show = () => window.hive.widgetDraw(repo, id, shown);
       worker.onmessage = (e: MessageEvent<{ type: string; tree?: unknown; state?: unknown; text?: string; x?: number; y?: number; over?: number; req?: number; verb?: string; args?: unknown[] }>) => {
         const m = e.data;
-        if (m.type === "act") {
-          void act({ name: pkg.name, permissions: pkg.permissions }, String(m.verb), Array.isArray(m.args) ? m.args : [])
-            .then((result) => worker.postMessage({ type: "acted", req: m.req, ok: true, result: result ?? null }))
-            .catch((err: unknown) => worker.postMessage({ type: "acted", req: m.req, ok: false, error: err instanceof Error ? err.message : String(err) }));
+        if (m.type.startsWith("hm-")) {
+          const bridge = bridges.get(id);
+          if (bridge) bridge.handle(m); else early.set(id, [...(early.get(id) ?? []), m].slice(-200));
           return;
         }
         if (m.type === "render") { shown.tree = m.tree ?? null; show(); }
@@ -290,17 +300,20 @@ export function useWidgetRuntime(repo: string | null, objects: BoardObject[], pa
       worker.onerror = (err) => console.warn(`[widget ${pkg.id}] ${err.message}`);
       worker.postMessage({ type: "init", state: w.state, options: optionsOf(pkg, w) });
       sentOptions.set(id, JSON.stringify(optionsOf(pkg, w)));
-      worker.postMessage({ type: "agents", payload: agents.current });
       workers.set(id, worker);
+      packageOf.set(id, pkg);
     }
     for (const [id, worker] of workers) {
       if (want.has(id)) continue;
       worker.terminate();
       workers.delete(id);
+      packageOf.delete(id);
+      early.delete(id);
       // Taken off the board: what it drew goes too. Still there, another window runs it now.
       if (!onBoard.current.has(id)) window.hive.widgetDraw(repo, id, null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
+    announceRunning();
   }, [key, update, repo, packages]);
 
   // Options the person changed reach the widget's code as they are set.
@@ -318,5 +331,9 @@ export function useWidgetRuntime(repo: string | null, objects: BoardObject[], pa
   });
 
   // A workspace left, or packages added, removed or replaced: every widget starts again on its code now.
-  useEffect(() => () => { for (const w of workers.values()) w.terminate(); workers.clear(); }, [repo, packages]);
+  useEffect(() => () => {
+    for (const w of workers.values()) w.terminate();
+    workers.clear(); packageOf.clear(); early.clear();
+    announceRunning();
+  }, [repo, packages]);
 }
