@@ -107,7 +107,8 @@ built this way, and is the fullest example there is.
 
 A tile reads the workspace's issues through `hm` like any plugin: `hm.onIssues(cb)` for the list,
 live, and `hm.issues.read(id)`, `create`, `update`, `setState`, `comment`, `delete`, `link`,
-`unlink`, `move`, `workspaces()`. Anything that writes needs `"workspace:issues"`.
+`unlink`, `move`, `workspaces()`. All of it needs `"workspace:issues"`; only `read` reaches another
+workspace (a link's other end), and every write is to the tile's own.
 
 Reach the app only through these, never `window.hive`: that is the app's own and changes without
 notice. This contract changes only with `apiVersion`; a plugin written for a newer one is listed

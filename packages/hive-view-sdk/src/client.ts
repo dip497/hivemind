@@ -17,7 +17,7 @@ import {
   COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
   type ActivityLevel, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect,
   type ViewCommands, type ViewDevice, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme, type ViewWidget,
-  ISSUE_CALLS, ISSUE_WRITES, type IssueCall, type ViewIssue, type ViewIssueAssignee, type ViewIssueState, type ViewIssueSummary,
+  ISSUE_CALLS, type IssueCall, type ViewIssue, type ViewIssueAssignee, type ViewIssueState, type ViewIssueSummary,
 } from "./protocol.js";
 
 /** A request the host refused or could not answer (`UNSUPPORTED` when it lacks the feature). */
@@ -80,9 +80,10 @@ export interface ViewClient {
   pressWidget(id: string, action: unknown): void;
   /** 1.8: click a widget's card, not on a button. */
   clickWidget(id: string): void;
-  /** 1.9: the workspace's issues, now and whenever one changes. A host before 1.9 sends none. */
+  /** 1.9: the workspace's issues, now and whenever one changes; needs `workspace:issues`. A host
+   *  before 1.9 sends none. */
   onIssues(cb: (issues: ViewIssueSummary[]) => void): () => void;
-  /** 1.9: the workspace's issue methods. Reading is open; the rest need `workspace:issues`. */
+  /** 1.9: the workspace's issue methods. Like `onIssues`, they need `workspace:issues`. */
   readonly issues: ViewIssues;
   /** 1.3: per-tile status intervals for a local day (YYYY-MM-DD). */
   history(day: string): Promise<ViewHistoryDay>;
@@ -428,6 +429,7 @@ class Client implements ViewClient {
   }
 
   onIssues(cb: (issues: ViewIssueSummary[]) => void): () => void {
+    this.need("workspace:issues", "onIssues");
     if (!this.supports("issues")) return () => {};
     this.issueCbs.add(cb);
     if (this.issueCbs.size === 1) this.send({ type: "subscribeIssues" });
@@ -438,7 +440,7 @@ class Client implements ViewClient {
   }
 
   private issueCall(call: IssueCall, args: unknown[]): Promise<unknown> {
-    if (ISSUE_WRITES.has(call)) this.need("workspace:issues", `issues.${call}`);
+    this.need("workspace:issues", `issues.${call}`);
     if (!this.supports("issues")) return Promise.reject(new HostError("UNSUPPORTED", "this host has no issues"));
     return this.request((requestId) => ({ type: "request", requestId, name: "issue", args: [{ call, args }] }), 30_000);
   }

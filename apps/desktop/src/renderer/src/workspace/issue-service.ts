@@ -1,7 +1,8 @@
 /**
  * The issues of the workspace a plugin shows (protocol 1.9), from the app's own issue calls: the
  * list now and whenever its `.hivemind` changes (an agent's `hive update` included), and each
- * issue method. What reaches a plugin never says where the workspace is on disk.
+ * issue method. What reaches a plugin never says where the workspace is on disk, and it writes
+ * only to this workspace.
  */
 import type { IssueCall, ViewIssue, ViewIssueSummary } from "@hivemind/view-sdk/protocol";
 import type { LinkServices } from "@hivemind/view-host/link";
@@ -11,8 +12,8 @@ const summary = ({ path: _, ...rest }: IssueSummary): ViewIssueSummary => rest;
 const full = ({ path: _, raw: __, ...rest }: Issue): ViewIssue => rest;
 const parent = (dir: string) => dir.slice(0, Math.max(dir.lastIndexOf("/"), dir.lastIndexOf("\\"))) || dir;
 
-/** The issues service for the workspace whose `.hivemind` is `root()`, as asked each time. An id
- *  of another of the host's workspaces is called in that one, found by its prefix. */
+/** The issues service for the workspace whose `.hivemind` is `root()`, as asked each time. Only
+ *  `read` reaches another of the host's workspaces (a link's other end), found by the id's prefix. */
 export function issueService(root: () => string | null): NonNullable<LinkServices["issues"]> {
   const listeners = new Set<() => void>();
   const changed = () => { for (const l of listeners) l(); };
@@ -44,8 +45,7 @@ export function issueService(root: () => string | null): NonNullable<LinkService
       if (call === "workspaces") {
         return (await window.hive.listWorkspaces()).map((w) => ({ prefix: w.prefix, title: w.title }));
       }
-      // Another workspace's issue (a link's other end) lives where its prefix says.
-      const r = call !== "create" && typeof a === "string" ? (await window.hive.resolveIssueRoot(a).catch(() => ({ root: null }))).root ?? here : here;
+      const r = call === "read" && typeof a === "string" ? (await window.hive.resolveIssueRoot(a).catch(() => ({ root: null }))).root ?? here : here;
       const wrote = <T>(p: Promise<T>) => p.then((v) => { changed(); return v; });
       switch (call) {
         case "read": return full(await window.hive.readIssue(r, str(a, "id")));

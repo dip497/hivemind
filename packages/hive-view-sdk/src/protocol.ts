@@ -36,7 +36,7 @@ const PERMISSION_WORDS: Record<ViewPermission, string> = {
   "workspace:sessions": "see past agent sessions and continue one",
   // A widget's button can do what the widget may (start or close agents): pressing is asked for.
   "workspace:widgets": "press the workspace's widgets, as you would (what a widget does then, it does as you)",
-  "workspace:issues": "create, change and delete the workspace's issues",
+  "workspace:issues": "read, create, change and delete the workspace's issues",
 };
 /** The permissions a plugin asks for, said as what they let it do; a name not known here is left out. */
 export const permissionWords = (perms: readonly string[]): string[] =>
@@ -221,9 +221,9 @@ export type ShareOutcome = "copied" | "saved" | "cancelled";
 // ── protocol 1.9 (additive) ─────────────────────────────────────────────────
 // `issues` in `hello.features`: after `subscribeIssues` the view is sent the workspace's issues
 // (`issues`), again whenever one changes, and may call the workspace's issue methods (`issue`
-// requests): reading is open, everything that writes needs `workspace:issues`. The workspace is
-// the one the view shows (a tool's tile: its frame's); the host names it, never the view. An
-// issue of another of the host's workspaces (a link's other end) is found by its prefix.
+// requests). All of it needs `workspace:issues`. The workspace is the one the view shows (a tool's
+// tile: its frame's); the host names it, never the view. Only `read` reaches an issue of another of
+// the host's workspaces (a link's other end, found by its prefix); every write is to this one.
 
 export const ISSUE_STATES = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"] as const;
 export type ViewIssueState = (typeof ISSUE_STATES)[number];
@@ -249,10 +249,9 @@ export interface ViewIssue extends ViewIssueSummary {
     activity: { at: string; who: string; message: string }[];
   };
 }
-/** The issue calls a view can make, and which of them write. */
+/** The issue calls a view can make. */
 export const ISSUE_CALLS = ["read", "create", "update", "setState", "comment", "delete", "link", "unlink", "move", "workspaces"] as const;
 export type IssueCall = (typeof ISSUE_CALLS)[number];
-export const ISSUE_WRITES: ReadonlySet<IssueCall> = new Set(["create", "update", "setState", "comment", "delete", "link", "unlink", "move"]);
 /** The most an `issue` request's arguments may take, as JSON. */
 export const ISSUE_ARGS_MAX = 256 * 1024;
 
@@ -708,7 +707,9 @@ function refused(m: PluginMessage, host: HostScope): string | null {
     case "request":
       if (m.name !== "issue") return null;
       if (!host.features.includes("issues")) return "issue: not supported";
-      return ISSUE_WRITES.has(m.args[0].call) && !host.capabilities.includes("workspace:issues") ? `issue ${m.args[0].call} needs permission "workspace:issues"` : null;
+      return host.capabilities.includes("workspace:issues") ? null : `issue ${m.args[0].call} needs permission "workspace:issues"`;
+    case "subscribeIssues":
+      return host.capabilities.includes("workspace:issues") ? null : 'subscribeIssues needs permission "workspace:issues"';
     case "command": {
       const need = COMMAND_PERMISSION[m.name];
       if (need && !host.capabilities.includes(need)) return `${m.name} needs permission "${need}"`;

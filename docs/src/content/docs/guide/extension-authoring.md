@@ -189,13 +189,14 @@ textarea, list), `text` and `items` what people wrote in it, `images` the pictur
 permission `workspace:widgets`: the widget's code hears it wherever it runs, and does what it does
 then as you, so pressing is asked for at install. `@dip497/widgets` on HiveHub is such a view.
 
-A view reads the workspace's issues (protocol 1.9, feature `issues`): `hm.onIssues((issues) => …)`
+With the permission `workspace:issues`, a view reads and changes the workspace's issues (protocol
+1.9, feature `issues`): `hm.onIssues((issues) => …)`
 hears the list now and whenever an issue changes (an agent's `hive update` included), each
 `{ id, title, state, parent, labels, assignee, created, updated }`. `hm.issues.read(id)` gives one in
 full, with its description, acceptance criteria and activity; `create`, `update`, `setState`,
-`comment`, `delete`, `link`, `unlink` and `move` change them, with the permission
-`workspace:issues`; `workspaces()` names the host's other workspaces. An id of another workspace
-(a link's other end) is found by its prefix; nothing a view is given says where a workspace is.
+`comment`, `delete`, `link`, `unlink` and `move` change them; `workspaces()` names the host's
+other workspaces. `read` finds an id of another workspace (a link's other end) by its prefix; every
+write is to the view's own workspace. Nothing a view is given says where a workspace is.
 
 ## Settings
 
@@ -223,7 +224,7 @@ Declared in the manifest, refused at install if unknown:
 `spawnClaude` / `addFrame` / `spawnAgent`; `workspace:edit` → `renameTile` / `openFolder`;
 `workspace:prompt` → `prompt` and `spawnAgent` with a `prompt`; `workspace:sessions` →
 `sessions` and `spawnAgent` with `resume`; `workspace:widgets` → `pressWidget` / `clickWidget`;
-`workspace:issues` → the `hm.issues` calls that write. Selection, focus and reading issues need none.
+`workspace:issues` → `onIssues` and every `hm.issues` call. Selection and focus need none.
 
 `spawnAgent(agent, frameId, { prompt?, name?, resume? })` starts an agent by its catalog id (`null` is
 the user's default); a `prompt` becomes its first message once the user sends it. An id that isn't installed is
