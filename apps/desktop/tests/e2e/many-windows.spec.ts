@@ -179,7 +179,8 @@ test("two windows share where tiles and notes are, and each keeps its own camera
   const windows = [page, second];
   const terminals = () => page.locator(".react-flow__node-terminal").evaluateAll((nodes) => nodes.map((n) => n.getAttribute("data-id")!));
   const had = await terminals();
-  await page.locator('[data-toolbar-action="terminal"]').click();
+  await page.locator('[data-toolbar-action="board"]').click();
+  await page.locator('[data-board-choice="tile:shell"]').click();
   await expect.poll(async () => (await terminals()).length).toBe(had.length + 1);
   const shell = (await terminals()).find((id) => !had.includes(id))!;
   for (const w of windows) await expect(w.locator(`.react-flow__node[data-id="${shell}"]`)).toHaveCount(1);

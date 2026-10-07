@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- **Breaking:** the toolbar's Terminal and Code buttons are gone: both open from Add, as every tool does. The `1` and `3` keys still open them. A saved toolbar that lists `terminal` or `explorer` drops them.
 - New: `useTileState(hm, key, initial)` in a tool plugin's `sdk.js`: `useState` kept with the tile across restarts. The example tools keep what was chosen, their filters, tabs and search with it.
 - New: a tool plugin can ship an icon (`"icon": "icon.svg"` on each tool), drawn in the text colour wherever the app shows the tool. Issues and the example tools have one.
 - Changed: the Add menu has a category panel beside its list, and keeps one size: the list scrolls.

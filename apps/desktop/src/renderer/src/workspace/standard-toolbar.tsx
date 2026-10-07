@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Download, Folder, Earth, LoaderCircle, MoveUpRight, Palette, RotateCw, Scan, Shapes, Terminal, Upload, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, Download, Earth, LoaderCircle, MoveUpRight, Palette, RotateCw, Scan, Shapes, Upload, type LucideIcon } from "lucide-react";
 import type { ToolbarAction, ToolbarActionId } from "@hivemind/core/toolbar";
 import { Button } from "../components/ui/button";
 import { MenuItem } from "../components/ui/menu-item";
@@ -19,7 +19,6 @@ export interface StandardToolbarProps {
   labels: boolean;
   compact: boolean;
   repoPath: string | null;
-  onToggle: (kind: "tree" | "shell") => void;
   agentSel: string | undefined;
   onAgentChange: (id: string) => void;
   onSpawnAgent: (agent: { id: string; cmd: string; defaultArgs?: string[]; label: string }) => void;
@@ -41,7 +40,6 @@ export interface StandardToolbarProps {
 }
 
 const icons: Record<Exclude<ToolbarActionId, "agent" | "board">, LucideIcon> = {
-  terminal: Terminal, explorer: Folder,
   frame: Scan, browser: Earth, theme: Palette,
 };
 // Derived per call: the catalog is replaced when manifests load.
@@ -50,9 +48,8 @@ const enabledAgents = () => getAgents().filter((agent) => agent.enabled);
 /** This adapter supplies host callbacks, never executable code from settings.
  *  Tool creation still goes through the runtime's shared activation checks. */
 export function StandardToolbar(props: StandardToolbarProps) {
-  const { actions, labels, compact, repoPath, onToggle, onFrame, onBrowser, onTheme } = props;
+  const { actions, labels, compact, repoPath, onFrame, onBrowser, onTheme } = props;
   const callbacks: Record<Exclude<ToolbarActionId, "agent" | "board">, () => void> = {
-    terminal: () => onToggle("shell"), explorer: () => onToggle("tree"),
     frame: onFrame, browser: onBrowser, theme: onTheme,
   };
   return <div role="group" aria-label="Workspace tools" className={`hm-island flex max-w-[calc(100vw-32px)] flex-wrap items-center justify-center gap-0.5 ${compact ? "p-1" : "p-1.5"}`} data-tool-island>
@@ -60,9 +57,7 @@ export function StandardToolbar(props: StandardToolbarProps) {
       if (action.id === "agent") return <AgentAction key={action.id} {...props} action={action} />;
       if (action.id === "board") return props.onBoard ? <BoardAction key={action.id} action={action} labels={labels} compact={compact} repoPath={repoPath} onBoard={props.onBoard} onTile={props.onTile} boardItems={!!props.boardItems} /> : null;
       const Icon = icons[action.id];
-      const needsRepo = action.id === "explorer";
-      return <ActionButton key={action.id} action={action} labels={labels} disabled={needsRepo && !repoPath}
-        onClick={callbacks[action.id]} icon={<Icon />} />;
+      return <ActionButton key={action.id} action={action} labels={labels} onClick={callbacks[action.id]} icon={<Icon />} />;
     })}
     <ViewSwitch compact={compact} />
     {/* One action, whichever is left to do: download it, or restart into what is downloaded. */}

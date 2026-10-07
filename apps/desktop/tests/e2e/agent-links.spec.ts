@@ -27,12 +27,15 @@ test("a pipe and a spawn wire are drawn from one tile to the other, and go when 
   const page = await app.firstWindow();
   await page.waitForSelector(".react-flow", { timeout: 30_000 });
 
-  // From the toolbar: once a terminal has focus, the `1` key is the shell's.
+  // From Add: once a terminal has focus, the `1` key is the shell's.
   const terminals = page.locator(".react-flow__node-terminal");
-  const newTerminal = page.locator('[data-toolbar-action="terminal"]');
-  await newTerminal.click();
+  const newTerminal = async () => {
+    await page.locator('[data-toolbar-action="board"]').click();
+    await page.locator('[data-board-choice="tile:shell"]').click();
+  };
+  await newTerminal();
   await expect(terminals).toHaveCount(1);
-  await newTerminal.click();
+  await newTerminal();
   await expect(terminals).toHaveCount(2);
   const [a, b] = await terminals.evaluateAll((nodes) => nodes.map((n) => n.getAttribute("data-id")!));
   const send = (event: string, change: object) =>

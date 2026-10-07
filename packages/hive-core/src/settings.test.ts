@@ -118,24 +118,24 @@ describe("settings schema", () => {
       views: {
         chrome: {},
         toolbars: {
-          canvas: { actions: ["theme", "terminal", "theme", "ghost"], labels: false },
+          canvas: { actions: ["theme", "frame", "theme", "ghost"], labels: false },
           world: { actions: [] },                    // deliberate empty toolbar
           windows: { labels: true },                 // labels only (opt-IN), actions default
-          orbit: { actions: "terminal" },            // not an array → no preference
+          orbit: { actions: "frame" },            // not an array → no preference
           solar: {},                                 // nothing meaningful → no entry
           "../x": { actions: ["agent"] },            // not a view id → dropped
         },
       },
     });
     expect(s.views.toolbars).toEqual({
-      canvas: { actions: ["theme", "terminal"], labels: false }, // dedupe + drop unknown, false kept
+      canvas: { actions: ["theme", "frame"], labels: false }, // dedupe + drop unknown, false kept
       world: { actions: [] },
       windows: { labels: true },
     });
     // Absent view → catalog defaults; the stored shape feeds resolveToolbar directly.
     expect(resolveToolbar(s.views.toolbars.mars)).toEqual(BUILTIN_TOOLBAR_ACTIONS);
     expect(resolveToolbar(s.views.toolbars.world)).toEqual([]);
-    expect(resolveToolbar(s.views.toolbars.canvas).map((a) => a.id)).toEqual(["theme", "terminal"]);
+    expect(resolveToolbar(s.views.toolbars.canvas).map((a) => a.id)).toEqual(["theme", "frame"]);
     // The render flag rides on the preferences; absent means icon-only (the
     // host default is FALSE, so this setting changes nothing for existing users).
     expect(s.views.toolbars.canvas!.labels).toBe(false);
@@ -154,17 +154,17 @@ describe("settings schema", () => {
   });
 
   test("views.toolbars: partial merges preserve it; an explicit {} resets", () => {
-    const cur = mergeSettings({ v: 1, views: { toolbars: { canvas: { actions: ["terminal"], labels: false } } } });
+    const cur = mergeSettings({ v: 1, views: { toolbars: { canvas: { actions: ["frame"], labels: false } } } });
     // A patch that does not mention `views` at all keeps every toolbar.
     expect(mergeSettings({ v: 1, appearance: { accent: "ember" } }, cur).views.toolbars)
-      .toEqual({ canvas: { actions: ["terminal"], labels: false } });
+      .toEqual({ canvas: { actions: ["frame"], labels: false } });
     // A patch that mentions `views` but not `toolbars` keeps them too.
     expect(mergeSettings({ v: 1, views: { defaultView: "world" } }, cur).views.toolbars)
-      .toEqual({ canvas: { actions: ["terminal"], labels: false } });
+      .toEqual({ canvas: { actions: ["frame"], labels: false } });
     // The CLI patch path: setPath then merge.
     const patched = mergeSettings(setPath(cur, "views.toolbars.world", { actions: [], labels: true }), cur);
     expect(patched.views.toolbars.world).toEqual({ actions: [], labels: true });
-    expect(patched.views.toolbars.canvas).toEqual({ actions: ["terminal"], labels: false });
+    expect(patched.views.toolbars.canvas).toEqual({ actions: ["frame"], labels: false });
     // Explicit {} is the reset — back to catalog defaults everywhere.
     const reset = mergeSettings(setPath(patched, "views.toolbars", {}), patched);
     expect(reset.views.toolbars).toEqual({});

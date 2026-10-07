@@ -15,7 +15,7 @@
  */
 
 export type ToolbarActionId =
-  | "terminal" | "agent" | "explorer" | "frame" | "browser" | "board" | "theme";
+  | "agent" | "frame" | "browser" | "board" | "theme";
 
 export interface ToolbarAction {
   readonly id: ToolbarActionId;
@@ -27,9 +27,7 @@ export interface ToolbarAction {
 /** The catalog, in the order a toolbar shows them when the user has no
  *  preference. Frozen: callers hand this straight to a renderer. */
 export const BUILTIN_TOOLBAR_ACTIONS: readonly ToolbarAction[] = Object.freeze([
-  Object.freeze({ id: "terminal", label: "Terminal", hint: "1" }),
   Object.freeze({ id: "agent", label: "Agent", hint: "2" }),
-  Object.freeze({ id: "explorer", label: "Code", hint: "3" }),
   Object.freeze({ id: "frame", label: "Frame", hint: "6" }),
   Object.freeze({ id: "browser", label: "Browser", hint: "7" }),
   Object.freeze({ id: "board", label: "Add", hint: "" }),

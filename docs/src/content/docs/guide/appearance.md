@@ -55,7 +55,7 @@ The CLI uses `hidden` for Collapsed and `off` for Off:
 ```sh
 hive config set views.chrome.canvas.island '"off"'
 hive config set views.chrome.canvas.island '"top"'
-hive config set views.toolbars.canvas.actions '["frame", "terminal", "theme"]'
+hive config set views.toolbars.canvas.actions '["agent", "board", "theme"]'
 hive config set views.toolbars.canvas.labels true
 ```
 

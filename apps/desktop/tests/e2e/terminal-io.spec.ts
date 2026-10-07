@@ -24,7 +24,8 @@ test.afterAll(async () => {
 });
 
 test("keys typed into a terminal reach its shell, and what it prints reaches the window", async () => {
-  await page.locator('[data-toolbar-action="terminal"]').click();
+  await page.locator('[data-toolbar-action="board"]').click();
+  await page.locator('[data-board-choice="tile:shell"]').click();
   const term = page.locator(".react-flow__node-terminal").first();
   await expect(term).toHaveCount(1);
   await term.locator(".xterm-screen").click();

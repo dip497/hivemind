@@ -1231,7 +1231,6 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
         chrome={chrome}
         toolbar={activeViewId ? settings.views.toolbars[activeViewId] : undefined}
         repoPath={repoPath}
-        onToggle={spawnVis}
         agentSel={agentSel}
         onAgentChange={setAgentSel}
         onSpawnAgent={spawnAgent}
