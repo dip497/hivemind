@@ -3,6 +3,7 @@
 // `gh run view --job <id> --log-failed`. "Ask an agent to fix" starts one in this tile's frame with
 // a prompt you read before it is sent (permissions workspace:spawn and workspace:prompt).
 import React, { useCallback, useEffect, useRef, useState } from "hm-plugin://host/react.js";
+import { Loading } from "hm-plugin://host/sdk.js";
 import { Button, toast } from "hm-plugin://host/ui.js";
 
 const h = React.createElement;
@@ -164,7 +165,7 @@ function Runs({ tile, hm, host }) {
             : outcome(run).color === "var(--color-err)" && h(Button, { size: "xs", variant: "outline", onClick: () => act("Rerunning the failed jobs", ["run", "rerun", String(run.databaseId), "--failed"]) }, "Rerun failed"),
           h(Button, { size: "xs", variant: "ghost", onClick: () => host.openUrl(run.url) }, "Open on GitHub")),
         h("div", { key: "jobs", style: { display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 12px", borderBottom: "1px solid var(--color-line)" } },
-          jobs === null ? h("span", { style: muted }, "Loading the jobs…")
+          jobs === null ? h(Loading, { label: "Loading the jobs", className: "min-h-0" })
             : jobs.map((j) => h("button", {
               key: j.databaseId, onClick: () => setJob(j.databaseId), "data-job": j.name,
               style: {
@@ -181,7 +182,7 @@ function Runs({ tile, hm, host }) {
           !theJob ? h("p", { style: { ...muted, padding: 12 } }, "Choose a job.")
             : !failed ? h("ol", { style: { margin: 0, padding: "8px 12px 8px 32px", fontSize: 12 } },
               theJob.steps.map((s) => h("li", { key: s.number, style: { padding: "2px 0" } }, h(Dot, { of: s }), " ", s.name)))
-            : log === null ? h("p", { style: { ...muted, padding: 12 } }, "Loading the log…")
+            : log === null ? h(Loading, { label: "Loading the log" })
               : h("pre", { "data-log": true, style: { margin: 0, padding: 12, fontSize: 11.5, lineHeight: 1.45, fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap", wordBreak: "break-word" } },
                 log.map((line, i) => line.includes("##[error]")
                   ? h("div", { key: i, "data-error": true, style: { color: "var(--color-err)", fontWeight: 600 } }, line.replace("##[error]", ""))

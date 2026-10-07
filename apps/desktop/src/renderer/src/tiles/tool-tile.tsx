@@ -3,6 +3,7 @@
  * this window, held to the permissions its manifest declares) and a `host` for what only a tile
  * has. Loaded with the first tile of a tool plugin, so the app starts without it.
  */
+import { Loading } from "../components/ui/loading";
 import { useContext, useEffect, useRef, useState, type ComponentType } from "react";
 import { GripVertical } from "lucide-react";
 import { connect, type ViewClient } from "@hivemind/view-sdk";
@@ -81,7 +82,7 @@ function LinkedTile({ data, selected, Draw, props }: { data: ToolTileData; selec
       <div ref={root} className="nodrag nowheel relative min-h-0 flex-1 overflow-hidden">
         {failed ? <div className="p-4 text-[12px] text-[var(--color-err)]">{data.pkg.name} stopped: {failed}</div>
           : hm ? <Draw tile={{ id: data.tileId, kind: data.kind, name: data.name, frameId: data.frameId }} hm={hm} host={host} selected={selected} />
-          : null}
+          : <Loading label={`Starting ${data.pkg.name}`} />}
       </div>
       {dialogs}
     </div>

@@ -10,6 +10,7 @@ import { parsePatchFiles, type CodeViewItem } from "@pierre/diffs";
 import { CodeView } from "@pierre/diffs/react";
 import { TILE_API_VERSION, type HostSdk } from "@hivemind/tile-sdk";
 import { Button } from "../components/ui/button";
+import { Loading } from "../components/ui/loading";
 import * as ui from "../plugin-ui";
 
 const MarkdownPreview = lazy(() => import("../markdown-preview").then((m) => ({ default: m.MarkdownPreview })));
@@ -39,6 +40,7 @@ export const hostSdk: HostSdk = {
   Button: Button as HostSdk["Button"],
   PatchView: PatchView as HostSdk["PatchView"],
   Markdown: Markdown as HostSdk["Markdown"],
+  Loading: Loading as HostSdk["Loading"],
 };
 
 const MODULES: Record<string, object> = { react: React, "react-jsx-runtime": jsxRuntime, sdk: hostSdk, ui };

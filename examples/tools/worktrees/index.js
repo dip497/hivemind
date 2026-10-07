@@ -4,7 +4,7 @@
 // removed; git refuses the rest. "Ask an agent to review" starts one in this tile's frame with a
 // prompt you read before it is sent (permissions workspace:spawn and workspace:prompt).
 import React, { useCallback, useEffect, useMemo, useState } from "hm-plugin://host/react.js";
-import { PatchView } from "hm-plugin://host/sdk.js";
+import { PatchView, Loading } from "hm-plugin://host/sdk.js";
 import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, toast } from "hm-plugin://host/ui.js";
 
 const h = React.createElement;
@@ -135,7 +135,7 @@ function Worktrees({ tile, hm, host }) {
         h("span", { style: { flex: 1 } }),
         h(Button, { size: "2xs", variant: "ghost", onClick: refresh }, "Refresh")),
       h("div", { style: { overflow: "auto", minHeight: 0 } },
-        trees === null ? h("p", { style: { ...muted, padding: 12 } }, "Reading the worktrees…")
+        trees === null ? h(Loading, { label: "Reading the worktrees" })
           : shown.length === 0 ? h("p", { style: { ...muted, padding: 12 } }, "None.")
             : shown.map((w) => h("button", {
               key: w.path, onClick: () => choose(w.path), "data-worktree": named(w.path),
@@ -170,7 +170,7 @@ function Worktrees({ tile, hm, host }) {
           mode === "changes" && tree.changed.some((l) => l.startsWith("??")) && h("span", { style: { ...muted, alignSelf: "center", marginLeft: 8 } },
             `New, not shown: ${tree.changed.filter((l) => l.startsWith("??")).map((l) => l.slice(3)).join(", ")}`)),
         h("div", { key: "diff", style: { flex: 1, minHeight: 0, overflow: "auto" } },
-          patch === null ? h("p", { style: { ...muted, padding: 12 } }, "Loading the diff…") : h(PatchView, { patch })),
+          patch === null ? h(Loading, { label: "Loading the diff" }) : h(PatchView, { patch })),
       ]),
     confirm && h(Dialog, { open: true, onOpenChange: (o) => { if (!o) setConfirm(null); } },
       h(DialogContent, null,

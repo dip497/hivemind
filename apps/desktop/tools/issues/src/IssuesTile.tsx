@@ -7,7 +7,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Inbox } from "lucide-react";
 import type { TileProps } from "@hivemind/tile-sdk";
-import { Button } from "@hivemind/app-ui";
+import { Button, Loading } from "@hivemind/app-ui";
 import { useIssueList, useIssuesPlugin, write, type IssueSummary } from "./data";
 import { FilterBar, emptyFilters, applyFilters, type Filters } from "./FilterBar";
 import { ViewSwitcher, type ViewKind } from "./ViewSwitcher";
@@ -91,7 +91,7 @@ export function IssuesTile({ tile, hm, selected }: TileProps) {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {list === null ? (
-        <div className="flex-1 grid place-items-center text-[11.5px] text-[var(--color-fg3)]">Loading issues…</div>
+        <Loading label="Loading the issues" className="flex-1" />
       ) : (
         <>
           <FilterBar

@@ -2,7 +2,7 @@
 // It runs `gh` in the tile's folder (host.run), draws diffs with the app's own
 // diff view (PatchView), and reads which PRs to list from its settings (hm.settings).
 import React, { useCallback, useEffect, useState } from "hm-plugin://host/react.js";
-import { Button, Markdown, PatchView } from "hm-plugin://host/sdk.js";
+import { Button, Markdown, PatchView, Loading } from "hm-plugin://host/sdk.js";
 
 const h = React.createElement;
 const LIST = ["number", "title", "author", "headRefName", "isDraft", "updatedAt", "reviewDecision"].join(",");
@@ -56,7 +56,7 @@ function Detail({ host, number, onChanged }) {
     setBusy(true); setError(null);
     try { await gh(host, args, stdin === undefined ? undefined : { stdin }); load(); onChanged(); } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
-  if (!pr) return h("p", { style: { ...muted, padding: 12 } }, error ?? "Loading…");
+  if (!pr) return error ? h("p", { style: { ...muted, padding: 12 } }, error) : h(Loading, { label: "Loading the pull request" });
   const tabs = ["conversation", "files", "checks"];
   return h("div", { style: { display: "flex", flexDirection: "column", minHeight: 0, height: "100%" } },
     h("div", { style: { padding: "10px 12px", borderBottom: "1px solid var(--color-line)" } },
@@ -84,7 +84,7 @@ function Detail({ host, number, onChanged }) {
           h(Button, { size: "sm", variant: "outline", disabled: busy, onClick: () => act(["pr", "review", String(number), "--approve"]) }, "Approve"),
           h(Button, { size: "sm", variant: "outline", disabled: busy || !comment.trim(), onClick: () => act(["pr", "review", String(number), "--request-changes", "--body-file", "-"], comment) }, "Request changes"),
           h(Button, { size: "sm", variant: "destructive", disabled: busy || pr.state !== "OPEN", onClick: () => act(["pr", "merge", String(number), "--squash"]) }, "Squash and merge"))),
-      tab === "files" && (diff === null ? h("p", { style: { ...muted, padding: 12 } }, "Loading the diff…") : h(PatchView, { patch: diff })),
+      tab === "files" && (diff === null ? h(Loading, { label: "Loading the diff" }) : h(PatchView, { patch: diff })),
       tab === "checks" && h(Checks, { rollup: pr.statusCheckRollup })));
 }
 
@@ -108,7 +108,7 @@ function PullRequests({ hm, host }) {
         h("strong", { style: { fontSize: 12, flex: 1 } }, `Pull requests · ${state}`),
         h(Button, { size: "xs", variant: "ghost", onClick: load }, "Refresh")),
       error ? h("p", { role: "alert", style: { color: "var(--color-err)", padding: 12 } }, error)
-        : prs === null ? h("p", { style: { ...muted, padding: 12 } }, "Loading…")
+        : prs === null ? h(Loading, { label: "Loading the pull requests" })
         : h(List, { prs, chosen, onChoose: choose })),
     chosen ? h(Detail, { host, number: chosen, onChanged: load }) : h("p", { style: { ...muted, padding: 16 } }, "Choose a pull request."));
 }

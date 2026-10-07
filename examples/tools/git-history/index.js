@@ -3,7 +3,7 @@
 // with a prompt you read before it is sent (hm.commands.spawnAgent, permissions workspace:spawn
 // and workspace:prompt).
 import React, { useEffect, useMemo, useState } from "hm-plugin://host/react.js";
-import { Button, PatchView } from "hm-plugin://host/sdk.js";
+import { Button, PatchView, Loading } from "hm-plugin://host/sdk.js";
 
 const h = React.createElement;
 const SEP = "\u001f";
@@ -52,7 +52,7 @@ function History({ tile, hm, host }) {
         style: { margin: 8, padding: "6px 8px", background: "var(--color-bg)", color: "var(--color-fg)", border: "1px solid var(--color-line)", borderRadius: 6 },
       }),
       h("div", { style: { overflow: "auto", minHeight: 0 } },
-        commits === null ? h("p", { style: { ...muted, padding: 12 } }, "Loading…")
+        commits === null ? h(Loading, { label: "Loading the commits" })
           : shown.map((c) => h("button", {
             key: c.hash, onClick: () => choose(c.hash), "data-commit": c.short,
             style: {
@@ -67,7 +67,7 @@ function History({ tile, hm, host }) {
           hm.capabilities.includes("workspace:spawn") && h(Button, { size: "sm", variant: "outline", onClick: explain }, "Ask an agent to explain"))
         : h("p", { style: { ...muted, padding: 16 } }, "Choose a commit."),
       h("div", { style: { flex: 1, minHeight: 0, overflow: "auto" } },
-        chosen && (patch === null ? h("p", { style: { ...muted, padding: 12 } }, "Loading the diff…") : h(PatchView, { patch })))));
+        chosen && (patch === null ? h(Loading, { label: "Loading the diff" }) : h(PatchView, { patch })))));
 }
 
 export default { tiles: { "git-history": History } };

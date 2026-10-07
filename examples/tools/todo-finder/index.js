@@ -2,7 +2,7 @@
 // files stay out. A note opens in the editor beside the tile (host.openFile); "Hand to an agent"
 // starts one with a prompt you read first (hm.commands.spawnAgent). Its markers are a setting.
 import React, { useCallback, useEffect, useMemo, useState } from "hm-plugin://host/react.js";
-import { Button } from "hm-plugin://host/sdk.js";
+import { Button, Loading } from "hm-plugin://host/sdk.js";
 
 const h = React.createElement;
 const muted = { color: "var(--color-fg3)", fontSize: 11 };
@@ -56,7 +56,7 @@ function Todos({ tile, hm, host }) {
       h("span", { style: { flex: 1 } }),
       h(Button, { size: "xs", variant: "ghost", onClick: scan }, "Scan again")),
     h("div", { style: { flex: 1, minHeight: 0, overflow: "auto", padding: "4px 0" } },
-      notes === null ? h("p", { style: { ...muted, padding: 12 } }, "Looking…")
+      notes === null ? h(Loading, { label: "Looking for notes" })
         : !byFile.length ? h("p", { style: { ...muted, padding: 12 } }, "Nothing to do.")
         : byFile.map(([file, list]) => h("section", { key: file, style: { padding: "6px 12px" } },
           h("div", { style: { ...muted, fontFamily: "var(--font-mono)" } }, file),

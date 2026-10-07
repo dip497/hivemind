@@ -67,7 +67,7 @@ test.beforeAll(async () => {
     `d='${fakeGh}'`,
     'case "$1 $2" in',
     '  "run list") cat "$d/runs.json" ;;',
-    '  "run view") if [ "$3" = "--job" ]; then cat "$d/log.txt"; else cat "$d/jobs.json"; fi ;;',
+    '  "run view") if [ "$3" = "--job" ]; then sleep 1; cat "$d/log.txt"; else cat "$d/jobs.json"; fi ;;',
     '  "run rerun"|"run cancel") echo "$@" >> "$d/calls" ;;',
     '  *) echo "unexpected: $*" >&2; exit 1 ;;',
     "esac",
@@ -105,6 +105,12 @@ test("CI runs lists the runs, shows a failed job's lines, and reruns the failed 
   await expect(ci).toContainText("fix: the build", { timeout: 20_000 });
   await expect(ci).toContainText("docs: a typo");
   await ci.locator('[data-run="101"]').click();
+  // While its log is on its way, a spinner says so in the middle of where it will be.
+  const waiting = ci.locator("[data-log-box] [data-loading]");
+  await expect(waiting).toHaveText("Loading the log");
+  const [spin, box] = await Promise.all([waiting.locator("svg").boundingBox(), ci.locator("[data-log-box]").boundingBox()]);
+  expect(Math.abs(spin!.x + spin!.width / 2 - (box!.x + box!.width / 2))).toBeLessThan(2);
+  expect(Math.abs(spin!.y + spin!.height / 2 - (box!.y + box!.height / 2))).toBeLessThan(box!.height / 4);
   // The failed job is the one chosen, and its failed lines are shown under its step.
   await expect(ci.locator("[data-log]")).toContainText("error TS2345: boom");
   await expect(ci.locator("[data-log]")).toContainText("── Typecheck");

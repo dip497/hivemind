@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Play, FileQuestionMark, X } from "lucide-react";
-import { Button, Dialog, DialogContent, DialogTitle, Input, Label, MarkdownPreview, MenuItem, Textarea } from "@hivemind/app-ui";
+import { Button, Dialog, DialogContent, DialogTitle, Input, Label, MarkdownPreview, MenuItem, Textarea, Loading } from "@hivemind/app-ui";
 import { useIssue, useIssueList, write, type AcceptanceItem, type Issue, type IssueState } from "./data";
 import type { PanelProps } from "./data";
 import { STATE_COLOR, STATE_LABEL, STATE_ORDER, StateIcon } from "./StateMeta";
@@ -45,7 +45,7 @@ export function IssuePanel({ hm, params, close: onClose, openPanel }: PanelProps
             h1 below, so this VisuallyHidden-style title carries the id. */}
         <DialogTitle className="sr-only">{issue ? `${issue.id}: ${issue.title}` : "Issue"}</DialogTitle>
         {isLoading ? (
-          <div className="grid place-items-center h-[80vh] max-h-[820px] text-[var(--color-fg3)] text-[12px]">loading…</div>
+          <Loading label="Loading the issue" className="h-[80vh] max-h-[820px]" />
         ) : !issue ? (
           <div className="grid place-items-center h-[80vh] max-h-[820px] px-6">
             <div className="flex flex-col items-center gap-3 text-center max-w-[320px]">

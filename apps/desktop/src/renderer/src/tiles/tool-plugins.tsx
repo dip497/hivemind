@@ -6,6 +6,7 @@
  * a tile has. A plugin switched off, removed, or loaded in safe mode registers nothing: its tiles
  * show the missing-plugin card, and the board keeps them.
  */
+import { Loading } from "../components/ui/loading";
 import { useEffect, useRef, useSyncExternalStore, type ComponentType } from "react";
 import { isPluginEnabled, pluginOptions } from "@hivemind/core/plugin-settings";
 import { toolFolder, type ToolPackage } from "@hivemind/core/tool-format";
@@ -113,6 +114,7 @@ function register(pkg: ToolPackage, off: Set<string>): void {
     }),
     lazy: true,
     body,
+    fallback: () => <Loading label={`Loading ${pkg.name}`} />,
     minSize: { width: 240, height: 160 },
   });
 }

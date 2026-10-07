@@ -92,6 +92,8 @@ export interface HostSdk {
   PatchView: (props: { patch: string; className?: string }) => unknown;
   /** Markdown, drawn safely (no raw HTML). */
   Markdown: (props: { text: string; className?: string }) => unknown;
+  /** A spinner in the middle of the space it fills, with what it waits for ("Loading" when unsaid). */
+  Loading: (props: { label?: string; className?: string }) => unknown;
 }
 
 /** Check a module a plugin's entry exported; why it is not one, or null. */
