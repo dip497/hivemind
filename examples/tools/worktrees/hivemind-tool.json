@@ -10,6 +10,12 @@
     "workspace:spawn",
     "workspace:prompt"
   ],
+  "commands": [
+    {
+      "name": "list",
+      "description": "Every worktree: its path, branch, files changed and not committed, commits ahead of and behind the base, and whether it is merged."
+    }
+  ],
   "settings": [
     {
       "id": "base",

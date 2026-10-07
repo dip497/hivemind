@@ -11,6 +11,7 @@ import path from "node:path";
 import { parseSettingFields } from "@hivemind/view-sdk/settings";
 import { VIEW_PERMISSIONS } from "@hivemind/view-sdk/protocol";
 import { parseCategory } from "@hivemind/view-sdk/category";
+import { parsePluginCommands } from "@hivemind/view-sdk/commands";
 import { BUILTIN_WIDGETS, isWidgetId, widgetFolder, type WidgetPackage } from "./widget-format.js";
 
 export function userWidgetsDir(): string {
@@ -21,7 +22,7 @@ export function userWidgetsDir(): string {
 /** The package in `dir`, read and checked, or why it is not one. Its id is the `@owner/name` its
  *  widget.json says when it lives in that id's folder, else its folder's name. */
 export async function readWidget(dir: string, given?: string): Promise<WidgetPackage> {
-  let meta: { id?: unknown; name?: unknown; version?: unknown; description?: unknown; icon?: unknown; category?: unknown; options?: unknown; chrome?: unknown; permissions?: unknown; placement?: unknown; size?: unknown; draw?: unknown };
+  let meta: { id?: unknown; name?: unknown; version?: unknown; description?: unknown; icon?: unknown; category?: unknown; commands?: unknown; options?: unknown; chrome?: unknown; permissions?: unknown; placement?: unknown; size?: unknown; draw?: unknown };
   try { meta = JSON.parse(await readFile(path.join(dir, "widget.json"), "utf8")) as typeof meta; } catch { throw new Error("no readable widget.json in that folder"); }
   let code = "";
   try { code = await readFile(path.join(dir, "widget.js"), "utf8"); } catch {
@@ -33,8 +34,10 @@ export async function readWidget(dir: string, given?: string): Promise<WidgetPac
   const assets = await imagesIn(dir);
   const cat = parseCategory(meta.category);
   if ("error" in cat) throw new Error(cat.error);
+  const cmds = parsePluginCommands(meta.commands);
+  if ("error" in cmds) throw new Error(cmds.error);
   return {
-    category: cat.category,
+    category: cat.category, commands: cmds.commands,
     id, name: typeof meta.name === "string" && meta.name.trim() ? meta.name.trim().slice(0, 60) : id,
     options: parseSettingFields(meta.options), chrome: meta.chrome === "none" ? "none" : "card",
     permissions: Array.isArray(meta.permissions) ? [...new Set(meta.permissions.filter((p): p is string => (VIEW_PERMISSIONS as readonly unknown[]).includes(p)))] : [],

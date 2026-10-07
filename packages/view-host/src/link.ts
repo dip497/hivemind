@@ -110,6 +110,7 @@ export function linkFeatures(s: LinkServices, placesSurfaces = false): ViewFeatu
   if (s.participants) f.push("participants");
   if (s.widgets) f.push("widgets");
   if (s.issues) f.push("issues");
+  f.push("invoke");
   if (placesSurfaces) f.push("surfaces");
   return f;
 }
@@ -209,6 +210,20 @@ export class CommunityLink {
     this.queueActivity();
   }
 
+  private invokes = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+  private nextInvoke = 0;
+
+  /** 1.10: run one of the plugin's commands; what its handler returned, or why it failed. */
+  invoke(name: string, args: unknown, timeoutMs = 30_000): Promise<unknown> {
+    if (this.stats.disabled || !this.port) return Promise.reject(new Error("the plugin is not running"));
+    const invokeId = ++this.nextInvoke;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { this.invokes.delete(invokeId); reject(new Error(`it did not answer "${name}" in ${timeoutMs / 1000}s`)); }, timeoutMs);
+      this.invokes.set(invokeId, { resolve, reject, timer });
+      this.send({ type: "invoke", invokeId, name, args });
+    });
+  }
+
   attach(port: PortLike): void {
     this.port = port;
     port.onmessage = (e) => this.handle(e.data);
@@ -248,6 +263,8 @@ export class CommunityLink {
   }
 
   dispose(): void {
+    for (const p of this.invokes.values()) { clearTimeout(p.timer); p.reject(new Error("the plugin stopped")); }
+    this.invokes.clear();
     this.eventUnsub?.(); this.eventUnsub = null;
     this.activityUnsub?.(); this.activityUnsub = null;
     if (this.services.activity && this.watched.size) this.services.activity.watch(this, []);
@@ -376,6 +393,14 @@ export class CommunityLink {
         return;
       }
       case "unsubscribeIssues": this.issuesUnsub?.(); this.issuesUnsub = null; return;
+      case "invokeResult": {
+        const p = this.invokes.get(m.invokeId);
+        if (!p) return;
+        this.invokes.delete(m.invokeId);
+        clearTimeout(p.timer);
+        if (m.ok) p.resolve(m.result); else p.reject(new Error(m.error));
+        return;
+      }
       case "pressWidget": this.services.widgets!.press(m.id, m.click ? { click: true } : { action: m.action }); return;
       case "request": this.request(m); return;
     }

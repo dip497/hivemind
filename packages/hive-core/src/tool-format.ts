@@ -17,6 +17,7 @@
  */
 import { VIEW_PERMISSIONS, type ViewPermission } from "@hivemind/view-sdk/protocol";
 import { parseCategory, type PluginCategory } from "@hivemind/view-sdk/category";
+import { parsePluginCommands, type PluginCommand } from "@hivemind/view-sdk/commands";
 import { parseSettingFields, type SettingField } from "@hivemind/view-sdk/settings";
 import { isToolId, type ToolPluginContribution } from "./tool-registry.js";
 
@@ -56,6 +57,9 @@ export interface ToolPackage extends ToolPluginContribution {
   permissions: ViewPermission[];
   /** What it is for; the Add menu groups tools by it. */
   category: PluginCategory;
+  /** What an agent may ask one of its open tiles to do (`hm.onCommand`): the manifest's
+   *  `commands`. (A built-in plugin's `commands` are the CLI's, described for `hive tools list`.) */
+  pluginCommands: PluginCommand[];
   /** What the person can set it to, read as `hm.settings`. */
   settings: SettingField[];
   /** What each tile kind it contributes opens as, by kind. */
@@ -114,8 +118,10 @@ export function parseToolManifest(raw: unknown, dir: string, folderId: string | 
   const minAppVersion = text(raw.minAppVersion, 40);
   const cat = parseCategory(raw.category);
   if ("error" in cat) throw new Error(cat.error);
+  const cmds = parsePluginCommands(raw.commands);
+  if ("error" in cmds) throw new Error(cmds.error);
   return {
-    id, source, tools, tiles, entry, dir, apiVersion, category: cat.category,
+    id, source, tools, tiles, entry, dir, apiVersion, category: cat.category, pluginCommands: cmds.commands,
     permissions: Array.isArray(raw.permissions)
       ? [...new Set(raw.permissions.filter((p): p is ViewPermission => (VIEW_PERMISSIONS as readonly unknown[]).includes(p)))] : [],
     settings,

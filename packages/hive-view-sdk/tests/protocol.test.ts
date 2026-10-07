@@ -171,7 +171,7 @@ describe("validateViewManifest", () => {
   const good = { id: "orbit", name: "Orbit", version: "0.1.0", entry: "index.html", permissions: [] };
   test("accepts a minimal manifest and fills defaults", () => {
     const r = validateViewManifest(good);
-    expect(r.ok && r.manifest).toEqual({ id: "orbit", name: "Orbit", version: "0.1.0", entry: "index.html", protocol: 1, permissions: [], category: "other" });
+    expect(r.ok && r.manifest).toEqual({ id: "orbit", name: "Orbit", version: "0.1.0", entry: "index.html", protocol: 1, permissions: [], category: "other", commands: [] });
   });
   test("an id is a name, or @owner/name from the registry, and never passes for one it is not", () => {
     const ok = (id: string) => validateViewManifest({ ...good, id }).ok;

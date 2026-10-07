@@ -123,6 +123,20 @@ function Runs({ tile, hm, host }) {
     else box.scrollTop = box.scrollHeight;
   }, [log]);
 
+  // An agent asks what failed (`hive ctl plugin call dip497/ci-runs failures`).
+  useEffect(() => hm.onCommand("failures", async () => {
+    if (!runs) throw new Error("the runs are still loading");
+    const failed = runs.filter((r) => outcome(r).color === "var(--color-err)");
+    return Promise.all(failed.map(async (r) => {
+      const jobs = JSON.parse(await gh(host, ["run", "view", String(r.databaseId), "--json", "jobs"], 60_000)).jobs
+        .filter((j) => outcome(j).color === "var(--color-err)");
+      return {
+        run: r.databaseId, title: r.displayTitle, workflow: r.workflowName, branch: r.headBranch, url: r.url, when: r.createdAt,
+        jobs: jobs.map((j) => ({ job: j.databaseId, name: j.name, log: `gh run view --job ${j.databaseId} --log-failed` })),
+      };
+    }));
+  }), [hm, host, runs]);
+
   const choose = (id) => { setChosen(id); setJobs(null); setJob(null); };
   const act = async (what, args) => {
     try { await gh(host, args); toast.success(what); refresh(); } catch (e) { toast.error(`${what} failed`, { description: e.message }); }

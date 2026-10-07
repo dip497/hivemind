@@ -10,6 +10,12 @@
     "workspace:spawn",
     "workspace:prompt"
   ],
+  "commands": [
+    {
+      "name": "failures",
+      "description": "The runs listed now that failed, newest first, each with the jobs that failed and the command that prints their lines."
+    }
+  ],
   "settings": [
     {
       "id": "count",

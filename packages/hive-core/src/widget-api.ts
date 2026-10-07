@@ -32,7 +32,15 @@ export const WIDGET_PRELUDE = `const hive = (() => {
     if (m.type === "options") options = m.payload;
     if (m.type === "hm-values") { values = m.values; return; }
     if (m.type === "hm-reply") { const w = waiting.get(m.req); waiting.delete(m.req); if (w) m.ok ? w.resolve(m.value) : w.reject(new Error(m.error)); return; }
-    if (m.type === "hm-cb") { const f = fns.get(m.fn); if (f) try { f(...m.args); } catch (e) { console.error(e); } return; }
+    if (m.type === "hm-cb" && !m.answer) { const f = fns.get(m.fn); if (f) try { f(...m.args); } catch (e) { console.error(e); } return; }
+    // A callback asked for its answer (a command's handler): what it returns, or why it failed.
+    if (m.type === "hm-cb") {
+      const f = fns.get(m.fn);
+      const send = (r) => { try { postMessage({ type: "hm-answer", answer: m.answer, ...r }); } catch (e) { postMessage({ type: "hm-answer", answer: m.answer, ok: false, error: "its answer is not JSON" }); } };
+      Promise.resolve().then(() => { if (!f) throw new Error("it is gone"); return f(...m.args); })
+        .then((value) => send({ ok: true, value: value === undefined ? null : value }), (e) => send({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+      return;
+    }
     fire(m.type === "init" ? "start" : m.type, m.type === "options" ? options : m.payload);
   };
   return {
@@ -104,11 +112,14 @@ interface Hm {
     spawnAgent(agent: string | null, frameId: string | null, opts?: { prompt?: string; name?: string }): Promise<void>;
     [name: string]: (...args: any[]) => Promise<unknown>;
   };
-  /** The workspace's issues, now and on each change. */
+  /** The workspace's issues, now and on each change. Needs "workspace:issues". */
   onIssues(cb: (issues: any[]) => void): () => void;
-  /** Its issue methods: \`read\` is open; \`create\`, \`update\`, \`setState\`, \`comment\`, \`delete\`,
-   *  \`link\`, \`unlink\`, \`move\` need "workspace:issues". */
+  /** Its issue methods (\`read\`, \`create\`, \`update\`, \`setState\`, \`comment\`, \`delete\`, \`link\`,
+   *  \`unlink\`, \`move\`). Need "workspace:issues". */
   issues: { [call: string]: (...args: any[]) => Promise<any> };
+  /** Answer the command \`name\` your widget.json declares when an agent runs it
+   *  (\`hive ctl plugin call\`): what the handler returns is the agent's answer. */
+  onCommand(name: string, handler: (args: any) => unknown): () => void;
   [name: string]: any;
 }
 

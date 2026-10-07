@@ -57,6 +57,7 @@ function LinkedTile({ data, selected, Draw, props }: { data: ToolTileData; selec
     pluginId: data.pkg.id, record: { kind: "tool", id: data.pkg.id }, name: data.pkg.name,
     capabilities: data.pkg.permissions, fields: data.pkg.settings, layoutId: `tile:${data.tileId}`, issueRoot: () => dataRef.current.root,
     props, root, onDisable: (reason) => setFailed(reason),
+    commands: data.pkg.pluginCommands, instance: { id: data.tileId, label: data.name },
   });
   useEffect(() => {
     const ch = new MessageChannel();

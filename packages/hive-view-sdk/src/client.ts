@@ -21,6 +21,9 @@ import {
 } from "./protocol.js";
 
 /** A request the host refused or could not answer (`UNSUPPORTED` when it lacks the feature). */
+/** How long an invoked command waits for its handler to be registered. */
+const HANDLER_WAIT_MS = 1000;
+
 export class HostError extends Error {
   constructor(readonly code: RequestErrorCode, message: string) { super(message); this.name = "HostError"; }
 }
@@ -83,6 +86,10 @@ export interface ViewClient {
   /** 1.9: the workspace's issues, now and whenever one changes; needs `workspace:issues`. A host
    *  before 1.9 sends none. */
   onIssues(cb: (issues: ViewIssueSummary[]) => void): () => void;
+  /** 1.10: answer the command `name` your manifest declares, when an agent runs it
+   *  (`hive ctl plugin call`): the handler gets its JSON argument, and what it returns (or a promise
+   *  of it) is the agent's answer; what it throws, the agent's error. One handler per name. */
+  onCommand(name: string, handler: (args: unknown) => unknown): () => void;
   /** 1.9: the workspace's issue methods. Like `onIssues`, they need `workspace:issues`. */
   readonly issues: ViewIssues;
   /** 1.3: per-tile status intervals for a local day (YYYY-MM-DD). */
@@ -117,7 +124,7 @@ export interface ViewClient {
  *  by name, and the values it holds, which the other side keeps a copy of. Surfaces and reveals
  *  are a view's own and are not among them. */
 export const CLIENT_CALLS = [
-  "on", "subscribeStatus", "supports", "onEvents", "onCustom", "activity", "onPresence", "onParticipants", "onWidgets", "onIssues",
+  "on", "subscribeStatus", "supports", "onEvents", "onCustom", "activity", "onPresence", "onParticipants", "onWidgets", "onIssues", "onCommand",
   "pressWidget", "clickWidget", "history", "share", "agents", "sessions", "prompt", "setLayout", "error",
 ] as const satisfies readonly (keyof ViewClient)[];
 export const CLIENT_VALUES = ["hello", "capabilities", "viewport", "visible", "device", "settings", "features"] as const satisfies readonly (keyof ViewClient)[];
@@ -192,6 +199,7 @@ class Client implements ViewClient {
   private widgets: ViewWidget[] | null = null;
   private issueList: ViewIssueSummary[] | null = null;
   private issueCbs = new Set<(issues: ViewIssueSummary[]) => void>();
+  private commandHandlers = new Map<string, (args: unknown) => unknown>();
   readonly issues: ViewIssues = Object.fromEntries(ISSUE_CALLS.map((call) => [call, (...args: unknown[]) => this.issueCall(call, args)])) as unknown as ViewIssues;
   private widgetCbs = new Set<(widgets: ViewWidget[]) => void>();
   private requests = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer?: ReturnType<typeof setTimeout> }>();
@@ -266,6 +274,7 @@ class Client implements ViewClient {
         this.issueList = m.issues;
         for (const cb of this.issueCbs) cb(m.issues);
         break;
+      case "invoke": void this.answer(m.invokeId, m.name, m.args); break;
       case "participants":
         this.participants = m.participants;
         for (const cb of this.participantCbs) cb(m.participants);
@@ -426,6 +435,24 @@ class Client implements ViewClient {
     return () => {
       if (this.widgetCbs.delete(cb) && this.widgetCbs.size === 0) { this.widgets = null; this.send({ type: "unsubscribeWidgets" }); }
     };
+  }
+
+  onCommand(name: string, handler: (args: unknown) => unknown): () => void {
+    this.commandHandlers.set(name, handler);
+    return () => { if (this.commandHandlers.get(name) === handler) this.commandHandlers.delete(name); };
+  }
+
+  private async answer(invokeId: number, name: string, args: unknown) {
+    // A plugin registers its handlers just after it connects: a call that arrives first waits for one.
+    for (let waited = 0; !this.commandHandlers.has(name) && waited < HANDLER_WAIT_MS; waited += 50) await new Promise((r) => setTimeout(r, 50));
+    const handler = this.commandHandlers.get(name);
+    if (!handler) { this.send({ type: "invokeResult", invokeId, ok: false, error: `it does not answer "${name}" now` }); return; }
+    try {
+      const result = JSON.parse(JSON.stringify((await handler(args)) ?? null)) as unknown;
+      this.send({ type: "invokeResult", invokeId, ok: true, result });
+    } catch (e) {
+      this.send({ type: "invokeResult", invokeId, ok: false, error: e instanceof Error ? e.message : String(e) });
+    }
   }
 
   onIssues(cb: (issues: ViewIssueSummary[]) => void): () => void {

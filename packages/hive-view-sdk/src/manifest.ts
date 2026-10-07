@@ -6,6 +6,7 @@
 import { PROTOCOL_VERSION, VIEW_PERMISSIONS, type ViewPermission } from "./protocol.js";
 import { checkSettingFields, type SettingField } from "./settings.js";
 import { parseCategory, type PluginCategory } from "./category.js";
+import { parsePluginCommands, type PluginCommand } from "./commands.js";
 
 export const MANIFEST_FILE = "hivemind-view.json";
 
@@ -27,6 +28,8 @@ export interface ViewManifest {
   permissions: ViewPermission[];
   /** What it is for (`other` when the manifest says nothing). */
   category: PluginCategory;
+  /** What an agent may ask it to do while it runs (`hm.onCommand`); none when it declares none. */
+  commands: PluginCommand[];
   /** Optional relative dir served alongside the entry (default: the whole package dir). */
   assets?: string;
   /** Who wrote it, where it came from, and under what terms — shown wherever the user is
@@ -112,6 +115,8 @@ export function validateViewManifest(raw: unknown): ManifestResult {
   }
   const cat = parseCategory(m.category);
   if ("error" in cat) errors.push(cat.error);
+  const cmds = parsePluginCommands(m.commands);
+  if ("error" in cmds) errors.push(cmds.error);
   let author: string | undefined;
   if (m.author !== undefined) {
     if (typeof m.author !== "string" || m.author.trim().length === 0 || m.author.length > 80) errors.push(`"author" must be a non-empty string of at most 80 characters`);
@@ -163,8 +168,8 @@ export function validateViewManifest(raw: unknown): ManifestResult {
     if (typeof m.assets !== "string" || !isSafeRelativePath(m.assets)) errors.push(`"assets" must be a relative path inside the package`);
     else assets = m.assets;
   }
-  for (const k of Object.keys(m)) if (!["id", "name", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "phone", "layers", "layout", "author", "homepage", "license", "settings", "category"].includes(k)) errors.push(`unknown field "${k}"`);
+  for (const k of Object.keys(m)) if (!["id", "name", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "phone", "layers", "layout", "author", "homepage", "license", "settings", "category", "commands"].includes(k)) errors.push(`unknown field "${k}"`);
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, manifest: { id: id!, name: name!, version: version!, entry: entry!, protocol, permissions, category: "category" in cat ? cat.category : "other", ...(assets ? { assets } : {}), ...(wallpaper === undefined ? {} : { wallpaper }),
+  return { ok: true, manifest: { id: id!, name: name!, version: version!, entry: entry!, protocol, permissions, category: "category" in cat ? cat.category : "other", commands: "commands" in cmds ? cmds.commands : [], ...(assets ? { assets } : {}), ...(wallpaper === undefined ? {} : { wallpaper }),
     ...(phone === undefined ? {} : { phone }), ...(layers === undefined ? {} : { layers }), ...(layout === undefined ? {} : { layout }), ...(author ? { author } : {}), ...(homepage ? { homepage } : {}), ...(license ? { license } : {}), ...(settings?.length ? { settings } : {}) } };
 }

@@ -6,6 +6,8 @@
  * to the permissions its manifest was granted. Who holds the other end of the port is the
  * caller's: a frame's window, or a client in this window.
  */
+import type { PluginCommand } from "@hivemind/view-sdk/commands";
+import { offerCommands, type CommandOffer } from "./plugin-commands";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { PROTOCOL_VERSION, type HostMessage, type ShareOutcome, type SurfaceRect, type ViewPermission } from "@hivemind/view-sdk/protocol";
 import type { SettingField } from "@hivemind/view-sdk/settings";
@@ -53,6 +55,9 @@ export interface PluginLinkOptions {
   issueRoot?: () => string | null;
   /** Where it asks for live surfaces; absent: it places none. */
   onSurfaceRects?: (rects: SurfaceRect[]) => void;
+  /** What an agent may run in it while it runs (its manifest's `commands`), and which copy this is. */
+  commands?: readonly PluginCommand[];
+  instance?: { id: string; label: string };
   onDisable: (reason: string) => void;
 }
 
@@ -262,6 +267,21 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme", "data-preset", "style"] });
     return () => { ro.disconnect(); document.removeEventListener("visibilitychange", onVis); mo.disconnect(); if (themeTimer) clearTimeout(themeTimer); };
   }, [send]);
+
+  // While it runs, an agent may run what its manifest declares (`hive ctl plugin call`): offered
+  // once its code has connected, so a call never reaches a plugin that is still loading.
+  const declared = o.commands ?? [];
+  const declaredKey = JSON.stringify(declared);
+  const instanceId = o.instance?.id ?? o.layoutId;
+  const instanceLabel = o.instance?.label ?? o.name;
+  useEffect(() => {
+    if (!declared.length || !ready) return;
+    return offerCommands({
+      plugin: o.pluginId, kind: o.record.kind as CommandOffer["kind"], instance: instanceId, label: instanceLabel,
+      commands: declared, call: (name, args) => link.invoke(name, args),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- declaredKey stands for `declared`
+  }, [link, ready, declaredKey, o.pluginId, o.record.kind, instanceId, instanceLabel]);
 
   const dialogs = (
     <>

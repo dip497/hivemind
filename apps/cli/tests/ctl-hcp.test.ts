@@ -59,6 +59,10 @@ beforeAll(async () => {
           if (p.name === "old.app") throw new HcpError("UNKNOWN_METHOD", "unknown method: view.emit");
           if (p.view === "@a/other") return { ok: true, id: "ev_2", delivered: false, view: "@a/valley", reason: "not-active", buffered: true };
           return p.name === "ci.build" ? { ok: true, id: "ev_1", delivered: true, view: "@a/valley" } : { ok: true, id: "ev_3", delivered: false, view: "canvas", reason: "no-listener", buffered: true };
+        case "plugin.commands": return { plugins: [{ plugin: "@a/progress", kind: "widget", instance: "w1", label: "Progress", commands: [{ name: "add", description: "Add a step.", args: '{ "text": string }' }] }] };
+        case "plugin.call":
+          if (p.command === "check") throw new HcpError("INTERNAL", "there is no step 7");
+          return { result: { echoed: p.args, tile: p.tile ?? null } };
         case "agent.send": if (!p.text) throw new HcpError("BAD_REQUEST", "text required"); return { ok: true };
         case "workflow.run": return { shape: p.shape, items: (p.items as string[]).map((item) => ({ item, tileId: "w-x", status: "ok", text: "did " + item })) };
         default: throw new HcpError("UNKNOWN_METHOD", method);
@@ -193,6 +197,23 @@ describe("hive ctl over a real HCP socket", () => {
     expect(none.stdout.trim()).toBe("buffered (active view canvas isn't listening)");
     const other = await hive(["ctl", "view", "emit", "ci.x", "--view", "@a/other", "--json"], { env: env() });
     expect(other.json).toEqual({ ok: true, id: "ev_2", delivered: false, view: "@a/valley", reason: "not-active", buffered: true });
+  });
+
+  test("plugin: commands lists what runs; call sends the JSON argument and prints the answer, or the plugin's error", async () => {
+    const list = await hive(["ctl", "plugin", "commands"], { env: env() });
+    expect(list.stdout).toContain("@a/progress  (widget Progress, w1)");
+    expect(list.stdout).toContain('add                Add a step.  args: { "text": string }');
+    const ok = await hive(["ctl", "plugin", "call", "@a/progress", "add", '{"text":"milk"}', "--tile", "w1", "--json"], { env: env() });
+    expect([ok.code, ok.json]).toEqual([0, { result: { echoed: { text: "milk" }, tile: "w1" } }]);
+    expect(calls.at(-1)).toEqual({ method: "plugin.call", params: { plugin: "@a/progress", command: "add", args: { text: "milk" }, tile: "w1", callerTile: "me-1" } });
+    const failed = await hive(["ctl", "plugin", "call", "@a/progress", "check", '{"index":7}', "--json"], { env: env() });
+    expect(failed.code).not.toBe(0);
+    expect(failed.json).toMatchObject({ ok: false, message: "there is no step 7" });
+    const before = calls.length;
+    const bad = await hive(["ctl", "plugin", "call", "@a/progress", "add", "{nope"], { env: env() });
+    expect(bad.code).not.toBe(0);
+    expect(bad.stderr).toContain("must be JSON");
+    expect(calls.length).toBe(before);
   });
 
   test("view emit: bad input never reaches the app; an older app says why", async () => {

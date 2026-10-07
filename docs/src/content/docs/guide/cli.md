@@ -92,6 +92,25 @@ Run inside an agent's tile, `list` and `frames` answer for that tile's workspace
 else, for the one the app's window shows (on a machine running `hive host`, the one it serves,
 when it serves one). Neither needs the window: the app answers them itself.
 
+## `hive ctl` — plugins
+
+```text
+hive ctl plugin commands [--json]          # what the running plugins let you run, with what each takes
+hive ctl plugin call <plugin> <command> ['{"json":"argument"}' | -] [--tile id] [--json]
+                                           # runs it and prints what the plugin answered
+```
+
+A view, a tool or a widget declares commands in its manifest and answers them in its code. They
+can be run while the plugin runs: the view shown, a tool's open tile, a widget on the board.
+`--tile` picks one when the same plugin runs more than once (two tiles of one tool). What the
+plugin throws is the command's error, and the exit code is not 0.
+
+```sh
+hive ctl plugin call @dip497/progress add '{"text":"Run the tests"}'   # → {"index": 0}
+hive ctl plugin call agent-board post '{"text":"Tests pass","kind":"done"}'
+hive ctl plugin call dip497/worktrees list
+```
+
 ## `hive ctl` — workflows, supervision, review
 
 ```text

@@ -23,6 +23,7 @@ import { createToolRegistry, type ToolPluginContribution } from "@hivemind/core/
 import type { ToolsSettings } from "@hivemind/core/settings-schema";
 import { SUBMIT_DELAY_MS } from "@hivemind/agent-host/agent-io";
 import { customDataProblem, isCustomEventName } from "@hivemind/view-sdk/protocol";
+import { COMMAND_NAME_RE } from "@hivemind/view-sdk/commands";
 import { AGENT_TILE_KIND, isTerminalKind, type CoreLayout, type FrameRecord, type TileRecord } from "@hivemind/workspace-doc/shapes";
 import { defaultFrame, frameFor, listFrames, listTiles, type TileFacts } from "@hivemind/workspace-doc/tile-list";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
@@ -207,6 +208,8 @@ export interface MethodDeps {
 const CONTROL = { writer: "control" };
 
 const RENDERER_TIMEOUT = 15_000;
+/** A plugin's command may do real work (read a repository, ask a server): longer than a window verb. */
+const PLUGIN_CALL_TIMEOUT = 35_000;
 const DEFAULT_READ_TIMEOUT = 120_000;
 const REVIEW_TIMEOUT = 24 * 60 * 60 * 1000; // human review may take a long time
 
@@ -233,6 +236,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // FOLLOWS the prompt we just delivered (not a stale earlier turn).
   const sendSeq = new Map<string, number>();
   const emitBucket = tokenBucket(EMIT_RATE);
+  const callBucket = tokenBucket(EMIT_RATE);
   const sendMark = new Map<string, number>();
 
   // Bare↔pty id mapping lives in @hivemind/workspace-api/tile-id (imported as ptyId/bareOf). The
@@ -869,6 +873,18 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const ev = parseEmit(p as Record<string, unknown>);
         if (!emitBucket.take()) throw new HcpError("RATE_LIMITED", `at most ${EMIT_RATE.perSecond} view events a second`);
         return await deps.callRenderer("view.emit", ev, RENDERER_TIMEOUT);
+      }
+      // `hive ctl plugin commands`: what the plugins running in the window let an agent run.
+      case "plugin.commands":
+        return await deps.callRenderer("plugin.commands", {}, RENDERER_TIMEOUT);
+      // `hive ctl plugin call`: run one, and answer with what the plugin answered.
+      case "plugin.call": {
+        if (typeof p.plugin !== "string" || !p.plugin || p.plugin.length > 200) throw new HcpError("BAD_REQUEST", "plugin must be an id, as `hive ctl plugin commands` lists it");
+        if (typeof p.command !== "string" || !COMMAND_NAME_RE.test(p.command)) throw new HcpError("BAD_REQUEST", "command must be one of the plugin's command names");
+        if (p.tile !== undefined && (typeof p.tile !== "string" || !p.tile || p.tile.length > 256)) throw new HcpError("BAD_REQUEST", "tile must be an id");
+        if (!callBucket.take()) throw new HcpError("RATE_LIMITED", `at most ${EMIT_RATE.perSecond} plugin calls a second`);
+        const params = { plugin: p.plugin, command: p.command, args: p.args ?? null, ...(p.tile ? { tile: p.tile } : {}) };
+        return effect(call, { verb: method, target: `${p.plugin}:${p.command}` }, () => deps.callRenderer("plugin.call", params, PLUGIN_CALL_TIMEOUT));
       }
       // Community view packages are scanned when the registry loads; `hive
       // views install|remove` calls this so a running app picks the change

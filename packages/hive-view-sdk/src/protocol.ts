@@ -119,7 +119,7 @@ export interface ViewTheme {
 
 /** What a host implements beyond 1.2, sent in `hello.features`. A host that predates 1.3 sends
  *  none, so read the field (`hm.hello.features ?? []`), never probe for a client method. */
-export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues"] as const;
+export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke"] as const;
 export type ViewFeature = (typeof VIEW_FEATURES)[number];
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
@@ -217,6 +217,15 @@ export interface ViewHistoryDay {
 
 export type RequestErrorCode = "UNSUPPORTED" | "BAD_REQUEST" | "BUSY" | "DECLINED" | "INTERNAL";
 export type ShareOutcome = "copied" | "saved" | "cancelled";
+
+// ── protocol 1.10 (additive) ────────────────────────────────────────────────
+// `invoke` in `hello.features`: the host runs one of the commands the plugin's manifest declares
+// (`invoke`: an agent's `hive ctl plugin call`), and the plugin answers it once (`invokeResult`):
+// what its handler returned, or why it failed. `hm.onCommand` does both.
+
+/** The most an invoked command's argument, and its answer, may take as JSON. */
+export const INVOKE_ARGS_MAX = 64 * 1024;
+export const INVOKE_RESULT_MAX = 256 * 1024;
 
 // ── protocol 1.9 (additive) ─────────────────────────────────────────────────
 // `issues` in `hello.features`: after `subscribeIssues` the view is sent the workspace's issues
@@ -356,7 +365,9 @@ export type HostMessage =
   | { type: "issues"; issues: ViewIssueSummary[] }
   /** The user undocked a surface from the host's bar (or Shift+Esc): the
    *  host has already released the tile; drop the rect on your side. */
-  | { type: "undock"; tileId: string };
+  | { type: "undock"; tileId: string }
+  /** 1.10: run the declared command `name`; answer with one `invokeResult` of the same id. */
+  | { type: "invoke"; invokeId: number; name: string; args: unknown };
 
 // ── plugin → host ───────────────────────────────────────────────────────────
 
@@ -426,6 +437,9 @@ export type PluginMessage =
   /** 1.9 */
   | { type: "subscribeIssues" }
   | { type: "unsubscribeIssues" }
+  /** 1.10: the answer to an `invoke`. */
+  | { type: "invokeResult"; invokeId: number; ok: true; result: unknown }
+  | { type: "invokeResult"; invokeId: number; ok: false; error: string }
   /** 1.8: press one of a widget's buttons (its `action`), or its card (`click`). */
   | { type: "pressWidget"; id: string; action?: unknown; click?: true }
   /** 1.3: answered by one `response` with the same id. The share buffer is the one non-JSON value. */
@@ -626,6 +640,14 @@ export function parsePluginMessage(raw: unknown): ParseResult<PluginMessage> {
       if (raw.click === true) return { ok: true, msg: { type: "pressWidget", id: raw.id as string, click: true } };
       return size <= 1024 ? { ok: true, msg: { type: "pressWidget", id: raw.id as string, action: raw.action } } : bad("action must be JSON of at most 1 KB");
     }
+    case "invokeResult": {
+      if (!isNum(raw.invokeId)) return bad("invokeId must be a number");
+      if (raw.ok === false) return { ok: true, msg: { type: "invokeResult", invokeId: raw.invokeId, ok: false, error: typeof raw.error === "string" ? raw.error.slice(0, 500) : "it failed" } };
+      let size = Infinity;
+      try { size = JSON.stringify(raw.result ?? null).length; } catch { /* not JSON */ }
+      if (size > INVOKE_RESULT_MAX) return bad(`result must be JSON of at most ${INVOKE_RESULT_MAX} bytes`);
+      return { ok: true, msg: { type: "invokeResult", invokeId: raw.invokeId, ok: true, result: raw.result ?? null } };
+    }
     case "watchActivity": {
       if (!Array.isArray(raw.tileIds) || raw.tileIds.length > ACTIVITY_MAX_TILES || !raw.tileIds.every(isId)) return bad(`tileIds must be at most ${ACTIVITY_MAX_TILES} tile ids`);
       return { ok: true, msg: { type: "watchActivity", tileIds: [...new Set(raw.tileIds as string[])] } };
@@ -789,6 +811,8 @@ export function parseHostMessage(raw: unknown): ParseResult<HostMessage> {
         ? { ok: true, msg: raw as unknown as HostMessage } : bad("issues must be an array of issues");
     case "undock":
       return isId(raw.tileId) ? { ok: true, msg: raw as unknown as HostMessage } : bad("tileId must be a string");
+    case "invoke":
+      return isNum(raw.invokeId) && typeof raw.name === "string" ? { ok: true, msg: raw as unknown as HostMessage } : bad("invokeId must be a number and name a string");
     default:
       return { ok: false, reason: `unknown message type ${JSON.stringify(raw.type)}` };
   }

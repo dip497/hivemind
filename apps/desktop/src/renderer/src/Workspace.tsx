@@ -31,6 +31,7 @@ import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import { Plus } from "lucide-react";
 import { PickerDialog } from "./picker-dialog";
+import { callCommand, listCommands } from "./workspace/plugin-commands";
 import type { LayerTile, LayerFrame } from "./LayersPanel";
 import { forgetStatus, statusOf, setHostedStatus, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
 import { ToolPlugins, WorkspacePropsContext } from "./tiles/tool-plugins";
@@ -910,6 +911,16 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
             const { event, delivered } = vh.viewEvents.emitCustom(ev.name, ev.data, ev.from, ev.view);
             const reason = delivered ? null : ev.view && ev.view !== active ? "not-active" : "no-listener";
             await window.hive.hcpResult(cmd.id, true, { ok: true, id: event.id, delivered, view: active, ...(reason ? { reason, buffered: true } : {}) });
+            break;
+          }
+          case "plugin.commands": {
+            await window.hive.hcpResult(cmd.id, true, { plugins: listCommands() });
+            break;
+          }
+          case "plugin.call": {
+            const c = p as { plugin: string; command: string; args: unknown; tile?: string };
+            const result = await callCommand(c.plugin, c.command, c.args, c.tile);
+            await window.hive.hcpResult(cmd.id, true, { result });
             break;
           }
           case "views.rescan": {

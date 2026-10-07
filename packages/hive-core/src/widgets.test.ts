@@ -42,3 +42,8 @@ test("its category is what its widget.json says, from the list; none is other, a
   await expect(readWidget(widget({ category: "games" }))).rejects.toThrow('"category" must be one of');
   for (const w of BUILTIN_WIDGETS) expect(w.category).toBe("productivity");
 });
+
+test("the example widget in the repository reads, with the commands an agent runs", async () => {
+  const w = await readWidget(path.resolve(import.meta.dir, "../../../examples/widgets/progress"));
+  expect([w.id, w.category, w.commands.map((c) => c.name)]).toEqual(["progress", "agents", ["set-title", "add", "check", "list", "clear"]]);
+});

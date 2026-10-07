@@ -209,9 +209,9 @@ function fakeActivity() {
 
 test("1.3: hello features list only what is wired; status carries since", () => {
   const bare = harness();
-  assert.deepEqual(bare.link.features, ["surfaces"]);
+  assert.deepEqual(bare.link.features, ["invoke", "surfaces"]);
   const h = harness([], ["t1"], { sinceOf: (id) => (id === "t1" ? { since: 42, exact: false } : undefined), history: async () => ({}) as never });
-  assert.deepEqual(h.link.features, ["since", "history", "surfaces"]);
+  assert.deepEqual(h.link.features, ["since", "history", "invoke", "surfaces"]);
   h.link.handle({ type: "ready", v: 1 });
   h.link.handle({ type: "subscribeStatus", tileId: "t1" });
   h.statusCbs.get("t1")!("question", {});
@@ -305,7 +305,7 @@ test("1.4: features; a status carries the agent's own, and a change in it alone 
   let push: (s: unknown) => void = () => {};
   const h = harness([], ["t1"], { agentStatus: (_id, cb) => { push = cb as never; cb({ state: "working", subagents: 0, background: 0, compacting: false, source: "hooks" }); return () => {}; } });
   h.link.handle({ type: "ready", v: 1 });
-  assert.deepEqual(h.link.features, ["agentStatus", "surfaces"]);
+  assert.deepEqual(h.link.features, ["agentStatus", "invoke", "surfaces"]);
   h.link.handle({ type: "subscribeStatus", tileId: "t1" });
   h.statusCbs.get("t1")!("working", {});
   push({ state: "waiting", waitingFor: "permission", subagents: 0, background: 0, compacting: false, source: "hooks" });
@@ -453,4 +453,24 @@ test("what a host cannot do at all (a remote screen: no surfaces, no folder pick
   h.link.handle({ type: "command", name: "closeTile", args: ["t1"] });
   assert.deepEqual(h.calls, ['renameTile("t1","Priya\'s")']);
   assert.equal(h.link.stats.refused, 1);
+});
+
+test("1.10: an invoked command is answered by its result, or why it failed; one that is never answered, or a plugin that stops, fails it", async () => {
+  const h = harness();
+  h.link.handle({ type: "ready", v: 1 });
+  const sent = () => h.sent.filter((m) => (m as { type: string }).type === "invoke") as Array<{ invokeId: number; name: string; args: unknown }>;
+  const added = h.link.invoke("add", { text: "milk" });
+  const [call] = sent();
+  assert.deepEqual([call!.name, call!.args], ["add", { text: "milk" }]);
+  h.link.handle({ type: "invokeResult", invokeId: call!.invokeId, ok: true, result: { count: 3 } });
+  assert.deepEqual(await added, { count: 3 });
+
+  const refused = h.link.invoke("delete", {});
+  h.link.handle({ type: "invokeResult", invokeId: sent()[1]!.invokeId, ok: false, error: "there is nothing to delete" });
+  await assert.rejects(refused, /there is nothing to delete/);
+
+  await assert.rejects(h.link.invoke("slow", null, 20), /did not answer "slow"/);
+  const pending = h.link.invoke("never", null);
+  h.link.dispose();
+  await assert.rejects(pending, /stopped/);
 });

@@ -125,6 +125,27 @@ Reach the app only through these, never `window.hive`: that is the app's own and
 notice. This contract changes only with `apiVersion`; a plugin written for a newer one is listed
 with why it does not load.
 
+## Commands an agent can run
+
+A tool can let an agent ask its open tile something, or tell it to do something: declare the
+command in `hivemind-tool.json`, answer it with `hm.onCommand` in the tile.
+
+```json
+"commands": [
+  { "name": "list", "description": "Every worktree, with its branch and what is not committed." }
+]
+```
+
+```js
+useEffect(() => hm.onCommand("list", () => trees), [hm, trees]);
+```
+
+An agent finds it with `hive ctl plugin commands` and runs it with
+`hive ctl plugin call dip497/worktrees list`; what the handler returns (or a promise of it) is
+what the agent reads, and what it throws is the agent's error. A command takes one JSON argument;
+`args` in the manifest says, in a line, what it holds. It runs only while a tile of the tool is
+open; with two open, the agent names one with `--tile`.
+
 ## On a board you share
 
 A guest sees a tool's tile if they have the same plugin switched on; otherwise the tile shows what

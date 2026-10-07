@@ -26,6 +26,7 @@ function WidgetLink({ id, pkg, props }: { id: string; pkg: WidgetPackage; props:
     pluginId: pkg.id, record: { kind: "widget", id: pkg.id }, name: pkg.name,
     capabilities: pkg.permissions as ViewPermission[], fields: [], layoutId: `widget:${id}`,
     props, root, onDisable: (reason) => console.warn(`[widget ${pkg.id}] its hive.hm stopped: ${reason}`),
+    commands: pkg.commands, instance: { id, label: pkg.name },
   });
   useEffect(() => {
     const ch = new MessageChannel();

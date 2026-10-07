@@ -389,11 +389,58 @@ const view = defineCommand({
   subCommands: { emit: viewEmit },
 });
 
+type PluginCommands = { plugins: Array<{ plugin: string; kind: string; instance: string; label: string; commands: Array<{ name: string; description: string; args?: string }> }> };
+
+const pluginCommands = defineCommand({
+  meta: { name: "commands", description: "What the running plugins (the active view, open tool tiles, widgets) let you run" },
+  args: { ...JSON_ARG },
+  async run({ args }) {
+    const json = !!args.json;
+    try {
+      const r = await hcpCall("plugin.commands", {}) as PluginCommands;
+      if (json) { console.log(JSON.stringify(r)); return; }
+      if (!r.plugins.length) { console.log("no running plugin has commands"); return; }
+      for (const p of r.plugins) {
+        console.log(`${p.plugin}  (${p.kind} ${p.label}, ${p.instance})`);
+        for (const c of p.commands) console.log(`  ${c.name.padEnd(18)} ${c.description}${c.args ? `  args: ${c.args}` : ""}`);
+      }
+    } catch (e) { fail(e, json); }
+  },
+});
+
+const pluginCall = defineCommand({
+  meta: { name: "call", description: "Run a plugin's command and print what it answers (`-` reads the JSON argument from stdin)" },
+  args: {
+    plugin: { type: "positional", required: true, description: "plugin id, as `hive ctl plugin commands` lists it" },
+    command: { type: "positional", required: true, description: "command name" },
+    payload: { type: "positional", required: false, description: "JSON argument, or - for stdin" },
+    tile: { type: "string", description: "which running copy, when it runs more than once" },
+    ...JSON_ARG,
+  },
+  async run({ args }) {
+    const json = !!args.json;
+    try {
+      const raw = args.payload === "-" ? fs.readFileSync(0, "utf8") : args.payload;
+      let payload: unknown = null;
+      if (raw !== undefined && raw !== "") {
+        try { payload = JSON.parse(String(raw)); } catch { throw new UsageError("the argument must be JSON, e.g. '{\"text\":\"milk\"}'"); }
+      }
+      const r = await hcpCall("plugin.call", { plugin: String(args.plugin), command: String(args.command), args: payload, ...(args.tile ? { tile: String(args.tile) } : {}) }) as { result: unknown };
+      console.log(json ? JSON.stringify(r) : typeof r.result === "string" ? r.result : JSON.stringify(r.result, null, 2));
+    } catch (e) { fail(e, json); }
+  },
+});
+
+const plugin = defineCommand({
+  meta: { name: "plugin", description: "Run what the running plugins let an agent do: list their commands, call one" },
+  subCommands: { commands: pluginCommands, call: pluginCall },
+});
+
 export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/workflow/report) and the issue verbs agents use" },
   subCommands: {
     list, agents, frames, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, report, "open-review": openReview,
-    focus, close, rename, connect, disconnect, view,
+    focus, close, rename, connect, disconnect, view, plugin,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,
   },

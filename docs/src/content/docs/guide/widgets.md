@@ -166,6 +166,21 @@ version and everyone who has it is offered the update in Settings ▸ Plugins:
 hivehub publish widgets/counter
 ```
 
+An agent can run what a widget declares in `widget.json`'s `"commands"` (a name, a
+`description`, and `args`: a line saying what its JSON argument holds) while the widget is on the
+board. The widget answers each with `hive.hm.onCommand(name, handler)`; what the handler returns
+is the agent's answer:
+
+```js
+hive.hm.onCommand("add", (a) => { save({ steps: [...steps(), { text: a.text, done: false }] }); return { index: steps().length - 1 }; });
+```
+
+```sh
+hive ctl plugin call @dip497/progress add '{"text":"Run the tests"}'
+```
+
+`examples/widgets/progress` is a widget agents keep: a task's steps, added and ticked off by them.
+
 A `"category"` in `widget.json` says what it is for: `code`, `git`, `agents`, `productivity`, `monitoring`, `team`, `web`, `fun` or `other` (the default). The Add menu
 groups widgets by it, beside the tools.
 

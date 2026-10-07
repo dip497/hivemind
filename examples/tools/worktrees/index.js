@@ -109,6 +109,14 @@ function Worktrees({ tile, hm, host }) {
   }, [host, chosen, mode, base, treeState]);
 
   const choose = (path) => setChosen(path);
+  // An agent asks what is here (`hive ctl plugin call dip497/worktrees list`).
+  useEffect(() => hm.onCommand("list", () => {
+    if (!trees) throw new Error("the worktrees are still being read");
+    return trees.map((w) => ({
+      path: w.path, branch: w.branch, main: w.main, uncommitted: w.changed.length,
+      ahead: w.ahead, behind: w.behind, merged: removable(w), lastCommit: w.subject, when: w.ago,
+    }));
+  }), [hm, trees]);
   const review = () => hm.commands.spawnAgent(null, tile.frameId, {
     name: `Review ${tree.branch ?? named(tree.path)}`,
     prompt: `Review the branch ${tree.branch ?? tree.head} in the worktree ${tree.path} against ${base}: read \`git -C ${tree.path} diff ${base}...HEAD\`${tree.changed.length ? ` and its uncommitted changes (\`git -C ${tree.path} diff HEAD\`)` : ""}. Report bugs, risks and missing tests, most serious first, with file:line references. Do not change any file.`,
