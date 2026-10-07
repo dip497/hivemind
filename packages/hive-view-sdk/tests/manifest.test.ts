@@ -41,3 +41,16 @@ describe("the settings a view declares", () => {
     expect(validateViewManifest({ ...base, settings: {} }).ok).toBe(false);
   });
 });
+
+describe("what a view asks of the app around it", () => {
+  const base = { id: "view", name: "V", version: "1.0.0", entry: "index.html", protocol: 1, permissions: [] };
+  const read = (extra: object) => { const r = validateViewManifest({ ...base, ...extra }); return r.ok ? [r.manifest.layers, r.manifest.layout] : r.errors; };
+  it("keeps the app's Layers rail and a personal layout when it asks, and nothing when it does not", () => {
+    expect(read({ layers: true, layout: "personal" })).toEqual([true, "personal"]);
+    expect(read({})).toEqual([undefined, undefined]);
+  });
+  it("refuses a rail or a layout it cannot mean", () => {
+    expect(read({ layers: "left" })).toEqual(['"layers" must be true or false']);
+    expect(read({ layout: "mine" })).toEqual(['"layout" must be "shared" or "personal"']);
+  });
+});

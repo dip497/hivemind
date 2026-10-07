@@ -53,5 +53,7 @@ Three facts changed the design:
   process per plugin is the upgrade path if that happens in practice.
 - A tool's tile on a shared board runs on the machine of whoever looks at it; a guest without the
   plugin sees the missing-plugin card.
-- Widgets still have their own workspace API (`hive.workspace`); moving them onto `hm` is the next
-  step, as is moving Issues and the Browser out of the app into packages built on the SDK.
+- Widgets reach the workspace through the same `hm` (bridged from their worker), and the Windows
+  view is a view package that comes with the app (`apps/desktop/views`), with the app's Layers rail
+  beside it on request. Moving Issues and the Browser out of the app into packages built on the
+  SDK is next; the SDK first needs issue data and a web-page part.

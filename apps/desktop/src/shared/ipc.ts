@@ -194,7 +194,7 @@ import type { CatalogEntry } from "@hivemind/core/plugin-catalog";
 export interface ViewPackageInfo {
   id: string;
   dir: string;
-  source: "user" | "repo" | "host";
+  source: "user" | "repo" | "app" | "host";
   manifest: ViewManifest | null;
   error: string | null;
   url: string | null;

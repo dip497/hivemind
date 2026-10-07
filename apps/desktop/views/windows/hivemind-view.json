@@ -1,0 +1,14 @@
+{
+  "id": "windows",
+  "name": "Windows",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "protocol": 1,
+  "permissions": [
+    "workspace:close"
+  ],
+  "layers": true,
+  "author": "Hivemind",
+  "license": "MIT",
+  "layout": "personal"
+}

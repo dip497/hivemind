@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Changed: the Windows view is a view package that comes with the app, built on the same protocol as anyone's, with the app's Layers rail beside it. Installing a view with the id `windows` replaces it. Which tabs you minimized starts afresh once.
+- New: a view's manifest can ask for the app's Layers rail beside it (`"layers": true`), with every frame action, and keep what it saves on this device instead of in the shared workspace (`"layout": "personal"`).
 - **Breaking:** a widget reads and acts on the workspace through `hive.hm`, the client a view and a tool's tile have, held to its widget.json's permissions: `hive.hm.on("structure")`, `subscribeStatus`, `onEvents`, `commands.spawnAgent`, `prompt`. `hive.workspace` and the `agents` and `agent` events are gone.
 - Changed: a view's `hm.on("structure" | "names" | "selection" | "settings" | "theme" | …)` tells a listener added later how things are now, at once.
 - New: widgets on your phone, and wherever else a widget is shown but not run: a press there reaches its code. A view can show the workspace's widgets (view protocol 1.8: `hm.onWidgets`), and press them only with the permission `workspace:widgets`, asked for at install (`hm.pressWidget`); install `@dip497/widgets` on the computer that hosts a workspace to see them on the phone (workspace API 0.19: `widget.press`).

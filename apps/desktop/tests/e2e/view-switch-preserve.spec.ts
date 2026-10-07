@@ -64,6 +64,9 @@ test.beforeAll(async () => {
   await page.waitForTimeout(500);
 });
 
+/** The Windows view's tab strip, in its frame. */
+const tabs = (selector: string, opts?: { hasText?: RegExp }) => page.frameLocator('[data-community-view="windows"] iframe').locator(selector, opts);
+
 test.afterAll(async () => {
     // Later specs share settings.json; the view switch's own save is debounced.
   await page?.evaluate(async () => {
@@ -78,12 +81,12 @@ test("the terminal body is one instance, adopted by each view in turn — never 
   await tagCanvasXterm();
   await expect(page.locator(".xterm")).toHaveCount(1);
 
-  // → Windows. The canvas is gone; the SAME xterm now sits inside a tab body.
+  // → Windows. The canvas is gone; the SAME xterm now sits in the slot the view placed.
   await toggleView();
-  await page.waitForSelector('[role="tablist"]');
+  await page.waitForSelector('[data-community-view="windows"][data-community-ready="1"]');
   expect(await page.locator(".react-flow").count()).toBe(0);
   await expect(page.locator(".xterm")).toHaveCount(1);
-  expect(await probe('[data-tile-id] .xterm')).toBe("kept");
+  expect(await probe('[data-community-slot] .xterm')).toBe("kept");
   expect(await page.getAttribute("[data-active-view]", "data-active-view")).toBe("windows");
 
   // → Canvas. Same element again, back inside the react-flow node.
@@ -118,7 +121,7 @@ test("the camera survives a canvas → windows → canvas round trip (no snap ba
   const panned = await viewportTransform();
   expect(panned).not.toBe(before);
   await toggleView();
-  await page.waitForSelector('[role="tablist"]');
+  await page.waitForSelector('[data-community-view="windows"][data-community-ready="1"]');
   await page.waitForTimeout(300);
   await toView("canvas");
   await page.waitForSelector(".react-flow__viewport");
@@ -131,19 +134,20 @@ test("the camera survives a canvas → windows → canvas round trip (no snap ba
 test("a minimized tab keeps its surface alive (parked, not unmounted) and comes back intact", async () => {
   await tagCanvasXterm();
   await toggleView();
-  await page.waitForSelector('[role="tablist"]');
-  const tab = page.locator('[role="tab"]').first();
+  await page.waitForSelector('[data-community-view="windows"][data-community-ready="1"]');
+  const tab = tabs('[role="tab"]').first();
   await tab.hover();
   await tab.getByRole("button", { name: /^Minimize/ }).click();
-  await expect(page.locator('[role="tab"]')).toHaveCount(0);
+  await expect(tabs('[role="tab"]')).toHaveCount(0);
   // Still exactly one xterm — now in the hidden park, still the tagged instance.
   await expect(page.locator(".xterm")).toHaveCount(1);
-  expect(await probe("#hm-tile-park .xterm")).toBe("kept");
+  // The view hands the surface back, and the app parks it, within a frame.
+  await expect.poll(() => probe("#hm-tile-park .xterm")).toBe("kept");
   // Restore from the rail → adopted by the tab body again.
   const rail = page.locator('aside[aria-label="Layers"]');
   await rail.locator('[role="button"]', { hasText: /shell/i }).first().click();
-  await expect(page.locator('[role="tab"]')).toHaveCount(1);
-  expect(await probe('[data-tile-id] .xterm')).toBe("kept");
+  await expect(tabs('[role="tab"]')).toHaveCount(1);
+  await expect.poll(() => probe('[data-community-slot] .xterm')).toBe("kept");
   await toView("canvas");
   await page.waitForSelector(".react-flow__node-terminal");
 });
@@ -163,12 +167,12 @@ test("an unsaved editor buffer survives a view switch (same CodeMirror instance)
   await content.evaluate((el) => { (el as unknown as Record<string, unknown>).__probe = "cm"; });
 
   await toggleView();
-  await page.waitForSelector('[role="tablist"]');
+  await page.waitForSelector('[data-community-view="windows"][data-community-ready="1"]');
   // Activate the editor tab (the strip's tab for the workbench tile).
-  await page.locator('[role="tab"]', { hasText: /editor|workbench|notes/i }).first().click();
-  const tabContent = page.locator('[data-tile-id] .cm-content');
+  await tabs('[role="tab"]', { hasText: /editor|workbench|notes|code/i }).first().click();
+  const tabContent = page.locator('[data-community-slot] .cm-content');
   await expect(tabContent.first()).toContainText(MARK);
-  expect(await probe('[data-tile-id] .cm-content')).toBe("cm");
+  expect(await probe('[data-community-slot] .cm-content')).toBe("cm");
   await expect(page.locator(".cm-content")).toHaveCount(1);
 
   await toView("canvas");

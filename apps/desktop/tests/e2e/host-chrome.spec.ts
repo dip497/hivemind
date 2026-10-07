@@ -60,7 +60,7 @@ test.afterAll(async () => {
 test("the island is host chrome: top on the canvas, a compact bottom island in windows / a community view, and it spawns from each", async () => {
   await expect(page.locator('[data-host-island="top"] [data-tool-island]')).toBeVisible();
   let n = await terminalNodes();
-  for (const [view, ready] of [["windows", "[data-windows-view]"], ["queue", queueReady]] as const) {
+  for (const [view, ready] of [["windows", '[data-community-view="windows"][data-community-ready="1"]'], ["queue", queueReady]] as const) {
     await toView(view);
     await page.waitForSelector(ready, { timeout: 15_000 });
     const island = page.locator('[data-host-island="bottom"] [data-tool-island]');

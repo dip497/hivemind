@@ -39,7 +39,8 @@ const ls = new Map<string, string>();
 const { loadLayout, reloadLayout, saveLayout } = await import("../../src/renderer/src/canvas-persistence.ts");
 const { loadViewLayout, saveViewLayout } = await import("../../src/renderer/src/workspace/view-layout-store.ts");
 const { CANVAS_CAMERA, CANVAS_LAYOUT, loadCanvasCamera, reloadCanvasLayout } = await import("../../src/renderer/src/workspace/views/canvas-layout.ts");
-const { WINDOWS_LAYOUT } = await import("../../src/renderer/src/workspace/views/windows-layout.ts");
+// A view's own layout, kept on this device: what a view with "layout": "personal" saves.
+const WINDOWS_LAYOUT = { viewId: "windows", version: 1, initial: () => ({ minimized: [] as string[], activeTabId: null as string | null }), personal: true };
 const { readBoard, writeBoard } = await import("../../src/renderer/src/workspace/workspace-store-client.ts");
 const { reloadBoardObjects } = await import("../../src/renderer/src/board-objects/useBoard.ts");
 

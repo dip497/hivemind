@@ -21,6 +21,7 @@ import { SlotBar } from "../../slot-chrome";
 import { Wallpaper } from "../../../Wallpaper";
 import { useSurfacePolicy } from "../../../theme-store";
 import { usePluginLink } from "../../plugin-link";
+import { LayersPanel } from "../../../LayersPanel";
 import { disableCommunityView } from "./registry";
 import { edgeBandClip } from "./edge-band";
 import { RemoteCommunityView } from "./RemoteCommunityView";
@@ -42,7 +43,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     const [rects, setRects] = useState<SurfaceRect[]>([]);
     const { link, ready, send, dialogs } = usePluginLink({
       pluginId: pkg.id, record: { kind: "view", id: pkg.id }, name: manifest.name, capabilities,
-      fields: manifest.settings ?? [], layoutId: pkg.id, props: { model, commands }, root: rootRef,
+      fields: manifest.settings ?? [], layoutId: pkg.id, personal: manifest.layout === "personal", props: { model, commands }, root: rootRef,
       onSurfaceRects: setRects,
       onDisable: (reason) => {
         toast.error(`The ${manifest.name} view was disabled: ${reason}. Switched back to Canvas — your tiles are untouched.`);
@@ -109,6 +110,19 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     const clip = useMemo(() => edgeBandClip(rects, hostBox), [rects, hostBox]);
 
     return (
+      <div className="flex-1 min-h-0 flex flex-row">
+      {/* The app's own Layers rail, every frame action with it, for a view that asks for it. */}
+      {manifest.layers && model.layerFrames.length > 0 && (
+        <LayersPanel
+          frames={model.layerFrames}
+          tiles={model.layerTiles}
+          selectedTileId={model.selectedTileId}
+          onFocusTile={commands.selectTile}
+          onFocusFrame={(id) => { commands.selectFrame(id); commands.selectTile(null); commands.focusTile(id); }}
+          frameActions={model.frameActions}
+          tileActions={{ onClose: commands.closeTile, onRename: commands.renameTile }}
+        />
+      )}
       <div ref={rootRef} className="relative flex-1 min-h-0 overflow-hidden" data-community-view={pkg.id} data-community-ready={ready ? "1" : "0"}>
         <iframe
           ref={iframeRef}
@@ -156,6 +170,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
             Loading {manifest.name}…
           </div>
         )}
+      </div>
       </div>
     );
   }

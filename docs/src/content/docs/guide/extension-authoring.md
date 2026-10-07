@@ -157,6 +157,12 @@ if (hm.device.compact) { /* a phone's screen: one column */ }
 if (hm.device.touch) { /* a finger: give what it taps room */ }
 ```
 
+A view that arranges tiles can ask for the app's own Layers rail beside it, `"layers": true`:
+frames, their tiles, and every frame action (spawn into it, worktrees, bind a folder, git), drawn by
+the app, so the view need not draw one. What a view saves with `setLayout` is kept in the
+workspace, the same for everyone in it; `"layout": "personal"` keeps it on this device instead,
+each person's own (which tabs are minimized, say).
+
 A view that lays itself out for a phone says so in its manifest, `"phone": true`: only those are
 offered on the person's phone. There its host runs on their computer, and the view may do what
 the phone may: start and close agents (the phone asks its own lock first), but not rename tiles. A

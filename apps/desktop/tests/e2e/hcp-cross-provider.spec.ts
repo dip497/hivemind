@@ -219,7 +219,7 @@ test("a busy worker closed in the Windows view ends, and a read waiting on its r
   await page.waitForTimeout(1_500); // the read is waiting before the tile goes
   const toView = (mode: string) => page.evaluate((m) => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: m } })), mode);
   await toView("windows");
-  const tab = page.getByRole("tab", { name: "closed-early" });
+  const tab = page.frameLocator('[data-community-view="windows"] iframe').getByRole("tab", { name: "closed-early" });
   await tab.hover();
   await tab.getByRole("button", { name: "Close closed-early", exact: true }).click();
   // Told at once, and told it is gone (exit 5): reading it again would wait for nothing.

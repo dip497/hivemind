@@ -39,6 +39,12 @@ export interface ViewManifest {
   /** It lays itself out for a phone (`hello.device.compact`, protocol 1.5): only a view that says
    *  so is offered on the person's phone. */
   phone?: boolean;
+  /** The app draws its Layers rail (frames, their tiles and every frame action) beside the view,
+   *  so a view that arranges tiles need not draw one of its own. */
+  layers?: boolean;
+  /** Where what it saves (`setLayout`) is kept: "shared", the default, in the workspace, the same
+   *  for everyone in it; "personal", on this device, each person's own. */
+  layout?: "shared" | "personal";
   /** What the person can set it to, drawn by the app in its Settings; the view reads the values
    *  as `hm.settings` and hears each change (protocol 1.7). */
   settings?: SettingField[];
@@ -127,6 +133,16 @@ export function validateViewManifest(raw: unknown): ManifestResult {
     if (typeof m.phone !== "boolean") errors.push(`"phone" must be true or false`);
     else phone = m.phone;
   }
+  let layers: boolean | undefined;
+  if (m.layers !== undefined) {
+    if (typeof m.layers !== "boolean") errors.push(`"layers" must be true or false`);
+    else layers = m.layers;
+  }
+  let layout: "shared" | "personal" | undefined;
+  if (m.layout !== undefined) {
+    if (m.layout !== "shared" && m.layout !== "personal") errors.push(`"layout" must be "shared" or "personal"`);
+    else layout = m.layout;
+  }
   let settings: SettingField[] | undefined;
   if (m.settings !== undefined) {
     if (!Array.isArray(m.settings)) errors.push(`"settings" must be an array`);
@@ -142,8 +158,8 @@ export function validateViewManifest(raw: unknown): ManifestResult {
     if (typeof m.assets !== "string" || !isSafeRelativePath(m.assets)) errors.push(`"assets" must be a relative path inside the package`);
     else assets = m.assets;
   }
-  for (const k of Object.keys(m)) if (!["id", "name", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "phone", "author", "homepage", "license", "settings"].includes(k)) errors.push(`unknown field "${k}"`);
+  for (const k of Object.keys(m)) if (!["id", "name", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "phone", "layers", "layout", "author", "homepage", "license", "settings"].includes(k)) errors.push(`unknown field "${k}"`);
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, manifest: { id: id!, name: name!, version: version!, entry: entry!, protocol, permissions, ...(assets ? { assets } : {}), ...(wallpaper === undefined ? {} : { wallpaper }),
-    ...(phone === undefined ? {} : { phone }), ...(author ? { author } : {}), ...(homepage ? { homepage } : {}), ...(license ? { license } : {}), ...(settings?.length ? { settings } : {}) } };
+    ...(phone === undefined ? {} : { phone }), ...(layers === undefined ? {} : { layers }), ...(layout === undefined ? {} : { layout }), ...(author ? { author } : {}), ...(homepage ? { homepage } : {}), ...(license ? { license } : {}), ...(settings?.length ? { settings } : {}) } };
 }

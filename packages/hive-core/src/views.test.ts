@@ -108,4 +108,17 @@ describe("view packages", () => {
       ["ring", "repo", null],
     ]);
   });
+
+  test("the app's own are listed first, and one installed under the id of one replaces it", async () => {
+    const own = path.join(tmp, "app-views");
+    pkg(path.join(own, "windows"), good("windows"));
+    pkg(path.join(own, "dock"), good("dock"));
+    pkg(path.join(userViewsDir(), "windows"), good("windows"));
+    const all = await listInstalledViews(null, own);
+    expect(all.map((x) => [x.id, x.source, x.error])).toEqual([
+      ["dock", "app", null],
+      ["windows", "app", 'replaced by the installed view "windows"'],
+      ["windows", "user", null],
+    ]);
+  });
 });

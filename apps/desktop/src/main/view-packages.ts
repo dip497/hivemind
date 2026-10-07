@@ -17,7 +17,7 @@ import { dialogStart, rememberPick } from "./dialog-start";
 import { app, net, protocol, dialog, type BrowserWindow, type WebFrameMain } from "electron";
 import { handle, handleEffect } from "./app-ipc.js";
 import { appWindowOf } from "./windows.js";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { listInstalledViews, readViewPackage, installView, removeView, type InstalledView } from "@hivemind/core/views";
 import { VIEW_SCHEME, entryUrl, newNonce, pluginCsp, serveViewFile } from "@hivemind/core/view-files";
 import { viewHost } from "@hivemind/view-sdk/manifest";
@@ -42,10 +42,13 @@ async function remoteCall<T>(method: string, params: unknown[]): Promise<T> {
  *  not always the id (`@owner/name` is served as `owner--name`), so the id travels with it. */
 const served = new Map<string, { id: string; dir?: string; repo?: string }>();
 
-/** Scan both roots; remember the loadable ones for the protocol handler. */
+/** The views that come with the app, built beside its main bundle (scripts/build-views.mjs). */
+export const appViewsDir = (): string => fileURLToPath(new URL("../views", import.meta.url));
+
+/** Scan the roots; remember the loadable ones for the protocol handler. */
 export async function listViewPackages(repoRoot: string | null): Promise<ViewPackageInfo[]> {
   const remote = repoRoot?.startsWith("hive://") ? repoRoot : null;
-  const views = await listInstalledViews(remote ? null : repoRoot);
+  const views = await listInstalledViews(remote ? null : repoRoot, appViewsDir());
   served.clear();
   const hosted: ViewPackageInfo[] = [];
   if (remote) {

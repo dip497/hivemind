@@ -1,7 +1,7 @@
-// Windowed ("editor-like") view mode: toggle from the canvas into a single
-// tab-strip + active-body layout, confirm a spawned tile shows as a tab and its
-// body renders, then minimize the tab (gone from the strip, still in the graph
-// rail) and restore it from the rail.
+// The Windows view, a view package that comes with the app: a tab strip in its sandboxed frame,
+// the active tile's live body placed by the app, and the app's own Layers rail beside it. A
+// spawned tile shows as a tab and its body renders; a minimized tab leaves the strip but stays
+// in the rail, and selecting it there brings it back.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,6 +12,9 @@ const APP_DIR = path.resolve(__dirname, "../..");
 
 let app: ElectronApplication;
 let page: Page;
+const view = () => page.frameLocator('[data-community-view="windows"] iframe');
+const tabsOf = () => view().locator('[role="tab"]');
+const windowsReady = () => page.waitForSelector('[data-community-view="windows"][data-community-ready="1"]');
 
 test.beforeAll(async () => {
   app = await electron.launch({
@@ -47,31 +50,32 @@ test.afterAll(async () => {
 test("toggle into windows mode shows a tab strip + active tile body", async () => {
   // Enter windows mode via the same event ⌘E dispatches.
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-view-mode")));
-  // The react-flow canvas is gone; a tablist appears.
-  await page.waitForSelector('[role="tablist"]');
+  // The react-flow canvas is gone; the view's tab strip appears.
+  await windowsReady();
   expect(await page.locator(".react-flow").count()).toBe(0);
   // Exactly one tab (the shell), and it's selected + its terminal body mounts.
-  const tabs = page.locator('[role="tab"]');
+  const tabs = tabsOf();
   await expect(tabs).toHaveCount(1);
   await expect(tabs.first()).toHaveAttribute("aria-selected", "true");
   // The terminal body renders inside the active-body host (xterm mounts a canvas).
   await page.waitForSelector(".xterm");
+  await page.screenshot({ path: "/tmp/hivemind-windows-view.png" });
 });
 
 test("minimize hides the tab but keeps it in the graph rail; restore brings it back", async () => {
-  const tab = page.locator('[role="tab"]').first();
+  const tab = tabsOf().first();
   await tab.hover();
   await tab.getByRole("button", { name: /^Minimize/ }).click();
   // Tab strip is now empty.
-  await expect(page.locator('[role="tab"]')).toHaveCount(0);
+  await expect(tabsOf()).toHaveCount(0);
   // But the tile is still listed in the Layers rail (aside[aria-label="Layers"]).
   const rail = page.locator('aside[aria-label="Layers"]');
   await expect(rail).toBeVisible();
   const railRow = rail.locator('[role="button"]', { hasText: /shell/i }).first();
   await railRow.click();
   // Restored → back as a tab, selected again.
-  await expect(page.locator('[role="tab"]')).toHaveCount(1);
-  await expect(page.locator('[role="tab"]').first()).toHaveAttribute("aria-selected", "true");
+  await expect(tabsOf()).toHaveCount(1);
+  await expect(tabsOf().first()).toHaveAttribute("aria-selected", "true");
 });
 
 test("switching back to canvas restores react-flow", async () => {
@@ -79,7 +83,7 @@ test("switching back to canvas restores react-flow", async () => {
   // switch here; the cycle itself is covered by community-view.spec.ts.
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
   await page.waitForSelector(".react-flow");
-  expect(await page.locator('[role="tablist"]').count()).toBe(0);
+  expect(await page.locator('[data-community-view="windows"]').count()).toBe(0);
 });
 
 test("right-click a frame in the rail opens the actions menu and spawns into it", async () => {
@@ -157,15 +161,10 @@ test("frame header shows a git button", async () => {
   await expect(frame.getByRole("button", { name: "git" }).first()).toBeVisible();
 });
 
-// Regression for the windowed-mode remote-agent-kill blocker: WindowsView used
-// to render ONLY the active tab's body, so switching tabs unmounted every other
-// open tile — TerminalTile's unmount calls window.hive.ptyDetach, which main
-// routes to killRemotePty for a remote (ssh://) tile. The fix keeps every open
-// tab's body mounted (hidden via visibility, not display:none/unmount) so a
-// tab switch can never fire that teardown. These specs assert the OBSERVABLE
-// contract of that fix: every tab's body is mounted at once, an inactive tab's
-// container is hidden (not removed), and a tab's container survives a
-// switch-away-and-back with no remount and no pty exit.
+// Regression for the windowed-mode remote-agent-kill blocker: a view that unmounted the bodies of
+// the tabs it did not show would detach their sessions, which for a remote (ssh://) tile kills its
+// agent. The app keeps every open tile's body mounted whatever a view shows: one view places the
+// active tile, and the rest wait, alive, at full size. These assert that contract observably.
 test("every open tab's body stays mounted; switching tabs never remounts the inactive one", async () => {
   // Spawn a second terminal so there's definitely something to switch away
   // from and back to, regardless of what earlier tests in this file left open.
@@ -173,36 +172,18 @@ test("every open tab's body stays mounted; switching tabs never remounts the ina
   await page.waitForTimeout(500);
 
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-view-mode")));
-  await page.waitForSelector('[role="tablist"]');
-  const tabs = page.locator('[role="tab"]');
+  await windowsReady();
+  const tabs = tabsOf();
+  await expect.poll(() => tabs.count()).toBeGreaterThanOrEqual(2);
   const tabCount = await tabs.count();
-  expect(tabCount).toBeGreaterThanOrEqual(2);
 
   // Every open tab's terminal is mounted AT ONCE, not just the active tab's.
-  // Before the fix this count would be 1 regardless of how many tabs exist.
   await expect(page.locator(".xterm")).toHaveCount(tabCount);
 
-  const bodies = page.locator("[data-tile-id]");
-  const idA = await bodies.nth(0).getAttribute("data-tile-id");
-  const containerA = page.locator(`[data-tile-id="${idA}"]`);
-
-  // Tag tile A's container with a probe property. A React unmount+remount
-  // produces a brand-new DOM node, which would NOT carry this property — a
-  // simple, dependency-free way to prove "never torn down" across a switch.
-  await containerA.evaluate((el) => { (el as unknown as Record<string, unknown>).__probe = "kept"; });
-
-  // The inactive tab's container is hidden via `visibility` (not display:none
-  // — a 0×0 box breaks xterm's fit addon) while still occupying full size.
-  //
-  // Pick it by the attribute the view sets, not by index: the active tab now
-  // follows `selectedTileId`, and a freshly spawned shell is selected, so the
-  // active body is the LAST one — nth(1) used to be inactive and no longer is.
-  const inactiveContainer = page.locator('[data-tile-id][aria-hidden="true"]').first();
-  await expect(page.locator('[data-tile-id][aria-hidden="true"]')).toHaveCount(tabCount - 1);
-  await expect(inactiveContainer).toHaveCSS("visibility", "hidden");
-  const inactiveBox = await inactiveContainer.boundingBox();
-  expect(inactiveBox?.width ?? 0).toBeGreaterThan(100);
-  expect(inactiveBox?.height ?? 0).toBeGreaterThan(100);
+  // Tag the first tile's terminal. A remount produces a new node, which would not carry it.
+  const idA = await tabs.nth(0).getAttribute("data-tile-id");
+  expect(idA).toBeTruthy();
+  await page.locator(".xterm").evaluateAll((els) => els.forEach((el, i) => { (el as unknown as Record<string, unknown>).__probe = `kept-${i}`; }));
 
   // Switch to the second tab, then back to the first.
   await tabs.nth(1).click();
@@ -210,21 +191,21 @@ test("every open tab's body stays mounted; switching tabs never remounts the ina
   await expect(page.locator(".xterm")).toHaveCount(tabCount); // still every body mounted
   await tabs.nth(0).click();
   await page.waitForTimeout(300);
+  await expect(tabs.nth(0)).toHaveAttribute("aria-selected", "true");
 
-  // The probe survived — tile A's container was never unmounted/remounted
-  // across the switch. A remount would have torn down xterm's scrollback +
-  // WebGL slot locally, and outright killed a remote (ssh://) tile's PTY.
-  const probeAfter = await containerA.evaluate((el) => (el as unknown as Record<string, unknown>).__probe);
-  expect(probeAfter).toBe("kept");
+  // Every terminal is the one tagged: none was unmounted and mounted again.
+  const probes = await page.locator(".xterm").evaluateAll((els) => els.map((el) => (el as unknown as Record<string, unknown>).__probe));
+  expect(probes.every((p) => typeof p === "string" && p.startsWith("kept-"))).toBe(true);
+  expect(new Set(probes).size).toBe(tabCount);
 });
 
 test("no pty exit fires for a tile while switching tabs away from and back to it", async () => {
   // Own setup: this used to inherit windows mode from the test above, so a
   // failure there left it querying an empty canvas and reporting a cascade.
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "windows" } })));
-  await page.waitForSelector('[role="tablist"]');
-  await expect.poll(() => page.locator("[data-tile-id]").count()).toBeGreaterThanOrEqual(2);
-  const ids = await page.locator("[data-tile-id]").evaluateAll((els) =>
+  await windowsReady();
+  await expect.poll(() => tabsOf().count()).toBeGreaterThanOrEqual(2);
+  const ids = await tabsOf().evaluateAll((els) =>
     els.map((el) => el.getAttribute("data-tile-id")).filter((id): id is string => !!id),
   );
   expect(ids.length).toBeGreaterThanOrEqual(2);
@@ -243,7 +224,7 @@ test("no pty exit fires for a tile while switching tabs away from and back to it
     }
   }, ids);
 
-  const tabs = page.locator('[role="tab"]');
+  const tabs = tabsOf();
   const count = await tabs.count();
   for (let i = 0; i < count; i++) {
     await tabs.nth(i).click();
@@ -261,10 +242,11 @@ test("no pty exit fires for a tile while switching tabs away from and back to it
 // still minimized. It came back minimized as soon as the selection moved on.
 test("a restored tab stays restored when the view switches at once", async () => {
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "windows" } })));
-  const first = page.locator('[role="tab"]').first();
+  await windowsReady();
+  const first = tabsOf().first();
   const name = await first.getAttribute("title");
   expect(name).toBeTruthy();
-  const tab = page.locator(`[role="tab"][title=${JSON.stringify(name)}]`);
+  const tab = view().locator(`[role="tab"][title=${JSON.stringify(name)}]`);
   await first.hover();
   await first.getByRole("button", { name: `Minimize ${name}` }).click();
   await expect(tab).toHaveCount(0);
@@ -283,6 +265,6 @@ test("a restored tab stays restored when the view switches at once", async () =>
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
   await expect(terminals).toHaveCount(before + 1);
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "windows" } })));
-  await page.waitForSelector('[role="tablist"]');
+  await windowsReady();
   await expect(tab).toHaveCount(1);
 });

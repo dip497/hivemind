@@ -1,10 +1,11 @@
 /**
  * Community view packages on disk. A view is a directory holding
  * `hivemind-view.json` (validated by @hivemind/view-sdk) plus its bundled
- * entry and assets. Two roots are scanned:
+ * entry and assets. Three roots are scanned:
  *
  *   $XDG_CONFIG_HOME/hivemind/views/<id>/   installed by `hive views install`
  *   <repo>/.hivemind/views/<id>/            shipped with a repo
+ *   <app>/out/views/<id>/                   come with the app, which names the folder
  *
  * The desktop loader and the CLI both read through this module, so what
  * `hive views list` prints is exactly what the app will (or will not) load.
@@ -16,7 +17,7 @@ import os from "node:os";
 import { isViewId, MANIFEST_FILE, validateViewManifest, type ViewManifest } from "@hivemind/view-sdk/manifest";
 import { HiveError } from "./storage.js";
 
-export type ViewSource = "user" | "repo";
+export type ViewSource = "user" | "repo" | "app";
 
 export interface InstalledView {
   /** Directory name (the manifest id when valid). */
@@ -85,14 +86,19 @@ async function scan(root: string, source: ViewSource): Promise<InstalledView[]> 
   return Promise.all((await packageDirs(root)).map((d) => readViewPackage(d, source)));
 }
 
-/** Every package in both roots, user dir first. A repo package whose id a user
- *  package already uses is reported with an error (the user's wins). */
-export async function listInstalledViews(repoRoot?: string | null): Promise<InstalledView[]> {
+/** Every package in the roots: the app's own first (the order views are offered in), then yours,
+ *  then the repository's. One whose id is already taken is reported with an error: yours wins
+ *  over a repository's, and either over the app's, so installing a view under the id of one that
+ *  comes with the app replaces it. */
+export async function listInstalledViews(repoRoot?: string | null, appRoot?: string | null): Promise<InstalledView[]> {
   const user = await scan(userViewsDir(), "user");
   const repo = repoRoot ? await scan(repoViewsDir(repoRoot), "repo") : [];
+  const own = appRoot ? await scan(appRoot, "app") : [];
   const taken = new Set(user.filter((v) => !v.error).map((v) => v.id));
   for (const v of repo) if (!v.error && taken.has(v.id)) v.error = `shadowed by the user-installed view "${v.id}"`;
-  return [...user, ...repo];
+  for (const v of repo) if (!v.error) taken.add(v.id);
+  for (const v of own) if (!v.error && taken.has(v.id)) v.error = `replaced by the installed view "${v.id}"`;
+  return [...own, ...user, ...repo];
 }
 
 /** Validate `srcDir` and copy it to the user views dir (replacing any previous install). */

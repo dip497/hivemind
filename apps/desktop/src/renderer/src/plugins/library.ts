@@ -88,7 +88,7 @@ export function usePlugins(catalog: CatalogEntry[] | null): PluginRecord[] {
       out.push({
         kind: "view", id: p.id, name: m?.name ?? p.id, description: (m as { description?: string } | null)?.description ?? "",
         ...(m?.version ? { version: m.version } : {}), ...(m?.author ? { author: m.author } : {}),
-        origin: p.source === "user" ? "you" : "repo", installed: true, can: permissionWords(m?.permissions ?? []),
+        origin: p.source === "user" ? "you" : p.source === "app" ? "app" : "repo", installed: true, can: permissionWords(m?.permissions ?? []),
         readme: { dir: p.dir }, problem: p.error ?? (report.refused[p.id] !== "disabled in Settings" ? report.refused[p.id] : null) ?? null, dir: p.dir,
         ...(listed.get(`view:${p.id}`) ? { catalog: listed.get(`view:${p.id}`)! } : {}),
       });

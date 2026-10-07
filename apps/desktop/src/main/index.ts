@@ -77,7 +77,7 @@ import type { ReadScreen } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { hcpSockPath } from "@hivemind/agent-host/hooks/token";
 import { HcpError } from "@hivemind/host/control/protocol";
-import { handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog, viewSdk } from "./view-packages.js";
+import { appViewsDir, handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog, viewSdk } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, onSettingsChange, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
@@ -1293,7 +1293,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   conversations({ transcriptOf: (bare) => transcriptOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)) }),
   // The community views here on the person's phone, their host run here (P8).
   views({
-    installed: (repo) => listInstalledViews(repo),
+    installed: (repo) => listInstalledViews(repo, appViewsDir()),
     sdk: viewSdk,
     store: workspaceStore,
     server: () => workspaceServer,

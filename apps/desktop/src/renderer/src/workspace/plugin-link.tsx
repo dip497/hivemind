@@ -30,8 +30,8 @@ import { ShareDialog, type ShareChoice } from "./views/community/ShareDialog";
 import { PromptDialog, type PromptAsk } from "./views/community/PromptDialog";
 
 /** Plugin layout blobs are opaque to the host: `{ v: 1, data: <whatever the plugin sent> }`. */
-export function layoutSpec(id: string): ViewLayoutSpec<unknown> {
-  return { viewId: id, version: 1, initial: () => null };
+export function layoutSpec(id: string, personal = false): ViewLayoutSpec<unknown> {
+  return { viewId: id, version: 1, initial: () => null, ...(personal ? { personal: true } : {}) };
 }
 
 export interface PluginLinkOptions {
@@ -43,8 +43,9 @@ export interface PluginLinkOptions {
   name: string;
   capabilities: ViewPermission[];
   fields: readonly SettingField[];
-  /** Where its saved layout is kept (`hello.layout`, `setLayout`). */
+  /** Where its saved layout is kept (`hello.layout`, `setLayout`); `personal`: on this device. */
   layoutId: string;
+  personal?: boolean;
   props: WorkspaceViewProps;
   /** The box it draws in, for `viewport` and `resize`. */
   root: RefObject<HTMLElement | null>;
@@ -140,7 +141,7 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
     hasFrame: (id) => framesRef.current.some((f) => f.id === id),
     onReady: () => setReady(true),
     ...(o.onSurfaceRects ? { onSurfaceRects: (r: SurfaceRect[]) => enqueue(() => optsRef.current.onSurfaceRects?.(r)) } : {}),
-    onLayout: (data) => saveViewLayout(layoutSpec(optsRef.current.layoutId), layoutKeyRef.current, data),
+    onLayout: (data) => saveViewLayout(layoutSpec(optsRef.current.layoutId, optsRef.current.personal), layoutKeyRef.current, data),
     onFramesDrawn: () => { /* read from stats by the perf harness */ },
     onError: (message) => console.warn(`[hivemind] plugin "${o.pluginId}": ${message}`),
     services: viewLinkServices({
@@ -177,7 +178,7 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
     if (!ready) return;
     send({
       type: "hello", v: PROTOCOL_VERSION, pluginId: o.pluginId, capabilities: o.capabilities, settings: settingsRef.current,
-      theme: readTheme(), layout: loadViewLayout(layoutSpec(o.layoutId), layoutKey),
+      theme: readTheme(), layout: loadViewLayout(layoutSpec(o.layoutId, o.personal), layoutKey),
       viewport: box(), visible: !document.hidden, features: [...link.features, "settings"],
       // A desktop: whether its pointer is a finger, never a phone's screen.
       device: { touch: matchMedia("(pointer: coarse)").matches, compact: false },

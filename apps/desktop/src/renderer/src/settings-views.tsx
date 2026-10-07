@@ -119,7 +119,7 @@ export function ViewPage({ id }: { id: string }) {
             says so, so it is never mistaken for a registry's verified owner. */}
         <dt>Says it is by</dt>
         <dd>{pkg.manifest?.author ?? "Not stated"}{pkg.manifest?.license ? ` · ${pkg.manifest.license}` : ""}{pkg.manifest?.homepage && <> · <a href={pkg.manifest.homepage} target="_blank" rel="noreferrer">Source<ExternalLink size={11} /></a></>}</dd>
-        <dt>Available to</dt><dd>{pkg.source === "user" ? "All your workspaces" : "This repository"}</dd>
+        <dt>Available to</dt><dd>{pkg.source === "repo" ? "This repository" : "All your workspaces"}</dd>
         <dt>Location</dt><dd className="settings-path">{pkg.dir}</dd>
         <dt>Additional access</dt><dd>{pkg.manifest?.permissions.join(", ") || "None"}</dd>
       </dl>

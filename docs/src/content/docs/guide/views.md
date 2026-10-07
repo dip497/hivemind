@@ -13,15 +13,16 @@ everyone else can work in it too.
 ⌘E, or choosing one under Views in Settings ▸ Plugins, switches how the workspace is shown. The workspace runtime owns
 frames, tiles, and sessions; a view only arranges them — never what runs.
 
-## Built-in views
+## Views that come with the app
 
 - **Canvas** — infinite board; frames as coloured zones; Layers rail on ⌘B; per-frame
-  Columns / Rows / Grid arrange.
+  Columns / Rows / Grid arrange. It is the workspace itself, drawn by the app.
 - **Windows** — one tab per tile; minimized tabs; the active tab follows tile selection
-  from any source (click, spawn, `hive ctl focus`).
+  from any source (click, spawn, `hive ctl focus`). It is a view package like yours
+  (`apps/desktop/views/windows`), run sandboxed and speaking the same protocol; install a view
+  with the id `windows` and yours replaces it.
 
-Everything else is a plugin you install or write. Nothing beyond these two ships in the
-box, and neither of them is privileged: they speak the same protocol yours will.
+Everything else is a plugin you install or write.
 
 <figure>
   <img src="../../shots/view-canvas.webp" alt="Canvas: frames as coloured zones on an infinite board, tiles placed inside them." />
