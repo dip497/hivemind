@@ -88,7 +88,7 @@ function register(pkg: ToolPackage, off: Set<string>): void {
     })),
     data: (t, s, h) => ({
       pkg, tileId: t.id, kind: t.kind, name: h.tileNames[t.id] ?? t.label ?? t.kind, frameId: s.frameId,
-      repoPath: s.repoPath, cwd: s.cwd,
+      repoPath: s.repoPath, cwd: s.cwd, glyph: pkg.tiles[t.kind]?.glyph, onClose: s.onClose, ...s.pin,
       openUrl: (u) => h.openUrlInBrowser(t.id, u),
       openFile: (f) => h.openFileFromTerminal(t.id, s.repoPath && !f.startsWith("/") ? `${s.repoPath}/${f}` : f),
     }),

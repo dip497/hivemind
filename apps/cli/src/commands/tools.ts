@@ -26,7 +26,7 @@ import { githubLogin } from "./views.js";
 const NO_PLUGINS: ToolsSettings = { enabledPlugins: [], disabledTools: [] };
 
 async function rescanApp(): Promise<boolean> {
-  try { await hcpCall("tools.rescan", {}, 5000); return true; } catch { return false; }
+  try { await hcpCall("settings.reload", {}, 5000); await hcpCall("tools.rescan", {}, 5000); return true; } catch { return false; }
 }
 const afterNote = (rescanned: boolean) => (rescanned ? "app updated" : "app not running — it loads them when it starts");
 const fail = (ctx: { json: boolean }, e: unknown, code: string): never => err(ctx, code, e instanceof Error ? e.message : String(e));

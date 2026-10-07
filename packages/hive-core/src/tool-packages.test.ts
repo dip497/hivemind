@@ -8,8 +8,11 @@ import path from "node:path";
 import { createToolRegistry } from "./tool-registry.js";
 import { BUNDLED_TOOL_PLUGINS } from "./tool-plugins.js";
 import { installToolPackage, listToolPackages, readToolPackage, removeToolPackage } from "./tool-packages.js";
+import { readSettings } from "./settings.js";
+import { isPluginEnabled } from "./plugin-settings.js";
 
 const dirs: string[] = [];
+process.env.HIVE_SETTINGS = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "hm-tool-settings-")), "settings.json");
 afterEach(() => { for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true }); });
 const temp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), "hm-tool-")); dirs.push(d); return d; };
 
@@ -45,7 +48,7 @@ test("a setting named like one of its tools is refused: a tool switched off is s
 
 test("one written for a newer tool API is listed with why it does not load, not dropped", async () => {
   const tools = temp();
-  await installToolPackage(plugin(), undefined, tools);
+  await installToolPackage(plugin(), undefined, tools, path.join(tools, "settings.json"));
   fs.writeFileSync(path.join(tools, "acme--prs", "hivemind-tool.json"), JSON.stringify({ ...MANIFEST, apiVersion: 99 }));
   const [p] = await listToolPackages(tools);
   expect(p!.problem).toContain("needs a newer app");
@@ -53,7 +56,7 @@ test("one written for a newer tool API is listed with why it does not load, not 
 
 test("installed under its id's folder, listed, and removed again", async () => {
   const tools = temp();
-  const p = await installToolPackage(plugin({ permissions: ["workspace:spawn", "root"] }), undefined, tools);
+  const p = await installToolPackage(plugin({ permissions: ["workspace:spawn", "root"] }), undefined, tools, path.join(tools, "settings.json"));
   expect(p.dir).toBe(path.join(tools, "acme--prs"));
   // Only permissions the protocol knows are kept.
   expect(p.permissions).toEqual(["workspace:spawn"]);
@@ -76,4 +79,15 @@ test("every example in the repository is a tool plugin this app loads", async ()
     expect([p.id, p.problem]).toEqual([`dip497/${name}`, null]);
     expect(() => createToolRegistry([...BUNDLED_TOOL_PLUGINS, p])).not.toThrow();
   }
+});
+
+test("an update is installed off: switching one on trusted the code that was there, not what replaces it", async () => {
+  const tools = temp();
+  const settings = path.join(tools, "settings.json");
+  fs.writeFileSync(settings, JSON.stringify({ plugins: { state: { "tool:acme/prs": { enabled: true, options: { prs: false } } } } }));
+  await installToolPackage(plugin({ version: "2.0.0" }), undefined, tools, settings);
+  const state = (await readSettings(settings)).plugins.state;
+  expect(isPluginEnabled(state, "tool", "acme/prs", false)).toBe(false);
+  // What the person set it to stays.
+  expect(state["tool:acme/prs"]).toEqual({ options: { prs: false } });
 });

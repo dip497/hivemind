@@ -8,6 +8,8 @@ import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, stat } from "node:fs
 import os from "node:os";
 import path from "node:path";
 import { isToolId, parseToolManifest, toolFolder, type ToolPackage } from "./tool-format.js";
+import { withPluginState } from "./plugin-settings.js";
+import { settingsPath, updateSettings } from "./settings.js";
 
 export const TOOL_MANIFEST = "hivemind-tool.json";
 
@@ -43,8 +45,9 @@ export async function listToolPackages(dir = userToolsDir()): Promise<ToolPackag
 
 /** Copy the tool plugin in `src` into the tools folder, replacing one with the same id. It is
  *  checked before anything is replaced, and copied whole before it takes the old one's place.
- *  `id`, when given (a HiveHub listing), is the id its manifest must say. */
-export async function installToolPackage(src: string, id?: string, dir = userToolsDir()): Promise<ToolPackage> {
+ *  `id`, when given (a HiveHub listing), is the id its manifest must say. It is left off, an
+ *  update included: switching one on trusts the code that was there, not what replaces it. */
+export async function installToolPackage(src: string, id?: string, dir = userToolsDir(), settings = settingsPath()): Promise<ToolPackage> {
   const read = await readToolPackage(src, id ?? null);
   await mkdir(dir, { recursive: true });
   const staging = await mkdtemp(path.join(dir, ".install-"));
@@ -56,6 +59,9 @@ export async function installToolPackage(src: string, id?: string, dir = userToo
   } finally {
     await rm(staging, { recursive: true, force: true });
   }
+  await updateSettings((cur) => ({
+    ...cur, plugins: { ...cur.plugins, state: withPluginState(cur.plugins.state, "tool", read.id, ({ enabled: _, ...rest }) => rest) },
+  }), settings);
   return { ...read, dir: dest };
 }
 

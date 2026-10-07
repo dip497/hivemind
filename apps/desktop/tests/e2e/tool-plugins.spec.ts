@@ -90,6 +90,12 @@ test("a tool that is off cannot be opened and its code is not served; switched o
   });
   await expect.poll(deepText, { timeout: 15_000 }).toContain("it leaks");
   await page.screenshot({ path: "/tmp/hivemind-tool-plugins.png" });
+  // The app draws its bar on a tool's tile, as on its own: closing it there closes the tile.
+  await expect(history.locator(".tile-drag-handle")).toContainText("Git history");
+  await history.getByRole("button", { name: "close tile" }).click();
+  await expect(history).toHaveCount(0);
+  const kinds = () => (hive("ctl", "list").data.frames as Array<{ tiles: Array<{ kind: string }> }>).flatMap((f) => f.tiles.map((t) => t.kind));
+  await expect.poll(kinds).not.toContain("git-history");
 });
 
 test("switched off, its open tiles stay on the board and say what they need", async () => {

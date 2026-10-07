@@ -16,7 +16,7 @@ import { isToolId } from "@hivemind/core/tool-format";
 import { installToolPackage, listToolPackages, removeToolPackage, toolFile } from "@hivemind/core/tool-packages";
 import { handle } from "./app-ipc.js";
 import { appWindowOf } from "./windows.js";
-import { getSettings } from "./settings-store.js";
+import { getSettings, reloadSettings } from "./settings-store.js";
 import type { ToolRun, ToolRunResult } from "../shared/ipc.js";
 
 export const PLUGIN_SCHEME = "hm-plugin";
@@ -149,6 +149,7 @@ export function installToolPackageIpc(): void {
     const from = picked.filePaths[0];
     if (picked.canceled || !from) return null;
     const pkg = await installToolPackage(from);
+    await reloadSettings();
     toolsChanged();
     return { id: pkg.id, name: pkg.name };
   });
