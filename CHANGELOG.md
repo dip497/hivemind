@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: two example tool plugins in `examples/tools`: CI runs (GitHub Actions runs, a failed job's lines, rerun, hand the failure to an agent) and Worktrees (every worktree's uncommitted changes, ahead and behind the base, its diffs; remove the merged ones).
 - Changed: Issues is a tool plugin that comes with the app (`hivemind/issues`), built on the same SDK as anyone's: the Issues tile, with New issue and each issue's dialog in it, opened from a frame's Open menu. **Breaking:** the title bar's New issue button, ⌘N, and the toolbar's Issues button and its 5 key are gone; the issues themselves, and `hive new | list | show | update`, are unchanged.
 - New: view protocol 1.9 — a view, a tool's tile or a widget reads the workspace's issues live (`hm.onIssues`) and calls its issue methods (`hm.issues.read | create | update | setState | comment | delete | link | unlink | move | workspaces`); all of it needs the permission `workspace:issues`, and every write is to the plugin's own workspace.
 - New: a tool plugin draws with the app's own UI kit (buttons, inputs, dialogs, popovers, menus, Markdown, notifications), imported from `hm-plugin://host/ui.js`, so it looks like the app.

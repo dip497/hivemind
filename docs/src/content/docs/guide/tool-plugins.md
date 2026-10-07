@@ -13,13 +13,15 @@ your logins. So one you add is off until you switch it on, in **Settings ▸ Plu
 with `hive plugins enable tool:<owner>/<name>`. Switch on only what you trust. If one makes the
 app misbehave, start it in safe mode, where none loads: `HIVEMIND_SAFE_MODE=1 hivemind`.
 
-Three examples are in the repository, in `examples/tools`:
+The examples are in the repository, in `examples/tools`:
 
 | Example | What it shows |
 |---|---|
 | `github-prs` | the repository's pull requests: conversation, diff, checks; comment, approve, merge (through `gh`) |
 | `git-history` | commits, searchable, with their diffs; ask an agent to explain one |
 | `todo-finder` | every TODO and FIXME by file; open one, or hand it to an agent; its markers are a setting |
+| `ci-runs` | GitHub Actions runs: a failed job's lines, rerun or cancel, hand the failure to an agent (through `gh`) |
+| `worktrees` | every git worktree: uncommitted changes, ahead and behind the base, its diffs; review one with an agent, remove the merged ones |
 
 ```bash
 hive tools install examples/tools/git-history
