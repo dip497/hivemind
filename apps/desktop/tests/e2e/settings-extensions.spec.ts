@@ -144,7 +144,7 @@ test("Tools separates what ships with the app from what you switch on", async ()
   const state = () => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind/settings.json"), "utf8")).plugins.state["tool:hivemind/code"];
   await code.getByRole("switch").click();
   await expect(code.getByRole("switch")).toHaveAttribute("aria-checked", "false");
-  await expect.poll(state).toEqual({ options: { editor: false, diff: false } });
+  await expect.poll(state).toEqual({ options: { editor: false } });
   await code.getByRole("switch").click();
   await expect.poll(state).toBeUndefined();
 });

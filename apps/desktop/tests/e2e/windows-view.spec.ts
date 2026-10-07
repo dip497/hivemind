@@ -3,8 +3,12 @@
 // spawned tile shows as a tab and its body renders; a minimized tab leaves the strip but stays
 // in the rail, and selecting it there brings it back.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { seedAgents } from "./helpers/agents";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,14 +20,20 @@ const view = () => page.frameLocator('[data-community-view="windows"] iframe');
 const tabsOf = () => view().locator('[role="tab"]');
 const windowsReady = () => page.waitForSelector('[data-community-view="windows"][data-community-ready="1"]');
 
+// Its own config and repository: what is installed or set on this machine is not the test's.
+const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-windows-view-"));
+const xdg = path.join(root, "config");
+const repo = path.join(root, "repo");
+
 test.beforeAll(async () => {
+  seedAgents(xdg);
+  fs.mkdirSync(repo);
+  execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
+  const env = { ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_PTY_DAEMON: "0" } as Record<string, string>;
+  delete env.ELECTRON_RUN_AS_NODE;
   app = await electron.launch({
-    args: [
-      path.join(APP_DIR, "out/main/index.js"),
-      "--no-sandbox",
-      `--user-data-dir=/tmp/hivemind-ud-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    ],
-    cwd: APP_DIR,
+    args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox", `--user-data-dir=${path.join(root, "ud")}`],
+    cwd: repo, env,
   });
   page = await app.firstWindow();
   page.on("console", (m) => console.log(`[r.${m.type()}]`, m.text()));
@@ -39,12 +49,8 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-    // Later specs share settings.json; the view switch's own save is debounced.
-  await page?.evaluate(async () => {
-    window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } }));
-    await window.hive.settingsSet("views.defaultView", "canvas");
-  }).catch(() => {});
   await app?.close();
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("toggle into windows mode shows a tab strip + active tile body", async () => {
