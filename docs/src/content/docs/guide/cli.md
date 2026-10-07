@@ -133,6 +133,11 @@ hive widgets list                       # the app's own widgets and the ones you
 hive widgets install <dir>|@owner/name  # from a folder, or from HiveHub
 hive widgets remove <id>
 
+hive tools list                         # what each tool contributes: tiles and commands, yours included
+hive tools new <name>                   # a starter tool plugin in ./<name>
+hive tools install <dir>                # added off: hive plugins enable tool:<owner>/<name>
+hive tools remove <owner>/<name>
+
 hive plugins list [--kind agent|view|widget|tool]   # every plugin on this machine, on or off
 hive plugins show agent:claude          # its settings: each one's value and what it takes
 hive plugins enable tool:hivemind/web   # or disable
