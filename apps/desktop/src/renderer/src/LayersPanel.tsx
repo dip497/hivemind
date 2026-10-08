@@ -126,7 +126,7 @@ const NEEDS_YOU = (s: TileStatusKind | null): boolean =>
  * 4.5:1 on the panel (see .u-eyebrow).
  */
 const ICON = 16;
-const STROKE = 1.75;
+const STROKE = 1.5;
 const LABEL = "text-[12px] font-medium text-[var(--color-fg2)]";
 const COUNT = "text-[11px] tabular-nums text-[var(--color-fg2)]";
 
@@ -536,7 +536,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       <section key={key} aria-label={label || "Tiles"} className="mt-2 first:mt-1" {...attr}>
         {label && (
           <button type="button" onClick={() => toggleGroup(`section:${key}`)} aria-expanded={!folded}
-            className={`group/sec flex w-full items-center gap-1 h-7 pl-4 pr-3 ${LABEL} transition-colors duration-150 hover:text-[var(--color-fg)]`}>
+            className={`group/sec flex w-full items-center gap-1 h-7 pl-5 pr-3 ${LABEL} transition-colors duration-150 hover:text-[var(--color-fg)]`}>
             <span>{label}</span>
             {/* Open or folded, it says it folds: quiet until the heading is pointed at. */}
             {folded ? <ChevronRight size={11} /> : <ChevronDown size={11} className="opacity-40 transition-opacity duration-150 group-hover/sec:opacity-100" />}
@@ -559,7 +559,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     <aside className="hm-layers relative h-full shrink-0 flex flex-col bg-[var(--color-bg2)] border-r border-[var(--color-line)] overflow-hidden" style={{ width }} aria-label="Layers">
       {/* As a sidebar does it: whose it is and its two quick tools on top, then what you can start,
           each a row with its name, then what is open. */}
-      <header className="flex items-center gap-1 pl-2 pr-2 h-11">
+      <header className="flex items-center gap-1 pl-[14px] pr-2 h-12">
         <PanelMenu title={title} onHide={() => setHidden(true)} />
         <span className="ml-auto" />
         <Button variant="ghost" size="icon-xs" aria-label="Search tiles" title="Search tiles" aria-pressed={searching} data-layers-search-toggle
@@ -576,8 +576,8 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             onKeyDown={(e) => { if (e.key === "Escape") { setSearching(false); setQuery(""); } e.stopPropagation(); }} className="h-7 text-[12px]" />
         </div>
       )}
-      <nav aria-label="Start" className="shrink-0 pb-1">
-        <ActionRow icon={<SquarePen size={ICON} strokeWidth={STROKE} />} label="New agent" hint="2" data="agent" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:spawn-agent"))} />
+      <nav aria-label="Start" className="shrink-0 pb-2">
+        <ActionRow primary icon={<SquarePen size={ICON} strokeWidth={STROKE} />} label="New agent" hint="2" data="agent" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:spawn-agent"))} />
         <ActionRow icon={<FolderPlus size={ICON} strokeWidth={STROKE} />} label="New project" data="project" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:add-project"))} />
         <ActionRow icon={<Server size={ICON} strokeWidth={STROKE} />} label="New machine" data="machine" onClick={() => openMachines({ kind: "add" })} />
         <ActionRow icon={<Shapes size={ICON} strokeWidth={STROKE} />} label="Add a tool or widget" data="add" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:open-add"))} />
@@ -585,7 +585,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       </nav>
 
       <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-[14px]">
-        {tiles.length === 0 && <div className="px-3 py-2 text-[12px] text-[var(--color-fg3)]">No tiles open.</div>}
+        {tiles.length === 0 && frames.length === 0 && <div className={`pl-5 pr-3 py-2 ${LABEL} font-normal`}>No tiles open.</div>}
         {tiles.length > 0 && nothing && (
           <div className="px-4 py-3 text-[12px] text-[var(--color-fg3)]" data-layers-nothing>
             Nothing matches.{" "}
@@ -594,7 +594,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         )}
         {view.pinned.length > 0 && section("pinned", "Pinned", view.pinned, { "data-layers-pinned": "" })}
         {tiles.length > 0 && (
-          <div className={`mt-2 flex h-7 items-center pl-4 pr-2 ${LABEL}`}>
+          <div className={`mt-2 flex h-7 items-center pl-5 pr-2 ${LABEL}`}>
             <span>Tiles</span>
             <span className="ml-auto"><ViewMenu prefs={prefs} setPref={setPref} machines={machineChoices} /></span>
           </div>
@@ -609,29 +609,27 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             ))
             : topFrames.map((f) => renderFrameGroup(f, 0, false))
         ) : view.buckets.map((b) => section(b.key, b.label, b.tiles, { "data-layers-bucket": b.key }))}
-        {projects.length > 1 && (
-          <section aria-label="Projects" data-layers-projects className="mt-3">
-            <div className={`flex h-7 items-center pl-4 pr-3 ${LABEL}`}>Projects</div>
-            {projects.map((p) => {
-              const here = p.repo === layoutKey;
-              return (
-                <button key={p.repo} type="button" disabled={here} data-layers-project={p.title}
-                  onClick={() => window.dispatchEvent(new CustomEvent("hivemind:open-workspace", { detail: { repo: p.repo } }))}
-                  title={here ? `${p.title} is this window` : `Open ${p.title} in this window`}
-                  className="flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-2 rounded-lg text-left text-[14px] text-[var(--color-fg)] transition-colors duration-150 enabled:hover:bg-[var(--surface-3)] disabled:cursor-default">
-                  <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">{here ? <FolderOpen size={ICON} strokeWidth={STROKE} /> : <Folder size={ICON} strokeWidth={STROKE} />}</span>
-                  <span className="flex-1 truncate">{p.title}</span>
-                  {p.needsYou > 0 && <span className="shrink-0 text-[10px] font-medium leading-none px-1.5 py-[3px] rounded-full" style={{ color: "var(--color-warn)", background: "color-mix(in srgb, var(--color-warn) 16%, transparent)" }}>{p.needsYou} need you</span>}
-                  {p.working > 0 && <span aria-label={`${p.working} working`} className="shrink-0 size-1.5 rounded-full" style={{ background: STATUS_COLOR.working }} />}
-                  <span className={`shrink-0 ${COUNT}`}>{here ? "here" : p.tiles}</span>
-                </button>
-              );
-            })}
-          </section>
+        {looseTiles.length > 0 && (
+          <div className="mt-1.5">
+            <div className="group/loose flex items-center gap-2 h-8 pr-2 mx-2 pl-[26px]" data-layers-loose>
+              <span className="flex-1 flex items-center gap-2.5 min-w-0 text-[14px] font-medium text-[var(--color-fg)]">
+                <FolderOpen size={ICON} strokeWidth={STROKE} className="shrink-0 text-[var(--color-fg2)]" />
+                <span className="truncate">Canvas</span>
+                <span className={`ml-auto ${COUNT} group-hover/loose:hidden group-focus-within/loose:hidden`}>{looseTiles.length}</span>
+                {tileActions && (
+                  <button type="button" data-layers-close-loose onClick={() => setClosingLoose(true)}
+                    className="ml-auto hidden group-hover/loose:block group-focus-within/loose:block focus-visible:block rounded-md px-1.5 py-0.5 text-[12px] font-medium text-[var(--color-fg2)] hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]">
+                    Close all
+                  </button>
+                )}
+              </span>
+            </div>
+            {looseTiles.map((t) => renderTile(t, 1))}
+          </div>
         )}
         {recentRows.shown.length > 0 && onResume && (
           <section aria-label="Recents" data-layers-recents className="mt-3">
-            <div className={`flex h-7 items-center pl-4 pr-3 ${LABEL}`}>Recents</div>
+            <div className={`flex h-7 items-center pl-5 pr-3 ${LABEL}`}>Recents</div>
             {recentRows.shown.map((r) => (
               <button key={`${r.agent}:${r.id}`} type="button" data-layers-recent={r.id}
                 onClick={() => onResume(r.agent, frames.find((f) => f.path === r.folder)?.id ?? null, r.id)}
@@ -650,23 +648,25 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             )}
           </section>
         )}
-        {looseTiles.length > 0 && (
-          <div className="mt-1.5">
-            <div className="group/loose flex items-center gap-2 h-8 pr-2 mx-2 pl-[26px]" data-layers-loose>
-              <span className="flex-1 flex items-center gap-2.5 min-w-0 text-[14px] font-medium text-[var(--color-fg)]">
-                <FolderOpen size={ICON} strokeWidth={STROKE} className="shrink-0 text-[var(--color-fg2)]" />
-                <span className="truncate">Canvas</span>
-                <span className={`ml-auto ${COUNT} group-hover/loose:hidden group-focus-within/loose:hidden`}>{looseTiles.length}</span>
-                {tileActions && (
-                  <button type="button" data-layers-close-loose onClick={() => setClosingLoose(true)}
-                    className="ml-auto hidden group-hover/loose:block group-focus-within/loose:block focus-visible:block rounded-md px-1.5 py-0.5 text-[12px] font-medium text-[var(--color-fg2)] hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]">
-                    Close all
-                  </button>
-                )}
-              </span>
-            </div>
-            {looseTiles.map((t) => renderTile(t, 1))}
-          </div>
+        {projects.length > 1 && (
+          <section aria-label="Projects" data-layers-projects className="mt-3">
+            <div className={`flex h-7 items-center pl-5 pr-3 ${LABEL}`}>Projects</div>
+            {projects.map((p) => {
+              const here = p.repo === layoutKey;
+              return (
+                <button key={p.repo} type="button" disabled={here} data-layers-project={p.title}
+                  onClick={() => window.dispatchEvent(new CustomEvent("hivemind:open-workspace", { detail: { repo: p.repo } }))}
+                  title={here ? `${p.title} is this window` : `Open ${p.title} in this window`}
+                  className="flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-2 rounded-lg text-left text-[14px] text-[var(--color-fg)] transition-colors duration-150 enabled:hover:bg-[var(--surface-3)] disabled:cursor-default">
+                  <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">{here ? <FolderOpen size={ICON} strokeWidth={STROKE} /> : <Folder size={ICON} strokeWidth={STROKE} />}</span>
+                  <span className="flex-1 truncate">{p.title}</span>
+                  {p.needsYou > 0 && <span className="shrink-0 text-[10px] font-medium leading-none px-1.5 py-[3px] rounded-full" style={{ color: "var(--color-warn)", background: "color-mix(in srgb, var(--color-warn) 16%, transparent)" }}>{p.needsYou} need you</span>}
+                  {p.working > 0 && <span aria-label={`${p.working} working`} className="shrink-0 size-1.5 rounded-full" style={{ background: STATUS_COLOR.working }} />}
+                  <span className={`shrink-0 ${COUNT}`}>{here ? "here" : p.tiles}</span>
+                </button>
+              );
+            })}
+          </section>
         )}
       </div>
       {/* Machines nothing runs on, at the foot of the rail; the View menu can hide them. */}
@@ -700,13 +700,19 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
 });
 
 /** One thing to start, named: the same row as a tile's, so the panel reads as one list. */
-function ActionRow({ icon, label, hint, data, onClick }: { icon: ReactNode; label: string; hint?: string; data: string; onClick: () => void }) {
+/** A row that starts something. The first one leads; the rest are quieter until pointed at. A key
+ *  shows as a keycap on the row under the pointer or focus. */
+function ActionRow({ icon, label, hint, data, primary, onClick }: { icon: ReactNode; label: string; hint?: string; data: string; primary?: boolean; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} data-layers-action={data}
-      className="flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-2 rounded-lg text-left text-[14px] text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)] outline-none focus-visible:bg-[var(--surface-3)]">
-      <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">{icon}</span>
+      className={`group/act flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-1.5 rounded-lg text-left text-[13.5px] transition-colors duration-150 hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)] outline-none focus-visible:bg-[var(--surface-3)] focus-visible:text-[var(--color-fg)] ${primary ? "font-medium text-[var(--color-fg)]" : "text-[var(--color-fg2)]"}`}>
+      <span aria-hidden className={`size-4 shrink-0 grid place-items-center ${primary ? "text-[var(--color-fg)]" : ""}`}>{icon}</span>
       <span className="flex-1 truncate">{label}</span>
-      {hint && <kbd aria-hidden className={COUNT}>{hint}</kbd>}
+      {hint && (
+        <kbd aria-hidden className="grid min-w-[18px] h-[18px] place-items-center rounded-[5px] px-1 font-sans text-[11px] leading-none tabular-nums text-[var(--color-fg2)] shadow-[inset_0_0_0_1px_var(--color-line2)] opacity-0 transition-opacity duration-150 group-hover/act:opacity-100 group-focus-visible/act:opacity-100">
+          {hint}
+        </kbd>
+      )}
     </button>
   );
 }
@@ -889,7 +895,7 @@ function IdleMachines({ groups }: { groups: MachineGroup[] }) {
       <button
         onClick={toggle}
         aria-expanded={open}
-        className={`sticky top-0 z-10 bg-[var(--color-bg2)] w-full flex items-center gap-1 h-7 pl-4 pr-3 ${LABEL} hover:text-[var(--color-fg)] cursor-pointer`}
+        className={`sticky top-0 z-10 bg-[var(--color-bg2)] w-full flex items-center gap-1 h-7 pl-5 pr-3 ${LABEL} hover:text-[var(--color-fg)] cursor-pointer`}
       >
         <span>Machines</span>
         <span className={COUNT}>{groups.length}</span>
@@ -917,7 +923,7 @@ function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYo
   return (
     <div
       className={`group/mach relative flex items-center gap-1.5 h-7 pr-2 ${used
-        ? `pl-4 mt-2 ${LABEL}`
+        ? `pl-5 mt-2 ${LABEL}`
         : "pl-7 mx-2 rounded-lg text-[13px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)]"}`}
       data-machine-header={group.key === "local" ? "local" : group.label}
       title={m ? `${m.target}${s.detail ? ` — ${s.detail}` : ""}` : undefined}

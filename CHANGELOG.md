@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Changed: the Layers panel lists Projects last, after the tiles, the canvas's loose tiles and Recents. Its title, headings and rows start on one edge; New agent leads the actions and the rest are quieter; a shortcut shows as a keycap on the row you point at; icons take a 1.5 stroke beside regular text. "No tiles open" no longer shows above frames that are listed.
 - Fixed: the Layers panel's **Recents** was empty in a workspace whose frames have no folder of their own (a plain group): it now also reads the workspace's folder, where those agents run. It also read the installed agents before the app had loaded them, and now reads again once they have.
 - Changed: the empty canvas leads with **New agent**, wearing the default agent's own logo, and offers **Open folder**; it no longer offers "Initialize workspace here…", and the app's own initialize dialog is gone. Issues are the Issues tool's: in a folder that keeps none yet, it offers **Set up issues** with the prefix their ids start with.
 - New (view protocol 1.12): `hm.issues.status()` says whether the workspace keeps issues yet and suggests a prefix; `hm.issues.setUp(prefix)` starts keeping them in the workspace's folder (permission `workspace:issues`).
