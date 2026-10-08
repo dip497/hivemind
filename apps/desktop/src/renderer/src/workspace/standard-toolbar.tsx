@@ -12,6 +12,7 @@ import { useEnabledWidgetPackages } from "../board-objects/widget-runtime";
 import { WidgetIcon } from "../plugins/WidgetIcon";
 import { Input } from "../components/ui/input";
 import { tileKinds, useTilesVersion } from "../tiles";
+import { AppControls } from "./app-controls";
 import { CATEGORY_LABELS, PLUGIN_CATEGORIES, type PluginCategory } from "@hivemind/view-sdk/category";
 
 export interface StandardToolbarProps {
@@ -68,6 +69,7 @@ export function StandardToolbar(props: StandardToolbarProps) {
       {props.upgrading ? <LoaderCircle className="animate-spin" /> : props.updateStaged ? <RotateCw /> : <Upload />}
       {props.upgrading ? "Updating…" : props.updateStaged ? "Restart to finish" : "Update available"}
     </Button>}
+    <AppControls />
   </div>;
 }
 

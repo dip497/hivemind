@@ -3,6 +3,8 @@ import { ThemePanel } from "./ThemePanel";
 import { RecentProjects } from "./RecentProjects";
 import { ROLE_LABELS } from "./multiplayer/people";
 import { WorkspaceActions } from "./multiplayer/workspace-actions";
+import { AppControls } from "./workspace/app-controls";
+import { useChromeState } from "./workspace/chrome-store";
 import { SharedBanner } from "./multiplayer/shared-banner";
 import { ShownWorkspaceProvider } from "./multiplayer/shown";
 import { setWorkspaceOccluded } from "./workspace-occlusion";
@@ -10,7 +12,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { UPDATE_START, UPDATE_STEPS, updateProgress, type UpdateProgress } from "../../shared/update-progress";
-import { Bell, ExternalLink, LoaderCircle, Settings, X, Palette, PanelsTopLeft, Bot, Keyboard, Info } from "lucide-react";
+import { Bell, ExternalLink, LoaderCircle, X, Palette, PanelsTopLeft, Bot, Keyboard, Info } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
@@ -56,7 +58,7 @@ function pushRecent(path: string): string[] {
   return next;
 }
 
-/** GitHub-release update check, owned at the App level so the top-right Settings
+/** GitHub-release update check, owned at the App level so the Settings
  *  dialog (full status) and the canvas "Update available" pill share ONE check.
  *  The fetch runs in main (renderer CSP blocks api.github.com); the last result
  *  is cached in localStorage so the affordance survives a reload, then re-checked
@@ -193,6 +195,13 @@ export function App() {
   const [recentOpen, setRecentOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
+  const { islandShown } = useChromeState();
+  // Share in the tool island asks for the dialog.
+  useEffect(() => {
+    const open = () => setShareOpen(true);
+    window.addEventListener("hivemind:open-share", open);
+    return () => window.removeEventListener("hivemind:open-share", open);
+  }, []);
   // Someone asks to join a workspace of the person's, hosted here or on another of their devices:
   // they let them in, or not. Answered at another window or device, the question goes.
   const joinAsked = useRef(new Map<string, string | number>());
@@ -306,7 +315,7 @@ export function App() {
   }, []);
 
   // A new app version landed → ping once (not every 4h re-check). Only when the
-  // master notification preference is on; the Settings gear dot always shows it
+  // master notification preference is on; the toolbar's update button always shows it
   // regardless. Uses the sonner action surface (an inline Update button) since
   // an update is an actionable confirmation, not an agent-status event.
   const announcedUpdateRef = useRef(false);
@@ -387,20 +396,8 @@ export function App() {
           />
           <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
             <SharedBanner onMoved={openMoved} />
-            <WorkspaceActions onShare={() => setShareOpen(true)} onPeople={() => setPeopleOpen(true)} />
-            <Button
-              variant="secondary"
-              size="icon"
-              onClick={() => setSettingsOpen(true)}
-              className="pointer-events-auto relative"
-              title={update.status?.updateAvailable ? "Settings — update available" : "Settings"}
-              aria-label="settings"
-            >
-              <Settings />
-              {update.status?.updateAvailable && (
-                <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-[var(--color-warn)] ring-2 ring-[var(--color-bg2)]" aria-hidden />
-              )}
-            </Button>
+            <WorkspaceActions onPeople={() => setPeopleOpen(true)} />
+            {!islandShown && <AppControls corner />}
           </div>
         </div>
 

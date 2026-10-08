@@ -1,8 +1,12 @@
 /** Host toolbar visibility shared by all workspace views. */
 import { useSyncExternalStore } from "react";
 
-interface ChromeState { suppressed: boolean }
-let state: ChromeState = { suppressed: false };
+interface ChromeState {
+  suppressed: boolean;
+  /** The tool island is drawn; when it is not, Share and Settings sit in the window's corner. */
+  islandShown: boolean;
+}
+let state: ChromeState = { suppressed: false, islandShown: true };
 const listeners = new Set<() => void>();
 function set(patch: Partial<ChromeState>) {
   state = { ...state, ...patch };
@@ -18,3 +22,5 @@ export function openAppearanceSettings(): void {
 /** A view (the canvas's zen mode) hides ALL host chrome while it is active;
  *  the view must call this with `false` on unmount. */
 export function setChromeSuppressed(on: boolean): void { if (on !== state.suppressed) set({ suppressed: on }); }
+/** Host chrome says whether its island is drawn. */
+export function setIslandShown(on: boolean): void { if (on !== state.islandShown) set({ islandShown: on }); }

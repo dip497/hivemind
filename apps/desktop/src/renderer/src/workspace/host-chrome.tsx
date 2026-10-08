@@ -1,7 +1,7 @@
 /**
  * host-chrome — what the workspace runtime draws OVER the active view, for
- * every view: the tool island (spawn shell/agent/explorer/diff/issues, frame,
- * browser, appearance, update pill). The hotkeys
+ * every view: the tool island (agent, frame, browser, Add, appearance, update
+ * pill, Share, Settings). The hotkeys
  * these buttons mirror are workspace-level already; the buttons used to be
  * rendered by the canvas only, which left the Windows, World and community
  * views with no visible way to spawn anything.
@@ -9,17 +9,17 @@
  * Placement comes from the view's chrome preference (`resolveChrome`): the
  * canvas keeps its top-centre island, everything else gets a compact bottom
  * one; "hidden" leaves a small handle that expands the island, while "off"
- * unmounts both. App-level Settings is independent of this component.
+ * unmounts both; Share and Settings then sit in the window corner (App).
  * The canvas's zen mode suppresses the chrome entirely
  * (its own eye button restores it), through chrome-store.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Wrench } from "lucide-react";
 import { resolveToolbar, type ToolbarPreferences } from "@hivemind/core/toolbar";
 import { Button } from "../components/ui/button";
 import { StandardToolbar } from "./standard-toolbar";
 import { useToolEnabled } from "../tool-availability";
-import { openAppearanceSettings, useChromeState } from "./chrome-store";
+import { openAppearanceSettings, setIslandShown, useChromeState } from "./chrome-store";
 import type { ViewChrome } from "./workspace-view";
 import type { BoardChoice } from "../board-objects/board-model";
 
@@ -54,6 +54,8 @@ export function HostChrome({ chrome, toolbar, ...island }: HostChromeProps) {
   const placement = chrome.island === "top" ? "top-3" : "bottom-3";
   const hasActions = actions.length > 0;
   const showIsland = hasActions && !suppressed && chrome.island !== "off" && (chrome.island !== "hidden" || expanded);
+  useEffect(() => { setIslandShown(showIsland); }, [showIsland]);
+  useEffect(() => () => setIslandShown(false), []);
   return (
     <>
       {showIsland && (

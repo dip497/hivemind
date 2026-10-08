@@ -59,13 +59,17 @@ test.afterAll(async () => {
 
 test("the island is host chrome: top on the canvas, a compact bottom island in windows / a community view, and it spawns from each", async () => {
   await expect(page.locator('[data-host-island="top"] [data-tool-island]')).toBeVisible();
+  // Share and Settings end the island, as in a call's control bar.
+  await expect(page.locator("[data-tool-island] [data-share]")).toBeVisible();
+  await expect(page.locator('[data-tool-island] [aria-label="settings"]')).toBeVisible();
   let n = await terminalNodes();
   for (const [view, ready] of [["windows", '[data-community-view="windows"][data-community-ready="1"]'], ["queue", queueReady]] as const) {
     await toView(view);
     await page.waitForSelector(ready, { timeout: 15_000 });
     const island = page.locator('[data-host-island="bottom"] [data-tool-island]');
     await expect(island, `${view}: island visible`).toBeVisible();
-    await island.getByTitle(/^Terminal/).click();
+    await island.locator('[data-toolbar-action="board"]').click();
+    await page.locator('[data-board-choice="tile:shell"]').click();
     await page.waitForTimeout(400);
     expect(await activeView(), `${view}: spawning does not switch views`).toBe(view);
     const after = await terminalNodes();
@@ -162,7 +166,9 @@ test("toolbar Off is per-view, persists through restart, and Settings restores i
   await page.getByLabel("Display", { exact: true }).selectOption("off");
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
+  // No island: Settings and Share wait in the window's corner.
   await expect(settings()).toBeFocused();
+  await expect(page.locator("[data-share]")).toBeVisible();
   expect(await page.locator(".xterm").first().evaluate((node, old) => node === old, original)).toBe(true);
   await original?.dispose();
   await toView("windows");
