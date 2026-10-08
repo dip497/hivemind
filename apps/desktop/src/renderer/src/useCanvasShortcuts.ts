@@ -17,7 +17,7 @@ type FocusModeReq = { id: string | null; n: number } | null;
 
 export interface CanvasShortcutsCtx {
   repoPath: string | null;
-  spawnDefaultAgent: (mode?: string, work?: string) => void;
+  spawnDefaultAgent: (mode?: string, work?: string, agentId?: string) => void;
   /** Spawn the tool island's currently-selected agent (claude/codex/opencode). */
   spawnSelectedAgent: () => void;
   spawnVis: (which: string) => void;
@@ -50,8 +50,8 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
   useEffect(() => {
     const onSpawn = (e: Event) => {
       const d = (e as CustomEvent).detail;
-      const obj = d && typeof d === "object" ? (d as { mode?: string; work?: string }) : undefined;
-      spawnDefaultAgent(obj?.mode, obj?.work);
+      const obj = d && typeof d === "object" ? (d as { mode?: string; work?: string; agent?: string }) : undefined;
+      spawnDefaultAgent(obj?.mode, obj?.work, obj?.agent);
     };
     // "tree" is the Code tile on its files; any other is a kind a plugin draws.
     const onToggle = (e: Event) => {

@@ -16,6 +16,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode
 import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, Shapes, Blocks, History } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon, agentById, useAgents } from "./agents";
+import { notReady, useAgentPresence } from "./agent-plugins";
+import { preferredAgent } from "@hivemind/agents";
 import { FrameRailMenu, type FrameActions } from "./FrameRailMenu";
 import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem,
@@ -600,7 +602,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         </div>
       )}
       <nav aria-label="Start" className="shrink-0 pb-2">
-        <ActionRow primary icon={<SquarePen size={ICON} strokeWidth={STROKE} />} label="New agent" hint="2" data="agent" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:spawn-agent"))} />
+        <NewAgentRow />
         <ActionRow icon={<FolderPlus size={ICON} strokeWidth={STROKE} />} label="New project" data="project" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:add-project"))} />
         <ActionRow icon={<Server size={ICON} strokeWidth={STROKE} />} label="New machine" data="machine" onClick={() => openMachines({ kind: "add" })} />
         <ActionRow icon={<Shapes size={ICON} strokeWidth={STROKE} />} label="Add a tool or widget" data="add" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:open-add"))} />
@@ -737,6 +739,39 @@ function ActionRow({ icon, label, hint, data, primary, onClick }: { icon: ReactN
         </kbd>
       )}
     </button>
+  );
+}
+
+/** New agent: which one, from the agents installed here; the default (key 2) first. With none
+ *  installed it opens Settings ▸ Agents, where one is got. */
+function NewAgentRow() {
+  const [open, setOpen] = useState(false);
+  const presence = useAgentPresence();
+  const chosen = useSettings().agents.defaultAgent;
+  const ready = useAgents().filter((a) => a.enabled && !notReady(presence, a.id));
+  const first = preferredAgent(chosen, (d) => !notReady(presence, d.id))?.id;
+  const ordered = [...ready].sort((a, b) => Number(b.id === first) - Number(a.id === first));
+  const getOne = () => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "agents" } }));
+  // Where the 2 key puts one: the selected frame, else the one asked for.
+  const start = (agent: string) => window.dispatchEvent(new CustomEvent("hivemind:spawn-agent", { detail: { agent } }));
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <div className="relative">
+        <ActionRow primary icon={<SquarePen size={ICON} strokeWidth={STROKE} />} label="New agent" hint="2" data="agent"
+          onClick={() => (ordered.length ? setOpen(true) : getOne())} />
+        <DropdownMenuTrigger asChild><span aria-hidden className="absolute bottom-0 left-4 size-0" /></DropdownMenuTrigger>
+      </div>
+      <DropdownMenuContent align="start" sideOffset={2} className="w-[220px]" data-layers-new-agent>
+        {ordered.map((a) => (
+          <DropdownMenuItem key={a.id} onSelect={() => start(a.id)} data-layers-new-agent-choice={a.id}>
+            <AgentIcon id={a.id} size={ICON} />{a.label}
+            {a.id === first && <DropdownMenuShortcut>2</DropdownMenuShortcut>}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={getOne}><Blocks />Get more agents…</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

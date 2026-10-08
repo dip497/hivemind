@@ -335,10 +335,11 @@ export function useSpawn(ctx: SpawnCtx) {
   }, [spawnInto]);
 
   // Back-compat thin wrappers for the many existing call sites.
-  const spawnDefaultAgent = useCallback(
-    (mode?: string, work?: string) => spawnInto(AGENT_TILE_KIND, { mode, work }),
-    [spawnInto],
-  );
+  // The default agent, or the one named (`agentId`), where a new agent goes.
+  const spawnDefaultAgent = useCallback((mode?: string, work?: string, agentId?: string) => {
+    const a = agentId ? agentById(agentId) : undefined;
+    spawnInto(AGENT_TILE_KIND, { mode, work, ...(a ? { agent: { id: a.id, cmd: a.cmd, args: a.defaultArgs, label: a.label } } : {}) });
+  }, [spawnInto]);
   const spawnVis = useCallback(
     (kind: string) => spawnInto(kind === "tree" ? "editor" : kind),
     [spawnInto],

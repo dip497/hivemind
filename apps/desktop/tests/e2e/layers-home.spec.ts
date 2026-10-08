@@ -79,6 +79,18 @@ test("an agent's started agents are listed under it, and fold away", async () =>
   await expect(started.locator(`[data-layer-tile="${child}"]`)).toBeVisible();
 });
 
+test("New agent asks which agent, from the ones installed here, the default marked by its key", async () => {
+  const claudes = panel().locator('[data-layer-tile^="tile-claude"]');
+  const before = await claudes.count();
+  await panel().locator('[data-layers-action="agent"]').click();
+  const menu = page.locator("[data-layers-new-agent]");
+  // Claude is the only agent this test installs, so it is the default: first, with its key.
+  await expect(menu.locator("[data-layers-new-agent-choice]").first()).toHaveAttribute("data-layers-new-agent-choice", "claude");
+  await expect(menu.locator('[data-layers-new-agent-choice="claude"]')).toContainText("2");
+  await menu.locator('[data-layers-new-agent-choice="claude"]').click();
+  await expect(claudes).toHaveCount(before + 1);
+});
+
 test("with no frame bound to its folder, Recents still lists the workspace's own sessions", async () => {
   // Delete the workspace's frame, keeping its tiles: nothing names the folder but the workspace.
   const frame = panel().locator("[data-layers-frame]").first();
