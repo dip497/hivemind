@@ -103,7 +103,7 @@ test.afterAll(async () => {
 
 test("add a machine: probe, install hive over ssh, save", async () => {
   test.setTimeout(180_000);
-  await page.getByRole("button", { name: "add machine" }).click();
+  await page.locator('[data-layers-action="machine"]').click();
   await page.getByLabel("Host").fill(`ssh://${os.userInfo().username}@127.0.0.1:${port}`);
   await page.getByLabel("Name", { exact: true }).fill("build-box");
   await page.getByRole("button", { name: "Add", exact: true }).click();

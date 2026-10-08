@@ -612,7 +612,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
                 {/* A summary of what is hidden: when folded, or when a child needs a person. */}
                 {agg && agg !== "idle" && agg !== "exited" && (isCollapsed || NEEDS_YOU(agg)) && (
                   NEEDS_YOU(agg) ? (
-                    <span className="shrink-0 text-[9px] font-medium leading-none px-1.5 py-[3px] rounded-full animate-pulse"
+                    <span className="shrink-0 text-[10px] font-medium leading-none px-1.5 py-[3px] rounded-full animate-pulse"
                       style={{ color: STATUS_COLOR[agg], background: `color-mix(in srgb, ${STATUS_COLOR[agg]} 16%, transparent)` }} title={STATUS_LABEL[agg]}>
                       {STATUS_LABEL[agg]}
                     </span>
@@ -681,7 +681,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         <Button variant="ghost" size="icon-xs" className="relative" data-layers-bell onClick={nextNeedsYou}
           aria-label={needsYou ? `${needsYou} need you: go to the next` : "Nothing needs you"} title={needsYou ? `${needsYou} need you: go to the next` : "Nothing needs you"}>
           <Bell size={ICON} strokeWidth={STROKE} className="size-4" />
-          {needsYou > 0 && <span aria-hidden className="absolute -right-1 -top-1 grid min-w-3.5 h-3.5 place-items-center rounded-full px-0.5 text-[9px] font-semibold tabular-nums leading-none text-[var(--color-bg)]" style={{ background: "var(--color-warn)" }}>{needsYou}</span>}
+          {needsYou > 0 && <span aria-hidden className="absolute -right-1 -top-1 grid min-w-3.5 h-3.5 place-items-center rounded-full px-0.5 text-[10px] font-semibold tabular-nums leading-none text-[var(--color-bg)]" style={{ background: "var(--color-warn)" }}>{needsYou}</span>}
         </Button>
       </header>
       {searching && (
@@ -834,7 +834,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
 function ActionRow({ icon, label, hint, data, primary, onClick }: { icon: ReactNode; label: string; hint?: string; data: string; primary?: boolean; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} data-layers-action={data}
-      className={`group/act flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-1.5 rounded-lg text-left text-[13.5px] transition-colors duration-150 hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)] outline-none focus-visible:bg-[var(--surface-3)] focus-visible:text-[var(--color-fg)] ${primary ? "font-medium text-[var(--color-fg)]" : "text-[var(--color-fg2)]"}`}>
+      className={`group/act flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-1.5 rounded-lg text-left text-[14px] transition-colors duration-150 hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)] outline-none focus-visible:bg-[var(--surface-3)] focus-visible:text-[var(--color-fg)] ${primary ? "font-medium text-[var(--color-fg)]" : "text-[var(--color-fg2)]"}`}>
       <span aria-hidden className={`size-4 shrink-0 grid place-items-center ${primary ? "text-[var(--color-fg)]" : ""}`}>{icon}</span>
       <span className="flex-1 truncate">{label}</span>
       {hint && (
@@ -908,7 +908,7 @@ function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger data-layers-view={key}>
         <span className="flex-1">{label}</span>
-        <span className="text-[11.5px] text-[var(--color-fg3)]">{choiceLabel(key, prefs[key])}</span>
+        <span className="text-[11px] text-[var(--color-fg2)]">{choiceLabel(key, prefs[key])}</span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="w-[170px]">
         <DropdownMenuRadioGroup value={prefs[key]} onValueChange={(v) => setPref(key, v)}>
@@ -939,7 +939,7 @@ function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (
         <DropdownMenuSub>
           <DropdownMenuSubTrigger data-layers-view="machines">
             <span className="flex-1">Machines</span>
-            <span className="text-[11.5px] text-[var(--color-fg3)]">{chosen.length === 0 ? "All" : `${chosen.length} selected`}</span>
+            <span className="text-[11px] text-[var(--color-fg2)]">{chosen.length === 0 ? "All" : `${chosen.length} selected`}</span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-[200px]">
             <DropdownMenuCheckboxItem checked={chosen.length === 0} onCheckedChange={() => setPref("machines", [])} onSelect={(e) => e.preventDefault()} data-layers-machine="all">All machines</DropdownMenuCheckboxItem>
@@ -1015,7 +1015,6 @@ function TileRailMenu({ tile, x, y, pinned, onPin, onUnread, onSnooze, onCloseTi
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" side="bottom" sideOffset={2} className="w-[190px]" data-layers-tile-actions
         onKeyDown={(e) => { const fn = keys[e.key.toLowerCase()]; if (fn && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); run(fn); } }}>
-        <DropdownMenuLabel className="px-2 pt-1 pb-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold truncate">{tile.name}</DropdownMenuLabel>
         <DropdownMenuItem onSelect={() => run(onPin)} data-layers-pin>
           <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]">{pinned ? <PinOff size={13} /> : <Pin size={13} />}</span>
           <span className="truncate">{pinned ? "Unpin" : "Pin"}</span>
@@ -1117,14 +1116,14 @@ function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYo
     <div
       className={`group/mach relative flex items-center gap-1.5 h-7 pr-2 ${used
         ? `pl-5 mt-2 ${LABEL}`
-        : "pl-7 mx-2 rounded-lg text-[13px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)]"}`}
+        : "pl-7 mx-2 rounded-lg text-[12px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)]"}`}
       data-machine-header={group.key === "local" ? "local" : group.label}
       title={m ? `${m.target}${s.detail ? ` — ${s.detail}` : ""}` : undefined}
     >
       {group.hostId && <MachineDot status={s} enabled={on} size={6} />}
       <span className={`truncate min-w-0 ${on ? "" : "opacity-60"} ${used ? "" : "text-[var(--color-fg2)]"}`}>{group.label}</span>
       {group.hostId && (
-        <span className="shrink-0 font-mono normal-case tracking-normal font-normal text-[10.5px] tabular-nums" data-machine-state>
+        <span className="shrink-0 font-mono normal-case tracking-normal font-normal text-[11px] tabular-nums" data-machine-state>
           {statusWords(s, on)}
         </span>
       )}
