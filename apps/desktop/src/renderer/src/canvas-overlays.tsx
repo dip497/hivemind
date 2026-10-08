@@ -4,7 +4,8 @@
  * queue + the spawn actions). Extracted to keep Canvas.tsx focused.
  */
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { CircleAlert, CircleCheck, TriangleAlert, Sparkles, X } from "lucide-react";
+import { CircleAlert, CircleCheck, TriangleAlert, SquarePen, X } from "lucide-react";
+import { AgentIcon } from "./agents";
 import { Button } from "./components/ui/button";
 import { useTileFocus } from "./canvas-camera";
 import { openMachines } from "./machines/store";
@@ -213,76 +214,58 @@ export function CanvasEmptyState({
   repoPath,
   onShowTree,
   onShowShell,
+  agentId,
   agentLabel,
   onSpawnAgent,
-  onInitWorkspace,
 }: {
   repoPath: string | null;
   onShowTree: () => void;
   onShowShell: () => void;
-  /** The default agent's name; null when no agent CLI is installed here. */
+  /** The default agent; null when no agent CLI is installed here. */
+  agentId: string | null;
   agentLabel: string | null;
   /** Start the default agent, or open Settings to get one. */
   onSpawnAgent: () => void;
-  /** When set (folder open, no .hivemind/), surface an init action. */
-  onInitWorkspace?: () => void;
 }) {
-  // Hierarchy, not a 4-up card grid: one confident primary action (spawn an
-  // agent) sits above a quiet row of secondary surface links. Asymmetry +
-  // clear weight reads as designed, not generated.
+  const folder = repoPath?.split(/[\\/]/).filter(Boolean).pop() ?? null;
+  // One action leads, as in the Layers panel (New agent, 2); the rest are a quiet row.
   const secondary = [
+    { label: "Open folder", hint: "", action: () => window.dispatchEvent(new CustomEvent("hivemind:open-folder")), disabled: false },
     { label: "Open terminal", hint: "1", action: onShowShell, disabled: false },
     { label: "Open code", hint: "3", action: onShowTree, disabled: !repoPath },
     { label: "Machines", hint: "", action: () => openMachines({ kind: "manage" }), disabled: false },
   ];
   return (
     <div className="pointer-events-none absolute inset-0 grid place-items-center">
-      <div className="pointer-events-auto w-full max-w-[440px] px-8">
-        <div className="u-eyebrow mb-2">Empty canvas</div>
+      <div className="pointer-events-auto w-full max-w-[460px] px-8" data-canvas-empty>
         <h2 className="text-[20px] font-semibold text-[var(--color-fg)] tracking-tight leading-tight">
           Start with an agent.
         </h2>
-        <p className="text-[12.5px] text-[var(--color-fg2)] mt-1.5 leading-relaxed">
-          {agentLabel
-            ? <>Nothing renders until you ask for it. Start {agentLabel}, or open a tool below.</>
-            : <>No agent CLI is installed on this machine yet. Get one, or open a tool below.</>}
+        <p className="text-[13px] text-[var(--color-fg2)] mt-1.5 leading-relaxed">
+          {!agentLabel
+            ? <>No agent CLI is installed on this machine yet. Get one, or open a tool below.</>
+            : folder
+              ? <>Each agent works in <span className="font-medium text-[var(--color-fg)]">{folder}</span>, in its own tile.</>
+              : <>Each agent works in its own tile. Open a folder to give it one.</>}
         </p>
 
-        {/* Primary: full-width confident action */}
         <button
+          type="button"
           onClick={onSpawnAgent}
-          className="mt-5 w-full flex items-center gap-3 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg3)] hover:border-[var(--color-brand)] hover:bg-[var(--color-bg4)] transition-colors px-3.5 py-3 text-left group"
+          data-canvas-empty-agent
+          className="mt-5 w-full flex items-center gap-3 rounded-xl border border-[var(--color-line2)] bg-[var(--color-bg3)] hover:border-[var(--color-brand)] hover:bg-[var(--color-bg4)] transition-colors duration-150 px-3.5 py-3 text-left group"
         >
-          <span aria-hidden className="grid place-items-center size-8 shrink-0 rounded-md bg-[var(--color-bg4)] text-[var(--color-brand)] group-hover:bg-[var(--color-brand)] group-hover:text-white transition-colors">
-            <Sparkles size={16} />
+          <span aria-hidden className="grid place-items-center size-9 shrink-0 rounded-lg bg-[var(--color-bg4)] text-[var(--color-fg)]">
+            {agentId ? <AgentIcon id={agentId} size={20} /> : <SquarePen size={18} strokeWidth={1.75} />}
           </span>
           <span className="flex-1 min-w-0">
-            <span className="block text-[13px] font-medium text-[var(--color-fg)]">{agentLabel ? `Start ${agentLabel}` : "Get an agent"}</span>
-            <span className="block text-[11.5px] text-[var(--color-fg3)] leading-snug">{agentLabel ? "A dedicated session in its own tile" : "See which agents Hivemind works with, and how to install one"}</span>
+            <span className="block text-[14px] font-medium text-[var(--color-fg)]">{agentLabel ? "New agent" : "Get an agent"}</span>
+            <span className="block text-[12px] text-[var(--color-fg2)] leading-snug">{agentLabel ? `${agentLabel}, in its own tile` : "See which agents Hivemind works with, and how to install one"}</span>
           </span>
-          {agentLabel && <kbd className="font-mono text-[10px] text-[var(--color-fg3)] group-hover:text-[var(--color-fg2)] transition-colors shrink-0">2</kbd>}
+          {agentLabel && <kbd className="font-mono text-[11px] text-[var(--color-fg2)] shrink-0">2</kbd>}
         </button>
 
-        {/* When launched in a non-hivemind folder, surface init right next to
-            the primary action. This is the empty-state path the removed top-left
-            switcher used to own; the ⌘K palette has the same item too. */}
-        {onInitWorkspace && (
-          <button
-            onClick={onInitWorkspace}
-            className="mt-2 w-full flex items-center gap-3 rounded-lg border border-[var(--color-line2)] hover:border-[var(--color-brand)] hover:bg-[var(--color-bg3)] transition-colors px-3.5 py-2.5 text-left group"
-          >
-            <span aria-hidden className="grid place-items-center size-7 shrink-0 rounded-md bg-[var(--color-bg3)] text-[var(--color-warn)] group-hover:bg-[var(--color-brand)] group-hover:text-white transition-colors">
-              <Sparkles size={14} />
-            </span>
-            <span className="flex-1 min-w-0">
-              <span className="block text-[12.5px] font-medium text-[var(--color-fg)]">Initialize workspace here…</span>
-              <span className="block text-[11px] text-[var(--color-fg3)] leading-snug">Creates a .hivemind/ so issues + agents can run</span>
-            </span>
-          </button>
-        )}
-
-        {/* Secondary: quiet horizontal rule of links */}
-        <div className="mt-3 flex items-center gap-1">
+        <div className="mt-3 flex flex-wrap items-center gap-1">
           {secondary.map((s) => (
             <Button
               key={s.label}
@@ -290,10 +273,10 @@ export function CanvasEmptyState({
               size="xs"
               onClick={s.action}
               disabled={s.disabled}
-              title={s.disabled ? "needs an open repo" : s.label}
+              title={s.disabled ? "Open a folder first" : s.label}
             >
               {s.label}
-              <kbd className="font-mono text-[9.5px]">{s.hint}</kbd>
+              {s.hint && <kbd className="font-mono text-[10px]">{s.hint}</kbd>}
             </Button>
           ))}
         </div>

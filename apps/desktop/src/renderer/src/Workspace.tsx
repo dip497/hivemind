@@ -132,10 +132,6 @@ interface Props {
   repoPath: string | null;
   /** Workspace root (.hivemind parent) — issues are keyed by this, not repoPath. */
   root?: string | null;
-  /** When the launched folder has no .hivemind/, App provides this so the
-   *  CanvasEmptyState can offer "Initialize workspace here…" (the old top-left
-   *  switcher's job). Undefined when a workspace is already resolved. */
-  onInitWorkspace?: () => void;
   /** A newer GitHub release exists → show the "Update available" pill by Theme.
    *  Owned by App (so the Settings dialog + this pill share one check). */
   updateAvailable?: boolean;
@@ -148,7 +144,7 @@ interface Props {
   upgrading?: boolean;
 }
 
-export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateAvailable = false, updateStaged = false, onUpgrade, onRestart, upgrading = false }: Props) {
+export function Workspace({ cwd, repoPath, root = null, updateAvailable = false, updateStaged = false, onUpgrade, onRestart, upgrading = false }: Props) {
   // Persistence key for the workspace. Prefer repoPath (a git/.hivemind
   // project); fall back to the absolute cwd so a plain folder — including
   // `$HOME` — still persists + resumes. Keyed on the absolute path (never a
@@ -319,12 +315,11 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   // worktree / workspace folder / remote host. frames/frameOf each expose a
   // synchronously-readable ref (updated in the setter — see useStateWithRef).
   const [frames, setFrames, framesRef] = useStateWithRef<FrameState[]>(initial.frames);
-  // Re-resolve a frame's workspaceRoot when it's null but the folder now has a
-  // `.hivemind/` (opened before `hive init` → persisted null → Issues showed
-  // "No workspace" forever). Run once on load.
+  // Re-resolve a frame's workspaceRoot when it's null but the folder now has a `.hivemind/`: on
+  // load (opened before `hive init`, persisted null) and when a plugin sets issues up.
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
+    const resolve = async () => {
       const todo = framesRef.current.filter(
         (f) => f.workspacePath && !isRemote(f.workspacePath) && !f.workspaceRoot,
       );
@@ -335,8 +330,11 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
           setFrames((fs) => fs.map((x) => (x.id === f.id ? { ...x, workspaceRoot: proj.root } : x)));
         } catch { /* unreadable path — leave as-is */ }
       }
-    })();
-    return () => { cancelled = true; };
+    };
+    void resolve();
+    const onSetUp = () => { void resolve(); };
+    window.addEventListener("hivemind:issues-set-up", onSetUp);
+    return () => { cancelled = true; window.removeEventListener("hivemind:issues-set-up", onSetUp); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // Explicit tile→frame membership (see PersistedLayout.frameOf). Authoritative
@@ -1236,14 +1234,14 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     frameTiles, updateFrameTitle, updateFrameColor, deleteFrame: requestDeleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
     pins, togglePin, onPinChange, board, canvasPointRef,
-    agentSel, setAgentSel, spawnAgent, spawnBrowser, onInitWorkspace,
+    agentSel, setAgentSel, spawnAgent, spawnBrowser,
     updateAvailable, updateStaged, onUpgrade: () => onUpgrade?.(), onRestart: () => onRestart?.(), upgrading,
   }), [
     positions, sizes, onNodeResizeCommit, handleNodeDragStop, resetCanvas, focusReq, focusModeReq,
     selectedTileIdRef, selectedFrameIdRef, selectedTileIdsRef, markSeen, toasts, dismissToast, frameTiles,
     updateFrameTitle, updateFrameColor, requestDeleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
-    pins, togglePin, onPinChange, board, agentSel, spawnAgent, spawnBrowser, onInitWorkspace, updateAvailable, updateStaged, onUpgrade, onRestart, upgrading,
+    pins, togglePin, onPinChange, board, agentSel, spawnAgent, spawnBrowser, updateAvailable, updateStaged, onUpgrade, onRestart, upgrading,
   ]);
 
   const viewProps = useMemo(() => ({ model, commands }), [model, commands]);

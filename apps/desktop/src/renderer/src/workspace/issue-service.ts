@@ -12,36 +12,71 @@ const summary = ({ path: _, ...rest }: IssueSummary): ViewIssueSummary => rest;
 const full = ({ path: _, raw: __, ...rest }: Issue): ViewIssue => rest;
 const parent = (dir: string) => dir.slice(0, Math.max(dir.lastIndexOf("/"), dir.lastIndexOf("\\"))) || dir;
 
+/** The prefix a folder's issue ids would start with: its name, letters and digits, upper case. */
+export function suggestedPrefix(folder: string | null): string {
+  const p = (folder ?? "").split(/[\\/]/).filter(Boolean).pop()?.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 6) ?? "";
+  return p.length >= 2 ? p : "HIVE";
+}
+
 /** The issues service for the workspace whose `.hivemind` is `root()`, as asked each time. Only
- *  `read` reaches another of the host's workspaces (a link's other end), found by the id's prefix. */
-export function issueService(root: () => string | null): NonNullable<LinkServices["issues"]> {
+ *  `read` reaches another of the host's workspaces (a link's other end), found by the id's prefix.
+ *  A workspace that keeps no issues yet is set up by the plugin (`setUp`) in `folder()`; the app
+ *  hears of it by `hivemind:issues-set-up`. */
+export function issueService(root: () => string | null, folder: () => string | null): NonNullable<LinkServices["issues"]> {
   const listeners = new Set<() => void>();
   const changed = () => { for (const l of listeners) l(); };
+  // Set up here before the app re-reads the workspace: this service already knows where.
+  let made: string | null = null;
+  const current = () => root() ?? made;
   const need = (): string => {
-    const r = root();
-    if (!r) throw Object.assign(new Error("this workspace has no issues: `hive init` sets them up"), { code: "BAD_REQUEST" });
+    const r = current();
+    if (!r) throw Object.assign(new Error("this workspace keeps no issues yet: `setUp` starts them"), { code: "BAD_REQUEST" });
     return r;
   };
   const str = (v: unknown, what: string): string => {
     if (typeof v !== "string" || !v) throw Object.assign(new Error(`${what} is required`), { code: "BAD_REQUEST" });
     return v;
   };
+  const status = () => {
+    const dir = folder();
+    return { ready: !!current(), folder: dir ? dir.split(/[\\/]/).filter(Boolean).pop() ?? null : null, suggested: suggestedPrefix(dir) };
+  };
   return {
     subscribe(cb) {
-      const r = root();
-      if (!r) { cb([]); return () => {}; }
       let live = true;
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const load = () => { void window.hive.listIssues(r).then((list) => { if (live) cb(list.map(summary)); }, () => { if (live) cb([]); }); };
+      let watched: string | null = null;
+      let off = () => {};
       const soon = () => { if (timer) clearTimeout(timer); timer = setTimeout(load, 200); };
+      // Read again on each change, and watch whatever root is current: one set up later included.
+      const load = () => {
+        const r = current();
+        if (r !== watched) {
+          off();
+          watched = r;
+          off = r ? window.hive.onFsChanged(parent(r), ({ paths }) => { if (paths.some((p) => p.startsWith(r))) soon(); }) : () => {};
+        }
+        if (!r) { cb([]); return; }
+        void window.hive.listIssues(r).then((list) => { if (live) cb(list.map(summary)); }, () => { if (live) cb([]); });
+      };
       load();
       listeners.add(load);
-      const off = window.hive.onFsChanged(parent(r), ({ paths }) => { if (paths.some((p) => p.startsWith(r))) soon(); });
       return () => { live = false; if (timer) clearTimeout(timer); listeners.delete(load); off(); };
     },
     async call(call: IssueCall, args: unknown[]) {
-      const here = need();
       const [a, b, c] = args;
+      if (call === "status") return status();
+      if (call === "setUp") {
+        const dir = folder();
+        if (!dir) throw Object.assign(new Error("this workspace has no folder on this computer"), { code: "BAD_REQUEST" });
+        if (!current()) {
+          made = (await window.hive.initWorkspace(dir, str(a, "prefix").trim())).root;
+          window.dispatchEvent(new CustomEvent("hivemind:issues-set-up", { detail: { dir, root: made } }));
+          changed();
+        }
+        return status();
+      }
+      const here = need();
       if (call === "workspaces") {
         return (await window.hive.listWorkspaces()).map((w) => ({ prefix: w.prefix, title: w.title }));
       }

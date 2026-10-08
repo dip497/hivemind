@@ -244,9 +244,6 @@ export function App() {
       window.removeEventListener("hivemind:open-workspace", onWorkspace);
     };
   });
-  const [initing, setIniting] = useState(false);
-  const [initOpen, setInitOpen] = useState(false);
-  const openInit = useCallback(() => setInitOpen(true), []);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const update = useUpdateCheck();
@@ -266,35 +263,17 @@ export function App() {
     return () => { window.removeEventListener("hivemind:open-people", people); window.removeEventListener("hivemind:open-moved", moved); };
   });
 
-  // Initialize a .hivemind/ workspace in the current folder (no terminal).
-  // NOTE: Electron disables window.prompt() (returns null), so the prefix is
-  // collected via an inline input (InitWorkspacePrompt) instead.
-  async function doInitWorkspace(prefix: string) {
-    const dir = repoPath ?? cwd;
-    if (!dir || !prefix.trim()) return;
-    setIniting(true);
-    try {
-      await window.hive.initWorkspace(dir, prefix.trim());
-      // Point the project query at `dir` explicitly. Changing the query key
-      // (["project", dir]) forces useProject to refetch with the new hint;
-      // resolveProject now finds the freshly-written .hivemind/ → root set →
-      // New button + board appear.
-      window.localStorage.setItem("hivemind:last-project", dir);
-      setRecents(pushRecent(dir));
-      setRootHint(dir);
-      setInitOpen(false);
-      await qc.invalidateQueries({ queryKey: ["project"] });
-    } catch (e) {
-      window.alert(`Could not initialize workspace: ${(e as Error).message}`);
-    } finally {
-      setIniting(false);
-    }
-  }
-  const suggestedPrefix = (() => {
-    const base = (repoPath ?? cwd).split("/").filter(Boolean).slice(-1)[0] ?? "HIVE";
-    const p = base.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 6);
-    return p.length >= 2 ? p : "HIVE";
-  })();
+  // A plugin set issues up in a folder: the workspace there now has a `.hivemind`, so read it again,
+  // in place (a new project key would show the loading screen and remount the workspace).
+  useEffect(() => {
+    const onSetUp = (event: Event) => {
+      const { dir } = (event as CustomEvent<{ dir: string }>).detail;
+      if (dir === (repoPath ?? cwd)) { window.localStorage.setItem("hivemind:last-project", dir); setRecents(pushRecent(dir)); }
+      void qc.invalidateQueries({ queryKey: ["project"] });
+    };
+    window.addEventListener("hivemind:issues-set-up", onSetUp);
+    return () => window.removeEventListener("hivemind:issues-set-up", onSetUp);
+  });
 
   // Ctrl+B Layers — only when nothing is typed into: a terminal's textarea keeps it.
   useEffect(() => {
@@ -402,7 +381,6 @@ export function App() {
             cwd={cwd}
             repoPath={repoPath}
             root={root}
-            onInitWorkspace={!root ? openInit : undefined}
             updateAvailable={update.status?.updateAvailable === true}
             updateStaged={!!update.status?.staged}
             onUpgrade={update.upgrade}
@@ -430,14 +408,6 @@ export function App() {
             onStart={(prompt) => window.dispatchEvent(new CustomEvent("hivemind:deliver-to-agent", { detail: { text: prompt } }))} />}
           {repoPath && peopleOpen && <PeopleDialog repo={repoPath} open onClose={() => setPeopleOpen(false)} />}
         </Suspense>
-        <InitWorkspacePrompt
-          open={initOpen}
-          onOpenChange={setInitOpen}
-          dir={repoPath ?? cwd}
-          suggested={suggestedPrefix}
-          pending={initing}
-          onConfirm={doInitWorkspace}
-        />
         <ThemePanel />
         <SettingsModal
           open={settingsOpen}
@@ -757,75 +727,6 @@ function SettingsModal({
       </SettingsDialog.Content>
     </SettingsDialog.Portal>
   </SettingsDialog.Root>
-  );
-}
-
-/** Inline prefix prompt for "Initialize workspace" — window.prompt is
- *  disabled in Electron, so we collect the prefix in a small dialog. */
-function InitWorkspacePrompt({
-  open,
-  onOpenChange,
-  dir,
-  suggested,
-  pending,
-  onConfirm,
-}: {
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
-  dir: string;
-  suggested: string;
-  pending: boolean;
-  onConfirm: (prefix: string) => void;
-}) {
-  const [prefix, setPrefix] = useState(suggested);
-  useEffect(() => {
-    if (open) setPrefix(suggested);
-  }, [open, suggested]);
-  if (!open) return null;
-  const valid = /^[A-Z][A-Z0-9]{1,9}$/.test(prefix);
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50" onClick={() => onOpenChange(false)}>
-      <div
-        className="hm-surface-3 w-[420px] p-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-[15px] font-semibold text-[var(--color-fg)]">Initialize workspace</h2>
-        <p className="mt-1 text-[12px] text-[var(--color-fg2)] leading-relaxed">
-          Creates <code className="font-mono text-[11px] bg-[var(--color-bg3)] px-1 rounded">.hivemind/</code> in
-          <span className="font-mono text-[11px] text-[var(--color-fg3)]"> {dir.split("/").slice(-2).join("/")}</span>.
-          Issues will be numbered <span className="font-mono">{valid ? prefix : "PREFIX"}-1</span>, -2, …
-        </p>
-        <form
-          className="mt-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (valid && !pending) onConfirm(prefix);
-          }}
-        >
-          <div className="grid gap-1">
-            <Label htmlFor="init-prefix">Issue prefix</Label>
-            <Input font="mono"
-              id="init-prefix"
-              autoFocus
-              value={prefix}
-              onChange={(e) => setPrefix(e.target.value.toUpperCase())}
-              placeholder="e.g. PAY"
-            />
-            {!valid && prefix.length > 0 && (
-              <span className="text-[10.5px] text-[var(--color-err)]">UPPERCASE, 2–10 chars, starts with a letter</span>
-            )}
-          </div>
-          <div className="mt-4 flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={!valid || pending}>
-              {pending ? "Initializing…" : "Initialize"}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
   );
 }
 

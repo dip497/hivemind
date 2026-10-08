@@ -82,7 +82,6 @@ export interface CanvasRuntime {
   setAgentSel: (id: string) => void;
   spawnAgent: (a: { id: string; cmd: string; defaultArgs?: string[]; label: string }) => void;
   spawnBrowser: () => void;
-  onInitWorkspace?: () => void;
   updateAvailable: boolean;
   onUpgrade: () => void;
   upgrading: boolean;

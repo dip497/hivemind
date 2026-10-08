@@ -146,7 +146,14 @@ export interface ViewIssues {
   move(id: string, prefix: string, mode: "move" | "copy"): Promise<{ newId: string; mode: "move" | "copy"; from: string }>;
   /** The host's other workspaces an issue can go to: their prefix and title. */
   workspaces(): Promise<{ prefix: string; title: string }[]>;
+  /** 1.12: whether this workspace keeps issues yet, and the prefix `setUp` would suggest. */
+  status(): Promise<ViewIssuesStatus>;
+  /** 1.12: start keeping issues in this workspace's folder, their ids starting `prefix`. */
+  setUp(prefix: string): Promise<ViewIssuesStatus>;
 }
+
+/** Whether a workspace keeps issues: `ready` once set up; `folder` names where they would live. */
+export interface ViewIssuesStatus { ready: boolean; folder: string | null; suggested: string }
 
 export interface ConnectOptions {
   /** Where to listen for the handshake (default `window`). */

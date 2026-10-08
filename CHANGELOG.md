@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Changed: the empty canvas leads with **New agent**, wearing the default agent's own logo, and offers **Open folder**; it no longer offers "Initialize workspace here…", and the app's own initialize dialog is gone. Issues are the Issues tool's: in a folder that keeps none yet, it offers **Set up issues** with the prefix their ids start with.
+- New (view protocol 1.12): `hm.issues.status()` says whether the workspace keeps issues yet and suggests a prefix; `hm.issues.setUp(prefix)` starts keeping them in the workspace's folder (permission `workspace:issues`).
 - New: deleting a frame that holds tiles asks what becomes of them: **Keep them** (they stay running, loose on the canvas) or **Close** them with the frame. The rail menu and the frame's × both ask.
 - New: the Layers panel's **Canvas** section (tiles in no frame) has **Close all**, with a confirm.
 - Fixed: the Layers panel's Canvas section listed each tile of a deleted frame once per tile in it (a frame of 9 tiles showed each 9 times). Deleting a frame now also clears its tiles' membership.

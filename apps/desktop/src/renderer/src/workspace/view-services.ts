@@ -131,9 +131,11 @@ export function viewLinkServices(opts: {
   confirmPrompt: LinkServices["confirmPrompt"];
   /** The `.hivemind` root whose issues the plugin is given (protocol 1.9), or null for none. */
   issueRoot: () => string | null;
+  /** The local folder issues would be set up in, or null (none, or on another machine). */
+  issueFolder: () => string | null;
 }): LinkServices {
   return {
-    issues: issueService(opts.issueRoot),
+    issues: issueService(opts.issueRoot, opts.issueFolder),
     agentStatus: (tileId, cb) => subscribeHostedStatus(tileId, (s) => cb(viewAgentStatus(s))),
     widgets: {
       subscribe: (cb) => {

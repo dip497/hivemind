@@ -698,13 +698,13 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
             repoPath={repoPath}
             onShowTree={() => spawnVis("tree")}
             onShowShell={() => spawnVis("shell")}
+            agentId={anyAgentReady ? agentById(rt.agentSel)?.id ?? null : null}
             agentLabel={anyAgentReady ? agentById(rt.agentSel)?.label ?? null : null}
             onSpawnAgent={() => {
               const a = anyAgentReady ? agentById(rt.agentSel) : undefined;
               if (a) rt.spawnAgent(a);
               else window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "agents" } }));
             }}
-            onInitWorkspace={rt.onInitWorkspace}
           />
         )}
         </div>

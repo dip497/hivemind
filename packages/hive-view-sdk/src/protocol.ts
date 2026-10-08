@@ -261,7 +261,7 @@ export interface ViewIssue extends ViewIssueSummary {
   };
 }
 /** The issue calls a view can make. */
-export const ISSUE_CALLS = ["read", "create", "update", "setState", "comment", "delete", "link", "unlink", "move", "workspaces"] as const;
+export const ISSUE_CALLS = ["read", "create", "update", "setState", "comment", "delete", "link", "unlink", "move", "workspaces", /** 1.12 */ "status", "setUp"] as const;
 export type IssueCall = (typeof ISSUE_CALLS)[number];
 /** The most an `issue` request's arguments may take, as JSON. */
 export const ISSUE_ARGS_MAX = 256 * 1024;

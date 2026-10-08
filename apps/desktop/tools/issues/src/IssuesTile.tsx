@@ -4,10 +4,11 @@
  * only while the tile is focused, so a drag never fights the canvas's pan. A card opens the issue
  * panel; "work" starts an agent on it. How the tile is set (view, grouping) is the tile's own.
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Inbox } from "lucide-react";
 import type { TileProps } from "@hivemind/tile-sdk";
-import { Button, Loading } from "@hivemind/app-ui";
+import type { ViewClient, ViewIssuesStatus } from "@hivemind/view-sdk";
+import { Button, Input, Label, Loading } from "@hivemind/app-ui";
 import { useIssueList, useIssuesPlugin, write, type IssueSummary } from "./data";
 import { FilterBar, emptyFilters, applyFilters, type Filters } from "./FilterBar";
 import { ViewSwitcher, type ViewKind } from "./ViewSwitcher";
@@ -63,6 +64,39 @@ function GroupByMenu({ value, onChange }: { value: GroupBy; onChange: (g: GroupB
   );
 }
 
+/** A workspace that keeps no issues yet: where they would live, and the prefix of their ids. */
+function SetUpIssues({ hm, status, onReady }: { hm: ViewClient; status: ViewIssuesStatus; onReady: (s: ViewIssuesStatus) => void }) {
+  const [prefix, setPrefix] = useState(status.suggested);
+  const [busy, setBusy] = useState(false);
+  if (!status.folder) {
+    return <TileEmpty icon={<Inbox size={26} strokeWidth={1.5} />} title="No folder here" hint="Issues live in a folder on this computer. Open one, then set them up here." />;
+  }
+  const submit = async () => {
+    setBusy(true);
+    const next = await write("Setting up issues", hm.issues.setUp(prefix));
+    setBusy(false);
+    if (next) onReady(next);
+  };
+  return (
+    <div className="flex-1 grid place-items-center px-6" data-issues-setup>
+      <form className="flex flex-col gap-3 w-full max-w-[280px]" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+        <div className="flex flex-col items-center gap-2 text-center">
+          <div className="text-[var(--color-fg3)]"><Inbox size={26} strokeWidth={1.5} /></div>
+          <div className="text-[13px] font-medium text-[var(--color-fg)]">Keep issues in {status.folder}</div>
+          <p className="text-[12px] text-[var(--color-fg2)] leading-relaxed">
+            They live in a <code className="font-mono text-[11px]">.hivemind</code> folder there, numbered {prefix || "…"}-1, -2, …, and agents read and update them with <code className="font-mono text-[11px]">hive</code>.
+          </p>
+        </div>
+        <div className="grid gap-1">
+          <Label htmlFor="issues-prefix">Issue prefix</Label>
+          <Input id="issues-prefix" font="mono" value={prefix} onChange={(e) => setPrefix(e.target.value.toUpperCase())} placeholder="e.g. PAY" data-issues-prefix />
+        </div>
+        <Button type="submit" size="sm" disabled={busy || !prefix} data-issues-setup-go>{busy ? "Setting up…" : "Set up issues"}</Button>
+      </form>
+    </div>
+  );
+}
+
 interface Saved { view?: ViewKind; groupBy?: GroupBy }
 
 /** "Work on it": an agent in this tile's frame, told the issue (the person sends or cancels it). */
@@ -82,6 +116,14 @@ export function IssuesTile({ tile, hm, selected }: TileProps) {
   const setViewP = (v: ViewKind) => { setView(v); save({ view: v }); };
   const setGroupP = (g: GroupBy) => { setGroupBy(g); save({ groupBy: g }); };
 
+  // Whether this workspace keeps issues; an older app does not say, and always does.
+  const [status, setStatus] = useState<ViewIssuesStatus | null>(null);
+  useEffect(() => {
+    let live = true;
+    hm.issues.status().then((s) => { if (live) setStatus(s); }, () => { if (live) setStatus({ ready: true, folder: null, suggested: "" }); });
+    return () => { live = false; };
+  }, [hm]);
+
   const filtered = useMemo(() => applyFilters(issues, filters), [issues, filters]);
   const workOn = (issue: IssueSummary) => {
     void write("Starting an agent", Promise.resolve().then(() => hm.commands.spawnAgent(null, tile.frameId, { prompt: workPrompt(issue), name: issue.id })));
@@ -90,8 +132,10 @@ export function IssuesTile({ tile, hm, selected }: TileProps) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {list === null ? (
+      {list === null || status === null ? (
         <Loading label="Loading the issues" className="flex-1" />
+      ) : !status.ready ? (
+        <SetUpIssues hm={hm} status={status} onReady={setStatus} />
       ) : (
         <>
           <FilterBar
@@ -111,7 +155,7 @@ export function IssuesTile({ tile, hm, selected }: TileProps) {
             <TileEmpty
               icon={<Inbox size={26} strokeWidth={1.5} />}
               title="No issues yet"
-              hint="Create your first issue to plan work and hand it to an agent. A folder with no .hivemind needs `hive init` first."
+              hint="Create your first issue to plan work and hand it to an agent."
               action={{ label: "New issue", onClick: newIssue }}
             />
           ) : filtered.length === 0 ? (

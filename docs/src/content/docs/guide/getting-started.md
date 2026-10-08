@@ -36,7 +36,11 @@ every agent listed on HiveHub whose CLI is on your `PATH` — install `claude`, 
 detection from an initialised workspace with `hive agent detect`. Capability differences
 are in [Agents](../agents/).
 
-## Initialise the workspace
+## Track issues (optional)
+
+Open a folder and start an agent; nothing needs setting up first. Issues are the Issues tool's: open
+it (Add ▸ Tools ▸ Issues) in a folder that keeps none yet and it offers to keep them there, with the
+prefix their ids start with. From a terminal it is:
 
 ```bash
 cd ~/my-project

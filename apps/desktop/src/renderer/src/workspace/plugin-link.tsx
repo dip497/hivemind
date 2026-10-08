@@ -54,6 +54,8 @@ export interface PluginLinkOptions {
   root: RefObject<HTMLElement | null>;
   /** The `.hivemind` root whose issues it is given: a tool's tile, its frame's; absent, the workspace's. */
   issueRoot?: () => string | null;
+  /** Where issues would be set up: the tile's folder; a view's is the workspace's. */
+  issueFolder?: () => string | null;
   /** Where it asks for live surfaces; absent: it places none. */
   onSurfaceRects?: (rects: SurfaceRect[]) => void;
   /** What an agent may run in it while it runs (its manifest's `commands`), and which copy this is. */
@@ -167,6 +169,7 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
       isAgentTile: (tileId) => tilesRef.current.some((t) => t.id === tileId && t.kind === AGENT_TILE_KIND),
       confirmPrompt,
       issueRoot: () => optsRef.current.issueRoot?.() ?? rootRef.current,
+      issueFolder: () => { const d = optsRef.current.issueFolder?.() ?? repoRef.current; return d && !isRemote(d) ? d : null; },
     }),
     onDisable: (reason) => optsRef.current.onDisable(reason),
   // eslint-disable-next-line react-hooks/exhaustive-deps
