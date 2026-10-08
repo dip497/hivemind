@@ -29,6 +29,35 @@ export function nextPtySize(last: PtySize | null, cols: number, rows: number): P
   return { cols, rows };
 }
 
+/** The longest a resize burst holds back the pty's resize. */
+export const PTY_RESIZE_SETTLE_MS = 120;
+
+/**
+ * A pty resize that waits for a burst to settle. A drag or a window resize refits every frame; an
+ * agent that redraws on each SIGWINCH then draws at widths already gone, and the leftovers stay on
+ * screen. The grid follows every frame; the pty hears the last size, once. `now` sends what is
+ * pending at once (a tile shown, keys taken).
+ */
+export function settledResize(send: (size: PtySize) => void, settleMs = PTY_RESIZE_SETTLE_MS) {
+  let pending: PtySize | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const flush = () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    const size = pending;
+    pending = null;
+    if (size) send(size);
+  };
+  return {
+    request(size: PtySize): void {
+      pending = size;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(flush, settleMs);
+    },
+    now: flush,
+    cancel(): void { if (timer) clearTimeout(timer); timer = null; pending = null; },
+  };
+}
+
 /**
  * The grid a window draws a terminal at (R4, M2). Several windows, on this machine or others, may
  * show one session, and only one of them sizes it: the one typing into it here, or a guest holding

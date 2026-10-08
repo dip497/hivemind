@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { drawnSize, nextPtySize, scaleToFit } from "../../src/renderer/src/pty-size-sync";
+import { drawnSize, nextPtySize, scaleToFit, settledResize } from "../../src/renderer/src/pty-size-sync";
 
 test("sends the size when the pty has never been told one", () => {
   assert.deepEqual(nextPtySize(null, 170, 44), { cols: 170, rows: 44 });
@@ -59,3 +59,27 @@ test("a session larger than the tile is scaled down to fit it, by the tighter of
   assert.equal(scaleToFit({ cols: 100, rows: 30 }, { cols: 80, rows: 24 }), 1);
 });
 
+
+// A drag refits every frame. Each SIGWINCH makes an agent redraw at that width, and the widths a
+// drag passes through leave their borders on screen: the pty hears the burst's last size, once.
+test("a resize burst reaches the pty once, at its last size, after it settles", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const sent: { cols: number; rows: number }[] = [];
+  const r = settledResize((s) => sent.push(s), 120);
+  for (const cols of [100, 110, 120, 130]) { r.request({ cols, rows: 30 }); t.mock.timers.tick(16); }
+  assert.deepEqual(sent, []);
+  t.mock.timers.tick(120);
+  assert.deepEqual(sent, [{ cols: 130, rows: 30 }]);
+});
+
+test("now sends what is pending at once, and nothing twice", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const sent: { cols: number; rows: number }[] = [];
+  const r = settledResize((s) => sent.push(s), 120);
+  r.request({ cols: 90, rows: 20 });
+  r.now();
+  t.mock.timers.tick(500);
+  assert.deepEqual(sent, [{ cols: 90, rows: 20 }]);
+  r.now();
+  assert.equal(sent.length, 1);
+});

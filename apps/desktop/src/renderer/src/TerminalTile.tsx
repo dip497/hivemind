@@ -6,7 +6,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { registerFileLinks } from "./terminal-file-links";
 import { installCrispDpr } from "./terminal-dpr";
-import { drawnSize, nextPtySize, scaleToFit, type PtySize } from "./pty-size-sync";
+import { drawnSize, nextPtySize, scaleToFit, settledResize, type PtySize } from "./pty-size-sync";
 import { oscColorReply } from "./osc-color";
 import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer } from "./terminal-renderer-policy";
@@ -445,14 +445,17 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     termRef.current = term;
     /** Ask the session to take this tile's size, when it has not been asked already. Only while
      *  this window's keys reach it: the keyboard's holder sizes a session (R4). */
-    const syncPtySize = (): void => {
+    const resizer = settledResize((next) => {
+      askedRef.current = [...askedRef.current.slice(-2), next];
+      window.hive.ptyResize(ptyId, next.cols, next.rows);
+    });
+    /** `settle`: part of a resize burst, so the pty hears only where it ends. */
+    const syncPtySize = (settle = false): void => {
       const own = ownSizeRef.current;
       if (!own || !kbRef.current.mayType) return;
       const next = nextPtySize(sentSizeRef.current, own.cols, own.rows);
-      if (!next) return;
-      sentSizeRef.current = next;
-      askedRef.current = [...askedRef.current.slice(-2), next];
-      window.hive.ptyResize(ptyId, next.cols, next.rows);
+      if (next) { sentSizeRef.current = next; resizer.request(next); }
+      if (!settle) resizer.now();
     };
     syncSizeRef.current = syncPtySize;
     // ── FOCUS GUARANTEE ──────────────────────────────────────────────────────
@@ -794,7 +797,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       starting.touch(); // the person is driving now: nothing is sent for them
       window.hive.ptyWrite(ptyId, d);
     });
-    term.onResize(() => syncPtySize());
+    term.onResize(() => syncPtySize(true));
     // A glass terminal's background is transparent, which xterm reports as black; answer with
     // the theme's colour so a TUI tinting its panels from it blends toward what the user chose.
     term.parser.registerOscHandler(11, (data) => {
@@ -999,17 +1002,38 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     let fitRaf = 0;
     const doFit = () => {
       try {
+        const buf = term.buffer.active;
+        const atBottom = buf.viewportY >= buf.baseY;
+        const before = `${term.cols}x${term.rows}`;
         fitTerm();
-        syncPtySize();
-        // Anchor to the bottom after a resize so the LATEST output + prompt
-        // stay visible. xterm's reflow can otherwise leave the viewport
-        // scrolled up — shrinking a tile "cropped" the live prompt off the
-        // bottom and showed stale lines instead.
-        term.scrollToBottom();
+        syncPtySize(true);
+        // At the bottom it stays there, with the latest output and the prompt (a reflow can
+        // leave it scrolled up); scrolled up to read, it stays put.
+        if (atBottom) term.scrollToBottom();
+        // A new grid is drawn whole: rows the reflow did not touch keep no glyphs of the old one.
+        if (`${term.cols}x${term.rows}` !== before) term.refresh(0, term.rows - 1);
       } catch {
         /* ignore */
       }
     };
+    // Coming back to the window (focus, or shown again) the GPU may have dropped what it drew:
+    // rebuild the glyphs and draw it whole, at most every 120 ms.
+    let lastRecovery = 0;
+    const recover = () => {
+      if (document.hidden || parked || !hostShown()) return;
+      const now = Date.now();
+      if (now - lastRecovery < 120) return;
+      lastRecovery = now;
+      try {
+        webgl?.clearTextureAtlas();
+        fitTerm();
+        syncPtySize();
+        term.refresh(0, term.rows - 1);
+      } catch { /* torn down */ }
+    };
+    const onVisible = () => { if (!document.hidden) recover(); };
+    window.addEventListener("focus", recover);
+    document.addEventListener("visibilitychange", onVisible);
     const scheduleFit = () => {
       if (fitRaf) return;
       fitRaf = requestAnimationFrame(() => { fitRaf = 0; doFit(); });
@@ -1073,6 +1097,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       // tile is still open. Closing one drops it (Workspace.closeTile).
       ro.disconnect();
       io.disconnect();
+      resizer.now();
+      window.removeEventListener("focus", recover);
+      document.removeEventListener("visibilitychange", onVisible);
       if (loseInterest) clearTimeout(loseInterest);
       surfaceEl?.removeEventListener(SURFACE_ADOPTED, onAdopted);
       surfaceEl?.removeEventListener(SURFACE_PARKED, onParked);
