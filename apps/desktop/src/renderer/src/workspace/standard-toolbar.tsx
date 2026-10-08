@@ -11,7 +11,7 @@ import type { BoardChoice } from "../board-objects/board-model";
 import { useEnabledWidgetPackages } from "../board-objects/widget-runtime";
 import { WidgetIcon } from "../plugins/WidgetIcon";
 import { Input } from "../components/ui/input";
-import { tileKinds, useTilesVersion } from "../tiles";
+import { toolKinds, useTilesVersion } from "../tiles";
 import { AppControls } from "./app-controls";
 import { CATEGORY_LABELS, PLUGIN_CATEGORIES, type PluginCategory } from "@hivemind/view-sdk/category";
 
@@ -160,7 +160,7 @@ function BoardAction({ action, labels, compact, repoPath, onBoard, onTile, board
     return () => window.removeEventListener("hivemind:open-add", show);
   }, [setOpen]);
   const choices: AddChoice[] = [
-    ...(onTile ? tileKinds().filter(([, spec]) => spec.title).map(([kind, spec]): AddChoice => ({
+    ...(onTile ? toolKinds().map(([kind, spec]): AddChoice => ({
       id: `tile:${kind}`, name: spec.title!, type: "tool", category: spec.category ?? "other",
       icon: spec.icon ? <spec.icon size={14} /> : <span className="text-[12px] leading-none">{spec.glyph ?? "▢"}</span>,
       disabled: !!spec.needsRepo && !repoPath, pick: () => onTile(kind),

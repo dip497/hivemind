@@ -12,8 +12,8 @@ import type { BoardObject } from "@hivemind/workspace-doc/shapes";
 import { defaultSizeForKind } from "./canvas-sizing";
 import { isBox } from "./board-objects/board-model";
 import type { FrameState, TileInstance } from "./canvas-persistence";
-import type { ArrangeMode } from "./frame-layout";
-import type { WorktreeEntry } from "../../shared/ipc";
+import type { FrameActions } from "./FrameMenu";
+import type { FrameNodeData } from "./FrameNode";
 import { effectiveRepoOf, type PinRect } from "./workspace/tile-surfaces";
 import { pluginOfKind, tileKind } from "./tiles";
 import type { CanvasTileNodeData } from "./canvas-nodes";
@@ -34,15 +34,9 @@ export interface NodeBuildCtx {
   objects: BoardObject[];
   frameTiles: Map<string, string[]>;
   updateFrameTitle: (id: string, title: string) => void;
-  updateFrameColor: (id: string, color: string) => void;
-  deleteFrame: (id: string) => void;
-  arrangeFrame: (id: string, mode: ArrangeMode) => void;
   bringFrameToFront: (id: string) => void;
-  onAttachWorktree: (frameId: string, entry: WorktreeEntry) => void;
-  onCreateWorktree: (frameId: string, branch: string) => void;
-  unbindBranch: (id: string) => void;
-  bindWorkspace: (id: string) => void;
-  unbindWorkspace: (id: string) => void;
+  /** A frame's menu: the workspace's frame actions, as the Layers panel has them. */
+  frameActions: FrameActions;
   closeTile: (id: string) => void;
   onNodeResizeCommit: (id: string, w: number, h: number, x?: number, y?: number) => void;
   /** Toggle a tile's pinned state. `rect` is the tile's SCREEN rect (top-left +
@@ -56,8 +50,7 @@ export interface NodeBuildCtx {
 export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
   const {
     repoPath, tiles, frames, frameOf, pins, sizes, positions, objects, frameTiles,
-    updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
-    onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
+    updateFrameTitle, bringFrameToFront, frameActions,
     closeTile, onNodeResizeCommit, onTogglePin, onPinChange,
   } = ctx;
 
@@ -150,17 +143,10 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
         workspaceRoot: f.workspaceRoot,
         canBind: !!repoPath,
         onTitleChange: updateFrameTitle,
-        onColorChange: updateFrameColor,
-        onDelete: deleteFrame,
-        onArrange: arrangeFrame,
         onBringToFront: bringFrameToFront,
-        onAttachWorktree,
-        onCreateWorktree,
-        onUnbindBranch: unbindBranch,
-        onBindWorkspace: bindWorkspace,
-        onUnbindWorkspace: unbindWorkspace,
+        actions: frameActions,
         tileIds: frameTiles.get(f.id) ?? NO_TILES,
-      },
+      } satisfies FrameNodeData,
       dragHandle: ".tile-drag-handle",
     });
   }

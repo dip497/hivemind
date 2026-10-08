@@ -93,7 +93,8 @@ test("a frame bound to workspace B is named after it, and an agent spawned while
   await page.waitForTimeout(300);
 
   // 2. Bind it to a workspace → pickProjectFolder returns repoB (seam).
-  await page.locator('[aria-label="bind workspace"]').first().click();
+  await page.locator("[data-frame-actions]").first().click();
+  await page.locator("[data-frame-menu-folder]").click();
   // Frame chip should now show repo B's name.
   await expect(page.locator(".react-flow__node-frame")).toContainText(path.basename(repoB), { timeout: 6_000 });
 

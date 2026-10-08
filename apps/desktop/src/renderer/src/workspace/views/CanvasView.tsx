@@ -159,18 +159,14 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
     const built = reuseNodes(lastBuiltRef.current, buildBaseNodes({
     repoPath, tiles, frames, frameOf, pins: rt.pins, sizes: rt.sizes, positions: rt.positions,
     objects: rt.board.objects, frameTiles: rt.frameTiles,
-    updateFrameTitle: rt.updateFrameTitle, updateFrameColor: rt.updateFrameColor, deleteFrame: rt.deleteFrame,
-    arrangeFrame: rt.arrangeFrame, bringFrameToFront: rt.bringFrameToFront,
-    onAttachWorktree: rt.onAttachWorktree, onCreateWorktree: rt.onCreateWorktree, unbindBranch: rt.unbindBranch,
-    bindWorkspace: rt.bindWorkspace, unbindWorkspace: rt.unbindWorkspace,
+    updateFrameTitle: rt.updateFrameTitle, bringFrameToFront: rt.bringFrameToFront, frameActions: model.frameActions,
     closeTile, onNodeResizeCommit: rt.onNodeResizeCommit, onTogglePin: rt.togglePin, onPinChange: rt.onPinChange,
     }));
     lastBuiltRef.current = new Map(built.map((n) => [n.id, n]));
     return built;
   }, [
     repoPath, tiles, frames, frameOf, rt.pins, rt.sizes, rt.positions, rt.board.objects, rt.frameTiles,
-    rt.updateFrameTitle, rt.updateFrameColor, rt.deleteFrame, rt.arrangeFrame, rt.bringFrameToFront,
-    rt.onAttachWorktree, rt.onCreateWorktree, rt.unbindBranch, rt.bindWorkspace, rt.unbindWorkspace,
+    rt.updateFrameTitle, rt.bringFrameToFront, model.frameActions,
     closeTile, rt.onNodeResizeCommit, rt.togglePin, rt.onPinChange, tilesVersion,
   ]);
   // Derive selection-aware nodes from baseNodes. Shallow-clones ONLY the
@@ -563,6 +559,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
             tiles={layerTiles}
             selectedTileId={selectedTileId}
             layoutKey={model.layoutKey}
+            canvas
             folder={model.repoPath && !isRemote(model.repoPath) ? model.repoPath : null}
           onResume={(agent, frameId, session) => { commands.spawnAgent(agent, frameId, { resume: session }); }}
             onFocusTile={focusTileFromPanel}

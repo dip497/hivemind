@@ -110,9 +110,11 @@ test("the panel names what it does: search narrows the list, its rows start thin
 test("deleting a frame asks what becomes of its tiles: kept, they are listed once under Canvas, which closes them all", async () => {
   const frames = () => panel().locator("[data-layers-frame]");
   const terminals = page.locator(".react-flow__node-terminal");
+  // Its ⋮, shown on the row under the pointer: no right-click needed.
   const remove = async () => {
-    await frames().first().click({ button: "right" });
-    await page.getByRole("menuitem", { name: "Delete frame" }).click();
+    await frames().first().hover();
+    await frames().first().locator("[data-layers-frame-menu]").click();
+    await page.locator("[data-frame-menu-delete]").click();
   };
   const dialog = page.locator("[data-delete-frame]");
   await remove();

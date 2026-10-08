@@ -6,58 +6,17 @@
  * remain clickable. Pure visual grouping in v1 — moving the frame does NOT
  * move tiles inside (use react-flow `parentId` later for strong containment).
  */
-import { FRAME_SWATCHES } from "./frame-color";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
-import { GitBranch, FolderGit2, Plus, LayoutGrid, Server, GitCommitHorizontal } from "lucide-react";
+import { useEffect, useState } from "react";
+import { GitBranch, FolderGit2, Server, Ellipsis } from "lucide-react";
 import { Button } from "./components/ui/button";
-import { MenuItem } from "./components/ui/menu-item";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
-import { WorktreePicker } from "./WorktreePicker";
+import { FrameMenu, type FrameActions } from "./FrameMenu";
 import { useGitBranch } from "./queries";
 import { isRemote, remoteBasename, remoteDisplay } from "@hivemind/core/remote-uri";
 import { frameMachine, useMachines } from "./machines/store";
 import { useMachineOwners } from "./machines/owners";
 import { useShown } from "./multiplayer/shown";
 import { MachineChip } from "./machines/MachineChip";
-import { useAgents } from "./agents";
-import type { ArrangeMode } from "./frame-layout";
-import type { WorktreeEntry } from "../../shared/ipc";
-import { tileKinds } from "./tiles";
-
-/** Dropdown anchored under a trigger button, rendered in a portal to
- *  document.body. Frame nodes have a low zIndex (≤90, BELOW tiles), and a
- *  child popover can't escape its parent's stacking context — so a normal
- *  absolute-positioned menu renders BEHIND any tile inside the frame.
- *  Portaling to body + fixed positioning lifts it above everything. */
-function AnchoredMenu({
-  anchor,
-  open,
-  onClose,
-  children,
-}: {
-  anchor: HTMLElement | null;
-  open: boolean;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  if (!open || !anchor) return null;
-  const r = anchor.getBoundingClientRect();
-  return createPortal(
-    <>
-      {/* click-away catcher */}
-      <div className="fixed inset-0 z-[9998]" onClick={onClose} />
-      <div
-        className="fixed z-[9999] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md p-1 shadow-xl flex flex-col"
-        style={{ top: r.bottom + 4, left: Math.max(8, r.right - 160), minWidth: 150 }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </>,
-    document.body,
-  );
-}
 
 export interface FrameNodeData {
   title: string;
@@ -78,40 +37,19 @@ export interface FrameNodeData {
   /** False when there's no repo → branch binding is impossible. */
   canBind?: boolean;
   onTitleChange: (id: string, title: string) => void;
-  onColorChange: (id: string, color: string) => void;
-  onDelete: (id: string) => void;
-  /** Opt-in tidy: snap this frame's tiles + worktree sub-frames into a layout. */
-  onArrange: (id: string, mode: ArrangeMode) => void;
   onBringToFront: (id: string) => void;
-  /** Attach an existing worktree → caller spawns a nested sub-frame. */
-  onAttachWorktree: (frameId: string, entry: WorktreeEntry) => void;
-  /** Create a worktree on `branch`, then attach it as a sub-frame. */
-  onCreateWorktree: (frameId: string, branch: string) => void;
-  /** Detach this worktree sub-frame (remove its worktree, delete the frame). */
-  onUnbindBranch: (id: string) => void;
-  onBindWorkspace: (id: string) => void;
-  onUnbindWorkspace: (id: string) => void;
+  /** Everything else a frame does: its menu, the same one the Layers panel opens. */
+  actions: FrameActions;
   id: string;
   /** Terminal tile ids inside this frame — Canvas precomputes via position
    *  overlap. Drives the header chip strip so renames inside surface here. */
   tileIds?: string[];
 }
 
-// Identity colours, shared with the rail menu and the default generator (frame-color.ts).
-const COLORS = FRAME_SWATCHES;
-
 export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeData; selected: boolean }) {
-  const agents = useAgents();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(data.title);
-  const [showPicker, setShowPicker] = useState(false);
-  const [showAdd, setShowAdd] = useState(false);
-  const [showWt, setShowWt] = useState(false);
-  const [showArrange, setShowArrange] = useState(false);
-  const addBtnRef = useRef<HTMLButtonElement>(null);
-  const colorBtnRef = useRef<HTMLButtonElement>(null);
-  const wtBtnRef = useRef<HTMLButtonElement>(null);
-  const arrangeBtnRef = useRef<HTMLButtonElement>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   // Live status per child tile — chips show a colored dot for working/blocked.
   // Subscribe filters by data.tileIds so unrelated tile events are skipped.
   const [chipStatus, setChipStatus] = useState<Map<string, TileStatusKind>>(new Map());
@@ -257,18 +195,9 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             <span className="shrink-0 text-[var(--color-fg3)]">worktree</span>
             <span className="truncate font-semibold">{data.branch}</span>
             {data.head && <span className="shrink-0 text-[var(--color-fg3)]">{data.head.slice(0, 7)}</span>}
-            <Button
-              variant="ghost-destructive"
-              size="micro"
-              onClick={() => data.onUnbindBranch(data.id)}
-              title="Detach worktree (destructive)"
-              aria-label="detach worktree"
-            >
-              ×
-            </Button>
           </span>
         ) : isRemoteWs ? (
-          <MachineChip uri={data.workspacePath!} frameId={data.id} onUnbind={() => data.onUnbindWorkspace(data.id)} />
+          <MachineChip uri={data.workspacePath!} frameId={data.id} onUnbind={() => data.actions.onUnbindWorkspace(data.id)} />
         ) : wsBound ? (
           <span
             className="flex items-center gap-1 max-w-[60%] rounded px-1.5 py-0.5 text-[10px] font-mono"
@@ -290,72 +219,8 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
               // Name == title (the default): say what it is instead — VS Code calls it a folder.
               <span className="text-[var(--color-fg3)]">folder</span>
             )}
-            <Button
-              variant="ghost-destructive"
-              size="micro"
-              onClick={() => data.onUnbindWorkspace(data.id)}
-              title={isRemoteWs ? "Disconnect remote" : "Unbind workspace"}
-              aria-label={isRemoteWs ? "disconnect remote" : "unbind workspace"}
-            >
-              ×
-            </Button>
           </span>
         ) : null}
-        {!isWorktreeChild && (
-          <Button
-            ref={wtBtnRef}
-            onClick={() => setShowWt((x) => !x)}
-            disabled={!data.canBind && !data.repoPath}
-            variant="ghost"
-            size="micro"
-            title="Attach a git worktree — opens a nested sub-frame scoped to that branch"
-            aria-label="attach worktree"
-          >
-            <GitBranch />
-            worktree
-          </Button>
-        )}
-        <AnchoredMenu anchor={wtBtnRef.current} open={showWt} onClose={() => setShowWt(false)}>
-          {data.repoPath ? (
-            <WorktreePicker
-              repoPath={data.repoPath}
-              onAttach={(entry) => {
-                data.onAttachWorktree(data.id, entry);
-                setShowWt(false);
-              }}
-              onCreate={(branch) => {
-                data.onCreateWorktree(data.id, branch);
-                setShowWt(false);
-              }}
-            />
-          ) : (
-            <div className="px-3 py-2 text-[11px] text-[var(--color-fg3)]">no git repo</div>
-          )}
-        </AnchoredMenu>
-        {!isWorktreeChild && !wsBound && (
-          <Button
-            onClick={() => data.onBindWorkspace(data.id)}
-            variant="ghost"
-            size="micro"
-            title="Bind this frame to a repo folder — tiles inside run in that workspace"
-            aria-label="bind workspace"
-          >
-            <FolderGit2 />
-            workspace
-          </Button>
-        )}
-        {!isWorktreeChild && !wsBound && (
-          <Button
-            onClick={() => window.dispatchEvent(new CustomEvent("hivemind:attach-remote", { detail: { frameId: data.id } }))}
-            variant="ghost"
-            size="micro"
-            title="Run this frame on a machine — its terminals, editor and diff run there"
-            aria-label="attach remote"
-          >
-            <Server />
-            machine
-          </Button>
-        )}
         {/* ── frame attention dot ───────────────────────────────────────
             This used to be a strip of up to three name pills plus a "+N".
             The names were dead weight: every tile already prints its own name
@@ -384,122 +249,18 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             />
           );
         })()}
-        {/* Git — open the commit/sync modal for this frame's repo. Shown when
-            the frame has a repo: a worktree sub-frame (always), a bound
-            workspace, or the base repo. */}
-        {(isWorktreeChild || data.workspacePath || data.repoPath) && (
-          <Button
-            onClick={() => window.dispatchEvent(new CustomEvent("hivemind:frame-git", { detail: { frameId: data.id } }))}
-            variant="ghost"
-            size="icon-micro"
-            title="Git — commit, push, pull"
-            aria-label="git"
-          >
-            <GitCommitHorizontal />
-          </Button>
-        )}
-        <Button
-          ref={addBtnRef}
-          onClick={() => setShowAdd((x) => !x)}
-          variant="ghost"
-          size="icon-micro"
-          title="Open a tile in this zone (terminal / Claude / editor / diff / issues)"
-          aria-label="add tile"
-        >
-          <Plus />
-        </Button>
-        <AnchoredMenu anchor={addBtnRef.current} open={showAdd} onClose={() => setShowAdd(false)}>
-          <div className="px-2 py-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold">open in zone</div>
-          {/* Agents come from the registry — adding one there adds it here. */}
-          {agents.filter((a) => a.enabled).map((a) => (
-            <MenuItem
-              key={a.id}
-              size="sm"
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: data.id, kind: a.id } }));
-                setShowAdd(false);
-              }}
-            >
-              <a.icon />
-              {a.label}
-            </MenuItem>
-          ))}
-          {tileKinds().filter(([, spec]) => spec.title).map(([kind, { title: label }]) => (
-            <MenuItem
-              key={kind}
-              size="sm"
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: data.id, kind } }));
-                setShowAdd(false);
-              }}
-            >
-              {label}
-            </MenuItem>
-          ))}
-        </AnchoredMenu>
-        <Button
-          ref={arrangeBtnRef}
-          onClick={() => setShowArrange((x) => !x)}
-          variant="ghost"
-          size="icon-micro"
-          title="Arrange tiles + worktrees (Columns / Rows / Grid)"
-          aria-label="arrange"
-        >
-          <LayoutGrid />
-        </Button>
-        <AnchoredMenu anchor={arrangeBtnRef.current} open={showArrange} onClose={() => setShowArrange(false)}>
-          <div className="px-2 py-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold">arrange</div>
-          {([
-            ["columns", "Columns"],
-            ["rows", "Rows"],
-            ["grid", "Grid"],
-          ] as const).map(([mode, label]) => (
-            <MenuItem
-              key={mode}
-              size="sm"
-              onClick={() => {
-                data.onArrange(data.id, mode);
-                setShowArrange(false);
-              }}
-            >
-              {label}
-            </MenuItem>
-          ))}
-        </AnchoredMenu>
-        <button
-          ref={colorBtnRef}
-          onClick={() => setShowPicker((x) => !x)}
-          className="size-4 rounded-full border border-[var(--color-line2)]"
-          style={{ background: data.color }}
-          title="Change color"
-          aria-label="color"
-        />
-        <Button
-          onClick={() => data.onDelete(data.id)}
-          variant="ghost-destructive"
-          size="icon-micro"
-          title="Delete frame"
-          aria-label="delete"
-        >
-          ×
+        {/* Its colour, and its menu: the same one the Layers panel opens. */}
+        <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: data.color }} />
+        <Button variant="ghost" size="icon-micro" aria-label={`${data.title} actions`} title="Frame actions" data-frame-actions={data.id}
+          onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu((m) => (m ? null : { x: r.right - 230, y: r.bottom })); }}>
+          <Ellipsis />
         </Button>
       </div>
-      <AnchoredMenu anchor={colorBtnRef.current} open={showPicker} onClose={() => setShowPicker(false)}>
-        <div className="flex gap-1">
-          {COLORS.map((c) => (
-            <button
-              key={c.value}
-              onClick={() => {
-                data.onColorChange(data.id, c.value);
-                setShowPicker(false);
-              }}
-              className="size-5 rounded-full border border-[var(--color-line2)] hover:scale-110 transition-transform"
-              style={{ background: c.value }}
-              title={c.name}
-            />
-          ))}
-        </div>
-      </AnchoredMenu>
+      {menu && (
+        <FrameMenu frame={{ id: data.id, title: data.title, parentFrameId: data.parentFrameId, path: data.workspacePath, remote: isRemoteWs }}
+          at={menu} actions={data.actions} arrange onClose={() => setMenu(null)}
+          onRename={() => { setDraft(data.title); setEditing(true); }} />
+      )}
     </div>
   );
 }

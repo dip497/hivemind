@@ -19,7 +19,7 @@ import type { LucideIcon } from "lucide-react";
 import type { IslandPlacement } from "@hivemind/core/settings-schema";
 import type { FrameState, TileInstance } from "../canvas-persistence";
 import type { LayerFrame, LayerTile } from "../LayersPanel";
-import type { FrameActions } from "../FrameRailMenu";
+import type { FrameActions } from "../FrameMenu";
 import type { TileKind } from "../tile-kinds";
 import type { StatusEvent, TileStatusKind } from "../agent-status-bus";
 

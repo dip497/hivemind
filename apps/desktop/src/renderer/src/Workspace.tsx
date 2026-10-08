@@ -849,6 +849,8 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     onRename: (frameId: string, title: string) => updateFrameTitle(frameId, title),
     onColor: (frameId: string, color: string) => updateFrameColor(frameId, color),
     onDelete: (frameId: string) => requestDeleteFrame(frameId),
+    onDetachWorktree: (frameId: string) => unbindBranch(frameId),
+    onUnbindWorkspace: (frameId: string) => unbindWorkspace(frameId),
     onGit: (frameId: string) =>
       window.dispatchEvent(new CustomEvent("hivemind:frame-git", { detail: { frameId } })),
     onPush: (frameId: string) => { const r = repoOfFrame(frameId); if (r) gitPushMut.mutate({ repoPath: r }); },
@@ -859,7 +861,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     },
     // Depend on the stable `.mutate` refs, NOT the mutation objects — those are
     // fresh on every isPending tick and would re-render every rail consumer.
-  }), [frameOpen, onCreateWorktree, onAttachWorktree, bindWorkspace, arrangeFrame, updateFrameTitle, updateFrameColor, requestDeleteFrame, repoPath, repoOfFrame, gitPushMut.mutate, gitPullMut.mutate]);
+  }), [frameOpen, onCreateWorktree, onAttachWorktree, bindWorkspace, arrangeFrame, updateFrameTitle, updateFrameColor, requestDeleteFrame, unbindBranch, unbindWorkspace, repoPath, repoOfFrame, gitPushMut.mutate, gitPullMut.mutate]);
   const openFileFromTerminal = useCallback((sourceTileId: string, path: string) => {
     const sourceFrameId = frameOfRef.current[sourceTileId] ?? selectedFrameIdRef.current;
     const existing = pickEditorTile(tilesRef.current, frameOfRef.current, sourceFrameId);
@@ -1233,16 +1235,14 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     onNodeResizeCommit, handleNodeDragStop, resetCanvas,
     focusReq, focusModeReq, setFocusModeReq, focusModeNonceRef, selectedTileIdRef, selectedFrameIdRef,
     selectedTileIdsRef, markSeen, toasts, dismissToast,
-    frameTiles, updateFrameTitle, updateFrameColor, deleteFrame: requestDeleteFrame, arrangeFrame, bringFrameToFront,
-    onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
+    frameTiles, updateFrameTitle, bringFrameToFront,
     pins, togglePin, onPinChange, board, canvasPointRef,
     agentSel, setAgentSel, spawnAgent, spawnBrowser,
     updateAvailable, updateStaged, onUpgrade: () => onUpgrade?.(), onRestart: () => onRestart?.(), upgrading,
   }), [
     positions, sizes, onNodeResizeCommit, handleNodeDragStop, resetCanvas, focusReq, focusModeReq,
     selectedTileIdRef, selectedFrameIdRef, selectedTileIdsRef, markSeen, toasts, dismissToast, frameTiles,
-    updateFrameTitle, updateFrameColor, requestDeleteFrame, arrangeFrame, bringFrameToFront,
-    onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
+    updateFrameTitle, bringFrameToFront,
     pins, togglePin, onPinChange, board, agentSel, spawnAgent, spawnBrowser, updateAvailable, updateStaged, onUpgrade, onRestart, upgrading,
   ]);
 

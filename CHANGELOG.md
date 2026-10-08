@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Changed: a frame has one menu, the same wherever it opens: the ⋮ on its row in the Layers panel (shown on hover; right-click still works) and the ⋯ on its header on the canvas. New agent ▸ (your agents, default first) and Open ▸ (every tool, as Add lists them), then where it runs (Open folder…, Run on a machine…, Close folder, Disconnect machine, Detach worktree…, Worktree ▸, Git ▸), then Arrange ▸ (canvas only), Rename (R), Color ▸ and Delete frame… (D). The canvas header keeps its name, folder, branch, machine, colour and the needs-you dot; its eight buttons and their popups are gone.
+- Changed: Add ▸ Tools and a frame's Open ▸ list tools by category, then by name; the ones that ship with the app no longer come first.
 - Fixed: in the Windows view, the active tab's body no longer repeats the tile's name in a bar of its own under the tab; a terminal takes that room. A view that draws its own chrome around a tile (`chrome: "none"`) gets every tile without the bar that only names it; a browser keeps its address bar. Minimize and close sit at the right end of a tab, not after its name.
 - Changed: the Layers panel's **New agent** asks which agent, from the ones installed here, with the default first and its key (2); it starts where the 2 key would (the selected frame, else the one you pick). With none installed it opens Settings ▸ Agents.
 - New: in the Layers panel, what an agent started (`hive ctl spawn`) is listed under it, as deep as it goes, and folds away with the chevron beside it. A started tile in another frame, or one the View menu leaves its starter out of, is listed on its own.

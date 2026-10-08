@@ -111,14 +111,14 @@ test("right-click a frame in the rail opens the actions menu and spawns into it"
   await expect(titleBtn).toBeVisible();
   await titleBtn.click({ button: "right" });
   // Menu appears. A nested submenu keeps its parent open: hovering an agent with launch
-  // choices must not close "Spawn agent" under the pointer.
+  // choices must not close "New agent" under the pointer.
   const menu = page.getByRole("menu").first();
-  await expect(menu.getByRole("menuitem", { name: "Spawn agent" })).toBeVisible();
-  await menu.getByRole("menuitem", { name: "Spawn agent" }).hover();
+  await expect(menu.getByRole("menuitem", { name: "New agent" })).toBeVisible();
+  await menu.getByRole("menuitem", { name: "New agent" }).hover();
   const nested = page.getByRole("menu").nth(1).locator('[role="menuitem"][aria-haspopup="menu"]').first();
   if (await nested.count()) {
     await nested.hover();
-    await expect(page.getByRole("menuitem", { name: "Default", exact: true })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "As set in Settings", exact: true })).toBeVisible();
     await expect(nested).toBeVisible();
   }
   await menu.getByRole("menuitem", { name: "Open" }).click();
@@ -165,12 +165,16 @@ test("Git submenu in the rail menu opens the commit modal", async () => {
   await page.keyboard.press("Escape");
 });
 
-test("frame header shows a git button", async () => {
-  // In canvas mode a repo frame's header carries a git button (same action as
-  // the rail Git ▸ Commit… — both fire hivemind:frame-git, proven above).
-  const frame = page.locator(".react-flow__node-frame").first();
-  await expect(frame).toBeVisible();
-  await expect(frame.getByRole("button", { name: "git" }).first()).toBeVisible();
+test("a frame's ⋯ on the canvas opens the menu the rail opens, Git included", async () => {
+  const names = async () => page.getByRole("menu").first().getByRole("menuitem").allInnerTexts();
+  const rail = page.locator('aside[aria-label="Layers"]');
+  await rail.locator('button[title^="Focus"]').first().click({ button: "right" });
+  const fromRail = await names();
+  await page.keyboard.press("Escape");
+  await page.locator(".react-flow__node-frame").first().locator("[data-frame-actions]").click();
+  expect(await names()).toEqual(fromRail);
+  expect(fromRail.join("|")).toContain("Git");
+  await page.keyboard.press("Escape");
 });
 
 // Regression for the windowed-mode remote-agent-kill blocker: a view that unmounted the bodies of

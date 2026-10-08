@@ -14,8 +14,6 @@
  */
 import { createContext, useContext, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type { Node } from "@xyflow/react";
-import type { WorktreeEntry } from "../../../../shared/ipc";
-import type { ArrangeMode } from "../../frame-layout";
 import type { PinRect } from "../tile-surfaces";
 import type { Toast } from "../../useAgentAwareness";
 import type { Board } from "../../board-objects/useBoard";
@@ -58,15 +56,7 @@ export interface CanvasRuntime {
   // ── frame / worktree ops for FrameNode headers ──
   frameTiles: Map<string, string[]>;
   updateFrameTitle: (id: string, title: string) => void;
-  updateFrameColor: (id: string, color: string) => void;
-  deleteFrame: (id: string) => void;
-  arrangeFrame: (id: string, mode: ArrangeMode) => void;
   bringFrameToFront: (id: string) => void;
-  onAttachWorktree: (frameId: string, entry: WorktreeEntry) => void;
-  onCreateWorktree: (frameId: string, branch: string) => void;
-  unbindBranch: (id: string) => void;
-  bindWorkspace: (id: string) => void;
-  unbindWorkspace: (id: string) => void;
   // ── the board's notes, checklists, text and arrows (board-objects/) ──
   board: Board;
   /** Set by the canvas while it is mounted: where on it a new box goes (under the pointer, else

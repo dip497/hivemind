@@ -18,7 +18,7 @@ import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon, agentById, useAgents } from "./agents";
 import { notReady, useAgentPresence } from "./agent-plugins";
 import { preferredAgent } from "@hivemind/agents";
-import { FrameRailMenu, type FrameActions } from "./FrameRailMenu";
+import { FrameMenu, type FrameActions } from "./FrameMenu";
 import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem,
   DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
@@ -78,6 +78,8 @@ interface Props {
   onFocusFrame: (id: string) => void;
   /** The workspace's layout key: where this person's pins and folded groups are kept. */
   layoutKey?: string | null;
+  /** Shown beside the canvas: a frame's menu offers Arrange, which places its tiles there. */
+  canvas?: boolean;
   /** The workspace's own folder on this computer: where tiles in a frame with no folder run. */
   folder?: string | null;
   /** Start an agent again on one of its past sessions, in the frame of that session's folder. */
@@ -261,7 +263,7 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
 });
 
 // Memo: a child of the canvas view, which re-renders on every drag frame.
-export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, layoutKey = null, folder = null, onResume, frameActions, tileActions }: Props) {
+export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, layoutKey = null, canvas = false, folder = null, onResume, frameActions, tileActions }: Props) {
   // Before the early `hidden` return: hooks run on every render, in the same order.
   const machineSnap = useMachines();
   const prefs = useSettings().views.layers;
@@ -537,9 +539,17 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
                     </span>
                   ) : <span aria-label={STATUS_LABEL[agg]} title={STATUS_LABEL[agg]} className="shrink-0 size-1.5 rounded-full" style={{ background: STATUS_COLOR[agg] }} />
                 )}
-                {items.length + kids.length > 0 && <span className={`shrink-0 ${COUNT}`}>{items.length + kids.length}</span>}
+                {items.length + kids.length > 0 && <span className={`shrink-0 ${COUNT} ${frameActions ? "group-hover/grp:hidden group-focus-within/grp:hidden" : ""}`}>{items.length + kids.length}</span>}
               </span>
             </button>
+          )}
+          {/* Its menu, for a pointer as for a right-click: shown on the row under the pointer. */}
+          {frameActions && renaming?.id !== gid && (
+            <Button variant="ghost" size="icon-2xs" aria-label={`${frame.title} actions`} title="Frame actions" data-layers-frame-menu={gid}
+              className="hidden group-hover/grp:grid group-focus-within/grp:grid shrink-0"
+              onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ frame, x: r.left, y: r.bottom }); }}>
+              <EllipsisVertical size={14} strokeWidth={STROKE} />
+            </Button>
           )}
         </div>
         {!isCollapsed && (items.length > 0 || kids.length > 0) && (
@@ -699,8 +709,8 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       {/* Right-edge resize grip. */}
       <div onPointerDown={startResize} className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[var(--color-brand)] active:bg-[var(--color-brand)] opacity-0 hover:opacity-60" title="Drag to resize" aria-hidden />
       {menu && frameActions && (
-        <FrameRailMenu frame={menu.frame} x={menu.x} y={menu.y} actions={frameActions} onClose={() => setMenu(null)}
-          onRequestRename={(id) => { const f = frames.find((x) => x.id === id); setRenaming({ id, draft: f?.title ?? "" }); }} />
+        <FrameMenu frame={menu.frame} at={{ x: menu.x, y: menu.y }} actions={frameActions} arrange={canvas} onClose={() => setMenu(null)}
+          onRename={() => setRenaming({ id: menu.frame.id, draft: menu.frame.title })} />
       )}
       {tileMenu && (
         <TileRailMenu tile={tileMenu.tile} x={tileMenu.x} y={tileMenu.y} pinned={pinnedSet.has(tileMenu.tile.id)}

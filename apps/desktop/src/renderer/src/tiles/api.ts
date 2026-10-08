@@ -2,7 +2,7 @@
  * Tile plugins: everything a tile is — its size, its rules and its body — comes from the plugin
  * that registers its kind. The tiles that ship with the app register through this same API.
  */
-import type { PluginCategory } from "@hivemind/view-sdk/category";
+import { PLUGIN_CATEGORIES, type PluginCategory } from "@hivemind/view-sdk/category";
 import { useSyncExternalStore, type ComponentType } from "react";
 /** A kind's icon: a lucide icon, or a plugin's drawn the same way. */
 export type KindIcon = ComponentType<{ size?: number; className?: string }>;
@@ -146,6 +146,12 @@ export const MISSING = "missing";
 
 /** Every kind installed, in the order its plugin registered. */
 export const tileKinds = (): [string, TileKindSpec][] => [...byKind].map(([kind, { spec }]) => [kind, spec]);
+
+/** The kinds a person opens by name (Add ▸ Tools, a frame's Open ▸): every one with a title, by
+ *  category in the catalogue's order, then by name. None comes first for having shipped with the app. */
+export const toolKinds = (): [string, TileKindSpec][] =>
+  tileKinds().filter(([, spec]) => spec.title).sort(([, a], [, b]) =>
+    (PLUGIN_CATEGORIES.indexOf(a.category ?? "other") - PLUGIN_CATEGORIES.indexOf(b.category ?? "other")) || a.title!.localeCompare(b.title!));
 
 /** The kinds that take what another tile hands over, first registered first. */
 export const kindsThatOpen = (intent: TileIntent): string[] =>
