@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: in the Layers panel a tile that finished something while you looked elsewhere is unread (its name in bold) until you select it; **Mark as unread** / **Mark as read** (U) in its menu, and **Unread** in the View menu's Status. **Snooze** (30 minutes, 1 hour, 2 hours, tomorrow at 9:00) moves a tile to **Snoozed** until then; it comes back early when it needs you or you select it, or with **Wake now**. Both are yours, per workspace.
 - Changed: Ctrl/⌘+1…9 go to the tiles in the order the Layers panel lists them (pinned first, then as grouped and nested), not the order they were opened; held a moment, Ctrl/⌘ shows each of the first nine rows its number.
 - Fixed: resizing a terminal (dragging a tile, a panel or the window, switching views) left an agent's old borders on screen. The program in it was told every size the drag passed through, nine or more, and redrew at each; it now hears one resize, at the size the drag ends at, while the screen still follows every frame. A resized terminal is redrawn whole, its glyphs are rebuilt when the window regains focus, and a terminal you scrolled up in stays where you were instead of jumping to the bottom.
 - Fixed: in the Windows view and every other view that docks tiles, the bottom tool island covered the last lines of the active tile (an agent's prompt and status line). The island now says how much of the window it covers, and those views keep their tiles above it.

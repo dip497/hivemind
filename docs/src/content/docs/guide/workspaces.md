@@ -40,14 +40,19 @@ right-click) opens its menu, the same one as the **⋯** on its header on the ca
 - **Pin** a tile from its **⋮** menu (or right-click it, then press **P**): it goes to **Pinned**
   at the top, whatever the panel lists below. **R** renames it, **D** closes it. Hover a row to
   see when it was last active and where it runs.
+- A tile that finished something while you looked elsewhere is **unread**: its name is bold until
+  you select it. **U** marks one unread again, or read; the View menu's **Unread** lists only those.
+- **Snooze** a tile (30 minutes, 1 hour, 2 hours, tomorrow at 9:00) and it leaves the list for
+  **Snoozed** until then. It is back early if it needs you, or when you select it; **Wake now**
+  brings it back at once.
 - The **View** menu (the sliders) chooses what is listed: **Status** (needs you, working, idle,
   exited), **Last activity** (past hour, today, this week), **Machines**; how it is grouped
   (**Machine**, **Group**, **Date**, **Status**, **Agent** or none) and ordered (canvas order,
   last activity, name); and whether idle machines show at the foot. **Reset to defaults** undoes
   it all.
 
-The View menu is yours in every workspace (`hive config set views.layers.groupBy status`). Pins
-and folded sections are yours in this workspace, on this computer: in a shared workspace, no one
+The View menu is yours in every workspace (`hive config set views.layers.groupBy status`). Pins,
+folded sections, what you have seen and what you snoozed are yours in this workspace, on this computer: in a shared workspace, no one
 else's panel changes.
 
 ## Machines

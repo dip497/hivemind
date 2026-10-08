@@ -25,6 +25,21 @@ export interface ModelTile {
   machine: string;
   /** The tile that started it (an agent's `hive ctl spawn`), when one did. */
   parent?: string;
+  /** When the person last looked at it (ms); null when it is new to them. */
+  seen?: number | null;
+  /** Kept out of the list until then (ms), unless it needs the person sooner. */
+  snoozedUntil?: number;
+}
+
+/** Done since the person last looked: it changed after they saw it and is not still at work. A tile
+ *  they have never seen counts as seen when it first appeared, so nothing opens unread. */
+export function isUnread(t: Pick<ModelTile, "activity" | "seen" | "status">): boolean {
+  return t.status !== "working" && t.activity !== null && t.seen != null && t.activity > t.seen;
+}
+
+/** Snoozed, and still for now: one that needs the person is back early. */
+export function isSnoozed(t: Pick<ModelTile, "snoozedUntil" | "needsYou">, now: number): boolean {
+  return t.snoozedUntil !== undefined && t.snoozedUntil > now && !t.needsYou;
 }
 
 /** A heading and the tiles under it, for the groupings that are not the workspace's own tree. */
@@ -40,6 +55,8 @@ export interface LayersView {
   buckets: Bucket[];
   /** The View menu leaves some tiles out: frames left with none are not listed. */
   filtering: boolean;
+  /** Snoozed, soonest back first: listed apart, and in none of the lists above. */
+  snoozed: ModelTile[];
   /** The tiles listed under another, by that tile's id: started by it and in the same list. The
    *  lists above hold only the tiles under no other. */
   kids: Map<string, ModelTile[]>;
@@ -58,6 +75,7 @@ function passes(t: ModelTile, prefs: LayersPrefs, now: number): boolean {
   if (prefs.machines.length && !prefs.machines.includes(t.machine)) return false;
   const s = prefs.status;
   if (s === "needs-you" && !t.needsYou) return false;
+  if (s === "unread" && !isUnread(t)) return false;
   if (s === "working" && (t.needsYou || t.status !== "working")) return false;
   if (s === "idle" && (t.needsYou || t.status !== "idle")) return false;
   if (s === "exited" && t.status !== "exited") return false;
@@ -105,9 +123,11 @@ export function layersView(input: {
   const q = input.query?.trim().toLowerCase() ?? "";
   const found = (t: ModelTile) => !q || `${t.name} ${input.agentLabel(t)}`.toLowerCase().includes(q);
   const byId = new Map(input.tiles.map((t) => [t.id, t]));
-  const pinned = input.pinned.map((id) => byId.get(id)).filter((t): t is ModelTile => !!t && found(t));
+  const asleep = (t: ModelTile) => isSnoozed(t, now);
+  const pinned = input.pinned.map((id) => byId.get(id)).filter((t): t is ModelTile => !!t && found(t) && !asleep(t));
   const pinnedIds = new Set(input.pinned);
-  const rest = sorted(input.tiles.filter((t) => !pinnedIds.has(t.id) && found(t) && passes(t, prefs, now)), prefs.sortBy);
+  const rest = sorted(input.tiles.filter((t) => !pinnedIds.has(t.id) && found(t) && !asleep(t) && passes(t, prefs, now)), prefs.sortBy);
+  const snoozed = input.tiles.filter((t) => found(t) && asleep(t)).sort((a, b) => a.snoozedUntil! - b.snoozedUntil!);
   const filtering = !!q || prefs.status !== "all" || prefs.activity !== "all" || prefs.machines.length > 0;
   const tree = prefs.groupBy === "machine" || prefs.groupBy === "group";
   const byFrame = new Map<string | null, ModelTile[]>();
@@ -143,7 +163,7 @@ export function layersView(input: {
   const kids = new Map<string, ModelTile[]>();
   for (const [key, list] of byFrame) byFrame.set(key, nest(list, kids));
   for (const b of buckets) b.tiles = nest(b.tiles, kids);
-  return { pinned, tree, byFrame, buckets, filtering, kids };
+  return { pinned, tree, byFrame, buckets, filtering, kids, snoozed };
 }
 
 /** `list` without the tiles whose starter is in it too, which go into `kids` under it, in list

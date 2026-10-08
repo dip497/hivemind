@@ -122,6 +122,39 @@ test("the panel names what it does: search narrows the list, its rows start thin
   await page.keyboard.press("Escape");
 });
 
+test("snoozed, a tile leaves the list for Snoozed until its time; Wake now brings it back", async () => {
+  const row = rows().last(); // in its frame: the pinned one is listed first
+  const id = (await row.getAttribute("data-layer-tile"))!;
+  await row.hover();
+  await row.locator("[data-layer-tile-menu]").click();
+  await page.locator("[data-layers-snooze]").click();
+  await page.locator('[data-layers-snooze-choice="1 hour"]').click();
+  const snoozed = panel().locator("[data-layers-snoozed]");
+  await expect(snoozed.locator(`[data-layer-tile="${id}"] [data-layer-until]`)).toContainText("until");
+  await expect(panel().locator(`[data-layer-tile="${id}"]`)).toHaveCount(1);
+  await snoozed.locator(`[data-layer-tile="${id}"]`).click({ button: "right" });
+  await page.locator("[data-layers-wake]").click();
+  await expect(snoozed).toHaveCount(0);
+  await expect(panel().locator(`[data-layer-tile="${id}"]`)).toHaveCount(1);
+});
+
+test("a tile that changes while you look elsewhere is unread until you look; you can mark it unread again", async () => {
+  const listed = rows();
+  const other = listed.last();
+  // Its shell is told to end in a second; meanwhile you look at another tile.
+  await other.click();
+  await page.waitForTimeout(300);
+  await page.keyboard.type("sleep 1; exit\n");
+  await listed.first().click();
+  await expect(other.locator("[data-layer-unread]")).toHaveCount(1, { timeout: 15_000 });
+  await other.click();
+  await expect(other.locator("[data-layer-unread]")).toHaveCount(0);
+  await listed.first().click();
+  await other.click({ button: "right" });
+  await page.locator("[data-layers-unread]").click();
+  await expect(other.locator("[data-layer-unread]")).toHaveCount(1);
+});
+
 test("deleting a frame asks what becomes of its tiles: kept, they are listed once under Canvas, which closes them all", async () => {
   const frames = () => panel().locator("[data-layers-frame]");
   const terminals = page.locator(".react-flow__node-terminal");

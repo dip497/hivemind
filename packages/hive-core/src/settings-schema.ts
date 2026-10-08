@@ -255,7 +255,7 @@ export type IslandPlacement = "top" | "bottom" | "hidden" | "off";
 export const ISLAND_PLACEMENTS: readonly IslandPlacement[] = ["top", "bottom", "hidden", "off"];
 
 /** How the Layers panel lists tiles (its View menu): which, grouped how, in what order. */
-export const LAYERS_STATUS = ["all", "needs-you", "working", "idle", "exited"] as const;
+export const LAYERS_STATUS = ["all", "needs-you", "unread", "working", "idle", "exited"] as const;
 export const LAYERS_ACTIVITY = ["all", "hour", "today", "week"] as const;
 export const LAYERS_GROUP_BY = ["machine", "group", "date", "status", "agent", "none"] as const;
 export const LAYERS_SORT_BY = ["canvas", "activity", "name"] as const;

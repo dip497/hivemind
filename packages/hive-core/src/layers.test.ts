@@ -4,7 +4,7 @@
  */
 import { test } from "bun:test";
 import assert from "node:assert/strict";
-import { layersView, recentsView, workspaceCounts, type ModelTile } from "./layers.js";
+import { isUnread, layersView, recentsView, workspaceCounts, type ModelTile } from "./layers.js";
 import { DEFAULT_LAYERS_PREFS, type LayersPrefs } from "./settings-schema.js";
 
 const NOW = new Date(2026, 9, 8, 15, 0).getTime();
@@ -105,6 +105,31 @@ test("a tile an agent started is listed under it, theirs under them; elsewhere, 
   const exited = v({ groupBy: "none", status: "exited" });
   assert.deepEqual(ids(exited.buckets[0]!.tiles), ["shell"]);
   assert.equal(exited.kids.size, 0);
+});
+
+test("unread: done since it was last looked at; not while still at work, and not one never seen", () => {
+  const at = NOW - HOUR;
+  assert.equal(isUnread({ status: "idle", activity: at, seen: at - 1 }), true);
+  assert.equal(isUnread({ status: "question", activity: at, seen: at - 1 }), true);
+  assert.equal(isUnread({ status: "working", activity: at, seen: at - 1 }), false);
+  assert.equal(isUnread({ status: "idle", activity: at, seen: at }), false);
+  assert.equal(isUnread({ status: "idle", activity: at, seen: null }), false);
+  const tiles = [tile("done", { seen: NOW - 2 * HOUR }), tile("looked", { seen: NOW })];
+  const v = layersView({ tiles, pinned: [], prefs: { ...DEFAULT_LAYERS_PREFS, status: "unread", groupBy: "none" }, now: NOW, agentLabel: () => "Claude" });
+  assert.deepEqual(ids(v.buckets[0]!.tiles), ["done"]);
+});
+
+test("snoozed tiles leave every list, pinned too, until their time; one that needs you is back early", () => {
+  const tiles = [
+    tile("later", { snoozedUntil: NOW + 2 * HOUR }),
+    tile("soon", { snoozedUntil: NOW + HOUR }),
+    tile("asks", { snoozedUntil: NOW + HOUR, needsYou: true, status: "question" }),
+    tile("woke", { snoozedUntil: NOW - 1 }),
+  ];
+  const v = layersView({ tiles, pinned: ["later"], prefs: DEFAULT_LAYERS_PREFS, now: NOW, agentLabel: () => "Claude" });
+  assert.deepEqual(ids(v.snoozed), ["soon", "later"]);
+  assert.deepEqual(ids(v.pinned), []);
+  assert.deepEqual(ids(v.byFrame.get("f1")!), ["asks", "woke"]);
 });
 
 test("recents: newest first, at most the limit with how many more, no session twice nor one a tile has open, and a search narrows them", () => {

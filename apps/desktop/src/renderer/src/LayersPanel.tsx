@@ -13,7 +13,7 @@ import { MachineDot, statusWords } from "./machines/status";
 import { A_DEVICE, GONE_MACHINE, openMachines, placeOf, statusOf, useMachines } from "./machines/store";
 import type { MachineInfo } from "../../shared/ipc";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, Shapes, Blocks, History } from "lucide-react";
+import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, Shapes, Blocks, History, Mail, MailOpen, AlarmClock, AlarmClockOff } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon, agentById, useAgents } from "./agents";
 import { notReady, useAgentPresence } from "./agent-plugins";
@@ -30,7 +30,7 @@ import { AGENT_TILE_KIND } from "./tile-kinds";
 import { tileKind } from "./tiles";
 import { KindMark } from "./tiles/mark";
 import { MenuItem } from "./components/ui/menu-item";
-import { layersView, recentsView, type ModelTile, type RecentSession } from "@hivemind/core/layers";
+import { isUnread, layersView, recentsView, type ModelTile, type RecentSession } from "@hivemind/core/layers";
 import type { WorkspaceSummary } from "../../shared/ipc";
 import { useSettings, patchSettings } from "./settings-store";
 import { setPanelOrder } from "./workspace/panel-order";
@@ -139,13 +139,27 @@ const STROKE = 1.5;
 const LABEL = "text-[12px] font-medium text-[var(--color-fg2)]";
 const COUNT = "text-[11px] tabular-nums text-[var(--color-fg2)]";
 
-/** This person's own for this workspace: pinned tiles (in pin order) and the groups they folded. */
-interface Mine { pinned: string[]; collapsed: string[] }
-const MINE = { viewId: "layers", version: 1, initial: (): Mine => ({ pinned: [], collapsed: [] }), personal: true } as const;
+/** This person's own for this workspace: pinned tiles (in pin order), the groups they folded, when
+ *  they last looked at each tile, and the tiles they snoozed, until when. */
+interface Mine { pinned: string[]; collapsed: string[]; seen?: Record<string, number>; snoozed?: Record<string, number> }
+const MINE = { viewId: "layers", version: 1, initial: (): Mine => ({ pinned: [], collapsed: [], seen: {}, snoozed: {} }), personal: true } as const;
+
+/** Snooze choices: until when, from now. */
+const SNOOZES: Array<[string, (now: number) => number]> = [
+  ["30 minutes", (n) => n + 30 * 60_000],
+  ["1 hour", (n) => n + 60 * 60_000],
+  ["2 hours", (n) => n + 120 * 60_000],
+  ["Tomorrow at 9:00", (n) => { const d = new Date(n); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d.getTime(); }],
+];
+const timeOf = (ms: number, now: number) => {
+  const d = new Date(ms);
+  const t = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return new Date(now).toDateString() === d.toDateString() ? t : `${d.toLocaleDateString([], { weekday: "short" })} ${t}`;
+};
 
 /** The View menu's choices, in its words. */
 const VIEW_CHOICES = {
-  status: [["all", "All"], ["needs-you", "Needs you"], ["working", "Working"], ["idle", "Idle"], ["exited", "Exited"]],
+  status: [["all", "All"], ["needs-you", "Needs you"], ["unread", "Unread"], ["working", "Working"], ["idle", "Idle"], ["exited", "Exited"]],
   activity: [["all", "All"], ["hour", "Past hour"], ["today", "Today"], ["week", "This week"]],
   groupBy: [["machine", "Machine"], ["group", "Group"], ["date", "Date"], ["status", "Status"], ["agent", "Agent"], ["none", "None"]],
   sortBy: [["canvas", "Canvas order"], ["activity", "Last activity"], ["name", "Name"]],
@@ -201,8 +215,9 @@ interface RowActions {
 }
 
 /** One tile's row: its mark, its name, and its status when that is worth reading. */
-const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0, folded = false, jumpKey }: { t: ModelTile; depth: number; selected: boolean; actions: RowActions; started?: number; folded?: boolean; jumpKey?: number }) {
+const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0, folded = false, jumpKey, until }: { t: ModelTile; depth: number; selected: boolean; actions: RowActions; started?: number; folded?: boolean; jumpKey?: number; until?: string }) {
   const st = t.status;
+  const unread = isUnread(t);
   const isPlan = !!tileKind(t.kind).waitsOnPerson;
   return (
     <div
@@ -238,8 +253,8 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
       <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">
         {t.kind === AGENT_TILE_KIND ? <AgentIcon id={t.agent} size={ICON - 1} /> : <KindMark kind={t.kind} size={ICON} />}
       </span>
-      {/* Name first, so every row's text starts at the same x. */}
-      <span className="truncate flex-1 min-w-0">{t.name}</span>
+      {/* Name first, so every row's text starts at the same x. Unread: its name in weight. */}
+      <span className={`truncate flex-1 min-w-0 ${unread ? "font-semibold" : ""}`} data-layer-unread={unread ? "" : undefined} title={unread ? "Done since you last looked" : undefined}>{t.name}</span>
       {/* While Ctrl/⌘ is held: the number that jumps here, in place of its status. */}
       {jumpKey !== undefined ? (
         <kbd data-layer-jump={jumpKey} className="grid min-w-[18px] h-[18px] shrink-0 place-items-center rounded-[5px] px-1 font-sans text-[11px] leading-none tabular-nums text-[var(--color-fg2)] shadow-[inset_0_0_0_1px_var(--color-line2)]">
@@ -247,6 +262,8 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
         </kbd>
       ) : /* A word only for what you must act on; `working` is a dot. Only needs-you pulses. */ st === "working" ? (
         <span aria-label="working" title="working" className="shrink-0 size-1.5 rounded-full group-hover:hidden" style={{ background: STATUS_COLOR[st] }} />
+      ) : until ? (
+        <span className={`shrink-0 ${COUNT} group-hover:hidden`} data-layer-until>{until}</span>
       ) : st !== "idle" ? (
         <span
           className={`shrink-0 text-[10px] font-medium leading-none px-1.5 py-[3px] rounded-full ${NEEDS_YOU(st) ? "animate-pulse" : "group-hover:hidden"}`}
@@ -255,6 +272,8 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
         >
           {isPlan ? "review" : STATUS_LABEL[st]}
         </span>
+      ) : unread ? (
+        <span aria-label="unread" title="Done since you last looked" className="shrink-0 size-2 rounded-full bg-[var(--color-brand)] group-hover:hidden" />
       ) : null}
       {actions.close && (st === "working" || st === "exited") && (
         <Button variant="ghost" size="icon-2xs" reveal="hidden" onClick={(e) => { e.stopPropagation(); actions.close!(t.id); }} title={`Close ${t.name}`} aria-label={`Close ${t.name}`}>
@@ -384,11 +403,21 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   const togglePin = useCallback((id: string) => setMine((m) => ({
     ...m, pinned: m.pinned.includes(id) ? m.pinned.filter((x) => x !== id) : [...m.pinned, id],
   })), [setMine]);
-  // A closed tile's pin goes with it.
+  // A closed tile's pin, last look and snooze go with it.
   useEffect(() => {
     const open = new Set(tiles.map((t) => t.id));
-    if (mine.pinned.some((id) => !open.has(id))) setMine((m) => ({ ...m, pinned: m.pinned.filter((id) => open.has(id)) }));
-  }, [tiles, mine.pinned, setMine]);
+    const keep = (r: Record<string, number> = {}) => Object.fromEntries(Object.entries(r).filter(([id]) => open.has(id)));
+    const gone = (r: Record<string, number> = {}) => Object.keys(r).some((id) => !open.has(id));
+    if (mine.pinned.some((id) => !open.has(id)) || gone(mine.seen) || gone(mine.snoozed)) {
+      setMine((m) => ({ ...m, pinned: m.pinned.filter((id) => open.has(id)), seen: keep(m.seen), snoozed: keep(m.snoozed) }));
+    }
+  }, [tiles, mine.pinned, mine.seen, mine.snoozed, setMine]);
+  const setSeen = useCallback((id: string, at: number) => setMine((m) => ({ ...m, seen: { ...m.seen, [id]: at } })), [setMine]);
+  const setSnooze = useCallback((id: string, until: number | null) => setMine((m) => {
+    const snoozed = { ...m.snoozed };
+    if (until === null) delete snoozed[id]; else snoozed[id] = until;
+    return { ...m, snoozed };
+  }), [setMine]);
   const setPref = (key: keyof LayersPrefs, value: unknown) => patchSettings(`views.layers.${key}`, value);
 
   // Frame forest: top-level (repo) frames each own their worktree sub-frames.
@@ -411,10 +440,30 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   const modelTiles: ModelTile[] = useMemo(() => tiles.map((t) => {
     const waits = !!tileKind(t.kind).waitsOnPerson;
     const st: TileStatusKind = waits ? "question" : (status.get(t.id) ?? "idle");
-    return { ...t, status: st, needsYou: waits || NEEDS_YOU(st), activity: activity.get(t.id) ?? null, machine: (t.frameId && machineOfFrame.get(t.frameId)) || "local" };
+    return {
+      ...t, status: st, needsYou: waits || NEEDS_YOU(st), activity: activity.get(t.id) ?? null, machine: (t.frameId && machineOfFrame.get(t.frameId)) || "local",
+      seen: mine.seen?.[t.id] ?? null, ...(mine.snoozed?.[t.id] ? { snoozedUntil: mine.snoozed[t.id] } : {}),
+    };
   // machineOfFrame is rebuilt each render from frames + machines; its content is what matters.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [tiles, status, activity, frames, machineSnap]);
+  }), [tiles, status, activity, frames, machineSnap, mine.seen, mine.snoozed]);
+  // Seen: a tile new to this person is seen as it appears, so nothing opens unread; the one they
+  // have selected is seen as it changes; looking at one wakes it from a snooze.
+  useEffect(() => {
+    const unseen = modelTiles.filter((t) => mine.seen?.[t.id] === undefined);
+    const sel = modelTiles.find((t) => t.id === selectedTileId);
+    const selStale = sel && (sel.seen ?? 0) < (sel.activity ?? 0);
+    if (!unseen.length && !selStale && !(sel && mine.snoozed?.[sel.id])) return;
+    setMine((m) => {
+      const seen = { ...m.seen };
+      const at = Date.now();
+      for (const t of unseen) seen[t.id] = t.activity ?? at;
+      if (sel) seen[sel.id] = Math.max(at, sel.activity ?? 0);
+      const snoozed = { ...m.snoozed };
+      if (sel) delete snoozed[sel.id];
+      return { ...m, seen, snoozed };
+    });
+  }, [modelTiles, selectedTileId, mine.seen, mine.snoozed, setMine]);
   const agentLabel = (t: ModelTile) => (t.kind === AGENT_TILE_KIND ? agentById(t.agent)?.label ?? t.agent ?? "Agent" : tileKind(t.kind).title ?? "Other");
   const view = layersView({ tiles: modelTiles, pinned: mine.pinned, prefs, now, agentLabel, query });
   const recentRows = recentsView(recents, { limit: recentLimit, query, agentLabel: (a) => agentById(a)?.label ?? a });
@@ -674,6 +723,19 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             ))
             : topFrames.map((f) => renderFrameGroup(f, 0, false))
         ) : view.buckets.map((b) => section(b.key, b.label, b.tiles, { "data-layers-bucket": b.key }))}
+        {view.snoozed.length > 0 && (
+          <section aria-label="Snoozed" data-layers-snoozed className="mt-2">
+            <button type="button" onClick={() => toggleGroup("section:snoozed")} aria-expanded={!collapsed.has("section:snoozed")}
+              className={`group/sec flex w-full items-center gap-1 h-7 pl-5 pr-3 ${LABEL} transition-colors duration-150 hover:text-[var(--color-fg)]`}>
+              <span>Snoozed</span>
+              {collapsed.has("section:snoozed") ? <ChevronRight size={11} /> : <ChevronDown size={11} className="opacity-40 transition-opacity duration-150 group-hover/sec:opacity-100" />}
+              <span className={`ml-auto ${COUNT}`}>{view.snoozed.length}</span>
+            </button>
+            {!collapsed.has("section:snoozed") && view.snoozed.map((t) => (
+              <TileRow key={t.id} t={t} depth={0} selected={t.id === selectedTileId} actions={rowActions} until={`until ${timeOf(t.snoozedUntil!, now)}`} />
+            ))}
+          </section>
+        )}
         {looseTiles.length > 0 && (
           <div className="mt-1.5">
             <div className="group/loose flex items-center gap-2 h-8 pr-2 mx-2 pl-[26px]" data-layers-loose>
@@ -745,6 +807,8 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       {tileMenu && (
         <TileRailMenu tile={tileMenu.tile} x={tileMenu.x} y={tileMenu.y} pinned={pinnedSet.has(tileMenu.tile.id)}
           onPin={() => togglePin(tileMenu.tile.id)}
+          onUnread={tileMenu.tile.activity !== null ? (on) => setSeen(tileMenu.tile.id, on ? tileMenu.tile.activity! - 1 : Date.now()) : undefined}
+          onSnooze={(until) => setSnooze(tileMenu.tile.id, until)}
           onCloseTile={tileActions ? (id) => tileActions.onClose(id) : undefined}
           onRequestRename={tileActions ? (id, draft) => setRenamingTile({ id, draft }) : undefined}
           close={() => setTileMenu(null)} />
@@ -922,19 +986,25 @@ function HoverCard({ tile, top, left, now, frame, agent }: { tile: ModelTile; to
 interface MachineGroup { key: string; label: string; hostId?: string; machine?: MachineInfo; frames: LayerFrame[] }
 
 /** A tile row's menu (its ⋮, or a right-click): pin, rename, close, each with its key while open. */
-function TileRailMenu({ tile, x, y, pinned, onPin, onCloseTile, onRequestRename, close }: {
+function TileRailMenu({ tile, x, y, pinned, onPin, onUnread, onSnooze, onCloseTile, onRequestRename, close }: {
   tile: ModelTile;
   x: number;
   y: number;
   pinned: boolean;
   onPin: () => void;
+  /** Mark it unread (true) or read; absent when nothing it did is known yet. */
+  onUnread?: (unread: boolean) => void;
+  /** Snooze it until then, or wake it (null). */
+  onSnooze: (until: number | null) => void;
   onCloseTile?: (id: string) => void;
   onRequestRename?: (id: string, draft: string) => void;
   close: () => void;
 }) {
   const run = (fn?: () => void) => { close(); fn?.(); };
+  const unread = isUnread(tile);
   const keys: Record<string, (() => void) | undefined> = {
     p: onPin,
+    u: onUnread && (() => onUnread(!unread)),
     r: onRequestRename && (() => onRequestRename(tile.id, tile.name)),
     d: onCloseTile && (() => onCloseTile(tile.id)),
   };
@@ -951,6 +1021,31 @@ function TileRailMenu({ tile, x, y, pinned, onPin, onCloseTile, onRequestRename,
           <span className="truncate">{pinned ? "Unpin" : "Pin"}</span>
           <DropdownMenuShortcut>P</DropdownMenuShortcut>
         </DropdownMenuItem>
+        {onUnread && (
+          <DropdownMenuItem onSelect={() => run(keys.u)} data-layers-unread>
+            <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]">{unread ? <MailOpen size={13} /> : <Mail size={13} />}</span>
+            <span className="truncate">{unread ? "Mark as read" : "Mark as unread"}</span>
+            <DropdownMenuShortcut>U</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
+        {tile.snoozedUntil ? (
+          <DropdownMenuItem onSelect={() => run(() => onSnooze(null))} data-layers-wake>
+            <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]"><AlarmClockOff size={13} /></span>
+            <span className="truncate">Wake now</span>
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger data-layers-snooze>
+              <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]"><AlarmClock size={13} /></span>
+              <span className="truncate flex-1">Snooze</span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-[180px]">
+              {SNOOZES.map(([label, until]) => (
+                <DropdownMenuItem key={label} onSelect={() => run(() => onSnooze(until(Date.now())))} data-layers-snooze-choice={label}>{label}</DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
         {onRequestRename && (
           <DropdownMenuItem onSelect={() => run(keys.r)}>
             <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]"><Pencil size={13} /></span>
