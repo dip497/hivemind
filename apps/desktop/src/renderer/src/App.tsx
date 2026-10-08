@@ -233,9 +233,16 @@ export function App() {
   useEffect(() => {
     const onFolder = () => void pickFolder();
     const onRecent = () => setRecentOpen(true);
+    // The Layers panel's Projects: this window shows that workspace instead.
+    const onWorkspace = (e: Event) => { const repo = (e as CustomEvent<{ repo?: string }>).detail?.repo; if (repo) openRecent(repo); };
     window.addEventListener("hivemind:open-folder", onFolder);
     window.addEventListener("hivemind:open-recent", onRecent);
-    return () => { window.removeEventListener("hivemind:open-folder", onFolder); window.removeEventListener("hivemind:open-recent", onRecent); };
+    window.addEventListener("hivemind:open-workspace", onWorkspace);
+    return () => {
+      window.removeEventListener("hivemind:open-folder", onFolder);
+      window.removeEventListener("hivemind:open-recent", onRecent);
+      window.removeEventListener("hivemind:open-workspace", onWorkspace);
+    };
   });
   const [initing, setIniting] = useState(false);
   const [initOpen, setInitOpen] = useState(false);

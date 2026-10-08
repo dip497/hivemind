@@ -137,3 +137,30 @@ export function layersView(input: {
   }
   return { pinned, tree, byFrame, buckets, filtering };
 }
+
+/** A past session an agent kept for a folder: what a Recents list shows. */
+export interface RecentSession { agent: string; id: string; folder: string; updated?: number; prompt?: string }
+
+/** Recents: newest first, at most `limit`, a search narrowing them as it narrows tiles; a session
+ *  a tile already has open is not offered again. */
+export function recentsView(rows: readonly RecentSession[], opts: { limit: number; open?: ReadonlySet<string>; query?: string; agentLabel?: (agent: string) => string }): { shown: RecentSession[]; more: number } {
+  const q = opts.query?.trim().toLowerCase() ?? "";
+  const seen = new Set<string>();
+  const kept = rows.filter((r) => {
+    const key = `${r.agent}:${r.id}`;
+    if (seen.has(key) || opts.open?.has(r.id)) return false;
+    seen.add(key);
+    return !q || `${r.prompt ?? ""} ${opts.agentLabel?.(r.agent) ?? r.agent}`.toLowerCase().includes(q);
+  }).sort((a, b) => (b.updated ?? 0) - (a.updated ?? 0));
+  return { shown: kept.slice(0, opts.limit), more: Math.max(0, kept.length - opts.limit) };
+}
+
+/** A workspace at a glance, from its tiles' statuses: how many, how many need the person, how many work. */
+export function workspaceCounts(statuses: readonly (LayerStatus | null)[]): { tiles: number; needsYou: number; working: number } {
+  const waiting = new Set<LayerStatus>(["blocked", "permission", "question", "plan_review", "awaiting_approval"]);
+  return {
+    tiles: statuses.length,
+    needsYou: statuses.filter((s) => s !== null && waiting.has(s)).length,
+    working: statuses.filter((s) => s === "working").length,
+  };
+}

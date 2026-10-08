@@ -64,6 +64,8 @@ export type { IssuePatch };
 
 /** A registered workspace (subset of the core registry entry — display shape
  *  for the renderer; avoids pulling node-only registry deps into the web tsconfig). */
+export interface WorkspaceSummary { repo: string; title: string; tiles: number; needsYou: number; working: number }
+
 export interface WorkspaceInfo {
   prefix: string;
   root: string;
@@ -485,6 +487,8 @@ export interface HiveIpc {
   // ── cross-repo (registry + transfer + links) ───────────────
   /** Every registered workspace (other repos) whose root still exists. */
   listWorkspaces(): Promise<WorkspaceInfo[]>;
+  /** Every workspace here, with how many tiles it has and how many of them need you or work. */
+  workspaceSummaries(): Promise<WorkspaceSummary[]>;
   /** Resolve the `.hivemind` root that owns an issue id (via its prefix), or
    *  null if its workspace isn't registered. Used to open a cross-repo link. */
   resolveIssueRoot(id: string): Promise<{ root: string | null }>;

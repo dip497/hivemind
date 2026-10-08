@@ -21,7 +21,16 @@ ids.
 
 ## The Layers panel
 
-⌘B shows or hides it. It lists every open tile, with its status when that is worth reading.
+⌘B shows or hides it. Its title is the workspace (⌄: recent projects, open a project, hide the
+panel); its search narrows everything it lists, and its bell counts the agents that need you and
+goes to the next. **New agent**, **New project**, **New machine**, **Add a tool or widget** and
+**Plugins** start things. Below them:
+
+- **Pinned**, then the tiles open here, with their status when that is worth reading.
+- **Projects**: every workspace on this computer, with how many of its agents need you or work.
+  Another one opens in this window.
+- **Recents**: this workspace's past agent sessions, newest first. One click resumes it in its
+  group.
 
 - **Pin** a tile from its **⋮** menu (or right-click it, then press **P**): it goes to **Pinned**
   at the top, whatever the panel lists below. **R** renames it, **D** closes it. Hover a row to

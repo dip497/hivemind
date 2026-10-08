@@ -555,12 +555,14 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
           canvas (not an overlay), so the canvas sits BESIDE it and is never
           occluded. Collapses to a narrow icon rail; both keep the canvas clear. */}
       <div className="flex-1 min-h-0 flex flex-row">
-        {!zen && layerTiles.length > 0 && (
+        {/* Always there, empty workspace too: it is where an agent, a project or a machine starts. */}
+        {!zen && (
           <LayersPanel
             frames={layerFrames}
             tiles={layerTiles}
             selectedTileId={selectedTileId}
             layoutKey={model.layoutKey}
+          onResume={(agent, frameId, session) => { commands.spawnAgent(agent, frameId, { resume: session }); }}
             onFocusTile={focusTileFromPanel}
             onFocusFrame={focusFrameFromPanel}
             frameActions={frameActions}

@@ -1,4 +1,6 @@
 import { installViewManagementIpc } from "./view-packages.js";
+import { tileStatusOf } from "@hivemind/agent-host/tile-status";
+import { workspaceCounts } from "@hivemind/core/layers";
 import { disabledPlugins, pluginOptions, stringOptions } from "@hivemind/core/plugin-settings";
 import { toolPreferences } from "@hivemind/core/settings-schema";
 import { installWidgetIpc, widgetAsset, widgetsChanged } from "./widgets.js";
@@ -65,7 +67,7 @@ import { registerAgentNotifications } from "./agent-notify.js";
 import { getNotificationSettings, setNotificationSettings } from "./notification-settings-store.js";
 import { normalizeNotificationSettings } from "../shared/notification-settings.js";
 import { latestNightlyTag, newerNightlyTag, tagFromReleasesLatest } from "../shared/update-progress.js";
-import type { AppErrorEvent, MachineAddRequest } from "../shared/ipc.js";
+import type { AppErrorEvent, MachineAddRequest, WorkspaceSummary } from "../shared/ipc.js";
 import { startPlanBridge, type PlanRequest } from "./plan-bridge.js";
 import { randomUUID } from "node:crypto";
 import { makeSpawnPacer } from "@hivemind/host/spawn-pacer";
@@ -867,6 +869,14 @@ handleEffect(
 );
 // ── cross-repo: registry + transfer + links ─────────────────────────────
 handle("listWorkspaces", wrap(async () => listWorkspaces({ persistPrune: true })));
+// The Layers panel's Projects: every workspace here, with what runs in it now.
+handle("workspaceSummaries", wrap(async () => (await listWorkspaces({ persistPrune: false })).map((w): WorkspaceSummary => {
+  const statuses = (workspaceStore().getCore(w.repo)?.tiles ?? []).map((t) => {
+    const s = control.status.get(t.id);
+    return s ? tileStatusOf(s).status : null;
+  });
+  return { repo: w.repo, title: w.title, ...workspaceCounts(statuses) };
+})));
 handle(
   "resolveIssueRoot",
   wrap(async (_e, id: string) => ({ root: await resolveRootForIssue(id) })),

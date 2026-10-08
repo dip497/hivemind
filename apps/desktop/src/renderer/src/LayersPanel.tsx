@@ -27,7 +27,9 @@ import { AGENT_TILE_KIND } from "./tile-kinds";
 import { tileKind } from "./tiles";
 import { KindMark } from "./tiles/mark";
 import { MenuItem } from "./components/ui/menu-item";
-import { layersView, type ModelTile } from "@hivemind/core/layers";
+import { layersView, recentsView, type ModelTile, type RecentSession } from "@hivemind/core/layers";
+import type { WorkspaceSummary } from "../../shared/ipc";
+import { getAgents } from "./agents";
 import { useSettings, patchSettings } from "./settings-store";
 import { useViewLayout } from "./workspace/view-layout-store";
 import { DEFAULT_LAYERS_PREFS, type LayersPrefs } from "@hivemind/core/settings-schema";
@@ -60,6 +62,8 @@ export interface LayerFrame {
   remoteUri?: string;
   /** Name of the folder it is bound to, shown when it differs from the title. */
   folder?: string;
+  /** Its folder on this computer, when it is on this computer: where its agents' past sessions are. */
+  path?: string;
 }
 
 interface Props {
@@ -70,6 +74,8 @@ interface Props {
   onFocusFrame: (id: string) => void;
   /** The workspace's layout key: where this person's pins and folded groups are kept. */
   layoutKey?: string | null;
+  /** Start an agent again on one of its past sessions, in the frame of that session's folder. */
+  onResume?: (agent: string, frameId: string | null, session: string) => void;
   /** When provided, right-clicking a frame row opens a context menu that
    *  mirrors the frame header (spawn agent/tile, worktree, workspace, remote,
    *  arrange, rename/color/delete). Optional so the panel still renders without
@@ -236,7 +242,7 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions }: { t: Mode
 });
 
 // Memo: a child of the canvas view, which re-renders on every drag frame.
-export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, layoutKey = null, frameActions, tileActions }: Props) {
+export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, layoutKey = null, onResume, frameActions, tileActions }: Props) {
   // Before the early `hidden` return: hooks run on every render, in the same order.
   const machineSnap = useMachines();
   const prefs = useSettings().views.layers;
@@ -274,6 +280,11 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   const [card, setCard] = useState<{ tile: ModelTile; top: number; left: number } | null>(null);
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
+  // Projects: every workspace here, as main counts it; read again as statuses change.
+  const [projects, setProjects] = useState<WorkspaceSummary[]>([]);
+  // Recents: this workspace's past agent sessions, read once its folders are known.
+  const [recents, setRecents] = useState<RecentSession[]>([]);
+  const [recentLimit, setRecentLimit] = useState(5);
   const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Live status per tile, and when it last changed: seeded from main's ledger (it outlives a
@@ -303,6 +314,34 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     replaying = false;
     return () => { live = false; off(); };
   }, []);
+  useEffect(() => {
+    let live = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    // What the panel adds to the tiles is never worth the view: a read that fails shows nothing.
+    const read = () => void Promise.resolve().then(() => window.hive.workspaceSummaries()).then((list) => { if (live) setProjects(list); }, () => {});
+    const soon = () => { if (timer) clearTimeout(timer); timer = setTimeout(read, 1500); };
+    read();
+    let first = true;
+    const off = subscribeStatus(() => { if (!first) soon(); });
+    first = false;
+    window.addEventListener("focus", read);
+    return () => { live = false; off(); if (timer) clearTimeout(timer); window.removeEventListener("focus", read); };
+  }, []);
+  const folders = [...new Set(frames.map((f) => f.path).filter((p): p is string => !!p))].join("\n");
+  useEffect(() => {
+    let live = true;
+    const dirs = folders ? folders.split("\n") : [];
+    const agents = getAgents().filter((a) => a.enabled && a.def.session);
+    // At most 24 reads, after the first paint: Recents is never what the panel waits on.
+    const asks = dirs.flatMap((dir) => agents.map((a) => [a.id, dir] as const)).slice(0, 24);
+    const id = setTimeout(() => {
+      void Promise.all(asks.map(([agent, dir]) => Promise.resolve().then(() => window.hive.viewSessions(agent, dir)).then(
+        (rows) => rows.map((r): RecentSession => ({ agent, folder: dir, ...r })), () => [] as RecentSession[],
+      ))).then((all) => { if (live) setRecents(all.flat()); });
+    }, 300);
+    return () => { live = false; clearTimeout(id); };
+  }, [folders]);
+
   // "4m ago" stays true: a tick a minute while the panel is open.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 60_000); return () => clearInterval(id); }, []);
@@ -346,6 +385,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   }), [tiles, status, activity, frames, machineSnap]);
   const agentLabel = (t: ModelTile) => (t.kind === AGENT_TILE_KIND ? agentById(t.agent)?.label ?? t.agent ?? "Agent" : tileKind(t.kind).title ?? "Other");
   const view = layersView({ tiles: modelTiles, pinned: mine.pinned, prefs, now, agentLabel, query });
+  const recentRows = recentsView(recents, { limit: recentLimit, query, agentLabel: (a) => agentById(a)?.label ?? a });
 
   const needsYou = modelTiles.filter((t) => t.needsYou).length;
   const working = modelTiles.filter((t) => t.status === "working" && !t.needsYou).length;
@@ -559,6 +599,47 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             ))
             : topFrames.map((f) => renderFrameGroup(f, 0, false))
         ) : view.buckets.map((b) => section(b.key, b.label, b.tiles, { "data-layers-bucket": b.key }))}
+        {projects.length > 1 && (
+          <section aria-label="Projects" data-layers-projects className="mt-3">
+            <div className={`flex h-7 items-center pl-4 pr-3 ${LABEL}`}>Projects</div>
+            {projects.map((p) => {
+              const here = p.repo === layoutKey;
+              return (
+                <button key={p.repo} type="button" disabled={here} data-layers-project={p.title}
+                  onClick={() => window.dispatchEvent(new CustomEvent("hivemind:open-workspace", { detail: { repo: p.repo } }))}
+                  title={here ? `${p.title} is this window` : `Open ${p.title} in this window`}
+                  className="flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-2 rounded-lg text-left text-[14px] text-[var(--color-fg)] transition-colors duration-150 enabled:hover:bg-[var(--surface-3)] disabled:cursor-default">
+                  <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">{here ? <FolderOpen size={ICON} strokeWidth={STROKE} /> : <Folder size={ICON} strokeWidth={STROKE} />}</span>
+                  <span className="flex-1 truncate">{p.title}</span>
+                  {p.needsYou > 0 && <span className="shrink-0 text-[10px] font-medium leading-none px-1.5 py-[3px] rounded-full" style={{ color: "var(--color-warn)", background: "color-mix(in srgb, var(--color-warn) 16%, transparent)" }}>{p.needsYou} need you</span>}
+                  {p.working > 0 && <span aria-label={`${p.working} working`} className="shrink-0 size-1.5 rounded-full" style={{ background: STATUS_COLOR.working }} />}
+                  <span className={`shrink-0 ${COUNT}`}>{here ? "here" : p.tiles}</span>
+                </button>
+              );
+            })}
+          </section>
+        )}
+        {recentRows.shown.length > 0 && onResume && (
+          <section aria-label="Recents" data-layers-recents className="mt-3">
+            <div className={`flex h-7 items-center pl-4 pr-3 ${LABEL}`}>Recents</div>
+            {recentRows.shown.map((r) => (
+              <button key={`${r.agent}:${r.id}`} type="button" data-layers-recent={r.id}
+                onClick={() => onResume(r.agent, frames.find((f) => f.path === r.folder)?.id ?? null, r.id)}
+                title={`Resume ${agentById(r.agent)?.label ?? r.agent}${r.prompt ? `: ${r.prompt}` : ""}`}
+                className="flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-2 rounded-lg text-left text-[14px] text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)]">
+                <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]"><AgentIcon id={r.agent} size={ICON - 1} /></span>
+                <span className="flex-1 truncate">{r.prompt?.split("\n")[0] || `${agentById(r.agent)?.label ?? r.agent} session`}</span>
+                <span className={`shrink-0 ${COUNT}`}>{ago(r.updated ?? null, now)}</span>
+              </button>
+            ))}
+            {recentRows.more > 0 && (
+              <button type="button" onClick={() => setRecentLimit((n) => n + 10)} data-layers-recents-more
+                className={`flex h-7 items-center mx-2 pl-3 pr-2 rounded-lg ${LABEL} hover:text-[var(--color-fg)]`}>
+                Show {Math.min(10, recentRows.more)} more
+              </button>
+            )}
+          </section>
+        )}
         {looseTiles.length > 0 && (
           <div className="mt-1.5">
             <div className="flex items-center gap-2 h-8 pr-2 mx-2 pl-[26px]">

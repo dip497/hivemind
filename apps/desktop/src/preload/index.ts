@@ -89,6 +89,7 @@ const api: HiveIpc & {
   deleteIssue: (root, id) => workspace.call("issue.delete", root, id),
 
   listWorkspaces: () => ipcRenderer.invoke("listWorkspaces"),
+  workspaceSummaries: () => ipcRenderer.invoke("workspaceSummaries"),
   resolveIssueRoot: (id) => ipcRenderer.invoke("resolveIssueRoot", id),
   moveIssue: (root, id, destPrefix, mode) => workspace.call("issue.move", root, id, destPrefix, mode),
   linkIssue: (root, id, otherId, type) => workspace.call("issue.link", root, id, otherId, type),

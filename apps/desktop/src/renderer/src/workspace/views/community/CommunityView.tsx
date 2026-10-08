@@ -112,12 +112,13 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     return (
       <div className="flex-1 min-h-0 flex flex-row">
       {/* The app's own Layers rail, every frame action with it, for a view that asks for it. */}
-      {manifest.layers && model.layerFrames.length > 0 && (
+      {manifest.layers && (
         <LayersPanel
           frames={model.layerFrames}
           tiles={model.layerTiles}
           selectedTileId={model.selectedTileId}
           layoutKey={model.layoutKey}
+          onResume={(agent, frameId, session) => { commands.spawnAgent(agent, frameId, { resume: session }); }}
           onFocusTile={commands.selectTile}
           onFocusFrame={(id) => { commands.selectFrame(id); commands.selectTile(null); commands.focusTile(id); }}
           frameActions={model.frameActions}

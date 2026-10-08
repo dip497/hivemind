@@ -4,7 +4,7 @@
  */
 import { test } from "bun:test";
 import assert from "node:assert/strict";
-import { layersView, type ModelTile } from "./layers.js";
+import { layersView, recentsView, workspaceCounts, type ModelTile } from "./layers.js";
 import { DEFAULT_LAYERS_PREFS, type LayersPrefs } from "./settings-schema.js";
 
 const NOW = new Date(2026, 9, 8, 15, 0).getTime();
@@ -83,4 +83,24 @@ test("a search keeps the tiles whose name or agent holds it, pinned ones include
   assert.equal(v.filtering, true);
   const byAgent = layersView({ tiles: TILES, pinned: [], prefs: DEFAULT_LAYERS_PREFS, now: NOW, agentLabel: (t) => t.agent ?? "Terminal", query: "terminal" });
   assert.deepEqual([...byAgent.byFrame.values()].flat().map((t) => t.id), ["c-shell"]);
+});
+
+test("recents: newest first, at most the limit with how many more, no session twice nor one a tile has open, and a search narrows them", () => {
+  const rows = [
+    { agent: "claude", id: "a", folder: "/r", updated: 10, prompt: "fix the share dialog" },
+    { agent: "codex", id: "b", folder: "/r", updated: 30, prompt: "hooks review" },
+    { agent: "claude", id: "a", folder: "/r/wt", updated: 10, prompt: "fix the share dialog" },
+    { agent: "claude", id: "c", folder: "/r", updated: 20 },
+    { agent: "claude", id: "d", folder: "/r", updated: 40, prompt: "open in a tile" },
+  ];
+  const v = recentsView(rows, { limit: 2, open: new Set(["d"]) });
+  assert.deepEqual(v.shown.map((r) => r.id), ["b", "c"]);
+  assert.equal(v.more, 1);
+  assert.deepEqual(recentsView(rows, { limit: 5, query: "SHARE" }).shown.map((r) => r.id), ["a"]);
+  assert.deepEqual(recentsView(rows, { limit: 5, query: "Codex", agentLabel: (a) => (a === "codex" ? "Codex" : "Claude") }).shown.map((r) => r.id), ["b"]);
+});
+
+test("a workspace's counts: its tiles, the ones that need the person, the ones at work", () => {
+  assert.deepEqual(workspaceCounts(["working", "blocked", "question", "idle", null, "exited"]), { tiles: 6, needsYou: 2, working: 1 });
+  assert.deepEqual(workspaceCounts([]), { tiles: 0, needsYou: 0, working: 0 });
 });

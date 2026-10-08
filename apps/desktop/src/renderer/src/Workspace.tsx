@@ -562,6 +562,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
       remote: isRemote(f.workspacePath),
       remoteUri: isRemote(f.workspacePath) ? f.workspacePath : undefined,
       folder: (f.worktreePath ?? f.workspacePath)?.split("/").filter(Boolean).pop(),
+      ...(!isRemote(f.workspacePath) && (f.worktreePath ?? f.workspacePath) ? { path: (f.worktreePath ?? f.workspacePath)! } : {}),
     })),
     [frames],
   );
