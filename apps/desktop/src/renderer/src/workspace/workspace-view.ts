@@ -15,7 +15,7 @@
  * docs/design/workspace-views.md.
  */
 import { useSyncExternalStore, type ComponentType } from "react";
-import type { LucideIcon } from "lucide-react";
+import type { Icon } from "../components/icons";
 import type { IslandPlacement } from "@hivemind/core/settings-schema";
 import type { FrameState, TileInstance } from "../canvas-persistence";
 import type { LayerFrame, LayerTile } from "../LayersPanel";
@@ -127,7 +127,7 @@ export interface WorkspaceViewPlugin {
   id: string;
   label: string;
   hint: string;
-  icon: LucideIcon;
+  icon: Icon;
   /** May be `React.lazy(...)` — the ViewHost wraps it in Suspense. */
   component: ComponentType<WorkspaceViewProps>;
   /** Built-ins run in the renderer; community views run in a sandboxed iframe

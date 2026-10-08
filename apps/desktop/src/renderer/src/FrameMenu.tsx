@@ -5,10 +5,7 @@
  */
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
-import {
-  ArrowDown, ArrowUp, FolderOpen, FolderMinus, GitBranch, GitCommitHorizontal, LayoutGrid, Palette, Pencil,
-  Server, ServerOff, SquarePen, Trash, Unlink, Shapes,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, FolderOpen, FolderMinus, GitBranch, GitCommit, LayoutGrid, Palette, Pencil, Server, ServerOff, SquarePen, Trash, Unlink, AddWidget } from "./components/icons";
 import { optionChoices, preferredAgent } from "@hivemind/agents";
 import { AgentIcon, useAgents } from "./agents";
 import { notReady, useAgentPresence } from "./agent-plugins";
@@ -131,7 +128,7 @@ export function FrameMenu({ frame, at, actions, arrange = false, onClose, onRena
           {!ready.length && <div className="px-2 py-1.5 text-[12px] text-[var(--color-fg2)]">No agent is installed here.</div>}
         </Sub>
         {/* Every tool and widget, as Add lists them, going into this frame: no shortlist of its own. */}
-        <DropdownMenuItem onSelect={() => actions.onAddInFrame(fid)} data-frame-menu-add><Shapes />Add a tool or widget…</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => actions.onAddInFrame(fid)} data-frame-menu-add><AddWidget />Add a tool or widget…</DropdownMenuItem>
 
         <DropdownMenuSeparator />
         {worktree ? (
@@ -157,8 +154,8 @@ export function FrameMenu({ frame, at, actions, arrange = false, onClose, onRena
           </Sub>
         )}
         {repo && (
-          <Sub icon={<GitCommitHorizontal />} label="Git" data="git">
-            <DropdownMenuItem onSelect={() => actions.onGit(fid)}><GitCommitHorizontal />Commit…</DropdownMenuItem>
+          <Sub icon={<GitCommit />} label="Git" data="git">
+            <DropdownMenuItem onSelect={() => actions.onGit(fid)}><GitCommit />Commit…</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => actions.onPush(fid)}><ArrowUp />Push</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => actions.onPull(fid)}><ArrowDown />Pull</DropdownMenuItem>
           </Sub>

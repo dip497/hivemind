@@ -26,7 +26,7 @@ import {
   type NodeChange,
   type Edge,
 } from "@xyflow/react";
-import { Eye, EyeOff, LayoutGrid } from "lucide-react";
+import { Eye, EyeOff, LayoutGrid } from "../../components/icons";
 import { Button } from "../../components/ui/button";
 import { LayersPanel } from "../../LayersPanel";
 import { ZoomIsland } from "../../canvas-islands";

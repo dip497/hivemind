@@ -4,7 +4,7 @@
  * brief (PROMPT.md) beside the starter, so what an agent reads always matches the app it runs on.
  */
 import { useState } from "react";
-import { Check, Copy, Sparkles } from "lucide-react";
+import { Check, Copy, Sparkles } from "../components/icons";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { Button } from "../components/ui/button";

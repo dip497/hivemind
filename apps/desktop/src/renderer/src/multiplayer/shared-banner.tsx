@@ -7,7 +7,7 @@
  * be reached, Host it here, from the board as it was last seen (§5.7 E).
  */
 import { useEffect, useState } from "react";
-import { House, LogOut } from "lucide-react";
+import { House, LogOut } from "../components/icons";
 import type { SharedStatus } from "../../../shared/ipc";
 import { Button } from "../components/ui/button";
 import { ROLE_LABELS } from "./people";

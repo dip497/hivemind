@@ -16,7 +16,7 @@ import { PluginsHome } from "./plugins/PluginsHome";
  * each one has a single implementation over the same `useTheme` / `setTheme`.
  */
 import { useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown } from "./components/icons";
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import { getSettings, patchSettings } from "./settings-store";

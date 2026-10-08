@@ -6,7 +6,7 @@
  * are added from the toolbar's Add menu, in any view.
  */
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { EyeOff, LayoutGrid, Settings2, X } from "lucide-react";
+import { EyeOff, LayoutGrid, Settings2, X } from "../components/icons";
 import type { WidgetObject } from "@hivemind/workspace-doc/shapes";
 import type { WidgetPackage } from "../../../shared/ipc";
 import { SettingsForm } from "../plugins/SettingsForm";

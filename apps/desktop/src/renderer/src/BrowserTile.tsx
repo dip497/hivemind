@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WebviewTag } from "electron";
-import { ArrowLeft, ArrowRight, RotateCw, X as XIcon, Plus, Search, Wrench, Bot, GripVertical } from "lucide-react";
+import { ArrowLeft, ArrowRight, RotateCw, X as XIcon, Plus, Search, Wrench, Bot, GripVertical } from "./components/icons";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";

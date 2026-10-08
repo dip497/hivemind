@@ -30,7 +30,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import { DeleteFrameDialog, type FrameDeleteAsk } from "./DeleteFrameDialog";
-import { Plus } from "lucide-react";
+import { Plus } from "./components/icons";
 import { PickerDialog } from "./picker-dialog";
 import { callCommand, listCommands } from "./workspace/plugin-commands";
 import type { LayerTile, LayerFrame } from "./LayersPanel";

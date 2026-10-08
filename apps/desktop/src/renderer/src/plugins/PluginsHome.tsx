@@ -5,7 +5,7 @@
  * default agent, the view in use, a tool or widget switched on or off.
  */
 import { useEffect, useState } from "react";
-import { ChevronRight, FolderPlus, RefreshCw, Sparkles, Trash } from "lucide-react";
+import { ChevronRight, FolderPlus, RefreshCw, Sparkles, Trash } from "../components/icons";
 import { isPluginEnabled } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";

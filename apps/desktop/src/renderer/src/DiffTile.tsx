@@ -24,7 +24,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { GripVertical, Play, RefreshCw, Search, SlidersHorizontal, ChevronUp, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Maximize2, X } from "lucide-react";
+import { GripVertical, Play, RefreshCw, Search, SlidersHorizontal, ChevronUp, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Maximize, X } from "./components/icons";
 import { ReviewPopover, CommentBox, ActionToolbar, ReviewAnnotation, composerAnchor } from "./review-ui";
 import { Button } from "./components/ui/button";
 import { MenuItem } from "./components/ui/menu-item";
@@ -1013,7 +1013,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             aria-label="fullscreen diff"
             title="Fullscreen · Esc to exit"
           >
-            <Maximize2 />
+            <Maximize />
           </Button>
           {!embedded && <>
             <HeaderPinButton pinned={pinned} onToggle={onTogglePin} />

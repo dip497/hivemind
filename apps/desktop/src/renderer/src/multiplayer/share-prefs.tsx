@@ -11,7 +11,7 @@ import { ReachChooser } from "./reach-chooser";
 import { ROLE_LABELS } from "./people";
 import { useShown } from "./shown";
 import { useCanShare } from "./workspace-actions";
-import { Check, Copy, Users } from "lucide-react";
+import { Check, Copy, Users } from "../components/icons";
 import { Button } from "../components/ui/button";
 
 type LinkRole = "view" | "edit" | "terminals";

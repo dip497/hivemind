@@ -4,7 +4,7 @@
  * checklist uses it, and so does any widget whose drawing has a list, so both edit the same way.
  */
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Check, GripVertical, Plus } from "lucide-react";
+import { Check, GripVertical, Plus } from "../components/icons";
 import type { ChecklistItem } from "@hivemind/workspace-doc/shapes";
 import { mintId } from "@hivemind/workspace-api/tile-id";
 import { useBoardContext } from "./board-context";

@@ -119,7 +119,7 @@ function register(pkg: ToolPackage, off: Set<string>): void {
   });
 }
 
-/** A plugin's .svg drawn as a lucide icon is: its shape in the text's colour, at the size asked. */
+/** A plugin's .svg drawn as the app's icons are: its shape in the text's colour, at the size asked. */
 function maskIcon(url: string): KindIcon {
   const mask = `url("${url}") center / contain no-repeat`;
   return function PluginIcon({ size = 16, className }) {

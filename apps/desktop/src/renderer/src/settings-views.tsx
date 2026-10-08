@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { isPluginEnabled } from "@hivemind/core/plugin-settings";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ExternalLink, Puzzle, Trash } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ExternalLink, Puzzle, Trash } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { MenuItem } from "./components/ui/menu-item";
 import { Switch } from "./components/ui/switch";

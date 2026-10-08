@@ -9,6 +9,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Changed: icons are Hugeicons, rounded, at one stroke weight everywhere. Plugins draw the same icons by importing them from `@hivemind/app-ui`.
+- Changed: "Add a tool or widget" has an icon of its own instead of the plugin puzzle piece.
+- Fixed: the toolbar's icon buttons showed their shortcut as a tiny number under the icon, which read as a count. The shortcut is in the button's tooltip.
 - Changed: badges (the UI kit's, which plugins use too) and the smallest buttons use the app's type scale, 10px and 11px instead of 10.5px. The Diff tile's file counts are plain numbers instead of 8.5px white-on-accent pills.
 - Changed: Settings opens as a sheet over the workspace, with round corners, the workspace dimmed behind it, instead of covering the whole window.
 - Fixed: in the Layers panel, every agent that had finished a turn showed its name in bold, so the panel read as all headings. Unread is now a small blue dot after the name.

@@ -10,7 +10,7 @@
  * earlier this session for misbehaving.
  */
 import { isPluginEnabled } from "@hivemind/core/plugin-settings";
-import { Puzzle } from "lucide-react";
+import { Puzzle } from "../../../components/icons";
 import { toast } from "sonner";
 import { PROTOCOL_VERSION } from "@hivemind/view-sdk/protocol";
 import type { ViewPackageInfo } from "../../../../../shared/ipc";

@@ -18,7 +18,7 @@
  * shadcn primitives (Button/Switch), which own their look and focus rings.
  */
 import { useState } from "react";
-import { Film, Image as ImageIcon, Plus, Trash, ChevronDown } from "lucide-react";
+import { Film, Image as ImageIcon, Plus, Trash, ChevronDown } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { Switch as SwitchPrimitive } from "./components/ui/switch";
 import { PRESETS, type TerminalPalette } from "@hivemind/core/settings-schema";

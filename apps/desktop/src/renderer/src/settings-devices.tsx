@@ -8,7 +8,7 @@
  * or show a code from here.
  */
 import { useEffect, useMemo, useState } from "react";
-import { Check, Copy, Laptop, Server, Smartphone } from "lucide-react";
+import { Check, Copy, Laptop, Server, Smartphone } from "./components/icons";
 import { encode } from "uqr";
 import type { PairedDeviceSummary } from "../../shared/ipc";
 import { Button } from "./components/ui/button";

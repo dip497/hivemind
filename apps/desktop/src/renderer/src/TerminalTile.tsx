@@ -20,7 +20,7 @@ import { publishStatus, clearStatus, setLabel, statusOf, subscribeTileStatus, ty
 import { typeKeys } from "@hivemind/agent-host/keys";
 import { SUBMIT_DELAY_MS, deliversPromptViaArgv } from "@hivemind/agent-host/agent-io";
 import { AgentStart, START_TICK_MS, typeTask } from "@hivemind/agent-host/agent-start";
-import { Pencil, GripVertical } from "lucide-react";
+import { Pencil, GripVertical } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Skeleton } from "./components/ui/skeleton";

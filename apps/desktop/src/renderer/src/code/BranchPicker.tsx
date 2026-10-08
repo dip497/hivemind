@@ -2,7 +2,7 @@
  * Base/head branch chooser for the branch and unpushed diff modes.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Search } from "lucide-react";
+import { ChevronDown, Search } from "../components/icons";
 import { Button } from "../components/ui/button";
 import { MenuItem } from "../components/ui/menu-item";
 import type { GitBranchList } from "../../../shared/ipc";

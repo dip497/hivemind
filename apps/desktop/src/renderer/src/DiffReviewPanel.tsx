@@ -6,7 +6,7 @@
  * + actions.
  */
 import { useState } from "react";
-import { X } from "lucide-react";
+import { X } from "./components/icons";
 import type { ReviewComment } from "./diff-comments";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";

@@ -50,7 +50,7 @@ Known traps: the dev-bridge runs under tsx (node), not bun; e2e needs
 ## Conventions
 
 - TypeScript strict; comments explain *why*, matching surrounding density.
-- Icons: `lucide-react` only. Colours: `var(--color-*)` tokens; `--color-fg2` for
+- Icons: from `components/icons.tsx` only (Hugeicons, one stroke weight); a plugin imports them from `@hivemind/app-ui`. Colours: `var(--color-*)` tokens; `--color-fg2` for
   informational text; `aria-label` on icon-only buttons; focus rings on inputs.
 - Agent providers: one directory in `packages/hive-agents/src/providers/`, registered
   in the shared catalog.

@@ -4,7 +4,7 @@
  * known by: its device's, and the person's it holds the key of.
  */
 import { useEffect, useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Section } from "./appearance-controls";

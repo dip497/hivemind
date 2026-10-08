@@ -150,7 +150,7 @@ Colour is spent only where it means something. One warm colour, Signal Amber, be
 
 This system rejects three looks. The first is the stock generated look: default Geist with Lucide, everything one grey, an icon on every row. The second is the neon gamer dashboard: glowing gradients, saturated colour everywhere, motion for its own sake. The third is the enterprise admin: boxy tables, heavy borders, uppercase labels, dense chrome around the work.
 
-The code is migrating to two settled decisions. The UI font moves from bundled Geist Sans to the operating system's own UI font, and icons move from Lucide to Phosphor (regular weight). The tokens below record the target. Where the build still differs, the build is mid-migration, not a second rule.
+The code is migrating to two settled decisions. The UI font moves from bundled Geist Sans to the operating system's own UI font, and icons are Hugeicons (free, stroke-rounded) at a 1.5 stroke, drawn only through `components/icons.tsx`. The tokens below record the target. Where the build still differs, the build is mid-migration, not a second rule.
 
 **Key Characteristics:**
 - Graphite surfaces stacked in four close steps; depth from tone and soft shadow, never from heavy borders.

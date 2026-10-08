@@ -1,6 +1,6 @@
 /** Appearance beside the workspace, not over it: every change shows live on the real app. */
 import { useEffect, useRef, useState } from "react";
-import { Palette, X } from "lucide-react";
+import { Palette, X } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { AccentPicker, BackgroundControls, GlassControls, OverlayControls, PresetRow, Section } from "./appearance-controls";
 import { useTheme } from "./theme-store";

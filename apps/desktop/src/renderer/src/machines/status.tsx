@@ -1,6 +1,6 @@
 /** How a machine's connection state looks everywhere it appears: dot, words, colour. */
 import { useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy } from "../components/icons";
 import type { MachineStatus } from "../../../shared/ipc";
 import { Button } from "../components/ui/button";
 

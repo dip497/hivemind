@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { pluginOptions, stringOptions } from "@hivemind/core/plugin-settings";
-import { Check, ChevronRight, Copy, ExternalLink, Trash, TriangleAlert } from "lucide-react";
+import { Check, ChevronRight, Copy, ExternalLink, Trash, TriangleAlert } from "./components/icons";
 import {
   GENERIC_AGENT_ICON, defFromManifest, optionChoices,
   type AgentOption, type AgentProviderDef, type AgentWireEntry,

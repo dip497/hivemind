@@ -5,7 +5,7 @@
  * panel; "work" starts an agent on it. How the tile is set (view, grouping) is the tile's own.
  */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Inbox } from "lucide-react";
+import { Inbox } from "@hivemind/app-ui";
 import type { TileProps } from "@hivemind/tile-sdk";
 import type { ViewClient, ViewIssuesStatus } from "@hivemind/view-sdk";
 import { Button, Input, Label, Loading } from "@hivemind/app-ui";

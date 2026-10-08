@@ -10,7 +10,7 @@
  *                            or a free-text box when there are no marks yet.
  */
 import { lazy, Suspense, useMemo, useRef, useState } from "react";
-import { Check, MessageSquare, X, MessagesSquare } from "lucide-react";
+import { Check, MessageSquare, X, MessagesSquare } from "../components/icons";
 import { parsePlanToBlocks, exportAnnotations } from "./blocks";
 import { type Annotation, type PlanBlock } from "./types";
 import { ReviewPopover, CommentBox, ActionToolbar } from "../review-ui";

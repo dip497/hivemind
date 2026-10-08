@@ -1,4 +1,4 @@
-import { Globe } from "lucide-react";
+import { Globe } from "../components/icons";
 import { BrowserSkeleton } from "../workspace/tile-skeletons";
 import type { TilePlugin, PinRect, TileBodyArgs } from "./api";
 

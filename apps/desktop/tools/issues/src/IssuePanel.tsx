@@ -4,7 +4,7 @@
  * a link or "New issue"; it reads and writes through the plugin's `hm`.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Play, FileQuestionMark, X } from "lucide-react";
+import { Play, FileQuestion, X } from "@hivemind/app-ui";
 import { Button, Dialog, DialogContent, DialogTitle, Input, Label, MarkdownPreview, MenuItem, Textarea, Loading } from "@hivemind/app-ui";
 import { useIssue, useIssueList, write, type AcceptanceItem, type Issue, type IssueState } from "./data";
 import type { PanelProps } from "./data";
@@ -49,7 +49,7 @@ export function IssuePanel({ hm, params, close: onClose, openPanel }: PanelProps
         ) : !issue ? (
           <div className="grid place-items-center h-[80vh] max-h-[820px] px-6">
             <div className="flex flex-col items-center gap-3 text-center max-w-[320px]">
-              <FileQuestionMark size={28} className="text-[var(--color-fg3)]" />
+              <FileQuestion size={28} className="text-[var(--color-fg3)]" />
               <div className="text-[13px] font-medium text-[var(--color-fg)]">
                 {isError ? "Couldn't load this issue" : "Issue not found"}
               </div>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { setViewMode } from "./workspace/view-mode-store";
-import { Check, ExternalLink, LayoutGrid, RefreshCw } from "lucide-react";
+import { Check, ExternalLink, LayoutGrid, RefreshCw } from "./components/icons";
 import { iconFromManifest } from "@hivemind/agents";
 import { Button } from "./components/ui/button";
 import { useCommunityReport } from "./workspace/views/community/registry";
@@ -132,7 +132,7 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
         const open = review?.key === key(e) ? review.data : null;
         return <article key={key(e)} className="catalog-entry" data-catalog-plugin={key(e)}>
           <div className="catalog-entry-row">
-            <div className="catalog-entry-icon" aria-hidden="true">{e.type === "agent" ? <CatalogMark entry={e} /> : <LayoutGrid size={20} strokeWidth={1.6} />}</div>
+            <div className="catalog-entry-icon" aria-hidden="true">{e.type === "agent" ? <CatalogMark entry={e} /> : <LayoutGrid size={20} />}</div>
             <div className="catalog-entry-text">
               <h4><button type="button" className="plugin-name-link" data-plugin-open={key(e)} onClick={() => go(`plugin:${e.type}:${e.id}`)}>{e.name}</button> <span className="catalog-type">{KIND_LABEL[e.type]}</span></h4>
               <p className="catalog-meta">{e.author}<span>·</span>{e.version}{e.homepage && <><span>·</span><a href={e.homepage} target="_blank" rel="noreferrer">Source<ExternalLink size={11} /></a></>}</p>

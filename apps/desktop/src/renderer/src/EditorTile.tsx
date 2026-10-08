@@ -12,7 +12,7 @@
  * user actually opens get pulled in.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, GripVertical } from "lucide-react";
+import { ExternalLink, GripVertical } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";

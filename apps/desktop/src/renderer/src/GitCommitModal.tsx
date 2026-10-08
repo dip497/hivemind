@@ -15,7 +15,7 @@
  * and Commit&Push require a summary + something to commit; Push/Pull don't.
  */
 import { useEffect, useState } from "react";
-import { GitCommitHorizontal, ArrowUp, ArrowDown, LoaderCircle, X } from "lucide-react";
+import { GitCommit, ArrowUp, ArrowDown, Spinner, X } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
@@ -114,7 +114,7 @@ export function GitCommitModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2">
-          <GitCommitHorizontal size={16} className="text-[var(--color-fg2)]" />
+          <GitCommit size={16} className="text-[var(--color-fg2)]" />
           <h2 className="text-[15px] font-semibold text-[var(--color-fg)]">Commit</h2>
           <Button
             variant="ghost"
@@ -183,7 +183,7 @@ export function GitCommitModal({
             disabled={!canPull}
             title="Update this branch from upstream (fast-forward only)"
           >
-            {pullMut.isPending ? <LoaderCircle className="animate-spin" /> : <ArrowDown />}
+            {pullMut.isPending ? <Spinner className="animate-spin" /> : <ArrowDown />}
             Pull{behind > 0 ? ` ↓${behind}` : ""}
           </Button>
           <Button
@@ -193,7 +193,7 @@ export function GitCommitModal({
             disabled={!canPush}
             title={ahead > 0 ? `Push ${ahead} commit(s)` : "Nothing to push yet"}
           >
-            {pushMut.isPending ? <LoaderCircle className="animate-spin" /> : <ArrowUp />}
+            {pushMut.isPending ? <Spinner className="animate-spin" /> : <ArrowUp />}
             Push{ahead > 0 ? ` ↑${ahead}` : ""}
           </Button>
 
@@ -205,7 +205,7 @@ export function GitCommitModal({
               disabled={!canCommit}
               title="Commit staged changes (⌘↵)"
             >
-              {commitMut.isPending ? <LoaderCircle className="animate-spin" /> : null}
+              {commitMut.isPending ? <Spinner className="animate-spin" /> : null}
               Commit
             </Button>
             <Button
@@ -214,7 +214,7 @@ export function GitCommitModal({
               disabled={!canCommit}
               title="Commit, then push"
             >
-              {(commitMut.isPending || pushMut.isPending) ? <LoaderCircle className="animate-spin" /> : null}
+              {(commitMut.isPending || pushMut.isPending) ? <Spinner className="animate-spin" /> : null}
               Commit &amp; Push
             </Button>
           </div>

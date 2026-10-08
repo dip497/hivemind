@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, FileCodeCorner, Earth, ListTodo, Puzzle, Trash } from "lucide-react";
+import { ChevronRight, FileCode, Earth, ListTodo, Puzzle, Trash } from "./components/icons";
 import { toast } from "sonner";
 import { BUNDLED_TOOL_PLUGINS, BROWSER_PLUGIN_ID, bundledToolRegistry, CODE_PLUGIN_ID, ISSUES_PLUGIN_ID } from "@hivemind/core/tool-plugins";
 import { toolPreferences } from "@hivemind/core/settings-schema";
@@ -50,7 +50,7 @@ function bundledEnabled(pluginId: string, settings: ReturnType<typeof useSetting
 }
 
 const ToolIcon = ({ pluginId, size }: { pluginId: string; size: number }) => {
-  const Icon = pluginId === CODE_PLUGIN_ID ? FileCodeCorner : pluginId === ISSUES_PLUGIN_ID ? ListTodo : pluginId === BROWSER_PLUGIN_ID ? Earth : Puzzle;
+  const Icon = pluginId === CODE_PLUGIN_ID ? FileCode : pluginId === ISSUES_PLUGIN_ID ? ListTodo : pluginId === BROWSER_PLUGIN_ID ? Earth : Puzzle;
   return <Icon size={size} />;
 };
 

@@ -1,5 +1,5 @@
 import { AGENT_TILE_KIND } from "@hivemind/workspace-doc/shapes";
-import { Terminal } from "lucide-react";
+import { Terminal } from "../components/icons";
 import { tileName } from "@hivemind/workspace-doc/tile-list";
 import { defaultShell } from "../canvas-persistence";
 import { identifyAgent } from "../agent-state";

@@ -16,7 +16,7 @@
  */
 import { useState } from "react";
 import { toast } from "sonner";
-import { GripVertical } from "lucide-react";
+import { GripVertical } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { PlanReviewBody } from "./plan-review/PlanReviewBody";

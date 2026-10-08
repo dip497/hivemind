@@ -12,7 +12,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { UPDATE_START, UPDATE_STEPS, updateProgress, type UpdateProgress } from "../../shared/update-progress";
-import { Bell, ExternalLink, LoaderCircle, X, Palette, PanelsTopLeft, Bot, Keyboard, Info } from "lucide-react";
+import { Bell, ExternalLink, Spinner, X, Palette, PanelsTopLeft, Bot, Keyboard, Info } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
@@ -438,7 +438,7 @@ function UpdateWork({ progress, busy, onRestart }: { progress: UpdateProgress | 
     <>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
-          {busy && <LoaderCircle className="size-3 animate-spin text-[var(--color-fg2)]" />}
+          {busy && <Spinner className="size-3 animate-spin text-[var(--color-fg2)]" />}
           <span className="truncate">{p.label}</span>
         </div>
         <div className="hm-update-bar mt-1.5" data-busy={busy ? "1" : "0"} role="progressbar"

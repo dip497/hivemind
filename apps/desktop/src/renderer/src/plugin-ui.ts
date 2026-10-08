@@ -18,3 +18,4 @@ export * from "./components/ui/textarea";
 export * from "./components/ui/tooltip";
 export { toast } from "sonner";
 export { MarkdownPreview } from "./markdown-preview";
+export * from "./components/icons";

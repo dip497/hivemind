@@ -4,7 +4,7 @@
  */
 import { PLUGIN_CATEGORIES, type PluginCategory } from "@hivemind/view-sdk/category";
 import { useSyncExternalStore, type ComponentType } from "react";
-/** A kind's icon: a lucide icon, or a plugin's drawn the same way. */
+/** A kind's icon: one of the app's icons, or a plugin's drawn the same way. */
 export type KindIcon = ComponentType<{ size?: number; className?: string }>;
 import type { TileInstance } from "../canvas-persistence";
 

@@ -1,8 +1,8 @@
 /** Settings navigation: fixed pages, grouped, plus one page per plugin of any kind
  *  (`plugin:agent:claude`, `plugin:view:canvas`, `plugin:widget:pet`, `plugin:tool:hivemind/web`).
  *  `chunk` keeps cheap pages out of the lazy Settings bundle. */
-import { Bell, Blocks, Info, Keyboard, Palette, UserRound, UserPlus, Network, MonitorSmartphone } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Bell, Blocks, Info, Keyboard, Palette, UserRound, UserPlus, Network, MonitorSmartphone } from "./components/icons";
+import type { Icon } from "./components/icons";
 
 export type SettingsGroup = "General" | "Plugins";
 export const SETTINGS_GROUPS: readonly SettingsGroup[] = ["General", "Plugins"];
@@ -13,7 +13,7 @@ export interface SettingsPageDef {
   /** Sidebar label; `title` is the page heading when it differs. */
   label: string;
   title?: string;
-  icon: LucideIcon;
+  icon: Icon;
   description: string;
   /** "eager" = rendered by App.tsx itself; "lazy" = by the Settings chunk. */
   chunk: "eager" | "lazy";

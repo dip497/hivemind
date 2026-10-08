@@ -167,6 +167,12 @@ catalogs:
     '@electron/rebuild':
       specifier: ^4.2.0
       version: 4.2.0
+    '@hugeicons/core-free-icons':
+      specifier: ^4.3.5
+      version: 4.3.5
+    '@hugeicons/react':
+      specifier: ^1.1.10
+      version: 1.1.10
     '@lydell/node-pty':
       specifier: 1.2.0-beta.15
       version: 1.2.0-beta.15
@@ -242,9 +248,6 @@ catalogs:
     loro-crdt:
       specifier: 1.16.4
       version: 1.16.4
-    lucide-react:
-      specifier: ^1.50.0
-      version: 1.50.0
     react:
       specifier: ^19.3.0
       version: 19.3.0
@@ -410,6 +413,12 @@ importers:
       '@hivemind/workspace-host':
         specifier: workspace:*
         version: link:../../packages/workspace-host
+      '@hugeicons/core-free-icons':
+        specifier: 'catalog:'
+        version: 4.3.5
+      '@hugeicons/react':
+        specifier: 'catalog:'
+        version: 1.1.10(react@19.3.0)
       '@lezer/highlight':
         specifier: ^1.2.5
         version: 1.2.5
@@ -500,9 +509,6 @@ importers:
       loro-crdt:
         specifier: 'catalog:'
         version: 1.16.4
-      lucide-react:
-        specifier: 'catalog:'
-        version: 1.50.0(@types/react@19.3.0)(react@19.3.0)
       marked:
         specifier: ^18.0.14
         version: 18.0.14
@@ -1464,6 +1470,14 @@ packages:
 
   '@fontsource/jetbrains-mono@5.3.0':
     resolution: {integrity: sha512-fqDfB5I9f1p1TV486aUgB9t8zP84P0O1FtQR5Ol9vjwPy+S+EIGlVYm1cvj2W5shcZMTg2nZFdVMoH5wFu8a1A==}
+
+  '@hugeicons/core-free-icons@4.3.5':
+    resolution: {integrity: sha512-Sv+NjHRPnQk+yZsGCMcGznCHdTfJR9PMMOEKcJYAQU4gy90dmlc9PwdtvYOImBZIjiheMsTLL5eMn2DmHxUiUg==}
+
+  '@hugeicons/react@1.1.10':
+    resolution: {integrity: sha512-9tAsd92yMVVGP+E+d8cM+wc0VnXuYZHNbWQi7TOe8k2neawmhiaFmVFbzyruejhOMa197/LbgvSED32ayUo3ZA==}
+    peerDependencies:
+      react: '>=16.0.0'
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -4073,15 +4087,6 @@ packages:
   lru_map@0.4.1:
     resolution: {integrity: sha512-I+lBvqMMFfqaV8CJCISjI3wbjmwVu/VyOoU7+qtu9d7ioW5klMgsTTiUOUp+DJvfTTzKXoPbyC6YfgkNcyPSOg==}
 
-  lucide-react@1.50.0:
-    resolution: {integrity: sha512-RqHPQtKX6S9IE1xOL4oTHHsVQbcwJWTnmlxI6AdI9IpOwKiy7q+COPCQyMepI/Qu1x3h7sunpyEMvqtgFbgNiQ==}
-    peerDependencies:
-      '@types/react': '*'
-      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
-    peerDependenciesMeta:
-      '@types/react':
-        optional: true
-
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
 
@@ -5659,6 +5664,12 @@ snapshots:
   '@fontsource/geist-sans@5.3.0': {}
 
   '@fontsource/jetbrains-mono@5.3.0': {}
+
+  '@hugeicons/core-free-icons@4.3.5': {}
+
+  '@hugeicons/react@1.1.10(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -8256,12 +8267,6 @@ snapshots:
       yallist: 4.0.0
 
   lru_map@0.4.1: {}
-
-  lucide-react@1.50.0(@types/react@19.3.0)(react@19.3.0):
-    dependencies:
-      react: 19.3.0
-    optionalDependencies:
-      '@types/react': 19.3.0
 
   magic-string@0.30.21:
     dependencies:

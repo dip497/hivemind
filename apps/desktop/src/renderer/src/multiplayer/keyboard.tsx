@@ -12,7 +12,7 @@
  */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
-import { Keyboard } from "lucide-react";
+import { Keyboard } from "../components/icons";
 import type { Typist } from "@hivemind/workspace-api/terminals";
 import type { PtySize } from "../pty-size-sync";
 import { Button } from "../components/ui/button";

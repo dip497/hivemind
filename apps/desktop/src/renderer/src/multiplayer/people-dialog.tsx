@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Users } from "lucide-react";
+import { Users } from "../components/icons";
 import type { SharedPerson } from "../../../shared/ipc";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { Button } from "../components/ui/button";

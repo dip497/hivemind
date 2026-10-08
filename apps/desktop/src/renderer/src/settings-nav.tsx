@@ -27,7 +27,7 @@ export function useSettingsNav(): { groups: SettingsNavGroup[]; titleOf: (id: st
   const widgets = useWidgetPackages();
   const groups = SETTINGS_GROUPS.map((group) => ({
     group,
-    items: SETTINGS_PAGES.filter((p) => p.group === group).map((p) => ({ id: p.id, label: p.label, icon: <p.icon size={16} strokeWidth={1.7} /> })),
+    items: SETTINGS_PAGES.filter((p) => p.group === group).map((p) => ({ id: p.id, label: p.label, icon: <p.icon size={16} /> })),
   }));
   const titleOf = (id: string): string => {
     const fixed = SETTINGS_PAGES.find((p) => p.id === id);

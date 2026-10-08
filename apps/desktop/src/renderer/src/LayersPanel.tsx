@@ -13,7 +13,7 @@ import { MachineDot, statusWords } from "./machines/status";
 import { A_DEVICE, GONE_MACHINE, openMachines, placeOf, statusOf, useMachines } from "./machines/store";
 import type { MachineInfo } from "../../shared/ipc";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, Shapes, Blocks, History, Mail, MailOpen, AlarmClock, AlarmClockOff, LayoutList, Settings, Monitor } from "lucide-react";
+import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, AddWidget, Blocks, History, Mail, MailOpen, AlarmClock, AlarmClockOff, LayoutList, Settings, Monitor } from "./components/icons";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon, agentById, useAgents } from "./agents";
 import { notReady, useAgentPresence } from "./agent-plugins";
@@ -135,7 +135,6 @@ const NEEDS_YOU = (s: TileStatusKind | null): boolean =>
 const ICON = 16;
 /** The key that jumps to a row with its number: ⌘ on macOS, Ctrl elsewhere. */
 const MOD = typeof window !== "undefined" && window.hive?.platform === "darwin" ? "⌘" : "Ctrl ";
-const STROKE = 1.5;
 const LABEL = "text-[12px] font-medium text-[var(--color-fg2)]";
 const COUNT = "text-[11px] tabular-nums text-[var(--color-fg2)]";
 
@@ -189,7 +188,7 @@ function RemoteIcon({ color, uri }: { color: string; uri?: string }) {
   const s = statusOf(snap, hostId);
   return (
     <span className="relative shrink-0 grid place-items-center" title={machine?.label ?? device?.name ?? hostId ?? GONE_MACHINE}>
-      <Server size={ICON} strokeWidth={STROKE} style={{ color: muted(color) }} />
+      <Server size={ICON} style={{ color: muted(color) }} />
       {s.state !== "idle" && <span className="absolute -right-0.5 -bottom-0.5 rounded-full ring-2 ring-[var(--color-bg2)] leading-[0]"><MachineDot status={s} size={6} /></span>}
     </span>
   );
@@ -198,10 +197,10 @@ function RemoteIcon({ color, uri }: { color: string; uri?: string }) {
 function WorkspaceIcon({ color, remote, remoteUri, worktree, collapsed }: { color: string; remote?: boolean; remoteUri?: string; worktree: boolean; collapsed: boolean }) {
   const c = muted(color);
   if (remote) return <RemoteIcon color={color} uri={remoteUri} />;
-  if (worktree) return <GitBranch size={ICON} strokeWidth={STROKE} className="shrink-0" style={{ color: c }} />;
+  if (worktree) return <GitBranch size={ICON} className="shrink-0" style={{ color: c }} />;
   const Icon = collapsed ? Folder : FolderOpen;
   // `fill` through `style`: an SVG attribute does not accept color-mix()/var().
-  return <Icon size={ICON} strokeWidth={STROKE} className="shrink-0" style={{ color: c, fill: `color-mix(in oklab, ${color} 22%, transparent)` }} />;
+  return <Icon size={ICON} className="shrink-0" style={{ color: c, fill: `color-mix(in oklab, ${color} 22%, transparent)` }} />;
 }
 
 /** What a tile row needs from the panel; stable across renders, so a row redraws only when its own tile does. */
@@ -599,7 +598,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         <div data-layers-frame={gid} className="group/grp flex items-center gap-0.5 h-8 pr-2 mx-2 rounded-lg hover:bg-[var(--color-bg3)] transition-colors" style={{ paddingLeft: depth * 14 }}
           onContextMenu={frameActions ? (e) => { e.preventDefault(); setMenu({ frame, x: e.clientX, y: e.clientY }); } : undefined}>
           <Button variant="ghost" size="icon-2xs" onClick={() => toggleGroup(gid)} aria-label={isCollapsed ? "expand" : "collapse"}>
-            {isCollapsed ? <ChevronRight size={14} strokeWidth={STROKE} /> : <ChevronDown size={14} strokeWidth={STROKE} />}
+            {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
           </Button>
           {renaming?.id === gid ? (
             <div className="flex-1 flex items-center gap-2 min-w-0">
@@ -636,7 +635,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             <Button variant="ghost" size="icon-2xs" aria-label={`${frame.title} actions`} title="Frame actions" data-layers-frame-menu={gid}
               className="hidden group-hover/grp:grid group-focus-within/grp:grid shrink-0"
               onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ frame, x: r.left, y: r.bottom }); }}>
-              <EllipsisVertical size={14} strokeWidth={STROKE} />
+              <EllipsisVertical size={14} />
             </Button>
           )}
         </div>
@@ -709,10 +708,10 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         <PanelMenu title={title} workspaces={projects} here={layoutKey} onHide={() => setHidden(true)} />
         <span className="ml-auto" />
         <Button variant="ghost" size="icon-xs" aria-label="Search tiles" title="Search tiles" aria-pressed={searching} data-layers-search-toggle
-          onClick={() => { setSearching((x) => !x); setQuery(""); }}><Search size={ICON} strokeWidth={STROKE} className="size-4" /></Button>
+          onClick={() => { setSearching((x) => !x); setQuery(""); }}><Search size={ICON} className="size-4" /></Button>
         <Button variant="ghost" size="icon-xs" className="relative" data-layers-bell onClick={nextNeedsYou}
           aria-label={needsYou ? `${needsYou} need you: go to the next` : "Nothing needs you"} title={needsYou ? `${needsYou} need you: go to the next` : "Nothing needs you"}>
-          <Bell size={ICON} strokeWidth={STROKE} className="size-4" />
+          <Bell size={ICON} className="size-4" />
           {needsYou > 0 && <span aria-hidden className="absolute -right-1 -top-1 grid min-w-3.5 h-3.5 place-items-center rounded-full px-0.5 text-[10px] font-semibold tabular-nums leading-none text-[var(--color-bg)]" style={{ background: "var(--color-warn)" }}>{needsYou}</span>}
         </Button>
       </header>
@@ -725,8 +724,8 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       {pane === "tiles" && (
       <nav aria-label="Start" className="shrink-0 pb-2">
         <NewAgentRow />
-        <ActionRow icon={<FolderPlus size={ICON} strokeWidth={STROKE} />} label="New project" data="project" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:add-project"))} />
-        <ActionRow icon={<Shapes size={ICON} strokeWidth={STROKE} />} label="Add a tool or widget" data="add" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:open-add"))} />
+        <ActionRow icon={<FolderPlus size={ICON} />} label="New project" data="project" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:add-project"))} />
+        <ActionRow icon={<AddWidget size={ICON} />} label="Add a tool or widget" data="add" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:open-add"))} />
       </nav>
       )}
 
@@ -760,7 +759,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
                 <section key={p.folder} aria-label={p.name} data-layers-project={p.name} className={all.length > 1 ? "mt-2" : ""}>
                   {all.length > 1 && (
                     <div className={`flex h-7 items-center gap-2 pl-5 pr-3 ${LABEL}`}>
-                      <Folder size={13} strokeWidth={STROKE} className="shrink-0" /><span className="truncate">{p.name}</span>
+                      <Folder size={13} className="shrink-0" /><span className="truncate">{p.name}</span>
                     </div>
                   )}
                   {p.frames.map((f) => renderFrameGroup(f, 0, false))}
@@ -785,7 +784,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           <div className="mt-1.5">
             <div className="group/loose flex items-center gap-2 h-8 pr-2 mx-2 pl-[26px]" data-layers-loose>
               <span className="flex-1 flex items-center gap-2.5 min-w-0 text-[14px] font-medium text-[var(--color-fg)]">
-                <FolderOpen size={ICON} strokeWidth={STROKE} className="shrink-0 text-[var(--color-fg2)]" />
+                <FolderOpen size={ICON} className="shrink-0 text-[var(--color-fg2)]" />
                 <span className="truncate">Canvas</span>
                 <span className={`ml-auto ${COUNT} group-hover/loose:hidden group-focus-within/loose:hidden`}>{looseTiles.length}</span>
                 {tileActions && (
@@ -816,7 +815,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
                 <button type="button" onClick={() => toggleGroup(`recents:${g.key}`)} aria-expanded={!folded} data-layers-recents-group={g.key}
                   className="group/sec flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-2 rounded-lg text-left text-[14px] font-medium text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)]">
                   <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">
-                    {prefs.recentsBy === "agent" ? <AgentIcon id={g.key} size={ICON - 1} /> : prefs.recentsBy === "project" ? <Folder size={ICON} strokeWidth={STROKE} /> : <History size={ICON} strokeWidth={STROKE} />}
+                    {prefs.recentsBy === "agent" ? <AgentIcon id={g.key} size={ICON - 1} /> : prefs.recentsBy === "project" ? <Folder size={ICON} /> : <History size={ICON} />}
                   </span>
                   <span className="flex-1 truncate">{g.label}</span>
                   {folded ? <ChevronRight size={12} className="shrink-0 text-[var(--color-fg2)]" /> : <ChevronDown size={12} className="shrink-0 text-[var(--color-fg2)] opacity-0 transition-opacity duration-150 group-hover/sec:opacity-100" />}
@@ -849,7 +848,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       {pane === "machines" && (
       <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-[14px]" data-layers-pane="machines">
         <nav aria-label="Start" className="pb-2">
-          <ActionRow primary icon={<Server size={ICON} strokeWidth={STROKE} />} label="New machine" data="machine" onClick={() => openMachines({ kind: "add" })} />
+          <ActionRow primary icon={<Server size={ICON} />} label="New machine" data="machine" onClick={() => openMachines({ kind: "add" })} />
         </nav>
         <div className={`mt-2 flex h-7 items-center pl-5 pr-3 ${LABEL}`}>Machines</div>
         {machineGroups.map((g) => (
@@ -925,7 +924,7 @@ function NewAgentRow() {
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <div className="relative">
-        <ActionRow primary icon={<SquarePen size={ICON} strokeWidth={STROKE} />} label="New agent" hint="2" data="agent"
+        <ActionRow primary icon={<SquarePen size={ICON} />} label="New agent" hint="2" data="agent"
           onClick={() => (ordered.length ? setOpen(true) : getOne())} />
         <DropdownMenuTrigger asChild><span aria-hidden className="absolute bottom-0 left-4 size-0" /></DropdownMenuTrigger>
       </div>
@@ -1206,7 +1205,7 @@ function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYo
       title={m ? `${m.target}${s.detail ? ` — ${s.detail}` : ""}` : undefined}
     >
       {/* As a row (the Machines pane): what kind of computer, then its link. */}
-      {!used && <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">{group.key === "local" ? <Monitor size={ICON} strokeWidth={STROKE} /> : <Server size={ICON} strokeWidth={STROKE} />}</span>}
+      {!used && <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">{group.key === "local" ? <Monitor size={ICON} /> : <Server size={ICON} />}</span>}
       {group.hostId && <MachineDot status={s} enabled={on} size={6} />}
       <span className={`truncate min-w-0 ${on ? "" : "opacity-60"}`}>{group.label}</span>
       {group.hostId && (

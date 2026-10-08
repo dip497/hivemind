@@ -5,7 +5,7 @@
  * options, the toolbar, browser control) sit in the same tab.
  */
 import { lazy, Suspense, useEffect, useState } from "react";
-import { ArrowLeft, ExternalLink, LayoutGrid } from "lucide-react";
+import { ArrowLeft, ExternalLink, LayoutGrid } from "../components/icons";
 import { isPluginEnabled, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
 import { Switch } from "../components/ui/switch";
@@ -68,7 +68,7 @@ export function PluginPage({ kind, id }: { kind: string; id: string }) {
     <div className="settings-stack plugin-page" data-plugin-page={`${p.kind}:${p.id}`}>
       <button type="button" className="settings-link plugin-back" onClick={() => go("plugins")}><ArrowLeft size={13} />All plugins</button>
       <header className="plugin-page-head">
-        <div className="settings-extension-icon" aria-hidden="true"><LayoutGrid size={20} strokeWidth={1.6} /></div>
+        <div className="settings-extension-icon" aria-hidden="true"><LayoutGrid size={20} /></div>
         <div className="min-w-0 flex-1">
           <p className="plugin-page-meta">
             <span className="catalog-type">{KIND_LABEL[p.kind]}</span>

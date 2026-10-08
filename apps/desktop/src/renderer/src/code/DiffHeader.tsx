@@ -3,7 +3,7 @@
  * open, discard. `data-diff-file` is what the comment gutter resolves a
  * clicked line back to a file with.
  */
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight } from "../components/icons";
 import { Button } from "../components/ui/button";
 export function DiffHeader(props: {
   h: number;

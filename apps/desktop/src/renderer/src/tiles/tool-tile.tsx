@@ -5,7 +5,7 @@
  */
 import { Loading } from "../components/ui/loading";
 import { useContext, useEffect, useRef, useState, type ComponentType } from "react";
-import { GripVertical } from "lucide-react";
+import { GripVertical } from "../components/icons";
 import { connect, type ViewClient } from "@hivemind/view-sdk";
 import { PORT_HANDSHAKE } from "@hivemind/view-sdk/protocol";
 import type { ToolPackage } from "@hivemind/core/tool-format";

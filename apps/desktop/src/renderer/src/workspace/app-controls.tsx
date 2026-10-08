@@ -3,7 +3,7 @@
  * Where the island is not drawn (off, collapsed, zen mode) it sits in the window's corner instead,
  * so Settings is never out of reach.
  */
-import { Settings2 } from "lucide-react";
+import { Settings2 } from "../components/icons";
 import { Button } from "../components/ui/button";
 
 export function AppControls({ corner = false }: { corner?: boolean }) {

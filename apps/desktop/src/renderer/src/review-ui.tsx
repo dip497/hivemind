@@ -9,7 +9,7 @@
  * (which used 10–11px) — they match plan mode: 13px icons, 11.5–12.5px text.
  */
 import type { ReactNode } from "react";
-import { MessageSquare, Trash, Tag } from "lucide-react";
+import { MessageSquare, Trash, Tag } from "./components/icons";
 import { QUICK_LABELS } from "./plan-review/types";
 import type { ReviewComment } from "./diff-comments";
 import { Button } from "./components/ui/button";

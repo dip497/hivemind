@@ -9,7 +9,7 @@
  * Canvas owns the persisted open-tab list.
  */
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { GripVertical, Files, GitCompare } from "lucide-react";
+import { GripVertical, Files, GitCompare } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { FileTreeTile } from "./FileTreeTile";

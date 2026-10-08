@@ -10,7 +10,7 @@
  * views as escape hatches instead of a white screen.
  */
 import { Component, Suspense, type ErrorInfo, type ReactNode } from "react";
-import { TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "../components/icons";
 import { Button } from "../components/ui/button";
 import { getView, useViews, type WorkspaceViewProps } from "./workspace-view";
 

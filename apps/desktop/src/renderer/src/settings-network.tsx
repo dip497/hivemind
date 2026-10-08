@@ -5,7 +5,7 @@
  * reaches outside it.
  */
 import { useEffect, useState } from "react";
-import { Check, X } from "lucide-react";
+import { Check, X } from "./components/icons";
 import type { NetworkHealth, NetworkProfile } from "@hivemind/workspace-host/network-profile";
 import { Button } from "./components/ui/button";
 import { Switch } from "./components/ui/switch";

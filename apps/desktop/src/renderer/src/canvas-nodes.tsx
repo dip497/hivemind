@@ -22,7 +22,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Handle, NodeResizer, Position, useReactFlow, type NodeTypes } from "@xyflow/react";
-import { Pin, X } from "lucide-react";
+import { Pin, X } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { clampAnchor } from "./pin-anchor";
 import { FrameNode, type FrameNodeData } from "./FrameNode";

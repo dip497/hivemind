@@ -14,7 +14,7 @@
  * (its own eye button restores it), through chrome-store.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Wrench } from "lucide-react";
+import { Wrench } from "../components/icons";
 import { resolveToolbar, type ToolbarPreferences } from "@hivemind/core/toolbar";
 import { Button } from "../components/ui/button";
 import { StandardToolbar } from "./standard-toolbar";

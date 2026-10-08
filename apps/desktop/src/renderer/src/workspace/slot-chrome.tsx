@@ -10,7 +10,7 @@
  * listener per mounted bar; the most recently mounted wins.
  */
 import { useEffect, useState } from "react";
-import { ArrowUpRight, X } from "lucide-react";
+import { ArrowUpRight, X } from "../components/icons";
 import { Button } from "../components/ui/button";
 import type { TileStatusKind } from "../agent-status-bus";
 import { bucketTileStatus, type TileStatusBucket } from "@hivemind/view-host/status";

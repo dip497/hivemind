@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Download, Earth, LoaderCircle, MoveUpRight, Palette, RotateCw, Scan, Shapes, Sparkles, Upload, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, Download, Earth, Spinner, MoveUpRight, Palette, RotateCw, Scan, AddWidget, Sparkles, Upload, Icon } from "../components/icons";
 import type { ToolbarAction, ToolbarActionId } from "@hivemind/core/toolbar";
 import { Button } from "../components/ui/button";
 import { MenuItem } from "../components/ui/menu-item";
@@ -41,7 +41,7 @@ export interface StandardToolbarProps {
   upgrading: boolean;
 }
 
-const icons: Record<Exclude<ToolbarActionId, "agent" | "board">, LucideIcon> = {
+const icons: Record<Exclude<ToolbarActionId, "agent" | "board">, Icon> = {
   frame: Scan, browser: Earth, theme: Palette,
 };
 // Derived per call: the catalog is replaced when manifests load.
@@ -67,7 +67,7 @@ export function StandardToolbar(props: StandardToolbarProps) {
       onClick={props.updateStaged && !props.upgrading ? props.onRestart : props.onUpgrade}
       disabled={props.upgrading} aria-busy={props.upgrading}
       title={props.upgrading ? "Downloading the update…" : props.updateStaged ? "Downloaded — restart to finish" : "Update available — click to download it"}>
-      {props.upgrading ? <LoaderCircle className="animate-spin" /> : props.updateStaged ? <RotateCw /> : <Upload />}
+      {props.upgrading ? <Spinner className="animate-spin" /> : props.updateStaged ? <RotateCw /> : <Upload />}
       {props.upgrading ? "Updating…" : props.updateStaged ? "Restart to finish" : "Update available"}
     </Button>}
     <AppControls />
@@ -104,7 +104,7 @@ function ViewSwitch({ compact }: { compact: boolean }) {
       <active.icon /><span className="text-[12px]">{active.label}</span><ChevronDown />
     </Button>
     {open && <div role="menu" className={`hm-island absolute right-0 z-30 min-w-[180px] rounded-lg p-1 ${compact ? "bottom-full mb-1" : "top-full mt-1"}`}>
-      {views.map((view) => <MenuItem key={view.id} variant="muted" data-view-choice={view.id} title={view.hint}
+      {views.map((view) => <MenuItem key={view.id} variant="muted" data-view-choice={view.id} title={view.hint} role="menuitemradio" aria-checked={view.id === current}
         onClick={() => { setViewMode(view.id); setOpen(false); trigger.current?.focus(); }}>
         <view.icon /><span className="flex-1">{view.label}</span>{view.id === current && <Check />}
       </MenuItem>)}
@@ -196,12 +196,12 @@ function BoardAction({ action, labels, compact, repoPath, onBoard, onTile, board
   const side = (id: PluginCategory | "all", label: string, count: number) =>
     <button key={id} type="button" data-add-shelf={id} aria-pressed={shelf === id} onClick={() => { setShelf(id); setActive(0); }}
       className={`flex w-full items-center rounded-md px-2 py-1 text-left text-[12px] ${shelf === id ? "bg-[var(--color-bg3)] text-[var(--color-fg)]" : "text-[var(--color-fg2)] hover:bg-[var(--color-bg3)]/60"}`}>
-      <span className="flex-1 truncate">{label}</span><span className="tabular-nums text-[10.5px] text-[var(--color-fg3)]">{count}</span>
+      <span className="flex-1 truncate">{label}</span><span className="tabular-nums text-[11px] text-[var(--color-fg3)]">{count}</span>
     </button>;
   return <div ref={root} className="relative flex items-center">
-    <Button ref={trigger} variant="ghost" size={labels ? "lg" : "icon-lg"} className="relative" onClick={() => setOpen((value) => !value)}
+    <Button ref={trigger} variant="ghost" size={labels ? "lg" : "icon-lg"} onClick={() => setOpen((value) => !value)}
       aria-label={action.label} aria-expanded={open} data-toolbar-action={action.id} title={action.label}>
-      <Shapes />{labels && <span data-toolbar-label className="text-[12px]">{action.label}</span>}
+      <AddWidget />{labels && <span data-toolbar-label className="text-[12px]">{action.label}</span>}
     </Button>
     {open && <div role="menu" onKeyDown={onKeyDown} data-add-menu
       className={`hm-popover absolute left-0 z-30 flex h-[min(420px,70vh)] w-[min(500px,calc(100vw-24px))] flex-col ${compact ? "bottom-full mb-1" : "top-full mt-1"}`}>
@@ -241,7 +241,7 @@ function BoardAction({ action, labels, compact, repoPath, onBoard, onTile, board
         <MenuItem variant="muted" data-add-make onClick={() => { setOpen(false); window.dispatchEvent(new CustomEvent("hivemind:make-plugin", { detail: { kind: tab === "tool" ? "tool" : "widget" } })); }}>
           <span className="grid size-4 shrink-0 place-items-center [&>svg]:size-3.5"><Sparkles /></span>
           <span className="flex-1">Make your own…</span>
-          <span className="text-[10.5px] text-[var(--color-fg3)]">an agent builds it</span>
+          <span className="text-[11px] text-[var(--color-fg3)]">an agent builds it</span>
         </MenuItem>
       </div>
     </div>}
@@ -252,9 +252,8 @@ function ActionButton({ action, labels, icon, disabled, onClick }: {
   action: ToolbarAction; labels: boolean; icon: React.ReactNode; disabled?: boolean; onClick: () => void;
 }) {
   return <Button onClick={onClick} disabled={disabled} aria-label={action.label} data-toolbar-action={action.id}
-    variant="ghost" size={labels ? "lg" : "icon-lg"} className="relative"
+    variant="ghost" size={labels ? "lg" : "icon-lg"}
     title={disabled ? `${action.label} — needs a repo` : action.hint ? `${action.label}  (${action.hint})` : action.label}>
     {icon}{labels && <span data-toolbar-label className="text-[12px]">{action.label}</span>}
-    {!labels && action.hint && <kbd aria-hidden className="absolute bottom-0.5 right-1 font-mono text-[8px] leading-none opacity-60">{action.hint}</kbd>}
   </Button>;
 }

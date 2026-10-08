@@ -4,7 +4,7 @@
  * queue + the spawn actions). Extracted to keep Canvas.tsx focused.
  */
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { CircleAlert, CircleCheck, TriangleAlert, SquarePen, X } from "lucide-react";
+import { CircleAlert, CircleCheck, TriangleAlert, SquarePen, X } from "./components/icons";
 import { AgentIcon } from "./agents";
 import { Button } from "./components/ui/button";
 import { useTileFocus } from "./canvas-camera";
@@ -113,7 +113,7 @@ function ToastCard({
           aria-hidden
           className={`hm-toast-icon mt-px shrink-0 ${pulse ? "hm-toast-attn" : ""}`}
         >
-          <Icon size={15} strokeWidth={2.25} />
+          <Icon size={15} />
         </span>
         <div className="flex flex-col min-w-0 flex-1 leading-tight">
           <span className="font-mono text-[13px] font-semibold tracking-[-0.01em] text-[var(--color-fg)] truncate">
@@ -256,7 +256,7 @@ export function CanvasEmptyState({
           className="mt-5 w-full flex items-center gap-3 rounded-xl border border-[var(--color-line2)] bg-[var(--color-bg3)] hover:border-[var(--color-brand)] hover:bg-[var(--color-bg4)] transition-colors duration-150 px-3.5 py-3 text-left group"
         >
           <span aria-hidden className="grid place-items-center size-9 shrink-0 rounded-lg bg-[var(--color-bg4)] text-[var(--color-fg)]">
-            {agentId ? <AgentIcon id={agentId} size={20} /> : <SquarePen size={18} strokeWidth={1.75} />}
+            {agentId ? <AgentIcon id={agentId} size={20} /> : <SquarePen size={18} />}
           </span>
           <span className="flex-1 min-w-0">
             <span className="block text-[14px] font-medium text-[var(--color-fg)]">{agentLabel ? "New agent" : "Get an agent"}</span>

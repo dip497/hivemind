@@ -7,7 +7,7 @@
  */
 import { memo, useState, type ReactNode } from "react";
 import { NodeResizer, type NodeTypes } from "@xyflow/react";
-import { Copy, Settings2, Trash } from "lucide-react";
+import { Copy, Settings2, Trash } from "../components/icons";
 import { Button } from "../components/ui/button";
 import { BOX_SIZE, type BoardWidget, type BoxObject } from "./board-model";
 import { WidgetContent, widgetTint, widgetTree } from "./WidgetBody";

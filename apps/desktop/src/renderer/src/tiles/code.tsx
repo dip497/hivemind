@@ -1,4 +1,4 @@
-import { Folder } from "lucide-react";
+import { Folder } from "../components/icons";
 import { EditorSkeleton } from "../workspace/tile-skeletons";
 import type { TilePlugin, PinRect, TileKindSpec, TileBodyArgs } from "./api";
 

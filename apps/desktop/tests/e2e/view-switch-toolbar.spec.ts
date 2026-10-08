@@ -34,7 +34,7 @@ test("the toolbar switches the view, and shows which one you are in", async () =
   await toggle.click();
   const choices = page.locator("[data-view-choice]");
   expect(await choices.count()).toBeGreaterThan(1);
-  const other = await choices.filter({ hasNot: page.locator("svg.lucide-check") }).first().getAttribute("data-view-choice");
+  const other = await page.locator('[data-view-choice][aria-checked="false"]').first().getAttribute("data-view-choice");
   await page.locator(`[data-view-choice="${other}"]`).click();
 
   await expect.poll(activeView).toBe(other);

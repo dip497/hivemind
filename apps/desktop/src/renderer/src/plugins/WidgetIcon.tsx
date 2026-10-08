@@ -1,4 +1,4 @@
-import { LayoutGrid } from "lucide-react";
+import { LayoutGrid } from "../components/icons";
 import type { WidgetPackage } from "../../../shared/ipc";
 
 /** A widget's mark: a one-colour SVG drawn in the text colour (a mask, so it follows the theme like

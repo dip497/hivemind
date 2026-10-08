@@ -1,5 +1,5 @@
 import type { DragEvent, KeyboardEvent } from "react";
-import { Play } from "lucide-react";
+import { Play } from "@hivemind/app-ui";
 import { useOpenIssue, type IssueSummary } from "./data";
 import { StateIcon, LabelChip, Avatar } from "./StateMeta";
 import { Button } from "@hivemind/app-ui";

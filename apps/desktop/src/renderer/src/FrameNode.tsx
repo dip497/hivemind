@@ -7,7 +7,7 @@
  * move tiles inside (use react-flow `parentId` later for strong containment).
  */
 import { useEffect, useState } from "react";
-import { GitBranch, FolderGit2, Server, Ellipsis } from "lucide-react";
+import { GitBranch, FolderGit, Server, Ellipsis } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { FrameMenu, type FrameActions } from "./FrameMenu";
@@ -206,7 +206,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
           >
             {isRemoteWs
               ? <Server size={11} className="shrink-0 text-[var(--color-brand)]" />
-              : <FolderGit2 size={11} className="shrink-0 text-[var(--color-fg2)]" />}
+              : <FolderGit size={11} className="shrink-0 text-[var(--color-fg2)]" />}
             {/* The pill's label is dropped when it just repeats the frame title —
                 which is the DEFAULT, since a new frame is titled after its repo.
                 The same word twice in one header is noise, and the icon already
