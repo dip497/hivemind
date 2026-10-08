@@ -153,6 +153,12 @@ function BoardAction({ action, labels, compact, repoPath, onBoard, onTile, board
   const [tab, setTab] = useState<(typeof ADD_TABS)[number][0]>("all");
   const [shelf, setShelf] = useState<PluginCategory | "all">("all");
   useEffect(() => { if (open) { setQuery(""); setActive(0); setShelf("all"); } }, [open]);
+  // Asked from elsewhere (the Layers panel's "Add a tool or widget").
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener("hivemind:open-add", show);
+    return () => window.removeEventListener("hivemind:open-add", show);
+  }, [setOpen]);
   const choices: AddChoice[] = [
     ...(onTile ? tileKinds().filter(([, spec]) => spec.title).map(([kind, spec]): AddChoice => ({
       id: `tile:${kind}`, name: spec.title!, type: "tool", category: spec.category ?? "other",

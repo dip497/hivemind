@@ -13,7 +13,7 @@ import { MachineDot, statusWords } from "./machines/status";
 import { A_DEVICE, GONE_MACHINE, openMachines, placeOf, statusOf, useMachines } from "./machines/store";
 import type { MachineInfo } from "../../shared/ipc";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Monitor, Plus, RefreshCw, Ellipsis, EllipsisVertical, ServerCog, X, Pencil, Trash, Pin, PinOff, SlidersHorizontal } from "lucide-react";
+import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, Shapes, Blocks, History } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon, agentById } from "./agents";
 import { FrameRailMenu, type FrameActions } from "./FrameRailMenu";
@@ -111,6 +111,17 @@ const STATUS_RANK: Record<TileStatusKind, number> = {
 const NEEDS_YOU = (s: TileStatusKind | null): boolean =>
   s === "blocked" || s === "permission" || s === "question" || s === "plan_review" || s === "awaiting_approval";
 
+/**
+ * The panel's one type and icon scale: the title 15px semibold; a row (an action, a group, a tile)
+ * 14px, its leading mark in a 16px box drawn at a 1.75 stroke; a section label 12px medium in
+ * sentence case; counts and times 11px. Labels and counts use --color-fg2: --color-fg3 is under
+ * 4.5:1 on the panel (see .u-eyebrow).
+ */
+const ICON = 16;
+const STROKE = 1.75;
+const LABEL = "text-[12px] font-medium text-[var(--color-fg2)]";
+const COUNT = "text-[11px] tabular-nums text-[var(--color-fg2)]";
+
 /** This person's own for this workspace: pinned tiles (in pin order) and the groups they folded. */
 interface Mine { pinned: string[]; collapsed: string[] }
 const MINE = { viewId: "layers", version: 1, initial: (): Mine => ({ pinned: [], collapsed: [] }), personal: true } as const;
@@ -147,7 +158,7 @@ function RemoteIcon({ color, uri }: { color: string; uri?: string }) {
   const s = statusOf(snap, hostId);
   return (
     <span className="relative shrink-0 grid place-items-center" title={machine?.label ?? device?.name ?? hostId ?? GONE_MACHINE}>
-      <Server size={15} style={{ color: muted(color) }} />
+      <Server size={ICON} strokeWidth={STROKE} style={{ color: muted(color) }} />
       {s.state !== "idle" && <span className="absolute -right-0.5 -bottom-0.5 rounded-full ring-2 ring-[var(--color-bg2)] leading-[0]"><MachineDot status={s} size={6} /></span>}
     </span>
   );
@@ -156,10 +167,10 @@ function RemoteIcon({ color, uri }: { color: string; uri?: string }) {
 function WorkspaceIcon({ color, remote, remoteUri, worktree, collapsed }: { color: string; remote?: boolean; remoteUri?: string; worktree: boolean; collapsed: boolean }) {
   const c = muted(color);
   if (remote) return <RemoteIcon color={color} uri={remoteUri} />;
-  if (worktree) return <GitBranch size={15} className="shrink-0" style={{ color: c }} />;
+  if (worktree) return <GitBranch size={ICON} strokeWidth={STROKE} className="shrink-0" style={{ color: c }} />;
   const Icon = collapsed ? Folder : FolderOpen;
   // `fill` through `style`: an SVG attribute does not accept color-mix()/var().
-  return <Icon size={15} className="shrink-0" style={{ color: c, fill: `color-mix(in oklab, ${color} 22%, transparent)` }} />;
+  return <Icon size={ICON} strokeWidth={STROKE} className="shrink-0" style={{ color: c, fill: `color-mix(in oklab, ${color} 22%, transparent)` }} />;
 }
 
 /** What a tile row needs from the panel; stable across renders, so a row redraws only when its own tile does. */
@@ -191,11 +202,11 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions }: { t: Mode
       }}
       // `w-[calc(100%-1rem)] min-w-0`: without a width the row shrink-wraps its text and `truncate` never engages.
       className={`group flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 pr-1.5 mx-2 text-left rounded-lg outline-none focus-visible:outline-none cursor-pointer transition-colors ${
-        selected ? "text-[var(--color-fg)]" : "text-[var(--color-fg2)] hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]"
+        selected ? "text-[var(--color-fg)]" : "text-[var(--color-fg)] hover:bg-[var(--surface-3)]"
       }`}
     >
-      <span aria-hidden className="w-4 shrink-0 grid place-items-center font-mono text-[11px] text-[var(--color-fg3)]">
-        {t.kind === AGENT_TILE_KIND ? <AgentIcon id={t.agent} size={14} /> : <KindMark kind={t.kind} />}
+      <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">
+        {t.kind === AGENT_TILE_KIND ? <AgentIcon id={t.agent} size={ICON - 1} /> : <KindMark kind={t.kind} size={ICON} />}
       </span>
       {/* Name first, so every row's text starts at the same x. */}
       <span className="truncate flex-1 min-w-0">{t.name}</span>
@@ -261,6 +272,8 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
   const [renamingTile, setRenamingTile] = useState<{ id: string; draft: string } | null>(null);
   const [card, setCard] = useState<{ tile: ModelTile; top: number; left: number } | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState("");
   const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Live status per tile, and when it last changed: seeded from main's ledger (it outlives a
@@ -332,10 +345,20 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [tiles, status, activity, frames, machineSnap]);
   const agentLabel = (t: ModelTile) => (t.kind === AGENT_TILE_KIND ? agentById(t.agent)?.label ?? t.agent ?? "Agent" : tileKind(t.kind).title ?? "Other");
-  const view = layersView({ tiles: modelTiles, pinned: mine.pinned, prefs, now, agentLabel });
+  const view = layersView({ tiles: modelTiles, pinned: mine.pinned, prefs, now, agentLabel, query });
 
   const needsYou = modelTiles.filter((t) => t.needsYou).length;
   const working = modelTiles.filter((t) => t.status === "working" && !t.needsYou).length;
+
+  // The bell: each press goes to the next tile that needs you, in the order they are listed.
+  const nextAt = useRef(0);
+  const nextNeedsYou = () => {
+    const waiting = modelTiles.filter((t) => t.needsYou);
+    if (!waiting.length) return;
+    const t = waiting[nextAt.current++ % waiting.length]!;
+    onFocusTile(t.id);
+  };
+  const title = layoutKey?.split(/[\\/]/).filter(Boolean).pop() ?? "Workspace";
 
   // Rows call these; kept stable so a row redraws only when its own tile changes.
   const focusRef = useRef(onFocusTile);
@@ -413,7 +436,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         <div className="group/grp flex items-center gap-0.5 h-8 pr-2 mx-2 rounded-lg hover:bg-[var(--color-bg3)] transition-colors" style={{ paddingLeft: depth * 14 }}
           onContextMenu={frameActions ? (e) => { e.preventDefault(); setMenu({ frame, x: e.clientX, y: e.clientY }); } : undefined}>
           <Button variant="ghost" size="icon-2xs" onClick={() => toggleGroup(gid)} aria-label={isCollapsed ? "expand" : "collapse"}>
-            {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+            {isCollapsed ? <ChevronRight size={14} strokeWidth={STROKE} /> : <ChevronDown size={14} strokeWidth={STROKE} />}
           </Button>
           {renaming?.id === gid ? (
             <div className="flex-1 flex items-center gap-2 min-w-0">
@@ -424,12 +447,12 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             </div>
           ) : (
             <button onClick={() => onFocusFrame(frame.id)} onDoubleClick={frameActions ? () => setRenaming({ id: gid, draft: frame.title }) : undefined}
-              className="flex-1 flex items-center gap-2 min-w-0 text-left text-[14px] font-semibold tracking-[-0.014em] text-[var(--color-fg)]"
+              className="flex-1 flex items-center gap-2.5 min-w-0 text-left text-[14px] font-medium text-[var(--color-fg)]"
               title={isWt ? `Focus worktree ${frame.branch ?? frame.title}` : `Focus ${frame.title}${frameActions ? " · double-click to rename" : ""}`}>
               <WorkspaceIcon color={frame.color} remote={frame.remote && !groupByMachine} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
               <span className="truncate">{frame.title}</span>
               {frame.folder && frame.folder !== frame.title && (
-                <span className="truncate min-w-0 font-mono text-[11px] font-normal text-[var(--color-fg3)]" title={frame.folder}>{frame.folder}</span>
+                <span className={`truncate min-w-0 font-normal ${COUNT}`} title={frame.folder}>{frame.folder}</span>
               )}
               <span className="ml-auto flex items-center gap-1.5 min-w-0">
                 {/* A summary of what is hidden: when folded, or when a child needs a person. */}
@@ -441,7 +464,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
                     </span>
                   ) : <span aria-label={STATUS_LABEL[agg]} title={STATUS_LABEL[agg]} className="shrink-0 size-1.5 rounded-full" style={{ background: STATUS_COLOR[agg] }} />
                 )}
-                {items.length + kids.length > 0 && <span className="font-mono text-[11px] tabular-nums text-[var(--color-fg3)] shrink-0">{items.length + kids.length}</span>}
+                {items.length + kids.length > 0 && <span className={`shrink-0 ${COUNT}`}>{items.length + kids.length}</span>}
               </span>
             </button>
           )}
@@ -465,11 +488,11 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       <section key={key} aria-label={label || "Tiles"} className="mt-2 first:mt-1" {...attr}>
         {label && (
           <button type="button" onClick={() => toggleGroup(`section:${key}`)} aria-expanded={!folded}
-            className="group/sec flex w-full items-center gap-1 h-7 pl-4 pr-3 text-[11px] font-medium text-[var(--color-fg3)] transition-colors duration-150 hover:text-[var(--color-fg2)]">
+            className={`group/sec flex w-full items-center gap-1 h-7 pl-4 pr-3 ${LABEL} transition-colors duration-150 hover:text-[var(--color-fg)]`}>
             <span>{label}</span>
             {/* Open or folded, it says it folds: quiet until the heading is pointed at. */}
             {folded ? <ChevronRight size={11} /> : <ChevronDown size={11} className="opacity-40 transition-opacity duration-150 group-hover/sec:opacity-100" />}
-            <span className="ml-auto font-mono text-[10.5px] tabular-nums">{list.length}</span>
+            <span className={`ml-auto ${COUNT}`}>{list.length}</span>
           </button>
         )}
         {!folded && list.map((t) => renderTile(t, 0))}
@@ -484,38 +507,48 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
 
   return (
     <aside className="hm-layers relative h-full shrink-0 flex flex-col bg-[var(--color-bg2)] border-r border-[var(--color-line)] overflow-hidden" style={{ width }} aria-label="Layers">
-      <header className="flex items-center gap-2 px-3 h-11 text-[13px] font-semibold text-[var(--color-fg2)]">
-        <Layers size={14} className="text-[var(--color-fg3)]" />
-        <span>Layers</span>
-        <span className="ml-auto flex items-center gap-1.5 font-mono text-[11px] tabular-nums">
-          {needsYou > 0 && (
-            <span className="flex items-center gap-0.5 text-[var(--color-warn)]" title={`${needsYou} need you`}>
-              <span aria-hidden className="size-1.5 rounded-full animate-pulse" style={{ background: "var(--color-warn)" }} />{needsYou}
-            </span>
-          )}
-          {working > 0 && (
-            <span className="flex items-center gap-0.5 text-[var(--color-brand)]" title={`${working} working`}>
-              <span aria-hidden className="size-1.5 rounded-full" style={{ background: "var(--color-brand)" }} />{working}
-            </span>
-          )}
-          <span className="text-[var(--color-fg3)]">{tiles.length}</span>
-        </span>
-        <ViewMenu prefs={prefs} setPref={setPref} machines={machineChoices} />
-        <Button variant="ghost" size="icon-2xs" onClick={() => openMachines({ kind: "add" })} title="Add a machine" aria-label="add machine"><ServerCog size={14} /></Button>
-        <Button variant="ghost" size="icon-2xs" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:add-project"))}
-          title="Add another project (opens as its own workspace)" aria-label="add project"><Plus size={14} /></Button>
-        <Button variant="ghost" size="icon-2xs" onClick={() => setHidden(true)} title="Collapse layers (⌘B)" aria-label="collapse layers"><PanelLeftClose size={14} /></Button>
+      {/* As a sidebar does it: whose it is and its two quick tools on top, then what you can start,
+          each a row with its name, then what is open. */}
+      <header className="flex items-center gap-1 pl-2 pr-2 h-11">
+        <PanelMenu title={title} onHide={() => setHidden(true)} />
+        <span className="ml-auto" />
+        <Button variant="ghost" size="icon-xs" aria-label="Search tiles" title="Search tiles" aria-pressed={searching} data-layers-search-toggle
+          onClick={() => { setSearching((x) => !x); setQuery(""); }}><Search size={ICON} strokeWidth={STROKE} className="size-4" /></Button>
+        <Button variant="ghost" size="icon-xs" className="relative" data-layers-bell onClick={nextNeedsYou}
+          aria-label={needsYou ? `${needsYou} need you: go to the next` : "Nothing needs you"} title={needsYou ? `${needsYou} need you: go to the next` : "Nothing needs you"}>
+          <Bell size={ICON} strokeWidth={STROKE} className="size-4" />
+          {needsYou > 0 && <span aria-hidden className="absolute -right-1 -top-1 grid min-w-3.5 h-3.5 place-items-center rounded-full px-0.5 text-[9px] font-semibold tabular-nums leading-none text-[var(--color-bg)]" style={{ background: "var(--color-warn)" }}>{needsYou}</span>}
+        </Button>
       </header>
+      {searching && (
+        <div className="px-2 pb-1.5">
+          <Input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search tiles" aria-label="Search tiles" data-layers-search
+            onKeyDown={(e) => { if (e.key === "Escape") { setSearching(false); setQuery(""); } e.stopPropagation(); }} className="h-7 text-[12px]" />
+        </div>
+      )}
+      <nav aria-label="Start" className="shrink-0 pb-1">
+        <ActionRow icon={<SquarePen size={ICON} strokeWidth={STROKE} />} label="New agent" hint="2" data="agent" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:spawn-agent"))} />
+        <ActionRow icon={<FolderPlus size={ICON} strokeWidth={STROKE} />} label="New project" data="project" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:add-project"))} />
+        <ActionRow icon={<Server size={ICON} strokeWidth={STROKE} />} label="New machine" data="machine" onClick={() => openMachines({ kind: "add" })} />
+        <ActionRow icon={<Shapes size={ICON} strokeWidth={STROKE} />} label="Add a tool or widget" data="add" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:open-add"))} />
+        <ActionRow icon={<Blocks size={ICON} strokeWidth={STROKE} />} label="Plugins" data="plugins" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "plugins" } }))} />
+      </nav>
 
       <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-[14px]">
         {tiles.length === 0 && <div className="px-3 py-2 text-[12px] text-[var(--color-fg3)]">No tiles open.</div>}
         {tiles.length > 0 && nothing && (
           <div className="px-4 py-3 text-[12px] text-[var(--color-fg3)]" data-layers-nothing>
-            Nothing here matches the View menu.{" "}
-            <button type="button" className="underline hover:text-[var(--color-fg)]" onClick={() => patchSettings("views.layers", DEFAULT_LAYERS_PREFS)}>Reset</button>
+            Nothing matches.{" "}
+            <button type="button" className="underline hover:text-[var(--color-fg)]" onClick={() => { patchSettings("views.layers", DEFAULT_LAYERS_PREFS); setQuery(""); }}>Show everything</button>
           </div>
         )}
         {view.pinned.length > 0 && section("pinned", "Pinned", view.pinned, { "data-layers-pinned": "" })}
+        {tiles.length > 0 && (
+          <div className={`mt-2 flex h-7 items-center pl-4 pr-2 ${LABEL}`}>
+            <span>Tiles</span>
+            <span className="ml-auto"><ViewMenu prefs={prefs} setPref={setPref} machines={machineChoices} /></span>
+          </div>
+        )}
         {view.tree ? (
           groupByMachine
             ? machineGroups.filter((g) => (g.key === "local" && !view.filtering) || g.frames.some((f) => !view.filtering || hasShown(f.id))).map((g) => (
@@ -529,10 +562,10 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         {looseTiles.length > 0 && (
           <div className="mt-1.5">
             <div className="flex items-center gap-2 h-8 pr-2 mx-2 pl-[26px]">
-              <span className="flex-1 flex items-center gap-2 min-w-0 text-[14px] font-medium text-[var(--color-fg2)]">
-                <FolderOpen size={15} className="shrink-0 text-[var(--color-fg3)]" />
+              <span className="flex-1 flex items-center gap-2.5 min-w-0 text-[14px] font-medium text-[var(--color-fg)]">
+                <FolderOpen size={ICON} strokeWidth={STROKE} className="shrink-0 text-[var(--color-fg2)]" />
                 <span className="truncate">Canvas</span>
-                <span className="ml-auto font-mono text-[11px] text-[var(--color-fg3)]">{looseTiles.length}</span>
+                <span className={`ml-auto ${COUNT}`}>{looseTiles.length}</span>
               </span>
             </div>
             {looseTiles.map((t) => renderTile(t, 1))}
@@ -559,6 +592,41 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   );
 });
 
+/** One thing to start, named: the same row as a tile's, so the panel reads as one list. */
+function ActionRow({ icon, label, hint, data, onClick }: { icon: ReactNode; label: string; hint?: string; data: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} data-layers-action={data}
+      className="flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-2 rounded-lg text-left text-[14px] text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)] outline-none focus-visible:bg-[var(--surface-3)]">
+      <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">{icon}</span>
+      <span className="flex-1 truncate">{label}</span>
+      {hint && <kbd aria-hidden className={COUNT}>{hint}</kbd>}
+    </button>
+  );
+}
+
+/** The panel's title: the workspace, and what concerns the panel itself. */
+function PanelMenu({ title, onHide }: { title: string; onHide: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <span className="relative inline-flex min-w-0">
+        <button type="button" onClick={() => setOpen(true)} aria-expanded={open} data-layers-title
+          className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-[15px] font-semibold tracking-[-0.014em] text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)]">
+          <span className="truncate">{title}</span>
+          <ChevronDown size={14} className="shrink-0 text-[var(--color-fg3)]" />
+        </button>
+        <DropdownMenuTrigger asChild><span aria-hidden className="absolute bottom-0 left-0 size-0" /></DropdownMenuTrigger>
+      </span>
+      <DropdownMenuContent align="start" className="w-[210px]">
+        <DropdownMenuItem onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:open-recent"))}><History />Recent projects…</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:add-project"))}><FolderPlus />Open a project…</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onHide} data-layers-hide><PanelLeftClose />Hide panel<DropdownMenuShortcut>⌘B</DropdownMenuShortcut></DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 /** The panel's View menu: which tiles (status, last activity, machines), grouped and ordered how. */
 function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (k: keyof LayersPrefs, v: unknown) => void; machines: MachineGroup[] }) {
   const radio = <K extends "status" | "activity" | "groupBy" | "sortBy">(key: K, label: string) => (
@@ -577,14 +645,16 @@ function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (
   const chosen = prefs.machines;
   const toggleMachine = (key: string) => setPref("machines", chosen.includes(key) ? chosen.filter((m) => m !== key) : [...chosen, key]);
   const altered = JSON.stringify(prefs) !== JSON.stringify(DEFAULT_LAYERS_PREFS);
+  const filtered = prefs.status !== "all" || prefs.activity !== "all" || prefs.machines.length > 0;
   const [open, setOpen] = useState(false);
   // Opened by the button, anchored under it: the app's menus open from code, as the row menus do.
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <span className="relative inline-flex">
-        <Button variant="ghost" size="icon-2xs" aria-label="View options" title="View options" data-layers-view-menu aria-expanded={open} className="relative" onClick={() => setOpen(true)}>
-          <SlidersHorizontal size={14} />
-          {altered && <span aria-hidden className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-[var(--color-brand)]" />}
+        <Button variant="ghost" size="2xs" aria-label="View options" title="What is listed, grouped and ordered how" data-layers-view-menu aria-expanded={open} className="relative text-[11px] font-medium" onClick={() => setOpen(true)}>
+          {prefs.groupBy === "none" ? "Not grouped" : `By ${choiceLabel("groupBy", prefs.groupBy).toLowerCase()}`}
+          {filtered && <span className="text-[var(--color-brand)]">· filtered</span>}
+          <ChevronDown size={11} />
         </Button>
         <DropdownMenuTrigger asChild><span aria-hidden className="absolute bottom-0 right-0 size-0" /></DropdownMenuTrigger>
       </span>
@@ -709,13 +779,12 @@ function IdleMachines({ groups }: { groups: MachineGroup[] }) {
       <button
         onClick={toggle}
         aria-expanded={open}
-        className="sticky top-0 z-10 bg-[var(--color-bg2)] w-full flex items-center gap-1.5 h-7 pl-3 pr-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)] hover:text-[var(--color-fg2)] cursor-pointer"
+        className={`sticky top-0 z-10 bg-[var(--color-bg2)] w-full flex items-center gap-1 h-7 pl-4 pr-3 ${LABEL} hover:text-[var(--color-fg)] cursor-pointer`}
       >
-        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        <Server size={11} />
         <span>Machines</span>
-        <span className="font-mono tracking-normal font-normal tabular-nums">{groups.length}</span>
-        {!open && summary && <span className="ml-auto normal-case tracking-normal font-normal truncate">{summary}</span>}
+        <span className={COUNT}>{groups.length}</span>
+        {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+        {!open && summary && <span className="ml-auto font-normal truncate">{summary}</span>}
       </button>
       {open && groups.map((g) => (
         <section key={g.key} aria-label={g.label} data-machine-group={g.label}>
@@ -737,19 +806,13 @@ function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYo
   const retry = () => (s.state === "attention" || !m ? openMachines({ kind: "manage" }) : window.hive.machineCheck(m.id).catch(() => {}));
   return (
     <div
-      className={`group/mach relative flex items-center gap-1.5 h-7 pr-2 text-[var(--color-fg3)] ${used
-        ? "pl-3 mt-2 text-[10.5px] font-semibold uppercase tracking-[0.12em]"
-        : "pl-7 mx-2 rounded-lg text-[12px] hover:bg-[var(--color-bg3)]"}`}
+      className={`group/mach relative flex items-center gap-1.5 h-7 pr-2 ${used
+        ? `pl-4 mt-2 ${LABEL}`
+        : "pl-7 mx-2 rounded-lg text-[13px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)]"}`}
       data-machine-header={group.key === "local" ? "local" : group.label}
       title={m ? `${m.target}${s.detail ? ` — ${s.detail}` : ""}` : undefined}
     >
-      {!group.hostId ? <Monitor size={11} />
-        : used ? (
-          <span className="relative shrink-0 grid place-items-center">
-            <Server size={11} />
-            <span className="absolute -right-1 -bottom-0.5 leading-[0]"><MachineDot status={s} enabled={on} size={5} /></span>
-          </span>
-        ) : <MachineDot status={s} enabled={on} size={6} />}
+      {group.hostId && <MachineDot status={s} enabled={on} size={6} />}
       <span className={`truncate min-w-0 ${on ? "" : "opacity-60"} ${used ? "" : "text-[var(--color-fg2)]"}`}>{group.label}</span>
       {group.hostId && (
         <span className="shrink-0 font-mono normal-case tracking-normal font-normal text-[10.5px] tabular-nums" data-machine-state>

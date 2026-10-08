@@ -84,3 +84,24 @@ test("pins, the View menu and a folded section are as they were left after a res
   await expect(panel().locator("[data-layers-bucket]")).toHaveCount(0);
   await expect(panel().locator("[data-layers-pinned] [data-layer-tile]")).toHaveCount(1);
 });
+
+test("the panel names what it does: search narrows the list, its rows start things, its heading says how it is grouped", async () => {
+  await expect(panel().locator("[data-layers-view-menu]")).toHaveText(/By machine/);
+  // Search: one tile's name leaves that tile.
+  const name = (await rows().last().innerText()).split("\n")[0]!.trim();
+  await panel().locator("[data-layers-search-toggle]").click();
+  await panel().locator("[data-layers-search]").fill(name);
+  await expect(rows()).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await expect(panel().locator("[data-layers-search]")).toHaveCount(0);
+  await expect(rows()).toHaveCount(3);
+  // Nothing waits on the person: the bell says so.
+  await expect(panel().locator("[data-layers-bell]")).toHaveAttribute("aria-label", "Nothing needs you");
+  // Rows that start things.
+  await panel().locator('[data-layers-action="add"]').click();
+  await expect(page.locator("[data-add-menu]")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await panel().locator('[data-layers-action="plugins"]').click();
+  await expect(page.locator("[data-plugins-home]")).toBeVisible();
+  await page.keyboard.press("Escape");
+});

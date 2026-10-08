@@ -75,3 +75,12 @@ test("sort by last activity puts the newest first and the unknown last; by name,
   const named = layersView({ tiles: [tile("pi #10"), tile("pi #2"), tile("Alpha")], pinned: [], prefs: { ...DEFAULT_LAYERS_PREFS, groupBy: "none", sortBy: "name" }, now: NOW, agentLabel: () => "" });
   assert.deepEqual(ids(named.buckets[0]!.tiles), ["Alpha", "pi #2", "pi #10"]);
 });
+
+test("a search keeps the tiles whose name or agent holds it, pinned ones included, and counts as filtering", () => {
+  const v = layersView({ tiles: TILES, pinned: ["d-pi", "b-claude"], prefs: DEFAULT_LAYERS_PREFS, now: NOW, agentLabel: (t) => t.agent ?? "Terminal", query: " CLAUDE " });
+  assert.deepEqual(ids(v.pinned), ["b-claude"]);
+  assert.deepEqual([...v.byFrame.values()].flat().map((t) => t.id), []);
+  assert.equal(v.filtering, true);
+  const byAgent = layersView({ tiles: TILES, pinned: [], prefs: DEFAULT_LAYERS_PREFS, now: NOW, agentLabel: (t) => t.agent ?? "Terminal", query: "terminal" });
+  assert.deepEqual([...byAgent.byFrame.values()].flat().map((t) => t.id), ["c-shell"]);
+});

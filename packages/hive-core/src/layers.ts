@@ -93,13 +93,17 @@ export function layersView(input: {
   prefs: LayersPrefs;
   now: number;
   agentLabel: (t: ModelTile) => string;
+  /** Searched for: only the tiles whose name or agent holds it, pinned ones too. */
+  query?: string;
 }): LayersView {
   const { prefs, now } = input;
+  const q = input.query?.trim().toLowerCase() ?? "";
+  const found = (t: ModelTile) => !q || `${t.name} ${input.agentLabel(t)}`.toLowerCase().includes(q);
   const byId = new Map(input.tiles.map((t) => [t.id, t]));
-  const pinned = input.pinned.map((id) => byId.get(id)).filter((t): t is ModelTile => !!t);
-  const pinnedIds = new Set(pinned.map((t) => t.id));
-  const rest = sorted(input.tiles.filter((t) => !pinnedIds.has(t.id) && passes(t, prefs, now)), prefs.sortBy);
-  const filtering = prefs.status !== "all" || prefs.activity !== "all" || prefs.machines.length > 0;
+  const pinned = input.pinned.map((id) => byId.get(id)).filter((t): t is ModelTile => !!t && found(t));
+  const pinnedIds = new Set(input.pinned);
+  const rest = sorted(input.tiles.filter((t) => !pinnedIds.has(t.id) && found(t) && passes(t, prefs, now)), prefs.sortBy);
+  const filtering = !!q || prefs.status !== "all" || prefs.activity !== "all" || prefs.machines.length > 0;
   const tree = prefs.groupBy === "machine" || prefs.groupBy === "group";
   const byFrame = new Map<string | null, ModelTile[]>();
   const buckets: Bucket[] = [];
