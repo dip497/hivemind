@@ -71,6 +71,35 @@ function win32HookCommand(env: Record<string, string>, hook: HookScript, req: La
   return `${exe} -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ${Buffer.from(script, "utf16le").toString("base64")}`;
 }
 
+/** The variable a stable hook command reads its script's path from (`_ARG`: its argument). */
+const stableVar = (name: string): string => `HIVEMIND_HOOK_${name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase()}`;
+const STABLE_EXEC = "HIVEMIND_HOOK_EXEC";
+
+/** A stable hook's command names no path: the binary, the script and its argument come from the
+ *  agent's environment (`stableHookEnv`), set at launch by whichever app started it. So the text is
+ *  the same for every install and build, and an agent that asks before running a hook it has not
+ *  seen (codex) is asked once, not each time another app or version starts it. It needs the agent
+ *  to run hooks through a shell, as codex does. */
+function stableHookCommand(name: string, hook: HookScript, entry?: AgentHookEntry): string {
+  const env = emitEnv(entry);
+  const v = stableVar(name);
+  return ["env", ...Object.entries(env).map(([k, x]) => `${k}=${shq(x)}`), "ELECTRON_RUN_AS_NODE=1",
+    `"$${STABLE_EXEC}"`, `"$${v}"`, ...(hook.arg ? [`"$${v}_ARG"`] : [])].join(" ");
+}
+
+/** What a stable hook command reads from the agent's environment: each script it may run, its
+ *  argument, the variables it is told (an asset hook's SDK paths), and the binary that runs them. */
+export function stableHookEnv(def: AgentProviderDef, req: LaunchRequest): Record<string, string> {
+  if (!def.hooks?.stable || (req.platform ?? process.platform) === "win32") return {};
+  const out: Record<string, string> = { [STABLE_EXEC]: req.paths.execPath };
+  for (const [name, hook] of Object.entries(req.paths.hooks)) {
+    out[stableVar(name)] = hook.path;
+    if (hook.arg) out[`${stableVar(name)}_ARG`] = hook.arg;
+    Object.assign(out, hook.env);
+  }
+  return out;
+}
+
 /** The command line the daemon runs for one of its own hooks, attributed to a tile. It starts
  *  with `env` so it runs the same whether the agent hands it to a shell or splits it into argv. */
 export function hookCommand(hook: HookScript, req: LaunchRequest, entry?: AgentHookEntry): string {
@@ -119,7 +148,8 @@ function entryFor(
   const hook = req.paths.hooks[name];
   if (!hook) return undefined; // the daemon does not have this script: the event is not wired
   const matcher = matcherFor(entry, req);
-  const values = { command: hookCommand(hook, req, entry), timeout: entry.timeout, matcher };
+  const stable = hooks.stable && (req.platform ?? process.platform) !== "win32";
+  const values = { command: stable ? stableHookCommand(name, hook, entry) : hookCommand(hook, req, entry), timeout: entry.timeout, matcher };
   return { body: fill(hooks.entry ?? DEFAULT_ENTRY, values), ...(matcher ? { matcher } : {}) };
 }
 

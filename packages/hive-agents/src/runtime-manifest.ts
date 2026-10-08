@@ -10,7 +10,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { findSession, sessionExists, sessionListed } from "./session.js";
 import { readTrackedSession } from "./tile-session-store.js";
-import { hookCommand, renderHookDocument } from "./hooks.js";
+import { hookCommand, renderHookDocument, stableHookEnv } from "./hooks.js";
 import { EVENT_HOOK, isAgentEventName } from "./events.js";
 import { homePaths, seedHome } from "./home-overlay.js";
 import { SDK_ENV } from "@hivemind/agent-sdk";
@@ -143,6 +143,7 @@ export function manifestRuntime(
       const env: Record<string, string> = {};
       if (def.launch?.hcp && req.paths.hcpSock && req.paths.hcpToken) Object.assign(env, hcpEnv(def, req));
       if (def.home) env[def.home.env] = homePaths(def.home, req.paths.private).root;
+      Object.assign(env, stableHookEnv(def, req));
       for (const [k, v] of Object.entries(def.launch?.env ?? {})) env[k] = resolve(v, req, def, ESCAPE_NONE, assetFile);
       if (Object.keys(env).length) plan.env = env;
 

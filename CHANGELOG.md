@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: codex asked "Hooks need review" again whenever another install or build of the app started it (the installed app, a dev build, a newer version), because each wrote its own paths into the hook commands. Skipped, the hooks did not run, so the app never learned the session and could not resume it, nor follow its turns. The commands now name no path (each app sets them in codex's environment), so they are trusted once. Trust them once more after updating.
 - New: `hive ctl plugin open <record>` gets a plugin running so an agent can call its commands: it opens a tool's tile (`tool:owner/name`), adds a widget to the board (`widget:@owner/name`) or switches to a view (`view:id`).
 - Fixed: in the Windows view, a strip with more tabs than fit could not reach the ones past the edge. Tabs now shrink as in a browser but never past a readable name, minimize and close show only on the hovered or selected tab, the mouse wheel scrolls the strip, and the selected tab is scrolled into view.
 - Changed: Settings sits at the right end of the toolbar, as in a call's control bar, with a new icon; where a view's toolbar is off, collapsed or hidden by zen mode, it shows in the window's top-right corner. Share is a page in Settings (Settings → Share) instead of a button and a dialog of its own.
