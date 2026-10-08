@@ -15,9 +15,9 @@ import {
   LayoutGridIcon, LayoutListIcon, ListTodoIcon, LoaderCircleIcon, LogInIcon, LogOutIcon, Mail01Icon,
   MailOpenIcon, Maximize01Icon, MessageSquareIcon, MessagesSquareIcon, MonitorIcon, MonitorSmartphoneIcon,
   MoveUpRightIcon, NetworkIcon, PaletteIcon, PanelLeftCloseIcon, PanelsTopLeftIcon, PencilIcon, PinIcon,
-  PinOffIcon, PlayIcon, PlusIcon, PuzzleIcon, RefreshCwIcon, RotateCwIcon, ScanIcon,
+  PinOffIcon, PlayIcon, PlusIcon, PuzzleIcon, RefreshCwIcon, RotateCwIcon,
   Search01Icon, ServerIcon, ServerOffIcon, Settings01Icon, Settings02Icon, DashboardSquareAddIcon, SlidersHorizontalIcon,
-  SmartphoneIcon, SparklesIcon, SquarePenIcon, SquareTerminalIcon, Tag01Icon, TerminalIcon, TrashIcon,
+  SmartphoneIcon, SparklesIcon, SquareDashedIcon, SquarePenIcon, SquareTerminalIcon, Tag01Icon, TerminalIcon, TrashIcon,
   TriangleAlertIcon, Unlink01Icon, UnplugIcon, Upload01Icon, UserPlusIcon, UserRoundIcon, UsersIcon,
   Wrench01Icon, XIcon,
 } from "@hugeicons/core-free-icons";
@@ -114,7 +114,6 @@ export const Plus = icon("plus", PlusIcon);
 export const Puzzle = icon("puzzle", PuzzleIcon);
 export const RefreshCw = icon("refresh", RefreshCwIcon);
 export const RotateCw = icon("rotate-cw", RotateCwIcon);
-export const Scan = icon("scan", ScanIcon);
 export const Search = icon("search", Search01Icon);
 export const Server = icon("server", ServerIcon);
 export const ServerOff = icon("server-off", ServerOffIcon);
@@ -124,6 +123,7 @@ export const AddWidget = icon("add-widget", DashboardSquareAddIcon);
 export const SlidersHorizontal = icon("sliders-horizontal", SlidersHorizontalIcon);
 export const Smartphone = icon("smartphone", SmartphoneIcon);
 export const Sparkles = icon("sparkles", SparklesIcon);
+export const SquareDashed = icon("square-dashed", SquareDashedIcon);
 export const SquarePen = icon("square-pen", SquarePenIcon);
 export const SquareTerminal = icon("square-terminal", SquareTerminalIcon);
 export const Tag = icon("tag", Tag01Icon);

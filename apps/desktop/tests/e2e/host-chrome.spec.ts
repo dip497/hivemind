@@ -57,12 +57,16 @@ test.afterAll(async () => {
   await fs.promises.rm(XDG, { recursive: true, force: true }).catch(() => {});
 });
 
-test("the island is host chrome: top on the canvas, a compact bottom island in windows / a community view, and it spawns from each", async () => {
+test("the island is host chrome: top on the canvas, a compact bottom island in a community view, none where the view's manifest turns it off, and it spawns from each", async () => {
   await expect(page.locator('[data-host-island="top"] [data-tool-island]')).toBeVisible();
   // Settings ends the island, as in a call's control bar.
   await expect(page.locator('[data-tool-island] [aria-label="settings"]')).toBeVisible();
+  // Windows turns it off in its manifest: no island and no handle over its tabs.
+  await toView("windows");
+  await page.waitForSelector('[data-community-view="windows"][data-community-ready="1"]', { timeout: 15_000 });
+  await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
   let n = await terminalNodes();
-  for (const [view, ready] of [["windows", '[data-community-view="windows"][data-community-ready="1"]'], ["queue", queueReady]] as const) {
+  for (const [view, ready] of [["queue", queueReady]] as const) {
     await toView(view);
     await page.waitForSelector(ready, { timeout: 15_000 });
     const island = page.locator('[data-host-island="bottom"] [data-tool-island]');
@@ -78,7 +82,8 @@ test("the island is host chrome: top on the canvas, a compact bottom island in w
 });
 
 test("the toolbar's Theme button opens Appearance beside the workspace, live, from a non-canvas view", async () => {
-  await toView("windows");
+  await toView("queue");
+  await page.waitForSelector(queueReady, { timeout: 15_000 });
   const theme = page.locator('[data-host-island="bottom"] [data-tool-island]').getByTitle(/^Theme/);
   await theme.click();
   const panel = page.locator("[data-theme-panel]");
@@ -169,7 +174,7 @@ test("toolbar Off is per-view, persists through restart, and Settings restores i
   await expect(settings()).toBeFocused();
   expect(await page.locator(".xterm").first().evaluate((node, old) => node === old, original)).toBe(true);
   await original?.dispose();
-  await toView("windows");
+  await toView("queue");
   await expect(page.locator('[data-host-island="bottom"]')).toBeVisible();
   await toView("canvas");
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
@@ -192,18 +197,18 @@ test("toolbar Off is per-view, persists through restart, and Settings restores i
 
 test("collapsed toolbar expansion does not leak across views or placement changes", async () => {
   const configure = (chrome: Record<string, { island: "hidden" | "off" }>) => page.evaluate((value) => window.hive.settingsSet("views.chrome", value), chrome);
-  await configure({ canvas: { island: "hidden" }, windows: { island: "hidden" } });
+  await configure({ canvas: { island: "hidden" }, queue: { island: "hidden" } });
   await toView("canvas");
   await expect(page.locator("[data-host-island]")).toHaveCount(0);
   await page.getByRole("button", { name: "show tools", exact: true }).click();
   await expect(page.locator("[data-host-island]")).toBeVisible();
-  await toView("windows");
+  await toView("queue");
   await expect(page.getByRole("button", { name: "show tools", exact: true })).toHaveAttribute("aria-expanded", "false");
   await expect(page.locator("[data-host-island]")).toHaveCount(0);
   await page.getByRole("button", { name: "show tools", exact: true }).click();
-  await configure({ windows: { island: "off" } });
+  await configure({ queue: { island: "off" } });
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
-  await configure({ windows: { island: "hidden" } });
+  await configure({ queue: { island: "hidden" } });
   await expect(page.getByRole("button", { name: "show tools", exact: true })).toHaveAttribute("aria-expanded", "false");
   await expect(page.locator("[data-host-island]")).toHaveCount(0);
   await configure({});

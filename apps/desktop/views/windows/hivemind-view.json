@@ -10,5 +10,6 @@
   "layers": true,
   "author": "Hivemind",
   "license": "MIT",
-  "layout": "personal"
+  "layout": "personal",
+  "toolbar": "off"
 }

@@ -8,6 +8,8 @@
  * groups are theirs for this workspace on this device (a personal layout), never the shared
  * document, so pinning in a shared workspace moves no one else's rows.
  */
+import { resolveViewId, useViews } from "./workspace/workspace-view";
+import { setViewMode, useViewMode } from "./workspace/view-mode-store";
 import { statusColor } from "./workspace/tile-status-bucket";
 import { MachineDot, statusWords } from "./machines/status";
 import { A_DEVICE, GONE_MACHINE, openMachines, placeOf, statusOf, useMachines } from "./machines/store";
@@ -1014,9 +1016,25 @@ function PanelMenu({ title, workspaces, here, onHide }: { title: string; workspa
         <DropdownMenuItem onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:open-folder"))}><FolderOpen />Open a folder…</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:open-recent"))}><History />Recent folders…</DropdownMenuItem>
         <DropdownMenuSeparator />
+        <ViewChoices />
+        <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onHide} data-layers-hide><PanelLeftClose />Hide panel<DropdownMenuShortcut>⌘B</DropdownMenuShortcut></DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** Which view draws the workspace, here as well as in the toolbar: a view may hide the toolbar. */
+function ViewChoices() {
+  const views = useViews();
+  const current = resolveViewId(useViewMode());
+  return (
+    <>
+      <DropdownMenuLabel>Show as</DropdownMenuLabel>
+      <DropdownMenuRadioGroup value={current ?? undefined} onValueChange={(id) => setViewMode(id)}>
+        {views.map((v) => <DropdownMenuRadioItem key={v.id} value={v.id} data-layers-show-as={v.id}>{v.label}</DropdownMenuRadioItem>)}
+      </DropdownMenuRadioGroup>
+    </>
   );
 }
 

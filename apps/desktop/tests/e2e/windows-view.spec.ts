@@ -71,9 +71,9 @@ test("toggle into windows mode shows a tab strip + active tile body", async () =
   const slot = page.locator("[data-community-slot]").first();
   await expect(slot.locator("[data-tile-titlebar]")).toBeHidden();
   await expect.poll(() => slot.evaluate((el) => el.querySelector(".xterm-screen")!.getBoundingClientRect().top - el.getBoundingClientRect().top)).toBeLessThan(16);
-  // And it ends above the tool island: the island never covers its last lines.
-  const islandTop = await page.locator("[data-host-island]").evaluate((el) => el.getBoundingClientRect().top);
-  expect(await slot.evaluate((el) => el.getBoundingClientRect().bottom)).toBeLessThanOrEqual(islandTop);
+  // No toolbar floats over it: the terminal runs to the window's foot.
+  await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
+  expect(await slot.evaluate((el) => window.innerHeight - el.getBoundingClientRect().bottom)).toBeLessThan(24);
   await page.screenshot({ path: "/tmp/hivemind-windows-view.png" });
 });
 
@@ -93,10 +93,10 @@ test("minimize hides the tab but keeps it in the graph rail; restore brings it b
   await expect(tabsOf().first()).toHaveAttribute("aria-selected", "true");
 });
 
-test("switching back to canvas restores react-flow", async () => {
-  // ⌘E cycles canvas → windows → canvas, so "back to canvas" is an explicit
-  // switch here; the cycle itself is covered by community-view.spec.ts.
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
+test("with no toolbar, the panel's title menu switches back to the canvas", async () => {
+  await page.locator("[data-layers-title]").click();
+  await expect(page.locator('[data-layers-show-as="windows"]')).toHaveAttribute("data-state", "checked");
+  await page.locator('[data-layers-show-as="canvas"]').click();
   await page.waitForSelector(".react-flow");
   expect(await page.locator('[data-community-view="windows"]').count()).toBe(0);
 });

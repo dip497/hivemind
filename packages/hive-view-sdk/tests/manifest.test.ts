@@ -49,6 +49,12 @@ describe("what a view asks of the app around it", () => {
     expect(read({ layers: true, layout: "personal" })).toEqual([true, "personal"]);
     expect(read({})).toEqual([undefined, undefined]);
   });
+  it("keeps where it wants the app's toolbar, and refuses a place there is none", () => {
+    const where = (toolbar: unknown) => { const r = validateViewManifest({ ...base, toolbar }); return r.ok ? r.manifest.toolbar : r.errors; };
+    expect(["top", "bottom", "hidden", "off"].map(where)).toEqual(["top", "bottom", "hidden", "off"]);
+    expect(where("left")).toEqual(['"toolbar" must be "top", "bottom", "hidden" or "off"']);
+    expect(where(undefined)).toBeUndefined();
+  });
   it("refuses a rail or a layout it cannot mean", () => {
     expect(read({ layers: "left" })).toEqual(['"layers" must be true or false']);
     expect(read({ layout: "mine" })).toEqual(['"layout" must be "shared" or "personal"']);

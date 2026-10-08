@@ -69,9 +69,8 @@ test("toolbar order, visibility and labels are per-view and keep live tools", as
   await expect(page.locator("[data-toolbar-label]")).toHaveCount(3);
   expect(await page.locator(".xterm").evaluate((node, old) => node === old, original)).toBe(true);
   await toView("windows");
-  // Add is in every view: a widget can be added wherever you are.
-  await expect.poll(order).toEqual(["agent", "frame", "board", "theme"]);
-  await expect(page.locator("[data-toolbar-label]")).toHaveCount(0);
+  // Windows has no toolbar: its manifest turns it off, and the Layers panel starts things there.
+  await expect(page.locator("[data-host-island]")).toHaveCount(0);
   await toView("canvas");
   await expect.poll(order).toEqual(["agent", "theme", "board"]);
   await original?.dispose();

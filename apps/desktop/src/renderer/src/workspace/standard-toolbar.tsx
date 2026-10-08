@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Download, Earth, Spinner, MoveUpRight, Palette, RotateCw, Scan, AddWidget, Sparkles, Upload, Icon } from "../components/icons";
+import { Check, ChevronDown, Download, Earth, Spinner, MoveUpRight, Palette, RotateCw, SquareDashed, AddWidget, Sparkles, Upload, Icon } from "../components/icons";
 import type { ToolbarAction, ToolbarActionId } from "@hivemind/core/toolbar";
 import { Button } from "../components/ui/button";
 import { MenuItem } from "../components/ui/menu-item";
@@ -42,7 +42,7 @@ export interface StandardToolbarProps {
 }
 
 const icons: Record<Exclude<ToolbarActionId, "agent" | "board">, Icon> = {
-  frame: Scan, browser: Earth, theme: Palette,
+  frame: SquareDashed, browser: Earth, theme: Palette,
 };
 // Derived per call: the catalog is replaced when manifests load.
 const enabledAgents = () => getAgents().filter((agent) => agent.enabled);

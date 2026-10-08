@@ -9,6 +9,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: a view's manifest says where the app's toolbar goes, `"toolbar": "top" | "bottom" | "hidden" | "off"`; Settings → Views still overrides it per view.
+- Changed: the Windows view has no toolbar; its terminal runs to the bottom of the window. The Layers panel's title menu switches views ("Show as") in every view.
+- Changed: the toolbar's frame button has a dashed-square icon.
 - Changed: icons are Hugeicons, rounded, at one stroke weight everywhere. Plugins draw the same icons by importing them from `@hivemind/app-ui`.
 - Changed: "Add a tool or widget" has an icon of its own instead of the plugin puzzle piece.
 - Fixed: the toolbar's icon buttons showed their shortcut as a tiny number under the icon, which read as a count. The shortcut is in the button's tooltip.
