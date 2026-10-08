@@ -1,0 +1,528 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-08T22:28:13.461Z",
+  "title": "Design System: hivemind",
+  "extensions": {
+    "colorMeta": {
+      "graphite-ground": {
+        "role": "neutral",
+        "displayName": "Graphite Ground",
+        "canonical": "oklch(0.165 0.004 250)",
+        "tonalRamp": [
+          "oklch(0.15 0.004 250)",
+          "oklch(0.27 0.004 250)",
+          "oklch(0.38 0.004 250)",
+          "oklch(0.5 0.004 250)",
+          "oklch(0.61 0.004 250)",
+          "oklch(0.72 0.004 250)",
+          "oklch(0.84 0.004 250)",
+          "oklch(0.95 0.004 250)"
+        ]
+      },
+      "graphite-sheet": {
+        "role": "neutral",
+        "displayName": "Graphite Sheet",
+        "canonical": "oklch(0.195 0.004 250)",
+        "tonalRamp": [
+          "oklch(0.15 0.004 250)",
+          "oklch(0.27 0.004 250)",
+          "oklch(0.38 0.004 250)",
+          "oklch(0.5 0.004 250)",
+          "oklch(0.61 0.004 250)",
+          "oklch(0.72 0.004 250)",
+          "oklch(0.84 0.004 250)",
+          "oklch(0.95 0.004 250)"
+        ]
+      },
+      "graphite-card": {
+        "role": "neutral",
+        "displayName": "Graphite Card",
+        "canonical": "oklch(0.23 0.005 250)",
+        "tonalRamp": [
+          "oklch(0.15 0.005 250)",
+          "oklch(0.27 0.005 250)",
+          "oklch(0.38 0.005 250)",
+          "oklch(0.5 0.005 250)",
+          "oklch(0.61 0.005 250)",
+          "oklch(0.72 0.005 250)",
+          "oklch(0.84 0.005 250)",
+          "oklch(0.95 0.005 250)"
+        ]
+      },
+      "graphite-hover": {
+        "role": "neutral",
+        "displayName": "Graphite Hover",
+        "canonical": "oklch(0.27 0.005 250)",
+        "tonalRamp": [
+          "oklch(0.15 0.005 250)",
+          "oklch(0.27 0.005 250)",
+          "oklch(0.38 0.005 250)",
+          "oklch(0.5 0.005 250)",
+          "oklch(0.61 0.005 250)",
+          "oklch(0.72 0.005 250)",
+          "oklch(0.84 0.005 250)",
+          "oklch(0.95 0.005 250)"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "oklch(0.27 0.005 250)",
+        "tonalRamp": [
+          "oklch(0.15 0.005 250)",
+          "oklch(0.27 0.005 250)",
+          "oklch(0.38 0.005 250)",
+          "oklch(0.5 0.005 250)",
+          "oklch(0.61 0.005 250)",
+          "oklch(0.72 0.005 250)",
+          "oklch(0.84 0.005 250)",
+          "oklch(0.95 0.005 250)"
+        ]
+      },
+      "control-line": {
+        "role": "neutral",
+        "displayName": "Control Line",
+        "canonical": "oklch(0.34 0.006 250)",
+        "tonalRamp": [
+          "oklch(0.15 0.006 250)",
+          "oklch(0.27 0.006 250)",
+          "oklch(0.38 0.006 250)",
+          "oklch(0.5 0.006 250)",
+          "oklch(0.61 0.006 250)",
+          "oklch(0.72 0.006 250)",
+          "oklch(0.84 0.006 250)",
+          "oklch(0.95 0.006 250)"
+        ]
+      },
+      "chalk-text": {
+        "role": "neutral",
+        "displayName": "Chalk Text",
+        "canonical": "oklch(0.93 0.004 250)",
+        "tonalRamp": [
+          "oklch(0.15 0.004 250)",
+          "oklch(0.27 0.004 250)",
+          "oklch(0.38 0.004 250)",
+          "oklch(0.5 0.004 250)",
+          "oklch(0.61 0.004 250)",
+          "oklch(0.72 0.004 250)",
+          "oklch(0.84 0.004 250)",
+          "oklch(0.95 0.004 250)"
+        ]
+      },
+      "pencil-text": {
+        "role": "neutral",
+        "displayName": "Pencil Text",
+        "canonical": "oklch(0.80 0.005 250)",
+        "tonalRamp": [
+          "oklch(0.15 0.005 250)",
+          "oklch(0.27 0.005 250)",
+          "oklch(0.38 0.005 250)",
+          "oklch(0.5 0.005 250)",
+          "oklch(0.61 0.005 250)",
+          "oklch(0.72 0.005 250)",
+          "oklch(0.84 0.005 250)",
+          "oklch(0.95 0.005 250)"
+        ]
+      },
+      "dust-text": {
+        "role": "neutral",
+        "displayName": "Dust Text",
+        "canonical": "oklch(0.62 0.006 250)",
+        "tonalRamp": [
+          "oklch(0.15 0.006 250)",
+          "oklch(0.27 0.006 250)",
+          "oklch(0.38 0.006 250)",
+          "oklch(0.5 0.006 250)",
+          "oklch(0.61 0.006 250)",
+          "oklch(0.72 0.006 250)",
+          "oklch(0.84 0.006 250)",
+          "oklch(0.95 0.006 250)"
+        ]
+      },
+      "steel-accent": {
+        "role": "primary",
+        "displayName": "Steel Accent",
+        "canonical": "oklch(0.52 0.03 250)",
+        "tonalRamp": [
+          "oklch(0.15 0.03 250)",
+          "oklch(0.27 0.03 250)",
+          "oklch(0.38 0.03 250)",
+          "oklch(0.5 0.03 250)",
+          "oklch(0.61 0.03 250)",
+          "oklch(0.72 0.03 250)",
+          "oklch(0.84 0.03 250)",
+          "oklch(0.95 0.03 250)"
+        ]
+      },
+      "steel-accent-hover": {
+        "role": "primary",
+        "displayName": "Steel Accent Hover",
+        "canonical": "oklch(0.57 0.03 250)",
+        "tonalRamp": [
+          "oklch(0.15 0.03 250)",
+          "oklch(0.27 0.03 250)",
+          "oklch(0.38 0.03 250)",
+          "oklch(0.5 0.03 250)",
+          "oklch(0.61 0.03 250)",
+          "oklch(0.72 0.03 250)",
+          "oklch(0.84 0.03 250)",
+          "oklch(0.95 0.03 250)"
+        ]
+      },
+      "signal-amber": {
+        "role": "tertiary",
+        "displayName": "Signal Amber",
+        "canonical": "oklch(0.80 0.13 72)",
+        "tonalRamp": [
+          "oklch(0.15 0.13 72)",
+          "oklch(0.27 0.13 72)",
+          "oklch(0.38 0.13 72)",
+          "oklch(0.5 0.13 72)",
+          "oklch(0.61 0.13 72)",
+          "oklch(0.72 0.13 72)",
+          "oklch(0.84 0.13 72)",
+          "oklch(0.95 0.13 72)"
+        ]
+      },
+      "sage-done": {
+        "role": "tertiary",
+        "displayName": "Sage Done",
+        "canonical": "oklch(0.74 0.07 155)",
+        "tonalRamp": [
+          "oklch(0.15 0.07 155)",
+          "oklch(0.27 0.07 155)",
+          "oklch(0.38 0.07 155)",
+          "oklch(0.5 0.07 155)",
+          "oklch(0.61 0.07 155)",
+          "oklch(0.72 0.07 155)",
+          "oklch(0.84 0.07 155)",
+          "oklch(0.95 0.07 155)"
+        ]
+      },
+      "brick-error": {
+        "role": "tertiary",
+        "displayName": "Brick Error",
+        "canonical": "oklch(0.66 0.11 32)",
+        "tonalRamp": [
+          "oklch(0.15 0.11 32)",
+          "oklch(0.27 0.11 32)",
+          "oklch(0.38 0.11 32)",
+          "oklch(0.5 0.11 32)",
+          "oklch(0.61 0.11 32)",
+          "oklch(0.72 0.11 32)",
+          "oklch(0.84 0.11 32)",
+          "oklch(0.95 0.11 32)"
+        ]
+      },
+      "mist-info": {
+        "role": "tertiary",
+        "displayName": "Mist Info",
+        "canonical": "oklch(0.74 0.035 245)",
+        "tonalRamp": [
+          "oklch(0.15 0.035 245)",
+          "oklch(0.27 0.035 245)",
+          "oklch(0.38 0.035 245)",
+          "oklch(0.5 0.035 245)",
+          "oklch(0.61 0.035 245)",
+          "oklch(0.72 0.035 245)",
+          "oklch(0.84 0.035 245)",
+          "oklch(0.95 0.035 245)"
+        ]
+      },
+      "unread-blue": {
+        "role": "tertiary",
+        "displayName": "Unread Blue",
+        "canonical": "oklch(0.70 0.14 250)",
+        "tonalRamp": [
+          "oklch(0.15 0.14 250)",
+          "oklch(0.27 0.14 250)",
+          "oklch(0.38 0.14 250)",
+          "oklch(0.5 0.14 250)",
+          "oklch(0.61 0.14 250)",
+          "oklch(0.72 0.14 250)",
+          "oklch(0.84 0.14 250)",
+          "oklch(0.95 0.14 250)"
+        ]
+      },
+      "working-white": {
+        "role": "tertiary",
+        "displayName": "Working White",
+        "canonical": "oklch(0.91 0.005 250)",
+        "tonalRamp": [
+          "oklch(0.15 0.005 250)",
+          "oklch(0.27 0.005 250)",
+          "oklch(0.38 0.005 250)",
+          "oklch(0.5 0.005 250)",
+          "oklch(0.61 0.005 250)",
+          "oklch(0.72 0.005 250)",
+          "oklch(0.84 0.005 250)",
+          "oklch(0.95 0.005 250)"
+        ]
+      },
+      "terminal-ground": {
+        "role": "neutral",
+        "displayName": "Terminal Ground",
+        "canonical": "#1A1C1F",
+        "tonalRamp": [
+          "oklch(0.15 0.006 250)",
+          "oklch(0.27 0.006 250)",
+          "oklch(0.38 0.006 250)",
+          "oklch(0.5 0.006 250)",
+          "oklch(0.61 0.006 250)",
+          "oklch(0.72 0.006 250)",
+          "oklch(0.84 0.006 250)",
+          "oklch(0.95 0.006 250)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "title": {
+        "displayName": "Title",
+        "purpose": "The workspace name at the top of the panel."
+      },
+      "row": {
+        "displayName": "Row",
+        "purpose": "Every tile, frame, recent and action row in the panel; 500 for frame and section rows."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "The app default: buttons, inputs, Settings text."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Panel headings and menu items, pencil text, sentence case."
+      },
+      "count": {
+        "displayName": "Count",
+        "purpose": "Counts, keycaps, secondary choices; tabular figures."
+      },
+      "chip": {
+        "displayName": "Chip",
+        "purpose": "Status chips and badge numbers only."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Terminals, paths, branches, commands, ids."
+      }
+    },
+    "shadows": [
+      {
+        "name": "hm-shadow-1",
+        "value": "0 1px 2px oklch(0.05 0 0 / 0.30), 0 1px 3px oklch(0.05 0 0 / 0.22)",
+        "purpose": "Rest: cards at rest."
+      },
+      {
+        "name": "hm-shadow-2",
+        "value": "0 4px 12px oklch(0.05 0 0 / 0.38), 0 1px 3px oklch(0.05 0 0 / 0.26)",
+        "purpose": "Lifted: the Layers sheet, popovers, menus, a hovered card."
+      },
+      {
+        "name": "hm-shadow-3",
+        "value": "0 12px 32px oklch(0.05 0 0 / 0.48), 0 4px 12px oklch(0.05 0 0 / 0.32)",
+        "purpose": "Raised: Settings and modal dialogs."
+      },
+      {
+        "name": "hm-highlight",
+        "value": "inset 0 1px 0 0 oklch(1 0 0 / 0.07)",
+        "purpose": "Top light, added to lifted and raised surfaces."
+      }
+    ],
+    "motion": [
+      {
+        "name": "hm-ease-out",
+        "value": "cubic-bezier(0.32, 0.72, 0, 1)",
+        "purpose": "The house curve; every enter and state change."
+      },
+      {
+        "name": "hm-ease-in",
+        "value": "cubic-bezier(1, 0, 0.68, 0.28)",
+        "purpose": "Its mirror, for exits."
+      },
+      {
+        "name": "hm-dur-1",
+        "value": "100ms",
+        "purpose": "Press feedback."
+      },
+      {
+        "name": "hm-dur-2",
+        "value": "150ms",
+        "purpose": "Hover, colour and small transforms."
+      },
+      {
+        "name": "hm-dur-3",
+        "value": "220ms",
+        "purpose": "Panels, toasts, drawers."
+      }
+    ],
+    "tracking": [
+      {
+        "name": "hm-track-display",
+        "value": "-0.022em",
+        "purpose": "24px and up."
+      },
+      {
+        "name": "hm-track-heading",
+        "value": "-0.014em",
+        "purpose": "16–23px, and the 15px title."
+      },
+      {
+        "name": "hm-track-body",
+        "value": "-0.005em",
+        "purpose": "12–15px, the default."
+      },
+      {
+        "name": "hm-track-caption",
+        "value": "0.01em",
+        "purpose": "11px and below."
+      }
+    ],
+    "glass": [
+      {
+        "name": "glass-blur",
+        "value": "16px",
+        "purpose": "Backdrop blur under the user's glass option."
+      },
+      {
+        "name": "glass-opacity",
+        "value": "60%",
+        "purpose": "Solid fraction of a frosted surface; panels and menus clamp it to 68–92%."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Action Row",
+      "kind": "custom",
+      "refersTo": "tile-row",
+      "description": "A start action in the panel (New agent, New project, …): the tile row's shape with a tinted icon tile and a keycap hint on hover or focus.",
+      "html": "<div class=\"ds-actions\"><button class=\"ds-action\" type=\"button\"><span class=\"ds-action-tile ds-tint-a\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 256 256\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"16\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><line x1=\"40\" y1=\"128\" x2=\"216\" y2=\"128\"/><line x1=\"128\" y1=\"40\" x2=\"128\" y2=\"216\"/></svg></span><span class=\"ds-action-label\">New agent</span><kbd class=\"ds-action-key\">⌘N</kbd></button><button class=\"ds-action\" type=\"button\"><span class=\"ds-action-tile ds-tint-b\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 256 256\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"16\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M216,208H40a8,8,0,0,1-8-8V64a8,8,0,0,1,8-8H93.33a8,8,0,0,1,4.8,1.6L128,80h88a8,8,0,0,1,8,8V200A8,8,0,0,1,216,208Z\"/><line x1=\"104\" y1=\"144\" x2=\"152\" y2=\"144\"/><line x1=\"128\" y1=\"120\" x2=\"128\" y2=\"168\"/></svg></span><span class=\"ds-action-label\">New project</span><kbd class=\"ds-action-key\">⌘O</kbd></button></div>",
+      "css": ".ds-actions { width: 260px; padding: 8px 0; background: var(--surface-2, oklch(0.195 0.004 250)); font-family: system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; } .ds-action { display: flex; align-items: center; gap: 10px; width: calc(100% - 16px); height: 32px; margin: 0 8px; padding: 0 6px 0 8px; border: 0; border-radius: 8px; background: transparent; color: var(--color-fg2, oklch(0.80 0.005 250)); font: 400 14px/1.4 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; letter-spacing: -0.005em; text-align: left; cursor: pointer; outline: none; transition: background-color var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)), color var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)); } .ds-action:hover, .ds-action:focus-visible { background: var(--surface-3, oklch(0.23 0.005 250)); color: var(--color-fg, oklch(0.93 0.004 250)); } .ds-action-tile { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; flex-shrink: 0; } .ds-tint-a { color: oklch(0.80 0.08 235); background: color-mix(in oklab, oklch(0.80 0.08 235) 18%, transparent); } .ds-tint-b { color: oklch(0.80 0.08 150); background: color-mix(in oklab, oklch(0.80 0.08 150) 18%, transparent); } .ds-action-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-action-key { display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 5px; font: 400 11px/1 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; font-variant-numeric: tabular-nums; color: var(--color-fg2, oklch(0.80 0.005 250)); box-shadow: inset 0 0 0 1px var(--color-line2, oklch(0.34 0.006 250)); opacity: 0; transition: opacity var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)); } .ds-action:hover .ds-action-key, .ds-action:focus-visible .ds-action-key { opacity: 1; }"
+    },
+    {
+      "name": "Tile Row",
+      "kind": "custom",
+      "refersTo": "tile-row",
+      "description": "One agent or tool in the panel: icon, name, unread dot, one status mark. Working is a dot; needs-you is an amber chip that pulses; idle shows nothing.",
+      "html": "<div class=\"ds-rows\"><div class=\"ds-row\" tabindex=\"0\"><span class=\"ds-row-icon\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 256 256\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"16\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"32\" y=\"48\" width=\"192\" height=\"160\" rx=\"8\"/><polyline points=\"80 104 112 128 80 152\"/><line x1=\"136\" y1=\"152\" x2=\"176\" y2=\"152\"/></svg></span><span class=\"ds-row-name\">api refactor</span><span class=\"ds-row-unread\" aria-label=\"unread\"></span><span class=\"ds-row-fill\"></span><span class=\"ds-row-chip ds-chip-done\">done</span></div><div class=\"ds-row\" tabindex=\"0\"><span class=\"ds-row-icon\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 256 256\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"16\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"32\" y=\"48\" width=\"192\" height=\"160\" rx=\"8\"/><polyline points=\"80 104 112 128 80 152\"/><line x1=\"136\" y1=\"152\" x2=\"176\" y2=\"152\"/></svg></span><span class=\"ds-row-name\">migrations</span><span class=\"ds-row-fill\"></span><span class=\"ds-row-chip ds-chip-ask\">asking</span></div><div class=\"ds-row ds-row-selected\" tabindex=\"0\"><span class=\"ds-row-icon\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 256 256\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"16\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"32\" y=\"48\" width=\"192\" height=\"160\" rx=\"8\"/><polyline points=\"80 104 112 128 80 152\"/><line x1=\"136\" y1=\"152\" x2=\"176\" y2=\"152\"/></svg></span><span class=\"ds-row-name\">docs pass</span><span class=\"ds-row-fill\"></span><span class=\"ds-row-dot\" aria-label=\"working\"></span></div><div class=\"ds-row\" tabindex=\"0\"><span class=\"ds-row-icon\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 256 256\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"16\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"32\" y=\"48\" width=\"192\" height=\"160\" rx=\"8\"/><polyline points=\"80 104 112 128 80 152\"/><line x1=\"136\" y1=\"152\" x2=\"176\" y2=\"152\"/></svg></span><span class=\"ds-row-name\">shell</span><span class=\"ds-row-fill\"></span></div></div>",
+      "css": ".ds-rows { width: 260px; padding: 8px 0; background: var(--surface-2, oklch(0.195 0.004 250)); font-family: system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; } .ds-row { display: flex; align-items: center; gap: 10px; width: calc(100% - 16px); height: 32px; margin: 0 8px; padding: 0 6px 0 12px; border-radius: 8px; color: var(--color-fg, oklch(0.93 0.004 250)); font: 400 14px/1.4 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; letter-spacing: -0.005em; cursor: pointer; outline: none; transition: background-color var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)); } .ds-row:hover, .ds-row:focus-visible { background: var(--surface-3, oklch(0.23 0.005 250)); } .ds-row-selected, .ds-row-selected:hover { background: var(--surface-4, oklch(0.27 0.005 250)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-fg, oklch(0.93 0.004 250)) 12%, transparent); } .ds-row-icon { display: grid; place-items: center; width: 16px; height: 16px; color: var(--color-fg2, oklch(0.80 0.005 250)); flex-shrink: 0; } .ds-row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-row-fill { flex: 1; } .ds-row-unread { width: 6px; height: 6px; border-radius: 9999px; background: var(--color-unread, oklch(0.70 0.14 250)); flex-shrink: 0; } .ds-row-dot { width: 6px; height: 6px; border-radius: 9999px; background: var(--color-status-working, oklch(0.91 0.005 250)); flex-shrink: 0; } .ds-row-chip { font: 500 10px/1 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; letter-spacing: 0.01em; padding: 3px 6px; border-radius: 9999px; flex-shrink: 0; } .ds-chip-done { color: var(--color-ok, oklch(0.74 0.07 155)); background: color-mix(in srgb, var(--color-ok, oklch(0.74 0.07 155)) 16%, transparent); } .ds-row:hover .ds-chip-done { visibility: hidden; } .ds-chip-ask { color: var(--color-warn, oklch(0.80 0.13 72)); background: color-mix(in srgb, var(--color-warn, oklch(0.80 0.13 72)) 16%, transparent); animation: ds-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; } @keyframes ds-pulse { 50% { opacity: 0.5; } } @media (prefers-reduced-motion: reduce) { .ds-chip-ask { animation: none; } }"
+    },
+    {
+      "name": "Section Label",
+      "kind": "custom",
+      "refersTo": "typography.label",
+      "description": "A panel or menu heading: 12px medium, pencil text, sentence case. Never uppercase.",
+      "html": "<div class=\"ds-section\"><div class=\"ds-section-label\">Recent<span class=\"ds-section-count\">12</span></div></div>",
+      "css": ".ds-section { width: 260px; padding: 8px 0; background: var(--surface-2, oklch(0.195 0.004 250)); } .ds-section-label { display: flex; align-items: center; gap: 6px; height: 28px; margin: 0 8px; padding: 0 8px 0 12px; border-radius: 8px; font: 500 12px/1.4 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; letter-spacing: -0.005em; color: var(--color-fg2, oklch(0.80 0.005 250)); cursor: default; transition: color var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)); } .ds-section-label:hover { color: var(--color-fg, oklch(0.93 0.004 250)); } .ds-section-count { margin-left: auto; font: 400 11px/1 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; font-variant-numeric: tabular-nums; color: var(--color-fg2, oklch(0.80 0.005 250)); }"
+    },
+    {
+      "name": "Menu Item with Shortcut",
+      "kind": "nav",
+      "refersTo": "menu-item",
+      "description": "A row in a dropdown or popover: 12px, 6px corners, card fill on hover or focus, the shortcut at the far end in 11px pencil text.",
+      "html": "<div class=\"ds-menu\" role=\"menu\"><button class=\"ds-menu-item\" role=\"menuitem\" type=\"button\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 256 256\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"16\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"128\" cy=\"128\" r=\"40\"/><path d=\"M128,32v24M128,200v24M60.1,60.1l17,17M178.9,178.9l17,17M32,128H56M200,128h24M60.1,195.9l17-17M178.9,77.1l17-17\"/></svg><span>Rename frame</span><span class=\"ds-menu-key\">R</span></button><button class=\"ds-menu-item\" role=\"menuitem\" type=\"button\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 256 256\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"16\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"112\" cy=\"112\" r=\"72\"/><line x1=\"163\" y1=\"163\" x2=\"216\" y2=\"216\"/></svg><span>Find in frame</span><span class=\"ds-menu-key\">F</span></button><div class=\"ds-menu-sep\"></div><button class=\"ds-menu-item ds-menu-danger\" role=\"menuitem\" type=\"button\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 256 256\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"16\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><line x1=\"200\" y1=\"56\" x2=\"56\" y2=\"200\"/><line x1=\"200\" y1=\"200\" x2=\"56\" y2=\"56\"/></svg><span>Delete frame…</span><span class=\"ds-menu-key\">D</span></button></div>",
+      "css": ".ds-menu { width: 220px; padding: 4px; background: var(--surface-2, oklch(0.195 0.004 250)); border: 1px solid var(--color-line2, oklch(0.34 0.006 250)); border-radius: 10px; box-shadow: var(--hm-shadow-2, 0 4px 12px oklch(0.05 0 0 / 0.38), 0 1px 3px oklch(0.05 0 0 / 0.26)), var(--hm-highlight, inset 0 1px 0 0 oklch(1 0 0 / 0.07)); } .ds-menu-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--color-fg, oklch(0.93 0.004 250)); font: 400 12px/1.4 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; text-align: left; cursor: pointer; outline: none; transition: background-color var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)); } .ds-menu-item svg { color: var(--color-fg2, oklch(0.80 0.005 250)); flex-shrink: 0; } .ds-menu-item:hover, .ds-menu-item:focus-visible { background: var(--surface-3, oklch(0.23 0.005 250)); } .ds-menu-key { margin-left: auto; font: 400 11px/1 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; color: var(--color-fg2, oklch(0.80 0.005 250)); } .ds-menu-sep { height: 1px; margin: 4px -4px; background: var(--color-line, oklch(0.27 0.005 250)); } .ds-menu-danger, .ds-menu-danger svg { color: var(--color-err, oklch(0.66 0.11 32)); } .ds-menu-danger:hover, .ds-menu-danger:focus-visible { background: color-mix(in srgb, var(--color-err, oklch(0.66 0.11 32)) 10%, transparent); }"
+    },
+    {
+      "name": "Ghost Icon Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "The default control in chrome: an icon on nothing, card fill on hover, a quick press.",
+      "html": "<div class=\"ds-ghost-row\"><button class=\"ds-ghost\" type=\"button\" aria-label=\"Search\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 256 256\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"16\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"112\" cy=\"112\" r=\"72\"/><line x1=\"163\" y1=\"163\" x2=\"216\" y2=\"216\"/></svg></button><button class=\"ds-ghost\" type=\"button\" aria-label=\"Settings\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 256 256\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"16\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"128\" cy=\"128\" r=\"40\"/><path d=\"M128,32v24M128,200v24M60.1,60.1l17,17M178.9,178.9l17,17M32,128H56M200,128h24M60.1,195.9l17-17M178.9,77.1l17-17\"/></svg></button><button class=\"ds-ghost\" type=\"button\" aria-label=\"Close\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 256 256\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"16\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><line x1=\"200\" y1=\"56\" x2=\"56\" y2=\"200\"/><line x1=\"200\" y1=\"200\" x2=\"56\" y2=\"56\"/></svg></button></div>",
+      "css": ".ds-ghost-row { display: flex; gap: 2px; padding: 6px; background: var(--surface-2, oklch(0.195 0.004 250)); border: 1px solid var(--color-line2, oklch(0.34 0.006 250)); border-radius: 12px; width: fit-content; } .ds-ghost { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent; color: var(--color-fg2, oklch(0.80 0.005 250)); cursor: pointer; outline: none; transition: background-color var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)), color var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)), scale var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)); } .ds-ghost:hover { background: var(--surface-3, oklch(0.23 0.005 250)); color: var(--color-fg, oklch(0.93 0.004 250)); } .ds-ghost:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-fg3, oklch(0.62 0.006 250)) 50%, transparent); } .ds-ghost:active { scale: 0.96; transition-duration: var(--hm-dur-1, 100ms); }"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one confirming action in a dialog or form: chalk fill under ground text, never the accent.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Install</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 12px; border: 0; border-radius: 6px; background: var(--color-fg, oklch(0.93 0.004 250)); color: var(--color-bg, oklch(0.165 0.004 250)); font: 500 13px/1 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; letter-spacing: -0.005em; cursor: pointer; outline: none; transition: background-color var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)), scale var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)); } .ds-btn-primary:hover { background: color-mix(in srgb, var(--color-fg, oklch(0.93 0.004 250)) 90%, transparent); } .ds-btn-primary:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-fg3, oklch(0.62 0.006 250)) 50%, transparent); } .ds-btn-primary:active { scale: 0.96; transition-duration: var(--hm-dur-1, 100ms); }"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A text field: ground fill, control-line border, the border warms to dust on focus with a soft ring.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Search tiles\" />",
+      "css": ".ds-input { width: 240px; height: 32px; padding: 0 10px; background: var(--color-bg, oklch(0.165 0.004 250)); border: 1px solid var(--color-line2, oklch(0.34 0.006 250)); border-radius: 6px; color: var(--color-fg, oklch(0.93 0.004 250)); font: 400 13px/1 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; letter-spacing: -0.005em; outline: none; transition: border-color var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)), box-shadow var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)); } .ds-input::placeholder { color: color-mix(in srgb, var(--color-fg2, oklch(0.80 0.005 250)) 70%, transparent); } .ds-input:hover { border-color: var(--color-fg3, oklch(0.62 0.006 250)); } .ds-input:focus-visible { border-color: var(--color-fg3, oklch(0.62 0.006 250)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-fg3, oklch(0.62 0.006 250)) 20%, transparent); }"
+    },
+    {
+      "name": "Sheet",
+      "kind": "card",
+      "refersTo": "sheet",
+      "description": "A side panel or Settings: set 8px in from the window, 14px corners, a hairline edge and a soft lift; opaque enough to read on any wallpaper.",
+      "html": "<div class=\"ds-window\"><aside class=\"ds-sheet\"><div class=\"ds-sheet-title\">hivemind</div><div class=\"ds-sheet-label\">Agents</div><div class=\"ds-sheet-row\">api refactor</div><div class=\"ds-sheet-row\">migrations</div></aside></div>",
+      "css": ".ds-window { width: 320px; height: 220px; padding: 8px; background: var(--color-bg, oklch(0.165 0.004 250)); border-radius: 4px; } .ds-sheet { width: 240px; height: 100%; padding: 12px 0; background: var(--surface-2, oklch(0.195 0.004 250)); border: 1px solid var(--color-line, oklch(0.27 0.005 250)); border-radius: 14px; box-shadow: var(--hm-shadow-2, 0 4px 12px oklch(0.05 0 0 / 0.38), 0 1px 3px oklch(0.05 0 0 / 0.26)), var(--hm-highlight, inset 0 1px 0 0 oklch(1 0 0 / 0.07)); transition: box-shadow var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)); font-family: system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; } .ds-sheet:hover { box-shadow: var(--hm-shadow-3, 0 12px 32px oklch(0.05 0 0 / 0.48), 0 4px 12px oklch(0.05 0 0 / 0.32)), var(--hm-highlight, inset 0 1px 0 0 oklch(1 0 0 / 0.07)); } .ds-sheet-title { padding: 0 14px 10px; font: 600 15px/1.3 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; letter-spacing: -0.014em; color: var(--color-fg, oklch(0.93 0.004 250)); } .ds-sheet-label { padding: 6px 20px; font: 500 12px/1.4 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; color: var(--color-fg2, oklch(0.80 0.005 250)); } .ds-sheet-row { height: 32px; display: flex; align-items: center; margin: 0 8px; padding: 0 12px; border-radius: 8px; font: 400 14px/1.4 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; color: var(--color-fg, oklch(0.93 0.004 250)); } .ds-sheet-row:hover { background: var(--surface-3, oklch(0.23 0.005 250)); }"
+    },
+    {
+      "name": "Keycap",
+      "kind": "chip",
+      "refersTo": "keycap",
+      "description": "A key or jump number: 18px tall, 11px tabular, drawn with an inset 1px ring rather than a border.",
+      "html": "<span class=\"ds-keys\"><kbd class=\"ds-kbd\">⌘</kbd><kbd class=\"ds-kbd\">K</kbd><kbd class=\"ds-kbd\">3</kbd></span>",
+      "css": ".ds-keys { display: inline-flex; gap: 4px; padding: 8px; background: var(--surface-2, oklch(0.195 0.004 250)); border-radius: 8px; } .ds-kbd { display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 5px; font: 400 11px/1 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; font-variant-numeric: tabular-nums; color: var(--color-fg2, oklch(0.80 0.005 250)); box-shadow: inset 0 0 0 1px var(--color-line2, oklch(0.34 0.006 250)); transition: color var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)), box-shadow var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)); } .ds-kbd:hover { color: var(--color-fg, oklch(0.93 0.004 250)); box-shadow: inset 0 0 0 1px var(--color-fg3, oklch(0.62 0.006 250)); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Workbench",
+    "overview": "A craftsman's bench: the tools laid out within reach, nothing shouting, and the work (the agents' terminals) in the middle. The chrome is calm, dense and exact. It is graphite on graphite, set in small sizes on a strict scale, and it gives way to the terminals a person reads for hours.\n\nColour is spent only where it means something. One warm colour, Signal Amber, belongs to whatever waits on a person, so it can be seen from across the room. Everything else is neutral, and the user's own wallpaper, glass, accent and preset sit on top. Every surface has to stay legible on any of them, so no surface depends on the look being the default one.\n\nThis system rejects three looks. The first is the stock generated look: default Geist with Lucide, everything one grey, an icon on every row. The second is the neon gamer dashboard: glowing gradients, saturated colour everywhere, motion for its own sake. The third is the enterprise admin: boxy tables, heavy borders, uppercase labels, dense chrome around the work.\n\nThe code is migrating to two settled decisions. The UI font moves from bundled Geist Sans to the operating system's own UI font, and icons move from Lucide to Phosphor (regular weight). The tokens below record the target. Where the build still differs, the build is mid-migration, not a second rule.",
+    "keyCharacteristics": [
+      "Graphite surfaces stacked in four close steps; depth from tone and soft shadow, never from heavy borders.",
+      "Side panels and Settings are inset sheets: 8px from the window edge, 14px corners, a soft lift.",
+      "One type scale for the panel and menus: 15, 14, 12, 11, 10.",
+      "Quiet until it needs you: working is a dot, idle is nothing, needs-you is amber and may pulse.",
+      "The OS UI font for chrome, JetBrains Mono for terminals and machine text."
+    ],
+    "rules": [
+      {
+        "name": "The One Voice Rule",
+        "body": "Signal Amber means \"this waits on you\". Only blocked, asking and plan-review states use it, and only they may pulse. If nothing needs the person, no amber is on screen.",
+        "section": "colors"
+      },
+      {
+        "name": "The Accent Is Not a Signal Rule",
+        "body": "The accent belongs to the user and may be grey. Never encode state, newness or selection in it alone. Unread has its own blue, and status has its own colours.",
+        "section": "colors"
+      },
+      {
+        "name": "The Five Sizes Rule",
+        "body": "The panel, menus, frame header and menu primitive set text only at 15, 14, 12, 11 and 10. A unit test enforces it. A new size there is a defect, not a variant.",
+        "section": "typography"
+      },
+      {
+        "name": "The Sentence Case Rule",
+        "body": "No uppercase section labels anywhere. A heading is 12px medium pencil-text in sentence case.",
+        "section": "typography"
+      },
+      {
+        "name": "The Inset Sheet Rule",
+        "body": "Side panels and Settings are sheets set 8px in from the window edges, with 14px corners, a hairline edge and the Lifted or Raised shadow. They are never full-bleed slabs.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Legible Without Glass Rule",
+        "body": "No surface relies on glass to be readable. Every surface is opaque enough to read on any wallpaper, and turning glass off loses no information.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do set panel and menu text at 15, 14, 12, 11 or 10px only (The Five Sizes Rule).",
+      "Do show working as a 6px dot and idle as nothing; give a word only to what a person must act on.",
+      "Do reserve Signal Amber and pulsing for blocked, asking and plan review (The One Voice Rule).",
+      "Do mark unread with the 6px unread-blue dot after the name, whatever the accent.",
+      "Do set side panels and Settings as inset sheets: 8px from the edges, 14px corners, a soft lift.",
+      "Do use colour only where it means something: start-action tiles, a frame's colour as a small dot, agents' own logos, status, unread.",
+      "Do use JetBrains Mono for terminals, paths, branches, commands and ids, with tabular figures for numbers.",
+      "Do check every surface on a busy wallpaper, under glass and without it, and with a grey accent."
+    ],
+    "donts": [
+      "Don't use uppercase or widely tracked section labels; headings are 12px medium sentence case.",
+      "Don't put an icon on every row or colour every icon; colour that means nothing is noise.",
+      "Don't use glowing gradients, saturated fills or motion for its own sake.",
+      "Don't build boxy tables, heavy borders or dense chrome around the terminals.",
+      "Don't encode meaning in the accent; it may be grey (The Accent Is Not a Signal Rule).",
+      "Don't make legibility depend on glass or on the default wallpaper.",
+      "Don't let anything that is not waiting on a person pulse or turn amber."
+    ]
+  }
+}
