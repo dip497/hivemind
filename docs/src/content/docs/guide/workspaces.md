@@ -21,17 +21,20 @@ ids.
 
 ## The Layers panel
 
-⌘B shows or hides it. Its title is the workspace (⌄: recent projects, open a project, hide the
-panel); its search narrows everything it lists, and its bell counts the agents that need you and
-goes to the next. **New agent**, **New project**, **New machine**, **Add a tool or widget** and
-**Plugins** start things. Below them:
+⌘B shows or hides it. A rail down its left edge picks what it shows: **Tiles**, **Recents** or
+**Machines**, with **Plugins** and **Settings** at its foot. Its title is this workspace; its menu
+lists every workspace on this computer (with how many agents need you there) to open in this
+window, and opens a folder or a recent one. Its search narrows everything it lists, and its bell
+counts the agents that need you and goes to the next.
 
-- **Pinned**, then the tiles open here, with their status when that is worth reading. What an
-  agent started (`hive ctl spawn`) is listed under it and folds away.
-- **Recents**: this workspace's past agent sessions, newest first. One click resumes it in its
-  group.
-- **Projects**: every workspace on this computer, with how many of its agents need you or work.
-  Another one opens in this window.
+- **Tiles**: **New agent** (which one, from the agents installed here), **New project** (a folder,
+  as a frame on this canvas) and **Add a tool or widget**. Then **Pinned**, then **Projects**: each
+  frame with a folder, its worktrees under it, and the tiles in each. Frames with no folder are
+  **Groups**; tiles in no frame are **Canvas**. What an agent started (`hive ctl spawn`) is listed
+  under it and folds away.
+- **Recents**: the past agent sessions of every folder here, newest first. One click resumes one in
+  its project.
+- **Machines**: **New machine**, then this computer and every machine you added, with its link.
 
 Hold **Ctrl** (**⌘** on macOS) and the first nine rows show their number; **Ctrl+1** to **Ctrl+9**
 go to that row's tile, counted as the panel lists them, from a terminal too. A frame's **⋮** (or a
@@ -47,8 +50,8 @@ right-click) opens its menu, the same one as the **⋯** on its header on the ca
   brings it back at once.
 - The **View** menu (the sliders) chooses what is listed: **Status** (needs you, working, idle,
   exited), **Last activity** (past hour, today, this week), **Machines**; how it is grouped
-  (**Machine**, **Group**, **Date**, **Status**, **Agent** or none) and ordered (canvas order,
-  last activity, name); and whether idle machines show at the foot. **Reset to defaults** undoes
+  (**Project**, **Machine**, **Date**, **Status**, **Agent** or none) and ordered (canvas order,
+  last activity, name). **Reset to defaults** undoes
   it all.
 
 The View menu is yours in every workspace (`hive config set views.layers.groupBy status`). Pins,

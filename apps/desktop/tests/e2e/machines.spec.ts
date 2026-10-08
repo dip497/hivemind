@@ -103,6 +103,7 @@ test.afterAll(async () => {
 
 test("add a machine: probe, install hive over ssh, save", async () => {
   test.setTimeout(180_000);
+  await page.locator('.hm-layers [data-layers-rail="machines"]').click();
   await page.locator('[data-layers-action="machine"]').click();
   await page.getByLabel("Host").fill(`ssh://${os.userInfo().username}@127.0.0.1:${port}`);
   await page.getByLabel("Name", { exact: true }).fill("build-box");
@@ -225,6 +226,12 @@ test("the server goes away and comes back: chip and banner say so, the job never
 
 test("the Layers rail groups frames by the computer they run on, in every view", async () => {
   const rail = page.locator(".hm-layers");
+  // Grouped by machine, from the View menu.
+  await rail.locator('[data-layers-rail="tiles"]').click();
+  await rail.locator("[data-layers-view-menu]").click();
+  await page.locator('[data-layers-view="groupBy"]').click();
+  await page.locator('[data-layers-choice="groupBy:machine"]').click();
+  await page.keyboard.press("Escape");
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:add-frame"))); // a frame on this computer too
   await expect(rail.locator('[data-machine-group="build-box"]')).toBeVisible();
   await expect(rail.locator('[data-machine-group="local"]')).toContainText("This computer");

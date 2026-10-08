@@ -52,7 +52,10 @@ test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: tru
 
 const panel = () => page.locator('aside[aria-label="Layers"]');
 
+const pane = (name: "tiles" | "recents" | "machines") => panel().locator(`[data-layers-rail="${name}"]`).click();
+
 test("Recents lists this workspace's past sessions, and one click resumes it", async () => {
+  await pane("recents");
   const row = panel().locator(`[data-layers-recent="${session}"]`);
   await expect(row).toContainText("fix the share dialog", { timeout: 15_000 });
   await row.click();
@@ -61,6 +64,7 @@ test("Recents lists this workspace's past sessions, and one click resumes it", a
 });
 
 test("an agent's started agents are listed under it, and fold away", async () => {
+  await pane("tiles");
   const parentRow = panel().locator('[data-layer-tile^="tile-claude"]').first();
   const parent = (await parentRow.getAttribute("data-layer-tile"))!;
   // As an agent does it: `hive ctl spawn` from inside its tile.
@@ -99,12 +103,14 @@ test("with no frame bound to its folder, Recents still lists the workspace's own
   await page.locator("[data-delete-frame-keep]").click();
   await expect(panel().locator("[data-layers-frame]")).toHaveCount(0);
   await page.waitForTimeout(600); // Recents reads again a moment after the folders change
+  await pane("recents");
   await expect(panel().locator(`[data-layers-recent="${session}"]`)).toContainText("fix the share dialog", { timeout: 15_000 });
 });
 
-test("Projects lists every workspace here; another one opens in this window", async () => {
-  const projects = panel().locator("[data-layers-projects]");
-  await expect(projects.locator('[data-layers-project="alpha"]')).toBeDisabled();
-  await projects.locator('[data-layers-project="beta"]').click();
+test("the title's menu lists every workspace here; another one opens in this window", async () => {
+  await panel().locator("[data-layers-title]").click();
+  const workspaces = page.locator("[data-layers-workspaces]");
+  await expect(workspaces.locator('[data-layers-workspace="alpha"]')).toHaveAttribute("data-disabled", "");
+  await workspaces.locator('[data-layers-workspace="beta"]').click();
   await expect(panel().locator("[data-layers-title]")).toHaveText(/beta/, { timeout: 15_000 });
 });

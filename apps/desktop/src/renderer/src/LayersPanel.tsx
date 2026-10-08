@@ -13,7 +13,7 @@ import { MachineDot, statusWords } from "./machines/status";
 import { A_DEVICE, GONE_MACHINE, openMachines, placeOf, statusOf, useMachines } from "./machines/store";
 import type { MachineInfo } from "../../shared/ipc";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, Shapes, Blocks, History, Mail, MailOpen, AlarmClock, AlarmClockOff } from "lucide-react";
+import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, Shapes, Blocks, History, Mail, MailOpen, AlarmClock, AlarmClockOff, LayoutList, Settings, Monitor } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon, agentById, useAgents } from "./agents";
 import { notReady, useAgentPresence } from "./agent-plugins";
@@ -161,7 +161,7 @@ const timeOf = (ms: number, now: number) => {
 const VIEW_CHOICES = {
   status: [["all", "All"], ["needs-you", "Needs you"], ["unread", "Unread"], ["working", "Working"], ["idle", "Idle"], ["exited", "Exited"]],
   activity: [["all", "All"], ["hour", "Past hour"], ["today", "Today"], ["week", "This week"]],
-  groupBy: [["machine", "Machine"], ["group", "Group"], ["date", "Date"], ["status", "Status"], ["agent", "Agent"], ["none", "None"]],
+  groupBy: [["group", "Project"], ["machine", "Machine"], ["date", "Date"], ["status", "Status"], ["agent", "Agent"], ["none", "None"]],
   sortBy: [["canvas", "Canvas order"], ["activity", "Last activity"], ["name", "Name"]],
 } as const satisfies Record<string, ReadonlyArray<readonly [string, string]>>;
 const choiceLabel = <K extends keyof typeof VIEW_CHOICES>(k: K, v: string) => (VIEW_CHOICES[k] as ReadonlyArray<readonly [string, string]>).find(([id]) => id === v)?.[1] ?? v;
@@ -260,10 +260,10 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
         <kbd data-layer-jump={jumpKey} className="grid min-w-[18px] h-[18px] shrink-0 place-items-center rounded-[5px] px-1 font-sans text-[11px] leading-none tabular-nums text-[var(--color-fg2)] shadow-[inset_0_0_0_1px_var(--color-line2)]">
           {MOD}{jumpKey}
         </kbd>
-      ) : /* A word only for what you must act on; `working` is a dot. Only needs-you pulses. */ st === "working" ? (
-        <span aria-label="working" title="working" className="shrink-0 size-1.5 rounded-full group-hover:hidden" style={{ background: STATUS_COLOR[st] }} />
       ) : until ? (
         <span className={`shrink-0 ${COUNT} group-hover:hidden`} data-layer-until>{until}</span>
+      ) : /* A word only for what you must act on; `working` is a dot. Only needs-you pulses. */ st === "working" ? (
+        <span aria-label="working" title="working" className="shrink-0 size-1.5 rounded-full group-hover:hidden" style={{ background: STATUS_COLOR[st] }} />
       ) : st !== "idle" ? (
         <span
           className={`shrink-0 text-[10px] font-medium leading-none px-1.5 py-[3px] rounded-full ${NEEDS_YOU(st) ? "animate-pulse" : "group-hover:hidden"}`}
@@ -301,14 +301,14 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   useEffect(() => { localStorage.setItem("hivemind:layers-hidden", hidden ? "1" : "0"); }, [hidden]);
   const [width, setWidth] = useState<number>(() => {
     const v = Number(localStorage.getItem("hivemind:layers-width"));
-    return v >= 180 && v <= 480 ? v : 250;
+    return v >= 260 && v <= 520 ? v : 310;
   });
   useEffect(() => { localStorage.setItem("hivemind:layers-width", String(width)); }, [width]);
   const startResize = (e: ReactPointerEvent) => {
     e.preventDefault();
     const startX = e.clientX;
     const startW = width;
-    const onMove = (ev: PointerEvent) => setWidth(Math.max(180, Math.min(480, startW + (ev.clientX - startX))));
+    const onMove = (ev: PointerEvent) => setWidth(Math.max(260, Math.min(520, startW + (ev.clientX - startX))));
     const onUp = () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -326,6 +326,9 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   const [renamingTile, setRenamingTile] = useState<{ id: string; draft: string } | null>(null);
   const [card, setCard] = useState<{ tile: ModelTile; top: number; left: number } | null>(null);
   const [searching, setSearching] = useState(false);
+  // Which pane the rail shows: this viewer's, kept across launches.
+  const [pane, setPane] = useState<Pane>(() => { try { const v = localStorage.getItem("hivemind:layers-pane"); return v === "recents" || v === "machines" ? v : "tiles"; } catch { return "tiles"; } });
+  const pickPane = useCallback((p: Pane) => { setPane(p); try { localStorage.setItem("hivemind:layers-pane", p); } catch { /* private window */ } }, []);
   const [closingLoose, setClosingLoose] = useState(false);
   const [query, setQuery] = useState("");
   // Projects: every workspace here, as main counts it; read again as statuses change.
@@ -668,13 +671,24 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   const looseTiles = view.tree ? (view.byFrame.get(null) ?? []).concat([...goneFrames].flatMap((id) => view.byFrame.get(id) ?? [])) : [];
   const nothing = view.pinned.length === 0 && (view.tree ? ![...view.byFrame.values()].some((l) => l.length) : view.buckets.length === 0);
   const machineChoices = machineGroups.filter((g) => g.key === "local" || g.frames.length > 0 || g.machine);
+  // By machine: the computers something here runs on (this one always, unless filtered out).
+  const shownMachines = machineGroups.filter((g) => (g.key === "local" && !view.filtering) || g.frames.some((f) => !view.filtering || hasShown(f.id)));
 
   return (
-    <aside className="hm-layers relative h-full shrink-0 flex flex-col bg-[var(--color-bg2)] border-r border-[var(--color-line)] overflow-hidden" style={{ width }} aria-label="Layers">
-      {/* As a sidebar does it: whose it is and its two quick tools on top, then what you can start,
-          each a row with its name, then what is open. */}
-      <header className="flex items-center gap-1 pl-[14px] pr-2 h-12">
-        <PanelMenu title={title} onHide={() => setHidden(true)} />
+    <aside className="hm-layers relative h-full shrink-0 flex flex-row bg-[var(--color-bg2)] border-r border-[var(--color-line)] overflow-hidden" style={{ width }} aria-label="Layers">
+      {/* The rail picks what the panel shows; what opens elsewhere sits at its foot. */}
+      <nav aria-label="Panel" className="w-11 shrink-0 flex flex-col items-center gap-1 py-2.5 border-r border-[var(--color-line)]">
+        <RailButton label="Tiles" pane="tiles" active={pane} onPick={pickPane} icon={<LayoutList />} badge={needsYou} />
+        <RailButton label="Recents" pane="recents" active={pane} onPick={pickPane} icon={<History />} />
+        <RailButton label="Machines" pane="machines" active={pane} onPick={pickPane} icon={<Server />} />
+        <span className="flex-1" />
+        <RailButton label="Plugins" onPick={() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "plugins" } }))} icon={<Blocks />} />
+        <RailButton label="Settings" onPick={() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: {} }))} icon={<Settings />} />
+      </nav>
+      <div className="flex-1 min-w-0 flex flex-col">
+      {/* Whose it is (and every other workspace, in its menu) and its two quick tools, then the pane. */}
+      <header className="flex items-center gap-1 pl-[14px] pr-2 h-12 shrink-0">
+        <PanelMenu title={title} workspaces={projects} here={layoutKey} onHide={() => setHidden(true)} />
         <span className="ml-auto" />
         <Button variant="ghost" size="icon-xs" aria-label="Search tiles" title="Search tiles" aria-pressed={searching} data-layers-search-toggle
           onClick={() => { setSearching((x) => !x); setQuery(""); }}><Search size={ICON} strokeWidth={STROKE} className="size-4" /></Button>
@@ -690,16 +704,16 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             onKeyDown={(e) => { if (e.key === "Escape") { setSearching(false); setQuery(""); } e.stopPropagation(); }} className="h-7 text-[12px]" />
         </div>
       )}
+      {pane === "tiles" && (
       <nav aria-label="Start" className="shrink-0 pb-2">
         <NewAgentRow />
         <ActionRow icon={<FolderPlus size={ICON} strokeWidth={STROKE} />} label="New project" data="project" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:add-project"))} />
-        <ActionRow icon={<Server size={ICON} strokeWidth={STROKE} />} label="New machine" data="machine" onClick={() => openMachines({ kind: "add" })} />
         <ActionRow icon={<Shapes size={ICON} strokeWidth={STROKE} />} label="Add a tool or widget" data="add" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:open-add"))} />
-        <ActionRow icon={<Blocks size={ICON} strokeWidth={STROKE} />} label="Plugins" data="plugins" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "plugins" } }))} />
       </nav>
+      )}
 
-      <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-[14px]">
-        {tiles.length === 0 && frames.length === 0 && <div className={`pl-5 pr-3 py-2 ${LABEL} font-normal`}>No tiles open.</div>}
+      {pane === "tiles" && (
+      <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-[14px]" data-layers-pane="tiles">
         {tiles.length > 0 && nothing && (
           <div className="px-4 py-3 text-[12px] text-[var(--color-fg3)]" data-layers-nothing>
             Nothing matches.{" "}
@@ -707,21 +721,32 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           </div>
         )}
         {view.pinned.length > 0 && section("pinned", "Pinned", view.pinned, { "data-layers-pinned": "" })}
-        {tiles.length > 0 && (
-          <div className={`mt-2 flex h-7 items-center pl-5 pr-2 ${LABEL}`}>
-            <span>Tiles</span>
-            <span className="ml-auto"><ViewMenu prefs={prefs} setPref={setPref} machines={machineChoices} /></span>
-          </div>
-        )}
+        <div className={`mt-2 flex h-7 items-center pl-5 pr-2 ${LABEL}`}>
+          <span>{view.tree && !groupByMachine ? "Projects" : "Tiles"}</span>
+          <span className="ml-auto"><ViewMenu prefs={prefs} setPref={setPref} machines={machineChoices} /></span>
+        </div>
+        {tiles.length === 0 && frames.length === 0 && <div className={`pl-5 pr-3 py-1.5 ${LABEL} font-normal`} data-layers-empty>Nothing open yet: start an agent, or open a project.</div>}
         {view.tree ? (
           groupByMachine
-            ? machineGroups.filter((g) => (g.key === "local" && !view.filtering) || g.frames.some((f) => !view.filtering || hasShown(f.id))).map((g) => (
+            ? shownMachines.map((g) => (
               <section key={g.key} aria-label={g.label} data-machine-group={g.key === "local" ? "local" : g.label} className={g.key === "local" ? "" : "mt-3 border-t border-[var(--color-line)] pt-1"}>
-                <MachineHeader group={g} used needsYou={g.frames.reduce((n, f) => n + needsYouIn(f.id), 0)} />
+                {/* One computer only: no heading to say which. */}
+                {shownMachines.length > 1 && <MachineHeader group={g} used needsYou={g.frames.reduce((n, f) => n + needsYouIn(f.id), 0)} />}
                 {g.frames.map((f) => renderFrameGroup(f, 0, true))}
               </section>
             ))
-            : topFrames.map((f) => renderFrameGroup(f, 0, false))
+            : (
+              <>
+                {/* Projects: frames with a folder, their worktrees under them. Groups: frames with none. */}
+                <div data-layers-projects-tree>{topFrames.filter((f) => f.path).map((f) => renderFrameGroup(f, 0, false))}</div>
+                {topFrames.some((f) => !f.path && (!view.filtering || hasShown(f.id))) && (
+                  <section aria-label="Groups" data-layers-groups className="mt-2">
+                    <div className={`flex h-7 items-center pl-5 pr-3 ${LABEL}`}>Groups</div>
+                    {topFrames.filter((f) => !f.path).map((f) => renderFrameGroup(f, 0, false))}
+                  </section>
+                )}
+              </>
+            )
         ) : view.buckets.map((b) => section(b.key, b.label, b.tiles, { "data-layers-bucket": b.key }))}
         {view.snoozed.length > 0 && (
           <section aria-label="Snoozed" data-layers-snoozed className="mt-2">
@@ -754,8 +779,13 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             {looseTiles.map((t) => renderTile(t, 1))}
           </div>
         )}
+      </div>
+      )}
+      {pane === "recents" && (
+      <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-[14px]" data-layers-pane="recents">
+        {recentRows.shown.length === 0 && <div className={`pl-5 pr-3 py-1.5 ${LABEL} font-normal`}>No past sessions in this workspace's folders yet.</div>}
         {recentRows.shown.length > 0 && onResume && (
-          <section aria-label="Recents" data-layers-recents className="mt-3">
+          <section aria-label="Recents" data-layers-recents className="mt-1">
             <div className={`flex h-7 items-center pl-5 pr-3 ${LABEL}`}>Recents</div>
             {recentRows.shown.map((r) => (
               <button key={`${r.agent}:${r.id}`} type="button" data-layers-recent={r.id}
@@ -775,29 +805,24 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             )}
           </section>
         )}
-        {projects.length > 1 && (
-          <section aria-label="Projects" data-layers-projects className="mt-3">
-            <div className={`flex h-7 items-center pl-5 pr-3 ${LABEL}`}>Projects</div>
-            {projects.map((p) => {
-              const here = p.repo === layoutKey;
-              return (
-                <button key={p.repo} type="button" disabled={here} data-layers-project={p.title}
-                  onClick={() => window.dispatchEvent(new CustomEvent("hivemind:open-workspace", { detail: { repo: p.repo } }))}
-                  title={here ? `${p.title} is this window` : `Open ${p.title} in this window`}
-                  className="flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-2 rounded-lg text-left text-[14px] text-[var(--color-fg)] transition-colors duration-150 enabled:hover:bg-[var(--surface-3)] disabled:cursor-default">
-                  <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">{here ? <FolderOpen size={ICON} strokeWidth={STROKE} /> : <Folder size={ICON} strokeWidth={STROKE} />}</span>
-                  <span className="flex-1 truncate">{p.title}</span>
-                  {p.needsYou > 0 && <span className="shrink-0 text-[10px] font-medium leading-none px-1.5 py-[3px] rounded-full" style={{ color: "var(--color-warn)", background: "color-mix(in srgb, var(--color-warn) 16%, transparent)" }}>{p.needsYou} need you</span>}
-                  {p.working > 0 && <span aria-label={`${p.working} working`} className="shrink-0 size-1.5 rounded-full" style={{ background: STATUS_COLOR.working }} />}
-                  <span className={`shrink-0 ${COUNT}`}>{here ? "here" : p.tiles}</span>
-                </button>
-              );
-            })}
-          </section>
-        )}
       </div>
-      {/* Machines nothing runs on, at the foot of the rail; the View menu can hide them. */}
-      {prefs.showMachines && machineGroups.length > 1 && <IdleMachines groups={machineGroups.filter((g) => g.key !== "local" && g.frames.length === 0)} />}
+      )}
+      {pane === "machines" && (
+      <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-[14px]" data-layers-pane="machines">
+        <nav aria-label="Start" className="pb-2">
+          <ActionRow primary icon={<Server size={ICON} strokeWidth={STROKE} />} label="New machine" data="machine" onClick={() => openMachines({ kind: "add" })} />
+        </nav>
+        <div className={`mt-2 flex h-7 items-center pl-5 pr-3 ${LABEL}`}>Machines</div>
+        {machineGroups.map((g) => (
+          <section key={g.key} aria-label={g.label} data-machine-group={g.key === "local" ? "local" : g.label}>
+            <MachineHeader group={g} used={false} needsYou={g.frames.reduce((n, f) => n + needsYouIn(f.id), 0)} />
+          </section>
+        ))}
+        <button type="button" onClick={() => openMachines({ kind: "manage" })} data-layers-manage-machines
+          className={`mt-2 flex h-7 items-center mx-2 pl-3 pr-2 rounded-lg ${LABEL} hover:text-[var(--color-fg)]`}>Manage machines…</button>
+      </div>
+      )}
+      </div>
       {/* Right-edge resize grip. */}
       <div onPointerDown={startResize} className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[var(--color-brand)] active:bg-[var(--color-brand)] opacity-0 hover:opacity-60" title="Drag to resize" aria-hidden />
       {menu && frameActions && (
@@ -879,8 +904,23 @@ function NewAgentRow() {
   );
 }
 
-/** The panel's title: the workspace, and what concerns the panel itself. */
-function PanelMenu({ title, onHide }: { title: string; onHide: () => void }) {
+type Pane = "tiles" | "recents" | "machines";
+
+/** A rail button: picks a pane (it shows which is open), or opens something elsewhere. */
+function RailButton({ label, icon, pane, active, onPick, badge = 0 }: { label: string; icon: ReactNode; pane?: Pane; active?: Pane; onPick: (p: Pane) => void; badge?: number }) {
+  const on = !!pane && pane === active;
+  return (
+    <button type="button" aria-label={label} title={label} aria-current={on ? "page" : undefined} data-layers-rail={pane ?? label.toLowerCase()}
+      onClick={() => onPick(pane ?? "tiles")}
+      className={`relative grid size-8 place-items-center rounded-lg transition-colors duration-150 [&_svg]:size-[18px] [&_svg]:stroke-[1.5] ${on ? "bg-[var(--surface-4)] text-[var(--color-fg)]" : "text-[var(--color-fg2)] hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]"}`}>
+      {icon}
+      {badge > 0 && <span aria-hidden className="absolute right-1 top-1 size-2 rounded-full ring-2 ring-[var(--color-bg2)]" style={{ background: "var(--color-warn)" }} />}
+    </button>
+  );
+}
+
+/** The panel's title: this workspace, every other one to switch to, and the panel itself. */
+function PanelMenu({ title, workspaces, here, onHide }: { title: string; workspaces: WorkspaceSummary[]; here: string | null; onHide: () => void }) {
   const [open, setOpen] = useState(false);
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -892,9 +932,27 @@ function PanelMenu({ title, onHide }: { title: string; onHide: () => void }) {
         </button>
         <DropdownMenuTrigger asChild><span aria-hidden className="absolute bottom-0 left-0 size-0" /></DropdownMenuTrigger>
       </span>
-      <DropdownMenuContent align="start" className="w-[210px]">
-        <DropdownMenuItem onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:open-recent"))}><History />Recent projects…</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:add-project"))}><FolderPlus />Open a project…</DropdownMenuItem>
+      <DropdownMenuContent align="start" className="w-[250px]" data-layers-workspaces>
+        {workspaces.length > 1 && (
+          <>
+            <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+            {workspaces.map((w) => {
+              const isHere = w.repo === here;
+              return (
+                <DropdownMenuItem key={w.repo} disabled={isHere} data-layers-workspace={w.title}
+                  onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:open-workspace", { detail: { repo: w.repo } }))}>
+                  {isHere ? <FolderOpen /> : <Folder />}
+                  <span className="flex-1 truncate">{w.title}</span>
+                  {w.needsYou > 0 && <span className="shrink-0 text-[10px] font-medium leading-none px-1.5 py-[3px] rounded-full" style={{ color: "var(--color-warn)", background: "color-mix(in srgb, var(--color-warn) 16%, transparent)" }}>{w.needsYou} need you</span>}
+                  <span className={`shrink-0 ${COUNT}`}>{isHere ? "here" : w.tiles}</span>
+                </DropdownMenuItem>
+              );
+            })}
+            <DropdownMenuSeparator />
+          </>
+        )}
+        <DropdownMenuItem onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:open-folder"))}><FolderOpen />Open a folder…</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:open-recent"))}><History />Recent folders…</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onHide} data-layers-hide><PanelLeftClose />Hide panel<DropdownMenuShortcut>⌘B</DropdownMenuShortcut></DropdownMenuItem>
       </DropdownMenuContent>
@@ -955,9 +1013,6 @@ function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (
         {radio("groupBy", "Group by")}
         {radio("sortBy", "Sort by")}
         <DropdownMenuSeparator />
-        <DropdownMenuCheckboxItem checked={prefs.showMachines} onCheckedChange={(v) => setPref("showMachines", !!v)} onSelect={(e) => e.preventDefault()} data-layers-show-machines>
-          Show idle machines
-        </DropdownMenuCheckboxItem>
         <DropdownMenuItem disabled={!altered} onSelect={() => patchSettings("views.layers", DEFAULT_LAYERS_PREFS)} data-layers-reset>Reset to defaults</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -1070,39 +1125,6 @@ function TileRailMenu({ tile, x, y, pinned, onPin, onUnread, onSnooze, onCloseTi
 const RETRYABLE = new Set(["offline", "reconnecting", "no-hive", "idle"]);
 const DOWN = new Set(["offline", "reconnecting", "attention"]);
 
-/** Machines nothing on this canvas runs on: one quiet, foldable list instead of a heading each. */
-function IdleMachines({ groups }: { groups: MachineGroup[] }) {
-  const snap = useMachines();
-  const [open, setOpen] = useState<boolean>(() => {
-    const v = localStorage.getItem("hivemind:layers-idle-machines");
-    return v === null ? groups.length <= 3 : v === "1";
-  });
-  if (groups.length === 0) return null;
-  const toggle = () => setOpen((o) => { localStorage.setItem("hivemind:layers-idle-machines", o ? "0" : "1"); return !o; });
-  const signIn = groups.filter((g) => statusOf(snap, g.hostId ?? null).state === "attention").length;
-  const down = groups.filter((g) => g.machine?.enabled !== false && DOWN.has(statusOf(snap, g.hostId ?? null).state)).length - signIn;
-  const summary = [signIn && `${signIn} to sign in`, down > 0 && `${down} offline`].filter(Boolean).join(" · ");
-  return (
-    <section aria-label="other machines" data-idle-machines className="shrink-0 max-h-[40%] overflow-y-auto overscroll-contain border-t border-[var(--color-line)] pt-1 pb-1 bg-[var(--color-bg2)]">
-      <button
-        onClick={toggle}
-        aria-expanded={open}
-        className={`sticky top-0 z-10 bg-[var(--color-bg2)] w-full flex items-center gap-1 h-7 pl-5 pr-3 ${LABEL} hover:text-[var(--color-fg)] cursor-pointer`}
-      >
-        <span>Machines</span>
-        <span className={COUNT}>{groups.length}</span>
-        {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-        {!open && summary && <span className="ml-auto font-normal truncate">{summary}</span>}
-      </button>
-      {open && groups.map((g) => (
-        <section key={g.key} aria-label={g.label} data-machine-group={g.label}>
-          <MachineHeader group={g} used={false} needsYou={0} />
-        </section>
-      ))}
-    </section>
-  );
-}
-
 /** A computer's row in Layers: its link, what needs you there, and what you can do with it. */
 function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYou: number; used: boolean }) {
   const snap = useMachines();
@@ -1114,14 +1136,16 @@ function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYo
   const retry = () => (s.state === "attention" || !m ? openMachines({ kind: "manage" }) : window.hive.machineCheck(m.id).catch(() => {}));
   return (
     <div
-      className={`group/mach relative flex items-center gap-1.5 h-7 pr-2 ${used
-        ? `pl-5 mt-2 ${LABEL}`
-        : "pl-7 mx-2 rounded-lg text-[12px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)]"}`}
+      className={`group/mach relative flex items-center pr-2 ${used
+        ? `gap-1.5 h-7 pl-5 mt-2 ${LABEL}`
+        : "gap-2.5 h-8 pl-3 mx-2 rounded-lg text-[14px] text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)]"}`}
       data-machine-header={group.key === "local" ? "local" : group.label}
       title={m ? `${m.target}${s.detail ? ` — ${s.detail}` : ""}` : undefined}
     >
+      {/* As a row (the Machines pane): what kind of computer, then its link. */}
+      {!used && <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">{group.key === "local" ? <Monitor size={ICON} strokeWidth={STROKE} /> : <Server size={ICON} strokeWidth={STROKE} />}</span>}
       {group.hostId && <MachineDot status={s} enabled={on} size={6} />}
-      <span className={`truncate min-w-0 ${on ? "" : "opacity-60"} ${used ? "" : "text-[var(--color-fg2)]"}`}>{group.label}</span>
+      <span className={`truncate min-w-0 ${on ? "" : "opacity-60"}`}>{group.label}</span>
       {group.hostId && (
         <span className="shrink-0 font-mono normal-case tracking-normal font-normal text-[11px] tabular-nums" data-machine-state>
           {statusWords(s, on)}

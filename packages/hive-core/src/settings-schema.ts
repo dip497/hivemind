@@ -269,9 +269,8 @@ export interface LayersPrefs {
   /** Only the tiles on these computers ("local", or a machine's id); empty: every one. */
   machines: string[];
   /** List the machines nothing here runs on, at the foot of the panel. */
-  showMachines: boolean;
 }
-export const DEFAULT_LAYERS_PREFS: LayersPrefs = { status: "all", activity: "all", groupBy: "machine", sortBy: "canvas", machines: [], showMachines: true };
+export const DEFAULT_LAYERS_PREFS: LayersPrefs = { status: "all", activity: "all", groupBy: "group", sortBy: "canvas", machines: [] };
 
 export interface ViewsSettings {
   /** The view to open with (a registered id; unknown → canvas). */
@@ -625,6 +624,5 @@ function mergeLayersPrefs(raw: unknown, base: LayersPrefs): LayersPrefs {
     machines: Array.isArray(v.machines)
       ? [...new Set(v.machines.filter((m): m is string => typeof m === "string" && m.length > 0 && m.length <= 128))].slice(0, 64)
       : base.machines,
-    showMachines: typeof v.showMachines === "boolean" ? v.showMachines : base.showMachines,
   };
 }

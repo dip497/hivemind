@@ -56,12 +56,12 @@ describe("settings schema", () => {
   });
 
   test("views.layers: the Layers View menu keeps each valid choice; an unknown one falls back, and a partial patch keeps the rest", () => {
-    expect(mergeSettings({ v: 1 }).views.layers).toEqual({ status: "all", activity: "all", groupBy: "machine", sortBy: "canvas", machines: [], showMachines: true });
-    const chosen = { status: "needs-you", activity: "today", groupBy: "date", sortBy: "activity", machines: ["local", "m-1"], showMachines: false } as const;
+    expect(mergeSettings({ v: 1 }).views.layers).toEqual({ status: "all", activity: "all", groupBy: "group", sortBy: "canvas", machines: [] });
+    const chosen = { status: "needs-you", activity: "today", groupBy: "date", sortBy: "activity", machines: ["local", "m-1"] } as const;
     const s = mergeSettings({ v: 1, views: { layers: chosen } });
     expect(s.views.layers).toEqual({ ...chosen, machines: ["local", "m-1"] });
-    expect(mergeSettings({ v: 1, views: { layers: { groupBy: "colour", sortBy: 3, machines: ["local", 7, "", "local"], showMachines: "no" } } }).views.layers)
-      .toMatchObject({ groupBy: "machine", sortBy: "canvas", machines: ["local"], showMachines: true });
+    expect(mergeSettings({ v: 1, views: { layers: { groupBy: "colour", sortBy: 3, machines: ["local", 7, "", "local"] } } }).views.layers)
+      .toMatchObject({ groupBy: "group", sortBy: "canvas", machines: ["local"] });
     expect(mergeSettings(setPath(s, "views.layers.groupBy", "status"), s).views.layers).toEqual({ ...chosen, machines: ["local", "m-1"], groupBy: "status" });
   });
 

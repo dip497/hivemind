@@ -2,6 +2,7 @@
 // is listed and how it is grouped, fold a section, and find all of it as they left it after a
 // restart. The View menu is theirs (settings); pins and folds are theirs for this workspace.
 // Deleting a frame that holds tiles asks whether they go with it; the canvas's loose tiles close together.
+// Its rail picks the pane: tiles (projects, then groups), recents, machines.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -102,7 +103,7 @@ test("pins, the View menu and a folded section are as they were left after a res
 });
 
 test("the panel names what it does: search narrows the list, its rows start things, its heading says how it is grouped", async () => {
-  await expect(panel().locator("[data-layers-view-menu]")).toHaveText(/By machine/);
+  await expect(panel().locator("[data-layers-view-menu]")).toHaveText(/By project/);
   // Search: one tile's name leaves that tile.
   const name = (await rows().last().innerText()).split("\n")[0]!.trim();
   await panel().locator("[data-layers-search-toggle]").click();
@@ -117,9 +118,30 @@ test("the panel names what it does: search narrows the list, its rows start thin
   await panel().locator('[data-layers-action="add"]').click();
   await expect(page.locator("[data-add-menu]")).toBeVisible();
   await page.keyboard.press("Escape");
-  await panel().locator('[data-layers-action="plugins"]').click();
+  // The rail: Plugins at its foot opens them; a pane it picks stays picked.
+  await panel().locator('[data-layers-rail="plugins"]').click();
   await expect(page.locator("[data-plugins-home]")).toBeVisible();
   await page.keyboard.press("Escape");
+  await panel().locator('[data-layers-rail="machines"]').click();
+  await expect(panel().locator('[data-layers-pane="machines"] [data-machine-group="local"]')).toContainText("This computer");
+  await expect(panel().locator('[data-layers-rail="machines"]')).toHaveAttribute("aria-current", "page");
+  await panel().locator('[data-layers-rail="tiles"]').click();
+  await expect(rows()).toHaveCount(3);
+});
+
+test("a frame with a folder is listed under Projects; one without, under Groups", async () => {
+  const projects = panel().locator("[data-layers-projects-tree]");
+  await expect(projects.locator("[data-layers-frame]")).toHaveCount(1); // the workspace's own folder
+  await expect(panel().locator("[data-layers-groups]")).toHaveCount(0);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:add-frame")));
+  const group = panel().locator("[data-layers-groups] [data-layers-frame]");
+  await expect(group).toHaveCount(1);
+  await expect(projects.locator("[data-layers-frame]")).toHaveCount(1);
+  // An empty group goes without asking.
+  await group.hover();
+  await group.locator("[data-layers-frame-menu]").click();
+  await page.locator("[data-frame-menu-delete]").click();
+  await expect(panel().locator("[data-layers-groups]")).toHaveCount(0);
 });
 
 test("snoozed, a tile leaves the list for Snoozed until its time; Wake now brings it back", async () => {
