@@ -46,21 +46,22 @@ function Share({ repo }: { repo: string }) {
   const { shared } = useShown();
   const name = elsewhere ? shared?.names.workspace ?? "this workspace" : repo.split(/[\\/]/).filter(Boolean).pop() ?? repo;
 
+  // One press makes the link and copies it: what someone sharing wants next is to paste it.
   const create = async () => {
     setBusy(true);
     setError(null);
     try {
-      setLink(await window.hive.share(repo, role, expiresIn, reusable));
+      const made = await window.hive.share(repo, role, expiresIn, reusable);
+      setLink(made);
+      await writeClipboard(made);
     } catch (e) {
       setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(e));
     } finally {
       setBusy(false);
     }
   };
-  const copy = () => {
-    if (!link) return;
-    void navigator.clipboard.writeText(link).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
-  };
+  const writeClipboard = (text: string) => navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }, () => {});
+  const copy = () => { if (link) void writeClipboard(link); };
 
   return (
     <div className="flex flex-col gap-3" data-share-page>
@@ -92,10 +93,10 @@ function Share({ repo }: { repo: string }) {
       {link ? (
         <div className="flex min-w-0 items-center gap-2">
           <code className="flex-1 min-w-0 truncate rounded bg-[var(--color-bg3)] px-2 py-1.5 font-mono text-[11px]" data-share-link title={link}>{link}</code>
-          <Button size="sm" variant="outline" className="shrink-0" onClick={copy}>{copied ? <Check /> : <Copy />} Copy link</Button>
+          <Button size="sm" variant="outline" className="shrink-0" onClick={copy} data-share-copy>{copied ? <Check /> : <Copy />} {copied ? "Copied" : "Copy again"}</Button>
         </div>
       ) : (
-        <Button onClick={() => void create()} disabled={busy} data-share-create>{busy ? "Making the link…" : "Make a link"}</Button>
+        <Button onClick={() => void create()} disabled={busy} data-share-create><Copy />{busy ? "Making the link…" : "Copy invite link"}</Button>
       )}
       {error && <p className="text-[12px] text-[var(--color-err)]" role="alert">{error}</p>}
       <Button variant="ghost" size="sm" className="justify-self-start" onClick={openPeople} data-share-people><Users /> People with access…</Button>

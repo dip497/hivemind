@@ -45,6 +45,9 @@ test("a person with an invite link asks to join; denied they are not let in, all
   await host.locator("[data-share-create]").click();
   const link = (await host.locator("[data-share-link]").textContent())!;
   expect(link).toMatch(/^hivemind:\/\/join\/[0-9a-f]{64}#/);
+  // The one press copied it too, ready to paste.
+  await expect(host.locator("[data-share-copy]")).toHaveText(/Copied/);
+  expect(await apps[0]!.evaluate(({ clipboard }) => clipboard.readText())).toBe(link);
   await host.keyboard.press("Escape");
 
   const ask = async () => {

@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Changed: in Settings ▸ Share, one press makes the invite link and copies it (**Copy invite link**), instead of making it first and copying it second.
 - New: **Make your own…** at the bottom of the Add menu and in Settings ▸ Plugins. Choose widget, tool or view, say what it should do, then copy the prompt for any agent or start an agent here with it; the agent creates the plugin with `hive <kind>s new`, follows its `PROMPT.md`, and checks it through its own commands.
 - New: `hive widgets new` and `hive tools new` write a `PROMPT.md`, as `hive views new` did: what to build goes at the top, then how to install it, show it (`hive ctl plugin open`) and check it through its own commands, and the kind's whole guide. Hand it to a coding agent and it can build and test the plugin by itself.
 - Fixed: codex asked "Hooks need review" again whenever another install or build of the app started it (the installed app, a dev build, a newer version), because each wrote its own paths into the hook commands. Skipped, the hooks did not run, so the app never learned the session and could not resume it, nor follow its turns. The commands now name no path (each app sets them in codex's environment), so they are trusted once. Trust them once more after updating.
