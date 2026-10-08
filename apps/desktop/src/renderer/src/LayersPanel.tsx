@@ -254,7 +254,10 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
         {t.kind === AGENT_TILE_KIND ? <AgentIcon id={t.agent} size={ICON - 1} /> : <KindMark kind={t.kind} size={ICON} />}
       </span>
       {/* Name first, so every row's text starts at the same x. Unread: its name in weight. */}
-      <span className={`truncate flex-1 min-w-0 ${unread ? "font-semibold" : ""}`} data-layer-unread={unread ? "" : undefined} title={unread ? "Done since you last looked" : undefined}>{t.name}</span>
+      <span className="truncate min-w-0">{t.name}</span>
+      {/* Unread: a dot after its name, whatever its status says. */}
+      {unread && <span aria-label="unread" title="Done since you last looked" data-layer-unread className="shrink-0 size-1.5 rounded-full bg-[var(--color-unread)]" />}
+      <span className="flex-1" />
       {/* While Ctrl/⌘ is held: the number that jumps here, in place of its status. */}
       {jumpKey !== undefined ? (
         <kbd data-layer-jump={jumpKey} className="grid min-w-[18px] h-[18px] shrink-0 place-items-center rounded-[5px] px-1 font-sans text-[11px] leading-none tabular-nums text-[var(--color-fg2)] shadow-[inset_0_0_0_1px_var(--color-line2)]">
@@ -272,8 +275,6 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
         >
           {isPlan ? "review" : STATUS_LABEL[st]}
         </span>
-      ) : unread ? (
-        <span aria-label="unread" title="Done since you last looked" className="shrink-0 size-2 rounded-full bg-[var(--color-brand)] group-hover:hidden" />
       ) : null}
       {actions.close && (st === "working" || st === "exited") && (
         <Button variant="ghost" size="icon-2xs" reveal="hidden" onClick={(e) => { e.stopPropagation(); actions.close!(t.id); }} title={`Close ${t.name}`} aria-label={`Close ${t.name}`}>
@@ -675,6 +676,17 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   const goneFrames = new Set(tiles.flatMap((t) => (t.frameId && !frames.some((f) => f.id === t.frameId) ? [t.frameId] : [])));
   const looseTiles = view.tree ? (view.byFrame.get(null) ?? []).concat([...goneFrames].flatMap((id) => view.byFrame.get(id) ?? [])) : [];
   const nothing = view.pinned.length === 0 && (view.tree ? ![...view.byFrame.values()].some((l) => l.length) : view.buckets.length === 0);
+  /** Top frames by the folder they run in, the workspace's first: its own, or the workspace's. */
+  const projectsOf = (list: LayerFrame[]) => {
+    const by = new Map<string, LayerFrame[]>();
+    for (const f of list) {
+      if (view.filtering && !hasShown(f.id)) continue;
+      const key = f.path ?? folder ?? "";
+      by.set(key, [...(by.get(key) ?? []), f]);
+    }
+    const name = (dir: string) => (dir === (folder ?? "") ? title : dir.split(/[\\/]/).filter(Boolean).pop() ?? dir);
+    return [...by.entries()].sort(([a], [b]) => Number(b === (folder ?? "")) - Number(a === (folder ?? ""))).map(([dir, frames]) => ({ folder: dir, name: name(dir), frames }));
+  };
   const machineChoices = machineGroups.filter((g) => g.key === "local" || g.frames.length > 0 || g.machine);
   // By machine: the computers something here runs on (this one always, unless filtered out).
   const shownMachines = machineGroups.filter((g) => (g.key === "local" && !view.filtering) || g.frames.some((f) => !view.filtering || hasShown(f.id)));
@@ -742,16 +754,18 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
               </section>
             ))
             : (
-              <>
-                {/* Projects: frames with a folder, their worktrees under them. Groups: frames with none. */}
-                <div data-layers-projects-tree>{topFrames.filter((f) => f.path).map((f) => renderFrameGroup(f, 0, false))}</div>
-                {topFrames.some((f) => !f.path && (!view.filtering || hasShown(f.id))) && (
-                  <section aria-label="Groups" data-layers-groups className="mt-2">
-                    <div className={`flex h-7 items-center pl-5 pr-3 ${LABEL}`}>Groups</div>
-                    {topFrames.filter((f) => !f.path).map((f) => renderFrameGroup(f, 0, false))}
-                  </section>
-                )}
-              </>
+              // A project is a folder: frames are groups in the one they run in (their own, or the
+              // workspace's). One folder needs no heading to say which.
+              projectsOf(topFrames).map((p, _, all) => (
+                <section key={p.folder} aria-label={p.name} data-layers-project={p.name} className={all.length > 1 ? "mt-2" : ""}>
+                  {all.length > 1 && (
+                    <div className={`flex h-7 items-center gap-2 pl-5 pr-3 ${LABEL}`}>
+                      <Folder size={13} strokeWidth={STROKE} className="shrink-0" /><span className="truncate">{p.name}</span>
+                    </div>
+                  )}
+                  {p.frames.map((f) => renderFrameGroup(f, 0, false))}
+                </section>
+              ))
             )
         ) : view.buckets.map((b) => section(b.key, b.label, b.tiles, { "data-layers-bucket": b.key }))}
         {view.snoozed.length > 0 && (

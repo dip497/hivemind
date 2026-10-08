@@ -116,6 +116,8 @@
   --color-warn:   oklch(0.80 0.13 72);
   --color-err:    oklch(0.66 0.11 32);
   --color-info:   oklch(0.74 0.035 245);
+  /* New for the person (an unread tile): a clear blue, whatever the accent; it marks, never fills. */
+  --color-unread: oklch(0.70 0.14 250);
 
   /* Behind a terminal, before the theme store has painted the preset's own. */
   --color-terminal-bg: #1A1C1F;

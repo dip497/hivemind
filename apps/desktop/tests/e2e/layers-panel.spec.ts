@@ -136,19 +136,20 @@ test("the panel names what it does: search narrows the list, its rows start thin
   await expect(rows()).toHaveCount(3);
 });
 
-test("a frame with a folder is listed under Projects; one without, under Groups", async () => {
-  const projects = panel().locator("[data-layers-projects-tree]");
-  await expect(projects.locator("[data-layers-frame]")).toHaveCount(1); // the workspace's own folder
-  await expect(panel().locator("[data-layers-groups]")).toHaveCount(0);
+test("frames are grouped by the folder they run in; with one folder, there is no heading to say which", async () => {
+  const projects = panel().locator("[data-layers-project]");
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:add-frame")));
-  const group = panel().locator("[data-layers-groups] [data-layers-frame]");
-  await expect(group).toHaveCount(1);
-  await expect(projects.locator("[data-layers-frame]")).toHaveCount(1);
-  // An empty group goes without asking.
-  await group.hover();
-  await group.locator("[data-layers-frame-menu]").click();
+  // The new frame has no folder of its own: it runs in the workspace's, with the first.
+  await expect(projects).toHaveCount(1);
+  await expect(projects.locator("[data-layers-frame]")).toHaveCount(2);
+  await expect(projects.first().getByText("repo", { exact: true }).first()).toBeVisible();
+  await expect(panel().locator("[data-layers-project] > div").filter({ hasText: /^repo$/ })).toHaveCount(0);
+  // An empty frame goes without asking.
+  const added = projects.locator("[data-layers-frame]").last();
+  await added.hover();
+  await added.locator("[data-layers-frame-menu]").click();
   await page.locator("[data-frame-menu-delete]").click();
-  await expect(panel().locator("[data-layers-groups]")).toHaveCount(0);
+  await expect(projects.locator("[data-layers-frame]")).toHaveCount(1);
 });
 
 test("snoozed, a tile leaves the list for Snoozed until its time; Wake now brings it back", async () => {
