@@ -275,7 +275,7 @@ test("a restored tab stays restored when the view switches at once", async () =>
   await expect(tab).toHaveCount(1);
 });
 
-test("more tabs than the strip holds: they shrink, the active one is in view, and the wheel reaches the rest", async () => {
+test("more tabs than the strip holds: they shrink to a readable name, the active one is in view, and the wheel reaches the rest", async () => {
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
   await page.waitForSelector(".react-flow");
   const terminals = page.locator(".react-flow__node-terminal");
@@ -294,14 +294,18 @@ test("more tabs than the strip holds: they shrink, the active one is in view, an
     const active = all.findIndex((t) => t.getAttribute("aria-selected") === "true");
     // The tab farthest from the active one, at the other end of the strip.
     const far = active < all.length / 2 ? all.length - 1 : 0;
-    return { overflow: el.scrollWidth > el.clientWidth, tabWidth: all[0]!.getBoundingClientRect().width,
+    // Names cut short, of the tabs not hovered or selected ("shell #12" must read whole).
+    const cut = all.filter((t, i) => i !== active).map((t) => t.querySelector(".w-name")!).filter((n) => n.scrollWidth > n.clientWidth + 1).length;
+    return { overflow: el.scrollWidth > el.clientWidth, tabWidth: all[0]!.getBoundingClientRect().width, cut,
       activeInView: inView(all[active]!), far, farInView: inView(all[far]!) };
   });
   // The last spawned is selected, somewhere along a strip too long for the window: in view.
   await expect.poll(async () => (await geometry()).activeInView).toBe(true);
   const at = await geometry();
   expect(at.overflow).toBe(true);
-  expect(at.tabWidth).toBeLessThan(200);
+  // Shrunk, but every name still reads: about a dozen letters, the buttons out of its way.
+  expect(at.tabWidth).toBeLessThan(220);
+  expect(at.cut).toBe(0);
   expect(at.farInView).toBe(false);
   // A plain wheel over the strip scrolls it to the tab at the other end.
   const box = (await strip.boundingBox())!;
