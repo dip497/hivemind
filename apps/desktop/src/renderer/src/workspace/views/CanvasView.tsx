@@ -11,6 +11,7 @@
  * `<TileSlot>` the shared TileHost fills, so react-flow may mount/unmount nodes
  * freely without touching a live session.
  */
+import { isRemote } from "@hivemind/core/remote-uri";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
@@ -562,6 +563,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
             tiles={layerTiles}
             selectedTileId={selectedTileId}
             layoutKey={model.layoutKey}
+            folder={model.repoPath && !isRemote(model.repoPath) ? model.repoPath : null}
           onResume={(agent, frameId, session) => { commands.spawnAgent(agent, frameId, { resume: session }); }}
             onFocusTile={focusTileFromPanel}
             onFocusFrame={focusFrameFromPanel}

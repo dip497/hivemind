@@ -15,7 +15,7 @@ import type { MachineInfo } from "../../shared/ipc";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, Shapes, Blocks, History } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
-import { AgentIcon, agentById } from "./agents";
+import { AgentIcon, agentById, useAgents } from "./agents";
 import { FrameRailMenu, type FrameActions } from "./FrameRailMenu";
 import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem,
@@ -30,7 +30,6 @@ import { KindMark } from "./tiles/mark";
 import { MenuItem } from "./components/ui/menu-item";
 import { layersView, recentsView, type ModelTile, type RecentSession } from "@hivemind/core/layers";
 import type { WorkspaceSummary } from "../../shared/ipc";
-import { getAgents } from "./agents";
 import { useSettings, patchSettings } from "./settings-store";
 import { useViewLayout } from "./workspace/view-layout-store";
 import { DEFAULT_LAYERS_PREFS, type LayersPrefs } from "@hivemind/core/settings-schema";
@@ -75,6 +74,8 @@ interface Props {
   onFocusFrame: (id: string) => void;
   /** The workspace's layout key: where this person's pins and folded groups are kept. */
   layoutKey?: string | null;
+  /** The workspace's own folder on this computer: where tiles in a frame with no folder run. */
+  folder?: string | null;
   /** Start an agent again on one of its past sessions, in the frame of that session's folder. */
   onResume?: (agent: string, frameId: string | null, session: string) => void;
   /** When provided, right-clicking a frame row opens a context menu that
@@ -244,7 +245,7 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions }: { t: Mode
 });
 
 // Memo: a child of the canvas view, which re-renders on every drag frame.
-export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, layoutKey = null, onResume, frameActions, tileActions }: Props) {
+export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, layoutKey = null, folder = null, onResume, frameActions, tileActions }: Props) {
   // Before the early `hidden` return: hooks run on every render, in the same order.
   const machineSnap = useMachines();
   const prefs = useSettings().views.layers;
@@ -330,20 +331,23 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     window.addEventListener("focus", read);
     return () => { live = false; off(); if (timer) clearTimeout(timer); window.removeEventListener("focus", read); };
   }, []);
-  const folders = [...new Set(frames.map((f) => f.path).filter((p): p is string => !!p))].join("\n");
+  // Every folder an agent here runs in: each frame's, and the workspace's for frames with none.
+  const folders = [...new Set([folder, ...frames.map((f) => f.path)].filter((p): p is string => !!p))].join("\n");
+  // The agents that keep sessions, read again once the catalog has loaded: it is empty at first.
+  const sessionAgents = useAgents().filter((a) => a.enabled && a.def.session).map((a) => a.id).join("\n");
   useEffect(() => {
     let live = true;
     const dirs = folders ? folders.split("\n") : [];
-    const agents = getAgents().filter((a) => a.enabled && a.def.session);
+    const agents = sessionAgents ? sessionAgents.split("\n") : [];
     // At most 24 reads, after the first paint: Recents is never what the panel waits on.
-    const asks = dirs.flatMap((dir) => agents.map((a) => [a.id, dir] as const)).slice(0, 24);
+    const asks = dirs.flatMap((dir) => agents.map((a) => [a, dir] as const)).slice(0, 24);
     const id = setTimeout(() => {
       void Promise.all(asks.map(([agent, dir]) => Promise.resolve().then(() => window.hive.viewSessions(agent, dir)).then(
         (rows) => rows.map((r): RecentSession => ({ agent, folder: dir, ...r })), () => [] as RecentSession[],
       ))).then((all) => { if (live) setRecents(all.flat()); });
     }, 300);
     return () => { live = false; clearTimeout(id); };
-  }, [folders]);
+  }, [folders, sessionAgents]);
 
   // "4m ago" stays true: a tick a minute while the panel is open.
   const [now, setNow] = useState(() => Date.now());

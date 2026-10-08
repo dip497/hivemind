@@ -1,5 +1,6 @@
 // The panel as a home: every workspace here under Projects, with what runs in it, and this
-// workspace's past agent sessions under Recents, each a click from being resumed.
+// workspace's past agent sessions under Recents, each a click from being resumed: those of every
+// folder its agents run in, the workspace's own included.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -56,6 +57,17 @@ test("Recents lists this workspace's past sessions, and one click resumes it", a
   await row.click();
   await expect.poll(() => fs.existsSync(path.join(root, "claude-args")) && fs.readFileSync(path.join(root, "claude-args"), "utf8"), { timeout: 15_000 })
     .toContain(`--resume ${session}`);
+});
+
+test("with no frame bound to its folder, Recents still lists the workspace's own sessions", async () => {
+  // Delete the workspace's frame, keeping its tiles: nothing names the folder but the workspace.
+  const frame = panel().locator("[data-layers-frame]").first();
+  await frame.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Delete frame" }).click();
+  await page.locator("[data-delete-frame-keep]").click();
+  await expect(panel().locator("[data-layers-frame]")).toHaveCount(0);
+  await page.waitForTimeout(600); // Recents reads again a moment after the folders change
+  await expect(panel().locator(`[data-layers-recent="${session}"]`)).toContainText("fix the share dialog", { timeout: 15_000 });
 });
 
 test("Projects lists every workspace here; another one opens in this window", async () => {

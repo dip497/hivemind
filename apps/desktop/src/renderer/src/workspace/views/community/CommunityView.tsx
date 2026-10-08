@@ -10,6 +10,7 @@
  * its iframe) disables it for the session; the registry then resolves the
  * active view to the fallback (canvas) with the sessions intact.
  */
+import { isRemote } from "@hivemind/core/remote-uri";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PORT_HANDSHAKE, type SurfaceRect, type ViewPermission } from "@hivemind/view-sdk/protocol";
@@ -118,6 +119,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
           tiles={model.layerTiles}
           selectedTileId={model.selectedTileId}
           layoutKey={model.layoutKey}
+          folder={model.repoPath && !isRemote(model.repoPath) ? model.repoPath : null}
           onResume={(agent, frameId, session) => { commands.spawnAgent(agent, frameId, { resume: session }); }}
           onFocusTile={commands.selectTile}
           onFocusFrame={(id) => { commands.selectFrame(id); commands.selectTile(null); commands.focusTile(id); }}
