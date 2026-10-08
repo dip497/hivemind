@@ -22,6 +22,7 @@ import { toolPreferences, type ToolsSettings } from "@hivemind/core/settings-sch
 import { err, ok } from "../format.js";
 import { hcpCall } from "../hcp.js";
 import { githubLogin } from "./views.js";
+import { pluginBrief } from "../plugin-brief.js";
 
 const NO_PLUGINS: ToolsSettings = { enabledPlugins: [], disabledTools: [] };
 
@@ -107,6 +108,7 @@ export function toolStarter(owner: string, name: string): Record<string, string>
     [TOOL_MANIFEST]: JSON.stringify(manifest, null, 2) + "\n",
     "index.js": STARTER_JS.replace("__KIND__", JSON.stringify(tileKind)),
     "README.md": `# ${manifest.name}\n\n${manifest.description}\n\nAdd it to the app and switch it on:\n\n\`\`\`bash\nhive tools install .\nhive plugins enable tool:${id}\n\`\`\`\n\nThen open it from a frame's **Open** menu.\n`,
+    "PROMPT.md": pluginBrief("tool", id),
   };
 }
 

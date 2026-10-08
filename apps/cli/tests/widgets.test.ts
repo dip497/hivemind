@@ -62,7 +62,7 @@ describe("hive widgets", () => {
     try {
       expect(hive(["widgets", "new", "tally", "--owner", "ada", "--json"], { cwd: tmp, env }).json).toMatchObject({ ok: true, data: { id: "@ada/tally" } });
       const dir = path.join(tmp, "tally");
-      expect(fs.readdirSync(dir).sort()).toEqual(["README.md", "hive.d.ts", "icon.svg", "jsconfig.json", "widget.js", "widget.json"]);
+      expect(fs.readdirSync(dir).sort()).toEqual(["PROMPT.md", "README.md", "hive.d.ts", "icon.svg", "jsconfig.json", "widget.js", "widget.json"]);
       // Its code is valid against the API it is given.
       execFileSync(path.join(import.meta.dir, "../../../node_modules/.bin/tsc"), ["-p", path.join(dir, "jsconfig.json")], { encoding: "utf8" });
       expect(hive(["widgets", "install", dir, "--json"], { cwd: tmp, env }).json).toMatchObject({ ok: true, data: { id: "@ada/tally", name: "Tally" } });

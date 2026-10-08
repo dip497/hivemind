@@ -18,6 +18,7 @@ import { hcpCall } from "../hcp.js";
 import { REGISTRY_NAME, stageFromRegistry } from "../registry.js";
 import { githubLogin } from "./views.js";
 import { WIDGET_TYPES } from "@hivemind/core/widget-api";
+import { pluginBrief } from "../plugin-brief.js";
 
 /** Ask a running app to list the widgets again. False when no app is reachable. */
 async function rescanApp(): Promise<boolean> {
@@ -95,6 +96,7 @@ hive.on("action", (a) => {
     "jsconfig.json": JSON.stringify({ compilerOptions: { allowJs: true, checkJs: true, noEmit: true, target: "es2022", lib: ["es2022", "webworker"] }, include: ["*.js", "*.d.ts"] }, null, 2) + "\n",
     "icon.svg": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="3"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>\n',
     "README.md": `# ${title}\n\nCounts presses. Shown on its HiveHub page and in the app before anyone installs it: say what it does and what it asks for.\n`,
+    "PROMPT.md": pluginBrief("widget", `@${owner}/${name}`),
   };
 }
 
@@ -115,7 +117,7 @@ const newCmd = defineCommand({
     if (existsSync(dir)) return err(ctx, "exists", `${dir} already exists`);
     await mkdir(dir, { recursive: true });
     for (const [f, body] of Object.entries(starter(owner, name))) await writeFile(path.join(dir, f), body);
-    return ok(ctx, { id: `@${owner}/${name}`, dir }, () => `created @${owner}/${name} in ${dir}\n  hive widgets install ${name}    then add it from the toolbar's Add menu\n  hivehub publish ${name}          once it is pushed`);
+    return ok(ctx, { id: `@${owner}/${name}`, dir }, () => `created @${owner}/${name} in ${dir}\n  hive widgets install ${name}    then add it from the toolbar's Add menu\n  hivehub publish ${name}          once it is pushed\n  want an agent to build it? write your idea into PROMPT.md and hand it that file`);
   },
 });
 

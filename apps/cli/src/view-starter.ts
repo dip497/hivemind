@@ -2,7 +2,7 @@
  *  package to install — the app serves it to every view — so a view gets its types here and
  *  leaves `@hivemind/view-sdk` out of its bundle. */
 import { readFileSync } from "node:fs";
-import { agentPrompt } from "./view-prompt.js";
+import { pluginBrief } from "./plugin-brief.js";
 
 /** Embedded by scripts/build.ts; a source checkout reads the package itself. */
 declare const HIVE_VIEW_SDK: Record<string, string> | undefined;
@@ -93,7 +93,7 @@ hm.on("structure", ({ tiles }) => {
   });
 });
 `,
-    "PROMPT.md": agentPrompt(id, title(name)),
+    "PROMPT.md": pluginBrief("view", id),
     "README.md": `# ${title(name)}
 
 A [Hivemind](https://hivemind.griiken.com) view.
