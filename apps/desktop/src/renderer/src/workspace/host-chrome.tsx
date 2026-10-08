@@ -13,13 +13,13 @@
  * The canvas's zen mode suppresses the chrome entirely
  * (its own eye button restores it), through chrome-store.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Wrench } from "lucide-react";
 import { resolveToolbar, type ToolbarPreferences } from "@hivemind/core/toolbar";
 import { Button } from "../components/ui/button";
 import { StandardToolbar } from "./standard-toolbar";
 import { useToolEnabled } from "../tool-availability";
-import { openAppearanceSettings, setIslandShown, useChromeState } from "./chrome-store";
+import { openAppearanceSettings, setBottomInset, setIslandShown, useChromeState } from "./chrome-store";
 import type { ViewChrome } from "./workspace-view";
 import type { BoardChoice } from "../board-objects/board-model";
 
@@ -55,13 +55,27 @@ export function HostChrome({ chrome, toolbar, ...island }: HostChromeProps) {
   const hasActions = actions.length > 0;
   const showIsland = hasActions && !suppressed && chrome.island !== "off" && (chrome.island !== "hidden" || expanded);
   useEffect(() => { setIslandShown(showIsland); }, [showIsland]);
-  useEffect(() => () => setIslandShown(false), []);
+  useEffect(() => () => { setIslandShown(false); setBottomInset(0); }, []);
+  // A bottom island says how much it covers, island and gap above it, as its size changes.
+  const islandRef = useRef<HTMLDivElement>(null);
+  const bottom = showIsland && chrome.island !== "top";
+  useEffect(() => {
+    const el = islandRef.current;
+    if (!bottom || !el) { setBottomInset(0); return; }
+    const measure = () => setBottomInset(Math.ceil(window.innerHeight - el.getBoundingClientRect().top) + 8);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener("resize", measure);
+    measure();
+    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
+  }, [bottom]);
   return (
     <>
       {showIsland && (
         <div
           className={`pointer-events-none absolute left-1/2 z-30 w-max max-w-[calc(100vw-24px)] -translate-x-1/2 ${placement}`}
           data-host-island={chrome.island}
+          ref={islandRef}
         >
           <div className="pointer-events-auto">
             <StandardToolbar {...island} actions={actions} labels={toolbar?.labels ?? false} onTheme={openAppearanceSettings} compact={chrome.island !== "top"} />

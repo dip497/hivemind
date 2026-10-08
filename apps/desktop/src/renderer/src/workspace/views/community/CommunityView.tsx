@@ -11,6 +11,7 @@
  * active view to the fallback (canvas) with the sessions intact.
  */
 import { isRemote } from "@hivemind/core/remote-uri";
+import { useChromeState } from "../../chrome-store";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PORT_HANDSHAKE, type SurfaceRect, type ViewPermission } from "@hivemind/view-sdk/protocol";
@@ -108,6 +109,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     // polygon mask. Floating rects stay plain overlays.
     const hostBox = useMemo(() => box(), [rects]); // eslint-disable-line react-hooks/exhaustive-deps
     const policy = useSurfacePolicy();
+    const { bottomInset } = useChromeState();
     const clip = useMemo(() => edgeBandClip(rects, hostBox), [rects, hostBox]);
 
     return (
@@ -127,7 +129,8 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
           tileActions={{ onClose: commands.closeTile, onRename: commands.renameTile }}
         />
       )}
-      <div ref={rootRef} className="relative flex-1 min-h-0 overflow-hidden" data-community-view={pkg.id} data-community-ready={ready ? "1" : "0"}>
+      {/* Above the host's bottom island, so it never covers a docked tile's last lines. */}
+      <div ref={rootRef} className="relative flex-1 min-h-0 overflow-hidden" style={{ marginBottom: bottomInset }} data-community-view={pkg.id} data-community-ready={ready ? "1" : "0"}>
         <iframe
           ref={iframeRef}
           name={`hm-view:${pkg.id}`}

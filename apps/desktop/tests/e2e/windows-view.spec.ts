@@ -70,7 +70,10 @@ test("toggle into windows mode shows a tab strip + active tile body", async () =
   // The tab names it: the body comes without its own name bar, and the terminal takes the room.
   const slot = page.locator("[data-community-slot]").first();
   await expect(slot.locator("[data-tile-titlebar]")).toBeHidden();
-  await expect.poll(() => slot.evaluate((el) => el.getBoundingClientRect().bottom - el.querySelector(".xterm-screen")!.getBoundingClientRect().bottom)).toBeLessThan(28);
+  await expect.poll(() => slot.evaluate((el) => el.querySelector(".xterm-screen")!.getBoundingClientRect().top - el.getBoundingClientRect().top)).toBeLessThan(16);
+  // And it ends above the tool island: the island never covers its last lines.
+  const islandTop = await page.locator("[data-host-island]").evaluate((el) => el.getBoundingClientRect().top);
+  expect(await slot.evaluate((el) => el.getBoundingClientRect().bottom)).toBeLessThanOrEqual(islandTop);
   await page.screenshot({ path: "/tmp/hivemind-windows-view.png" });
 });
 
