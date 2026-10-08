@@ -431,9 +431,25 @@ const pluginCall = defineCommand({
   },
 });
 
+const pluginOpen = defineCommand({
+  meta: { name: "open", description: "Get a plugin running so its commands can be called: open a tool's tile, add a widget to the board, switch to a view" },
+  args: {
+    plugin: { type: "positional", required: true, description: "tool:owner/name[/tool], widget:@owner/name or view:id, as `hive plugins list` shows it" },
+    frame: { type: "string", description: "frame to open a tool's tile in (default: beside you)" },
+    ...JSON_ARG,
+  },
+  async run({ args }) {
+    const json = !!args.json;
+    try {
+      const r = await hcpCall("plugin.open", { plugin: String(args.plugin), ...(args.frame ? { frame: String(args.frame) } : {}) }) as { tileId?: string; widget?: string; view?: string };
+      console.log(json ? JSON.stringify(r) : r.tileId ? `opened tile ${r.tileId}` : r.widget ? `added widget ${r.widget}` : `switched to view ${r.view}`);
+    } catch (e) { fail(e, json); }
+  },
+});
+
 const plugin = defineCommand({
-  meta: { name: "plugin", description: "Run what the running plugins let an agent do: list their commands, call one" },
-  subCommands: { commands: pluginCommands, call: pluginCall },
+  meta: { name: "plugin", description: "Run what plugins let an agent do: open one, list the running ones' commands, call one" },
+  subCommands: { open: pluginOpen, commands: pluginCommands, call: pluginCall },
 });
 
 export const ctlCmd = defineCommand({

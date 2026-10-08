@@ -402,18 +402,21 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   const widgetPackages = useEnabledWidgetPackages();
   useShownWorkspace(persistKey, !!joinedId(repoPath ?? null));
   useWidgetRuntime(persistKey, board.objects, widgetPackages, updateBoard);
-  const addBoard = useCallback((kind: BoardChoice) => {
+  /** Add from the menu (or `hive ctl plugin open`); a widget's new id, when one was added. */
+  const addBoard = useCallback((kind: BoardChoice): string | undefined => {
     const at = canvasPointRef.current?.();
     const widget = kind.startsWith("widget:") ? kind.slice("widget:".length) : null;
     if (widget) {
       const pkg = widgetPackages.find((p) => p.id === widget);
-      if (!pkg) return;
+      if (!pkg) return undefined;
       // A board widget goes on the board where the canvas is drawn; elsewhere, and any other, floats.
-      addWidget(pkg.id, pkg.placement === "board" && at && activeViewIdRef.current === "canvas" ? { at, size: pkg.size, lines: JSON.stringify(pkg.draw ?? null).includes('"type":"list"') } : undefined);
-      return;
+      return addWidget(pkg.id, pkg.placement === "board" && at && activeViewIdRef.current === "canvas" ? { at, size: pkg.size, lines: JSON.stringify(pkg.draw ?? null).includes('"type":"list"') } : undefined);
     }
     if (kind === "arrow") startArrow();
+    return undefined;
   }, [addWidget, startArrow, widgetPackages]);
+  const addBoardRef = useRef(addBoard);
+  addBoardRef.current = addBoard;
 
   // Reload when the repo changes — each repo has its own workspace + view
   // layouts. Skip on first mount (initial values already came from the memos).
@@ -915,6 +918,19 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
           }
           case "plugin.commands": {
             await window.hive.hcpResult(cmd.id, true, { plugins: listCommands() });
+            break;
+          }
+          case "plugin.open": {
+            const o = p as { kind: "widget" | "view"; id: string };
+            if (o.kind === "view") {
+              if (!getView(o.id)) throw new Error(`no view ${o.id} here: install it (\`hive views install <folder>\`) and switch it on (\`hive plugins enable view:${o.id}\`)`);
+              setViewMode(o.id);
+              await window.hive.hcpResult(cmd.id, true, { view: o.id });
+            } else {
+              const widget = addBoardRef.current(`widget:${o.id}` as BoardChoice);
+              if (!widget) throw new Error(`no widget ${o.id} here: install it (\`hive widgets install <folder>\`) and switch it on (\`hive plugins enable widget:${o.id}\`)`);
+              await window.hive.hcpResult(cmd.id, true, { widget });
+            }
             break;
           }
           case "plugin.call": {

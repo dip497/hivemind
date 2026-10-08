@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: `hive ctl plugin open <record>` gets a plugin running so an agent can call its commands: it opens a tool's tile (`tool:owner/name`), adds a widget to the board (`widget:@owner/name`) or switches to a view (`view:id`).
 - Fixed: in the Windows view, a strip with more tabs than fit could not reach the ones past the edge. Tabs now shrink as in a browser but never past a readable name, minimize and close show only on the hovered or selected tab, the mouse wheel scrolls the strip, and the selected tab is scrolled into view.
 - Changed: Settings sits at the right end of the toolbar, as in a call's control bar, with a new icon; where a view's toolbar is off, collapsed or hidden by zen mode, it shows in the window's top-right corner. Share is a page in Settings (Settings → Share) instead of a button and a dialog of its own.
 - New: an agent can run what a plugin offers. A view, tool or widget declares `"commands"` in its manifest and answers them with `hm.onCommand` (view protocol 1.10); `hive ctl plugin commands` lists what the running plugins offer, and `hive ctl plugin call <plugin> <command> '<json>'` runs one and prints its answer. Examples: the Progress widget (`examples/widgets/progress`), the Agent board view (`examples/views/agent-board`), and `list` / `failures` in the Worktrees and CI runs tools.

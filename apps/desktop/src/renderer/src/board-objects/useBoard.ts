@@ -36,7 +36,8 @@ export interface Board {
   select: (id: string | null) => void;
   edit: (id: string | null) => void;
   /** Add a widget of the package `pkg`: on the board at `board.at`, else floating over every view. */
-  addWidget: (pkg: string, board?: { at: Point; size: { w: number; h: number }; lines?: boolean }) => void;
+  /** The new widget's id. */
+  addWidget: (pkg: string, board?: { at: Point; size: { w: number; h: number }; lines?: boolean }) => string;
   update: (id: string, change: (o: BoardObject) => BoardObject) => void;
   remove: (id: string) => void;
   duplicate: (id: string) => void;
@@ -140,6 +141,7 @@ export function useBoard({ persistKey, frames, framesRef, onSelect }: {
     set((board) => [...board, w]);
     // On the board it is written in at once, as a new note is.
     if (place) edit(w.id);
+    return w.id;
   }, [set, edit, framesRef]);
 
 

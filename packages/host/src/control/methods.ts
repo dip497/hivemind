@@ -460,6 +460,34 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     return tile.id;
   };
 
+  /** Open a tool plugin's tile: the tool `pick` chooses among the registered ones. */
+  type RegisteredTool = ReturnType<typeof createToolRegistry>["tools"][number];
+  async function openTool(p: Record<string, unknown>, pick: (tools: RegisteredTool[]) => RegisteredTool | undefined, badId: string): Promise<{ tileId: string }> {
+    let registry;
+    try { registry = createToolRegistry([...BUNDLED_TOOL_PLUGINS, ...(await deps.addedTools?.() ?? [])]); }
+    catch { registry = createToolRegistry(BUNDLED_TOOL_PLUGINS); }
+    const tool = pick(registry.tools.filter((t) => t.tileKind));
+    if (!tool?.tileKind) throw new HcpError("UNSUPPORTED", `${badId}; \`hive tools list\` shows them`);
+    const availability = registry.resolve(deps.toolsSettings?.() ?? { enabledPlugins: [], disabledTools: [] }).availability(tool.id);
+    if (!availability.available) throw new HcpError("UNAUTHORIZED", `${tool.label} is disabled; switch it on in Settings ▸ Plugins, or \`hive plugins enable tool:${tool.pluginId}\``);
+    const kind = tool.tileKind;
+    if (p.frame !== undefined && (typeof p.frame !== "string" || !p.frame || p.frame.length > 256)) throw new HcpError("BAD_REQUEST", "frame must be an id");
+    if (p.url !== undefined) {
+      if (typeof p.url !== "string" || p.url.length > 8192) throw new HcpError("BAD_REQUEST", "Invalid URL");
+      let url: URL;
+      try { url = new URL(p.url); } catch { throw new HcpError("BAD_REQUEST", "Invalid URL"); }
+      if (!["http:", "https:"].includes(url.protocol) && p.url !== "about:blank") throw new HcpError("BAD_REQUEST", "URL must use http or https, or be about:blank");
+    }
+    if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
+    const url = typeof p.url === "string" ? p.url : undefined;
+    const tileId = openTile(p.callerTile, p.frame, (ws) => ({
+      id: mintId(`tile-${kind.replace(/[^A-Za-z0-9-]/g, "")}`), kind,
+      label: `${tool.label} #${nextOrdinal(ws.tiles.map((t) => t.label), (n) => `${tool.label} #${n}`)}`,
+      ...(url ? { url } : {}),
+    }), { background: false });
+    return { tileId };
+  }
+
   // What only the running app knows about a workspace's tiles, for the list.
   const factsOf = (tiles: readonly TileRecord[]): TileFacts<TileRecord> => ({
     status: (tileId) => {
@@ -831,32 +859,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
       // ── canvas verbs (renderer) ──────────────────────────────────────────
       case "tool.open":
-        return effect(call, { verb: method, target: (r) => r.tileId }, async () => {
-          if (typeof p.tool !== "string") throw new HcpError("BAD_REQUEST", "tool must be an id: owner/name/tool");
-          let registry;
-          try { registry = createToolRegistry([...BUNDLED_TOOL_PLUGINS, ...(await deps.addedTools?.() ?? [])]); }
-          catch { registry = createToolRegistry(BUNDLED_TOOL_PLUGINS); }
-          const tool = registry.tools.find((t) => t.id === p.tool);
-          if (!tool?.tileKind) throw new HcpError("UNSUPPORTED", "Unknown tool id: `hive tools list` shows them");
-          const availability = registry.resolve(deps.toolsSettings?.() ?? { enabledPlugins: [], disabledTools: [] }).availability(tool.id);
-          if (!availability.available) throw new HcpError("UNAUTHORIZED", `${tool.label} is disabled; switch it on in Settings ▸ Plugins, or \`hive plugins enable tool:${tool.pluginId}\``);
-          const kind = tool.tileKind;
-          if (p.frame !== undefined && (typeof p.frame !== "string" || !p.frame || p.frame.length > 256)) throw new HcpError("BAD_REQUEST", "frame must be an id");
-          if (p.url !== undefined) {
-            if (typeof p.url !== "string" || p.url.length > 8192) throw new HcpError("BAD_REQUEST", "Invalid URL");
-            let url: URL;
-            try { url = new URL(p.url); } catch { throw new HcpError("BAD_REQUEST", "Invalid URL"); }
-            if (!["http:", "https:"].includes(url.protocol) && p.url !== "about:blank") throw new HcpError("BAD_REQUEST", "URL must use http or https, or be about:blank");
-          }
-          if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
-          const url = typeof p.url === "string" ? p.url : undefined;
-          const tileId = openTile(p.callerTile, p.frame, (ws) => ({
-            id: mintId(`tile-${kind.replace(/[^A-Za-z0-9-]/g, "")}`), kind,
-            label: `${tool.label} #${nextOrdinal(ws.tiles.map((t) => t.label), (n) => `${tool.label} #${n}`)}`,
-            ...(url ? { url } : {}),
-          }), { background: false });
-          return { tileId };
-        });
+        if (typeof p.tool !== "string") throw new HcpError("BAD_REQUEST", "tool must be an id: owner/name/tool");
+        return effect(call, { verb: method, target: (r) => r.tileId }, () => openTool(p, (tools) => tools.find((t) => t.id === p.tool), "Unknown tool id"));
       case "tile.list": {
         // One frame, named the way spawn names one; a name no frame answers to is refused.
         const ws = layoutFor(p.callerTile);
@@ -877,6 +881,19 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // `hive ctl plugin commands`: what the plugins running in the window let an agent run.
       case "plugin.commands":
         return await deps.callRenderer("plugin.commands", {}, RENDERER_TIMEOUT);
+      // `hive ctl plugin open`: get a plugin running, so its commands can be called: a tool's tile
+      // opened (`tool:owner/name`, its first tool, or `tool:owner/name/tool`), a widget added to the
+      // board, a view switched to.
+      case "plugin.open": {
+        const m = typeof p.plugin === "string" && p.plugin.length <= 200 ? /^(tool|widget|view):(.+)$/.exec(p.plugin) : null;
+        if (!m) throw new HcpError("BAD_REQUEST", "plugin must be a record: tool:owner/name, widget:@owner/name or view:id, as `hive plugins list` shows it");
+        const [, kind, id] = m as unknown as [string, "tool" | "widget" | "view", string];
+        if (kind === "tool") {
+          return effect(call, { verb: method, target: `${kind}:${id}` }, () => openTool(p, (tools) => tools.find((t) => t.id === id) ?? tools.find((t) => t.pluginId === id), `${id} has no tool to open`));
+        }
+        if (kind === "widget" && !deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
+        return effect(call, { verb: method, target: `${kind}:${id}` }, () => deps.callRenderer("plugin.open", { kind, id }, RENDERER_TIMEOUT));
+      }
       // `hive ctl plugin call`: run one, and answer with what the plugin answered.
       case "plugin.call": {
         if (typeof p.plugin !== "string" || !p.plugin || p.plugin.length > 200) throw new HcpError("BAD_REQUEST", "plugin must be an id, as `hive ctl plugin commands` lists it");

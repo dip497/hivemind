@@ -95,6 +95,9 @@ when it serves one). Neither needs the window: the app answers them itself.
 ## `hive ctl` — plugins
 
 ```text
+hive ctl plugin open <record> [--frame f] [--json]
+                                           # get it running: a tool's tile opened, a widget added
+                                           # to the board, a view switched to
 hive ctl plugin commands [--json]          # what the running plugins let you run, with what each takes
 hive ctl plugin call <plugin> <command> ['{"json":"argument"}' | -] [--tile id] [--json]
                                            # runs it and prints what the plugin answered
@@ -102,10 +105,13 @@ hive ctl plugin call <plugin> <command> ['{"json":"argument"}' | -] [--tile id] 
 
 A view, a tool or a widget declares commands in its manifest and answers them in its code. They
 can be run while the plugin runs: the view shown, a tool's open tile, a widget on the board.
+`plugin open` gets one there, named as `hive plugins list` names it (`tool:owner/name` opens its
+first tool, `tool:owner/name/tool` another; `widget:@owner/name`; `view:id`).
 `--tile` picks one when the same plugin runs more than once (two tiles of one tool). What the
 plugin throws is the command's error, and the exit code is not 0.
 
 ```sh
+hive ctl plugin open widget:@dip497/progress                           # → added widget widget-…
 hive ctl plugin call @dip497/progress add '{"text":"Run the tests"}'   # → {"index": 0}
 hive ctl plugin call agent-board post '{"text":"Tests pass","kind":"done"}'
 hive ctl plugin call dip497/worktrees list
