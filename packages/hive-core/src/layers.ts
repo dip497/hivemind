@@ -191,18 +191,59 @@ function nest(list: ModelTile[], kids: Map<string, ModelTile[]>): ModelTile[] {
 /** A past session an agent kept for a folder: what a Recents list shows. */
 export interface RecentSession { agent: string; id: string; folder: string; updated?: number; prompt?: string }
 
-/** Recents: newest first, at most `limit`, a search narrowing them as it narrows tiles; a session
- *  a tile already has open is not offered again. */
-export function recentsView(rows: readonly RecentSession[], opts: { limit: number; open?: ReadonlySet<string>; query?: string; agentLabel?: (agent: string) => string }): { shown: RecentSession[]; more: number } {
+/** Each session once, none a tile has open, the search's only, newest first. */
+function recentRows(rows: readonly RecentSession[], opts: { open?: ReadonlySet<string>; query?: string; agentLabel?: (agent: string) => string }): RecentSession[] {
   const q = opts.query?.trim().toLowerCase() ?? "";
   const seen = new Set<string>();
-  const kept = rows.filter((r) => {
+  return rows.filter((r) => {
     const key = `${r.agent}:${r.id}`;
     if (seen.has(key) || opts.open?.has(r.id)) return false;
     seen.add(key);
     return !q || `${r.prompt ?? ""} ${opts.agentLabel?.(r.agent) ?? r.agent}`.toLowerCase().includes(q);
   }).sort((a, b) => (b.updated ?? 0) - (a.updated ?? 0));
-  return { shown: kept.slice(0, opts.limit), more: Math.max(0, kept.length - opts.limit) };
+}
+
+export type RecentsBy = "agent" | "project" | "date" | "none";
+/** A heading of Recents and its newest sessions; `more` are left for "Show more". */
+export interface RecentGroup { key: string; label: string; rows: RecentSession[]; more: number }
+
+/** Recents grouped (`by`): by agent and by project the group with the newest session first, by date
+ *  Today, Yesterday, This week, Older; "none" one group with no heading. Each shows `limit(key)`. */
+export function recentGroups(rows: readonly RecentSession[], opts: {
+  by: RecentsBy;
+  now: number;
+  limit: (key: string) => number;
+  open?: ReadonlySet<string>;
+  query?: string;
+  agentLabel?: (agent: string) => string;
+  /** A folder's name as Recents shows it; its last path segment when absent. */
+  folderLabel?: (folder: string) => string;
+}): RecentGroup[] {
+  const kept = recentRows(rows, opts);
+  const today = midnight(opts.now);
+  const keyOf = (r: RecentSession): [string, string] => {
+    if (opts.by === "agent") return [r.agent, opts.agentLabel?.(r.agent) ?? r.agent];
+    if (opts.by === "project") return [r.folder, opts.folderLabel?.(r.folder) ?? (r.folder.split(/[\\/]/).filter(Boolean).pop() ?? r.folder)];
+    if (opts.by === "date") {
+      const at = r.updated ?? 0;
+      return at >= today ? ["today", "Today"] : at >= today - DAY ? ["yesterday", "Yesterday"] : at >= today - 6 * DAY ? ["week", "This week"] : ["older", "Older"];
+    }
+    return ["all", ""];
+  };
+  const groups = new Map<string, { label: string; all: RecentSession[] }>();
+  for (const r of kept) {
+    const [key, label] = keyOf(r);
+    const g = groups.get(key) ?? { label, all: [] };
+    g.all.push(r);
+    groups.set(key, g);
+  }
+  // Rows are newest first, so a group's first session is its newest, and insertion order is newest group first.
+  const ordered = [...groups.entries()];
+  if (opts.by === "date") ordered.sort(([a], [b]) => DATE_ORDER.indexOf(a) - DATE_ORDER.indexOf(b));
+  return ordered.map(([key, g]) => {
+    const n = opts.limit(key);
+    return { key, label: g.label, rows: g.all.slice(0, n), more: Math.max(0, g.all.length - n) };
+  });
 }
 
 /** A workspace at a glance, from its tiles' statuses: how many, how many need the person, how many work. */

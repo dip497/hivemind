@@ -32,8 +32,9 @@ counts the agents that need you and goes to the next.
   frame with a folder, its worktrees under it, and the tiles in each. Frames with no folder are
   **Groups**; tiles in no frame are **Canvas**. What an agent started (`hive ctl spawn`) is listed
   under it and folds away.
-- **Recents**: the past agent sessions of every folder here, newest first. One click resumes one in
-  its project.
+- **Recents**: the past agent sessions of every folder here, newest first, grouped by **agent**,
+  **project** or **date** (or not at all) from its heading. Each group folds and shows its newest
+  five, with **Show more**. One click resumes a session in its project.
 - **Machines**: **New machine**, then this computer and every machine you added, with its link.
 
 Hold **Ctrl** (**⌘** on macOS) and the first nine rows show their number; **Ctrl+1** to **Ctrl+9**

@@ -63,6 +63,32 @@ test("Recents lists this workspace's past sessions, and one click resumes it", a
     .toContain(`--resume ${session}`);
 });
 
+test("Recents groups by agent, by project or not at all, and a group folds away", async () => {
+  await pane("recents");
+  const by = async (choice: string) => {
+    await panel().locator("[data-layers-recents-by]").click();
+    await page.locator(`[data-layers-recents-choice="${choice}"]`).click();
+    await expect(page.locator("[data-layers-recents-choice]")).toHaveCount(0);
+  };
+  const row = panel().locator(`[data-layers-recent="${session}"]`);
+  // By agent, the default: under Claude.
+  await expect(panel().locator('[data-layers-recents-group="claude"]')).toContainText("Claude");
+  await expect(panel().locator('[data-layers-recents="claude"]').locator(`[data-layers-recent="${session}"]`)).toBeVisible();
+  await panel().locator('[data-layers-recents-group="claude"]').click();
+  await expect(row).toHaveCount(0);
+  await panel().locator('[data-layers-recents-group="claude"]').click();
+  await expect(row).toBeVisible();
+  // By project: under the project it ran in, by its name.
+  await by("project");
+  await expect(panel().locator("[data-layers-recents-by]")).toHaveText(/By project/);
+  await expect(panel().locator("[data-layers-recents-group]")).toContainText("alpha");
+  // Not at all: no headings.
+  await by("none");
+  await expect(panel().locator("[data-layers-recents-group]")).toHaveCount(0);
+  await expect(row).toBeVisible();
+  await by("agent");
+});
+
 test("an agent's started agents are listed under it, and fold away", async () => {
   await pane("tiles");
   const parentRow = panel().locator('[data-layer-tile^="tile-claude"]').first();

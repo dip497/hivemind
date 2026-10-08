@@ -56,8 +56,8 @@ describe("settings schema", () => {
   });
 
   test("views.layers: the Layers View menu keeps each valid choice; an unknown one falls back, and a partial patch keeps the rest", () => {
-    expect(mergeSettings({ v: 1 }).views.layers).toEqual({ status: "all", activity: "all", groupBy: "group", sortBy: "canvas", machines: [] });
-    const chosen = { status: "needs-you", activity: "today", groupBy: "date", sortBy: "activity", machines: ["local", "m-1"] } as const;
+    expect(mergeSettings({ v: 1 }).views.layers).toEqual({ status: "all", activity: "all", groupBy: "group", sortBy: "canvas", machines: [], recentsBy: "agent" });
+    const chosen = { status: "needs-you", activity: "today", groupBy: "date", sortBy: "activity", machines: ["local", "m-1"], recentsBy: "project" } as const;
     const s = mergeSettings({ v: 1, views: { layers: chosen } });
     expect(s.views.layers).toEqual({ ...chosen, machines: ["local", "m-1"] });
     expect(mergeSettings({ v: 1, views: { layers: { groupBy: "colour", sortBy: 3, machines: ["local", 7, "", "local"] } } }).views.layers)

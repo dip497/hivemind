@@ -259,6 +259,8 @@ export const LAYERS_STATUS = ["all", "needs-you", "unread", "working", "idle", "
 export const LAYERS_ACTIVITY = ["all", "hour", "today", "week"] as const;
 export const LAYERS_GROUP_BY = ["machine", "group", "date", "status", "agent", "none"] as const;
 export const LAYERS_SORT_BY = ["canvas", "activity", "name"] as const;
+/** How Recents groups past sessions: by the agent, by the project (folder) they ran in, by day, or not. */
+export const LAYERS_RECENTS_BY = ["agent", "project", "date", "none"] as const;
 export interface LayersPrefs {
   /** Only the tiles in this state. */
   status: (typeof LAYERS_STATUS)[number];
@@ -268,9 +270,9 @@ export interface LayersPrefs {
   sortBy: (typeof LAYERS_SORT_BY)[number];
   /** Only the tiles on these computers ("local", or a machine's id); empty: every one. */
   machines: string[];
-  /** List the machines nothing here runs on, at the foot of the panel. */
+  recentsBy: (typeof LAYERS_RECENTS_BY)[number];
 }
-export const DEFAULT_LAYERS_PREFS: LayersPrefs = { status: "all", activity: "all", groupBy: "group", sortBy: "canvas", machines: [] };
+export const DEFAULT_LAYERS_PREFS: LayersPrefs = { status: "all", activity: "all", groupBy: "group", sortBy: "canvas", machines: [], recentsBy: "agent" };
 
 export interface ViewsSettings {
   /** The view to open with (a registered id; unknown → canvas). */
@@ -624,5 +626,6 @@ function mergeLayersPrefs(raw: unknown, base: LayersPrefs): LayersPrefs {
     machines: Array.isArray(v.machines)
       ? [...new Set(v.machines.filter((m): m is string => typeof m === "string" && m.length > 0 && m.length <= 128))].slice(0, 64)
       : base.machines,
+    recentsBy: pick(v.recentsBy, LAYERS_RECENTS_BY, base.recentsBy),
   };
 }

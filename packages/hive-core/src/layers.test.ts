@@ -4,11 +4,12 @@
  */
 import { test } from "bun:test";
 import assert from "node:assert/strict";
-import { isUnread, layersView, recentsView, workspaceCounts, type ModelTile } from "./layers.js";
+import { isUnread, layersView, recentGroups, workspaceCounts, type ModelTile, type RecentsBy } from "./layers.js";
 import { DEFAULT_LAYERS_PREFS, type LayersPrefs } from "./settings-schema.js";
 
 const NOW = new Date(2026, 9, 8, 15, 0).getTime();
 const HOUR = 3_600_000;
+const DAY_MS = 24 * HOUR;
 const tile = (id: string, over: Partial<ModelTile> = {}): ModelTile => ({
   id, kind: "agent-terminal", name: id, frameId: "f1", agent: "claude", status: "idle", needsYou: false, activity: NOW - HOUR / 2, machine: "local", ...over,
 });
@@ -132,19 +133,30 @@ test("snoozed tiles leave every list, pinned too, until their time; one that nee
   assert.deepEqual(ids(v.byFrame.get("f1")!), ["asks", "woke"]);
 });
 
-test("recents: newest first, at most the limit with how many more, no session twice nor one a tile has open, and a search narrows them", () => {
-  const rows = [
-    { agent: "claude", id: "a", folder: "/r", updated: 10, prompt: "fix the share dialog" },
-    { agent: "codex", id: "b", folder: "/r", updated: 30, prompt: "hooks review" },
-    { agent: "claude", id: "a", folder: "/r/wt", updated: 10, prompt: "fix the share dialog" },
-    { agent: "claude", id: "c", folder: "/r", updated: 20 },
-    { agent: "claude", id: "d", folder: "/r", updated: 40, prompt: "open in a tile" },
-  ];
-  const v = recentsView(rows, { limit: 2, open: new Set(["d"]) });
-  assert.deepEqual(v.shown.map((r) => r.id), ["b", "c"]);
-  assert.equal(v.more, 1);
-  assert.deepEqual(recentsView(rows, { limit: 5, query: "SHARE" }).shown.map((r) => r.id), ["a"]);
-  assert.deepEqual(recentsView(rows, { limit: 5, query: "Codex", agentLabel: (a) => (a === "codex" ? "Codex" : "Claude") }).shown.map((r) => r.id), ["b"]);
+const ROWS = [
+  { agent: "claude", id: "a", folder: "/r", updated: NOW - 3 * DAY_MS, prompt: "fix the share dialog" },
+  { agent: "codex", id: "b", folder: "/r", updated: NOW - HOUR, prompt: "hooks review" },
+  { agent: "claude", id: "a", folder: "/r/wt", updated: NOW - 3 * DAY_MS, prompt: "fix the share dialog" },
+  { agent: "claude", id: "c", folder: "/r/wt", updated: NOW - 26 * HOUR },
+  { agent: "claude", id: "d", folder: "/r", updated: NOW - 10 * 60_000, prompt: "open in a tile" },
+];
+const groups = (by: RecentsBy, more: Partial<Parameters<typeof recentGroups>[1]> = {}) =>
+  recentGroups(ROWS, { by, now: NOW, limit: () => 5, agentLabel: (a) => (a === "codex" ? "Codex" : "Claude"), ...more });
+const shape = (g: ReturnType<typeof recentGroups>) => g.map((x) => [x.label, x.rows.map((r) => r.id), x.more]);
+
+test("recents: newest first, each session once, none a tile has open, at most the limit with how many more, a search narrows", () => {
+  assert.deepEqual(shape(groups("none", { open: new Set(["d"]), limit: () => 2 })), [["", ["b", "c"], 1]]);
+  assert.deepEqual(shape(groups("none", { query: "SHARE" })), [["", ["a"], 0]]);
+  assert.deepEqual(shape(groups("none", { query: "Codex" })), [["", ["b"], 0]]);
+});
+
+test("recents grouped by agent or project, the group with the newest session first; by date, the day's order", () => {
+  assert.deepEqual(shape(groups("agent")), [["Claude", ["d", "c", "a"], 0], ["Codex", ["b"], 0]]);
+  assert.deepEqual(shape(groups("project")), [["r", ["d", "b", "a"], 0], ["wt", ["c"], 0]]);
+  assert.deepEqual(shape(groups("project", { folderLabel: (f) => (f === "/r" ? "manageark" : "fix-nav") })).map(([l]) => l), ["manageark", "fix-nav"]);
+  assert.deepEqual(shape(groups("date")), [["Today", ["d", "b"], 0], ["Yesterday", ["c"], 0], ["This week", ["a"], 0]]);
+  // Each group shows its own count: "Show more" opens one group, not all.
+  assert.deepEqual(shape(groups("agent", { limit: (k) => (k === "claude" ? 1 : 5) })), [["Claude", ["d"], 2], ["Codex", ["b"], 0]]);
 });
 
 test("a workspace's counts: its tiles, the ones that need the person, the ones at work", () => {

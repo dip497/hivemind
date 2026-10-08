@@ -30,7 +30,7 @@ import { AGENT_TILE_KIND } from "./tile-kinds";
 import { tileKind } from "./tiles";
 import { KindMark } from "./tiles/mark";
 import { MenuItem } from "./components/ui/menu-item";
-import { isUnread, layersView, recentsView, type ModelTile, type RecentSession } from "@hivemind/core/layers";
+import { isUnread, layersView, recentGroups, type ModelTile, type RecentSession } from "@hivemind/core/layers";
 import type { WorkspaceSummary } from "../../shared/ipc";
 import { useSettings, patchSettings } from "./settings-store";
 import { setPanelOrder } from "./workspace/panel-order";
@@ -335,7 +335,8 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   const [projects, setProjects] = useState<WorkspaceSummary[]>([]);
   // Recents: this workspace's past agent sessions, read once its folders are known.
   const [recents, setRecents] = useState<RecentSession[]>([]);
-  const [recentLimit, setRecentLimit] = useState(5);
+  // How many of each Recents group show; "Show more" opens one group at a time.
+  const [recentLimits, setRecentLimits] = useState<Record<string, number>>({});
   const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Live status per tile, and when it last changed: seeded from main's ledger (it outlives a
@@ -469,7 +470,11 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   }, [modelTiles, selectedTileId, mine.seen, mine.snoozed, setMine]);
   const agentLabel = (t: ModelTile) => (t.kind === AGENT_TILE_KIND ? agentById(t.agent)?.label ?? t.agent ?? "Agent" : tileKind(t.kind).title ?? "Other");
   const view = layersView({ tiles: modelTiles, pinned: mine.pinned, prefs, now, agentLabel, query });
-  const recentRows = recentsView(recents, { limit: recentLimit, query, agentLabel: (a) => agentById(a)?.label ?? a });
+  const recentList = recentGroups(recents, {
+    by: prefs.recentsBy, now, query, limit: (key) => recentLimits[key] ?? 5,
+    agentLabel: (a) => agentById(a)?.label ?? a,
+    folderLabel: (folder) => frames.find((f) => f.path === folder)?.title ?? folder.split(/[\\/]/).filter(Boolean).pop() ?? folder,
+  });
 
   const needsYou = modelTiles.filter((t) => t.needsYou).length;
   const working = modelTiles.filter((t) => t.status === "working" && !t.needsYou).length;
@@ -717,7 +722,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         {tiles.length > 0 && nothing && (
           <div className="px-4 py-3 text-[12px] text-[var(--color-fg3)]" data-layers-nothing>
             Nothing matches.{" "}
-            <button type="button" className="underline hover:text-[var(--color-fg)]" onClick={() => { patchSettings("views.layers", DEFAULT_LAYERS_PREFS); setQuery(""); }}>Show everything</button>
+            <button type="button" className="underline hover:text-[var(--color-fg)]" onClick={() => { patchSettings("views.layers", { ...DEFAULT_LAYERS_PREFS, recentsBy: prefs.recentsBy }); setQuery(""); }}>Show everything</button>
           </div>
         )}
         {view.pinned.length > 0 && section("pinned", "Pinned", view.pinned, { "data-layers-pinned": "" })}
@@ -783,28 +788,47 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       )}
       {pane === "recents" && (
       <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-[14px]" data-layers-pane="recents">
-        {recentRows.shown.length === 0 && <div className={`pl-5 pr-3 py-1.5 ${LABEL} font-normal`}>No past sessions in this workspace's folders yet.</div>}
-        {recentRows.shown.length > 0 && onResume && (
-          <section aria-label="Recents" data-layers-recents className="mt-1">
-            <div className={`flex h-7 items-center pl-5 pr-3 ${LABEL}`}>Recents</div>
-            {recentRows.shown.map((r) => (
-              <button key={`${r.agent}:${r.id}`} type="button" data-layers-recent={r.id}
-                onClick={() => onResume(r.agent, frames.find((f) => f.path === r.folder)?.id ?? null, r.id)}
-                title={`Resume ${agentById(r.agent)?.label ?? r.agent}${r.prompt ? `: ${r.prompt}` : ""}`}
-                className="flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-2 rounded-lg text-left text-[14px] text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)]">
-                <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]"><AgentIcon id={r.agent} size={ICON - 1} /></span>
-                <span className="flex-1 truncate">{r.prompt?.split("\n")[0] || `${agentById(r.agent)?.label ?? r.agent} session`}</span>
-                <span className={`shrink-0 ${COUNT}`}>{ago(r.updated ?? null, now)}</span>
-              </button>
-            ))}
-            {recentRows.more > 0 && (
-              <button type="button" onClick={() => setRecentLimit((n) => n + 10)} data-layers-recents-more
-                className={`flex h-7 items-center mx-2 pl-3 pr-2 rounded-lg ${LABEL} hover:text-[var(--color-fg)]`}>
-                Show {Math.min(10, recentRows.more)} more
-              </button>
-            )}
-          </section>
-        )}
+        <div className={`flex h-7 items-center pl-5 pr-2 ${LABEL}`}>
+          <span>Recents</span>
+          <span className="ml-auto"><RecentsByMenu value={prefs.recentsBy} onChange={(v) => setPref("recentsBy", v)} /></span>
+        </div>
+        {recentList.length === 0 && <div className={`pl-5 pr-3 py-1.5 ${LABEL} font-normal`}>No past sessions in this workspace's folders yet.</div>}
+        {onResume && recentList.map((g) => {
+          const folded = collapsed.has(`recents:${g.key}`);
+          return (
+            <section key={g.key} aria-label={g.label || "Recents"} data-layers-recents={g.key} className={g.label ? "mt-1.5" : ""}>
+              {g.label && (
+                <button type="button" onClick={() => toggleGroup(`recents:${g.key}`)} aria-expanded={!folded} data-layers-recents-group={g.key}
+                  className="group/sec flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-2 rounded-lg text-left text-[14px] font-medium text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)]">
+                  <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">
+                    {prefs.recentsBy === "agent" ? <AgentIcon id={g.key} size={ICON - 1} /> : prefs.recentsBy === "project" ? <Folder size={ICON} strokeWidth={STROKE} /> : <History size={ICON} strokeWidth={STROKE} />}
+                  </span>
+                  <span className="flex-1 truncate">{g.label}</span>
+                  {folded ? <ChevronRight size={12} className="shrink-0 text-[var(--color-fg2)]" /> : <ChevronDown size={12} className="shrink-0 text-[var(--color-fg2)] opacity-0 transition-opacity duration-150 group-hover/sec:opacity-100" />}
+                  <span className={`shrink-0 ${COUNT}`}>{g.rows.length + g.more}</span>
+                </button>
+              )}
+              {!folded && g.rows.map((r) => (
+                <button key={`${r.agent}:${r.id}`} type="button" data-layers-recent={r.id}
+                  onClick={() => onResume(r.agent, frames.find((f) => f.path === r.folder)?.id ?? null, r.id)}
+                  title={`Resume ${agentById(r.agent)?.label ?? r.agent}${r.prompt ? `: ${r.prompt}` : ""}`}
+                  className="flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pr-2 rounded-lg text-left text-[14px] text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)]"
+                  style={{ paddingLeft: g.label ? 26 : 12 }}>
+                  {/* Grouped by agent, the heading carries the logo; a row repeats it only when it says something. */}
+                  {prefs.recentsBy !== "agent" && <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]"><AgentIcon id={r.agent} size={ICON - 1} /></span>}
+                  <span className="flex-1 truncate">{r.prompt?.split("\n")[0] || `${agentById(r.agent)?.label ?? r.agent} session`}</span>
+                  <span className={`shrink-0 ${COUNT}`}>{ago(r.updated ?? null, now)}</span>
+                </button>
+              ))}
+              {!folded && g.more > 0 && (
+                <button type="button" onClick={() => setRecentLimits((m) => ({ ...m, [g.key]: (m[g.key] ?? 5) + 10 }))} data-layers-recents-more={g.key}
+                  className={`flex h-7 items-center mx-2 pr-2 rounded-lg ${LABEL} hover:text-[var(--color-fg)]`} style={{ paddingLeft: g.label ? 26 : 12 }}>
+                  Show {Math.min(10, g.more)} more
+                </button>
+              )}
+            </section>
+          );
+        })}
       </div>
       )}
       {pane === "machines" && (
@@ -906,6 +930,28 @@ function NewAgentRow() {
 
 type Pane = "tiles" | "recents" | "machines";
 
+const RECENTS_BY: Array<[LayersPrefs["recentsBy"], string]> = [["agent", "Agent"], ["project", "Project"], ["date", "Date"], ["none", "None"]];
+
+/** How Recents groups its sessions, as its heading says it: "By agent ⌄". */
+function RecentsByMenu({ value, onChange }: { value: LayersPrefs["recentsBy"]; onChange: (v: LayersPrefs["recentsBy"]) => void }) {
+  const label = value === "none" ? "Not grouped" : `By ${RECENTS_BY.find(([k]) => k === value)![1].toLowerCase()}`;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" data-layers-recents-by className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-[var(--color-fg2)] transition-colors duration-150 hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]">
+          {label}<ChevronDown size={12} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-[170px]">
+        <DropdownMenuLabel>Group by</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={value} onValueChange={(v) => onChange(v as LayersPrefs["recentsBy"])}>
+          {RECENTS_BY.map(([k, text]) => <DropdownMenuRadioItem key={k} value={k} data-layers-recents-choice={k}>{text}</DropdownMenuRadioItem>)}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 /** A rail button: picks a pane (it shows which is open), or opens something elsewhere. */
 function RailButton({ label, icon, pane, active, onPick, badge = 0 }: { label: string; icon: ReactNode; pane?: Pane; active?: Pane; onPick: (p: Pane) => void; badge?: number }) {
   const on = !!pane && pane === active;
@@ -977,7 +1023,9 @@ function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (
   );
   const chosen = prefs.machines;
   const toggleMachine = (key: string) => setPref("machines", chosen.includes(key) ? chosen.filter((m) => m !== key) : [...chosen, key]);
-  const altered = JSON.stringify(prefs) !== JSON.stringify(DEFAULT_LAYERS_PREFS);
+  // The tiles' choices only: how Recents groups is its own menu's, and a reset here keeps it.
+  const tilesDefault = { ...DEFAULT_LAYERS_PREFS, recentsBy: prefs.recentsBy };
+  const altered = JSON.stringify(prefs) !== JSON.stringify(tilesDefault);
   const filtered = prefs.status !== "all" || prefs.activity !== "all" || prefs.machines.length > 0;
   const [open, setOpen] = useState(false);
   // Opened by the button, anchored under it: the app's menus open from code, as the row menus do.
@@ -1013,7 +1061,7 @@ function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (
         {radio("groupBy", "Group by")}
         {radio("sortBy", "Sort by")}
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled={!altered} onSelect={() => patchSettings("views.layers", DEFAULT_LAYERS_PREFS)} data-layers-reset>Reset to defaults</DropdownMenuItem>
+        <DropdownMenuItem disabled={!altered} onSelect={() => patchSettings("views.layers", tilesDefault)} data-layers-reset>Reset to defaults</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
