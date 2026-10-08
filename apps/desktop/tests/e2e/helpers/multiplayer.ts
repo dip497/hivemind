@@ -6,6 +6,12 @@ import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
+/** Settings → Share, for the workspace the window shows. */
+export async function openShare(page: Page): Promise<void> {
+  await page.locator('[aria-label="settings"]').click();
+  await page.locator('[data-settings-page="share"]').click();
+}
+
 export const HIVE_NET = path.resolve("../../crates/hive-net/target/debug/hive-net");
 export const hiveNetBuilt = (): boolean => fs.existsSync(HIVE_NET);
 
@@ -47,7 +53,7 @@ export async function person(root: string, name: string, cwd: string, apps: Elec
 
 /** The host makes an invite link for `role` from Share. */
 export async function share(host: Page, role: "view" | "edit" | "terminals"): Promise<string> {
-  await host.locator("[data-share]").click();
+  await openShare(host);
   await host.locator("#share-role").selectOption(role);
   await host.locator("[data-share-create]").click();
   const link = (await host.locator("[data-share-link]").textContent())!;

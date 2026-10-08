@@ -33,7 +33,6 @@ import { getNotificationSettings, setNotificationSettingsCache, subscribeNotific
 import type { NotificationSettings } from "../../shared/ipc";
 const SettingsPages = lazy(() => import("./settings-panels"));
 // Sharing's dialogs load when opened: they are nothing the first frame draws.
-const ShareDialog = lazy(() => import("./multiplayer/share-dialog").then((m) => ({ default: m.ShareDialog })));
 const PeopleDialog = lazy(() => import("./multiplayer/people-dialog").then((m) => ({ default: m.PeopleDialog })));
 
 // Last 8 opened folders, most recent first. Persisted via localStorage —
@@ -193,15 +192,8 @@ export function App() {
   useFsChangedInvalidation(repoPath, root);
   // Ctrl+O / Ctrl+R on the canvas (useCanvasShortcuts): VS Code's Open Folder and Open Recent.
   const [recentOpen, setRecentOpen] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const { islandShown } = useChromeState();
-  // Share in the tool island asks for the dialog.
-  useEffect(() => {
-    const open = () => setShareOpen(true);
-    window.addEventListener("hivemind:open-share", open);
-    return () => window.removeEventListener("hivemind:open-share", open);
-  }, []);
   // Someone asks to join a workspace of the person's, hosted here or on another of their devices:
   // they let them in, or not. Answered at another window or device, the question goes.
   const joinAsked = useRef(new Map<string, string | number>());
@@ -250,6 +242,14 @@ export function App() {
     openRecent(path);
     void qc.invalidateQueries({ queryKey: ["project", path] });
   };
+  // Settings → Share hands these on: Settings closes for the People panel, and for the moved workspace.
+  useEffect(() => {
+    const people = () => { setSettingsOpen(false); setPeopleOpen(true); };
+    const moved = (event: Event) => { setSettingsOpen(false); openMoved((event as CustomEvent<{ uri: string }>).detail.uri); };
+    window.addEventListener("hivemind:open-people", people);
+    window.addEventListener("hivemind:open-moved", moved);
+    return () => { window.removeEventListener("hivemind:open-people", people); window.removeEventListener("hivemind:open-moved", moved); };
+  });
 
   // Initialize a .hivemind/ workspace in the current folder (no terminal).
   // NOTE: Electron disables window.prompt() (returns null), so the prefix is
@@ -411,7 +411,6 @@ export function App() {
           onClose={() => setRecentOpen(false)}
         />
         <Suspense fallback={null}>
-          {repoPath && shareOpen && <ShareDialog repo={repoPath} open onClose={() => setShareOpen(false)} onPeople={() => { setShareOpen(false); setPeopleOpen(true); }} onMoved={(uri) => { setShareOpen(false); openMoved(uri); }} />}
           {repoPath && peopleOpen && <PeopleDialog repo={repoPath} open onClose={() => setPeopleOpen(false)} />}
         </Suspense>
         <InitWorkspacePrompt

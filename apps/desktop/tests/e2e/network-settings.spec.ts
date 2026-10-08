@@ -7,7 +7,7 @@ import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HIVE_NET, hiveNetBuilt } from "./helpers/multiplayer";
+import { HIVE_NET, hiveNetBuilt, openShare } from "./helpers/multiplayer";
 
 let root: string;
 let app: ElectronApplication | undefined;
@@ -63,7 +63,7 @@ test("a fresh install is on the local network; a network's link is used from the
   const page = await launch();
   /** The relay an invite from here names: where the app's network waits for others. */
   const inviteRelay = async (): Promise<string | null> => {
-    await page.locator("[data-share]").click();
+    await openShare(page);
     await page.locator("[data-share-create]").click();
     const invite = (await page.locator("[data-share-link]").textContent())!;
     await page.keyboard.press("Escape");
@@ -73,12 +73,12 @@ test("a fresh install is on the local network; a network's link is used from the
   // On the local network the app's network runs, and names no server; Share says the link works
   // here only, and inviting someone elsewhere asks for a way through, which can wait.
   expect(await inviteRelay()).toBeNull();
-  await page.locator("[data-share]").click();
-  await expect(page.locator("[data-share-dialog]")).toContainText("Works for people on this network.");
+  await openShare(page);
+  await expect(page.locator("[data-share-page]")).toContainText("Works for people on this network.");
   await page.locator("[data-invite-elsewhere]").click();
   await expect(page.locator("[data-reach-chooser]")).toBeVisible();
   await page.locator("[data-reach-not-now]").click();
-  await expect(page.locator("[data-share-dialog]")).toContainText("Stays on this network: the link works only here.");
+  await expect(page.locator("[data-share-page]")).toContainText("Stays on this network: the link works only here.");
   await page.keyboard.press("Escape");
   await openSettings(page, "network");
   await expect(page.locator("[data-network-name]")).toHaveText("Local network");

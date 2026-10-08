@@ -1,7 +1,7 @@
 /** Settings navigation: fixed pages, grouped, plus one page per plugin of any kind
  *  (`plugin:agent:claude`, `plugin:view:canvas`, `plugin:widget:pet`, `plugin:tool:hivemind/web`).
  *  `chunk` keeps cheap pages out of the lazy Settings bundle. */
-import { Bell, Blocks, Info, Keyboard, Palette, UserRound, Network, MonitorSmartphone } from "lucide-react";
+import { Bell, Blocks, Info, Keyboard, Palette, UserRound, UserPlus, Network, MonitorSmartphone } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export type SettingsGroup = "General" | "Plugins";
@@ -21,6 +21,7 @@ export interface SettingsPageDef {
 
 export const SETTINGS_PAGES: readonly SettingsPageDef[] = [
   { id: "profile", group: "General", label: "Profile", icon: UserRound, description: "Your name and colour, and this computer's ids.", chunk: "lazy" },
+  { id: "share", group: "General", label: "Share", title: "Share this workspace", icon: UserPlus, description: "Invite people to the workspace in this window, and where it is hosted.", chunk: "lazy" },
   { id: "network", group: "General", label: "Network", icon: Network, description: "Which servers this computer uses, if any, and the update check.", chunk: "lazy" },
   { id: "devices", group: "General", label: "Devices", icon: MonitorSmartphone, description: "Your hosts and other computers, and pairing another.", chunk: "lazy" },
   { id: "appearance", group: "General", label: "Appearance", icon: Palette, description: "Theme, wallpaper, and effects.", chunk: "lazy" },

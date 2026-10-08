@@ -1,5 +1,5 @@
 /**
- * Share (design §4.2 A): an invite link to this workspace, for a role, that expires. The link is
+ * Settings → Share (design §4.2 A), for the workspace this window shows: an invite link to this workspace, for a role, that expires. The link is
  * single-use unless made reusable; the person here is asked before anyone joins with it. And
  * where the workspace is hosted (§5.7 B): this computer, until it is moved to one of your hosts,
  * which keeps it open while this computer sleeps.
@@ -10,15 +10,27 @@ import type { NetworkProfile } from "@hivemind/workspace-host/network-profile";
 import { ReachChooser } from "./reach-chooser";
 import { ROLE_LABELS } from "./people";
 import { useShown } from "./shown";
-import { Check, Copy, Share2, Users } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
+import { useCanShare } from "./workspace-actions";
+import { Check, Copy, Users } from "lucide-react";
 import { Button } from "../components/ui/button";
 
 type LinkRole = "view" | "edit" | "terminals";
 
 const EXPIRIES: Array<[string, number]> = [["1 hour", 3_600_000], ["24 hours", 86_400_000], ["7 days", 604_800_000]];
 
-export function ShareDialog({ repo, open, onClose, onPeople, onMoved }: { repo: string; open: boolean; onClose: () => void; onPeople: () => void; onMoved: (uri: string) => void }) {
+/** People and a move are answered outside Settings, which closes for them (App). */
+const openPeople = () => window.dispatchEvent(new CustomEvent("hivemind:open-people"));
+const openMoved = (uri: string) => window.dispatchEvent(new CustomEvent("hivemind:open-moved", { detail: { uri } }));
+
+export function SharePrefs() {
+  const { repo } = useShown();
+  const owner = useCanShare();
+  if (!repo) return <p className="settings-note">Open a workspace to share it.</p>;
+  if (!owner) return <p className="settings-note" data-share-not-owner>This workspace is its owner's to share.</p>;
+  return <Share key={repo} repo={repo} />;
+}
+
+function Share({ repo }: { repo: string }) {
   const [role, setRole] = useState<LinkRole>("view");
   const [expiresIn, setExpiresIn] = useState(86_400_000);
   const [reusable, setReusable] = useState(false);
@@ -30,7 +42,7 @@ export function ShareDialog({ repo, open, onClose, onPeople, onMoved }: { repo: 
   const [reaching, setReaching] = useState(false);
   // A workspace hosted on another of the person's devices: that device makes the link, on its network.
   const elsewhere = repo.startsWith("hive://");
-  useEffect(() => { if (open && !elsewhere) void window.hive.network().then(setNet, () => setNet(null)); }, [open, elsewhere]);
+  useEffect(() => { if (!elsewhere) void window.hive.network().then(setNet, () => setNet(null)); }, [elsewhere]);
   const { shared } = useShown();
   const name = elsewhere ? shared?.names.workspace ?? "this workspace" : repo.split(/[\\/]/).filter(Boolean).pop() ?? repo;
 
@@ -51,46 +63,44 @@ export function ShareDialog({ repo, open, onClose, onPeople, onMoved }: { repo: 
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) { onClose(); setLink(null); setError(null); } }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[460px]" data-share-dialog>
-        <DialogTitle className="flex items-center"><Share2 size={15} className="mr-2" /> Invite people to {name}</DialogTitle>
-        <DialogDescription>
-          {elsewhere ? "Works for people who can reach the device it is hosted on." : net && net.builtin !== "local" ? `Works for people on this network, and through ${net.profile.name}'s servers.` : "Works for people on this network."} You are asked before anyone joins.
-        </DialogDescription>
-        {!elsewhere && net?.builtin === "local" && (reaching
-          ? <ReachChooser current={net} onChosen={(n) => { setNet(n); setReaching(false); setLink(null); }} onCancel={() => { setReaching(false); setError("Stays on this network: the link works only here."); }} />
-          : <Button size="sm" variant="ghost" className="justify-self-start" onClick={() => setReaching(true)} data-invite-elsewhere>Invite someone elsewhere…</Button>)}
-        <div className="settings-row">
-          <label htmlFor="share-role">They can</label>
-          <select id="share-role" className="w-40" value={role} onChange={(e) => { setRole(e.target.value as LinkRole); setLink(null); }}>
-            <option value="view">{ROLE_LABELS.view}</option>
-            <option value="edit">{ROLE_LABELS.edit}</option>
-            <option value="terminals">{ROLE_LABELS.terminals}</option>
-          </select>
+    <div className="flex flex-col gap-3" data-share-page>
+      <h3 className="text-[13px] font-semibold">Invite people to {name}</h3>
+      <p className="text-[12px] text-[var(--color-fg2)]">
+        {elsewhere ? "Works for people who can reach the device it is hosted on." : net && net.builtin !== "local" ? `Works for people on this network, and through ${net.profile.name}'s servers.` : "Works for people on this network."} You are asked before anyone joins.
+      </p>
+      {!elsewhere && net?.builtin === "local" && (reaching
+        ? <ReachChooser current={net} onChosen={(n) => { setNet(n); setReaching(false); setLink(null); }} onCancel={() => { setReaching(false); setError("Stays on this network: the link works only here."); }} />
+        : <Button size="sm" variant="ghost" className="justify-self-start" onClick={() => setReaching(true)} data-invite-elsewhere>Invite someone elsewhere…</Button>)}
+      <div className="settings-row">
+        <label htmlFor="share-role">They can</label>
+        <select id="share-role" className="w-40" value={role} onChange={(e) => { setRole(e.target.value as LinkRole); setLink(null); }}>
+          <option value="view">{ROLE_LABELS.view}</option>
+          <option value="edit">{ROLE_LABELS.edit}</option>
+          <option value="terminals">{ROLE_LABELS.terminals}</option>
+        </select>
+      </div>
+      <div className="settings-row">
+        <label htmlFor="share-expiry">Link expires in</label>
+        <select id="share-expiry" className="w-40" value={expiresIn} onChange={(e) => { setExpiresIn(Number(e.target.value)); setLink(null); }}>
+          {EXPIRIES.map(([label, ms]) => <option key={ms} value={ms}>{label}</option>)}
+        </select>
+      </div>
+      <label className="flex items-center gap-2 text-[12px]">
+        <input type="checkbox" checked={reusable} onChange={(e) => { setReusable(e.target.checked); setLink(null); }} />
+        Anyone with the link can use it, not only the first person
+      </label>
+      {link ? (
+        <div className="flex min-w-0 items-center gap-2">
+          <code className="flex-1 min-w-0 truncate rounded bg-[var(--color-bg3)] px-2 py-1.5 font-mono text-[11px]" data-share-link title={link}>{link}</code>
+          <Button size="sm" variant="outline" className="shrink-0" onClick={copy}>{copied ? <Check /> : <Copy />} Copy link</Button>
         </div>
-        <div className="settings-row">
-          <label htmlFor="share-expiry">Link expires in</label>
-          <select id="share-expiry" className="w-40" value={expiresIn} onChange={(e) => { setExpiresIn(Number(e.target.value)); setLink(null); }}>
-            {EXPIRIES.map(([label, ms]) => <option key={ms} value={ms}>{label}</option>)}
-          </select>
-        </div>
-        <label className="flex items-center gap-2 text-[12px]">
-          <input type="checkbox" checked={reusable} onChange={(e) => { setReusable(e.target.checked); setLink(null); }} />
-          Anyone with the link can use it, not only the first person
-        </label>
-        {link ? (
-          <div className="flex min-w-0 items-center gap-2">
-            <code className="flex-1 min-w-0 truncate rounded bg-[var(--color-bg3)] px-2 py-1.5 font-mono text-[11px]" data-share-link title={link}>{link}</code>
-            <Button size="sm" variant="outline" className="shrink-0" onClick={copy}>{copied ? <Check /> : <Copy />} Copy link</Button>
-          </div>
-        ) : (
-          <Button onClick={() => void create()} disabled={busy} data-share-create>{busy ? "Making the link…" : "Make a link"}</Button>
-        )}
-        {error && <p className="text-[12px] text-[var(--color-err)]" role="alert">{error}</p>}
-        <Button variant="ghost" size="sm" className="justify-self-start" onClick={onPeople} data-share-people><Users /> People with access…</Button>
-        {!elsewhere && <Hosting repo={repo} onMoved={onMoved} />}
-      </DialogContent>
-    </Dialog>
+      ) : (
+        <Button onClick={() => void create()} disabled={busy} data-share-create>{busy ? "Making the link…" : "Make a link"}</Button>
+      )}
+      {error && <p className="text-[12px] text-[var(--color-err)]" role="alert">{error}</p>}
+      <Button variant="ghost" size="sm" className="justify-self-start" onClick={openPeople} data-share-people><Users /> People with access…</Button>
+      {!elsewhere && <Hosting repo={repo} onMoved={openMoved} />}
+    </div>
   );
 }
 

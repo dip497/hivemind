@@ -7,7 +7,7 @@ import { test, expect, type ElectronApplication, type Page } from "@playwright/t
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { hiveNetBuilt, join, note, notes, person, share, sharedWorkspace } from "./helpers/multiplayer";
+import { hiveNetBuilt, join, note, notes, openShare, person, share, sharedWorkspace } from "./helpers/multiplayer";
 
 let root: string;
 const apps: ElectronApplication[] = [];
@@ -19,7 +19,7 @@ test.afterEach(async () => {
 
 const banner = (w: Page) => w.locator("[data-shared-banner]");
 async function openPeople(host: Page): Promise<void> {
-  await host.locator("[data-share]").click();
+  await openShare(host);
   await host.locator("[data-share-people]").click();
   await expect(host.locator("[data-people-dialog]")).toBeVisible();
 }

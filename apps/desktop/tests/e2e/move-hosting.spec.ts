@@ -15,7 +15,7 @@ import { test, expect, type ElectronApplication, type Page } from "@playwright/t
 import { execFileSync, execSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { HIVE_NET, hiveNetBuilt, join, note, notes, person, share, tiles } from "./helpers/multiplayer";
+import { HIVE_NET, hiveNetBuilt, join, note, notes, openShare, person, share, tiles } from "./helpers/multiplayer";
 import { guest as windowless } from "./helpers/guest";
 
 const HIVE = path.resolve("../cli/dist/hive");
@@ -126,7 +126,7 @@ async function sharedAndPaired(profile?: string) {
 /** Share → move it to the host: the laptop's window opens it from there as its owner, and the
  *  guest follows. */
 async function moveToHost(laptop: Page, guest: Page, hostDevice: string): Promise<void> {
-  await laptop.locator("[data-share]").click();
+  await openShare(laptop);
   await expect(laptop.locator("[data-move-to]")).toHaveValue(hostDevice);
   await laptop.locator("[data-move-hosting]").click();
   await expect(laptop.locator('[data-shared-banner][data-state="connected"]')).toHaveAttribute("data-access", "owner", { timeout: 20_000 });
@@ -211,7 +211,10 @@ test("on a network with a lookup server, the laptop shares the workspace at the 
   // At the host it is the laptop's to share still, and not the guest's. Someone asks to join with
   // a link the laptop makes there (a device with no window): the laptop's window is asked, and
   // lets them in.
-  await expect(guest.locator("[data-share]")).toHaveCount(0);
+  await openShare(guest);
+  await expect(guest.locator("[data-share-not-owner]")).toBeVisible();
+  await expect(guest.locator("[data-share-create]")).toHaveCount(0);
+  await guest.keyboard.press("Escape");
   const link = await share(laptop, "view");
   const newcomer = await windowless(path.join(root, "newcomer"), "Noor", link, async () => {
     const request = laptop.locator(".hm-join-request");
@@ -222,7 +225,7 @@ test("on a network with a lookup server, the laptop shares the workspace at the 
 
   // In People, the guest is here, and given another role: they work under it at once.
   const guestId = (await guest.evaluate(() => window.hive.identity())).personId;
-  await laptop.locator("[data-share]").click();
+  await openShare(laptop);
   await laptop.locator("[data-share-people]").click();
   const row = laptop.locator(`[data-shared-person="${guestId}"]`);
   await expect(row).toContainText("Here now", { timeout: 20_000 });

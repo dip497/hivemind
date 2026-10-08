@@ -9,7 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
-- Changed: Share and Settings sit at the right end of the toolbar, as in a call's control bar, with new icons. Where a view's toolbar is off, collapsed or hidden by zen mode, they show in the window's top-right corner.
+- Changed: Settings sits at the right end of the toolbar, as in a call's control bar, with a new icon; where a view's toolbar is off, collapsed or hidden by zen mode, it shows in the window's top-right corner. Share is a page in Settings (Settings → Share) instead of a button and a dialog of its own.
 - New: an agent can run what a plugin offers. A view, tool or widget declares `"commands"` in its manifest and answers them with `hm.onCommand` (view protocol 1.10); `hive ctl plugin commands` lists what the running plugins offer, and `hive ctl plugin call <plugin> <command> '<json>'` runs one and prints its answer. Examples: the Progress widget (`examples/widgets/progress`), the Agent board view (`examples/views/agent-board`), and `list` / `failures` in the Worktrees and CI runs tools.
 - **Breaking:** the toolbar's Terminal and Code buttons are gone: both open from Add, as every tool does. The `1` and `3` keys still open them. A saved toolbar that lists `terminal` or `explorer` drops them.
 - New: `useTileState(hm, key, initial)` in a tool plugin's `sdk.js`: `useState` kept with the tile across restarts. The example tools keep what was chosen, their filters, tabs and search with it.
