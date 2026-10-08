@@ -54,6 +54,15 @@ function minimize(id: string) {
   render();
 }
 
+// The strip scrolls sideways under a plain wheel too: its scrollbar is hidden.
+tabsEl.addEventListener("wheel", (e) => {
+  if (!e.deltaY || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+  e.preventDefault();
+  tabsEl.scrollLeft += e.deltaY;
+}, { passive: false });
+
+let shownActive: string | null = null;
+
 function render() {
   const active = activeTab();
   if (active !== fallback) { fallback = active; save(); }
@@ -80,6 +89,11 @@ function render() {
     tab.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); hm.commands.selectTile(t.id); } });
     return tab;
   }));
+  // A newly active tab is brought into the strip's view; a re-render leaves the scroll alone.
+  if (active !== shownActive) {
+    shownActive = active;
+    tabsEl.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
   emptyEl.hidden = !!active;
   emptyEl.textContent = tabs().length ? "Select a tab to view it." : "Nothing open. Spawn a tile (1–7) or restore one from the rail.";
   // The active tile's live surface fills the stage; the rest wait, alive, in the app.

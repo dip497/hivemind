@@ -274,3 +274,44 @@ test("a restored tab stays restored when the view switches at once", async () =>
   await windowsReady();
   await expect(tab).toHaveCount(1);
 });
+
+test("more tabs than the strip holds: they shrink, the active one is in view, and the wheel reaches the rest", async () => {
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
+  await page.waitForSelector(".react-flow");
+  const terminals = page.locator(".react-flow__node-terminal");
+  const before = await terminals.count();
+  for (let i = 0; i < 20; i++) await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
+  await expect(terminals).toHaveCount(before + 20, { timeout: 30_000 });
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "windows" } })));
+  await windowsReady();
+  await expect.poll(() => tabsOf().count()).toBeGreaterThanOrEqual(before + 20);
+
+  const strip = view().locator(".w-tabs");
+  const geometry = () => strip.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const inView = (t: Element) => { const r = t.getBoundingClientRect(); return r.left >= box.left - 1 && r.right <= box.right + 1; };
+    const all = [...el.querySelectorAll('[role="tab"]')];
+    const active = all.findIndex((t) => t.getAttribute("aria-selected") === "true");
+    // The tab farthest from the active one, at the other end of the strip.
+    const far = active < all.length / 2 ? all.length - 1 : 0;
+    return { overflow: el.scrollWidth > el.clientWidth, tabWidth: all[0]!.getBoundingClientRect().width,
+      activeInView: inView(all[active]!), far, farInView: inView(all[far]!) };
+  });
+  // The last spawned is selected, somewhere along a strip too long for the window: in view.
+  await expect.poll(async () => (await geometry()).activeInView).toBe(true);
+  const at = await geometry();
+  expect(at.overflow).toBe(true);
+  expect(at.tabWidth).toBeLessThan(200);
+  expect(at.farInView).toBe(false);
+  // A plain wheel over the strip scrolls it to the tab at the other end.
+  const box = (await strip.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  for (let i = 0; i < 10; i++) await page.mouse.wheel(0, at.far === 0 ? -400 : 400);
+  await expect.poll(async () => (await geometry()).farInView).toBe(true);
+  // A tile spawned now lands at the end scrolled away from, selected: the strip brings it into view.
+  const count = await tabsOf().count();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
+  await expect(tabsOf()).toHaveCount(count + 1);
+  await expect.poll(async () => (await geometry()).farInView).toBe(false);
+  await expect.poll(async () => (await geometry()).activeInView).toBe(true);
+});

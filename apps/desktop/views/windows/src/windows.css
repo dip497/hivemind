@@ -6,7 +6,8 @@ body { display: flex; flex-direction: column; }
 .w-bar { flex: none; height: 36px; display: flex; align-items: stretch; padding-right: 96px;
   background: var(--hm-color-bg2, #17181c); border-bottom: 1px solid var(--hm-color-line, #2a2c33); }
 .w-tabs { flex: 1; min-width: 0; display: flex; align-items: stretch; gap: 4px; padding: 0 8px; overflow-x: auto; scrollbar-width: none; }
-.w-tab { display: flex; align-items: center; gap: 8px; max-width: 220px; margin: 4px 0; padding: 0 6px 0 10px; border: 0;
+/* Many tabs shrink, as in a browser, down to a width that still shows a few letters. */
+.w-tab { flex: 0 1 200px; min-width: 76px; display: flex; align-items: center; gap: 8px; margin: 4px 0; padding: 0 6px 0 10px; border: 0;
   border-radius: 8px; background: transparent; color: var(--hm-color-fg2, #b7bac1); cursor: pointer; user-select: none; font: inherit; }
 .w-tab:hover { background: color-mix(in srgb, var(--hm-color-fg, #fff) 6%, transparent); color: var(--hm-color-fg, #e6e6e6); }
 .w-tab[aria-selected="true"] { background: color-mix(in srgb, var(--hm-color-fg, #fff) 10%, transparent); color: var(--hm-color-fg, #e6e6e6); }
