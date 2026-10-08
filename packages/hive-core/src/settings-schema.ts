@@ -254,6 +254,25 @@ export function terminalThemeFor(t: TerminalPalette): Record<string, string> {
 export type IslandPlacement = "top" | "bottom" | "hidden" | "off";
 export const ISLAND_PLACEMENTS: readonly IslandPlacement[] = ["top", "bottom", "hidden", "off"];
 
+/** How the Layers panel lists tiles (its View menu): which, grouped how, in what order. */
+export const LAYERS_STATUS = ["all", "needs-you", "working", "idle", "exited"] as const;
+export const LAYERS_ACTIVITY = ["all", "hour", "today", "week"] as const;
+export const LAYERS_GROUP_BY = ["machine", "group", "date", "status", "agent", "none"] as const;
+export const LAYERS_SORT_BY = ["canvas", "activity", "name"] as const;
+export interface LayersPrefs {
+  /** Only the tiles in this state. */
+  status: (typeof LAYERS_STATUS)[number];
+  /** Only the tiles whose status changed within this long. */
+  activity: (typeof LAYERS_ACTIVITY)[number];
+  groupBy: (typeof LAYERS_GROUP_BY)[number];
+  sortBy: (typeof LAYERS_SORT_BY)[number];
+  /** Only the tiles on these computers ("local", or a machine's id); empty: every one. */
+  machines: string[];
+  /** List the machines nothing here runs on, at the foot of the panel. */
+  showMachines: boolean;
+}
+export const DEFAULT_LAYERS_PREFS: LayersPrefs = { status: "all", activity: "all", groupBy: "machine", sortBy: "canvas", machines: [], showMachines: true };
+
 export interface ViewsSettings {
   /** The view to open with (a registered id; unknown → canvas). */
   defaultView: string;
@@ -267,6 +286,8 @@ export interface ViewsSettings {
    *  whether they carry text labels. Absent view = the catalog defaults; see
    *  `resolveToolbar`. Presentation only — never an availability decision. */
   toolbars: Record<string, ToolbarPreferences>;
+  /** The Layers panel's View menu, for every view that shows it. */
+  layers: LayersPrefs;
 }
 export interface PluginsSettings {
   /** Every plugin's stored state, by `<kind>:<id>` (plugin-settings.ts): whether it is on, and
@@ -318,7 +339,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   v: 1,
   appearance: DEFAULT_APPEARANCE,
-  views: { defaultView: "canvas", chrome: {}, toolbars: {} },
+  views: { defaultView: "canvas", chrome: {}, toolbars: {}, layers: DEFAULT_LAYERS_PREFS },
   // Fresh install: every plugin as it is by default (a tool plugin that is not built in: off).
   plugins: { state: {} },
   // Empty = "the agent catalog's default" — hive-core does not depend on
@@ -494,7 +515,7 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
   return {
     v: 1,
     appearance: mergeAppearance(p.appearance, base.appearance),
-    views: { defaultView: str(views.defaultView, base.views.defaultView, 64), chrome, toolbars },
+    views: { defaultView: str(views.defaultView, base.views.defaultView, 64), chrome, toolbars, layers: mergeLayersPrefs(views.layers, base.views.layers) },
     plugins: { state },
     agents: {
       defaultAgent: str(agents.defaultAgent, base.agents.defaultAgent, 64),
@@ -590,4 +611,20 @@ export function setPath<T>(obj: T, path: string, value: unknown): T {
     return base;
   };
   return rec(obj, 0) as T;
+}
+
+/** The Layers View menu from a stored value: each choice kept when it is one of its list, else `base`'s. */
+function mergeLayersPrefs(raw: unknown, base: LayersPrefs): LayersPrefs {
+  const v = isObj(raw) ? raw : {};
+  const pick = <T extends string>(x: unknown, list: readonly T[], fallback: T): T => (list.includes(x as T) ? (x as T) : fallback);
+  return {
+    status: pick(v.status, LAYERS_STATUS, base.status),
+    activity: pick(v.activity, LAYERS_ACTIVITY, base.activity),
+    groupBy: pick(v.groupBy, LAYERS_GROUP_BY, base.groupBy),
+    sortBy: pick(v.sortBy, LAYERS_SORT_BY, base.sortBy),
+    machines: Array.isArray(v.machines)
+      ? [...new Set(v.machines.filter((m): m is string => typeof m === "string" && m.length > 0 && m.length <= 128))].slice(0, 64)
+      : base.machines,
+    showMachines: typeof v.showMachines === "boolean" ? v.showMachines : base.showMachines,
+  };
 }

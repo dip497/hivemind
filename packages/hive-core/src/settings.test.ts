@@ -55,6 +55,16 @@ describe("settings schema", () => {
     expect(sharedAppearance({ accent: "<script>", radius: 9999, palette: { bg: "url(x)" } })).toMatchObject({ accent: DEFAULT_APPEARANCE.accent, radius: 24, palette: { bg: DEFAULT_APPEARANCE.palette.bg } });
   });
 
+  test("views.layers: the Layers View menu keeps each valid choice; an unknown one falls back, and a partial patch keeps the rest", () => {
+    expect(mergeSettings({ v: 1 }).views.layers).toEqual({ status: "all", activity: "all", groupBy: "machine", sortBy: "canvas", machines: [], showMachines: true });
+    const chosen = { status: "needs-you", activity: "today", groupBy: "date", sortBy: "activity", machines: ["local", "m-1"], showMachines: false } as const;
+    const s = mergeSettings({ v: 1, views: { layers: chosen } });
+    expect(s.views.layers).toEqual({ ...chosen, machines: ["local", "m-1"] });
+    expect(mergeSettings({ v: 1, views: { layers: { groupBy: "colour", sortBy: 3, machines: ["local", 7, "", "local"], showMachines: "no" } } }).views.layers)
+      .toMatchObject({ groupBy: "machine", sortBy: "canvas", machines: ["local"], showMachines: true });
+    expect(mergeSettings(setPath(s, "views.layers.groupBy", "status"), s).views.layers).toEqual({ ...chosen, machines: ["local", "m-1"], groupBy: "status" });
+  });
+
   test("views.chrome: every island placement round-trips, junk is dropped", () => {
     const s = mergeSettings({
       v: 1,
@@ -195,7 +205,7 @@ describe("settings schema", () => {
     expect(s.appearance.terminal.ansi[1]).toBe(SIGNAL.terminal.ansi[1]);
     expect(s.appearance.palette.bg).toBe(SIGNAL.palette.bg);
     expect(s.appearance.pluginSurfaces).toBe("theme");
-    expect(s.views).toEqual({ defaultView: "orbit", chrome: { world: { island: "hidden" } }, toolbars: {} });
+    expect(s.views).toEqual({ defaultView: "orbit", chrome: { world: { island: "hidden" } }, toolbars: {}, layers: DEFAULT_SETTINGS.views.layers });
     expect(s.plugins.state).toEqual({ "view:a": { enabled: false }, "view:b": { enabled: false } }); // the old key, read once
     // Empty stays empty: "" means "whatever the agent catalog's default is".
     expect(s.agents.defaultAgent).toBe(DEFAULT_SETTINGS.agents.defaultAgent);

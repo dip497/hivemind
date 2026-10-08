@@ -117,6 +117,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
           frames={model.layerFrames}
           tiles={model.layerTiles}
           selectedTileId={model.selectedTileId}
+          layoutKey={model.layoutKey}
           onFocusTile={commands.selectTile}
           onFocusFrame={(id) => { commands.selectFrame(id); commands.selectTile(null); commands.focusTile(id); }}
           frameActions={model.frameActions}

@@ -19,6 +19,23 @@ saved for — one you removed — is `ssh://user@host:port/abs/path` and still r
 machine at that address puts the frame on it, as it does for a workspace from before machines had
 ids.
 
+## The Layers panel
+
+⌘B shows or hides it. It lists every open tile, with its status when that is worth reading.
+
+- **Pin** a tile from its **⋮** menu (or right-click it, then press **P**): it goes to **Pinned**
+  at the top, whatever the panel lists below. **R** renames it, **D** closes it. Hover a row to
+  see when it was last active and where it runs.
+- The **View** menu (the sliders) chooses what is listed: **Status** (needs you, working, idle,
+  exited), **Last activity** (past hour, today, this week), **Machines**; how it is grouped
+  (**Machine**, **Group**, **Date**, **Status**, **Agent** or none) and ordered (canvas order,
+  last activity, name); and whether idle machines show at the foot. **Reset to defaults** undoes
+  it all.
+
+The View menu is yours in every workspace (`hive config set views.layers.groupBy status`). Pins
+and folded sections are yours in this workspace, on this computer: in a shared workspace, no one
+else's panel changes.
+
 ## Machines
 
 Machines live in the Layers rail, one heading per computer — **This computer** first — with

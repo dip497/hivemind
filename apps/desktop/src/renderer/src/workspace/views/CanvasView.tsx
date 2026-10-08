@@ -560,6 +560,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
             frames={layerFrames}
             tiles={layerTiles}
             selectedTileId={selectedTileId}
+            layoutKey={model.layoutKey}
             onFocusTile={focusTileFromPanel}
             onFocusFrame={focusFrameFromPanel}
             frameActions={frameActions}

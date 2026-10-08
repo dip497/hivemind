@@ -1,30 +1,36 @@
 /**
- * LayersPanel — a DOCKED side panel (t3code / VS Code style) on the left of the
- * canvas. It is a flex SIBLING of the canvas (not an overlay), so the canvas
- * sits beside it and is never occluded. Lists every open tile GROUPED BY FRAME
- * (workspace), each with a live status dot and click-to-focus. Collapsible per
- * group, resizable by its right edge, and collapsible to a narrow icon rail.
+ * LayersPanel — a DOCKED side panel on the left of the canvas, a flex SIBLING of it (never an
+ * overlay). Lists every open tile: the pinned ones first, then the rest as its View menu says —
+ * which (status, last activity, machine), grouped how (machine, group, date, status, agent, none)
+ * and in what order. What it lists is worked out by layers-model.ts; this draws it.
  *
- * It reads the same `agent-status-bus` that drives the frame-header chips, so a
- * tile's status here stays in sync with everywhere else. Pure presentational +
- * its own status subscription; Canvas owns the data + focus actions.
+ * The View menu is the person's, for every workspace (settings `views.layers`); pins and folded
+ * groups are theirs for this workspace on this device (a personal layout), never the shared
+ * document, so pinning in a shared workspace moves no one else's rows.
  */
 import { statusColor } from "./workspace/tile-status-bucket";
 import { MachineDot, statusWords } from "./machines/status";
 import { A_DEVICE, GONE_MACHINE, openMachines, placeOf, statusOf, useMachines } from "./machines/store";
 import type { MachineInfo } from "../../shared/ipc";
-import { memo, useEffect, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Monitor, Plus, RefreshCw, Ellipsis, ServerCog, X, Pencil, Trash } from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
+import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Monitor, Plus, RefreshCw, Ellipsis, EllipsisVertical, ServerCog, X, Pencil, Trash, Pin, PinOff, SlidersHorizontal } from "lucide-react";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
-import { AgentIcon } from "./agents";
+import { AgentIcon, agentById } from "./agents";
 import { FrameRailMenu, type FrameActions } from "./FrameRailMenu";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "./components/ui/dropdown-menu";
+import {
+  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem,
+  DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
+} from "./components/ui/dropdown-menu";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { AGENT_TILE_KIND } from "./tile-kinds";
 import { tileKind } from "./tiles";
 import { KindMark } from "./tiles/mark";
 import { MenuItem } from "./components/ui/menu-item";
+import { layersView, type ModelTile } from "@hivemind/core/layers";
+import { useSettings, patchSettings } from "./settings-store";
+import { useViewLayout } from "./workspace/view-layout-store";
+import { DEFAULT_LAYERS_PREFS, type LayersPrefs } from "@hivemind/core/settings-schema";
 
 /** The tile's kind, as its plugin registered it. */
 export type LayerKind = string;
@@ -62,6 +68,8 @@ interface Props {
   selectedTileId: string | null;
   onFocusTile: (id: string) => void;
   onFocusFrame: (id: string) => void;
+  /** The workspace's layout key: where this person's pins and folded groups are kept. */
+  layoutKey?: string | null;
   /** When provided, right-clicking a frame row opens a context menu that
    *  mirrors the frame header (spawn agent/tile, worktree, workspace, remote,
    *  arrange, rename/color/delete). Optional so the panel still renders without
@@ -69,7 +77,7 @@ interface Props {
   frameActions?: FrameActions;
   /** Per-tile actions (close / rename) from the view's commands. Optional the
    *  same way frameActions is: a host without them just hides the × and the
-   *  tile context menu. */
+   *  tile menu's actions. */
   tileActions?: {
     onClose: (id: string) => void;
     onRename: (id: string, name: string) => void;
@@ -103,26 +111,33 @@ const STATUS_RANK: Record<TileStatusKind, number> = {
 const NEEDS_YOU = (s: TileStatusKind | null): boolean =>
   s === "blocked" || s === "permission" || s === "question" || s === "plan_review" || s === "awaiting_approval";
 
+/** This person's own for this workspace: pinned tiles (in pin order) and the groups they folded. */
+interface Mine { pinned: string[]; collapsed: string[] }
+const MINE = { viewId: "layers", version: 1, initial: (): Mine => ({ pinned: [], collapsed: [] }), personal: true } as const;
 
-/** Workspace identity glyph, keyed to the frame color — no boxed chip (the solid
- *  square read as an ugly block). A repo frame is a FOLDER that opens/closes with
- *  the group (semantic: a workspace IS a folder); a worktree is a branch glyph, a
- *  remote is a server glyph. All three are the same size + tinted the frame color,
- *  so the kinds read as one family. */
+/** The View menu's choices, in its words. */
+const VIEW_CHOICES = {
+  status: [["all", "All"], ["needs-you", "Needs you"], ["working", "Working"], ["idle", "Idle"], ["exited", "Exited"]],
+  activity: [["all", "All"], ["hour", "Past hour"], ["today", "Today"], ["week", "This week"]],
+  groupBy: [["machine", "Machine"], ["group", "Group"], ["date", "Date"], ["status", "Status"], ["agent", "Agent"], ["none", "None"]],
+  sortBy: [["canvas", "Canvas order"], ["activity", "Last activity"], ["name", "Name"]],
+} as const satisfies Record<string, ReadonlyArray<readonly [string, string]>>;
+const choiceLabel = <K extends keyof typeof VIEW_CHOICES>(k: K, v: string) => (VIEW_CHOICES[k] as ReadonlyArray<readonly [string, string]>).find(([id]) => id === v)?.[1] ?? v;
+
+/** "now", "4m ago", "3h ago", "2d ago". */
+function ago(t: number | null, now: number): string {
+  if (t === null) return "";
+  const s = Math.max(0, Math.round((now - t) / 1000));
+  if (s < 60) return "now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
 /**
- * Identity color, turned DOWN. A frame's hue says "which repo"; the status pill
- * says "this agent needs you". Rendered at full chroma they shout at the same
- * volume, and a row of saturated folders reads as decoration the eye must sort
- * through before it finds the one thing that's actually urgent.
- *
- * So the panel mutes the hue toward the tertiary text color: the repo stays
- * distinguishable at a glance, but status is unambiguously the loudest thing on
- * screen. The CANVAS frame headers keep full chroma — that's where the hue earns
- * its keep, separating workspaces across a wide board.
- *
- * `color-mix` (not a chroma tweak in frame-color.ts) because `color` may be an
- * oklch() string or a user-picked hex from the header swatch — mixing handles
- * both without parsing either.
+ * Identity color, turned DOWN: the frame's hue says "which repo", the status pill says "this
+ * agent needs you"; at full chroma they shout at the same volume. `color-mix` because `color` may
+ * be an oklch() string or a user-picked hex.
  */
 const muted = (color: string) => `color-mix(in oklab, ${color} 62%, var(--color-fg3))`;
 
@@ -143,32 +158,83 @@ function WorkspaceIcon({ color, remote, remoteUri, worktree, collapsed }: { colo
   if (remote) return <RemoteIcon color={color} uri={remoteUri} />;
   if (worktree) return <GitBranch size={15} className="shrink-0" style={{ color: c }} />;
   const Icon = collapsed ? Folder : FolderOpen;
-  // Outline + a wash of fill, rather than a solid slug of color: the shape still
-  // reads as a folder and the hue still identifies it, at a fraction of the ink.
-  // `fill` goes through `style`, not the SVG attribute — an attribute parses as
-  // an SVG <paint>, which doesn't accept color-mix()/var().
-  return (
-    <Icon
-      size={15}
-      className="shrink-0"
-      style={{ color: c, fill: `color-mix(in oklab, ${color} 22%, transparent)` }}
-    />
-  );
+  // `fill` through `style`: an SVG attribute does not accept color-mix()/var().
+  return <Icon size={15} className="shrink-0" style={{ color: c, fill: `color-mix(in oklab, ${color} 22%, transparent)` }} />;
 }
 
+/** What a tile row needs from the panel; stable across renders, so a row redraws only when its own tile does. */
+interface RowActions {
+  focus: (id: string) => void;
+  menu: (t: ModelTile, at: { x: number; y: number }) => void;
+  hover: (t: ModelTile | null, el?: HTMLElement) => void;
+  close?: (id: string) => void;
+}
+
+/** One tile's row: its mark, its name, and its status when that is worth reading. */
+const TileRow = memo(function TileRow({ t, depth, selected, actions }: { t: ModelTile; depth: number; selected: boolean; actions: RowActions }) {
+  const st = t.status;
+  const isPlan = !!tileKind(t.kind).waitsOnPerson;
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => actions.focus(t.id)}
+      onKeyDown={(e) => { if (e.key === "Enter") actions.focus(t.id); }}
+      onContextMenu={(e) => { e.preventDefault(); actions.menu(t, { x: e.clientX, y: e.clientY }); }}
+      onMouseEnter={(e) => actions.hover(t, e.currentTarget)}
+      onMouseLeave={() => actions.hover(null)}
+      data-active={selected}
+      data-layer-tile={t.id}
+      style={{
+        paddingLeft: 12 + depth * 14,
+        ...(selected ? { background: "var(--surface-4)", boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--color-fg) 12%, transparent)" } : {}),
+      }}
+      // `w-[calc(100%-1rem)] min-w-0`: without a width the row shrink-wraps its text and `truncate` never engages.
+      className={`group flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 pr-1.5 mx-2 text-left rounded-lg outline-none focus-visible:outline-none cursor-pointer transition-colors ${
+        selected ? "text-[var(--color-fg)]" : "text-[var(--color-fg2)] hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]"
+      }`}
+    >
+      <span aria-hidden className="w-4 shrink-0 grid place-items-center font-mono text-[11px] text-[var(--color-fg3)]">
+        {t.kind === AGENT_TILE_KIND ? <AgentIcon id={t.agent} size={14} /> : <KindMark kind={t.kind} />}
+      </span>
+      {/* Name first, so every row's text starts at the same x. */}
+      <span className="truncate flex-1 min-w-0">{t.name}</span>
+      {/* A word only for what you must act on; `working` is a dot. Only needs-you pulses. */}
+      {st === "working" ? (
+        <span aria-label="working" title="working" className="shrink-0 size-1.5 rounded-full group-hover:hidden" style={{ background: STATUS_COLOR[st] }} />
+      ) : st !== "idle" ? (
+        <span
+          className={`shrink-0 text-[10px] font-medium leading-none px-1.5 py-[3px] rounded-full ${NEEDS_YOU(st) ? "animate-pulse" : "group-hover:hidden"}`}
+          style={{ color: STATUS_COLOR[st], background: `color-mix(in srgb, ${STATUS_COLOR[st]} 16%, transparent)` }}
+          title={st}
+        >
+          {isPlan ? "review" : STATUS_LABEL[st]}
+        </span>
+      ) : null}
+      {actions.close && (st === "working" || st === "exited") && (
+        <Button variant="ghost" size="icon-2xs" reveal="hidden" onClick={(e) => { e.stopPropagation(); actions.close!(t.id); }} title={`Close ${t.name}`} aria-label={`Close ${t.name}`}>
+          <X size={12} />
+        </Button>
+      )}
+      <Button variant="ghost" size="icon-2xs" reveal="hidden" aria-label={`${t.name} actions`} data-layer-tile-menu
+        onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); actions.menu(t, { x: r.right, y: r.bottom }); }}>
+        <EllipsisVertical size={12} />
+      </Button>
+    </div>
+  );
+});
+
 // Memo: a child of the canvas view, which re-renders on every drag frame.
-export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, frameActions, tileActions }: Props) {
+export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, layoutKey = null, frameActions, tileActions }: Props) {
   // Before the early `hidden` return: hooks run on every render, in the same order.
   const machineSnap = useMachines();
-  // Persisted: panel hidden + which frame groups are collapsed. Now that the
-  // panel is DOCKED (a flex sibling, not an overlay) it no longer occludes any
-  // tile, so it defaults to SHOWN; collapsing leaves a narrow icon rail. The
-  // choice persists ("1" = collapsed to the rail).
-  const [hidden, setHidden] = useState<boolean>(
-    () => localStorage.getItem("hivemind:layers-hidden") === "1",
-  );
+  const prefs = useSettings().views.layers;
+  const [mine, setMine] = useViewLayout<Mine>(MINE, layoutKey);
+  const pinnedSet = useMemo(() => new Set(mine.pinned), [mine.pinned]);
+  const collapsed = useMemo(() => new Set(mine.collapsed), [mine.collapsed]);
+  // Persisted: panel hidden (collapsed to the floating button) and its width.
+  const [hidden, setHidden] = useState<boolean>(() => localStorage.getItem("hivemind:layers-hidden") === "1");
   useEffect(() => { localStorage.setItem("hivemind:layers-hidden", hidden ? "1" : "0"); }, [hidden]);
-  // Docked-sidebar width, resizable via the right-edge handle (persisted).
   const [width, setWidth] = useState<number>(() => {
     const v = Number(localStorage.getItem("hivemind:layers-width"));
     return v >= 180 && v <= 480 ? v : 250;
@@ -179,440 +245,285 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     const startX = e.clientX;
     const startW = width;
     const onMove = (ev: PointerEvent) => setWidth(Math.max(180, Math.min(480, startW + (ev.clientX - startX))));
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
+    const onUp = () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   };
-  // ⌘/Ctrl+B toggles the panel open/closed (dispatched from App's menu bridge;
-  // works even over a focused terminal since main forwards the key). The header
-  // × and the collapsed pill remain for mouse.
+  // ⌘/Ctrl+B toggles the panel (App's menu bridge; works over a focused terminal too).
   useEffect(() => {
     const onToggle = () => setHidden((h) => !h);
     window.addEventListener("hivemind:toggle-layers", onToggle);
     return () => window.removeEventListener("hivemind:toggle-layers", onToggle);
   }, []);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // Right-click-a-frame context menu (only when a host wired frameActions).
   const [menu, setMenu] = useState<{ frame: LayerFrame; x: number; y: number } | null>(null);
-  // Right-click-a-tile menu (only when a host wired tileActions).
-  const [tileMenu, setTileMenu] = useState<{ tile: LayerTile; x: number; y: number } | null>(null);
-  // Inline frame rename — active frame id + its draft. Started from the context
-  // menu ("Rename") or a double-click on the frame title; commits on Enter/blur.
+  const [tileMenu, setTileMenu] = useState<{ tile: ModelTile; x: number; y: number } | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
-  // Inline tile rename — same pattern, one level deeper (a tile row).
   const [renamingTile, setRenamingTile] = useState<{ id: string; draft: string } | null>(null);
+  const [card, setCard] = useState<{ tile: ModelTile; top: number; left: number } | null>(null);
+  const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Live status per tile, from the shared bus (same source as frame chips).
+  // Live status per tile, and when it last changed: seeded from main's ledger (it outlives a
+  // reload), then each change. The bus replays every status on subscribe; that is no activity.
   const [status, setStatus] = useState<Map<string, TileStatusKind>>(new Map());
+  const [activity, setActivity] = useState<Map<string, number>>(new Map());
   useEffect(() => {
-    return subscribeStatus((e) => {
+    let live = true;
+    void window.hive.viewLedgerSnapshot().then((lines) => {
+      if (!live) return;
+      setActivity((m) => {
+        const next = new Map(m);
+        for (const l of lines) if (!next.has(l.id)) next.set(l.id, l.since);
+        return next;
+      });
+    }, () => {});
+    let replaying = true;
+    const off = subscribeStatus((e) => {
       setStatus((m) => {
         if (m.get(e.tileId) === e.status) return m;
         const next = new Map(m);
         next.set(e.tileId, e.status);
         return next;
       });
+      if (!replaying) setActivity((m) => new Map(m).set(e.tileId, Date.now()));
     });
+    replaying = false;
+    return () => { live = false; off(); };
   }, []);
+  // "4m ago" stays true: a tick a minute while the panel is open.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 60_000); return () => clearInterval(id); }, []);
 
-  const toggleGroup = (id: string) =>
-    setCollapsed((s) => {
-      const next = new Set(s);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  // Aggregate status across open tiles — drives the at-a-glance summary in the
-  // header AND the badge on the collapsed pill (so a hidden panel still signals
-  // "an agent needs you" / "agents are working"). needs-you wins over working.
-  const needsYou = tiles.filter((t) => {
-    if (tileKind(t.kind).waitsOnPerson) return true; // e.g. a blocked agent waiting on your review
-    return NEEDS_YOU(status.get(t.id) ?? null);
-  }).length;
-  const working = tiles.filter((t) => status.get(t.id) === "working").length;
-
-  // Collapsed → just a small FLOATING icon button (no full-height rail), so the
-  // canvas goes edge-to-edge. Absolutely positioned over the canvas's top-left,
-  // so it takes no flex width. A status dot rides the icon so a hidden panel
-  // still signals "an agent needs you" / "busy".
-  if (hidden) {
-    const badge = needsYou > 0 ? "var(--color-warn)" : working > 0 ? "var(--color-brand)" : null;
-    return (
-      <Button
-        variant="secondary"
-        size="icon"
-        onClick={() => setHidden(false)}
-        className="pointer-events-auto absolute left-2.5 top-2.5 z-30"
-        title={
-          needsYou > 0 ? `Show layers (⌘B) — ${needsYou} agent(s) need you`
-          : working > 0 ? `Show layers (⌘B) — ${working} working`
-          : "Show layers (⌘B)"
-        }
-        aria-label="show layers"
-      >
-        <Layers />
-        {badge && (
-          <span
-            aria-hidden
-            className={`absolute -top-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-[var(--color-bg)] ${needsYou > 0 ? "animate-pulse" : ""}`}
-            style={{ background: badge }}
-          />
-        )}
-      </Button>
-    );
-  }
+  const toggleGroup = useCallback((id: string) => setMine((m) => ({
+    ...m, collapsed: m.collapsed.includes(id) ? m.collapsed.filter((x) => x !== id) : [...m.collapsed, id],
+  })), [setMine]);
+  const togglePin = useCallback((id: string) => setMine((m) => ({
+    ...m, pinned: m.pinned.includes(id) ? m.pinned.filter((x) => x !== id) : [...m.pinned, id],
+  })), [setMine]);
+  // A closed tile's pin goes with it.
+  useEffect(() => {
+    const open = new Set(tiles.map((t) => t.id));
+    if (mine.pinned.some((id) => !open.has(id))) setMine((m) => ({ ...m, pinned: m.pinned.filter((id) => open.has(id)) }));
+  }, [tiles, mine.pinned, setMine]);
+  const setPref = (key: keyof LayersPrefs, value: unknown) => patchSettings(`views.layers.${key}`, value);
 
   // Frame forest: top-level (repo) frames each own their worktree sub-frames.
-  // A child whose parent is missing falls back to top-level (defensive).
   const topFrames = frames.filter((f) => !f.parentFrameId || !frames.some((p) => p.id === f.parentFrameId));
   const childFramesOf = (fid: string) => frames.filter((f) => f.parentFrameId === fid);
-  const tilesOf = (fid: string) => tiles.filter((t) => t.frameId === fid);
-  const looseTiles = tiles.filter((t) => !t.frameId || !frames.some((f) => f.id === t.frameId));
-  const totalGroups = topFrames.length + (looseTiles.length ? 1 : 0);
-  // Grouped by the computer each frame runs on — this computer first — once any frame is on
-  // another one; a local-only canvas stays a plain list. Same names the views get (frameMachine).
   // Every saved machine is a group, frames or not, so this rail is where machines live.
   const machineGroups: MachineGroup[] = [{ key: "local", label: "This computer", frames: [] }];
   for (const m of machineSnap.machines) machineGroups.push({ key: m.id, label: m.label, hostId: m.hostId, machine: m, frames: [] });
+  const machineOfFrame = new Map<string, string>();
   for (const f of topFrames) {
     const { machine, device, hostId } = placeOf(machineSnap, f.remoteUri);
     const key = !f.remoteUri ? "local" : machine?.id ?? hostId ?? "gone";
     let g = machineGroups.find((x) => x.key === key);
-    // A frame on a host no machine is saved for, or on one no longer saved, still says where it
-    // is; one on one of the person's devices (M3) is under the device's name.
     if (!g) machineGroups.push(g = { key, label: device?.name ?? (hostId?.startsWith("device:") ? A_DEVICE : hostId?.replace(/:22$/, "")) ?? GONE_MACHINE, ...(hostId ? { hostId } : {}), frames: [] });
     g.frames.push(f);
+    machineOfFrame.set(f.id, key);
+    for (const k of childFramesOf(f.id)) machineOfFrame.set(k.id, key);
   }
-  const groupByMachine = machineGroups.length > 1;
 
-  // Highest-priority status across a frame's tiles + descendant frames — drives
-  // the per-frame status dot, so a COLLAPSED frame still signals "an agent here
-  // needs you / is working" (t3code-style aggregate dot). null → all idle.
+  const modelTiles: ModelTile[] = useMemo(() => tiles.map((t) => {
+    const waits = !!tileKind(t.kind).waitsOnPerson;
+    const st: TileStatusKind = waits ? "question" : (status.get(t.id) ?? "idle");
+    return { ...t, status: st, needsYou: waits || NEEDS_YOU(st), activity: activity.get(t.id) ?? null, machine: (t.frameId && machineOfFrame.get(t.frameId)) || "local" };
+  // machineOfFrame is rebuilt each render from frames + machines; its content is what matters.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [tiles, status, activity, frames, machineSnap]);
+  const agentLabel = (t: ModelTile) => (t.kind === AGENT_TILE_KIND ? agentById(t.agent)?.label ?? t.agent ?? "Agent" : tileKind(t.kind).title ?? "Other");
+  const view = layersView({ tiles: modelTiles, pinned: mine.pinned, prefs, now, agentLabel });
+
+  const needsYou = modelTiles.filter((t) => t.needsYou).length;
+  const working = modelTiles.filter((t) => t.status === "working" && !t.needsYou).length;
+
+  // Rows call these; kept stable so a row redraws only when its own tile changes.
+  const focusRef = useRef(onFocusTile);
+  focusRef.current = onFocusTile;
+  const closeRef = useRef(tileActions?.onClose);
+  closeRef.current = tileActions?.onClose;
+  const rowActions = useMemo<RowActions>(() => ({
+    focus: (id) => focusRef.current(id),
+    menu: (tile, at) => { setCard(null); setTileMenu({ tile, ...at }); },
+    hover: (tile, el) => {
+      if (cardTimer.current) clearTimeout(cardTimer.current);
+      if (!tile || !el) { setCard(null); return; }
+      cardTimer.current = setTimeout(() => {
+        const r = el.getBoundingClientRect();
+        setCard({ tile, top: r.top, left: r.right + 8 });
+      }, 450);
+    },
+    ...(tileActions ? { close: (id: string) => closeRef.current?.(id) } : {}),
+  }), [!!tileActions]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Collapsed → a small FLOATING button over the canvas's top-left; its dot still says
+  // "an agent needs you" / "busy".
+  if (hidden) {
+    const badge = needsYou > 0 ? "var(--color-warn)" : working > 0 ? "var(--color-brand)" : null;
+    return (
+      <Button variant="secondary" size="icon" onClick={() => setHidden(false)} className="pointer-events-auto absolute left-2.5 top-2.5 z-30"
+        title={needsYou > 0 ? `Show layers (⌘B) — ${needsYou} agent(s) need you` : working > 0 ? `Show layers (⌘B) — ${working} working` : "Show layers (⌘B)"}
+        aria-label="show layers">
+        <Layers />
+        {badge && <span aria-hidden className={`absolute -top-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-[var(--color-bg)] ${needsYou > 0 ? "animate-pulse" : ""}`} style={{ background: badge }} />}
+      </Button>
+    );
+  }
+
+  const shownIn = (fid: string) => view.byFrame.get(fid) ?? [];
+  const hasShown = (fid: string): boolean => shownIn(fid).length > 0 || childFramesOf(fid).some((k) => hasShown(k.id));
+  // Highest-priority status across a frame's listed tiles + sub-frames (a folded frame still signals).
   const frameAgg = (fid: string): TileStatusKind | null => {
     let best: TileStatusKind | null = null;
     let bestRank = -1;
-    const consider = (s: TileStatusKind) => {
-      const r = STATUS_RANK[s] ?? 0;
-      if (r > bestRank) { bestRank = r; best = s; }
-    };
-    for (const t of tilesOf(fid)) consider(tileKind(t.kind).waitsOnPerson ? "question" : (status.get(t.id) ?? "idle"));
-    for (const k of childFramesOf(fid)) { const s = frameAgg(k.id); if (s) consider(s); }
+    for (const t of shownIn(fid)) { const r = STATUS_RANK[t.status] ?? 0; if (r > bestRank) { bestRank = r; best = t.status; } }
+    for (const k of childFramesOf(fid)) { const s = frameAgg(k.id); if (s && (STATUS_RANK[s] ?? 0) > bestRank) { bestRank = STATUS_RANK[s] ?? 0; best = s; } }
     return best;
   };
+  const needsYouIn = (fid: string): number => shownIn(fid).filter((t) => t.needsYou).length + childFramesOf(fid).reduce((n, k) => n + needsYouIn(k.id), 0);
 
-  const needsYouIn = (fid: string): number =>
-    tilesOf(fid).filter((t) => tileKind(t.kind).waitsOnPerson || NEEDS_YOU(status.get(t.id) ?? null)).length
-    + childFramesOf(fid).reduce((n, k) => n + needsYouIn(k.id), 0);
-
-  const renderTile = (t: LayerTile, depth: number): ReactNode => {
-    // A plan-review tile is inherently a "needs you" state (an agent is blocked
-    // on your review) — surface it as warn + pulse with a "review" tag.
-    const isPlan = !!tileKind(t.kind).waitsOnPerson;
-    const st: TileStatusKind = isPlan ? "question" : (status.get(t.id) ?? "idle");
-    const sel = t.id === selectedTileId;
+  const renderTile = (t: ModelTile, depth: number): ReactNode => {
     if (renamingTile?.id === t.id) {
+      const commit = () => { tileActions?.onRename(t.id, renamingTile.draft); setRenamingTile(null); };
       return (
-        <div
-          key={t.id}
-          className="flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2 mx-2"
-          style={{ paddingLeft: 12 + depth * 14 }}
-        >
-          <Input
-            autoFocus
-            value={renamingTile.draft}
-            onChange={(e) => setRenamingTile({ id: t.id, draft: e.target.value })}
-            onBlur={() => {
-              tileActions?.onRename(t.id, renamingTile.draft);
-              setRenamingTile(null);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                tileActions?.onRename(t.id, renamingTile.draft);
-                setRenamingTile(null);
-              } else if (e.key === "Escape") setRenamingTile(null);
-              e.stopPropagation();
-            }}
-            className="flex-1 min-w-0"
-            aria-label="Rename tile"
-          />
+        <div key={t.id} className="flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2 mx-2" style={{ paddingLeft: 12 + depth * 14 }}>
+          <Input autoFocus value={renamingTile.draft} onChange={(e) => setRenamingTile({ id: t.id, draft: e.target.value })} onBlur={commit}
+            onKeyDown={(e) => { if (e.key === "Enter") commit(); else if (e.key === "Escape") setRenamingTile(null); e.stopPropagation(); }}
+            className="flex-1 min-w-0" aria-label="Rename tile" />
         </div>
       );
     }
-    // A <div> (not <button>): a hover × can't nest inside a native button, and
-    // the row already carries its own focus handling everywhere else.
-    return (
-      <div
-        key={t.id}
-        role="button"
-        tabIndex={0}
-        onClick={() => onFocusTile(t.id)}
-        onContextMenu={tileActions ? (e) => { e.preventDefault(); setTileMenu({ tile: t, x: e.clientX, y: e.clientY }); } : undefined}
-        data-active={sel}
-        style={{
-          paddingLeft: 12 + depth * 14,
-          // Selected surface set INLINE (staleness-proof, glass never remaps it):
-          // `--surface-4` is the opaque neutral "active" surface — the SOLE
-          // selection cue. No brand accent bar: the inset lavender-blue boxShadow
-          // read as an unwanted blue block on the row's left edge. A row is
-          // SELECTED, not "focused" — `outline-none` (an already-compiled utility
-          // the whole app uses) suppresses the global focus ring.
-          ...(sel
-            ? {
-                background: "var(--surface-4)",
-                // Neutral (NOT brand) hairline ring so the active row reads as a
-                // distinct card at a glance — the earlier blue accent bar is gone.
-                boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--color-fg) 12%, transparent)",
-              }
-            : {}),
-        }}
-        // `w-full min-w-0` is load-bearing, not cosmetic: a <button> defaults to
-        // width:auto, which on a flex container resolves to FIT-CONTENT. Without
-        // it the row shrink-wraps its text — so the selected background hugged the
-        // label instead of spanning the row, and the `truncate` on the name below
-        // never engaged (the row grew past the panel instead of clipping).
-        className={`group flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 pr-2.5 mx-2 text-left rounded-lg outline-none focus-visible:outline-none cursor-pointer transition-colors ${
-          sel
-            ? "text-[var(--color-fg)]"
-            : "text-[var(--color-fg2)] hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]"
-        }`}
-        title={`${t.name} · ${st}`}
-      >
-        <span aria-hidden className="w-4 shrink-0 grid place-items-center font-mono text-[11px] text-[var(--color-fg3)]">
-          {t.kind === AGENT_TILE_KIND ? <AgentIcon id={t.agent} size={14} /> : <KindMark kind={t.kind} />}
-        </span>
-        {/* Name first, so every row's text starts at the same x. The badge used to
-            lead, which pushed each name right by however wide its status happened
-            to be — the column read as ragged even though nothing was misaligned. */}
-        <span className="truncate flex-1 min-w-0">{t.name}</span>
-        {/* A word is for something you must ACT on. `working` is an agent doing its
-            job — the ordinary case — so it gets a dot, not a label: present enough
-            to see at a glance, quiet enough that `approve?` / `blocked` are the only
-            words in the column and therefore impossible to miss. Only those pulse.
-            (TerminalTile already said as much: "pulsing every active state is the
-            slop tell.") `exited` keeps its word — a dead tile is worth reading. */}
-        {/* Close — hover/focus-revealed × (mirror of the windows-view tab strip).
-            Replaces a non-actionable status pill when it can act instead. */}
-        {tileActions && (st === "working" || st === "exited") && (
-          <Button
-            variant="ghost"
-            size="icon-2xs"
-            reveal="hidden"
-            onClick={(e) => { e.stopPropagation(); tileActions.onClose(t.id); }}
-            title={`Close ${t.name}`}
-            aria-label={`Close ${t.name}`}
-          >
-            <X size={12} />
-          </Button>
-        )}
-        {st === "working" ? (
-          <span
-            aria-label="working"
-            title="working"
-            className="shrink-0 ml-auto size-1.5 rounded-full"
-            style={{ background: STATUS_COLOR[st] }}
-          />
-        ) : st !== "idle" ? (
-          <span
-            className={`shrink-0 ml-auto text-[10px] font-medium leading-none px-1.5 py-[3px] rounded-full ${NEEDS_YOU(st) ? "animate-pulse" : ""}`}
-            style={{ color: STATUS_COLOR[st], background: `color-mix(in srgb, ${STATUS_COLOR[st]} 16%, transparent)` }}
-            title={st}
-          >
-            {isPlan ? "review" : STATUS_LABEL[st]}
-          </span>
-        ) : null}
-      </div>
-    );
+    return <TileRow key={t.id} t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} />;
   };
 
-  // A frame group: header + its tiles, then its worktree child groups indented
-  // one level deeper (recursion is depth-bounded at 2, but written generally).
-  const renderFrameGroup = (frame: LayerFrame, depth: number): ReactNode => {
+  // A frame group: header + its listed tiles, then its worktree groups one level deeper. While the
+  // View menu leaves tiles out, a frame with none of its own listed is left out too.
+  const renderFrameGroup = (frame: LayerFrame, depth: number, groupByMachine: boolean): ReactNode => {
     const gid = frame.id;
+    if (view.filtering && !hasShown(gid)) return null;
     const isCollapsed = collapsed.has(gid);
-    const items = tilesOf(gid);
-    const kids = childFramesOf(gid);
+    const items = shownIn(gid);
+    const kids = childFramesOf(gid).filter((k) => !view.filtering || hasShown(k.id));
     const isWt = !!frame.parentFrameId;
     const agg = frameAgg(gid);
+    const commitRename = () => { const t = renaming?.draft.trim(); if (t) frameActions?.onRename(gid, t); setRenaming(null); };
     return (
       <div key={gid} className={depth === 0 ? "mt-1.5 first:mt-1" : ""}>
-        <div
-          className="group/grp flex items-center gap-0.5 h-8 pr-2 mx-2 rounded-lg hover:bg-[var(--color-bg3)] transition-colors"
-          style={{ paddingLeft: depth * 14 }}
-          onContextMenu={frameActions ? (e) => { e.preventDefault(); setMenu({ frame, x: e.clientX, y: e.clientY }); } : undefined}
-        >
-          <Button
-            variant="ghost"
-            size="icon-2xs"
-            onClick={() => toggleGroup(gid)}
-            aria-label={isCollapsed ? "expand" : "collapse"}
-          >
+        <div className="group/grp flex items-center gap-0.5 h-8 pr-2 mx-2 rounded-lg hover:bg-[var(--color-bg3)] transition-colors" style={{ paddingLeft: depth * 14 }}
+          onContextMenu={frameActions ? (e) => { e.preventDefault(); setMenu({ frame, x: e.clientX, y: e.clientY }); } : undefined}>
+          <Button variant="ghost" size="icon-2xs" onClick={() => toggleGroup(gid)} aria-label={isCollapsed ? "expand" : "collapse"}>
             {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
           </Button>
           {renaming?.id === gid ? (
             <div className="flex-1 flex items-center gap-2 min-w-0">
               <WorkspaceIcon color={frame.color} remote={frame.remote && !groupByMachine} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
-              <Input
-                autoFocus
-                value={renaming.draft}
-                onChange={(e) => setRenaming({ id: gid, draft: e.target.value })}
-                onBlur={() => {
-                  const t = renaming.draft.trim();
-                  if (t) frameActions?.onRename(gid, t);
-                  setRenaming(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    const t = renaming.draft.trim();
-                    if (t) frameActions?.onRename(gid, t);
-                    setRenaming(null);
-                  } else if (e.key === "Escape") {
-                    setRenaming(null);
-                  }
-                  // Don't let the panel's key handlers see rename typing.
-                  e.stopPropagation();
-                }}
-                className="flex-1 min-w-0"
-                aria-label="Rename frame"
-              />
+              <Input autoFocus value={renaming.draft} onChange={(e) => setRenaming({ id: gid, draft: e.target.value })} onBlur={commitRename}
+                onKeyDown={(e) => { if (e.key === "Enter") commitRename(); else if (e.key === "Escape") setRenaming(null); e.stopPropagation(); }}
+                className="flex-1 min-w-0" aria-label="Rename frame" />
             </div>
           ) : (
-          <button
-            onClick={() => onFocusFrame(frame.id)}
-            onDoubleClick={frameActions ? () => setRenaming({ id: gid, draft: frame.title }) : undefined}
-            className="flex-1 flex items-center gap-2 min-w-0 text-left text-[14px] font-semibold tracking-[-0.014em] text-[var(--color-fg)]"
-            title={isWt ? `Focus worktree ${frame.branch ?? frame.title}` : `Focus ${frame.title}${frameActions ? " · double-click to rename" : ""}`}
-          >
-            <WorkspaceIcon color={frame.color} remote={frame.remote && !groupByMachine} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
-            <span className="truncate">{frame.title}</span>
-            {frame.folder && frame.folder !== frame.title && (
-              <span className="truncate min-w-0 font-mono text-[11px] font-normal text-[var(--color-fg3)]" title={frame.folder}>{frame.folder}</span>
-            )}
-            <span className="ml-auto flex items-center gap-1.5 min-w-0">
-              {/* The frame's aggregate is a SUMMARY of its children. While the group
-                  is expanded the children are right there saying it themselves, so
-                  repeating it on the parent is the same fact twice — the row read
-                  `hmdemo working` directly above `Claude Code working`. Summarise
-                  only what's hidden: when collapsed, or when a child needs a human
-                  (that one is worth shouting even with the row open). */}
-              {agg && agg !== "idle" && agg !== "exited" && (isCollapsed || NEEDS_YOU(agg)) && (
-                NEEDS_YOU(agg) ? (
-                  <span
-                    className="shrink-0 text-[9px] font-medium leading-none px-1.5 py-[3px] rounded-full animate-pulse"
-                    style={{ color: STATUS_COLOR[agg], background: `color-mix(in srgb, ${STATUS_COLOR[agg]} 16%, transparent)` }}
-                    title={STATUS_LABEL[agg]}
-                  >
-                    {STATUS_LABEL[agg]}
-                  </span>
-                ) : (
-                  <span
-                    aria-label={STATUS_LABEL[agg]}
-                    title={STATUS_LABEL[agg]}
-                    className="shrink-0 size-1.5 rounded-full"
-                    style={{ background: STATUS_COLOR[agg] }}
-                  />
-                )
+            <button onClick={() => onFocusFrame(frame.id)} onDoubleClick={frameActions ? () => setRenaming({ id: gid, draft: frame.title }) : undefined}
+              className="flex-1 flex items-center gap-2 min-w-0 text-left text-[14px] font-semibold tracking-[-0.014em] text-[var(--color-fg)]"
+              title={isWt ? `Focus worktree ${frame.branch ?? frame.title}` : `Focus ${frame.title}${frameActions ? " · double-click to rename" : ""}`}>
+              <WorkspaceIcon color={frame.color} remote={frame.remote && !groupByMachine} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
+              <span className="truncate">{frame.title}</span>
+              {frame.folder && frame.folder !== frame.title && (
+                <span className="truncate min-w-0 font-mono text-[11px] font-normal text-[var(--color-fg3)]" title={frame.folder}>{frame.folder}</span>
               )}
-              {/* A frame with nothing in it shouldn't advertise a `0` — an empty
-                  count is noise the eye still has to read and discard. */}
-              {items.length + kids.length > 0 && (
-                <span className="font-mono text-[11px] tabular-nums text-[var(--color-fg3)] shrink-0">
-                  {items.length + kids.length}
-                </span>
-              )}
-            </span>
-          </button>
+              <span className="ml-auto flex items-center gap-1.5 min-w-0">
+                {/* A summary of what is hidden: when folded, or when a child needs a person. */}
+                {agg && agg !== "idle" && agg !== "exited" && (isCollapsed || NEEDS_YOU(agg)) && (
+                  NEEDS_YOU(agg) ? (
+                    <span className="shrink-0 text-[9px] font-medium leading-none px-1.5 py-[3px] rounded-full animate-pulse"
+                      style={{ color: STATUS_COLOR[agg], background: `color-mix(in srgb, ${STATUS_COLOR[agg]} 16%, transparent)` }} title={STATUS_LABEL[agg]}>
+                      {STATUS_LABEL[agg]}
+                    </span>
+                  ) : <span aria-label={STATUS_LABEL[agg]} title={STATUS_LABEL[agg]} className="shrink-0 size-1.5 rounded-full" style={{ background: STATUS_COLOR[agg] }} />
+                )}
+                {items.length + kids.length > 0 && <span className="font-mono text-[11px] tabular-nums text-[var(--color-fg3)] shrink-0">{items.length + kids.length}</span>}
+              </span>
+            </button>
           )}
         </div>
         {!isCollapsed && (items.length > 0 || kids.length > 0) && (
-          // Nesting guide rail — a faint vertical line the child rows hang from,
-          // aligned under this group's workspace chip, so the worktree/tile
-          // hierarchy reads at a glance instead of relying on indent alone.
+          // Nesting guide rail the child rows hang from.
           <div className="relative">
-            <span
-              aria-hidden
-              className="absolute top-0 bottom-1 w-px bg-[var(--color-line)]"
-              style={{ left: depth * 14 + 18 }}
-            />
+            <span aria-hidden className="absolute top-0 bottom-1 w-px bg-[var(--color-line)]" style={{ left: depth * 14 + 18 }} />
             {items.map((t) => renderTile(t, depth + 1))}
-            {kids.map((k) => renderFrameGroup(k, depth + 1))}
+            {kids.map((k) => renderFrameGroup(k, depth + 1, groupByMachine))}
           </div>
         )}
       </div>
     );
   };
 
+  /** A section of its own (Pinned, a date, a status): a quiet heading that folds. */
+  const section = (key: string, label: string, list: ModelTile[], attr: Record<string, string> = {}) => {
+    const folded = collapsed.has(`section:${key}`);
+    return (
+      <section key={key} aria-label={label || "Tiles"} className="mt-2 first:mt-1" {...attr}>
+        {label && (
+          <button type="button" onClick={() => toggleGroup(`section:${key}`)} aria-expanded={!folded}
+            className="flex w-full items-center gap-1 h-7 pl-4 pr-3 text-[11px] font-medium text-[var(--color-fg3)] hover:text-[var(--color-fg2)]">
+            <span>{label}</span>
+            {folded ? <ChevronRight size={11} /> : <ChevronDown size={11} className="opacity-0 group-hover:opacity-100" />}
+            <span className="ml-auto font-mono text-[10.5px] tabular-nums">{list.length}</span>
+          </button>
+        )}
+        {!folded && list.map((t) => renderTile(t, 0))}
+      </section>
+    );
+  };
+
+  const groupByMachine = prefs.groupBy === "machine" && machineGroups.length > 1;
+  const looseTiles = view.tree ? (view.byFrame.get(null) ?? []).concat(tiles.filter((t) => t.frameId && !frames.some((f) => f.id === t.frameId)).flatMap((t) => view.byFrame.get(t.frameId) ?? [])) : [];
+  const nothing = view.pinned.length === 0 && (view.tree ? ![...view.byFrame.values()].some((l) => l.length) : view.buckets.length === 0);
+  const machineChoices = machineGroups.filter((g) => g.key === "local" || g.frames.length > 0 || g.machine);
+
   return (
-    <aside
-      className="hm-layers relative h-full shrink-0 flex flex-col bg-[var(--color-bg2)] border-r border-[var(--color-line)] overflow-hidden"
-      style={{ width }}
-      aria-label="Layers"
-    >
+    <aside className="hm-layers relative h-full shrink-0 flex flex-col bg-[var(--color-bg2)] border-r border-[var(--color-line)] overflow-hidden" style={{ width }} aria-label="Layers">
       <header className="flex items-center gap-2 px-3 h-11 text-[13px] font-semibold text-[var(--color-fg2)]">
         <Layers size={14} className="text-[var(--color-fg3)]" />
         <span>Layers</span>
         <span className="ml-auto flex items-center gap-1.5 font-mono text-[11px] tabular-nums">
           {needsYou > 0 && (
             <span className="flex items-center gap-0.5 text-[var(--color-warn)]" title={`${needsYou} need you`}>
-              <span aria-hidden className="size-1.5 rounded-full animate-pulse" style={{ background: "var(--color-warn)" }} />
-              {needsYou}
+              <span aria-hidden className="size-1.5 rounded-full animate-pulse" style={{ background: "var(--color-warn)" }} />{needsYou}
             </span>
           )}
           {working > 0 && (
             <span className="flex items-center gap-0.5 text-[var(--color-brand)]" title={`${working} working`}>
-              <span aria-hidden className="size-1.5 rounded-full" style={{ background: "var(--color-brand)" }} />
-              {working}
+              <span aria-hidden className="size-1.5 rounded-full" style={{ background: "var(--color-brand)" }} />{working}
             </span>
           )}
           <span className="text-[var(--color-fg3)]">{tiles.length}</span>
         </span>
-        <Button
-          variant="ghost"
-          size="icon-2xs"
-          onClick={() => openMachines({ kind: "add" })}
-          title="Add a machine"
-          aria-label="add machine"
-        ><ServerCog size={14} /></Button>
-        {/* Quick "open another project": reuses App's hivemind:open-folder
-            listener (folder picker → recents → workspace switch). */}
-        <Button
-          variant="ghost"
-          size="icon-2xs"
-          onClick={() => window.dispatchEvent(new CustomEvent("hivemind:add-project"))}
-          title="Add another project (opens as its own workspace)"
-          aria-label="add project"
-        ><Plus size={14} /></Button>
-        <kbd
-          aria-hidden
-          title="Toggle the Layers panel"
-          className="grid place-items-center h-[15px] px-1 rounded bg-[var(--color-bg)] border border-[var(--color-line2)] text-[9px] font-mono text-[var(--color-fg3)] tracking-tight"
-        >⌘B</kbd>
-        <Button
-          variant="ghost"
-          size="icon-2xs"
-          onClick={() => setHidden(true)}
-          title="Collapse layers (⌘B)"
-          aria-label="collapse layers"
-        ><PanelLeftClose size={14} /></Button>
+        <ViewMenu prefs={prefs} setPref={setPref} machines={machineChoices} />
+        <Button variant="ghost" size="icon-2xs" onClick={() => openMachines({ kind: "add" })} title="Add a machine" aria-label="add machine"><ServerCog size={14} /></Button>
+        <Button variant="ghost" size="icon-2xs" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:add-project"))}
+          title="Add another project (opens as its own workspace)" aria-label="add project"><Plus size={14} /></Button>
+        <Button variant="ghost" size="icon-2xs" onClick={() => setHidden(true)} title="Collapse layers (⌘B)" aria-label="collapse layers"><PanelLeftClose size={14} /></Button>
       </header>
 
       <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-[14px]">
-        {totalGroups === 0 && (
-          <div className="px-3 py-2 text-[12px] text-[var(--color-fg3)]">No tiles open.</div>
+        {tiles.length === 0 && <div className="px-3 py-2 text-[12px] text-[var(--color-fg3)]">No tiles open.</div>}
+        {tiles.length > 0 && nothing && (
+          <div className="px-4 py-3 text-[12px] text-[var(--color-fg3)]" data-layers-nothing>
+            Nothing here matches the View menu.{" "}
+            <button type="button" className="underline hover:text-[var(--color-fg)]" onClick={() => patchSettings("views.layers", DEFAULT_LAYERS_PREFS)}>Reset</button>
+          </div>
         )}
-        {groupByMachine
-          ? <>
-            {machineGroups.filter((g) => g.key === "local" || g.frames.length > 0).map((g) => (
+        {view.pinned.length > 0 && section("pinned", "Pinned", view.pinned, { "data-layers-pinned": "" })}
+        {view.tree ? (
+          groupByMachine
+            ? machineGroups.filter((g) => (g.key === "local" && !view.filtering) || g.frames.some((f) => !view.filtering || hasShown(f.id))).map((g) => (
               <section key={g.key} aria-label={g.label} data-machine-group={g.key === "local" ? "local" : g.label} className={g.key === "local" ? "" : "mt-3 border-t border-[var(--color-line)] pt-1"}>
                 <MachineHeader group={g} used needsYou={g.frames.reduce((n, f) => n + needsYouIn(f.id), 0)} />
-                {g.frames.map((f) => renderFrameGroup(f, 0))}
+                {g.frames.map((f) => renderFrameGroup(f, 0, true))}
               </section>
-            ))}
-          </>
-          : topFrames.map((f) => renderFrameGroup(f, 0))}
+            ))
+            : topFrames.map((f) => renderFrameGroup(f, 0, false))
+        ) : view.buckets.map((b) => section(b.key, b.label, b.tiles, { "data-layers-bucket": b.key }))}
         {looseTiles.length > 0 && (
           <div className="mt-1.5">
             <div className="flex items-center gap-2 h-8 pr-2 mx-2 pl-[26px]">
@@ -626,70 +537,151 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           </div>
         )}
       </div>
-      {/* Machines nothing runs on sit at the foot of the rail, not after the tiles: a row of
-          them below the fold is a row nobody scrolls to. The list scrolls inside itself. */}
-      {groupByMachine && <IdleMachines groups={machineGroups.filter((g) => g.key !== "local" && g.frames.length === 0)} />}
-      {/* Right-edge resize grip (t3code-style) — drag to set the panel width. */}
-      <div
-        onPointerDown={startResize}
-        className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[var(--color-brand)] active:bg-[var(--color-brand)] opacity-0 hover:opacity-60"
-        title="Drag to resize"
-        aria-hidden
-      />
+      {/* Machines nothing runs on, at the foot of the rail; the View menu can hide them. */}
+      {prefs.showMachines && machineGroups.length > 1 && <IdleMachines groups={machineGroups.filter((g) => g.key !== "local" && g.frames.length === 0)} />}
+      {/* Right-edge resize grip. */}
+      <div onPointerDown={startResize} className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[var(--color-brand)] active:bg-[var(--color-brand)] opacity-0 hover:opacity-60" title="Drag to resize" aria-hidden />
       {menu && frameActions && (
-        <FrameRailMenu
-          frame={menu.frame}
-          x={menu.x}
-          y={menu.y}
-          actions={frameActions}
-          onClose={() => setMenu(null)}
-          onRequestRename={(id) => {
-            const f = frames.find((x) => x.id === id);
-            setRenaming({ id, draft: f?.title ?? "" });
-          }}
-        />
+        <FrameRailMenu frame={menu.frame} x={menu.x} y={menu.y} actions={frameActions} onClose={() => setMenu(null)}
+          onRequestRename={(id) => { const f = frames.find((x) => x.id === id); setRenaming({ id, draft: f?.title ?? "" }); }} />
       )}
-      {tileMenu && tileActions && (
-        <TileRailMenu
-          tile={tileMenu.tile}
-          x={tileMenu.x}
-          y={tileMenu.y}
-          onCloseTile={(id) => { tileActions.onClose(id); setTileMenu(null); }}
-          onRequestRename={(id, draft) => { setRenamingTile({ id, draft }); setTileMenu(null); }}
-          close={() => setTileMenu(null)}
-        />
+      {tileMenu && (
+        <TileRailMenu tile={tileMenu.tile} x={tileMenu.x} y={tileMenu.y} pinned={pinnedSet.has(tileMenu.tile.id)}
+          onPin={() => togglePin(tileMenu.tile.id)}
+          onCloseTile={tileActions ? (id) => tileActions.onClose(id) : undefined}
+          onRequestRename={tileActions ? (id, draft) => setRenamingTile({ id, draft }) : undefined}
+          close={() => setTileMenu(null)} />
       )}
+      {card && <HoverCard tile={card.tile} top={card.top} left={card.left} now={now} frame={frames.find((f) => f.id === card.tile.frameId)} agent={agentLabel(card.tile)} />}
     </aside>
   );
 });
 
+/** The panel's View menu: which tiles (status, last activity, machines), grouped and ordered how. */
+function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (k: keyof LayersPrefs, v: unknown) => void; machines: MachineGroup[] }) {
+  const radio = <K extends "status" | "activity" | "groupBy" | "sortBy">(key: K, label: string) => (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger data-layers-view={key}>
+        <span className="flex-1">{label}</span>
+        <span className="text-[11.5px] text-[var(--color-fg3)]">{choiceLabel(key, prefs[key])}</span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="w-[170px]">
+        <DropdownMenuRadioGroup value={prefs[key]} onValueChange={(v) => setPref(key, v)}>
+          {VIEW_CHOICES[key].map(([id, text]) => <DropdownMenuRadioItem key={id} value={id} className="text-[12px]" data-layers-choice={`${key}:${id}`}>{text}</DropdownMenuRadioItem>)}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+  const chosen = prefs.machines;
+  const toggleMachine = (key: string) => setPref("machines", chosen.includes(key) ? chosen.filter((m) => m !== key) : [...chosen, key]);
+  const altered = JSON.stringify(prefs) !== JSON.stringify(DEFAULT_LAYERS_PREFS);
+  const [open, setOpen] = useState(false);
+  // Opened by the button, anchored under it: the app's menus open from code, as the row menus do.
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <span className="relative inline-flex">
+        <Button variant="ghost" size="icon-2xs" aria-label="View options" title="View options" data-layers-view-menu aria-expanded={open} className="relative" onClick={() => setOpen(true)}>
+          <SlidersHorizontal size={14} />
+          {altered && <span aria-hidden className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-[var(--color-brand)]" />}
+        </Button>
+        <DropdownMenuTrigger asChild><span aria-hidden className="absolute bottom-0 right-0 size-0" /></DropdownMenuTrigger>
+      </span>
+      <DropdownMenuContent align="end" className="w-[220px]">
+        {radio("status", "Status")}
+        {radio("activity", "Last activity")}
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger data-layers-view="machines">
+            <span className="flex-1">Machines</span>
+            <span className="text-[11.5px] text-[var(--color-fg3)]">{chosen.length === 0 ? "All" : `${chosen.length} selected`}</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-[200px]">
+            <DropdownMenuCheckboxItem className="text-[12px]" checked={chosen.length === 0} onCheckedChange={() => setPref("machines", [])} onSelect={(e) => e.preventDefault()} data-layers-machine="all">All machines</DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+            {machines.map((g) => (
+              <DropdownMenuCheckboxItem key={g.key} className="text-[12px]" checked={chosen.includes(g.key)} onCheckedChange={() => toggleMachine(g.key)} onSelect={(e) => e.preventDefault()} data-layers-machine={g.key}>
+                <span className="truncate">{g.label}</span>
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSeparator />
+        {radio("groupBy", "Group by")}
+        {radio("sortBy", "Sort by")}
+        <DropdownMenuSeparator />
+        <DropdownMenuCheckboxItem className="text-[12px]" checked={prefs.showMachines} onCheckedChange={(v) => setPref("showMachines", !!v)} onSelect={(e) => e.preventDefault()} data-layers-show-machines>
+          Show idle machines
+        </DropdownMenuCheckboxItem>
+        <DropdownMenuItem disabled={!altered} onSelect={() => patchSettings("views.layers", DEFAULT_LAYERS_PREFS)} data-layers-reset>Reset to defaults</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** What a row is, on hover: its name, when it last changed, and where it runs. */
+function HoverCard({ tile, top, left, now, frame, agent }: { tile: ModelTile; top: number; left: number; now: number; frame?: LayerFrame; agent: string }) {
+  const when = ago(tile.activity, now);
+  return (
+    <div role="tooltip" data-layers-card className="hm-popover pointer-events-none fixed z-50 w-[240px] px-3 py-2.5" style={{ top, left }}>
+      <p className="truncate text-[13px] font-medium text-[var(--color-fg)]">{tile.name}</p>
+      <p className="mt-0.5 text-[11.5px] text-[var(--color-fg3)]">{[when, tile.needsYou ? "needs you" : STATUS_LABEL[tile.status]].filter(Boolean).join(" · ")}</p>
+      <div className="mt-2 flex flex-wrap gap-1 text-[11px] text-[var(--color-fg2)]">
+        <span className="rounded bg-[var(--color-bg3)] px-1.5 py-0.5">{agent}</span>
+        {frame && <span className="max-w-full truncate rounded bg-[var(--color-bg3)] px-1.5 py-0.5">{frame.title}</span>}
+        {frame?.branch && <span className="max-w-full truncate rounded bg-[var(--color-bg3)] px-1.5 py-0.5 font-mono">{frame.branch}</span>}
+      </div>
+    </div>
+  );
+}
+
 interface MachineGroup { key: string; label: string; hostId?: string; machine?: MachineInfo; frames: LayerFrame[] }
 
-/** Right-click menu for a TILE row in the rail (Close / Rename) — the tile
- *  counterpart of FrameRailMenu, trimmed to the two actions a tile has. */
-function TileRailMenu({ tile, x, y, onCloseTile, onRequestRename, close }: {
-  tile: LayerTile;
+/** A tile row's menu (its ⋮, or a right-click): pin, rename, close, each with its key while open. */
+function TileRailMenu({ tile, x, y, pinned, onPin, onCloseTile, onRequestRename, close }: {
+  tile: ModelTile;
   x: number;
   y: number;
-  onCloseTile: (id: string) => void;
-  onRequestRename: (id: string, draft: string) => void;
+  pinned: boolean;
+  onPin: () => void;
+  onCloseTile?: (id: string) => void;
+  onRequestRename?: (id: string, draft: string) => void;
   close: () => void;
 }) {
+  const run = (fn?: () => void) => { close(); fn?.(); };
+  const keys: Record<string, (() => void) | undefined> = {
+    p: onPin,
+    r: onRequestRename && (() => onRequestRename(tile.id, tile.name)),
+    d: onCloseTile && (() => onCloseTile(tile.id)),
+  };
   return (
     <DropdownMenu open onOpenChange={(o) => { if (!o) close(); }}>
       <DropdownMenuTrigger asChild>
         <span aria-hidden style={{ position: "fixed", left: x, top: y, width: 0, height: 0 }} />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="bottom" sideOffset={0} className="w-[170px]">
+      <DropdownMenuContent align="end" side="bottom" sideOffset={2} className="w-[190px]" data-layers-tile-actions
+        onKeyDown={(e) => { const fn = keys[e.key.toLowerCase()]; if (fn && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); run(fn); } }}>
         <DropdownMenuLabel className="px-2 pt-1 pb-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold truncate">{tile.name}</DropdownMenuLabel>
-        <DropdownMenuItem onSelect={() => onRequestRename(tile.id, tile.name)}>
-          <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]"><Pencil size={13} /></span>
-          <span className="truncate">Rename</span>
+        <DropdownMenuItem onSelect={() => run(onPin)} data-layers-pin>
+          <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]">{pinned ? <PinOff size={13} /> : <Pin size={13} />}</span>
+          <span className="truncate">{pinned ? "Unpin" : "Pin"}</span>
+          <DropdownMenuShortcut>P</DropdownMenuShortcut>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onCloseTile(tile.id)} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
-          <span className="shrink-0 grid place-items-center size-4"><Trash size={13} /></span>
-          <span className="truncate">Close tile</span>
-        </DropdownMenuItem>
+        {onRequestRename && (
+          <DropdownMenuItem onSelect={() => run(keys.r)}>
+            <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]"><Pencil size={13} /></span>
+            <span className="truncate">Rename</span>
+            <DropdownMenuShortcut>R</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
+        {onCloseTile && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => run(keys.d)} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+              <span className="shrink-0 grid place-items-center size-4"><Trash size={13} /></span>
+              <span className="truncate">Close tile</span>
+              <DropdownMenuShortcut>D</DropdownMenuShortcut>
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

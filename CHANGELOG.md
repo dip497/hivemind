@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: the Layers panel can pin tiles (Pinned, at the top) and has a **View** menu: filter by status, last activity and machine; group by machine, group, date, status or agent, or not at all; sort by canvas order, last activity or name; show or hide idle machines. Each row has a ⋮ menu (Pin P, Rename R, Close D) and a hover card. The View menu is kept in settings (`views.layers`); pins and folded sections per workspace, for you alone. What the panel lists is worked out by `@hivemind/core/layers`.
 - Changed: in Settings ▸ Share, one press makes the invite link and copies it (**Copy invite link**), instead of making it first and copying it second.
 - New: **Make your own…** at the bottom of the Add menu and in Settings ▸ Plugins. Choose widget, tool or view, say what it should do, then copy the prompt for any agent or start an agent here with it; the agent creates the plugin with `hive <kind>s new`, follows its `PROMPT.md`, and checks it through its own commands.
 - New: `hive widgets new` and `hive tools new` write a `PROMPT.md`, as `hive views new` did: what to build goes at the top, then how to install it, show it (`hive ctl plugin open`) and check it through its own commands, and the kind's whole guide. Hand it to a coding agent and it can build and test the plugin by itself.
