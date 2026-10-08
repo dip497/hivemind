@@ -29,31 +29,32 @@ export function nextPtySize(last: PtySize | null, cols: number, rows: number): P
   return { cols, rows };
 }
 
-/** The longest a resize burst holds back the pty's resize. */
-export const PTY_RESIZE_SETTLE_MS = 120;
+/** How long a resize burst must be quiet before its last size is taken. */
+export const RESIZE_SETTLE_MS = 120;
 
 /**
- * A pty resize that waits for a burst to settle. A drag or a window resize refits every frame; an
- * agent that redraws on each SIGWINCH then draws at widths already gone, and the leftovers stay on
- * screen. The grid follows every frame; the pty hears the last size, once. `now` sends what is
- * pending at once (a tile shown, keys taken).
+ * Resizes in a burst (a drag, a window resized, a view laid out): the first is taken at once, the
+ * rest wait until the burst has been quiet `settleMs`, and only the last of them is taken. A terminal
+ * resizes its grid and tells its program in the same step, so the two never disagree: a program
+ * drawing at a width its grid no longer has wraps its lines, and what it meant to erase stays.
  */
-export function settledResize(send: (size: PtySize) => void, settleMs = PTY_RESIZE_SETTLE_MS) {
-  let pending: PtySize | null = null;
+export function resizeBurst(settleMs = RESIZE_SETTLE_MS) {
   let timer: ReturnType<typeof setTimeout> | null = null;
-  const flush = () => {
-    if (timer) { clearTimeout(timer); timer = null; }
-    const size = pending;
+  let pending: (() => void) | null = null;
+  const quiet = () => {
+    timer = null;
+    const last = pending;
     pending = null;
-    if (size) send(size);
+    // Taken, the burst may go on: the next waits for quiet again.
+    if (last) { last(); timer = setTimeout(quiet, settleMs); }
   };
   return {
-    request(size: PtySize): void {
-      pending = size;
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(flush, settleMs);
+    run(resize: () => void): void {
+      if (!timer) { resize(); timer = setTimeout(quiet, settleMs); return; }
+      pending = resize;
+      clearTimeout(timer);
+      timer = setTimeout(quiet, settleMs);
     },
-    now: flush,
     cancel(): void { if (timer) clearTimeout(timer); timer = null; pending = null; },
   };
 }

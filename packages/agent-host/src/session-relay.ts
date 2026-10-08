@@ -40,6 +40,10 @@ export interface SessionRelayOptions {
   screenPrefix: string;
   /** Whether every viewer is hidden: batches then wait longer. */
   hidden?: () => boolean;
+  /** A viewer was just sent the host's copy of the screen in place of what it showed. The program
+   *  repaints only what it thinks changed, against the screen it drew; told nothing, it patches the
+   *  copy wherever the two differ. */
+  screenShown?(tileId: string): void;
 }
 
 export class SessionRelay {
@@ -179,7 +183,10 @@ export class SessionRelay {
       // What is pending now is older than this screen: it goes to the others first.
       this.out.flush(tileId);
       watch.unseen = false;
-      if (replay !== null && viewer.alive()) viewer.data(tileId, this.opts.screenPrefix + replay);
+      if (replay !== null && viewer.alive()) {
+        viewer.data(tileId, this.opts.screenPrefix + replay);
+        this.opts.screenShown?.(tileId);
+      }
     });
     if (!asked) { watch.awaiting = false; watch.unseen = false; }
     return asked;

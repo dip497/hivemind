@@ -186,7 +186,7 @@ test("a view opened on a workspace here is told, once ready, where it is (a phon
   assert.deepEqual(c.said(phone, session), [
     {
       type: "hello", v: 1, pluginId: "priya-board", capabilities: ["workspace:spawn", "workspace:close", "workspace:edit"], theme: { colors: {} },
-      layout: null, viewport: { w: 0, h: 0 }, visible: true, features: ["agentStatus", "widgets"], device: { touch: true, compact: true },
+      layout: null, viewport: { w: 0, h: 0 }, visible: true, features: ["agentStatus", "widgets", "invoke"], device: { touch: true, compact: true },
     },
     {
       type: "structure",
@@ -223,9 +223,9 @@ test("a screen that places live surfaces itself says so, and its view is told it
     c.post(phone, session, { type: "ready", v: 1 });
     return (c.said(phone, session).find((m) => m.type === "hello") as { features: string[] }).features;
   };
-  assert.deepEqual(await features(true), ["agentStatus", "widgets", "surfaces"]);
-  assert.deepEqual(await features(false), ["agentStatus", "widgets"]);
-  assert.deepEqual(await features(), ["agentStatus", "widgets"]);
+  assert.deepEqual(await features(true), ["agentStatus", "widgets", "invoke", "surfaces"]);
+  assert.deepEqual(await features(false), ["agentStatus", "widgets", "invoke"]);
+  assert.deepEqual(await features(), ["agentStatus", "widgets", "invoke"]);
   assert.equal(await code(c.call("view.open", ["priya-board", c.repo, null, "yes"], phone)), "BAD_REQUEST");
 });
 

@@ -36,7 +36,7 @@ export interface HostChromeProps {
   onBoard?: (kind: BoardChoice) => void;
   boardItems?: boolean;
   /** Open a tool's tile from the Add menu. */
-  onTile?: (kind: string) => void;
+  onTile?: (kind: string, frameId?: string) => void;
   updateAvailable: boolean;
   updateStaged: boolean;
   onUpgrade: () => void;

@@ -30,7 +30,8 @@ export interface StandardToolbarProps {
   /** The board is drawn here (the canvas): its items are offered too. */
   boardItems?: boolean;
   /** Open a tool's tile, offered in the Add menu beside the widgets. */
-  onTile?: (kind: string) => void;
+  /** Open a tool: where a new tile goes, or into `frameId` when Add was opened for a frame. */
+  onTile?: (kind: string, frameId?: string) => void;
   onTheme: () => void;
   updateAvailable: boolean;
   /** A version is downloaded and waiting: restarting is all that is left. */
@@ -143,7 +144,7 @@ const ADD_TABS = [["all", "All"], ["tool", "Tools"], ["widget", "Widgets"]] as c
 
 function BoardAction({ action, labels, compact, repoPath, onBoard, onTile, boardItems }: {
   action: ToolbarAction; labels: boolean; compact: boolean; repoPath: string | null;
-  onBoard: (kind: BoardChoice) => void; onTile?: (kind: string) => void; boardItems: boolean;
+  onBoard: (kind: BoardChoice) => void; onTile?: (kind: string, frameId?: string) => void; boardItems: boolean;
 }) {
   const { open, setOpen, root, trigger } = useDropdown();
   const widgets = useEnabledWidgetPackages();
@@ -153,9 +154,12 @@ function BoardAction({ action, labels, compact, repoPath, onBoard, onTile, board
   const [tab, setTab] = useState<(typeof ADD_TABS)[number][0]>("all");
   const [shelf, setShelf] = useState<PluginCategory | "all">("all");
   useEffect(() => { if (open) { setQuery(""); setActive(0); setShelf("all"); } }, [open]);
-  // Asked from elsewhere (the Layers panel's "Add a tool or widget").
+  // Asked from elsewhere: the Layers panel's "Add a tool or widget", or a frame's, which names the
+  // frame a tool goes into. Opened from its own button it adds where a new tile goes.
+  const [into, setInto] = useState<string | null>(null);
+  useEffect(() => { if (!open) setInto(null); }, [open]);
   useEffect(() => {
-    const show = () => setOpen(true);
+    const show = (e: Event) => { setInto((e as CustomEvent<{ frameId?: string } | undefined>).detail?.frameId ?? null); setOpen(true); };
     window.addEventListener("hivemind:open-add", show);
     return () => window.removeEventListener("hivemind:open-add", show);
   }, [setOpen]);
@@ -163,7 +167,7 @@ function BoardAction({ action, labels, compact, repoPath, onBoard, onTile, board
     ...(onTile ? toolKinds().map(([kind, spec]): AddChoice => ({
       id: `tile:${kind}`, name: spec.title!, type: "tool", category: spec.category ?? "other",
       icon: spec.icon ? <spec.icon size={14} /> : <span className="text-[12px] leading-none">{spec.glyph ?? "▢"}</span>,
-      disabled: !!spec.needsRepo && !repoPath, pick: () => onTile(kind),
+      disabled: !!spec.needsRepo && !repoPath, pick: () => onTile(kind, into ?? undefined),
     })) : []),
     ...widgets.map((w): AddChoice => ({ id: `widget:${w.id}`, name: w.name, type: "widget", category: w.category ?? "other", icon: <WidgetIcon pkg={w} size={14} />, pick: () => onBoard(`widget:${w.id}`) })),
   ];

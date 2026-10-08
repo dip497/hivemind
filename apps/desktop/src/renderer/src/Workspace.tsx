@@ -850,6 +850,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     onColor: (frameId: string, color: string) => updateFrameColor(frameId, color),
     onDelete: (frameId: string) => requestDeleteFrame(frameId),
     onDetachWorktree: (frameId: string) => unbindBranch(frameId),
+    onAddInFrame: (frameId: string) => window.dispatchEvent(new CustomEvent("hivemind:open-add", { detail: { frameId } })),
     onUnbindWorkspace: (frameId: string) => unbindWorkspace(frameId),
     onGit: (frameId: string) =>
       window.dispatchEvent(new CustomEvent("hivemind:frame-git", { detail: { frameId } })),
@@ -1287,7 +1288,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
         onFrame={addFrame}
         onBrowser={spawnBrowser}
         onBoard={addBoard}
-        onTile={spawnInto}
+        onTile={(kind, frameId) => (frameId ? frameOpen(frameId, kind) : spawnInto(kind))}
         boardItems={activeViewId === "canvas"}
         updateAvailable={updateAvailable}
         updateStaged={updateStaged}

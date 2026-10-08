@@ -32,6 +32,9 @@ import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { Keyboards, isHost } from "./keyboard.js";
 
 /** Where a session's output and exit go, as its backend runs it. */
+/** How long after a copy of its screen is shown a session repaints: the copy is drawn first. */
+export const REPAINT_AFTER_MS = 60;
+
 export interface SessionOutput {
   /** `replay`: a redraw of output already seen, not new output. */
   data(data: string, replay?: boolean): void;
@@ -122,6 +125,7 @@ export class Terminals {
   private readonly openers = new Map<string, Set<Connection>>();
   /** Each session's size, as last given: whoever opens it is told. */
   private readonly sizes = new Map<string, { cols: number; rows: number }>();
+  private readonly repaints = new Map<string, ReturnType<typeof setTimeout>>();
   /** The sessions that run on a participant's machine (M4), and whose it is. */
   private readonly machines = new Map<string, TerminalMachine>();
   private readonly keyboards: Keyboards;
@@ -129,7 +133,7 @@ export class Terminals {
   constructor(private readonly opts: TerminalsOptions) {
     // Output waits longer while every window here is hidden, but not while someone watches from
     // another device (the person's phone, a guest): they see it as it comes.
-    this.relay = new SessionRelay({ ...opts.relay, hidden: () => !!opts.relay.hidden?.() && !this.watchedFromAfar() });
+    this.relay = new SessionRelay({ ...opts.relay, hidden: () => !!opts.relay.hidden?.() && !this.watchedFromAfar(), screenShown: (tile) => this.repaintSoon(tile) });
     this.keyboards = new Keyboards({
       publish: (event, ...params) => opts.publish?.(event, ...params),
       tell: (to, event, ...params) => emit(to, event, ...params),
@@ -250,10 +254,27 @@ export class Terminals {
     });
   }
 
+  /**
+   * A viewer shows a copy of a session's screen (a replay on attaching, the host's screen when it
+   * joins or is shown again): the program repaints all of it, once, a moment later, by its size
+   * stepping one row down and back. A program that repaints only what changed would otherwise patch
+   * its own idea of the screen over the copy. A session sized on another machine is sized there.
+   */
+  private repaintSoon(tile: string): void {
+    if (this.repaints.has(tile) || this.machines.has(tile)) return;
+    this.repaints.set(tile, setTimeout(() => {
+      this.repaints.delete(tile);
+      const size = this.sizes.get(tile);
+      if (!size || size.rows < 2) return;
+      this.opts.backend.resize(tile, size.cols, size.rows - 1);
+      this.opts.backend.resize(tile, size.cols, size.rows);
+    }, REPAINT_AFTER_MS));
+  }
+
   /** Where a session's output, exit and size go: to every client that shows it. */
   private outputOf(tile: string): SessionOutput {
     return {
-      data: (data) => this.relay.push(tile, data),
+      data: (data, replay) => { this.relay.push(tile, data); if (replay) this.repaintSoon(tile); },
       exit: (code, signal) => this.relay.exit(tile, { code, signal }),
       size: (cols, rows) => {
         const was = this.sizes.get(tile);

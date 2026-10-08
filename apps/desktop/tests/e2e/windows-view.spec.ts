@@ -124,15 +124,17 @@ test("right-click a frame in the rail opens the actions menu and spawns into it"
     await expect(page.getByRole("menuitem", { name: "As set in Settings", exact: true })).toBeVisible();
     await expect(nested).toBeVisible();
   }
-  await menu.getByRole("menuitem", { name: "Open" }).click();
-  // Scope to menu items: the workspace toolbar renders its own "Terminal" button.
-  const terminalItem = page.getByRole("menuitem", { name: "Terminal", exact: true });
-  await expect(terminalItem).toBeVisible();
+  // Add a tool or widget: the Add menu, every tool in it, adding into this frame.
+  const header = titleBtn.locator("xpath=ancestor::*[@data-layers-frame][1]");
+  const inFrame = async () => Number((await header.innerText()).match(/(\d+)\s*$/)?.[1] ?? 0);
+  const before = await inFrame();
+  await menu.getByRole("menuitem", { name: "Add a tool or widget…" }).click();
+  await expect(page.locator("[data-add-menu]")).toBeVisible();
   const beforeTerms = await page.locator(".react-flow__node-terminal").count();
-  await terminalItem.click();
-  await page.waitForTimeout(700);
-  const afterTerms = await page.locator(".react-flow__node-terminal").count();
-  expect(afterTerms).toBe(beforeTerms + 1);
+  await page.locator('[data-add-menu] [data-board-choice="tile:shell"]').click();
+  await expect(page.locator(".react-flow__node-terminal")).toHaveCount(beforeTerms + 1);
+  // It landed in that frame: one more there.
+  await expect.poll(inFrame).toBe(before + 1);
 });
 
 test("rename a frame inline from the rail context menu", async () => {

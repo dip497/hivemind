@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { drawnSize, nextPtySize, scaleToFit, settledResize } from "../../src/renderer/src/pty-size-sync";
+import { drawnSize, nextPtySize, resizeBurst, scaleToFit } from "../../src/renderer/src/pty-size-sync";
 
 test("sends the size when the pty has never been told one", () => {
   assert.deepEqual(nextPtySize(null, 170, 44), { cols: 170, rows: 44 });
@@ -60,26 +60,30 @@ test("a session larger than the tile is scaled down to fit it, by the tighter of
 });
 
 
-// A drag refits every frame. Each SIGWINCH makes an agent redraw at that width, and the widths a
-// drag passes through leave their borders on screen: the pty hears the burst's last size, once.
-test("a resize burst reaches the pty once, at its last size, after it settles", async (t) => {
+// A drag resizes every frame. A program told each width redraws at each, and a grid resized ahead
+// of its program shows what the program drew at the width it had: the first resize is taken at
+// once, the rest wait for the burst to stop, and only its last is taken, grid and program together.
+test("a resize burst: the first at once, then only the last, once it has been quiet", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
-  const sent: { cols: number; rows: number }[] = [];
-  const r = settledResize((s) => sent.push(s), 120);
-  for (const cols of [100, 110, 120, 130]) { r.request({ cols, rows: 30 }); t.mock.timers.tick(16); }
-  assert.deepEqual(sent, []);
+  const taken: number[] = [];
+  const b = resizeBurst(120);
+  for (const w of [100, 110, 120, 130]) { b.run(() => taken.push(w)); t.mock.timers.tick(16); }
+  assert.deepEqual(taken, [100]);
   t.mock.timers.tick(120);
-  assert.deepEqual(sent, [{ cols: 130, rows: 30 }]);
+  assert.deepEqual(taken, [100, 130]);
+  // Quiet since: the next is a new burst, taken at once.
+  t.mock.timers.tick(200);
+  b.run(() => taken.push(90));
+  assert.deepEqual(taken, [100, 130, 90]);
 });
 
-test("now sends what is pending at once, and nothing twice", (t) => {
+test("cancelled, a burst takes nothing more", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
-  const sent: { cols: number; rows: number }[] = [];
-  const r = settledResize((s) => sent.push(s), 120);
-  r.request({ cols: 90, rows: 20 });
-  r.now();
+  const taken: number[] = [];
+  const b = resizeBurst(120);
+  b.run(() => taken.push(1));
+  b.run(() => taken.push(2));
+  b.cancel();
   t.mock.timers.tick(500);
-  assert.deepEqual(sent, [{ cols: 90, rows: 20 }]);
-  r.now();
-  assert.equal(sent.length, 1);
+  assert.deepEqual(taken, [1]);
 });

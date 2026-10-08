@@ -15,8 +15,6 @@ import { notReady, useAgentPresence } from "./agent-plugins";
 import { useSettings } from "./settings-store";
 import { FRAME_SWATCHES } from "./frame-color";
 import { WorktreePicker } from "./WorktreePicker";
-import { KindMark } from "./tiles/mark";
-import { toolKinds } from "./tiles";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut,
   DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
@@ -39,6 +37,8 @@ export interface FrameActions {
   onRename: (frameId: string, title: string) => void;
   onColor: (frameId: string, color: string) => void;
   onDelete: (frameId: string) => void;
+  /** The Add menu, adding into this frame. */
+  onAddInFrame: (frameId: string) => void;
   /** The commit and sync dialog for the frame's repository. */
   onGit: (frameId: string) => void;
   onPush: (frameId: string) => void;
@@ -130,13 +130,8 @@ export function FrameMenu({ frame, at, actions, arrange = false, onClose, onRena
           })}
           {!ready.length && <div className="px-2 py-1.5 text-[12px] text-[var(--color-fg2)]">No agent is installed here.</div>}
         </Sub>
-        <Sub icon={<Shapes />} label="Open" data="open">
-          {toolKinds().map(([kind, spec]) => (
-            <DropdownMenuItem key={kind} onSelect={() => actions.onOpenInFrame(fid, kind)} data-frame-menu-open={kind}>
-              <KindMark kind={kind} size={16} />{spec.title}
-            </DropdownMenuItem>
-          ))}
-        </Sub>
+        {/* Every tool and widget, as Add lists them, going into this frame: no shortlist of its own. */}
+        <DropdownMenuItem onSelect={() => actions.onAddInFrame(fid)} data-frame-menu-add><Shapes />Add a tool or widget…</DropdownMenuItem>
 
         <DropdownMenuSeparator />
         {worktree ? (

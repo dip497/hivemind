@@ -6,7 +6,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { registerFileLinks } from "./terminal-file-links";
 import { installCrispDpr } from "./terminal-dpr";
-import { drawnSize, nextPtySize, scaleToFit, settledResize, type PtySize } from "./pty-size-sync";
+import { drawnSize, nextPtySize, resizeBurst, scaleToFit, type PtySize } from "./pty-size-sync";
 import { oscColorReply } from "./osc-color";
 import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer } from "./terminal-renderer-policy";
@@ -194,7 +194,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   const sentSizeRef = useRef<PtySize | null>(null);
   const syncSizeRef = useRef<(() => void) | null>(null);
   /** Fits the terminal to its tile (or draws it at the size another gave the session). */
-  const fitRef = useRef<{ fit(): void } | null>(null);
+  const fitRef = useRef<{ fit(): void; draw(): void } | null>(null);
   const webglRef = useRef<WebglAddon | null>(null);
   // Live `selected` for the WebGL slot manager's priority() (read outside render).
   const selectedRef = useRef(selected);
@@ -434,28 +434,31 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       const own = fit.proposeDimensions();
       if (!own) return;
       ownSizeRef.current = own;
+      drawTerm();
+    };
+    /** Draw at the size last measured: this window's, or the one the session was given. Measuring
+     *  again here would take a size a resize burst is still holding back. */
+    const drawTerm = (): void => {
+      const own = ownSizeRef.current;
+      if (!own) return;
       const drawn = drawnSize(own, askedRef.current, kbRef.current.size);
-      if (drawn === own) fit.fit();
-      else if (term.cols !== drawn.cols || term.rows !== drawn.rows) term.resize(drawn.cols, drawn.rows);
+      if (term.cols !== drawn.cols || term.rows !== drawn.rows) term.resize(drawn.cols, drawn.rows);
       const scale = scaleToFit(own, drawn);
       if (term.element) term.element.style.transform = scale < 1 ? `scale(${scale})` : "";
     };
-    fitRef.current = { fit: fitTerm };
+    fitRef.current = { fit: fitTerm, draw: drawTerm };
     fitTerm();
     termRef.current = term;
     /** Ask the session to take this tile's size, when it has not been asked already. Only while
      *  this window's keys reach it: the keyboard's holder sizes a session (R4). */
-    const resizer = settledResize((next) => {
-      askedRef.current = [...askedRef.current.slice(-2), next];
-      window.hive.ptyResize(ptyId, next.cols, next.rows);
-    });
-    /** `settle`: part of a resize burst, so the pty hears only where it ends. */
-    const syncPtySize = (settle = false): void => {
+    const syncPtySize = (): void => {
       const own = ownSizeRef.current;
       if (!own || !kbRef.current.mayType) return;
       const next = nextPtySize(sentSizeRef.current, own.cols, own.rows);
-      if (next) { sentSizeRef.current = next; resizer.request(next); }
-      if (!settle) resizer.now();
+      if (!next) return;
+      sentSizeRef.current = next;
+      askedRef.current = [...askedRef.current.slice(-2), next];
+      window.hive.ptyResize(ptyId, next.cols, next.rows);
     };
     syncSizeRef.current = syncPtySize;
     // ── FOCUS GUARANTEE ──────────────────────────────────────────────────────
@@ -797,7 +800,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       starting.touch(); // the person is driving now: nothing is sent for them
       window.hive.ptyWrite(ptyId, d);
     });
-    term.onResize(() => syncPtySize(true));
+    term.onResize(() => syncPtySize());
     // A glass terminal's background is transparent, which xterm reports as black; answer with
     // the theme's colour so a TUI tinting its panels from it blends toward what the user chose.
     term.parser.registerOscHandler(11, (data) => {
@@ -1006,7 +1009,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         const atBottom = buf.viewportY >= buf.baseY;
         const before = `${term.cols}x${term.rows}`;
         fitTerm();
-        syncPtySize(true);
+        syncPtySize();
         // At the bottom it stays there, with the latest output and the prompt (a reflow can
         // leave it scrolled up); scrolled up to read, it stays put.
         if (atBottom) term.scrollToBottom();
@@ -1048,6 +1051,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     // shown tile be the only one that resizes. On the way back the deferred
     // tiles are at their old size again, so their fit is a no-op.
     const fitKey = {};
+    // Grid and program resize together, in one step per burst (see resizeBurst).
+    const burst = resizeBurst();
     const ro = new ResizeObserver(() => {
       if (parked) return; // a parked surface holds its size; adoption refits
       queueFit(fitKey, {
@@ -1055,9 +1060,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         fit: () => {
           pendingFitRef.current = false;
           if (fitRaf) { cancelAnimationFrame(fitRaf); fitRaf = 0; }
-          doFit();
-          // Ranked while xyflow still had the node hidden; now shown, it can take a WebGL slot.
-          if (!webgl) reconcileWebglSlots();
+          burst.run(() => {
+            doFit();
+            // Ranked while xyflow still had the node hidden; now shown, it can take a WebGL slot.
+            if (!webgl) reconcileWebglSlots();
+          });
         },
         hidden: () => {
           pendingFitRef.current = true;
@@ -1097,7 +1104,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       // tile is still open. Closing one drops it (Workspace.closeTile).
       ro.disconnect();
       io.disconnect();
-      resizer.now();
+      burst.cancel();
       window.removeEventListener("focus", recover);
       document.removeEventListener("visibilitychange", onVisible);
       if (loseInterest) clearTimeout(loseInterest);
@@ -1202,7 +1209,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
 
   // The session was given a size: draw it again, at this window's size or at the one given.
   useEffect(() => {
-    try { fitRef.current?.fit(); } catch { /* torn down */ }
+    try { fitRef.current?.draw(); } catch { /* torn down */ }
   }, [kb.size?.cols, kb.size?.rows]);
   // The keyboard moved. Keys reaching the session again (it was given to this window, or came
   // back to its host): this window asks for its size again, to be the session's. Keys no longer

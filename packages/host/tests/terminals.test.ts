@@ -10,13 +10,13 @@ import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
-import { PAUSE_MAX_MS, Terminals, type SessionOutput } from "../src/terminals.ts";
+import { PAUSE_MAX_MS, REPAINT_AFTER_MS, Terminals, type SessionOutput } from "../src/terminals.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-terminals-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 let logs = 0;
 
-function host(opts: { askedByHost?: (bare: string) => boolean; hidden?: () => boolean } = {}) {
+function host(opts: { askedByHost?: (bare: string) => boolean; hidden?: () => boolean; screen?: string } = {}) {
   const calls: string[] = [];
   const outputs = new Map<string, SessionOutput>();
   const file = path.join(tmp, `audit-${logs++}.jsonl`);
@@ -33,7 +33,7 @@ function host(opts: { askedByHost?: (bare: string) => boolean; hidden?: () => bo
       resume: (t) => calls.push(`resume ${t}`),
       kill: (t) => calls.push(`kill ${t}`),
       detach: (t) => calls.push(`detach ${t}`),
-      screen: () => null,
+      screen: () => (opts.screen === undefined ? null : (cb) => { cb(opts.screen!); return true; }),
     },
   });
   const server = new WorkspaceServer([terminals.domain], new Intents(new AuditLog({ file })));
@@ -162,4 +162,35 @@ test("while every window here is hidden a session's output waits longer, but not
   phone.close();
   await new Promise((r) => setTimeout(r, 20));
   assert.ok(await pushed("unseen again", window) >= 150, "held again once the phone went");
+});
+
+// A program that repaints only what changed draws against the screen it thinks is there. Shown a
+// copy instead (a replay on attaching, the host's screen for one that joins), it patches the copy
+// wherever the two differ, and text runs into text: it is made to repaint all of it, once.
+test("a session whose screen a client is shown from a copy repaints all of it, once; live output does not", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const h = host();
+  const a = h.client();
+  await h.open(a, "hm:t1");
+  const resizes = () => h.calls.filter((c) => c.startsWith("resize"));
+  h.outputs.get("hm:t1")!.data("live bytes");
+  t.mock.timers.tick(REPAINT_AFTER_MS * 2);
+  assert.deepEqual(resizes(), []);
+  // The screen again on attaching, twice in a row: one repaint, a row down and back.
+  h.outputs.get("hm:t1")!.data("\x1b[H screen", true);
+  h.outputs.get("hm:t1")!.data("\x1b[H screen", true);
+  assert.deepEqual(resizes(), [], "the copy is drawn first");
+  t.mock.timers.tick(REPAINT_AFTER_MS);
+  assert.deepEqual(resizes(), ["resize hm:t1 80x23", "resize hm:t1 80x24"]);
+});
+
+test("a client that joins a running session is shown the host's screen, and the session repaints all of it", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const h = host({ screen: "the host's screen" });
+  await h.open(h.client(), "hm:t1");
+  const b = h.client();
+  await h.open(b, "hm:t1");
+  assert.ok(output(b).some((m) => JSON.stringify(m.params).includes("the host's screen")));
+  t.mock.timers.tick(REPAINT_AFTER_MS);
+  assert.deepEqual(h.calls.filter((c) => c.startsWith("resize")), ["resize hm:t1 80x23", "resize hm:t1 80x24"]);
 });
