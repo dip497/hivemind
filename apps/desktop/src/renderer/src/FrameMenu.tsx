@@ -4,6 +4,7 @@
  * comes first, then where the frame runs, then how it looks, then deleting it.
  */
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowDown, ArrowUp, FolderOpen, FolderMinus, GitBranch, GitCommitHorizontal, LayoutGrid, Palette, Pencil,
   Server, ServerOff, SquarePen, Trash, Unlink, Shapes,
@@ -92,9 +93,14 @@ export function FrameMenu({ frame, at, actions, arrange = false, onClose, onRena
 
   return (
     <DropdownMenu open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DropdownMenuTrigger asChild>
-        <span aria-hidden style={{ position: "fixed", left: at.x, top: at.y, width: 0, height: 0 }} />
-      </DropdownMenuTrigger>
+      {/* The point it opens at, in the window's own coordinates: inside the canvas a `fixed` box is
+          placed by the zoomed layer it sits in, so the point lives in the page body. */}
+      {createPortal(
+        <DropdownMenuTrigger asChild>
+          <span aria-hidden style={{ position: "fixed", left: at.x, top: at.y, width: 0, height: 0 }} />
+        </DropdownMenuTrigger>,
+        document.body,
+      )}
       <DropdownMenuContent align="start" side="bottom" sideOffset={2} className="w-[230px]" data-frame-menu={fid}
         onKeyDown={(e) => { const fn = keys[e.key.toLowerCase()]; if (fn && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); onClose(); fn(); } }}>
         <Sub icon={<SquarePen />} label="New agent" data="agent">

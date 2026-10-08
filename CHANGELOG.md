@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: a frame's ⋯ menu on the canvas opened away from its button, further the more the canvas was zoomed or panned. It opens at the button now.
 - Changed: the Layers panel, its menus and a frame's header set text in one scale (15 the title, 14 a row, 12 a heading or menu, 11 a count or key, 10 a status chip), down from ten sizes; a menu no longer repeats the row's name as an uppercase label. A unit test fails when a size off the scale is added there.
 - New: in the Layers panel a tile that finished something while you looked elsewhere is unread (its name in bold) until you select it; **Mark as unread** / **Mark as read** (U) in its menu, and **Unread** in the View menu's Status. **Snooze** (30 minutes, 1 hour, 2 hours, tomorrow at 9:00) moves a tile to **Snoozed** until then; it comes back early when it needs you or you select it, or with **Wake now**. Both are yours, per workspace.
 - Changed: Ctrl/⌘+1…9 go to the tiles in the order the Layers panel lists them (pinned first, then as grouped and nested), not the order they were opened; held a moment, Ctrl/⌘ shows each of the first nine rows its number.

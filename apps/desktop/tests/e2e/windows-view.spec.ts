@@ -174,8 +174,15 @@ test("a frame's ⋯ on the canvas opens the menu the rail opens, Git included", 
   await rail.locator('button[title^="Focus"]').first().click({ button: "right" });
   const fromRail = await names();
   await page.keyboard.press("Escape");
-  await page.locator(".react-flow__node-frame").first().locator("[data-frame-actions]").click();
+  const button = page.locator(".react-flow__node-frame").first().locator("[data-frame-actions]");
+  await button.click();
   expect(await names()).toEqual(fromRail);
+  // And it opens at its button, wherever the canvas is panned and zoomed.
+  const b = (await button.boundingBox())!;
+  const m = (await page.getByRole("menu").first().boundingBox())!;
+  const gapX = Math.max(0, m.x - (b.x + b.width), b.x - (m.x + m.width));
+  const gapY = Math.max(0, m.y - (b.y + b.height), b.y - (m.y + m.height));
+  expect(Math.max(gapX, gapY)).toBeLessThan(12);
   expect(fromRail.join("|")).toContain("Git");
   await page.keyboard.press("Escape");
 });
