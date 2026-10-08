@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: in the Windows view, the active tab's body no longer repeats the tile's name in a bar of its own under the tab; a terminal takes that room. A view that draws its own chrome around a tile (`chrome: "none"`) gets every tile without the bar that only names it; a browser keeps its address bar. Minimize and close sit at the right end of a tab, not after its name.
 - Changed: the Layers panel's **New agent** asks which agent, from the ones installed here, with the default first and its key (2); it starts where the 2 key would (the selected frame, else the one you pick). With none installed it opens Settings ▸ Agents.
 - New: in the Layers panel, what an agent started (`hive ctl spawn`) is listed under it, as deep as it goes, and folds away with the chevron beside it. A started tile in another frame, or one the View menu leaves its starter out of, is listed on its own.
 - Changed: the Layers panel lists Projects last, after the tiles, the canvas's loose tiles and Recents. Its title, headings and rows start on one edge; New agent leads the actions and the rest are quieter; a shortcut shows as a keycap on the row you point at; icons take a 1.5 stroke beside regular text. "No tiles open" no longer shows above frames that are listed.

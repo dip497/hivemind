@@ -1288,3 +1288,7 @@ html.glass-on .u-eyebrow { color: var(--color-fg); }
   outline-offset: 2px;
   border-radius: 8px;
 }
+
+/* A view that draws its own chrome around a tile (a slot rect with `chrome: "none"`, as the Windows
+   view's tabs do) gets the body without the bar that only names it; a browser's address bar stays. */
+[data-slot-bare] [data-tile-titlebar] { display: none; }

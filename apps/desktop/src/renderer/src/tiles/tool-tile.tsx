@@ -30,7 +30,7 @@ export type ToolTileData = {
 /** The bar the app draws on every tool's tile, as on its own: what it is, pin, close; dragged by. */
 function ToolBar({ data }: { data: ToolTileData }) {
   return (
-    <div className="tile-drag-handle h-8 shrink-0 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
+    <div data-tile-titlebar className="tile-drag-handle h-8 shrink-0 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
       <GripVertical size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
       {data.glyph && <span aria-hidden className="text-[var(--color-fg3)]">{data.glyph}</span>}
       <span className="font-semibold text-[var(--color-fg)] truncate">{data.name}</span>

@@ -15,7 +15,7 @@ body { display: flex; flex-direction: column; }
 .w-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
 .w-mark { flex: none; display: grid; place-items: center; width: 16px; height: 16px; }
 .w-mark svg { width: 16px; height: 16px; }
-.w-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.w-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 /* Minimize and close show on the tab under the pointer (or reached by keyboard) and take no room
    otherwise: every tab, the selected one too, keeps its width for its name. */
 .w-act { flex: none; display: none; place-items: center; width: 20px; height: 20px; border: 0; border-radius: 5px;

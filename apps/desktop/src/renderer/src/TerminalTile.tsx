@@ -1230,7 +1230,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           wide) carried `.tile-drag-handle` — invisible target, users
           clicked the wide header bar expecting drag and nothing happened
           (verified via playwright element-from-point probe). */}
-      <div className="group tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
+      <div data-tile-titlebar className="group tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
         <GripVertical size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
         {editing ? (
           <Input

@@ -153,6 +153,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
               // World's dock pane does the same with pt-12).
               style={{ left: r.x, top: r.y, width: r.w, height: r.h, paddingTop: r.y <= 1 && r.x + r.w >= hostBox.w - 1 ? 48 : 0 }}
               data-community-slot={r.tileId}
+              data-slot-bare={r.chrome === "none" ? "" : undefined}
             >
               {/* The user's theme wins everywhere: with pluginSurfaces "theme"
                   the wallpaper is painted behind THIS slot only (clipped by the

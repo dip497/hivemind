@@ -67,6 +67,10 @@ test("toggle into windows mode shows a tab strip + active tile body", async () =
   await expect(tabs.first().locator(".w-mark svg")).toHaveCount(1);
   // The terminal body renders inside the active-body host (xterm mounts a canvas).
   await page.waitForSelector(".xterm");
+  // The tab names it: the body comes without its own name bar, and the terminal takes the room.
+  const slot = page.locator("[data-community-slot]").first();
+  await expect(slot.locator("[data-tile-titlebar]")).toBeHidden();
+  await expect.poll(() => slot.evaluate((el) => el.getBoundingClientRect().bottom - el.querySelector(".xterm-screen")!.getBoundingClientRect().bottom)).toBeLessThan(28);
   await page.screenshot({ path: "/tmp/hivemind-windows-view.png" });
 });
 
