@@ -11,10 +11,10 @@ import {
   EllipsisIcon, EllipsisVerticalIcon, ExternalLinkIcon, EyeIcon, EyeOffIcon, FileCodeCornerIcon,
   FileQuestionMarkIcon, Files01Icon, Film01Icon, Folder01Icon, FolderGitIcon, FolderMinusIcon, FolderOpenIcon,
   FolderPlusIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareIcon, GlobeIcon, GripVerticalIcon,
-  HistoryIcon, Home01Icon, Image01Icon, InboxIcon, InfoIcon, KeyboardIcon, LaptopIcon, Layers01Icon,
+  HistoryIcon, Home01Icon, Image01Icon, InboxIcon, InfoIcon, KeyboardIcon, LaptopIcon,
   LayoutGridIcon, LayoutListIcon, ListTodoIcon, LoaderCircleIcon, LogInIcon, LogOutIcon, Mail01Icon,
   MailOpenIcon, Maximize01Icon, MessageSquareIcon, MessagesSquareIcon, MonitorIcon, MonitorSmartphoneIcon,
-  MoveUpRightIcon, NetworkIcon, PaletteIcon, PanelLeftCloseIcon, PanelsTopLeftIcon, PencilIcon, PinIcon,
+  MoveUpRightIcon, NetworkIcon, PaletteIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PanelsTopLeftIcon, PencilIcon, PinIcon,
   PinOffIcon, PlayIcon, PlusIcon, PuzzleIcon, RefreshCwIcon, RotateCwIcon,
   Search01Icon, ServerIcon, ServerOffIcon, Settings01Icon, Settings02Icon, DashboardSquareAddIcon, SlidersHorizontalIcon,
   SmartphoneIcon, SparklesIcon, SquareDashedIcon, SquarePenIcon, SquareTerminalIcon, Tag01Icon, TerminalIcon, TrashIcon,
@@ -87,7 +87,6 @@ export const Inbox = icon("inbox", InboxIcon);
 export const Info = icon("info", InfoIcon);
 export const Keyboard = icon("keyboard", KeyboardIcon);
 export const Laptop = icon("laptop", LaptopIcon);
-export const Layers = icon("layers", Layers01Icon);
 export const LayoutGrid = icon("layout-grid", LayoutGridIcon);
 export const LayoutList = icon("layout-list", LayoutListIcon);
 export const ListTodo = icon("list-todo", ListTodoIcon);
@@ -105,6 +104,7 @@ export const MoveUpRight = icon("move-up-right", MoveUpRightIcon);
 export const Network = icon("network", NetworkIcon);
 export const Palette = icon("palette", PaletteIcon);
 export const PanelLeftClose = icon("panel-left-close", PanelLeftCloseIcon);
+export const PanelLeftOpen = icon("panel-left-open", PanelLeftOpenIcon);
 export const PanelsTopLeft = icon("panels-top-left", PanelsTopLeftIcon);
 export const Pencil = icon("pencil", PencilIcon);
 export const Pin = icon("pin", PinIcon);

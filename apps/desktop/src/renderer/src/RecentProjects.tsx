@@ -11,8 +11,10 @@ const JoinForm = lazy(() => import("./multiplayer/join-form").then((m) => ({ def
 const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 const parent = (p: string) => p.split("/").slice(0, -1).join("/").replace(/^\/home\/[^/]+/, "~");
 
-export function RecentProjects({ open, recents, current, onOpen, onBrowse, onNewWindow, onClose }: {
+export function RecentProjects({ open, joining: joinFirst = false, recents, current, onOpen, onBrowse, onNewWindow, onClose }: {
   open: boolean;
+  /** Open on joining a shared workspace rather than on the list. */
+  joining?: boolean;
   recents: string[];
   current: string | null;
   onOpen: (path: string) => void;
@@ -23,7 +25,8 @@ export function RecentProjects({ open, recents, current, onOpen, onBrowse, onNew
   // A workspace shared from elsewhere is listed under its name, with the others shared.
   const others = recents.filter((p) => p !== current && !p.startsWith("hive://"));
   // Joining a shared workspace is this dialog's second page, not a dialog of its own.
-  const [joining, setJoining] = useState(false);
+  const [joining, setJoining] = useState(joinFirst);
+  useEffect(() => { if (open) setJoining(joinFirst); }, [open, joinFirst]);
   const [shared, setShared] = useState<Awaited<ReturnType<typeof window.hive.joined>>>([]);
   useEffect(() => {
     if (open) void window.hive.joined().then((all) => setShared((all ?? []).filter((j) => `hive://${j.workspace}` !== current)), () => {});

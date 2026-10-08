@@ -224,3 +224,19 @@ test("deleting a frame asks what becomes of its tiles: kept, they are listed onc
   await expect(frames()).toHaveCount(0);
   await expect(terminals).toHaveCount(0);
 });
+
+test("the panel closes from its own header, and opens again from where it was", async () => {
+  await panel().locator("[data-layers-close]").click();
+  await expect(panel()).toHaveCount(0);
+  await page.getByRole("button", { name: "show layers" }).click();
+  await expect(panel()).toBeVisible();
+});
+
+test("joining a shared workspace is in the panel's title menu, and opens on the join form", async () => {
+  await panel().locator("[data-layers-title]").click();
+  await page.locator("[data-layers-join]").click();
+  await expect(page.locator("[data-join-dialog]")).toBeVisible();
+  await expect(page.getByRole("dialog")).toContainText("Join a shared workspace");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});

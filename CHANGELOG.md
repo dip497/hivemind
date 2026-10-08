@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: the Layers panel closes from a button in its header, and reopens from the same corner; the shortcut is Ctrl+B (⌘B on macOS).
+- Changed: "Join a shared workspace…" is in the Layers panel's title menu, next to Open a folder and Recent folders, and opens straight on the join form.
 - Added: a view's manifest says where the app's toolbar goes, `"toolbar": "top" | "bottom" | "hidden" | "off"`; Settings → Views still overrides it per view.
 - Changed: the Windows view has no toolbar; its terminal runs to the bottom of the window. The Layers panel's title menu switches views ("Show as") in every view.
 - Changed: the toolbar's frame button has a dashed-square icon.

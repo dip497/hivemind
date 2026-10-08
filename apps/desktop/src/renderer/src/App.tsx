@@ -192,7 +192,8 @@ export function App() {
   const repoPath = project?.repoPath ?? (root ? path.dirname(root) : null);
   useFsChangedInvalidation(repoPath, root);
   // Ctrl+O / Ctrl+R on the canvas (useCanvasShortcuts): VS Code's Open Folder and Open Recent.
-  const [recentOpen, setRecentOpen] = useState(false);
+  // Which page of the Recent dialog is open: its list, or joining a workspace shared with you.
+  const [recentOpen, setRecentOpen] = useState<"recent" | "join" | null>(null);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const { islandShown } = useChromeState();
   // Make your own plugin (the Add menu, Settings ▸ Plugins): a prompt to copy or hand an agent here.
@@ -232,7 +233,7 @@ export function App() {
   }, []);
   useEffect(() => {
     const onFolder = () => void pickFolder();
-    const onRecent = () => setRecentOpen(true);
+    const onRecent = (e: Event) => setRecentOpen((e as CustomEvent<{ join?: boolean }>).detail?.join ? "join" : "recent");
     // The Layers panel's Projects: this window shows that workspace instead.
     const onWorkspace = (e: Event) => { const repo = (e as CustomEvent<{ repo?: string }>).detail?.repo; if (repo) openRecent(repo); };
     window.addEventListener("hivemind:open-folder", onFolder);
@@ -395,13 +396,14 @@ export function App() {
         </div>
 
         <RecentProjects
-          open={recentOpen}
+          open={!!recentOpen}
+          joining={recentOpen === "join"}
           recents={recents}
           current={repoPath}
           onOpen={openRecent}
           onBrowse={() => void pickFolder()}
           onNewWindow={() => void window.hive.newWindow()}
-          onClose={() => setRecentOpen(false)}
+          onClose={() => setRecentOpen(null)}
         />
         <Suspense fallback={null}>
           {making && <MakePluginDialog kind={making} onClose={() => setMaking(null)}

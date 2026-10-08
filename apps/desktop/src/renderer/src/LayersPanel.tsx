@@ -15,7 +15,7 @@ import { MachineDot, statusWords } from "./machines/status";
 import { A_DEVICE, GONE_MACHINE, openMachines, placeOf, statusOf, useMachines } from "./machines/store";
 import type { MachineInfo } from "../../shared/ipc";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { Layers, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, AddWidget, Blocks, History, Mail, MailOpen, AlarmClock, AlarmClockOff, LayoutList, Settings, Monitor } from "./components/icons";
+import { PanelLeftOpen, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, AddWidget, Blocks, History, Mail, MailOpen, AlarmClock, AlarmClockOff, LayoutList, LogIn, Settings, Monitor } from "./components/icons";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon, agentById, useAgents } from "./agents";
 import { notReady, useAgentPresence } from "./agent-plugins";
@@ -539,9 +539,9 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     const badge = needsYou > 0 ? "var(--color-warn)" : working > 0 ? "var(--color-brand)" : null;
     return (
       <Button variant="secondary" size="icon" onClick={() => setHidden(false)} className="pointer-events-auto absolute left-2.5 top-2.5 z-30"
-        title={needsYou > 0 ? `Show layers (⌘B) — ${needsYou} agent(s) need you` : working > 0 ? `Show layers (⌘B) — ${working} working` : "Show layers (⌘B)"}
+        title={needsYou > 0 ? `Show panel (${MOD}B): ${needsYou} need you` : working > 0 ? `Show panel (${MOD}B): ${working} working` : `Show panel (${MOD}B)`}
         aria-label="show layers">
-        <Layers />
+        <PanelLeftOpen />
         {badge && <span aria-hidden className={`absolute -top-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-[var(--color-bg)] ${needsYou > 0 ? "animate-pulse" : ""}`} style={{ background: badge }} />}
       </Button>
     );
@@ -715,6 +715,9 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           aria-label={needsYou ? `${needsYou} need you: go to the next` : "Nothing needs you"} title={needsYou ? `${needsYou} need you: go to the next` : "Nothing needs you"}>
           <Bell size={ICON} className="size-4" />
           {needsYou > 0 && <span aria-hidden className="absolute -right-1 -top-1 grid min-w-3.5 h-3.5 place-items-center rounded-full px-0.5 text-[10px] font-semibold tabular-nums leading-none text-[var(--color-bg)]" style={{ background: "var(--color-warn)" }}>{needsYou}</span>}
+        </Button>
+        <Button variant="ghost" size="icon-xs" aria-label="Hide panel" title={`Hide panel (${MOD}B)`} data-layers-close onClick={() => setHidden(true)}>
+          <PanelLeftClose size={ICON} className="size-4" />
         </Button>
       </header>
       {searching && (
@@ -1015,10 +1018,11 @@ function PanelMenu({ title, workspaces, here, onHide }: { title: string; workspa
         )}
         <DropdownMenuItem onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:open-folder"))}><FolderOpen />Open a folder…</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:open-recent"))}><History />Recent folders…</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:open-recent", { detail: { join: true } }))} data-layers-join><LogIn />Join a shared workspace…</DropdownMenuItem>
         <DropdownMenuSeparator />
         <ViewChoices />
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onHide} data-layers-hide><PanelLeftClose />Hide panel<DropdownMenuShortcut>⌘B</DropdownMenuShortcut></DropdownMenuItem>
+        <DropdownMenuItem onSelect={onHide} data-layers-hide><PanelLeftClose />Hide panel<DropdownMenuShortcut>{MOD}B</DropdownMenuShortcut></DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
