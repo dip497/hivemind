@@ -26,11 +26,16 @@ panel); its search narrows everything it lists, and its bell counts the agents t
 goes to the next. **New agent**, **New project**, **New machine**, **Add a tool or widget** and
 **Plugins** start things. Below them:
 
-- **Pinned**, then the tiles open here, with their status when that is worth reading.
-- **Projects**: every workspace on this computer, with how many of its agents need you or work.
-  Another one opens in this window.
+- **Pinned**, then the tiles open here, with their status when that is worth reading. What an
+  agent started (`hive ctl spawn`) is listed under it and folds away.
 - **Recents**: this workspace's past agent sessions, newest first. One click resumes it in its
   group.
+- **Projects**: every workspace on this computer, with how many of its agents need you or work.
+  Another one opens in this window.
+
+Hold **Ctrl** (**⌘** on macOS) and the first nine rows show their number; **Ctrl+1** to **Ctrl+9**
+go to that row's tile, counted as the panel lists them, from a terminal too. A frame's **⋮** (or a
+right-click) opens its menu, the same one as the **⋯** on its header on the canvas.
 
 - **Pin** a tile from its **⋮** menu (or right-click it, then press **P**): it goes to **Pinned**
   at the top, whatever the panel lists below. **R** renames it, **D** closes it. Hover a row to

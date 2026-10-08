@@ -33,6 +33,7 @@ import { MenuItem } from "./components/ui/menu-item";
 import { layersView, recentsView, type ModelTile, type RecentSession } from "@hivemind/core/layers";
 import type { WorkspaceSummary } from "../../shared/ipc";
 import { useSettings, patchSettings } from "./settings-store";
+import { setPanelOrder } from "./workspace/panel-order";
 import { useViewLayout } from "./workspace/view-layout-store";
 import { DEFAULT_LAYERS_PREFS, type LayersPrefs } from "@hivemind/core/settings-schema";
 
@@ -132,6 +133,8 @@ const NEEDS_YOU = (s: TileStatusKind | null): boolean =>
  * 4.5:1 on the panel (see .u-eyebrow).
  */
 const ICON = 16;
+/** The key that jumps to a row with its number: ⌘ on macOS, Ctrl elsewhere. */
+const MOD = typeof window !== "undefined" && window.hive?.platform === "darwin" ? "⌘" : "Ctrl ";
 const STROKE = 1.5;
 const LABEL = "text-[12px] font-medium text-[var(--color-fg2)]";
 const COUNT = "text-[11px] tabular-nums text-[var(--color-fg2)]";
@@ -198,7 +201,7 @@ interface RowActions {
 }
 
 /** One tile's row: its mark, its name, and its status when that is worth reading. */
-const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0, folded = false }: { t: ModelTile; depth: number; selected: boolean; actions: RowActions; started?: number; folded?: boolean }) {
+const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0, folded = false, jumpKey }: { t: ModelTile; depth: number; selected: boolean; actions: RowActions; started?: number; folded?: boolean; jumpKey?: number }) {
   const st = t.status;
   const isPlan = !!tileKind(t.kind).waitsOnPerson;
   return (
@@ -237,8 +240,12 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
       </span>
       {/* Name first, so every row's text starts at the same x. */}
       <span className="truncate flex-1 min-w-0">{t.name}</span>
-      {/* A word only for what you must act on; `working` is a dot. Only needs-you pulses. */}
-      {st === "working" ? (
+      {/* While Ctrl/⌘ is held: the number that jumps here, in place of its status. */}
+      {jumpKey !== undefined ? (
+        <kbd data-layer-jump={jumpKey} className="grid min-w-[18px] h-[18px] shrink-0 place-items-center rounded-[5px] px-1 font-sans text-[11px] leading-none tabular-nums text-[var(--color-fg2)] shadow-[inset_0_0_0_1px_var(--color-line2)]">
+          {MOD}{jumpKey}
+        </kbd>
+      ) : /* A word only for what you must act on; `working` is a dot. Only needs-you pulses. */ st === "working" ? (
         <span aria-label="working" title="working" className="shrink-0 size-1.5 rounded-full group-hover:hidden" style={{ background: STATUS_COLOR[st] }} />
       ) : st !== "idle" ? (
         <span
@@ -447,6 +454,26 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     ...(tileActions ? { close: (id: string) => closeRef.current?.(id) } : {}),
   }), [!!tileActions, toggleGroup]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The rows in the order this render draws them (renderTile fills it): what Ctrl/⌘+1…9 count.
+  const drawn = useRef<string[]>([]);
+  drawn.current = [];
+  useEffect(() => { setPanelOrder(drawn.current); });
+  useEffect(() => () => setPanelOrder([]), []);
+  // Held a moment, Ctrl or ⌘ numbers the first nine rows; any key or letting go hides them.
+  const [numbered, setNumbered] = useState(false);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const stop = () => { if (timer) clearTimeout(timer); timer = null; setNumbered(false); };
+    const down = (e: KeyboardEvent) => {
+      if ((e.key === "Control" || e.key === "Meta") && !e.repeat) { stop(); timer = setTimeout(() => setNumbered(true), 400); }
+      else if (e.key !== "Control" && e.key !== "Meta") { if (timer) clearTimeout(timer); timer = null; }
+    };
+    window.addEventListener("keydown", down, true);
+    window.addEventListener("keyup", stop, true);
+    window.addEventListener("blur", stop);
+    return () => { stop(); window.removeEventListener("keydown", down, true); window.removeEventListener("keyup", stop, true); window.removeEventListener("blur", stop); };
+  }, []);
+
   // Collapsed → a small FLOATING button over the canvas's top-left; its dot still says
   // "an agent needs you" / "busy".
   if (hidden) {
@@ -474,6 +501,9 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   const needsYouIn = (fid: string): number => shownIn(fid).filter((t) => t.needsYou).length + childFramesOf(fid).reduce((n, k) => n + needsYouIn(k.id), 0);
 
   const renderTile = (t: ModelTile, depth: number): ReactNode => {
+    drawn.current.push(t.id);
+    const n = drawn.current.length;
+    const key = numbered && n <= 9 ? n : undefined;
     if (renamingTile?.id === t.id) {
       const commit = () => { tileActions?.onRename(t.id, renamingTile.draft); setRenamingTile(null); };
       return (
@@ -486,10 +516,10 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     }
     const started = view.kids.get(t.id) ?? [];
     const folded = collapsed.has(`tile:${t.id}`);
-    if (!started.length) return <TileRow key={t.id} t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} />;
+    if (!started.length) return <TileRow key={t.id} t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} jumpKey={key} />;
     return (
       <div key={t.id} role="group" aria-label={`${t.name} and what it started`} data-layer-started={t.id}>
-        <TileRow t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} started={started.length} folded={folded} />
+        <TileRow t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} started={started.length} folded={folded} jumpKey={key} />
         {!folded && started.map((k) => renderTile(k, depth + 1))}
       </div>
     );

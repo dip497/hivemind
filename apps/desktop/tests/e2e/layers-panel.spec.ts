@@ -48,6 +48,21 @@ test("a tile pinned from its menu leads the panel, under Pinned, and is not list
   await expect(panel().locator(`[data-layer-tile="${id}"]`)).toHaveCount(1);
 });
 
+test("held, Ctrl numbers the rows as the panel lists them, and Ctrl+number goes to that one", async () => {
+  const pinned = panel().locator("[data-layers-pinned] [data-layer-tile]").first();
+  const pinnedId = (await pinned.getAttribute("data-layer-tile"))!;
+  await expect(panel().locator("[data-layer-jump]")).toHaveCount(0);
+  await page.keyboard.down("Control");
+  // The pinned tile is listed first, so it is 1, whatever order the tiles were opened in.
+  await expect(pinned.locator('[data-layer-jump="1"]')).toBeVisible();
+  await expect(panel().locator("[data-layer-jump]")).toHaveCount(3);
+  await page.keyboard.up("Control");
+  // Ctrl+1, as main hands it on: it takes the key before the page, which synthetic keys skip.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:shortcut", { detail: "tile:1" })));
+  await expect(panel().locator("[data-layer-jump]")).toHaveCount(0);
+  await expect(panel().locator(`[data-layer-tile="${pinnedId}"]`)).toHaveAttribute("data-active", "true");
+});
+
 test("the hover card says what a row is", async () => {
   const row = rows().first();
   await row.hover();

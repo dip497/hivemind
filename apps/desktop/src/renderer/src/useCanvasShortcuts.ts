@@ -6,6 +6,7 @@
  * fit-all, F2 rename, and the board's keys (8 note, 9 checklist, ⌫ delete,
  * ⌘D duplicate, ⌘Z / ⌘⇧Z undo and redo) — with the same text-field guards.
  */
+import { panelOrder } from "./workspace/panel-order";
 import { canSpawnKind } from "./tiles/api";
 import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { inEditable } from "./dom-focus";
@@ -182,7 +183,12 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
       else if (action === "settings") window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: {} }));
       else if (action === "next-tile") step(1);
       else if (action === "prev-tile") step(-1);
-      else if (action.startsWith("tile:")) select(tiles[Number(action.slice(5)) - 1]?.id);
+      else if (action.startsWith("tile:")) {
+        // As the Layers panel lists them, when it is shown; else in the order opened.
+        const n = Number(action.slice(5)) - 1;
+        const listed = panelOrder().filter((id) => tiles.some((t) => t.id === id));
+        select(listed.length ? listed[n] : tiles[n]?.id);
+      }
     };
     // A native agent notification was clicked → select + fly to that tile.
     const onFocusTile = (e: Event) => {
