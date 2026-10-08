@@ -350,7 +350,8 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       if (!tile || !el) { setCard(null); return; }
       cardTimer.current = setTimeout(() => {
         const r = el.getBoundingClientRect();
-        setCard({ tile, top: r.top, left: r.right + 8 });
+        // Beside the row, and never past the bottom of the window (the card is about 100px tall).
+        setCard({ tile, top: Math.max(8, Math.min(r.top, window.innerHeight - 112)), left: r.right + 8 });
       }, 450);
     },
     ...(tileActions ? { close: (id: string) => closeRef.current?.(id) } : {}),
@@ -464,9 +465,10 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       <section key={key} aria-label={label || "Tiles"} className="mt-2 first:mt-1" {...attr}>
         {label && (
           <button type="button" onClick={() => toggleGroup(`section:${key}`)} aria-expanded={!folded}
-            className="flex w-full items-center gap-1 h-7 pl-4 pr-3 text-[11px] font-medium text-[var(--color-fg3)] hover:text-[var(--color-fg2)]">
+            className="group/sec flex w-full items-center gap-1 h-7 pl-4 pr-3 text-[11px] font-medium text-[var(--color-fg3)] transition-colors duration-150 hover:text-[var(--color-fg2)]">
             <span>{label}</span>
-            {folded ? <ChevronRight size={11} /> : <ChevronDown size={11} className="opacity-0 group-hover:opacity-100" />}
+            {/* Open or folded, it says it folds: quiet until the heading is pointed at. */}
+            {folded ? <ChevronRight size={11} /> : <ChevronDown size={11} className="opacity-40 transition-opacity duration-150 group-hover/sec:opacity-100" />}
             <span className="ml-auto font-mono text-[10.5px] tabular-nums">{list.length}</span>
           </button>
         )}
@@ -567,7 +569,7 @@ function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="w-[170px]">
         <DropdownMenuRadioGroup value={prefs[key]} onValueChange={(v) => setPref(key, v)}>
-          {VIEW_CHOICES[key].map(([id, text]) => <DropdownMenuRadioItem key={id} value={id} className="text-[12px]" data-layers-choice={`${key}:${id}`}>{text}</DropdownMenuRadioItem>)}
+          {VIEW_CHOICES[key].map(([id, text]) => <DropdownMenuRadioItem key={id} value={id} data-layers-choice={`${key}:${id}`}>{text}</DropdownMenuRadioItem>)}
         </DropdownMenuRadioGroup>
       </DropdownMenuSubContent>
     </DropdownMenuSub>
@@ -595,10 +597,10 @@ function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (
             <span className="text-[11.5px] text-[var(--color-fg3)]">{chosen.length === 0 ? "All" : `${chosen.length} selected`}</span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-[200px]">
-            <DropdownMenuCheckboxItem className="text-[12px]" checked={chosen.length === 0} onCheckedChange={() => setPref("machines", [])} onSelect={(e) => e.preventDefault()} data-layers-machine="all">All machines</DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={chosen.length === 0} onCheckedChange={() => setPref("machines", [])} onSelect={(e) => e.preventDefault()} data-layers-machine="all">All machines</DropdownMenuCheckboxItem>
             <DropdownMenuSeparator />
             {machines.map((g) => (
-              <DropdownMenuCheckboxItem key={g.key} className="text-[12px]" checked={chosen.includes(g.key)} onCheckedChange={() => toggleMachine(g.key)} onSelect={(e) => e.preventDefault()} data-layers-machine={g.key}>
+              <DropdownMenuCheckboxItem key={g.key} checked={chosen.includes(g.key)} onCheckedChange={() => toggleMachine(g.key)} onSelect={(e) => e.preventDefault()} data-layers-machine={g.key}>
                 <span className="truncate">{g.label}</span>
               </DropdownMenuCheckboxItem>
             ))}
@@ -608,7 +610,7 @@ function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (
         {radio("groupBy", "Group by")}
         {radio("sortBy", "Sort by")}
         <DropdownMenuSeparator />
-        <DropdownMenuCheckboxItem className="text-[12px]" checked={prefs.showMachines} onCheckedChange={(v) => setPref("showMachines", !!v)} onSelect={(e) => e.preventDefault()} data-layers-show-machines>
+        <DropdownMenuCheckboxItem checked={prefs.showMachines} onCheckedChange={(v) => setPref("showMachines", !!v)} onSelect={(e) => e.preventDefault()} data-layers-show-machines>
           Show idle machines
         </DropdownMenuCheckboxItem>
         <DropdownMenuItem disabled={!altered} onSelect={() => patchSettings("views.layers", DEFAULT_LAYERS_PREFS)} data-layers-reset>Reset to defaults</DropdownMenuItem>
@@ -621,7 +623,7 @@ function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (
 function HoverCard({ tile, top, left, now, frame, agent }: { tile: ModelTile; top: number; left: number; now: number; frame?: LayerFrame; agent: string }) {
   const when = ago(tile.activity, now);
   return (
-    <div role="tooltip" data-layers-card className="hm-popover pointer-events-none fixed z-50 w-[240px] px-3 py-2.5" style={{ top, left }}>
+    <div role="tooltip" data-layers-card className="hm-popover pointer-events-none fixed z-50 w-[240px] px-3 py-2.5 animate-in fade-in-0 slide-in-from-left-1 duration-150 ease-out" style={{ top, left }}>
       <p className="truncate text-[13px] font-medium text-[var(--color-fg)]">{tile.name}</p>
       <p className="mt-0.5 text-[11.5px] text-[var(--color-fg3)]">{[when, tile.needsYou ? "needs you" : STATUS_LABEL[tile.status]].filter(Boolean).join(" · ")}</p>
       <div className="mt-2 flex flex-wrap gap-1 text-[11px] text-[var(--color-fg2)]">
