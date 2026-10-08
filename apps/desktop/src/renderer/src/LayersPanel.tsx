@@ -680,7 +680,8 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   const shownMachines = machineGroups.filter((g) => (g.key === "local" && !view.filtering) || g.frames.some((f) => !view.filtering || hasShown(f.id)));
 
   return (
-    <aside className="hm-layers relative h-full shrink-0 flex flex-row bg-[var(--color-bg2)] border-r border-[var(--color-line)] overflow-hidden" style={{ width }} aria-label="Layers">
+    // A sheet set in from the window's edges, its corners round, as the Appearance panel is.
+    <aside className="hm-layers relative m-2 h-[calc(100%-1rem)] shrink-0 flex flex-row bg-[var(--color-bg2)] border border-[var(--color-line)] rounded-[14px] shadow-[var(--hm-shadow-2)] overflow-hidden" style={{ width }} aria-label="Layers">
       {/* The rail picks what the panel shows; what opens elsewhere sits at its foot. */}
       <nav aria-label="Panel" className="w-11 shrink-0 flex flex-col items-center gap-1 py-2.5 border-r border-[var(--color-line)]">
         <RailButton label="Tiles" pane="tiles" active={pane} onPick={pickPane} icon={<LayoutList />} badge={needsYou} />

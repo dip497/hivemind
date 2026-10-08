@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Changed: the Layers panel and the Appearance panel are sheets set in from the window's edges, with round corners.
 - Fixed: an agent's screen could be garbled after switching project or view, its text running into older text ("Theeotel-collectorNdepends…"). The screen it was shown again was a copy, and an agent that repaints only what changed (Claude Code) patched its own idea of the screen over that copy. Whenever a session's screen is shown from a copy (attaching to a running session, joining it, showing it again), the host now makes the program repaint all of it, once.
 - Fixed: resizing a terminal now resizes its grid and tells the program in the same step: the first size of a resize burst at once, then only the one it ends at. Before, the grid could be one width while the program drew at another, which wraps its lines and leaves what it meant to erase. The session's size coming back no longer re-measures the tile mid-drag (it made a drag resize the program on every frame).
 - Changed: a frame's menu offers **Add a tool or widget…**, the Add menu adding into that frame, instead of its own **Open ▸** list.
