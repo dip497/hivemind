@@ -73,6 +73,13 @@ test("the hover card says what a row is", async () => {
 });
 
 test("the View menu groups by status or not at all; a filter that leaves nothing says so and resets", async () => {
+  // What is chosen is checked, in every choice.
+  await panel().locator("[data-layers-view-menu]").click();
+  await page.locator('[data-layers-view="status"]').click();
+  await expect(page.locator('[data-layers-choice="status:all"] [data-menu-checked] svg')).toBeVisible();
+  await expect(page.locator('[data-layers-choice="status:working"] [data-menu-checked]')).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
   await choose("groupBy", "status");
   await expect(panel().locator('[data-layers-bucket="idle"]')).toBeVisible();
   await choose("groupBy", "none");

@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: in single-choice menus (the Layers View menu's Status, Group by and Sort by, Recents' grouping) the chosen option was marked by a dot too small to see; it shows a check, as in multi-choice menus.
 - New: the Layers panel's **Recents** groups past sessions by agent (the default), by project or by date, or not at all, from **By agent ⌄** at its top (`hive config set views.layers.recentsBy project`). Each group folds and shows its newest five with its own **Show more**.
 - Changed: the Layers panel has a rail on its left edge: **Tiles**, **Recents** and **Machines** each get the panel to themselves, with **Plugins** and **Settings** at its foot. In Tiles, frames with a folder are listed under **Projects** (their worktrees under them) and frames without one under **Groups**; grouping by project is the default. The other workspaces on this computer moved from a Projects section into the title's menu. **New machine** and the machines moved to the Machines pane; the View menu's *Show idle machines* is gone (setting `views.layers.showMachines` removed).
 - Fixed: a frame's ⋯ menu on the canvas opened away from its button, further the more the canvas was zoomed or panned. It opens at the button now.
