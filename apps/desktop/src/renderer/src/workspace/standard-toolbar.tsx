@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Download, Earth, LoaderCircle, MoveUpRight, Palette, RotateCw, Scan, Shapes, Upload, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, Download, Earth, LoaderCircle, MoveUpRight, Palette, RotateCw, Scan, Shapes, Sparkles, Upload, type LucideIcon } from "lucide-react";
 import type { ToolbarAction, ToolbarActionId } from "@hivemind/core/toolbar";
 import { Button } from "../components/ui/button";
 import { MenuItem } from "../components/ui/menu-item";
@@ -225,6 +225,14 @@ function BoardAction({ action, labels, compact, repoPath, onBoard, onTile, board
           </>}
           {order.length === 0 && <p className="px-2 py-3 text-[12px] text-[var(--color-fg3)]">Nothing matches.</p>}
         </div>
+      </div>
+      {/* Not here yet: an agent makes it. */}
+      <div className="border-t border-[var(--color-line)] pt-1">
+        <MenuItem variant="muted" data-add-make onClick={() => { setOpen(false); window.dispatchEvent(new CustomEvent("hivemind:make-plugin", { detail: { kind: tab === "tool" ? "tool" : "widget" } })); }}>
+          <span className="grid size-4 shrink-0 place-items-center [&>svg]:size-3.5"><Sparkles /></span>
+          <span className="flex-1">Make your own…</span>
+          <span className="text-[10.5px] text-[var(--color-fg3)]">an agent builds it</span>
+        </MenuItem>
       </div>
     </div>}
   </div>;

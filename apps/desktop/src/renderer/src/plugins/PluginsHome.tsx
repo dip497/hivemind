@@ -5,7 +5,7 @@
  * default agent, the view in use, a tool or widget switched on or off.
  */
 import { useEffect, useState } from "react";
-import { ChevronRight, FolderPlus, RefreshCw, Trash } from "lucide-react";
+import { ChevronRight, FolderPlus, RefreshCw, Sparkles, Trash } from "lucide-react";
 import { isPluginEnabled } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -38,6 +38,8 @@ export function PluginsHome() {
         <Button size="sm" variant={scope === "hub" ? "secondary" : "outline"} aria-pressed={scope === "hub"} data-plugins-scope="hub" onClick={() => setScope("hub")}>On HiveHub</Button>
       </div>
       <Input type="search" placeholder="Search plugins" aria-label="Search plugins" value={query} onChange={(e) => setQuery(e.target.value)} className="flex-1 min-w-[160px]" />
+      {/* Not on HiveHub nor here: an agent makes it. */}
+      <Button size="sm" data-make-plugin-open onClick={() => window.dispatchEvent(new CustomEvent("hivemind:make-plugin", { detail: { kind: kind === "tool" || kind === "view" ? kind : "widget" } }))}><Sparkles />Make your own</Button>
     </div>
     <div className="catalog-filters" role="group" aria-label="Plugin type">
       {(["all", ...PLUGIN_KINDS] as const).map((k) => (

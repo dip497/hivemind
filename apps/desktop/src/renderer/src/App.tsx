@@ -33,6 +33,7 @@ import { getNotificationSettings, setNotificationSettingsCache, subscribeNotific
 import type { NotificationSettings } from "../../shared/ipc";
 const SettingsPages = lazy(() => import("./settings-panels"));
 // Sharing's dialogs load when opened: they are nothing the first frame draws.
+const MakePluginDialog = lazy(() => import("./plugins/MakePlugin").then((m) => ({ default: m.MakePluginDialog })));
 const PeopleDialog = lazy(() => import("./multiplayer/people-dialog").then((m) => ({ default: m.PeopleDialog })));
 
 // Last 8 opened folders, most recent first. Persisted via localStorage —
@@ -194,6 +195,13 @@ export function App() {
   const [recentOpen, setRecentOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const { islandShown } = useChromeState();
+  // Make your own plugin (the Add menu, Settings ▸ Plugins): a prompt to copy or hand an agent here.
+  const [making, setMaking] = useState<"widget" | "tool" | "view" | null>(null);
+  useEffect(() => {
+    const open = (e: Event) => { setSettingsOpen(false); setMaking((e as CustomEvent<{ kind?: "widget" | "tool" | "view" }>).detail?.kind ?? "widget"); };
+    window.addEventListener("hivemind:make-plugin", open);
+    return () => window.removeEventListener("hivemind:make-plugin", open);
+  }, []);
   // Someone asks to join a workspace of the person's, hosted here or on another of their devices:
   // they let them in, or not. Answered at another window or device, the question goes.
   const joinAsked = useRef(new Map<string, string | number>());
@@ -411,6 +419,8 @@ export function App() {
           onClose={() => setRecentOpen(false)}
         />
         <Suspense fallback={null}>
+          {making && <MakePluginDialog kind={making} onClose={() => setMaking(null)}
+            onStart={(prompt) => window.dispatchEvent(new CustomEvent("hivemind:deliver-to-agent", { detail: { text: prompt } }))} />}
           {repoPath && peopleOpen && <PeopleDialog repo={repoPath} open onClose={() => setPeopleOpen(false)} />}
         </Suspense>
         <InitWorkspacePrompt
