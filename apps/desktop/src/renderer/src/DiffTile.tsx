@@ -750,7 +750,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             >
               {t.label}
               {t.badge != null && (
-                <span className="px-1 rounded-full bg-[var(--color-brand)] text-white text-[8.5px] leading-none py-0.5 tabular-nums">
+                <span className="text-[11px] leading-none tabular-nums text-[var(--color-fg2)]">
                   {t.badge}
                 </span>
               )}

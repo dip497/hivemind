@@ -32,7 +32,7 @@ const buttonVariants = cva(
         default: "h-8 px-3",
         xs: "h-6 gap-1 rounded-sm px-2 text-[11px]",
         /* Tile and canvas chrome, where a taller control would move the layout. */
-        "2xs": "h-5 gap-1 rounded-sm px-1.5 text-[10.5px] [&_svg:not([class*='size-'])]:size-3",
+        "2xs": "h-5 gap-1 rounded-sm px-1.5 text-[11px] [&_svg:not([class*='size-'])]:size-3",
         micro: "h-4 gap-0.5 rounded-sm px-1 text-[10px] [&_svg:not([class*='size-'])]:size-2.5",
         sm: "h-7 px-2.5 text-xs",
         lg: "h-9 px-4",

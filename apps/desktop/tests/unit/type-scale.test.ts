@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const SCALE = new Set([10, 11, 12, 14, 15]);
-const FILES = ["LayersPanel.tsx", "FrameMenu.tsx", "FrameNode.tsx", "components/ui/dropdown-menu.tsx"];
+const FILES = ["LayersPanel.tsx", "FrameMenu.tsx", "FrameNode.tsx", "components/ui/dropdown-menu.tsx", "components/ui/badge.tsx"];
 const src = (f: string) => fs.readFileSync(path.join(import.meta.dirname, "../../src/renderer/src", f), "utf8");
 
 /** What in `text` sets a size off the scale, by line. */
