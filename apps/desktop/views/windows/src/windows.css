@@ -15,10 +15,11 @@ body { display: flex; flex-direction: column; }
 .w-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
 .w-glyph { flex: none; width: 16px; text-align: center; color: var(--hm-color-fg3, #8a8f98); font-family: var(--hm-font-mono, monospace); font-size: 11px; }
 .w-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-/* Minimize and close take room only where they can be used: the hovered or selected tab. */
+/* Minimize and close show on the tab under the pointer (or reached by keyboard) and take no room
+   otherwise: every tab, the selected one too, keeps its width for its name. */
 .w-act { flex: none; display: none; place-items: center; width: 20px; height: 20px; border: 0; border-radius: 5px;
   background: transparent; color: var(--hm-color-fg3, #8a8f98); cursor: pointer; opacity: 0; font-size: 14px; line-height: 1; }
-.w-tab:hover .w-act, .w-tab:focus-within .w-act, .w-tab[aria-selected="true"] .w-act { display: grid; opacity: 1; }
+.w-tab:hover .w-act, .w-tab:focus-visible .w-act, .w-tab:has(.w-act:focus-visible) .w-act { display: grid; opacity: 1; }
 .w-act:hover { background: color-mix(in srgb, var(--hm-color-fg, #fff) 12%, transparent); color: var(--hm-color-fg, #e6e6e6); }
 .w-stage { position: relative; flex: 1; min-height: 0; }
 .w-empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--hm-color-fg3, #8a8f98); font-size: 13px; }
