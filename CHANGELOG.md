@@ -9,6 +9,11 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: deleting a frame that holds tiles asks what becomes of them: **Keep them** (they stay running, loose on the canvas) or **Close** them with the frame. The rail menu and the frame's × both ask.
+- New: the Layers panel's **Canvas** section (tiles in no frame) has **Close all**, with a confirm.
+- Fixed: the Layers panel's Canvas section listed each tile of a deleted frame once per tile in it (a frame of 9 tiles showed each 9 times). Deleting a frame now also clears its tiles' membership.
+- Fixed: the Layers hover card's padding, and it opens beside the panel instead of over the row.
+- New (view protocol 1.11): each tile in `structure` carries its `icon`, the mark the app draws for it, as one `<svg>` in `currentColor`. The Windows view's tabs use it: agents show their logo instead of "✦", and a tab shows its full name on hover only when the name is cut short.
 - New: the Layers panel shows **Projects** (every workspace on this computer, with how many agents need you or work there; another one opens in this window) and **Recents** (this workspace's past agent sessions, newest first; a click resumes one in its group). It is there for an empty workspace too.
 - Changed: the Layers panel reads like a sidebar. Its title is the workspace's name (⌄: recent projects, open a project, hide the panel); search and a bell (it counts the agents that need you and goes to the next) are its only icons; **New agent**, **New project**, **New machine**, **Add a tool or widget** and **Plugins** are named rows; the tiles' heading says how they are grouped (**By machine ⌄**) and opens the View menu. One type and icon scale throughout, and a tool with no icon shows a drawn window instead of a character.
 - New: the Layers panel can pin tiles (Pinned, at the top) and has a **View** menu: filter by status, last activity and machine; group by machine, group, date, status or agent, or not at all; sort by canvas order, last activity or name; show or hide idle machines. Each row has a ⋮ menu (Pin P, Rename R, Close D) and a hover card. The View menu is kept in settings (`views.layers`); pins and folded sections per workspace, for you alone. What the panel lists is worked out by `@hivemind/core/layers`.

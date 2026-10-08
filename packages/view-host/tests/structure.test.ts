@@ -1,7 +1,7 @@
 // What a view is told the workspace holds (`structure`), as the window and a device both build it:
 // each frame with the colour and machine its host resolves, the frame it nests in, its branch and
 // its folder by name alone; each tile in its frame (or none), by its name or else its label, with
-// its agent; and the links between agents, nothing more of them.
+// its agent and its icon, when the host draws one; and the links between agents, nothing more of them.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { viewStructure } from "../src/structure.ts";
@@ -23,6 +23,7 @@ test("frames, tiles and links as the protocol says, the host's colours and machi
     frameOf: { t1: "f1", t2: "f2" },
     name: (t) => (t.id === "t1" ? "Fixing the nav" : undefined),
     agent: (t) => (t.kind === "claude" ? "claude" : undefined),
+    icon: (t) => (t.kind === "editor" ? undefined : `<svg data-kind="${t.kind}"></svg>`),
     links: { pipes: [{ src: "t1", dst: "t2", since: 1 } as { src: string; dst: string }], spawns: [{ parent: "t1", child: "t2" }] },
     color: (f) => (f.color.startsWith("#") ? f.color : "#8cb4e5"),
     machine: (f) => (f.workspacePath?.startsWith("machine://") ? { name: "build box", state: "online" } : undefined),
@@ -36,8 +37,8 @@ test("frames, tiles and links as the protocol says, the host's colours and machi
       { id: "f4", title: "Group 4", color: "#000000" },
     ],
     tiles: [
-      { id: "t1", frameId: "f1", kind: "claude", name: "Fixing the nav", agent: "claude" },
-      { id: "t2", frameId: "f2", kind: "shell", name: "Shell #1" },
+      { id: "t1", frameId: "f1", kind: "claude", name: "Fixing the nav", agent: "claude", icon: '<svg data-kind="claude"></svg>' },
+      { id: "t2", frameId: "f2", kind: "shell", name: "Shell #1", icon: '<svg data-kind="shell"></svg>' },
       { id: "t3", frameId: null, kind: "editor", name: "Editor" },
     ],
     links: { pipes: [{ src: "t1", dst: "t2" }], spawns: [{ parent: "t1", child: "t2" }] },

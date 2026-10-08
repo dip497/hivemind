@@ -13,7 +13,8 @@ body { display: flex; flex-direction: column; }
 .w-tab[aria-selected="true"] { background: color-mix(in srgb, var(--hm-color-fg, #fff) 10%, transparent); color: var(--hm-color-fg, #e6e6e6); }
 .w-tab:focus-visible { outline: 2px solid var(--hm-color-brand, #6d9eff); outline-offset: -2px; }
 .w-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
-.w-glyph { flex: none; width: 16px; text-align: center; color: var(--hm-color-fg3, #8a8f98); font-family: var(--hm-font-mono, monospace); font-size: 11px; }
+.w-mark { flex: none; display: grid; place-items: center; width: 16px; height: 16px; }
+.w-mark svg { width: 16px; height: 16px; }
 .w-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 /* Minimize and close show on the tab under the pointer (or reached by keyboard) and take no room
    otherwise: every tab, the selected one too, keeps its width for its name. */

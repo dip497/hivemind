@@ -35,6 +35,7 @@ export interface FrameOpsCtx {
   boardRef: MutableRefObject<BoardObject[]>;
   // setters + actions
   setFrames: Dispatch<SetStateAction<FrameState[]>>;
+  setFrameOf: Dispatch<SetStateAction<Record<string, string>>>;
   setPositions: Dispatch<SetStateAction<Record<string, { x: number; y: number }>>>;
   setSelectedFrameId: Dispatch<SetStateAction<string | null>>;
   focusTile: (id: string) => void;
@@ -48,7 +49,7 @@ export function useFrameOps(ctx: FrameOpsCtx) {
   const {
     repoPath, positions, sizes, tiles, frameOf, boxes,
     framesRef, tilesRef, frameOfRef, positionsRef, sizesRef, lastActiveFrameRef, boardRef,
-    setFrames, setPositions, setSelectedFrameId, focusTile, shiftBoxes, placeBoxes,
+    setFrames, setFrameOf, setPositions, setSelectedFrameId, focusTile, shiftBoxes, placeBoxes,
   } = ctx;
 
   const addFrame = useCallback(() => {
@@ -87,8 +88,11 @@ export function useFrameOps(ctx: FrameOpsCtx) {
     // silently promotes it to a top-level frame. The worktrees stay on DISK
     // (re-attachable via the picker); the destructive removal is the explicit
     // detach (×) on a worktree frame, not a canvas delete.
-    setFrames((fs) => fs.filter((f) => f.id !== id && f.parentFrameId !== id));
-  }, [setFrames]);
+    const gone = new Set([id, ...framesRef.current.filter((f) => f.parentFrameId === id).map((f) => f.id)]);
+    setFrames((fs) => fs.filter((f) => !gone.has(f.id)));
+    // Its tiles stay, loose on the canvas: membership in a frame that is gone means nothing.
+    setFrameOf((m) => Object.fromEntries(Object.entries(m).filter(([, f]) => !gone.has(f))));
+  }, [setFrames, setFrameOf, framesRef]);
 
   // Opt-in "tidy": snap a frame's contents — its member tiles, board boxes AND its
   // worktree sub-frames — into Columns / Rows / Grid. A child frame moves with its

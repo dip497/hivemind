@@ -22,6 +22,7 @@ import {
   DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 import { Button } from "./components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "./components/ui/dialog";
 import { Input } from "./components/ui/input";
 import { AGENT_TILE_KIND } from "./tile-kinds";
 import { tileKind } from "./tiles";
@@ -194,6 +195,7 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions }: { t: Mode
   return (
     <div
       role="button"
+      aria-label={t.name}
       tabIndex={0}
       onClick={() => actions.focus(t.id)}
       onKeyDown={(e) => { if (e.key === "Enter") actions.focus(t.id); }}
@@ -279,6 +281,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   const [renamingTile, setRenamingTile] = useState<{ id: string; draft: string } | null>(null);
   const [card, setCard] = useState<{ tile: ModelTile; top: number; left: number } | null>(null);
   const [searching, setSearching] = useState(false);
+  const [closingLoose, setClosingLoose] = useState(false);
   const [query, setQuery] = useState("");
   // Projects: every workspace here, as main counts it; read again as statuses change.
   const [projects, setProjects] = useState<WorkspaceSummary[]>([]);
@@ -413,8 +416,9 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       if (!tile || !el) { setCard(null); return; }
       cardTimer.current = setTimeout(() => {
         const r = el.getBoundingClientRect();
-        // Beside the row, and never past the bottom of the window (the card is about 100px tall).
-        setCard({ tile, top: Math.max(8, Math.min(r.top, window.innerHeight - 112)), left: r.right + 8 });
+        const edge = el.closest("aside")?.getBoundingClientRect().right ?? r.right;
+        // Beside the panel, level with the row, and never past the bottom of the window.
+        setCard({ tile, top: Math.max(8, Math.min(r.top - 6, window.innerHeight - 124)), left: edge + 8 });
       }, 450);
     },
     ...(tileActions ? { close: (id: string) => closeRef.current?.(id) } : {}),
@@ -473,7 +477,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     const commitRename = () => { const t = renaming?.draft.trim(); if (t) frameActions?.onRename(gid, t); setRenaming(null); };
     return (
       <div key={gid} className={depth === 0 ? "mt-1.5 first:mt-1" : ""}>
-        <div className="group/grp flex items-center gap-0.5 h-8 pr-2 mx-2 rounded-lg hover:bg-[var(--color-bg3)] transition-colors" style={{ paddingLeft: depth * 14 }}
+        <div data-layers-frame={gid} className="group/grp flex items-center gap-0.5 h-8 pr-2 mx-2 rounded-lg hover:bg-[var(--color-bg3)] transition-colors" style={{ paddingLeft: depth * 14 }}
           onContextMenu={frameActions ? (e) => { e.preventDefault(); setMenu({ frame, x: e.clientX, y: e.clientY }); } : undefined}>
           <Button variant="ghost" size="icon-2xs" onClick={() => toggleGroup(gid)} aria-label={isCollapsed ? "expand" : "collapse"}>
             {isCollapsed ? <ChevronRight size={14} strokeWidth={STROKE} /> : <ChevronDown size={14} strokeWidth={STROKE} />}
@@ -541,7 +545,9 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   };
 
   const groupByMachine = prefs.groupBy === "machine" && machineGroups.length > 1;
-  const looseTiles = view.tree ? (view.byFrame.get(null) ?? []).concat(tiles.filter((t) => t.frameId && !frames.some((f) => f.id === t.frameId)).flatMap((t) => view.byFrame.get(t.frameId) ?? [])) : [];
+  // Loose: in no frame, or in one that is gone. Each such frame id once, or its tiles repeat.
+  const goneFrames = new Set(tiles.flatMap((t) => (t.frameId && !frames.some((f) => f.id === t.frameId) ? [t.frameId] : [])));
+  const looseTiles = view.tree ? (view.byFrame.get(null) ?? []).concat([...goneFrames].flatMap((id) => view.byFrame.get(id) ?? [])) : [];
   const nothing = view.pinned.length === 0 && (view.tree ? ![...view.byFrame.values()].some((l) => l.length) : view.buckets.length === 0);
   const machineChoices = machineGroups.filter((g) => g.key === "local" || g.frames.length > 0 || g.machine);
 
@@ -642,11 +648,17 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         )}
         {looseTiles.length > 0 && (
           <div className="mt-1.5">
-            <div className="flex items-center gap-2 h-8 pr-2 mx-2 pl-[26px]">
+            <div className="group/loose flex items-center gap-2 h-8 pr-2 mx-2 pl-[26px]" data-layers-loose>
               <span className="flex-1 flex items-center gap-2.5 min-w-0 text-[14px] font-medium text-[var(--color-fg)]">
                 <FolderOpen size={ICON} strokeWidth={STROKE} className="shrink-0 text-[var(--color-fg2)]" />
                 <span className="truncate">Canvas</span>
-                <span className={`ml-auto ${COUNT}`}>{looseTiles.length}</span>
+                <span className={`ml-auto ${COUNT} group-hover/loose:hidden group-focus-within/loose:hidden`}>{looseTiles.length}</span>
+                {tileActions && (
+                  <button type="button" data-layers-close-loose onClick={() => setClosingLoose(true)}
+                    className="ml-auto hidden group-hover/loose:block group-focus-within/loose:block focus-visible:block rounded-md px-1.5 py-0.5 text-[12px] font-medium text-[var(--color-fg2)] hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]">
+                    Close all
+                  </button>
+                )}
               </span>
             </div>
             {looseTiles.map((t) => renderTile(t, 1))}
@@ -668,6 +680,16 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           onRequestRename={tileActions ? (id, draft) => setRenamingTile({ id, draft }) : undefined}
           close={() => setTileMenu(null)} />
       )}
+      <Dialog open={closingLoose} onOpenChange={setClosingLoose}>
+        <DialogContent className="sm:max-w-[420px]" data-layers-close-loose-confirm>
+          <DialogTitle>Close {looseTiles.length} {looseTiles.length === 1 ? "tile" : "tiles"} on the canvas?</DialogTitle>
+          <DialogDescription>The ones in no frame. Their agents and shells end; frames and what is in them stay.</DialogDescription>
+          <DialogFooter>
+            <Button variant="ghost" autoFocus onClick={() => setClosingLoose(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => { setClosingLoose(false); for (const t of looseTiles) tileActions?.onClose(t.id); }}>Close {looseTiles.length}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {card && <HoverCard tile={card.tile} top={card.top} left={card.left} now={now} frame={frames.find((f) => f.id === card.tile.frameId)} agent={agentLabel(card.tile)} />}
     </aside>
   );
@@ -774,13 +796,16 @@ function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (
 function HoverCard({ tile, top, left, now, frame, agent }: { tile: ModelTile; top: number; left: number; now: number; frame?: LayerFrame; agent: string }) {
   const when = ago(tile.activity, now);
   return (
-    <div role="tooltip" data-layers-card className="hm-popover pointer-events-none fixed z-50 w-[240px] px-3 py-2.5 animate-in fade-in-0 slide-in-from-left-1 duration-150 ease-out" style={{ top, left }}>
-      <p className="truncate text-[13px] font-medium text-[var(--color-fg)]">{tile.name}</p>
-      <p className="mt-0.5 text-[11.5px] text-[var(--color-fg3)]">{[when, tile.needsYou ? "needs you" : STATUS_LABEL[tile.status]].filter(Boolean).join(" · ")}</p>
-      <div className="mt-2 flex flex-wrap gap-1 text-[11px] text-[var(--color-fg2)]">
-        <span className="rounded bg-[var(--color-bg3)] px-1.5 py-0.5">{agent}</span>
-        {frame && <span className="max-w-full truncate rounded bg-[var(--color-bg3)] px-1.5 py-0.5">{frame.title}</span>}
-        {frame?.branch && <span className="max-w-full truncate rounded bg-[var(--color-bg3)] px-1.5 py-0.5 font-mono">{frame.branch}</span>}
+    // `.hm-popover` brings its own 4px padding; the card's spacing is on the inner box.
+    <div role="tooltip" data-layers-card className="hm-popover pointer-events-none fixed z-50 w-[256px] animate-in fade-in-0 slide-in-from-left-1 duration-150 ease-out" style={{ top, left }}>
+      <div className="px-3 pt-2.5 pb-3">
+        <p className="truncate text-[14px] font-semibold leading-5 text-[var(--color-fg)]">{tile.name}</p>
+        <p className="mt-1 text-[12px] leading-4 text-[var(--color-fg2)]">{[when, tile.needsYou ? "needs you" : STATUS_LABEL[tile.status]].filter(Boolean).join(" · ")}</p>
+        <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] leading-4 text-[var(--color-fg2)]">
+          <span className="rounded-md bg-[var(--color-bg3)] px-2 py-0.5">{agent}</span>
+          {frame && <span className="max-w-full truncate rounded-md bg-[var(--color-bg3)] px-2 py-0.5">{frame.title}</span>}
+          {frame?.branch && <span className="max-w-full truncate rounded-md bg-[var(--color-bg3)] px-2 py-0.5 font-mono">{frame.branch}</span>}
+        </div>
       </div>
     </div>
   );

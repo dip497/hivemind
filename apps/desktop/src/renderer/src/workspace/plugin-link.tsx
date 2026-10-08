@@ -30,6 +30,7 @@ import { viewLinkServices } from "./view-services";
 import { readTheme } from "./plugin-theme";
 import { ShareDialog, type ShareChoice } from "./views/community/ShareDialog";
 import { PromptDialog, type PromptAsk } from "./views/community/PromptDialog";
+import { tileMarkSvg } from "../tiles/mark-svg";
 
 /** Plugin layout blobs are opaque to the host: `{ v: 1, data: <whatever the plugin sent> }`. */
 export function layoutSpec(id: string, personal = false): ViewLayoutSpec<unknown> {
@@ -218,6 +219,7 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
       frames, tiles, frameOf,
       name: (t) => nameRef.current.get(t.id),
       agent: (t) => agentOf.get(t.id),
+      icon: (t) => tileMarkSvg(t.kind, agentOf.get(t.id)),
       links: { pipes: links.pipes, spawns: links.spawnLinks },
       color: (f) => cssColorToHexString(f.color),
       machine: (f) => machineOf(f.workspacePath),

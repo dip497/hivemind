@@ -1,7 +1,7 @@
 /**
  * What a view is told the workspace holds (view protocol `structure`): its frames, each with its
  * colour, the machine it runs on, the frame it nests in, its branch and its folder; its tiles, each
- * with its frame, its name and the agent it runs; and the links between agents. One builder for
+ * with its frame, its name, the agent it runs and its icon; and the links between agents. One builder for
  * every host of a view: the window's, from its model, and a device's for a remote screen, from its
  * store (docs/design/phone-app-2026-10-02.md §6.1). No DOM and no Node: each host says how it
  * resolves a frame's colour and names its machine.
@@ -26,6 +26,8 @@ export interface StructureSource<F extends StructureFrame, T extends StructureTi
   name(tile: T): string | undefined;
   /** The agent an agent's tile runs, its catalog id. */
   agent(tile: T): string | undefined;
+  /** A tile's mark, an `<svg>` in `currentColor`; a host that cannot draw one leaves it out. */
+  icon?(tile: T): string | undefined;
   links: { pipes: readonly { src: string; dst: string }[]; spawns: readonly { parent: string; child: string }[] };
   /** A frame's colour, `#rrggbb`. */
   color(frame: F): string;
@@ -59,7 +61,8 @@ export function viewStructure<F extends StructureFrame, T extends StructureTile>
     }),
     tiles: s.tiles.map((t) => {
       const agent = s.agent(t);
-      return { id: t.id, frameId: s.frameOf[t.id] ?? null, kind: t.kind, name: s.name(t) ?? t.label, ...(agent ? { agent } : {}) };
+      const icon = s.icon?.(t);
+      return { id: t.id, frameId: s.frameOf[t.id] ?? null, kind: t.kind, name: s.name(t) ?? t.label, ...(agent ? { agent } : {}), ...(icon ? { icon } : {}) };
     }),
     links: { pipes: s.links.pipes.map(({ src, dst }) => ({ src, dst })), spawns: s.links.spawns.map(({ parent, child }) => ({ parent, child })) },
   };

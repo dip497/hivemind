@@ -37,7 +37,6 @@ function activeTab(): string | null {
   return fallback && shown.includes(fallback) ? fallback : shown[0] ?? null;
 }
 
-const glyph = (t: ViewTile) => (t.agent ? "✦" : t.kind === "shell" ? "›_" : "▢");
 
 function button(cls: string, label: string, text: string, onClick: () => void): HTMLButtonElement {
   const b = document.createElement("button");
@@ -72,16 +71,19 @@ function render() {
   tabsEl.replaceChildren(...tabs().map((t) => {
     const name = names.get(t.id) ?? t.name;
     const tab = document.createElement("div");
-    tab.className = "w-tab"; tab.setAttribute("role", "tab"); tab.tabIndex = 0; tab.title = name;
+    tab.className = "w-tab"; tab.setAttribute("role", "tab"); tab.tabIndex = 0;
     tab.setAttribute("aria-selected", String(t.id === active));
     tab.dataset.tileId = t.id;
     const dot = document.createElement("span");
     dot.className = "w-dot"; dot.setAttribute("aria-hidden", "true");
     dot.style.background = (t.frameId && color.get(t.frameId)) || "var(--hm-color-fg3)";
     const mark = document.createElement("span");
-    mark.className = "w-glyph"; mark.setAttribute("aria-hidden", "true"); mark.textContent = glyph(t);
+    // The app's own mark for it: the agent's logo, the kind's icon.
+    mark.className = "w-mark"; mark.setAttribute("aria-hidden", "true"); mark.innerHTML = t.icon ?? "";
     const label = document.createElement("span");
     label.className = "w-name"; label.textContent = name;
+    // The full name on hover only when the tab cuts it short.
+    tab.addEventListener("pointerenter", () => { tab.title = label.scrollWidth > label.clientWidth ? name : ""; });
     tab.append(dot, mark, label, button("w-act", `Minimize ${name}`, "–", () => minimize(t.id)));
     if (hm.capabilities.includes("workspace:close")) tab.append(button("w-act", `Close ${name}`, "×", () => hm.commands.closeTile(t.id)));
     tab.addEventListener("click", () => hm.commands.selectTile(t.id));

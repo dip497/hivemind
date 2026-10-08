@@ -29,6 +29,7 @@ import { clearWork, queueWork } from "./work-queue";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
+import { DeleteFrameDialog, type FrameDeleteAsk } from "./DeleteFrameDialog";
 import { Plus } from "lucide-react";
 import { PickerDialog } from "./picker-dialog";
 import { callCommand, listCommands } from "./workspace/plugin-commands";
@@ -519,7 +520,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   } = useFrameOps({
     repoPath, positions, sizes, tiles, frameOf, boxes: board.objects,
     framesRef, tilesRef, frameOfRef, positionsRef, sizesRef, lastActiveFrameRef, boardRef: board.objectsRef,
-    setFrames, setPositions, setSelectedFrameId, focusTile, shiftBoxes: board.shiftFrames, placeBoxes: board.place,
+    setFrames, setFrameOf, setPositions, setSelectedFrameId, focusTile, shiftBoxes: board.shiftFrames, placeBoxes: board.place,
   });
 
   // Worktree + workspace-zone lifecycle (IPC, in-flight guard, detach confirm).
@@ -553,6 +554,27 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     }
     return map;
   }, [frameOf, tiles]);
+
+  // Deleting a frame that holds tiles asks first: keep them (loose) or close them with it. Its
+  // worktree sub-frames go with it, so their tiles count too.
+  const [frameDeleteAsk, setFrameDeleteAsk] = useState<FrameDeleteAsk | null>(null);
+  const tilesInFrame = useCallback((id: string) => {
+    const ids = new Set([id, ...framesRef.current.filter((f) => f.parentFrameId === id).map((f) => f.id)]);
+    return tilesRef.current.filter((t) => ids.has(frameOfRef.current[t.id] ?? ""));
+  }, []);
+  const requestDeleteFrame = useCallback((id: string) => {
+    const held = tilesInFrame(id);
+    if (!held.length) { deleteFrame(id); return; }
+    const title = framesRef.current.find((f) => f.id === id)?.title || "this frame";
+    setFrameDeleteAsk({ frameId: id, title, tiles: held.length, agents: held.filter((t) => t.kind === AGENT_TILE_KIND).length });
+  }, [tilesInFrame, deleteFrame]);
+  const onFrameDeleteChoice = useCallback((choice: "cancel" | "keep" | "close") => {
+    const ask = frameDeleteAsk;
+    setFrameDeleteAsk(null);
+    if (!ask || choice === "cancel") return;
+    if (choice === "close") for (const t of tilesInFrame(ask.frameId)) closeTile(t.id);
+    deleteFrame(ask.frameId);
+  }, [frameDeleteAsk, tilesInFrame, closeTile, deleteFrame]);
 
   // ── view-agnostic listing (Layers rail, tab strip, 3D labels …) ────────────
   const layerFrames: LayerFrame[] = useMemo(
@@ -826,7 +848,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     onArrange: (frameId: string, mode: "columns" | "rows" | "grid") => arrangeFrame(frameId, mode),
     onRename: (frameId: string, title: string) => updateFrameTitle(frameId, title),
     onColor: (frameId: string, color: string) => updateFrameColor(frameId, color),
-    onDelete: (frameId: string) => deleteFrame(frameId),
+    onDelete: (frameId: string) => requestDeleteFrame(frameId),
     onGit: (frameId: string) =>
       window.dispatchEvent(new CustomEvent("hivemind:frame-git", { detail: { frameId } })),
     onPush: (frameId: string) => { const r = repoOfFrame(frameId); if (r) gitPushMut.mutate({ repoPath: r }); },
@@ -837,7 +859,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     },
     // Depend on the stable `.mutate` refs, NOT the mutation objects — those are
     // fresh on every isPending tick and would re-render every rail consumer.
-  }), [frameOpen, onCreateWorktree, onAttachWorktree, bindWorkspace, arrangeFrame, updateFrameTitle, updateFrameColor, deleteFrame, repoPath, repoOfFrame, gitPushMut.mutate, gitPullMut.mutate]);
+  }), [frameOpen, onCreateWorktree, onAttachWorktree, bindWorkspace, arrangeFrame, updateFrameTitle, updateFrameColor, requestDeleteFrame, repoPath, repoOfFrame, gitPushMut.mutate, gitPullMut.mutate]);
   const openFileFromTerminal = useCallback((sourceTileId: string, path: string) => {
     const sourceFrameId = frameOfRef.current[sourceTileId] ?? selectedFrameIdRef.current;
     const existing = pickEditorTile(tilesRef.current, frameOfRef.current, sourceFrameId);
@@ -1211,7 +1233,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
     onNodeResizeCommit, handleNodeDragStop, resetCanvas,
     focusReq, focusModeReq, setFocusModeReq, focusModeNonceRef, selectedTileIdRef, selectedFrameIdRef,
     selectedTileIdsRef, markSeen, toasts, dismissToast,
-    frameTiles, updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
+    frameTiles, updateFrameTitle, updateFrameColor, deleteFrame: requestDeleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
     pins, togglePin, onPinChange, board, canvasPointRef,
     agentSel, setAgentSel, spawnAgent, spawnBrowser, onInitWorkspace,
@@ -1219,7 +1241,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
   }), [
     positions, sizes, onNodeResizeCommit, handleNodeDragStop, resetCanvas, focusReq, focusModeReq,
     selectedTileIdRef, selectedFrameIdRef, selectedTileIdsRef, markSeen, toasts, dismissToast, frameTiles,
-    updateFrameTitle, updateFrameColor, deleteFrame, arrangeFrame, bringFrameToFront,
+    updateFrameTitle, updateFrameColor, requestDeleteFrame, arrangeFrame, bringFrameToFront,
     onAttachWorktree, onCreateWorktree, unbindBranch, bindWorkspace, unbindWorkspace,
     pins, togglePin, onPinChange, board, agentSel, spawnAgent, spawnBrowser, onInitWorkspace, updateAvailable, updateStaged, onUpgrade, onRestart, upgrading,
   ]);
@@ -1282,6 +1304,7 @@ export function Workspace({ cwd, repoPath, root = null, onInitWorkspace, updateA
         <TileHost surfaces={surfaces} selectedTileId={selectedTileId} onSurfacePointerDown={setSelectedTileId} />
       </WorkspacePropsContext.Provider>
 
+      <DeleteFrameDialog ask={frameDeleteAsk} onChoose={onFrameDeleteChoice} />
       {/* Where a new tile runs, when 2+ workspaces are open: asked here, so every view spawns alike. */}
       {spawnPick && (
         <PickerDialog

@@ -238,6 +238,9 @@ Declared in the manifest, refused at install if unknown:
 the user's default); a `prompt` becomes its first message once the user sends it. An id that isn't installed is
 refused. `openFolder(frameId)` asks the user to pick the frame's folder; the view never sees a path.
 
+Each tile in `structure` carries its `icon`, the mark the app draws for it (an agent's logo, a
+kind's icon) as one `<svg>` in `currentColor`: put it in your markup and size it with CSS.
+
 `structure` also tells you how the workspace is wired: each tile's `agent`, each frame's
 `parentId` (a worktree nested under its repo), `branch` and `folder: { name, kind }`, and
 `links: { pipes, spawns }` — which agent feeds which, and which agent started which.

@@ -63,6 +63,8 @@ test("toggle into windows mode shows a tab strip + active tile body", async () =
   const tabs = tabsOf();
   await expect(tabs).toHaveCount(1);
   await expect(tabs.first()).toHaveAttribute("aria-selected", "true");
+  // It wears the mark the app draws for a shell, not a stand-in character.
+  await expect(tabs.first().locator(".w-mark svg")).toHaveCount(1);
   // The terminal body renders inside the active-body host (xterm mounts a canvas).
   await page.waitForSelector(".xterm");
   await page.screenshot({ path: "/tmp/hivemind-windows-view.png" });
@@ -250,9 +252,10 @@ test("a restored tab stays restored when the view switches at once", async () =>
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "windows" } })));
   await windowsReady();
   const first = tabsOf().first();
-  const name = await first.getAttribute("title");
+  const id = await first.getAttribute("data-tile-id");
+  const name = (await first.locator(".w-name").textContent())?.trim();
   expect(name).toBeTruthy();
-  const tab = view().locator(`[role="tab"][title=${JSON.stringify(name)}]`);
+  const tab = view().locator(`[role="tab"][data-tile-id=${JSON.stringify(id)}]`);
   await first.hover();
   await first.getByRole("button", { name: `Minimize ${name}` }).click();
   await expect(tab).toHaveCount(0);

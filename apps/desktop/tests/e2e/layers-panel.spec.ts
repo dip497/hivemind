@@ -1,6 +1,7 @@
 // The Layers panel as a person arranges it: pin a tile from its menu, choose in the View menu what
 // is listed and how it is grouped, fold a section, and find all of it as they left it after a
 // restart. The View menu is theirs (settings); pins and folds are theirs for this workspace.
+// Deleting a frame that holds tiles asks whether they go with it; the canvas's loose tiles close together.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -104,4 +105,42 @@ test("the panel names what it does: search narrows the list, its rows start thin
   await panel().locator('[data-layers-action="plugins"]').click();
   await expect(page.locator("[data-plugins-home]")).toBeVisible();
   await page.keyboard.press("Escape");
+});
+
+test("deleting a frame asks what becomes of its tiles: kept, they are listed once under Canvas, which closes them all", async () => {
+  const frames = () => panel().locator("[data-layers-frame]");
+  const terminals = page.locator(".react-flow__node-terminal");
+  const remove = async () => {
+    await frames().first().click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Delete frame" }).click();
+  };
+  const dialog = page.locator("[data-delete-frame]");
+  await remove();
+  await expect(dialog).toContainText("3 tiles");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(frames()).toHaveCount(1);
+  await expect(terminals).toHaveCount(3);
+
+  await remove();
+  await page.locator("[data-delete-frame-keep]").click();
+  await expect(frames()).toHaveCount(0);
+  await expect(terminals).toHaveCount(3);
+  await expect(rows()).toHaveCount(3);
+
+  // Close all closes what Canvas lists: the pinned one is listed under Pinned, and stays.
+  await panel().locator("[data-layers-loose]").hover();
+  await panel().locator("[data-layers-close-loose]").click();
+  await page.locator("[data-layers-close-loose-confirm]").getByRole("button", { name: "Close 2" }).click();
+  await expect(terminals).toHaveCount(1);
+
+  // A frame closed with its tiles takes them with it. The new workspace frame takes in the
+  // loose tile too, so it holds both.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
+  await expect(frames()).toHaveCount(1);
+  await remove();
+  await expect(dialog).toContainText("2 tiles");
+  await page.locator("[data-delete-frame-close]").click();
+  await expect(frames()).toHaveCount(0);
+  await expect(terminals).toHaveCount(0);
 });

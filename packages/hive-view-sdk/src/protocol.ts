@@ -86,6 +86,8 @@ export interface ViewTile {
   id: string; frameId: string | null; kind: string; name: string;
   /** 1.2: which agent an agent tile runs — its catalog id (`"codex"`, `"claude"`, …). */
   agent?: string;
+  /** 1.11: its mark as the app draws it, one `<svg>` element in `currentColor`; size it with CSS. */
+  icon?: string;
 }
 /** Agents driving agents (protocol 1.2): `pipes` carry one agent's replies into another's input;
  *  `spawns` record which agent opened which (`hive ctl spawn`). Tile ids at both ends. */
