@@ -23,6 +23,8 @@ export interface ModelTile {
   activity: number | null;
   /** The computer it runs on: "local", or a machine's key. */
   machine: string;
+  /** The tile that started it (an agent's `hive ctl spawn`), when one did. */
+  parent?: string;
 }
 
 /** A heading and the tiles under it, for the groupings that are not the workspace's own tree. */
@@ -38,6 +40,9 @@ export interface LayersView {
   buckets: Bucket[];
   /** The View menu leaves some tiles out: frames left with none are not listed. */
   filtering: boolean;
+  /** The tiles listed under another, by that tile's id: started by it and in the same list. The
+   *  lists above hold only the tiles under no other. */
+  kids: Map<string, ModelTile[]>;
 }
 
 const HOUR = 3_600_000;
@@ -135,7 +140,32 @@ export function layersView(input: {
       : [...groups.values()].sort((a, b) => a.label.localeCompare(b.label));
     buckets.push(...order);
   }
-  return { pinned, tree, byFrame, buckets, filtering };
+  const kids = new Map<string, ModelTile[]>();
+  for (const [key, list] of byFrame) byFrame.set(key, nest(list, kids));
+  for (const b of buckets) b.tiles = nest(b.tiles, kids);
+  return { pinned, tree, byFrame, buckets, filtering, kids };
+}
+
+/** `list` without the tiles whose starter is in it too, which go into `kids` under it, in list
+ *  order. A tile whose starters loop back to it stays in the list, so no tile is ever lost. */
+function nest(list: ModelTile[], kids: Map<string, ModelTile[]>): ModelTile[] {
+  const here = new Map(list.map((t) => [t.id, t]));
+  const under = (t: ModelTile): boolean => {
+    const seen = new Set([t.id]);
+    for (let p = t.parent; p !== undefined && here.has(p); p = here.get(p)!.parent) {
+      if (seen.has(p)) return false;
+      seen.add(p);
+    }
+    return t.parent !== undefined && here.has(t.parent);
+  };
+  const top: ModelTile[] = [];
+  for (const t of list) {
+    if (!under(t)) { top.push(t); continue; }
+    const k = kids.get(t.parent!) ?? [];
+    k.push(t);
+    kids.set(t.parent!, k);
+  }
+  return top;
 }
 
 /** A past session an agent kept for a folder: what a Recents list shows. */

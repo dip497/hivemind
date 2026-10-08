@@ -85,6 +85,28 @@ test("a search keeps the tiles whose name or agent holds it, pinned ones include
   assert.deepEqual([...byAgent.byFrame.values()].flat().map((t) => t.id), ["c-shell"]);
 });
 
+test("a tile an agent started is listed under it, theirs under them; elsewhere, or alone, it is listed itself", () => {
+  const tiles = [
+    tile("lead"),
+    tile("helper", { parent: "lead" }),
+    tile("shell", { kind: "shell", agent: undefined, parent: "helper", status: "exited" }),
+    tile("away", { parent: "lead", frameId: "f2" }),
+    tile("loop-a", { parent: "loop-b" }),
+    tile("loop-b", { parent: "loop-a" }),
+  ];
+  const v = (prefs: Partial<LayersPrefs> = {}) => layersView({ tiles, pinned: [], prefs: { ...DEFAULT_LAYERS_PREFS, ...prefs }, now: NOW, agentLabel: (t) => t.agent ?? "Terminal" });
+  const tree = v();
+  assert.deepEqual(ids(tree.byFrame.get("f1")!), ["lead", "loop-a", "loop-b"]);
+  assert.deepEqual(ids(tree.kids.get("lead")!), ["helper"]);
+  assert.deepEqual(ids(tree.kids.get("helper")!), ["shell"]);
+  // In another frame: listed there, not under its starter.
+  assert.deepEqual(ids(tree.byFrame.get("f2")!), ["away"]);
+  // Filtered apart (only the exited): the shell has no starter in its list and stands alone.
+  const exited = v({ groupBy: "none", status: "exited" });
+  assert.deepEqual(ids(exited.buckets[0]!.tiles), ["shell"]);
+  assert.equal(exited.kids.size, 0);
+});
+
 test("recents: newest first, at most the limit with how many more, no session twice nor one a tile has open, and a search narrows them", () => {
   const rows = [
     { agent: "claude", id: "a", folder: "/r", updated: 10, prompt: "fix the share dialog" },

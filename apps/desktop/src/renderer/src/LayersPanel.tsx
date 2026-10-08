@@ -46,6 +46,8 @@ export interface LayerTile {
   /** For agent tiles (kind AGENT_TILE_KIND): the registry agent id (claude/codex/…)
    *  so the right logo shows even though they share the agent-terminal kind. */
   agent?: string;
+  /** The tile that started it, when an agent did: it is listed under that one. */
+  parent?: string;
 }
 
 export interface LayerFrame {
@@ -186,11 +188,13 @@ interface RowActions {
   focus: (id: string) => void;
   menu: (t: ModelTile, at: { x: number; y: number }) => void;
   hover: (t: ModelTile | null, el?: HTMLElement) => void;
+  /** Fold or unfold the tiles it started. */
+  fold: (id: string) => void;
   close?: (id: string) => void;
 }
 
 /** One tile's row: its mark, its name, and its status when that is worth reading. */
-const TileRow = memo(function TileRow({ t, depth, selected, actions }: { t: ModelTile; depth: number; selected: boolean; actions: RowActions }) {
+const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0, folded = false }: { t: ModelTile; depth: number; selected: boolean; actions: RowActions; started?: number; folded?: boolean }) {
   const st = t.status;
   const isPlan = !!tileKind(t.kind).waitsOnPerson;
   return (
@@ -205,15 +209,25 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions }: { t: Mode
       onMouseLeave={() => actions.hover(null)}
       data-active={selected}
       data-layer-tile={t.id}
+      aria-expanded={started ? !folded : undefined}
       style={{
         paddingLeft: 12 + depth * 14,
         ...(selected ? { background: "var(--surface-4)", boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--color-fg) 12%, transparent)" } : {}),
       }}
       // `w-[calc(100%-1rem)] min-w-0`: without a width the row shrink-wraps its text and `truncate` never engages.
-      className={`group flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 pr-1.5 mx-2 text-left rounded-lg outline-none focus-visible:outline-none cursor-pointer transition-colors ${
+      className={`group relative flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 pr-1.5 mx-2 text-left rounded-lg outline-none focus-visible:outline-none cursor-pointer transition-colors ${
         selected ? "text-[var(--color-fg)]" : "text-[var(--color-fg)] hover:bg-[var(--surface-3)]"
       }`}
     >
+      {/* What it started folds under it: the chevron sits in the indent, left of its mark. */}
+      {started > 0 && (
+        <button type="button" data-layer-fold={t.id} aria-label={`${folded ? "Show" : "Hide"} the ${started} it started`}
+          onClick={(e) => { e.stopPropagation(); actions.fold(t.id); }}
+          className="absolute top-1/2 -translate-y-1/2 grid size-4 place-items-center rounded text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
+          style={{ left: depth * 14 - 4 }}>
+          {folded ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+        </button>
+      )}
       <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">
         {t.kind === AGENT_TILE_KIND ? <AgentIcon id={t.agent} size={ICON - 1} /> : <KindMark kind={t.kind} size={ICON} />}
       </span>
@@ -425,8 +439,9 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         setCard({ tile, top: Math.max(8, Math.min(r.top - 6, window.innerHeight - 124)), left: edge + 8 });
       }, 450);
     },
+    fold: (id) => toggleGroup(`tile:${id}`),
     ...(tileActions ? { close: (id: string) => closeRef.current?.(id) } : {}),
-  }), [!!tileActions]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [!!tileActions, toggleGroup]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Collapsed → a small FLOATING button over the canvas's top-left; its dot still says
   // "an agent needs you" / "busy".
@@ -465,7 +480,15 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         </div>
       );
     }
-    return <TileRow key={t.id} t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} />;
+    const started = view.kids.get(t.id) ?? [];
+    const folded = collapsed.has(`tile:${t.id}`);
+    if (!started.length) return <TileRow key={t.id} t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} />;
+    return (
+      <div key={t.id} role="group" aria-label={`${t.name} and what it started`} data-layer-started={t.id}>
+        <TileRow t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} started={started.length} folded={folded} />
+        {!folded && started.map((k) => renderTile(k, depth + 1))}
+      </div>
+    );
   };
 
   // A frame group: header + its listed tiles, then its worktree groups one level deeper. While the

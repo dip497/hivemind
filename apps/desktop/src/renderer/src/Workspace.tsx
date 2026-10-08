@@ -591,6 +591,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   const layerTiles: LayerTile[] = useMemo(() => {
     const out: LayerTile[] = [];
     const fo = frameOf;
+    const starter = new Map(spawnLinks.map((l) => [l.child, l.parent]));
     for (const t of tiles) {
       // Same effective-repo rule as the surface builder: a worktree/workspace
       // frame can supply the repo even when the workspace has no global one.
@@ -599,10 +600,11 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       if (tileKind(t.kind).needsRepo && !effRepo) continue;
       const kind = t.kind;
       const agent = agentOfTile(t);
-      out.push({ id: t.id, kind, name: tileName(tileNames, agentTitles, t), frameId: fo[t.id] ?? null, agent });
+      const parent = starter.get(t.id);
+      out.push({ id: t.id, kind, name: tileName(tileNames, agentTitles, t), frameId: fo[t.id] ?? null, agent, ...(parent ? { parent } : {}) });
     }
     return out;
-  }, [tiles, repoPath, frameOf, frames, tileNames, agentTitles, agentCatalog]);
+  }, [tiles, repoPath, frameOf, frames, tileNames, agentTitles, agentCatalog, spawnLinks]);
 
   // ── active view (plugin) ───────────────────────────────────────────────────
   // The stored id (view-mode-store, shared with Settings ▸ View and ⌘E) is a

@@ -1,8 +1,9 @@
 // The panel as a home: every workspace here under Projects, with what runs in it, and this
 // workspace's past agent sessions under Recents, each a click from being resumed: those of every
-// folder its agents run in, the workspace's own included.
+// folder its agents run in, the workspace's own included. What an agent started is listed under it.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
+import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -57,6 +58,25 @@ test("Recents lists this workspace's past sessions, and one click resumes it", a
   await row.click();
   await expect.poll(() => fs.existsSync(path.join(root, "claude-args")) && fs.readFileSync(path.join(root, "claude-args"), "utf8"), { timeout: 15_000 })
     .toContain(`--resume ${session}`);
+});
+
+test("an agent's started agents are listed under it, and fold away", async () => {
+  const parentRow = panel().locator('[data-layer-tile^="tile-claude"]').first();
+  const parent = (await parentRow.getAttribute("data-layer-tile"))!;
+  // As an agent does it: `hive ctl spawn` from inside its tile.
+  const ud = path.join(root, "ud");
+  const { stdout } = await promisify(execFile)("bun", [cli, "ctl", "spawn", "--agent", "claude", "--name", "helper", "--json"], {
+    env: { ...env, HIVE_HCP_SOCK: path.join(ud, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(ud, "hcp.token"), "utf8").trim(), HIVEMIND_TILE: parent },
+  });
+  const child = JSON.parse(stdout.trim().split("\n").pop()!).tileId as string;
+  const started = panel().locator(`[data-layer-started="${parent}"]`);
+  await expect(started.locator(`[data-layer-tile="${child}"]`)).toBeVisible({ timeout: 15_000 });
+  await expect(panel().locator(`[data-layer-tile="${child}"]`)).toHaveCount(1);
+  await panel().locator(`[data-layer-fold="${parent}"]`).click();
+  await expect(panel().locator(`[data-layer-tile="${child}"]`)).toHaveCount(0);
+  await expect(panel().locator(`[data-layer-tile="${parent}"]`)).toHaveAttribute("aria-expanded", "false");
+  await panel().locator(`[data-layer-fold="${parent}"]`).click();
+  await expect(started.locator(`[data-layer-tile="${child}"]`)).toBeVisible();
 });
 
 test("with no frame bound to its folder, Recents still lists the workspace's own sessions", async () => {
