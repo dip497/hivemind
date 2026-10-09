@@ -41,6 +41,7 @@ import { machineCmd } from "./commands/machine.js";
 import { killCmd } from "./commands/kill.js";
 import { pushCmd } from "./commands/push.js";
 import { joinCmd, peopleCmd, shareCmd } from "./commands/share.js";
+import { grantCmd } from "./commands/grant.js";
 
 /**
  * Intercept `hive @ID` BEFORE citty sees argv — citty treats unknown
@@ -92,6 +93,7 @@ const main = defineCommand({
     host: hostCmd,
     share: shareCmd,
     people: peopleCmd,
+    grant: grantCmd,
     join: joinCmd,
     ps: psCmd,
     attach: attachCmd,

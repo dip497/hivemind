@@ -10,6 +10,7 @@ import type { AgentAnswer, AgentChange, AgentChanges, AgentEvent, AgentItem, Con
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
 import type { Answerer, PlanDecided, PlanReview } from "./plans.js";
 import type { JoinQuestion, JoinRequests, PersonHere } from "./people.js";
+import type { ClientGrant, NewGrant } from "./grants.js";
 import type { ViewFile, ViewListing, ViewScreen } from "./views.js";
 import type { HostMessage, PluginMessage, SurfaceRect } from "@hivemind/view-sdk/protocol";
 import type { Answering, LinkRole, Role } from "@hivemind/workspace-host/access";
@@ -155,6 +156,12 @@ export interface WorkspaceMethods {
   "people.requests": (repo: string) => JoinRequests;
   /** How `repo` lets in someone with a valid invite: asked about first, or at once at its role. */
   "people.answering": (repo: string, rule: Answering) => void;
+  /** The programs let drive workspaces here (0.20). */
+  "grant.list": () => ClientGrant[];
+  /** Let a program drive `repos` at `role`: the grant, and its token, which is never shown again. */
+  "grant.create": (grant: NewGrant) => { grant: ClientGrant; token: string };
+  /** Take a grant back: its connections close. `revoked` false: there was none of that id. */
+  "grant.revoke": (id: string) => { revoked: boolean };
   /** A workspace's layouts, for a client that holds them: every read after it answers from what
    *  it holds, and each `store.changed` says what to read again. */
   "store.open": (repo: string) => StoreSnapshot;

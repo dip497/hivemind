@@ -77,7 +77,7 @@ import { ControlPlane } from "@hivemind/host/control/plane";
 import { REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
 import type { ReadScreen } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
-import { hcpSockPath } from "@hivemind/agent-host/hooks/token";
+import { hcpSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { HcpError } from "@hivemind/host/control/protocol";
 import { appViewsDir, handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog, viewSdk } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, onSettingsChange, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
@@ -101,6 +101,8 @@ import { presence } from "@hivemind/host/presence";
 import { widgets } from "@hivemind/host/widgets";
 import { appearance } from "@hivemind/host/appearance";
 import { Plans } from "@hivemind/host/plans";
+import { Grants, grantsDomain } from "@hivemind/host/grants";
+import { serveDrive } from "@hivemind/host/drive";
 import { answers } from "@hivemind/host/answers";
 import { heldBoards, manifestOf, permissionKeys, runsIn } from "@hivemind/host/needs";
 import { agentControl } from "@hivemind/host/agent-control";
@@ -1119,7 +1121,7 @@ let agentsScanned: Promise<void> = Promise.resolve();
 /** Who is at a client of this host, as the others are told: a peer is the person its certificate
  *  names, under the name they joined with; a window is the person at this machine. */
 const whoIs = (c: Connection): { person: string; name: string } => c.actor.kind === "peer"
-  ? { person: c.actor.person, name: personName(c.actor.person) }
+  ? { person: c.actor.person, name: c.actor.client ?? personName(c.actor.person) }
   : { person: machineIdentity().personId, name: getAppSettings().profile.name || os.userInfo().username };
 
 const terminals = new Terminals({
@@ -1265,6 +1267,9 @@ const plans = new Plans({
 
 // links, terminals, the store and who is where on it (M1). Each window is a connection to it (workspace-ipc.ts), which is
 // answered as the person at the window, and sent its events.
+/** The programs the person lets drive workspaces here (the drive socket). */
+let grantsKept: Grants | null = null;
+const grants = (): Grants => (grantsKept ??= new Grants(path.join(app.getPath("userData"), "grants.json")));
 // Shown on this machine's windows, run in one of the person's, and served to a phone's views.
 const widgetDomain = widgets(() => workspaceServer, widgetAsset, listWidgets, (repo) => workspaceStore().getObjects(repo));
 const workspaceServer: WorkspaceServer = new WorkspaceServer([
@@ -1322,6 +1327,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   // How this host looks to its guests, as its theme changes.
   appearance({ current: () => getAppSettings().appearance, onChange: (l) => { onSettingsChange((s) => l(s.appearance)); }, server: () => workspaceServer }),
   peopleHere.domain,
+  grantsDomain(grants),
   // A participant's branch, handed off from their machine (M4).
   handOff({ who: whoIs, place: (repo, tile, name) => { workspaceStore().addTile(repo, tile, { name }, HANDED_OFF); } }),
 ], hostIntents(), (m) => console.warn(`[workspace] ${m}`));
@@ -1913,6 +1919,20 @@ function startHcpControlPlane(): void {
     await control.dispatch("agent.send", { tileId, text }, { actor: { kind: "person" } }); // the person at the window
   });
   control.listen(hcpSockPath(app.getPath("userData")), (err: Error) => pushAppError(`Agent control plane is off: ${err.message}. \`hive ctl\` cannot reach this app.`, "hcp"));
+  // Programs drive workspaces here through the workspace API, held to what they were granted.
+  try {
+    serveDrive(ipcPath(app.getPath("userData"), "drive.sock"), {
+      server: workspaceServer,
+      installToken: () => readOrCreateToken(app.getPath("userData")),
+      grants: grants(),
+      repos: () => workspaceStore().repos(),
+      holds: (repo, tile) => workspaceStore().workspaceOf(toBareId(tile)) === repo,
+      workspaceId: (repo) => workspaceStore().ownership(repo)?.workspaceId ?? null,
+      onWarn: (m) => console.warn(`[drive] ${m}`),
+    });
+  } catch (e) {
+    pushAppError(`Programs cannot drive this app: ${(e as Error).message}`, "drive");
+  }
   // A machine's daemon keeps the status of the sessions it runs (R6): shown here as it has it.
   // Only a machine's own report does that: from then on the session's local reports are ignored.
   setRemoteEventSink((topic, data) => control.fromMachine(topic, data));

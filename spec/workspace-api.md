@@ -1,4 +1,4 @@
-# Workspace API (0.19)
+# Workspace API (0.20)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -39,10 +39,34 @@ for it.
 | HTTP | the dev-bridge's page | its event stream: `GET /workspace/events?token=…`, whose first event, `connection`, carries `{id}` | `POST /workspace`, body `{"method", "params"}` → 200 with the answer | `POST /workspace/notice`, same body → 204 | the stream's `data:` lines, one `{event, params}` each |
 
 | hive-net | a peer on another device, reaching a workspace shared from here (M1) | an `api` stream of its `hive/ws/1` connection: a connection may carry several, each a connection of its own (0.13) | a frame on that stream, `{"id", "method", "params"}` → a frame `{"id", "result"}` or `{"id", "error"}` on it | a frame without `id` | frames `{event, params}` on the same stream |
+| Drive socket (0.20) | a program on this machine, `hive grant` among them (below) | the socket connection, from its `hello` until it closes | a line `{"id", "method", "params"}` → a line `{"id", "result"}` or `{"id", "error"}` | a line without `id` | lines `{event, params}`; for a program, one line may be a list of them |
 
 Over Electron only the main frame of an app window is heard; anything else is rejected. Over HTTP
 every request carries the token (`x-hive-token`, or `token` on the stream) and a call or notice
 names its connection (`x-hive-connection`): 401 without the token, 400 without a connection.
+
+## Drive socket
+
+Programs on this machine reach the workspace API on `drive.sock` in the app's data folder (0600;
+a named pipe on Windows, named as `hcp.sock`'s is). The app and `hive host` both serve it;
+whichever starts first does, and the other says so. Lines of JSON both ways, 1 MiB each at most.
+
+The first line says who connects: `{"hello": {"token", "workspace"?}}`.
+
+- **The install's token** (`hcp.token`) is the person at this machine. The host answers
+  `{"hello": {"api": "0.20", "as": "person"}}` and serves every method, as to a window of theirs.
+- **A grant's token** is a program the person let drive workspaces (`grant.create`). It names one
+  of the grant's workspaces by its folder; the host answers
+  `{"hello": {"api", "as": {"client", "role", "workspace"}}}` and serves that workspace as it does
+  a guest at the grant's role (Peers, below): what the role does not name is `FORBIDDEN`, and it
+  hears the events of that workspace's tiles alone. Unlike a guest's, its calls and answers name
+  the workspace and its files by their paths here. It is recorded in the audit log as a peer whose
+  `person` and `device` are `client:<grant id>` and whose `client` is the grant's name.
+- **Anything else**, an agent's tile token among them, is answered `{"error": {"code", "message"}}`
+  and the connection closes. So does a grant that does not name the workspace, or one that ran out.
+
+Taking a grant back closes its connections; one that runs out closes them then. The host keeps
+grants in `grants.json` beside `hcp.token`, 0600, each token only as its sha256.
 
 ## Who asks, and the audit log
 
@@ -209,6 +233,9 @@ log.
 | `people.answer` | `repo`, `req`, `allow`, `role`? | `{answered}`: whether this answer to the question `req` (`people.asked`) counted, the first one does; `role` (`view`, `edit` or `terminals`, 0.16) lets them in at it in place of their link's | target `repo`, detail `allow` (`allow as <role>`) or `deny` |
 | `people.requests` | `repo` | `{answering, asking}` (0.16): how the workspace lets in someone with a valid invite (`ask` or `invite`), and the questions about it waiting on its owner now, each `{req, workspace, profile, role}` as `people.asked` tells it | read |
 | `people.answering` | `repo`, `rule` (`ask` or `invite`) | `null` (0.16): `ask`, the default, asks the owner about each person with a valid invite; `invite` lets them in at once at the invite's role | target `repo`, detail the rule |
+| `grant.list` | | `[{id, name, repos, role, createdAt, expires, lastUsed}]`: the programs let drive workspaces here (0.20); the person's alone | read |
+| `grant.create` | `{name, repos, role, expires?}` (`repos`: folders, in full; `expires`: ms since the epoch, or null for never) | `{grant, token}`: the token is shown this once | target the name, detail the role |
+| `grant.revoke` | `id` | `{revoked}`: false when there was none of that id; its connections close | target `id` |
 
 Only the workspace's owner asks the `people.*` methods: at a window of the host's own, or from
 another of their devices while the workspace is hosted on one they moved it to (a peer whose role

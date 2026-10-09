@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: programs on this machine can drive your workspaces without the app's own token. `hive grant create <name> -w <folder> --role agents` prints a token for one program; it connects to `drive.sock` and gets the workspace API for those workspaces at that role, so an orchestrator can start, follow and answer agents but cannot push, share the workspace or write files. `hive grant list` shows each grant and when it was last used, `hive grant revoke <id>` takes one back and closes its connections, and `--expires 30d` lets one run out (workspace API 0.20).
 - Fixed: Codex opened every tile on "Hooks need review" for the hooks Hivemind adds. An agent's manifest can now say `hooks.trust: codex`: the app then hands Codex, at launch, its own record of trust for exactly those hooks, so it never asks about them, and still asks about any other hook, yours or a repository's. Codex is no longer started with `--dangerously-bypass-hook-trust`, which skipped the review of every hook. Needs the Codex agent from HiveHub that declares it.
 - Added: in the Windows view, drag a tab onto another pane's tabs to move it there, or onto the edge of a pane to split it; Escape cancels. Along its own tabs a drag reorders them.
 - Fixed: the Windows view's keys (Ctrl+\\ to split, Ctrl+Shift+Enter to maximize, Ctrl+Alt+arrows to move between panes) did nothing while a terminal had focus, and Ctrl+\\ reached the shell. They now work wherever focus is.

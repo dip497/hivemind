@@ -10,6 +10,7 @@ import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/lay
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
 import type { NetworkHealth, NetworkProfile } from "@hivemind/workspace-host/network-profile";
 import type { Grant } from "@hivemind/host/machine-share";
+import type { ClientGrant, NewGrant } from "@hivemind/workspace-api/grants";
 export type { Grant };
 
 /** One of the person's other devices, as Settings → Devices lists it (R14, spec/pairing.md). */
@@ -367,6 +368,12 @@ export interface HiveIpc {
   setRole(repo: string, person: string, role: string): Promise<void>;
   /** Take someone off `repo`'s list: they are disconnected, and their link spent. */
   removePerson(repo: string, person: string): Promise<void>;
+  /** The programs let drive workspaces here (the drive socket). */
+  grants(): Promise<ClientGrant[]>;
+  /** Let a program drive workspaces here: its grant, and its token, shown this once. */
+  grantCreate(grant: NewGrant): Promise<{ grant: ClientGrant; token: string }>;
+  /** Take a program's grant back; its connections close. */
+  grantRevoke(id: string): Promise<{ revoked: boolean }>;
   /** The workspaces this person joined elsewhere, newest first. */
   joined(): Promise<Array<{ workspace: string; names: { workspace: string; host: string }; role: string; joinedAt: number; ended?: "left" | "removed" }>>;
   /** How the joined workspace `workspace` is: whose, and where its connection is. */

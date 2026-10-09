@@ -37,6 +37,9 @@ export interface PeerOf {
   /** The workspace's id, and its repo here. */
   workspace: string;
   repo: string;
+  /** How the peer names the workspace: by its id (`hive://<id>`) unless given. A program on this
+   *  machine names it by its folder, and is told the host's paths as they are. */
+  url?: string;
   /** Whether a tile is in the workspace. */
   holds(tile: string): boolean;
   /** What this peer may ask at all, whatever its role: a phone watches and types into the
@@ -157,7 +160,7 @@ function json(event: EventMessage): string {
 
 /** Serve the workspace API to a peer over `channel`, from `server`. */
 export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "notice">, channel: TextChannel, peer: PeerOf): void {
-  const url = workspaceUrl(peer.workspace);
+  const url = peer.url ?? workspaceUrl(peer.workspace);
   const inbound = (v: unknown): unknown => {
     if (v === url) return peer.repo;
     if (typeof v === "string" && v.startsWith(`${url}/`)) return peer.repo + v.slice(url.length);
@@ -169,9 +172,9 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
   // What leaves for a peer names the workspace by its id: the host's folder never reaches it, in
   // an answer, an error or an event; what a terminal prints is shared as printed.
   const hostPath = new RegExp(`${peer.repo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=$|[\\/'"\\s:])`, "g");
-  // The person's own devices are the owner, and keep the host's paths.
+  // The person's own devices are the owner, and keep the host's paths; so does a program here.
   const egress = (v: unknown): unknown => {
-    if (peer.actor.access === "owner") return v;
+    if (peer.actor.access === "owner" || url === peer.repo) return v;
     if (typeof v === "string") return v.includes(peer.repo) ? v.replace(hostPath, url) : v;
     if (Array.isArray(v)) return v.map(egress);
     if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, egress(x)]));

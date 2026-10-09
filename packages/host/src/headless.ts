@@ -22,7 +22,10 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import type { Duplex } from "node:stream";
 import { DaemonEndpoint, REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
-import { hcpSockPath } from "@hivemind/agent-host/hooks/token";
+import { hcpSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
+import { ipcPath } from "@hivemind/core/ipc";
+import { serveDrive } from "./drive.js";
+import { Grants, grantsDomain } from "./grants.js";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
 import { agentForCmd, preferredAgent, setCatalog, spawnableAgents } from "@hivemind/agents";
 import { findBin } from "@hivemind/agents/discover";
@@ -188,7 +191,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     }
     return "";
   };
-  const who = (c: Connection) => (c.actor.kind === "peer" ? { person: c.actor.person, name: nameOf(c.actor.person) } : { person: keys.personId, name: "" });
+  const who = (c: Connection) => (c.actor.kind === "peer" ? { person: c.actor.person, name: c.actor.client ?? nameOf(c.actor.person) } : { person: keys.personId, name: "" });
   // Frames on the person's other devices run their terminals there (M3), in each device's daemon.
   /** One of the person's devices, where it is said to be when it paired. */
   const dialDevice = async (device: string): Promise<Link> => {
@@ -280,6 +283,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   let appearanceNow = (): Appearance => DEFAULT_APPEARANCE;
   // Its widgets run on the person's own devices that have a workspace open: it has no window.
   const widgetDomain = widgets(() => api, widgetAsset, listWidgets, (repo) => store.getObjects(repo));
+  const grants = new Grants(path.join(o.dir, "grants.json"));
   const api: WorkspaceServer = new WorkspaceServer([
     ...workspaceDomains,
     layouts.domain,
@@ -294,6 +298,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     // Nothing changes a headless host's theme while it runs: it answers, and has nothing to tell.
     appearance({ current: () => appearanceNow(), onChange: () => {}, server: () => api }),
     peopleHere.domain,
+    grantsDomain(() => grants),
     // A participant's branch, handed off from their machine (M4).
     handOff({ who, place: (repo, tile, name) => { store.addTile(repo, tile, { name }, HANDED_OFF); } }),
     // What an agent here waits on the person for, answered from another of their devices (M5).
@@ -393,6 +398,17 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     hcp.close();
     hcp = control.listen(hcpSockPath(o.dir), hcpWarn);
   }
+
+  // Programs drive the workspaces here through the workspace API, held to what they were granted.
+  const drive = serveDrive(ipcPath(o.dir, "drive.sock"), {
+    server: api,
+    installToken: () => readOrCreateToken(o.dir),
+    grants,
+    repos: () => store.repos(),
+    holds: (repo, tile) => store.workspaceOf(toBareId(tile)) === repo,
+    workspaceId: (repo) => store.ownership(repo)?.workspaceId ?? null,
+    onWarn: o.onWarn,
+  });
 
   // On the network: hive-net admits the devices the access lists let in, and each is served the
   // workspace it names. hive-net that stops is started again, as is one whose network changed.
@@ -621,6 +637,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       // The sessions stay in the daemons; only this host's connections to them go, and the daemon
       // answers on the control-plane socket again.
       hcp.close();
+      drive.close();
       endpoint.close();
       elsewhere.close();
       store.flush();

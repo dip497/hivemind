@@ -194,6 +194,9 @@ const api: HiveIpc & {
   people: (repo) => workspace.call("people.list", repo),
   setRole: (repo, person, role) => workspace.call("people.role", repo, person, role as Role),
   removePerson: (repo, person) => workspace.call("people.remove", repo, person),
+  grants: () => workspace.call("grant.list"),
+  grantCreate: (grant) => workspace.call("grant.create", grant),
+  grantRevoke: (id) => workspace.call("grant.revoke", id),
   joined: () => ipcRenderer.invoke("net:joined"),
   sharedStatus: (workspace) => ipcRenderer.invoke("net:shared-status", workspace),
   onSharedStatus: (cb) => {
