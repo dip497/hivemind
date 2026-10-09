@@ -36,6 +36,7 @@ import { MenuItem } from "./components/ui/menu-item";
 import { isUnread, layersView, recentGroups, type ModelTile, type RecentSession } from "@hivemind/core/layers";
 import type { WorkspaceSummary } from "../../shared/ipc";
 import { useSettings, patchSettings } from "./settings-store";
+import { layersDrawn } from "./workspace/chrome-store";
 import { setPanelOrder } from "./workspace/panel-order";
 import { useViewLayout } from "./workspace/view-layout-store";
 import { DEFAULT_LAYERS_PREFS, type LayersPrefs } from "@hivemind/core/settings-schema";
@@ -294,6 +295,7 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
 // Memo: a child of the canvas view, which re-renders on every drag frame.
 export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, layoutKey = null, canvas = false, folder = null, onResume, frameActions, tileActions }: Props) {
   // Before the early `hidden` return: hooks run on every render, in the same order.
+  useEffect(layersDrawn, []);
   const machineSnap = useMachines();
   const prefs = useSettings().views.layers;
   const [mine, setMine] = useViewLayout<Mine>(MINE, layoutKey);

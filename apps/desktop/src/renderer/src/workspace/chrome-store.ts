@@ -3,13 +3,16 @@ import { useSyncExternalStore } from "react";
 
 interface ChromeState {
   suppressed: boolean;
-  /** The tool island is drawn; when it is not, Share and Settings sit in the window's corner. */
+  /** The tool island is drawn. Settings is on it, and on the Layers rail; with neither drawn, it
+   *  sits in the window's corner. */
   islandShown: boolean;
+  /** The Layers panel is drawn, in any view. */
+  layersShown: boolean;
   /** How far up from the window's bottom the island covers (px), 0 when it is not drawn there. A
    *  view that docks tiles keeps them above it, or the island hides their last lines. */
   bottomInset: number;
 }
-let state: ChromeState = { suppressed: false, islandShown: true, bottomInset: 0 };
+let state: ChromeState = { suppressed: false, islandShown: true, layersShown: false, bottomInset: 0 };
 const listeners = new Set<() => void>();
 function set(patch: Partial<ChromeState>) {
   state = { ...state, ...patch };
@@ -29,3 +32,10 @@ export function setChromeSuppressed(on: boolean): void { if (on !== state.suppre
 export function setBottomInset(px: number): void { if (px !== state.bottomInset) set({ bottomInset: px }); }
 /** Host chrome says whether its island is drawn. */
 export function setIslandShown(on: boolean): void { if (on !== state.islandShown) set({ islandShown: on }); }
+let layers = 0;
+/** The Layers panel says it is drawn, until the function it gets back is called. */
+export function layersDrawn(): () => void {
+  layers++;
+  set({ layersShown: true });
+  return () => { layers--; if (layers === 0) set({ layersShown: false }); };
+}

@@ -170,8 +170,10 @@ test("toolbar Off is per-view, persists through restart, and Settings restores i
   await page.getByLabel("Display", { exact: true }).selectOption("off");
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
-  // No island: Settings waits in the window's corner.
-  await expect(settings()).toBeFocused();
+  // No island: Settings is the Layers rail's, and no second one waits in the window's corner.
+  const rail = page.locator('[data-layers-rail="settings"]');
+  await expect(rail).toBeFocused();
+  await expect(settings()).toHaveCount(0);
   expect(await page.locator(".xterm").first().evaluate((node, old) => node === old, original)).toBe(true);
   await original?.dispose();
   await toView("queue");
@@ -185,8 +187,8 @@ test("toolbar Off is per-view, persists through restart, and Settings restores i
   page = await app.firstWindow();
   await page.waitForSelector(".react-flow");
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
-  // Exercise keyboard recovery through the app-owned Settings button.
-  await settings().focus();
+  // Exercise keyboard recovery through the Layers rail's Settings.
+  await page.locator('[data-layers-rail="settings"]').focus();
   await page.keyboard.press("Enter");
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "view:canvas" } })));
   await expect(page.getByLabel("Display", { exact: true })).toHaveValue("off");

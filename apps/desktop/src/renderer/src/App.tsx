@@ -195,7 +195,7 @@ export function App() {
   // Which page of the Recent dialog is open: its list, or joining a workspace shared with you.
   const [recentOpen, setRecentOpen] = useState<"recent" | "join" | null>(null);
   const [peopleOpen, setPeopleOpen] = useState(false);
-  const { islandShown } = useChromeState();
+  const { islandShown, layersShown } = useChromeState();
   // Make your own plugin (the Add menu, Settings ▸ Plugins): a prompt to copy or hand an agent here.
   const [making, setMaking] = useState<"widget" | "tool" | "view" | null>(null);
   useEffect(() => {
@@ -391,7 +391,7 @@ export function App() {
           <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
             <SharedBanner onMoved={openMoved} />
             <WorkspaceActions onPeople={() => setPeopleOpen(true)} />
-            {!islandShown && <AppControls corner />}
+            {!islandShown && !layersShown && <AppControls corner />}
           </div>
         </div>
 
@@ -619,7 +619,7 @@ function SettingsModal({
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             const target = settingsReturnFocus.current;
-            (target?.isConnected ? target : document.querySelector<HTMLElement>('[aria-label="settings"]'))?.focus({ preventScroll: true });
+            (target?.isConnected ? target : document.querySelector<HTMLElement>('[aria-label="settings"], [data-layers-rail="settings"]'))?.focus({ preventScroll: true });
           }}
         >
           <aside className="settings-sidebar">

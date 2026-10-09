@@ -1,7 +1,7 @@
 /**
  * The right end of the tool island, as in a call's control bar: Settings, which holds Share too.
- * Where the island is not drawn (off, collapsed, zen mode) it sits in the window's corner instead,
- * so Settings is never out of reach.
+ * Where neither the island nor the Layers rail (which has Settings too) is drawn, it sits in the
+ * window's corner instead, so Settings is never out of reach.
  */
 import { Settings2 } from "../components/icons";
 import { Button } from "../components/ui/button";
