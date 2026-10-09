@@ -18,6 +18,7 @@ import { promisify } from "node:util";
 import { HiveNet } from "@hivemind/workspace-host/hive-net";
 import { heldWorkspaces } from "@hivemind/host/peer-links";
 import { HIVE_NET, hiveNetBuilt, person, tiles } from "./helpers/multiplayer";
+import { stopDaemons } from "./helpers/daemons";
 
 const HIVE = path.resolve("../cli/dist/hive");
 const HIVE_PHONE = path.resolve("../../crates/hive-phone/target/debug/hive-phone");
@@ -55,19 +56,12 @@ const read = (file: string) => (fs.existsSync(file) ? fs.readFileSync(file, "utf
 
 test.beforeEach(() => { root = fs.mkdtempSync("/tmp/hm-host-"); });
 test.afterEach(async () => {
-  // The app's own daemon first: closing waits on it. An app not gone after a while is killed.
-  const reap = () => { try { execSync(`pkill -f "out/main/pty-daemon.js ${root}/"`, { stdio: "ignore" }); } catch { /* none */ } };
-  reap();
-  for (const a of apps.splice(0)) {
-    const gone = await Promise.race([a.close().then(() => true, () => true), new Promise<boolean>((r) => setTimeout(() => r(false), 15_000))]);
-    if (!gone) a.process().kill("SIGKILL");
-  }
+  for (const a of apps.splice(0)) await a.close();
   hive("host", "stop");
   for (const p of procs.splice(0)) p.kill("SIGKILL");
   hive("daemon", "stop");
-  // The app's own daemon, which outlives it, and the processes of an app whose main was killed.
-  try { execSync(`pkill -f "out/main/pty-daemon.js ${root}/"`, { stdio: "ignore" }); } catch { /* none */ }
-  try { execSync(`pkill -KILL -f -- "--user-data-dir=${root}/"`, { stdio: "ignore" }); } catch { /* none */ }
+  // The apps' own daemons, which outlive them.
+  stopDaemons(root);
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 
@@ -84,7 +78,7 @@ for (const entered of ["words", "link"] as const) test(`the app pairs with a hos
   // that is what names a session by its tile, which the host knows the workspace's tiles by.
   const elsewhere = path.join(root, "elsewhere");
   fs.mkdirSync(elsewhere);
-  const laptop = await person(root, "laptop", elsewhere, apps, { HIVEMIND_PTY_DAEMON: "1" });
+  const laptop = await person(root, "laptop", elsewhere, apps);
 
   // The host shows a code; the app enters its link in Settings → Devices.
   const pairing = spawn(HIVE, ["host", "pair", "--json"], { env: hostEnv() });
@@ -145,7 +139,7 @@ test("a frame of the app's own workspace runs on the paired host: placed on one 
   const elsewhere = path.join(root, "elsewhere");
   fs.mkdirSync(elsewhere);
   execSync("git init -q", { cwd: elsewhere });
-  const laptop = await person(root, "laptop", elsewhere, apps, { HIVEMIND_PTY_DAEMON: "1" });
+  const laptop = await person(root, "laptop", elsewhere, apps);
   const pairing = spawn(HIVE, ["host", "pair", "--json"], { env: hostEnv() });
   procs.push(pairing);
   const offer = (JSON.parse(await lines(pairing.stdout!)()) as { data: { offer: { link: string } } }).data.offer;
@@ -241,7 +235,7 @@ test("a phone paired with the app is the person's at the host too: the host lets
   // The laptop pairs with the host by its link.
   const elsewhere = path.join(root, "elsewhere");
   fs.mkdirSync(elsewhere);
-  const laptop = await person(root, "laptop", elsewhere, apps, { HIVEMIND_PTY_DAEMON: "1" });
+  const laptop = await person(root, "laptop", elsewhere, apps);
   const pairing = spawn(HIVE, ["host", "pair", "--json"], { env: onHost });
   procs.push(pairing);
   const printed = lines(pairing.stdout!);

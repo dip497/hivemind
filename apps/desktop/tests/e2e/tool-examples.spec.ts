@@ -15,7 +15,7 @@ const repo = path.join(root, "repo");
 const fakeGh = path.join(root, "gh");
 // A worktree outside the main one's folder keeps its whole path.
 const far = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "hm-far-")), "far");
-const env = { ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_PTY_DAEMON: "0", HIVEMIND_SHELL_ENV: "0", PATH: `${fakeGh}${path.delimiter}${process.env.PATH}` } as Record<string, string>;
+const env = { ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_SHELL_ENV: "0", PATH: `${fakeGh}${path.delimiter}${process.env.PATH}` } as Record<string, string>;
 delete env.ELECTRON_RUN_AS_NODE;
 const cli = path.resolve(process.cwd(), "../cli/src/index.ts");
 const examples = path.resolve(process.cwd(), "../../examples/tools");

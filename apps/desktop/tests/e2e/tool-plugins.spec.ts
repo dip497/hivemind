@@ -13,7 +13,7 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-tool-plugins-"));
 const xdg = path.join(root, "config");
 seedAgents(xdg);
 const repo = path.join(root, "repo");
-const env = { ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_PTY_DAEMON: "0" } as Record<string, string>;
+const env = { ...process.env, XDG_CONFIG_HOME: xdg } as Record<string, string>;
 delete env.ELECTRON_RUN_AS_NODE;
 const cli = path.resolve(process.cwd(), "../cli/src/index.ts");
 const examples = path.resolve(process.cwd(), "../../examples/tools");

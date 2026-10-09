@@ -6,24 +6,18 @@
 // When the host goes away and comes back, the guest's terminal shows the host's shell again, live,
 // and the keyboard the guest held is the host's again.
 import { test, expect, type ElectronApplication, type Page } from "@playwright/test";
-import { execSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { hiveNetBuilt, person, sharedWorkspace } from "./helpers/multiplayer";
+import { stopDaemons } from "./helpers/daemons";
 
 let root: string;
 const apps: ElectronApplication[] = [];
 test.beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-terminals-")); });
-// A terminal's session lives in its host's daemon, as it does outside tests: that is what gives it
-// an id another machine can name (hm:<tile>).
-const DAEMON = { HIVEMIND_PTY_DAEMON: "1" };
 test.afterEach(async () => {
-  // These two people's daemons only, before the apps close (closing waits on them) and after.
-  const reap = () => { try { execSync(`pkill -f "out/main/pty-daemon.js ${root}/"`, { stdio: "ignore" }); } catch { /* none */ } };
-  reap();
-  for (const a of apps.splice(0)) await a.close().catch(() => {});
-  reap();
+  for (const a of apps.splice(0)) await a.close();
+  stopDaemons(root);
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -55,7 +49,7 @@ async function run(w: Page, line: string, file: string, want: RegExp): Promise<s
 
 test("a guest watches the host's shell; given the keyboard they type into it and size it, and the host takes it back", async () => {
   test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
-  const { host, guest, repo } = await sharedWorkspace(root, apps, "terminals", { env: DAEMON, names: { host: "Adarsh", guest: "Priya" } });
+  const { host, guest, repo } = await sharedWorkspace(root, apps, "terminals", { names: { host: "Adarsh", guest: "Priya" } });
   // The host's letters are bigger than the guest's: fewer of them fit its tile.
   for (let i = 0; i < 4; i++) await terminal(host).getByRole("button", { name: "increase font size" }).click({ force: true });
 
@@ -116,7 +110,7 @@ test("a guest watches the host's shell; given the keyboard they type into it and
 test("the host goes away and comes back: the guest's terminal shows the host's shell again, live, and the keyboard they held is the host's", async () => {
   test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
   test.setTimeout(180_000); // the guest dials again with back-off while the host is away
-  const { host, guest, repo } = await sharedWorkspace(root, apps, "terminals", { env: DAEMON, names: { host: "Adarsh", guest: "Priya" } });
+  const { host, guest, repo } = await sharedWorkspace(root, apps, "terminals", { names: { host: "Adarsh", guest: "Priya" } });
   await run(host, `echo before > ${repo}/before`, `${repo}/before`, /^before$/);
   await clickInto(guest);
   await guest.locator("[data-keyboard-pill-ask]").click();
@@ -130,7 +124,7 @@ test("the host goes away and comes back: the guest's terminal shows the host's s
   await gone.evaluate(({ app }) => app.quit()).catch(() => {});
   await expect.poll(() => { try { process.kill(pid, 0); return true; } catch { return false; } }, { timeout: 20_000 }).toBe(false);
   await expect(guest.locator("[data-shared-banner]")).toHaveAttribute("data-state", /reconnecting|offline/, { timeout: 15_000 });
-  const back = await person(root, "host", repo, apps, DAEMON);
+  const back = await person(root, "host", repo, apps);
   await expect(guest.locator("[data-shared-banner]")).toHaveAttribute("data-state", "connected", { timeout: 40_000 });
   await expect(holder(guest)).toHaveAttribute("data-keyboard-holder", "Adarsh", { timeout: 10_000 });
   await run(back, `echo back > ${repo}/back`, `${repo}/back`, /^back$/);

@@ -1,18 +1,16 @@
 /**
- * Daemon client — the main process's connection to the persistent PTY daemon.
- * Exposes the SAME surface as pty-host (spawnPty/writePty/resizePty/killPty +
- * detachPty) so index.ts can route to either. Spawns the daemon on demand and
- * reconnects transparently. See research/persistence-plan.md.
+ * Daemon client — the main process's connection to the persistent PTY daemon, where every
+ * terminal runs (spawnPty/writePty/resizePty/killPty + detachPty). Starts the daemon on demand
+ * and reconnects transparently. See research/persistence-plan.md.
  */
 import net from "node:net";
 import path from "node:path";
 import { readFileSync } from "node:fs";
-import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { app } from "electron";
 import { type ServerMsg, type SessionInfo, SOCKET_NAME, frame, makeLineDecoder } from "@hivemind/agent-host/pty-protocol";
 import { DaemonEndpoint, type Callbacks } from "@hivemind/agent-host/daemon-endpoint";
-import { HANDED_DOWN, handedDown } from "@hivemind/agent-host/handed-down";
+import { reachDaemon } from "@hivemind/agent-host/daemon-start";
 import { ipcPath } from "./platform.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -85,68 +83,13 @@ export async function ensureFreshDaemon(): Promise<void> {
   await delay(300); // let it exit + unlink the socket so the next connect spawns fresh
 }
 
-// GNOME / systemd desktops launch the app inside a transient
-// `app-gnome-<name>-<pid>.scope` cgroup whose default `KillMode=control-group`
-// terminates EVERY process in the cgroup when the window closes. `detached`
-// (setsid) escapes the process group + controlling terminal but NOT the cgroup,
-// so a plainly-detached daemon is killed on every close. Detect this and, if so,
-// register the daemon in its OWN transient scope (a `run-*.scope` outside the
-// app cgroup) via `systemd-run --user --scope`. Returns the systemd-run argv
-// prefix to wrap the daemon command with, or null to spawn it directly.
-function cgroupEscapePrefix(): string[] | null {
-  if (process.platform !== "linux") return null;
-  if (!process.env.XDG_RUNTIME_DIR) return null; // no user systemd manager to talk to
-  let cg = "";
-  try { cg = readFileSync("/proc/self/cgroup", "utf8"); } catch { return null; }
-  // Only intervene when we're actually inside a killable app scope — elsewhere
-  // (plain login session, container, non-systemd) the direct spawn is correct.
-  if (!/app-[^/\n]*\.scope/.test(cg)) return null;
-  const probe = spawnSync("systemd-run", ["--version"], { stdio: "ignore" });
-  if (probe.status !== 0) return null;
-  // --scope runs the command in OUR env + cwd (no env-forwarding dance), just in
-  // a fresh scope cgroup; --collect cleans the unit up when the daemon exits.
-  return ["systemd-run", "--user", "--scope", "--quiet", "--collect"];
-}
-
-function spawnDaemon(sp: string): void {
-  // ELECTRON_RUN_AS_NODE makes Electron run the daemon as plain Node (no
-  // Chromium); detached + unref so it outlives this window.
-  const env = { ...process.env, ELECTRON_RUN_AS_NODE: "1", [HANDED_DOWN]: handedDown() };
-  const daemonCmd = [process.execPath, daemonScript(), sp];
-  const prefix = cgroupEscapePrefix();
-  const [file, ...args] = prefix ? [...prefix, ...daemonCmd] : daemonCmd;
-  const child = spawn(file as string, args, { env, detached: true, stdio: "ignore" });
-  child.unref();
-}
-
-function tryConnect(sp: string): Promise<net.Socket> {
-  return new Promise((resolve, reject) => {
-    const s = net.connect(sp);
-    const onErr = (e: Error) => {
-      s.destroy();
-      reject(e);
-    };
-    s.once("error", onErr);
-    s.once("connect", () => {
-      s.removeListener("error", onErr);
-      // Never keep main's event loop alive on this socket, or quit would hang.
-      s.unref();
-      resolve(s);
-    });
-  });
-}
-
+/** This computer's daemon, started if it is not running; never keeping quit waiting on it. */
 async function doConnect(): Promise<net.Socket> {
   const sp = socketPath();
-  for (let attempt = 0; attempt < 25; attempt++) {
-    try {
-      return await tryConnect(sp);
-    } catch {
-      if (attempt === 0) spawnDaemon(sp); // first failure → bring the daemon up
-      await delay(120);
-    }
-  }
-  throw new Error("pty-daemon unreachable");
+  // ELECTRON_RUN_AS_NODE: Electron runs the daemon as plain Node, no Chromium.
+  const s = await reachDaemon(sp, [process.execPath, daemonScript(), sp], { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } });
+  s.unref();
+  return s;
 }
 
 /** A connection of its own to this computer's daemon, started if it is not running: for another

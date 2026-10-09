@@ -5,8 +5,9 @@ import { test, expect, _electron as electron, type ElectronApplication, type Pag
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { seedAgents } from "./helpers/agents";
+import { stopDaemons } from "./helpers/daemons";
 
 let app: ElectronApplication;
 let page: Page;
@@ -14,7 +15,7 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-app-ipc-"));
 const xdg = path.join(root, "config");
 seedAgents(xdg);
 // A terminal's session lives in the daemon here, so it has an id the test can name (hm:<tile>).
-const env = { ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_PTY_DAEMON: "1" } as Record<string, string>;
+const env = { ...process.env, XDG_CONFIG_HOME: xdg } as Record<string, string>;
 const userData = path.join(xdg, "hivemind-dev");
 const cli = path.resolve(process.cwd(), "../cli/src/index.ts");
 let hcp: Record<string, string> = {};
@@ -36,13 +37,8 @@ test.beforeAll(async () => {
   hcp = { HIVE_HCP_SOCK: path.join(userData, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim() };
 });
 test.afterAll(async () => {
-  // This profile's daemon only, before the app closes (close waits on it), and again after it
-  // (closing, the app starts one to let go of its tiles).
-  const reap = () => { try { execSync(`pkill -f "out/main/pty-daemon.js ${xdg}/"`, { stdio: "ignore" }); } catch { /* none */ } };
-  reap();
-  const closed = await Promise.race([app?.close().then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), 10_000))]);
-  if (!closed) { try { app?.process().kill("SIGKILL"); } catch { /* gone */ } }
-  reap();
+  await app?.close();
+  stopDaemons(xdg);
   fs.rmSync(root, { recursive: true, force: true });
 });
 

@@ -14,7 +14,7 @@ let page: Page;
 test.beforeAll(async () => {
   const repo = path.join(root, "repo");
   execSync(`mkdir -p ${repo} && git -C ${repo} init -q -b main`);
-  const env = { ...process.env, XDG_CONFIG_HOME: path.join(root, "config"), HIVEMIND_PTY_DAEMON: "0" } as Record<string, string>;
+  const env = { ...process.env, XDG_CONFIG_HOME: path.join(root, "config") } as Record<string, string>;
   delete env.ELECTRON_RUN_AS_NODE;
   app = await electron.launch({
     args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=${path.join(root, "ud")}`],

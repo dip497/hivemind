@@ -135,7 +135,6 @@ const hive: Partial<Hive> = {
  *  not listed answers nothing, and a subscription to it hears nothing. */
 const machine: Partial<Hive> = {
   platform: "linux",
-  persistentPty: false,
   getNotificationSettings: async () => DEFAULT_NOTIFICATION_SETTINGS,
   setNotificationSettings: async () => ({ ok: true }),
   getBrowserSettings: async () => ({ active: false, enabled: false, port: "" }),

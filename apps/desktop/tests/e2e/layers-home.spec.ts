@@ -19,7 +19,7 @@ const repoB = path.join(root, "beta");
 const session = randomUUID();
 const cli = path.resolve(process.cwd(), "../cli/src/index.ts");
 const env = {
-  ...process.env, XDG_CONFIG_HOME: xdg, HOME: home, HIVEMIND_PTY_DAEMON: "0", HIVEMIND_SHELL_ENV: "0",
+  ...process.env, XDG_CONFIG_HOME: xdg, HOME: home, HIVEMIND_SHELL_ENV: "0",
   PATH: `${bin}${path.delimiter}${process.env.PATH}`,
 } as Record<string, string>;
 delete env.ELECTRON_RUN_AS_NODE;

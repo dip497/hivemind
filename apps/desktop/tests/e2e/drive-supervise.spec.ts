@@ -11,6 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { seedAgents } from "./helpers/agents";
+import { stopDaemons } from "./helpers/daemons";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_DIR = path.resolve(__dirname, "../..");
@@ -20,17 +21,11 @@ const FIXTURE = path.join(__dirname, "fixtures", "fake-agent.cjs");
 let root: string;
 let app: ElectronApplication | undefined;
 test.beforeEach(() => { root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hm-drive-sup-"))); });
-/** This spec's own pty daemon: it outlives the window, and is found by the profile it serves. */
-function ownDaemons(): number[] {
-  return fs.readdirSync("/proc").filter((d) => /^\d+$/.test(d)).filter((pid) => {
-    try { const cmd = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8"); return cmd.includes("pty-daemon") && cmd.includes(root); } catch { return false; }
-  }).map(Number);
-}
 test.afterEach(async () => {
   // The app closes while its daemon lives on, as when the person quits; then the daemon goes.
   await app?.close();
   app = undefined;
-  for (const pid of ownDaemons()) try { process.kill(pid); } catch { /* gone */ }
+  stopDaemons(root);
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -82,7 +77,7 @@ test("a program supervises the agents it starts: their tool uses wait on its ans
   seedAgents(config);
   fs.writeFileSync(path.join(bin, "claude"), `#!/usr/bin/env bash\nFAKE_TOOL_LOG=${JSON.stringify(toolLog)} exec ${JSON.stringify(process.execPath)} ${JSON.stringify(FIXTURE)} claude "$@"\n`, { mode: 0o755 });
   fs.writeFileSync(path.join(bin, "hive"), `#!/usr/bin/env bash\nexec ${JSON.stringify(onPath("bun"))} ${JSON.stringify(CLI)} "$@"\n`, { mode: 0o755 });
-  const env = { ...process.env, XDG_CONFIG_HOME: config, HOME: home, PATH: `${bin}:${process.env.PATH}`, HIVEMIND_SHELL_ENV: "0", HIVEMIND_PTY_DAEMON: "1" } as Record<string, string>;
+  const env = { ...process.env, XDG_CONFIG_HOME: config, HOME: home, PATH: `${bin}:${process.env.PATH}`, HIVEMIND_SHELL_ENV: "0" } as Record<string, string>;
   delete env.ELECTRON_RUN_AS_NODE;
   app = await electron.launch({ args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox"], cwd: repo, env });
   const page = await app.firstWindow();

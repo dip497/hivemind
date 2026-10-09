@@ -21,7 +21,7 @@ test("a pipe and a spawn wire are drawn from one tile to the other, and go when 
   const repo = scratch("hm-links-repo-");
   execSync("git init -q -b main && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init", { cwd: repo });
   const ud = scratch("hm-links-ud-");
-  const env = { ...process.env, HIVEMIND_PTY_DAEMON: "0", XDG_CONFIG_HOME: path.join(ud, "config") };
+  const env = { ...process.env, XDG_CONFIG_HOME: path.join(ud, "config") };
   delete env.ELECTRON_RUN_AS_NODE;
   const app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=${ud}`], cwd: repo, env });
   const page = await app.firstWindow();

@@ -1,32 +1,16 @@
-// Reap ONLY the pty-daemons this suite could have spawned — never the user's
-// real one. The suite forces HIVEMIND_PTY_DAEMON=0 (see playwright.config), so
-// normally no daemon is spawned at all; this is a defensive sweep in case a
-// spec opts the daemon back on.
-//
-// CRITICAL: a blanket `pkill -f out/main/pty-daemon.js` ALSO kills the
-// production daemon when hivemind is run from source (same script path) —
-// that silently dropped the developer's live claude sessions. Every test
-// daemon's socket lives under the OS temp dir (each spec uses a
-// `--user-data-dir` under tmpdir, and that socket path is passed as the
-// daemon's argv), while the real daemon's socket is under `$HOME/.config/`.
-// Match the temp-dir socket path, which the production daemon can never have.
-import { execSync } from "node:child_process";
+// Every terminal daemon the suite's apps started, stopped (each outlives its app): their sockets
+// are in the temp dir, where the daemon of the app someone is using never has one.
 import fs from "node:fs";
 import os from "node:os";
+import { stopDaemons } from "./helpers/daemons";
 
 export default function globalTeardown(): void {
-  const tmp = os.tmpdir(); // e.g. /tmp — the prefix of every test socket path
+  const tmp = os.tmpdir();
+  // First: a daemon still running writes into its profile.
+  stopDaemons(tmp);
   // The isolated Electron profile playwright.config created for this run.
   const xdg = process.env.XDG_CONFIG_HOME;
   if (xdg && xdg.startsWith(tmp) && xdg.includes("hivemind-e2e-xdg-")) {
     try { fs.rmSync(xdg, { recursive: true, force: true }); } catch { /* best-effort */ }
-  }
-  try {
-    // `-f` matches the full command line: `electron …/pty-daemon.js <socketPath>`.
-    // Anchoring on the script + the tmp-dir socket prefix excludes the real
-    // daemon (whose socket is under $HOME/.config).
-    execSync(`pkill -f "out/main/pty-daemon.js ${tmp}/"`, { stdio: "ignore" });
-  } catch {
-    // pkill exits non-zero when nothing matches — fine.
   }
 }

@@ -29,7 +29,7 @@ test.beforeAll(async () => {
   seedAgents(xdg);
   fs.mkdirSync(repo);
   execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
-  const env = { ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_PTY_DAEMON: "0" } as Record<string, string>;
+  const env = { ...process.env, XDG_CONFIG_HOME: xdg } as Record<string, string>;
   delete env.ELECTRON_RUN_AS_NODE;
   app = await electron.launch({
     args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox", `--user-data-dir=${path.join(root, "ud")}`],

@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
+import { stopDaemons } from "./helpers/daemons";
 
 test.use({ trace: "off" });
 
@@ -14,7 +15,7 @@ let repo: string;
 const APP_DIR = process.cwd();
 const CLI = path.resolve(APP_DIR, "../cli/src/index.ts");
 const XDG = fs.mkdtempSync(path.join(os.tmpdir(), "hm-interest-xdg-"));
-const ENV = { ...process.env, XDG_CONFIG_HOME: XDG, HIVEMIND_PTY_DAEMON: "1" } as Record<string, string>;
+const ENV = { ...process.env, XDG_CONFIG_HOME: XDG } as Record<string, string>;
 const VIEW = fs.mkdtempSync(path.join(os.tmpdir(), "hm-interest-view-"));
 
 /** What the renderer's copy of each terminal shows. */
@@ -34,10 +35,8 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  // Reap only the daemon this spec started (its socket is under this spec's XDG), before
-  // closing the app: close() waits on child processes.
-  try { execFileSync("pkill", ["-f", `out/main/pty-daemon.js ${XDG}/`], { stdio: "ignore" }); } catch { /* none */ }
-  await Promise.race([app?.close(), new Promise((r) => setTimeout(r, 10_000))]);
+  await app?.close();
+  stopDaemons(XDG);
   for (const d of [repo, XDG, VIEW]) await fs.promises.rm(d, { recursive: true, force: true }).catch(() => {});
 });
 

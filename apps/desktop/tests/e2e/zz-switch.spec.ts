@@ -1,10 +1,11 @@
 // Scratch: an Ink-like agent's screen after switching to another workspace and back. Not committed.
 import { test, expect, _electron as electron } from "@playwright/test";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { seedAgents } from "./helpers/agents";
+import { stopDaemons } from "./helpers/daemons";
 
 test("switch and back", async () => {
   test.setTimeout(180_000);
@@ -13,7 +14,7 @@ test("switch and back", async () => {
   const cli = path.resolve(process.cwd(), "../cli/src/index.ts");
   fs.mkdirSync(bin, { recursive: true }); fs.mkdirSync(home, { recursive: true });
   seedAgents(xdg, ["claude"]);
-  const env = { ...process.env, XDG_CONFIG_HOME: xdg, HOME: home, HIVEMIND_PTY_DAEMON: "1", HIVEMIND_SHELL_ENV: "0", PATH: `${bin}${path.delimiter}${process.env.PATH}` } as Record<string, string>;
+  const env = { ...process.env, XDG_CONFIG_HOME: xdg, HOME: home, HIVEMIND_SHELL_ENV: "0", PATH: `${bin}${path.delimiter}${process.env.PATH}` } as Record<string, string>;
   delete env.ELECTRON_RUN_AS_NODE; delete env.HIVE_HCP_SOCK; delete env.HCP_TOKEN; delete env.HIVEMIND_TILE;
   const repos = ["alpha", "beta"].map((n) => path.join(root, n));
   for (const [i, r] of repos.entries()) { fs.mkdirSync(r); execFileSync("git", ["init", "-q", "-b", "main"], { cwd: r }); execFileSync("bun", [cli, "init", `--prefix=${["AL", "BE"][i]}`, "--no-agentic"], { cwd: r, env }); }
@@ -44,5 +45,5 @@ setInterval(() => { const w = out.columns; n++; out.write("\\x1b[2A\\r\\x1b[J" +
   fs.writeFileSync(path.join(process.env.SHOTS!, "switch-after.txt"), await screen());
   await page.screenshot({ path: path.join(process.env.SHOTS!, "switch-after.png") });
   await app.close();
-  spawnSync("pkill", ["-f", `pty-daemon.js ${xdg}`]);
+  stopDaemons(xdg);
 });

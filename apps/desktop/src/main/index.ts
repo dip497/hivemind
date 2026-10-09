@@ -38,7 +38,6 @@ import { agentById, agentForCmd, getCatalog, preferredAgent, setCatalog, spawnab
 import { agentPresence, discoverOptions, findBin, verifyAgent } from "@hivemind/agents/discover";
 import { listSessions } from "@hivemind/agents/node";
 import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
-import * as ptyHost from "./pty-host.js";
 import * as ptyDaemon from "./daemon-client.js";
 import { isRemote, parseDeviceUri } from "@hivemind/core/remote-uri";
 import { savedAuth } from "./remote/saved-hosts.js";
@@ -51,15 +50,9 @@ import {
 } from "./remote/pty.js";
 import { remoteConns } from "@hivemind/host/remote/conn";
 import { findGitRoot, computeRepoPath, projectDir } from "./workspace-paths.js";
-// tmux-style persistence is ON by default — terminal sessions live in a
-// detached daemon and survive the window closing. No user-facing flag.
-// `HIVEMIND_PTY_DAEMON=0` is an internal escape hatch (debugging / a hostile
-// environment where spawning the daemon fails) that falls back to the legacy
-// in-process PTYs (which die with the window).
-const PERSIST_PTY = process.env.HIVEMIND_PTY_DAEMON !== "0";
-const ptyMod = PERSIST_PTY ? ptyDaemon : ptyHost;
-const { spawnPty, writePty, resizePty, killPty, detachPty, hasSession, pausePty, resumePty } = ptyMod;
-const killAllPtys = ptyMod.killAll;
+// Terminal sessions live in a detached daemon and survive the window closing.
+const { spawnPty, writePty, resizePty, killPty, detachPty, hasSession, pausePty, resumePty } = ptyDaemon;
+const killAllPtys = ptyDaemon.killAll;
 import { dialogStart, rememberPick } from "./dialog-start";
 import { applyShellEnvToProcess, refreshShellEnv } from "@hivemind/agent-host/shell-env";
 import { watchRepo } from "./fs-watcher.js";
@@ -1105,7 +1098,7 @@ const onYourDevices = deviceSessions({
 function screenOf(tileId: string): ReadScreen | null {
   if (onYourDevices.holds(tileId)) return onYourDevices.screen(tileId);
   if (hasRemotePty(tileId)) return remoteKeepsScreen(tileId) ? (cb) => screenRemotePty(tileId, cb) : null;
-  return PERSIST_PTY && hasSession(tileId) ? (cb) => ptyDaemon.screenPty(tileId, cb) : null;
+  return hasSession(tileId) ? (cb) => ptyDaemon.screenPty(tileId, cb) : null;
 }
 function setPtyPaused(tileId: string, paused: boolean): void {
   if (onYourDevices.holds(tileId)) { if (paused) onYourDevices.pause(tileId); else onYourDevices.resume(tileId); }
@@ -1188,7 +1181,7 @@ async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ p
   // One someone else put in a frame of theirs here is that one's to start, when they let the
   // people there run agents here: a window here shows it once it runs, and never starts it.
   const placed = placedRun(opts.tile ?? toBareId(opts.tileId));
-  const theirs = placed === null && !opts.attachOnly && PERSIST_PTY && startedByOthers(opts.tile ?? toBareId(opts.tileId));
+  const theirs = placed === null && !opts.attachOnly && startedByOthers(opts.tile ?? toBareId(opts.tileId));
   if (placed === null && !opts.attachOnly && !theirs) throw new Error("someone else placed this tile on your computer: it runs here only if you place it");
   if (theirs) opts = { ...opts, attachOnly: true, liveOnly: true };
   if (placed) {
@@ -1412,7 +1405,7 @@ app.commandLine.appendSwitch("max-active-webgl-contexts", "32");
 // port so a spawned agent in a PTY tile can drive a BrowserTile with
 // `agent-browser --cdp <port>` (see the `hive-browser` skill). The port + the
 // discovery-file path are exported into the environment, which every PTY
-// inherits (pty-host spreads process.env) — so the agent sees
+// inherits (the daemon starts from this env) — so the agent sees
 // $HIVEMIND_BROWSER_CDP_PORT and $HIVEMIND_BROWSER_TARGETS with no extra wiring.
 // SECURITY: a remote-debugging port also exposes the app's OWN window, so this
 // is off by default and bound to 127.0.0.1 — only enable it for agents you trust.
@@ -1510,7 +1503,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // The person's other devices run terminals here in this computer's daemon, when it has one.
     // A participant who lends their machine's keyboards, or keeps them again (M4).
     installNetworkIpc(workspaceServer, {
-      daemon: PERSIST_PTY ? ptyDaemon.connectDaemon : undefined,
+      daemon: ptyDaemon.connectDaemon,
       granted: (device) => terminals.machineChanged(`peer:${device}`),
       statuses: () => control.status.all(),
       onStatus: (listener) => { control.status.subscribe(listener); },
@@ -1521,7 +1514,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       workspaceServer.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part }));
     void initMachines({
       send: (snap) => broadcast("machines:changed", snap),
-      listLocalSessions: () => (PERSIST_PTY ? ptyDaemon.listSessions() : Promise.resolve([])),
+      listLocalSessions: () => ptyDaemon.listSessions(),
       version: app.getVersion(),
     }).catch((e: unknown) => console.warn("[machines] init failed:", e));
     installViewManagementIpc();
@@ -1765,14 +1758,12 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // Dev rebuild safety: if a daemon from an older build is still running,
     // replace it BEFORE the renderer attaches tiles, so new sessions carry the
     // current code (HCP/plan hooks + env injection). No-op in prod / when current.
-    if (PERSIST_PTY) {
-      try { await ptyDaemon.ensureFreshDaemon(); }
-      catch (e) {
-        // Best-effort, but a stale daemon means injected hooks may be wrong →
-        // notifications themselves could silently break. Surface it once as a
-        // non-blocking toast instead of swallowing entirely.
-        pushAppError(`Couldn't refresh the PTY daemon: ${(e as Error).message ?? "unknown error"}`, "pty-daemon");
-      }
+    try { await ptyDaemon.ensureFreshDaemon(); }
+    catch (e) {
+      // Best-effort, but a stale daemon means injected hooks may be wrong →
+      // notifications themselves could silently break. Surface it once as a
+      // non-blocking toast instead of swallowing entirely.
+      pushAppError(`Couldn't refresh the PTY daemon: ${(e as Error).message ?? "unknown error"}`, "pty-daemon");
     }
     void createWindow();
     // Native OS notifications for agents that need you — driven by the renderer's
@@ -1945,10 +1936,10 @@ function startHcpControlPlane(): void {
   // A machine's daemon keeps the status of the sessions it runs (R6): shown here as it has it.
   // Only a machine's own report does that: from then on the session's local reports are ignored.
   setRemoteEventSink((topic, data) => control.fromMachine(topic, data));
-  ptyMod.setDaemonEventSink((method, params) => control.event(method, params));
+  ptyDaemon.setDaemonEventSink((method, params) => control.event(method, params));
 }
 
-// In daemon mode the normal quit hangs (~60s): this UI process owns no PTY
+// The normal quit hangs (~60s): this UI process owns no PTY
 // children to reap, yet some platform handle keeps the loop alive. Terminal
 // state is safe in the detached daemon, so we force a hard exit. BUT first flush
 // Chromium storage to disk — app.exit() skips the graceful flush, which would
@@ -1978,8 +1969,9 @@ function forceExitAfterFlush(): void {
  *  writer's lock gives up after 5 s, so this is enough for it to finish either way. */
 const SETTINGS_QUIT_WAIT_MS = 6_000;
 
-// The normal quit (not daemon mode) waits for a settings write still running, once, then
-// quits again: exiting mid-write loses the change and can leave settings.json's lock behind.
+// A quit waits for a settings write still running, once, then quits again: exiting mid-write
+// loses the change and can leave settings.json's lock behind. Only this holds the quit;
+// before-quit cannot.
 let settingsWaitedOnQuit = false;
 app.on("will-quit", (e) => {
   if (settingsWaitedOnQuit || !settingsBusy()) return;
@@ -1989,28 +1981,13 @@ app.on("will-quit", (e) => {
 });
 
 // Linux: quit when last window closes (no menu-bar persistence like macOS).
-app.on("window-all-closed", () => {
-  if (PERSIST_PTY) forceExitAfterFlush();
-  else app.quit();
-});
+app.on("window-all-closed", () => forceExitAfterFlush());
 
-// Reap any live PTY processes before exit — otherwise bash/claude sessions
-// keep running and emit data to a destroyed sender, throwing `Object has
-// been destroyed`. (Daemon mode reaps nothing here — sessions persist; the
-// socket teardown in killAll just unblocks exit.)
+// Every quit path (app.quit, Cmd+Q, playwright's app.close) flushes what is pending and exits; the
+// terminal sessions stay in the daemon, and only this app's socket to it goes, so it cannot stall
+// the exit.
 app.on("before-quit", () => {
-  // Catches every quit path that doesn't go through window-all-closed
-  // (app.quit / Cmd+Q / playwright's app.close). Daemon mode force-exits after
-  // flushing storage; legacy mode reaps in-process PTYs and quits normally.
   flushWorkspaceStore();
   stopNetwork();
-  if (PERSIST_PTY) {
-    forceExitAfterFlush();
-    return;
-  }
-  try {
-    killAllPtys();
-  } catch {
-    /* best-effort */
-  }
+  forceExitAfterFlush();
 });

@@ -131,7 +131,6 @@ issue("PAY-6", "Migrate refunds to the v2 ledger", "done", ["billing"],
 
 // ── launch + drive ──────────────────────────────────────────────────
 const userData = mkdtempSync(path.join(tmpdir(), "hm-ud-"));
-process.env.HIVEMIND_PTY_DAEMON = "0";
 
 const app = await electron.launch({
   args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox", `--user-data-dir=${userData}`],

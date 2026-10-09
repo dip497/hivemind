@@ -11,6 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { stopDaemons } from "./helpers/daemons";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_DIR = path.resolve(__dirname, "../..");
@@ -61,7 +62,7 @@ test.beforeAll(async () => {
     args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox"],
     cwd: repo,
     // HIVEMIND_SHELL_ENV=0 keeps this PATH (the stand-ins first), not the login shell's.
-    env: { ...process.env, HOME: home, PATH: `${fakeBin}:${process.env.PATH}`, HIVEMIND_PTY_DAEMON: "1", HIVEMIND_SHELL_ENV: "0" } as Record<string, string>,
+    env: { ...process.env, HOME: home, PATH: `${fakeBin}:${process.env.PATH}`, HIVEMIND_SHELL_ENV: "0" } as Record<string, string>,
   });
   page = await app.firstWindow();
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
@@ -74,12 +75,8 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   // The next spec on this profile opens the project it is started in, not this spec's (removed below).
   await page?.evaluate((v) => { if (v === null) localStorage.removeItem("hivemind:last-project"); else localStorage.setItem("hivemind:last-project", v); }, lastProject).catch(() => {});
-  // Reap this spec's daemon before closing the app (close() waits on child processes), and again
-  // after: the closing app starts another to let go of its tiles.
-  try { execSync(`pkill -f "out/main/pty-daemon.js ${XDG}/"`, { stdio: "ignore" }); } catch { /* none */ }
-  const closed = await Promise.race([app?.close().then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), 10_000))]);
-  if (!closed) { try { app?.process().kill("SIGKILL"); } catch { /* gone */ } }
-  try { execSync(`pkill -f "out/main/pty-daemon.js ${XDG}/"`, { stdio: "ignore" }); } catch { /* none */ }
+  await app?.close();
+  stopDaemons(XDG);
   try { execSync(`pkill -f "fixtures/fake-agent\\.cjs (claude|droid) "`, { stdio: "ignore" }); } catch { /* none */ }
   for (const d of [repo, fakeBin, home]) fs.rmSync(d, { recursive: true, force: true });
 });

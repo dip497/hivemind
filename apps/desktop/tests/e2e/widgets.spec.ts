@@ -28,7 +28,7 @@ test("a widget is offered, added, drawn in every view, and its button changes wh
   fs.mkdirSync(counter, { recursive: true });
   fs.writeFileSync(path.join(counter, "widget.json"), JSON.stringify({ name: "Counter" }));
   fs.writeFileSync(path.join(counter, "widget.js"), COUNTER);
-  const env = { ...process.env, HIVEMIND_PTY_DAEMON: "0", XDG_CONFIG_HOME: path.join(ud, "config") };
+  const env = { ...process.env, XDG_CONFIG_HOME: path.join(ud, "config") };
   delete env.ELECTRON_RUN_AS_NODE;
   const app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=${ud}`], cwd: repo, env });
   try {
@@ -102,7 +102,7 @@ test("a widget reads the workspace through hive.hm, held to what its widget.json
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "widget.json"), JSON.stringify({ name: "Tiles" }));
   fs.writeFileSync(path.join(dir, "widget.js"), TILES);
-  const env = { ...process.env, HIVEMIND_PTY_DAEMON: "0", XDG_CONFIG_HOME: path.join(ud, "config") };
+  const env = { ...process.env, XDG_CONFIG_HOME: path.join(ud, "config") };
   delete env.ELECTRON_RUN_AS_NODE;
   const app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=${ud}`], cwd: repo, env });
   try {

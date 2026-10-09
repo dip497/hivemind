@@ -22,6 +22,7 @@ import os from "node:os";
 import path from "node:path";
 import { hiveNetBuilt, person } from "./helpers/multiplayer";
 import { offerPhonePairing, talkerAgent } from "./helpers/phone";
+import { stopDaemons } from "./helpers/daemons";
 
 const platform = process.env.PHONE_APP === "android" || process.env.PHONE_APP === "ios" ? process.env.PHONE_APP : null;
 
@@ -43,8 +44,6 @@ let root: string | undefined;
 const apps: ElectronApplication[] = [];
 /** The phone's UI test while it runs: stopped with the test. */
 let phone: ChildProcess | undefined;
-/** This test's terminal daemons, stopped: an app closing waits on them. */
-const reap = () => { try { execSync(`pkill -f "out/main/pty-daemon.js ${root}/"`, { stdio: "ignore" }); } catch { /* none */ } };
 test.afterEach(async ({}, testInfo) => {
   phone?.kill("SIGKILL");
   phone = undefined;
@@ -54,13 +53,10 @@ test.afterEach(async ({}, testInfo) => {
       await a.context().tracing.stop({ path: testInfo.outputPath("trace.zip") }).catch(() => undefined);
       await (await a.firstWindow()).screenshot({ path: testInfo.outputPath("desktop.png") }).catch(() => undefined);
     }
-    reap();
-    const gone = await Promise.race([a.close().then(() => true, () => true), new Promise<boolean>((r) => setTimeout(() => r(false), 15_000))]);
-    if (!gone) a.process().kill("SIGKILL");
+    await a.close();
   }
   if (!root) return;
-  reap();
-  try { execSync(`pkill -KILL -f -- "--user-data-dir=${root}/"`, { stdio: "ignore" }); } catch { /* none */ }
+  stopDaemons(root);
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   root = undefined;
 });
@@ -136,7 +132,7 @@ test("the phone app pairs with the computer by the link it shows, finds it and i
   // Its own data under `root` on every platform (on Linux XDG_CONFIG_HOME puts it there already); on
   // a Mac, Chromium's own keys kept off the runner's keychain, which nothing here should ask about.
   const args = [`--user-data-dir=${path.join(root, "desktop", "hivemind-dev")}`, ...(process.platform === "darwin" ? ["--use-mock-keychain"] : [])];
-  const desktop = await person(root, "desktop", repo, apps, { HIVEMIND_PTY_DAEMON: "1", HOME: home, ...env }, args);
+  const desktop = await person(root, "desktop", repo, apps, { HOME: home, ...env }, args);
   const app = apps[0]!;
   await app.context().tracing.start({ screenshots: true, snapshots: true });
   const log = fs.createWriteStream(testInfo.outputPath("desktop.log"));

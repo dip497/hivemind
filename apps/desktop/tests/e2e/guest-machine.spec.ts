@@ -10,29 +10,19 @@
 // host, and their window shows it. The host's board names their computer by them, there or not. A
 // branch of theirs, handed off, lands in the host's repository, and the Code tile shows it there, on its Changes.
 import { test, expect, type ElectronApplication, type Page } from "@playwright/test";
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { hiveNetBuilt, sharedWorkspace, tiles } from "./helpers/multiplayer";
+import { stopDaemons } from "./helpers/daemons";
 
 let root: string;
 const apps: ElectronApplication[] = [];
 test.beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-guest-machine-")); });
-const DAEMON = { HIVEMIND_PTY_DAEMON: "1" };
 test.afterEach(async () => {
-  // These two people's daemons only (`[.]`: the pattern matches no shell that runs it), before the
-  // apps close, as they close (closing waits on them, and an app that still shows a session there
-  // starts its daemon again), and after.
-  const reap = () => { try { execSync(`pkill -f "out/main/pty-daemon[.]js ${root}/"`, { stdio: "ignore" }); } catch { /* none */ } };
-  reap();
-  const reaping = setInterval(reap, 500);
-  try {
-    for (const a of apps.splice(0)) await a.close().catch(() => {});
-  } finally {
-    clearInterval(reaping);
-  }
-  reap();
+  for (const a of apps.splice(0)) await a.close();
+  stopDaemons(root);
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -82,7 +72,7 @@ async function openShell(w: Page, frame: string): Promise<string> {
 test("a guest puts a frame of their own on their computer: a shell they open in it runs there, in their folder, and the host watches it without typing into it; a shell the host puts there runs nowhere, until they let the others run terminals there", async () => {
   test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
   test.setTimeout(180_000);
-  const { host, guest, repo } = await sharedWorkspace(root, apps, "edit", { env: DAEMON, names: { host: "Adarsh", guest: "Priya" } });
+  const { host, guest, repo } = await sharedWorkspace(root, apps, "edit", { names: { host: "Adarsh", guest: "Priya" } });
   // The guest's folder is a clone of the host's repository.
   git(repo, "commit", "-q", "--allow-empty", "-m", "start");
   const folder = path.join(root, "priya-api");

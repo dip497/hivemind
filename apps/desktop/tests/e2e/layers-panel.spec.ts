@@ -11,7 +11,7 @@ import path from "node:path";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-layers-"));
 const repo = path.join(root, "repo");
-const env = { ...process.env, XDG_CONFIG_HOME: path.join(root, "config"), HIVEMIND_PTY_DAEMON: "0", HIVEMIND_SHELL_ENV: "0" } as Record<string, string>;
+const env = { ...process.env, XDG_CONFIG_HOME: path.join(root, "config"), HIVEMIND_SHELL_ENV: "0" } as Record<string, string>;
 delete env.ELECTRON_RUN_AS_NODE;
 let app: ElectronApplication;
 let page: Page;

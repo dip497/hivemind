@@ -1,6 +1,5 @@
 /** `hive daemon start|status|stop` — the desktop's PTY daemon, hosted by `hive` on machines without the app. */
 import { defineCommand } from "citty";
-import { spawn } from "node:child_process";
 import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
@@ -9,7 +8,7 @@ import { EXIT } from "../hcp.js";
 import { connect, defaultSocket, listSessions, MAX_SOCKET_PATH, ping } from "../pty-client.js";
 import { compiledSelf } from "../remote.js";
 import { BRIDGE_READY } from "@hivemind/agent-host/pty-protocol";
-import { HANDED_DOWN, handedDown } from "@hivemind/agent-host/handed-down";
+import { startDaemon } from "@hivemind/agent-host/daemon-start";
 
 /** Set by scripts/build.ts so bun embeds the addon; absent when running from source. */
 declare const HIVE_PTY_NATIVE: string | undefined;
@@ -33,10 +32,8 @@ export async function ensureDaemon(sock: string): Promise<{ started: boolean }> 
   const dir = path.dirname(sock);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const log = fs.openSync(path.join(dir, "pty-daemon.log"), "a");
-  const [file, ...args] = [...selfArgv(), "daemon", "start", "--foreground", "--socket", sock];
-  // Detached so it outlives this command and the ssh session that ran it.
-  const child = spawn(file!, args, { detached: true, stdio: ["ignore", log, log], env: { ...process.env, [HANDED_DOWN]: handedDown() } });
-  child.unref();
+  // Outliving this command and the ssh session that ran it.
+  startDaemon([...selfArgv(), "daemon", "start", "--foreground", "--socket", sock], { stdio: ["ignore", log, log] });
   fs.closeSync(log);
   for (let t = 0; t < 10_000; t += 100) {
     if (await ping(sock, 500)) return { started: true };

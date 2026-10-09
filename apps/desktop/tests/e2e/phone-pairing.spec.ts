@@ -34,6 +34,7 @@ import { heldWorkspaces } from "@hivemind/host/peer-links";
 import { pluginCsp, withImportMap } from "@hivemind/core/view-files";
 import { HIVE_NET, hiveNetBuilt, ownNetwork, person } from "./helpers/multiplayer";
 import { offerPhonePairing, talkerAgent } from "./helpers/phone";
+import { stopDaemons } from "./helpers/daemons";
 
 const HIVE_PHONE = path.resolve("../../crates/hive-phone/target/debug/hive-phone");
 const CLI = path.resolve("../cli/src/index.ts");
@@ -44,20 +45,10 @@ const apps: ElectronApplication[] = [];
 /** What the phone runs that keeps running: stopped after each test. */
 const procs: ChildProcess[] = [];
 test.beforeEach(() => { root = fs.mkdtempSync("/tmp/hm-phone-"); });
-/** This test's terminal daemons, stopped: an app closing waits on them. */
-const reap = () => { try { execSync(`pkill -f "out/main/pty-daemon.js ${root}/"`, { stdio: "ignore" }); } catch { /* none */ } };
-/** Close `a`, its daemons stopped first; one not gone after a while is killed. */
-async function closeApp(a: ElectronApplication): Promise<void> {
-  reap();
-  const gone = await Promise.race([a.close().then(() => true, () => true), new Promise<boolean>((r) => setTimeout(() => r(false), 15_000))]);
-  if (!gone) a.process().kill("SIGKILL");
-}
 test.afterEach(async () => {
   for (const p of procs.splice(0)) p.kill("SIGKILL");
-  // The app's daemons only, before it closes and after, and the processes it started with it.
-  for (const a of apps.splice(0)) await closeApp(a);
-  reap();
-  try { execSync(`pkill -KILL -f -- "--user-data-dir=${root}/"`, { stdio: "ignore" }); } catch { /* none */ }
+  for (const a of apps.splice(0)) await a.close();
+  stopDaemons(root);
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 
@@ -68,7 +59,7 @@ async function desktopWith(env: Record<string, string> = {}) {
   const repo = path.join(root, "api");
   fs.mkdirSync(repo);
   execSync("git init -q", { cwd: repo });
-  const desktop = await person(root, "desktop", repo, apps, { HIVEMIND_PTY_DAEMON: "1", ...env });
+  const desktop = await person(root, "desktop", repo, apps, { ...env });
   const me = await desktop.evaluate(() => window.hive.identity());
   const devices = () => desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "devices" } })));
   return { repo, desktop, me, devices };
@@ -638,7 +629,7 @@ test("a computer away is shown with what it last said needed the person, and whe
   // It starts again: on its network at once, for the phone paired with it, which it tells it is
   // back; the phone shows it, and finds it there.
   const started = Date.now();
-  await person(root, "desktop", d.repo, apps, { HIVEMIND_PTY_DAEMON: "1", ...env });
+  await person(root, "desktop", d.repo, apps, { ...env });
   await expect.poll(backs, { timeout: 30_000 }).toEqual([{ v: 1, t: "back", device: d.me.deviceId, name: os.hostname(), since: expect.any(Number) }]);
   expect(backs()[0]!.since).toBeGreaterThanOrEqual(started);
   expect((await needsOf(phone)).away).toEqual([]);

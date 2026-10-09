@@ -655,8 +655,6 @@ export interface HiveIpc {
   onTerminalSize(cb: (tileId: string, cols: number, rows: number) => void): () => void;
   /** Someone types into a terminal this window shows: at most once a second while they type on. */
   onTyping(cb: (tileId: string, by: Typist) => void): () => void;
-  /** True when HIVEMIND_PTY_DAEMON=1 — terminals persist across window close. */
-  persistentPty: boolean;
 
   // ── notifications ─────────────────────────────────────────
   /** Forward a notable agent-status transition to the main process, which fires

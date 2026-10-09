@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { trackOpenSession } from "./machines/open-sessions";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -94,7 +94,7 @@ const INTEREST_HIDE_MS = 1000;
 // preset is the historical Ubuntu / GNOME Terminal palette, byte-identical —
 // golden-tested in hive-core). `allowTransparency` must be set at construction,
 // so it follows the user's glass setting, not the per-view gate.
-/** Mounted tiles per session id: a persistent id is shared by a tile and its remount. */
+/** Mounted tiles per session id: a tile shares its id with its remount. */
 const liveMounts = new Map<string, number>();
 /** Each mounted terminal's "your tile is closing", by tile id. */
 const closing = new Map<string, Set<() => void>>();
@@ -109,7 +109,7 @@ const closing = new Map<string, Set<() => void>>();
 export function endTileSession(tileId: string, adopted: boolean): void {
   const mounts = closing.get(tileId);
   if (mounts?.size) for (const close of mounts) close();
-  else if (!adopted && window.hive.persistentPty) window.hive.ptyKill(toPtyId(tileId));
+  else if (!adopted) window.hive.ptyKill(toPtyId(tileId));
 }
 
 const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
@@ -228,32 +228,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     if (!term) return;
     term.options.theme = { ...withScrollbar(terminalThemeFor(termPalette)), background: termBg };
   }, [termBg, termPalette]);
-  // Unique PTY identity per MOUNT (not per prop). Fixes React.StrictMode
-  // double-mount race: the first mount's awaited ptySpawn could resolve AFTER
-  // its cleanup ran, killing the second mount's PTY (same tileId in the
-  // pty-host map → SIGHUP, terminal shows "exited code=0 signal=1").
-  // With useId(), each mount lifecycle gets its own ptyId — cleanup only ever
-  // kills its own PTY.
-  const reactId = useId();
-  // Persistence mode (HIVEMIND_PTY_DAEMON=1): use a STABLE session id so the
-  // same tile reattaches to its surviving daemon session across restarts, and
-  // DETACH (not kill) on unmount. The StrictMode double-mount race the per-mount
-  // id guarded against dissolves here — detach is harmless and attach is
-  // idempotent (the daemon replays the buffer). Non-persistent: keep the
-  // per-mount unique id + kill-on-unmount (unchanged legacy behavior).
-  //
-  // ID is tileId-only, NOT keyed on cwd. tileIds are already unique
-  // (timestamp-derived). Earlier `hm:${cwd}:${tileId}` orphaned a session
-  // whenever the containing frame's workspacePath rebound, because mkTile
-  // re-threads the new zoneRepo into the cwd prop → ptyId mutates →
-  // daemon's stored session becomes unreachable → fresh spawn at new cwd
-  // (and the old session leaks until idle GC). Session identity should
-  // follow the TILE/FRAME, not the path. The original spawn cwd is still
-  // preserved inside the daemon's frozen spec, so claude resumes at the
-  // path where its history lives — which is the correct semantics for
-  // claude (its session JSONL is tied to that repo).
-  const persistent = window.hive.persistentPty === true;
-  const ptyId = session ?? (persistent ? toPtyId(tileId) : `${tileId}-${reactId}`);
+  // One session per tile, its id the tile's: the same tile reattaches to its session in the daemon
+  // across restarts, a remount (StrictMode, a view move) shares it, and an unmount lets go of it
+  // (only a close kills it). Not keyed on cwd: a frame rebinding its folder keeps the session, which
+  // the daemon keeps at the folder it began in, where an agent's history is.
+  const ptyId = session ?? toPtyId(tileId);
   useEffect(() => trackOpenSession(ptyId), [ptyId]);
   // One keyboard per terminal (M2): who has it, whether this window's keys reach the session, and
   // the size the session was given. Heard before the session is opened, which tells it both.
@@ -268,8 +247,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   const { shared } = useShown();
   const attachedRef = useRef(false);
   const reattachRef = useRef<(() => void) | null>(null);
-  // True once the tile is closing (endTileSession) — then we KILL even in persistent
-  // mode. App-close / project-switch unmounts leave it false → detach.
+  // True once the tile is closing (endTileSession): then the unmount kills its session. App-close
+  // and project-switch unmounts leave it false: they let go of it.
   const killOnUnmountRef = useRef(false);
 
   // Agent/terminal status — driven by PTY activity, mutated imperatively via
@@ -894,12 +873,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         // agents run on another machine and never queue here.
         let attachedPid: number | undefined;
         if (agent && !session && isRestored(tileId) && !isRemote(cwd)) {
-          if (persistent) {
-            // liveOnly: a session saved before a reboot restores on attach, which is the
-            // start this queue is for; it must wait its turn like any other.
-            const probe = await window.hive.ptySpawn({ tileId: ptyId, tile: tileId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows, attachOnly: true, liveOnly: true });
-            if (probe.pid !== -1) attachedPid = probe.pid;
-          }
+          // liveOnly: a session saved before a reboot restores on attach, which is the
+          // start this queue is for; it must wait its turn like any other.
+          const probe = await window.hive.ptySpawn({ tileId: ptyId, tile: tileId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows, attachOnly: true, liveOnly: true });
+          if (probe.pid !== -1) attachedPid = probe.pid;
           if (attachedPid === undefined && !cancelled) {
             bootRelease = await acquireBoot(tileId);
             if (cancelled) { releaseBoot(); return; }
@@ -919,11 +896,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         });
         if (cancelled) {
           // An adopted session is someone's running job: an abandoned mount only lets go of it.
-          // Otherwise a persistent id is shared with the remount (StrictMode, a view move) that
+          // Otherwise the id is shared with the remount (StrictMode, a view move) that
           // now owns the session; only an explicit close may kill it. With no remount,
           // let go of the attach this spawn made after the unmount already detached.
           if (session) window.hive.ptyDetach(ptyId);
-          else if (!persistent || killOnUnmountRef.current) window.hive.ptyKill(ptyId);
+          else if (killOnUnmountRef.current) window.hive.ptyKill(ptyId);
           else if (!liveMounts.get(ptyId)) window.hive.ptyDetach(ptyId);
           return;
         }
@@ -1118,10 +1095,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       // this. (term.dispose() below drops the write callbacks that would have.)
       releaseFlowPause();
       try {
-        // Persistent + not an explicit close → detach (keep the session alive
-        // in the daemon). Otherwise kill.
+        // Not an explicit close → detach (keep the session alive in the daemon). Otherwise kill.
         // An adopted session is someone's job (`hive run`, another device): closing the tile only lets go.
-        if (session || (persistent && !killOnUnmountRef.current)) window.hive.ptyDetach(ptyId);
+        if (session || !killOnUnmountRef.current) window.hive.ptyDetach(ptyId);
         else window.hive.ptyKill(ptyId);
       } catch {
         /* ignore */
@@ -1139,15 +1115,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     // a PTY respawn on every parent re-render. We freeze args on first mount.
     // (For real argv changes, change the cmd or destroy/recreate the tile.)
     //
-    // `cwd` is excluded too in PERSISTENT mode: ptyId is now keyed on tileId
-    // only (frame-stable across workspace rebinding), and the daemon owns the
-    // original spawn cwd inside the frozen spec. A cwd-only prop change with
-    // a live session would otherwise tear down → re-attach silently (daemon
-    // ignores new cwd on re-attach), looking like "nothing happened" with no
-    // visible signal that the rebind didn't apply. Keep cwd in deps for the
-    // non-persistent path where a fresh PTY at the new cwd IS the right thing.
+    // `cwd` is excluded too: ptyId is keyed on the tile only (frame-stable across workspace
+    // rebinding), and the daemon keeps the original spawn cwd. A cwd-only prop change with a live
+    // session would otherwise tear down and re-attach silently (the daemon ignores a new cwd on
+    // re-attach), looking like nothing happened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, persistent ? [ptyId, cmd, agentsScanned] : [ptyId, cwd, cmd, agentsScanned]);
+  }, [ptyId, cmd, agentsScanned]);
 
   // Gate keyboard on selection. pointer-events:none (tile-locked) blocks the
   // mouse but NOT the keyboard — a focused xterm keeps eating keystrokes after

@@ -1,5 +1,5 @@
 /**
- * Remote interactive PTYs, keyed by tileId with the local pty-host surface so the
+ * Remote interactive PTYs, keyed by tileId with the local daemon client's surface so the
  * ptySpawn IPC handler only branches on an ssh:// cwd. A host that has `hive`
  * runs them in its own PTY daemon (they survive ssh drops and app restarts);
  * otherwise they fall back to a local PTY running `ssh -tt`, where detach == kill.

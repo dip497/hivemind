@@ -4,14 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import { seedAgents } from "./tests/e2e/helpers/agents";
 
-// Persistence is default-ON in the real app, but the detached pty-daemon
-// intentionally outlives the window — and Playwright's electronApp.close()
-// waits on child processes, so a persistent daemon stalls worker teardown ~60s.
-// Tests run the in-process (legacy) PTY path via this opt-out; the daemon path
-// is proven separately by the unit + real socket integration tests.
-// electron.launch inherits this process's env, so setting it here propagates.
-process.env.HIVEMIND_PTY_DAEMON = "0";
-
 // Per run, not per spec: specs share settings.json, so isolate or restore what you persist.
 process.env.XDG_CONFIG_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "hivemind-e2e-xdg-"));
 // Nothing is compiled in, so the shared profile installs the usual six from the published

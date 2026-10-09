@@ -270,8 +270,8 @@ function registerSnapshots(): SnapshotEntry[] {
   return entries;
 }
 
-// Real node-pty factory. Mirrors pty-host.doSpawn's env defaults so colors,
-// locale, and TERM_PROGRAM match the in-process path. UUID injection happens
+// Real node-pty factory: the env defaults every terminal gets (colors, locale,
+// TERM_PROGRAM). UUID injection happens
 // in transformSpecOnSpawn (so the snapshot persists it) — by the time spec
 // reaches here, the args already carry the session an agent is bound to.
 const factory = (spec: SpawnSpec): ManagedPty => {
@@ -289,7 +289,7 @@ const factory = (spec: SpawnSpec): ManagedPty => {
   // A canvas written on another OS can name a shell this one doesn't have.
   const runSpec = repairShellSpec({ cmd: spec.cmd, args: spec.args });
   const { args: execArgs, env: execEnv } = applyInitialPrompt(runSpec.args ?? [], env);
-  // Last step before the pty (see pty-host.doSpawn): spec.cmd stays bare here
+  // Last step before the pty: spec.cmd stays bare here
   // so the session-matching transforms above still see the agent's name.
   const resolved = resolveWindowsSpawn(runSpec.cmd, execArgs, execEnv);
   const p = spawnPty(resolved.file, resolved.args, {

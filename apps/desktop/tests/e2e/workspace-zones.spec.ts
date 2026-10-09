@@ -52,7 +52,7 @@ test.beforeAll(async () => {
     args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=/tmp/hm-ws-ud-${Date.now()}`],
     cwd: repoA,
     env: {
-      ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_PTY_DAEMON: "0", HIVEMIND_TEST_PICK_DIR: repoB,
+      ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_TEST_PICK_DIR: repoB,
       PATH: `${bin}${path.delimiter}${process.env.PATH}`, HIVEMIND_SHELL_ENV: "0",
     },
   });

@@ -11,6 +11,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { stopDaemons } from "./helpers/daemons";
 
 const APP_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const HIVE = path.resolve(APP_DIR, "../cli/dist/hive");
@@ -79,7 +80,7 @@ test.beforeAll(async () => {
     // Own HOME and config: saved hosts and machines of the person running the suite stay out of it.
     // Persistence ON (the suite defaults it off): a remote tile must keep a stable session id and
     // detach — not kill — when it unmounts, which is how the app really runs.
-    env: { ...process.env, HOME: path.join(dir, "home"), XDG_CONFIG_HOME: path.join(dir, "xdg"), SSH_AUTH_SOCK: path.join(dir, "agent.sock"), HIVE_BIN: HIVE, HIVEMIND_PTY_DAEMON: "1" },
+    env: { ...process.env, HOME: path.join(dir, "home"), XDG_CONFIG_HOME: path.join(dir, "xdg"), SSH_AUTH_SOCK: path.join(dir, "agent.sock"), HIVE_BIN: HIVE },
   });
   app.process().stderr.on("data", (d) => { for (const l of String(d).split("\n")) if (/\[remote\]|\[machines\]/.test(l)) console.log("  [main]", l.slice(0, 200)); });
   page = await app.firstWindow();
@@ -89,13 +90,13 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  try { await Promise.race([app?.close(), new Promise((r) => setTimeout(r, 10_000))]); } catch { /* already gone */ }
+  await app?.close();
   if (!dir) return;
   try { remote(`${rhive()} daemon stop`); } catch { /* not running */ }
   // The "remote" daemon is a local process; its socket path is unique to this spec. So is the
-  // app's own daemon's, which outlives the app and holds the pipe Playwright waits on to finish.
+  // app's own daemon's, which outlives the app.
   spawnSync("pkill", ["-f", `${dir}/r.sock`]);
-  spawnSync("pkill", ["-f", `out/main/pty-daemon.js ${dir}/`]);
+  stopDaemons(dir);
   try { const listener = sshdPid(); spawnSync("pkill", ["-P", String(listener)]); process.kill(listener); } catch { /* not running */ }
   if (agentPid) try { process.kill(agentPid); } catch { /* gone */ }
   fs.rmSync(dir, { recursive: true, force: true });

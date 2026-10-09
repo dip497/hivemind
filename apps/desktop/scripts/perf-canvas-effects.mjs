@@ -9,7 +9,7 @@ const output = process.argv[2] ?? '/tmp/canvas-effects.json';
 // needs it (see the waitForFunction below).
 const NTERM = Math.max(1, Number(process.env.PERF_TERMINALS) || 3);
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'hm-canvas-effects-'));
-const env = { ...process.env, XDG_CONFIG_HOME: path.join(root, 'config'), HIVEMIND_PTY_DAEMON: '0' };
+const env = { ...process.env, XDG_CONFIG_HOME: path.join(root, 'config') };
 delete env.ELECTRON_RUN_AS_NODE;
 delete env.HIVE_SETTINGS;
 const result = { version: 2, completed: false, at: new Date().toISOString(), workload: `${NTERM} shell terminals, 50 lines/sec each; 1920x1200 viewport; quiet and wheel pan; forward/reverse effect order`, terminals: NTERM, os: { platform: os.platform(), release: os.release(), cpu: os.cpus()[0]?.model, cpus: os.cpus().length, load: os.loadavg() }, session: { type: process.env.XDG_SESSION_TYPE ?? null, display: process.env.DISPLAY ?? null, wayland: process.env.WAYLAND_DISPLAY ?? null, extraArgs: (process.env.PERF_EXTRA_ARGS ?? '').split(' ').filter(Boolean) }, samples: [] };

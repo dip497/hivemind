@@ -6,12 +6,13 @@
 // laptop's the same way. A computer on a network of its own offers a link that lets the device
 // entering it onto that network first (spec/pairing.md 0.6).
 import { test, expect, type ElectronApplication } from "@playwright/test";
-import { execFileSync, execSync, type ChildProcess } from "node:child_process";
+import { execFileSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { readDoc } from "@hivemind/workspace-host/doc-file";
 import { parsePairLink } from "@hivemind/workspace-host/pairing";
 import { hiveNetBuilt, ownNetwork, person, tiles } from "./helpers/multiplayer";
+import { stopDaemons } from "./helpers/daemons";
 
 let root: string;
 const apps: ElectronApplication[] = [];
@@ -19,17 +20,9 @@ const apps: ElectronApplication[] = [];
 const procs: ChildProcess[] = [];
 test.beforeEach(() => { root = fs.mkdtempSync("/tmp/hm-devices-"); });
 test.afterEach(async () => {
-  // The two apps' daemons only, before the apps close (closing waits on them) and after. An app
-  // not gone after a while is killed, and the processes it started with it.
-  const reap = () => { try { execSync(`pkill -f "out/main/pty-daemon.js ${root}/"`, { stdio: "ignore" }); } catch { /* none */ } };
-  reap();
-  for (const a of apps.splice(0)) {
-    const gone = await Promise.race([a.close().then(() => true, () => true), new Promise<boolean>((r) => setTimeout(() => r(false), 15_000))]);
-    if (!gone) a.process().kill("SIGKILL");
-  }
-  reap();
+  for (const a of apps.splice(0)) await a.close();
+  stopDaemons(root);
   for (const p of procs.splice(0)) p.kill();
-  try { execSync(`pkill -KILL -f -- "--user-data-dir=${root}/"`, { stdio: "ignore" }); } catch { /* none */ }
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 
@@ -48,13 +41,12 @@ test("a laptop enters the desktop's six words and becomes its person; each opens
   test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
   test.setTimeout(180_000);
   // Terminals run in each app's daemon, as outside tests: that is what names a session by its tile.
-  const env = { HIVEMIND_PTY_DAEMON: "1" };
   const api = repo("api");
-  const desktop = await person(root, "desktop", api, apps, env);
+  const desktop = await person(root, "desktop", api, apps);
   await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
   await expect.poll(async () => (await tiles(desktop)).length).toBeGreaterThan(0);
   const notes = repo("notes");
-  const laptop = await person(root, "laptop", notes, apps, env);
+  const laptop = await person(root, "laptop", notes, apps);
   await laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
   await expect.poll(async () => (await tiles(laptop)).length).toBeGreaterThan(0);
   const [desktopIs, laptopWas] = await Promise.all([desktop.evaluate(() => window.hive.identity()), laptop.evaluate(() => window.hive.identity())]);

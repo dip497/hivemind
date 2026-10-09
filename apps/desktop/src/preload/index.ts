@@ -170,7 +170,6 @@ const api: HiveIpc & {
   onKeyboardAsked: (cb) => workspace.on("terminal.keyboard.asked", cb),
   onTerminalSize: (cb) => workspace.on("terminal.size", cb),
   onTyping: (cb) => workspace.on("terminal.typing", cb),
-  persistentPty: process.env.HIVEMIND_PTY_DAEMON !== "0",
 
   notifyAgent: (notice) => ipcRenderer.send("notify:agent", notice),
 

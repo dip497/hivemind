@@ -18,6 +18,7 @@ import os from "node:os";
 import path from "node:path";
 import { person, tiles } from "./helpers/multiplayer";
 import { guest, type Guest } from "./helpers/guest";
+import { stopDaemons } from "./helpers/daemons";
 
 let root: string;
 const apps: ElectronApplication[] = [];
@@ -25,15 +26,13 @@ const guests: Guest[] = [];
 test.beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-load-")); });
 test.afterEach(async () => {
   for (const g of guests.splice(0)) g.stop();
-  const reap = () => { try { execSync(`pkill -f "out/main/pty-daemon.js ${root}/"`, { stdio: "ignore" }); } catch { /* none */ } };
-  reap();
   // A host of a hundred terminals can take its time to quit: past that, it is stopped.
   for (const a of apps.splice(0)) {
     const pid = a.process().pid!;
     await Promise.race([a.close().catch(() => {}), new Promise((r) => setTimeout(r, 15_000))]);
     try { process.kill(pid, "SIGKILL"); } catch { /* gone */ }
   }
-  reap();
+  stopDaemons(root);
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -118,7 +117,7 @@ test("with four people watching ten streaming terminals of 100 tiles the host wo
   const repo = path.join(root, "api");
   fs.mkdirSync(repo);
   execSync("git init -q", { cwd: repo });
-  const host: Page = await person(root, "host", repo, apps, { HIVEMIND_PTY_DAEMON: "1", HIVEMIND_HIVE_NET: HIVE_NET });
+  const host: Page = await person(root, "host", repo, apps, { HIVEMIND_HIVE_NET: HIVE_NET });
   const pid = apps[0]!.process().pid!;
   await host.evaluate(() => window.hive.settingsSet("appearance.glass.animate", false));
   for (let i = 0; i < TILES; i++) await host.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));

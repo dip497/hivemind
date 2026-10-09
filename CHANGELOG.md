@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Changed: every terminal runs in the background daemon, the dev bridge's too. `HIVEMIND_PTY_DAEMON=0`, which ran terminals inside the app with none of the agents' hooks, is gone, and the app and `hive daemon` start the daemon one way.
 - Changed: no second Settings button in the window's corner where the Layers panel already has one (the Windows view, the canvas with its toolbar off). Views without Layers and without a toolbar keep it there.
 - Fixed: the terminal daemon kept the app's own pipes and sockets open for as long as it ran, after the app had quit. It now lets go of them as it starts, whether the app or `hive daemon` started it (Linux).
 - Added: a program on `drive.sock` can supervise the agents it starts. `agent.start` takes `supervise` (`true`, `"all"` or a list of tools), `name`, `resume` and `report`. A supervised agent's tool use then waits in `agent.list` with the tool, what it would do (`rm -rf dist`) and when it gives up, and the program allows or denies it with `agent.answer`; if nobody answers, the agent asks at its own prompt as before. What an agent it started reports with `hive ctl report` comes to it as an `agent.event` of kind `reported`, and each agent says who started it (`parent`). Workspace API 0.20, spec/agents.md 0.5, spec/needs.md 0.6.

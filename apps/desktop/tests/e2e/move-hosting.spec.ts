@@ -17,6 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { HIVE_NET, hiveNetBuilt, join, note, notes, openShare, person, share, tiles } from "./helpers/multiplayer";
 import { guest as windowless } from "./helpers/guest";
+import { stopDaemons } from "./helpers/daemons";
 
 const HIVE = path.resolve("../cli/dist/hive");
 const hostable = fs.existsSync(HIVE) && `${spawnSync(HIVE, ["host", "--help"], { encoding: "utf8" }).stdout}`.includes("pair");
@@ -34,18 +35,11 @@ const read = (file: string) => (fs.existsSync(file) ? fs.readFileSync(file, "utf
 
 test.beforeEach(() => { root = fs.mkdtempSync("/tmp/hm-move-"); });
 test.afterEach(async () => {
-  // The apps' daemons first: closing waits on them. An app not gone after a while is killed.
-  const reap = () => { try { execSync(`pkill -f "out/main/pty-daemon.js ${root}/"`, { stdio: "ignore" }); } catch { /* none */ } };
-  reap();
-  for (const a of apps.splice(0)) {
-    const gone = await Promise.race([a.close().then(() => true, () => true), new Promise<boolean>((r) => setTimeout(() => r(false), 15_000))]);
-    if (!gone) a.process().kill("SIGKILL");
-  }
+  for (const a of apps.splice(0)) await a.close();
   hive("host", "stop");
   for (const p of procs.splice(0)) p.kill("SIGKILL");
   hive("daemon", "stop");
-  reap();
-  try { execSync(`pkill -KILL -f -- "--user-data-dir=${root}/"`, { stdio: "ignore" }); } catch { /* none */ }
+  stopDaemons(root);
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 
@@ -88,7 +82,7 @@ async function sharedAndPaired(profile?: string) {
   const api = path.join(root, "api");
   fs.mkdirSync(api);
   execSync("git init -q", { cwd: api });
-  const laptop = await person(root, "laptop", api, apps, { HIVEMIND_PTY_DAEMON: "1" });
+  const laptop = await person(root, "laptop", api, apps);
   await onNetwork(laptop);
   await laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
   await expect.poll(async () => (await tiles(laptop)).length).toBeGreaterThan(0);

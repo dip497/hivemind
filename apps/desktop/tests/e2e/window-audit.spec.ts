@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { execSync } from "node:child_process";
 import { seedAgents } from "./helpers/agents";
+import { stopDaemons } from "./helpers/daemons";
 
 let app: ElectronApplication;
 let page: Page;
@@ -14,7 +15,7 @@ const repo = path.join(root, "repo");
 const xdg = path.join(root, "config");
 seedAgents(xdg);
 // A terminal's session lives in the daemon here, so it has an id the test can name (hm:<tile>).
-const env = { ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_PTY_DAEMON: "1" } as Record<string, string>;
+const env = { ...process.env, XDG_CONFIG_HOME: xdg } as Record<string, string>;
 const person = { kind: "person" };
 /** What the audit log says was done, without when. */
 const audited = (): Array<Record<string, unknown>> => {
@@ -32,12 +33,8 @@ test.beforeAll(async () => {
   await page.waitForSelector(".react-flow");
 });
 test.afterAll(async () => {
-  // This profile's daemon only, before the app closes (close waits on it), and again after it.
-  const reap = () => { try { execSync(`pkill -f "out/main/pty-daemon.js ${xdg}/"`, { stdio: "ignore" }); } catch { /* none */ } };
-  reap();
-  const closed = await Promise.race([app?.close().then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), 10_000))]);
-  if (!closed) { try { app?.process().kill("SIGKILL"); } catch { /* gone */ } }
-  reap();
+  await app?.close();
+  stopDaemons(xdg);
   fs.rmSync(root, { recursive: true, force: true });
 });
 

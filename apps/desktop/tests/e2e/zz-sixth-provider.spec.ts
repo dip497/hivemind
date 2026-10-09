@@ -12,6 +12,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { stopDaemons } from "./helpers/daemons";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_DIR = path.resolve(__dirname, "../..");
@@ -72,7 +73,7 @@ test.beforeAll(async () => {
   app = await electron.launch({
     args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox"],
     cwd: repo,
-    env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, HIVEMIND_PTY_DAEMON: "1", HIVEMIND_SHELL_ENV: "0" } as Record<string, string>,
+    env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, HIVEMIND_SHELL_ENV: "0" } as Record<string, string>,
   });
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
@@ -85,14 +86,9 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   test.setTimeout(420_000);
-  try { execSync(`pkill -f "out/main/pty-daemon.js ${process.env.XDG_CONFIG_HOME}/"`, { stdio: "ignore" }); } catch { /* none */ }
-  // close() waits on child processes; if the app is wedged on one, kill it
-  // outright rather than stall the worker teardown.
-  const closed = await Promise.race([app?.close().then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), 10_000))]);
-  if (!closed) { try { app?.process().kill("SIGKILL"); } catch { /* gone */ } }
-  // Closing, the app found its daemon gone and started another to let go of its tiles: reap
-  // that one too, or the next spec on this profile's socket runs in this spec's environment.
-  try { execSync(`pkill -f "out/main/pty-daemon.js ${process.env.XDG_CONFIG_HOME}/"`, { stdio: "ignore" }); } catch { /* none */ }
+  await app?.close();
+  // This profile's daemon, or the next spec on its socket runs in this spec's environment.
+  stopDaemons(process.env.XDG_CONFIG_HOME!);
   // Stand-in agents this spec's tiles spawned (pattern anchored on the fixture
   // path + provider argv so it can never match an unrelated shell).
   try { execSync(`pkill -f "fixtures/fake-agent\\.cjs (claude|droid|codex|faux) "`, { stdio: "ignore" }); } catch { /* none */ }

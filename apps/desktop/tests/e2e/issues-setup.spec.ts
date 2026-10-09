@@ -29,7 +29,7 @@ test.beforeAll(async () => {
   seedAgents(xdg, ["claude"]);
   await fs.mkdir(bin);
   await fs.writeFile(path.join(bin, "claude"), "#!/bin/sh\n[ \"$1\" = --version ] && echo '2.0.0 (Claude Code)' && exit 0\nexec sleep 60\n", { mode: 0o755 });
-  const env = { ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_PTY_DAEMON: "0", HIVEMIND_SHELL_ENV: "0", PATH: `${bin}${path.delimiter}${process.env.PATH}` } as Record<string, string>;
+  const env = { ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_SHELL_ENV: "0", PATH: `${bin}${path.delimiter}${process.env.PATH}` } as Record<string, string>;
   delete env.ELECTRON_RUN_AS_NODE; delete env.HIVE_HCP_SOCK; delete env.HCP_TOKEN; delete env.HIVEMIND_TILE;
   app = await electron.launch({
     args: [

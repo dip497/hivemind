@@ -1,6 +1,6 @@
 /**
  * Dev HTTP bridge — exposes the SAME main-process adapters (hive-core,
- * the workspace API's server, pty-host) over HTTP so the renderer can be
+ * the workspace API's server, the PTY daemon) over HTTP so the renderer can be
  * driven by /gsd-browser without packaging Electron.
  *
  * Nothing here is mocked. The handlers import the same files Electron
@@ -52,7 +52,12 @@ import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { machineKeys } from "@hivemind/workspace-host/keyring";
 import { computeRepoPath, findGitRoot, projectDir } from "../main/workspace-paths";
 import { agents } from "@hivemind/host/agents";
-import { spawnPty, writePty, resizePty, killPty, pausePty, resumePty, detachPty } from "../main/pty-host";
+import { DaemonEndpoint } from "@hivemind/agent-host/daemon-endpoint";
+import { reachDaemon } from "@hivemind/agent-host/daemon-start";
+import { SOCKET_NAME } from "@hivemind/agent-host/pty-protocol";
+import { ipcPath } from "@hivemind/core/ipc";
+import { daemonSessions } from "@hivemind/host/daemon-sessions";
+import { makeSpawnPacer } from "@hivemind/host/spawn-pacer";
 import { Terminals } from "@hivemind/host/terminals";
 import { watchRepo } from "../main/fs-watcher";
 import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
@@ -81,29 +86,23 @@ const intents = new Intents(new AuditLog({
   file: path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "hivemind-dev", "audit.jsonl"),
   onWarn: (m) => console.warn(`[audit] ${m}`),
 }));
-// Terminals run in this process (no daemon): one a page lets go of ends.
+// Terminals run in a daemon of the bridge's own, from source, as the app's run in its: they outlive
+// the page, and the hooks agents get are the app's.
+const BRIDGE_DIR = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "hivemind-dev", "bridge");
+const DAEMON_SOCK = ipcPath(BRIDGE_DIR, SOCKET_NAME);
+const DAEMON_SRC = path.resolve(__dirname, "../../../../packages/agent-host/src/pty-daemon.ts");
+const endpoint = new DaemonEndpoint({
+  connect: () => reachDaemon(DAEMON_SOCK, [process.execPath, "--import", "tsx", DAEMON_SRC, DAEMON_SOCK]),
+  onEvent: () => {},
+});
 const terminals = new Terminals({
   intents,
   relay: { record: () => {}, screenPrefix: "\x1bc" },
   publish: (event, ...params) => workspaceServer.publish(event, ...params),
   onError: (m) => console.warn(`[terminals] ${m}`),
-  backend: {
-    start: async (opts, out) => {
-      if (!ptySpawnAllowed()) throw new Error(`terminal rate limit: ${PTY_SPAWN_LIMIT} starts / ${PTY_SPAWN_WINDOW_MS / 1000}s exceeded`);
-      return spawnPty(opts, { onData: (data) => out.data(data), onExit: (code, signal) => out.exit(code, signal) });
-    },
-    write: writePty,
-    echoes: () => true,
-    resize: resizePty,
-    pause: pausePty,
-    resume: resumePty,
-    kill: killPty,
-    detach: detachPty,
-    screen: () => null,
-  },
+  backend: daemonSessions({ endpoint, pace: makeSpawnPacer({ windowMs: 10_000, max: 24, queueMax: 128 }) }),
 });
 // Layouts in a store of the bridge's own, and keys of its own: the dev app's are in use while it runs.
-const BRIDGE_DIR = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "hivemind-dev", "bridge");
 const store = new WorkspaceStore({
   dir: path.join(BRIDGE_DIR, "workspaces"),
   person: machineKeys(path.join(BRIDGE_DIR, "identity"), (m) => console.warn(`[identity] ${m}`)).person,
@@ -119,25 +118,6 @@ const workspaceServer = new WorkspaceServer([
 ], intents, (m) => console.warn(`[workspace] ${m}`));
 /** Each page's connection, by the id its event stream was given. */
 const workspaceConnections = new Map<string, Connection>();
-
-// ── terminal start rate limit ───────────────────────────────────
-// Defense in depth: even with AUTH_TOKEN + loopback-only binding, a
-// misbehaving same-origin script could start terminals in a loop and fork-bomb
-// the host. 20 starts / 60s window is generous for any human-driven UI but
-// catches runaway loops.
-const PTY_SPAWN_LIMIT = 20;
-const PTY_SPAWN_WINDOW_MS = 60_000;
-const ptySpawnTimestamps: number[] = [];
-function ptySpawnAllowed(): boolean {
-  const now = Date.now();
-  // Drop expired entries
-  while (ptySpawnTimestamps.length > 0 && now - ptySpawnTimestamps[0]! > PTY_SPAWN_WINDOW_MS) {
-    ptySpawnTimestamps.shift();
-  }
-  if (ptySpawnTimestamps.length >= PTY_SPAWN_LIMIT) return false;
-  ptySpawnTimestamps.push(now);
-  return true;
-}
 
 /** The page's `window.hive` (page.ts), bundled for the browser as the bridge starts. */
 async function bundlePage(): Promise<string> {

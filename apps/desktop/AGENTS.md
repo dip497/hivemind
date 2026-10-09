@@ -9,7 +9,7 @@ The Electron canvas app. Three processes: **main** (Node — IPC, PTY, git, fs),
 ```
 src/main/      Node main process — owns IPC, PTY daemon, git, fs, windows
   index.ts        every ipcMain.handle/on channel; the IPC choke point
-  daemon-client.ts / pty-host.ts   daemon vs in-process PTY transports
+  daemon-client.ts   the app's connection to the PTY daemon, where every terminal runs
   remote/         a machine's pty over ssh, its saved logins, the Machines hub
   claude-resume.ts  session-id binding + shq() POSIX escaper (reused by remote)
 src/preload/index.ts   window.hive bridge (1:1 with shared/ipc.ts HiveIpc)

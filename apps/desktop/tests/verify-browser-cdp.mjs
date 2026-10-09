@@ -21,7 +21,7 @@ const proc = spawn(
     `--remote-debugging-port=${PORT}`,
     `--user-data-dir=/tmp/hivemind-verify-${Date.now()}`,
   ],
-  { cwd: APP_DIR, env: { ...process.env, DISPLAY: process.env.DISPLAY || ":1", HIVEMIND_PTY_DAEMON: "0" }, stdio: ["ignore", "pipe", "pipe"] },
+  { cwd: APP_DIR, env: { ...process.env, DISPLAY: process.env.DISPLAY || ":1" }, stdio: ["ignore", "pipe", "pipe"] },
 );
 proc.stdout.on("data", (d) => process.stdout.write(`[main] ${d}`));
 proc.stderr.on("data", (d) => process.stderr.write(`[main.err] ${d}`));

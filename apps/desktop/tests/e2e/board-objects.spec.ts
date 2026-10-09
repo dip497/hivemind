@@ -26,7 +26,7 @@ function scratch(prefix: string): string {
 }
 
 async function launch(repo: string, ud: string): Promise<{ app: ElectronApplication; page: Page }> {
-  const env = { ...process.env, HIVEMIND_PTY_DAEMON: "0", XDG_CONFIG_HOME: path.join(ud, "config") };
+  const env = { ...process.env, XDG_CONFIG_HOME: path.join(ud, "config") };
   delete env.ELECTRON_RUN_AS_NODE;
   const app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=${ud}`], cwd: repo, env });
   const page = await app.firstWindow();

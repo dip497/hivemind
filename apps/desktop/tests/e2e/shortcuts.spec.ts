@@ -23,7 +23,7 @@ test.beforeAll(async () => {
   app = await electron.launch({
     args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox", `--user-data-dir=${dir}/ud`],
     cwd: APP_DIR,
-    env: { ...process.env, HOME: path.join(dir, "home"), XDG_CONFIG_HOME: path.join(dir, "xdg"), HIVEMIND_PTY_DAEMON: "0" },
+    env: { ...process.env, HOME: path.join(dir, "home"), XDG_CONFIG_HOME: path.join(dir, "xdg") },
   });
   page = await app.firstWindow();
   await page.waitForSelector(".react-flow", { timeout: 15_000 });

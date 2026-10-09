@@ -28,7 +28,7 @@ const XDG = tmp("hm-shots-xdg-"), HOME = tmp("hm-shots-home-"), WORK = tmp("hm-s
 
 const env = Object.fromEntries(Object.entries(process.env).filter(([k]) =>
   !k.startsWith("CLAUDE") && !["ELECTRON_RUN_AS_NODE", "ELECTRON_RENDERER_URL", "HIVE_HCP_SOCK", "HCP_TOKEN"].includes(k)));
-Object.assign(env, { XDG_CONFIG_HOME: XDG, HOME, HIVEMIND_SHELL_ENV: "0", HIVEMIND_PTY_DAEMON: "0" });
+Object.assign(env, { XDG_CONFIG_HOME: XDG, HOME, HIVEMIND_SHELL_ENV: "0" });
 
 // Tiles start login shells, which read .bash_profile — not .bashrc.
 const profile = 'PS1="\\[\\e[38;5;244m\\]\\W\\[\\e[0m\\] \\$ "\nexport GIT_PAGER=cat PAGER=cat LESS=FRX\n';
