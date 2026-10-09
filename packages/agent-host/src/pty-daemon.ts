@@ -15,6 +15,7 @@ import { createRequire } from "node:module";
 import type * as NodePty from "@lydell/node-pty";
 import * as bunPty from "./bun-pty.js";
 import { listenExclusive } from "./socket-claim.js";
+import { dropHandedDown, HANDED_DOWN } from "./handed-down.js";
 import { SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot, type SessionClient } from "./pty-session-manager.js";
 import { type ClientMsg, type ServerMsg, frame, makeLineDecoder } from "./pty-protocol.js";
 import { PtyOutputBuffer } from "./pty-output-buffer.js";
@@ -44,6 +45,9 @@ const spawnPty: (file: string, args: string[] | string, opts: { cwd: string; col
   ? bunPty.spawn
   : (createRequire(import.meta.url)("@lydell/node-pty") as typeof NodePty).spawn;
 
+// What the starter handed down is its, not ours: held, it outlives the starter.
+dropHandedDown(process.env[HANDED_DOWN]);
+delete process.env[HANDED_DOWN];
 const socketPath = process.argv[2] || process.env.HIVEMIND_PTY_SOCK;
 // Set by `hive daemon` (no desktop on this machine); removed so sessions don't inherit it.
 const STANDALONE = process.env.HIVEMIND_DAEMON_STANDALONE === "1";

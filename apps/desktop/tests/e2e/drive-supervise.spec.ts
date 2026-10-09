@@ -27,9 +27,10 @@ function ownDaemons(): number[] {
   }).map(Number);
 }
 test.afterEach(async () => {
-  for (const pid of ownDaemons()) try { process.kill(pid); } catch { /* gone */ }
-  await app?.close().catch(() => {});
+  // The app closes while its daemon lives on, as when the person quits; then the daemon goes.
+  await app?.close();
   app = undefined;
+  for (const pid of ownDaemons()) try { process.kill(pid); } catch { /* gone */ }
   fs.rmSync(root, { recursive: true, force: true });
 });
 

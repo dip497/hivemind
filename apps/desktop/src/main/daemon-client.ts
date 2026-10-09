@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { app } from "electron";
 import { type ServerMsg, type SessionInfo, SOCKET_NAME, frame, makeLineDecoder } from "@hivemind/agent-host/pty-protocol";
 import { DaemonEndpoint, type Callbacks } from "@hivemind/agent-host/daemon-endpoint";
+import { HANDED_DOWN, handedDown } from "@hivemind/agent-host/handed-down";
 import { ipcPath } from "./platform.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -110,7 +111,7 @@ function cgroupEscapePrefix(): string[] | null {
 function spawnDaemon(sp: string): void {
   // ELECTRON_RUN_AS_NODE makes Electron run the daemon as plain Node (no
   // Chromium); detached + unref so it outlives this window.
-  const env = { ...process.env, ELECTRON_RUN_AS_NODE: "1" };
+  const env = { ...process.env, ELECTRON_RUN_AS_NODE: "1", [HANDED_DOWN]: handedDown() };
   const daemonCmd = [process.execPath, daemonScript(), sp];
   const prefix = cgroupEscapePrefix();
   const [file, ...args] = prefix ? [...prefix, ...daemonCmd] : daemonCmd;
