@@ -619,7 +619,8 @@ function SettingsModal({
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             const target = settingsReturnFocus.current;
-            (target?.isConnected ? target : document.querySelector<HTMLElement>('[aria-label="settings"], [data-layers-rail="settings"]'))?.focus({ preventScroll: true });
+            // The toolbar's Settings, else the Layers rail's.
+            (target?.isConnected ? target : document.querySelector<HTMLElement>('[aria-label="settings"]') ?? document.querySelector<HTMLElement>('[data-layers-rail="settings"]'))?.focus({ preventScroll: true });
           }}
         >
           <aside className="settings-sidebar">
