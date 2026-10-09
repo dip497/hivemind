@@ -9,6 +9,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: the Windows view splits like an editor. Split a pane right or down from its tab bar (or Ctrl+\\ and Ctrl+Shift+\\), drag the divider between panes, double-click it to make them equal, maximize a pane, close one into its neighbour, and move between panes with Ctrl+Alt+arrows. Each pane has its own tabs, and the arrangement is kept per person. An agent can do the same with `hive ctl plugin call windows split-right` and the view's other commands.
+- Added: view protocol 1.13: a surface rect can let the pointer through to the view while it drags (`inert`), and `setLayout(data, { now: true })` saves at once instead of after 250 ms.
+- Fixed: a view's rounded surfaces (`radius`) were dropped by the view SDK before they reached the app.
 - Changed: the Windows view's tabs and the tile they show are two rounded cards, level with the Layers panel, instead of a flat strip across the top.
 - Added: a view can round the corners of a tile it shows (`radius` on a surface rect, view protocol 1.13).
 - Fixed: "Add a tool or widget" in the Layers panel or a frame's menu did nothing in a view without the toolbar (Windows). Add is now one dialog wherever it is opened, toolbar or not; what it adds on the canvas goes where the pointer was when it opened.

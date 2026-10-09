@@ -150,7 +150,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
           {rects.map((r) => (
             <div
               key={r.tileId}
-              className="pointer-events-auto absolute flex flex-col overflow-hidden bg-[var(--color-bg)]"
+              className={`${r.inert ? "pointer-events-none [&_*]:!pointer-events-none" : "pointer-events-auto"} absolute flex flex-col overflow-hidden bg-[var(--color-bg)]`}
               // App's top-right New/Settings cluster overlays every view; a slot
               // flush with the top-right corner keeps its bar below it (the
               // World's dock pane does the same with pt-12).

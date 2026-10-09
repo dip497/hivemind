@@ -101,6 +101,8 @@ export interface SurfaceRect extends ViewRect {
   chrome?: "bar" | "none";
   /** 1.13: its corners rounded by this many pixels (0 to 24), so the surface matches the card the view draws around it. */
   radius?: number;
+  /** 1.13: the pointer passes through it to the view, while the view drags something across it. */
+  inert?: true;
 }
 /** The roundest a surface's corners may be. */
 export const MAX_SURFACE_RADIUS = 24;
@@ -606,8 +608,10 @@ export function parsePluginMessage(raw: unknown): ParseResult<PluginMessage> {
         if (c !== undefined && c !== "bar" && c !== "none") return bad("chrome must be \"bar\" or \"none\"");
         const radius = (r as SurfaceRect).radius;
         if (radius !== undefined && !(typeof radius === "number" && radius >= 0 && radius <= MAX_SURFACE_RADIUS)) return bad(`radius must be a number from 0 to ${MAX_SURFACE_RADIUS}`);
+        const inert = (r as SurfaceRect).inert;
+        if (inert !== undefined && inert !== true) return bad("inert must be true when it is given");
       }
-      return { ok: true, msg: { type: "surfaceRects", rects: (raw.rects as SurfaceRect[]).map((r) => ({ tileId: r.tileId, x: r.x, y: r.y, w: r.w, h: r.h, ...(r.chrome ? { chrome: r.chrome } : {}), ...(r.radius ? { radius: r.radius } : {}) })) } };
+      return { ok: true, msg: { type: "surfaceRects", rects: (raw.rects as SurfaceRect[]).map((r) => ({ tileId: r.tileId, x: r.x, y: r.y, w: r.w, h: r.h, ...(r.chrome ? { chrome: r.chrome } : {}), ...(r.radius ? { radius: r.radius } : {}), ...(r.inert ? { inert: true as const } : {}) })) } };
     }
     case "revealed":
       if (!isNum(raw.requestId)) return bad("requestId must be a number");

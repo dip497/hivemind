@@ -78,6 +78,16 @@ screen places them: `hm.supports("surfaces")`, protocol 1.6; a phone's app draws
 over your view there); `onReveal` answers focus requests; `setLayout` saves up to 64 KB per repository. Canvas/WebGL views can use
 `createInvalidator` to coalesce drawing and pause while hidden.
 
+A rect may round its corners to match a card you draw around it (`radius`, 0 to 24) and, while
+you drag something across the surfaces (a divider between panes), let the pointer through to
+your view (`inert: true`; set it as the pointer reaches your grip, so the first moves are not
+caught). `setLayout` gathers saves for 250 ms, as a drag makes many; pass `{ now: true }` for a
+change made in one step, so a view switched away from straight after it keeps it.
+
+The manifest's `"toolbar"` says where the app's toolbar sits over your view: `"top"`,
+`"bottom"` (the default), `"hidden"` behind a handle, or `"off"`. Settings → Views can still
+change it per view.
+
 
 The hello/structure payload includes the resolved palette (`applyThemeVars`), so chrome
 can follow the user's theme.

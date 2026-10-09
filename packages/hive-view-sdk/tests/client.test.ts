@@ -65,6 +65,28 @@ describe("view-sdk client", () => {
     expect(inbox.filter((m) => m.type === "surfaceRects")).toEqual([{ type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 3, w: 10, h: 10 }] }]);
   });
 
+  test("layouts saved in a stream are sent once it settles; one saved now is sent at once", async () => {
+    const { client, inbox } = await scriptedHost();
+    client.setLayout({ n: 1 });
+    client.setLayout({ n: 2 });
+    await tick();
+    expect(inbox.filter((m) => m.type === "layout")).toEqual([]);
+    client.setLayout({ n: 3 }, { now: true });
+    await tick();
+    expect(inbox.filter((m) => m.type === "layout")).toEqual([{ type: "layout", data: { n: 3 } }]);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(inbox.filter((m) => m.type === "layout")).toHaveLength(1); // the stream's last is in what was sent now
+  });
+
+  test("a rect's rounded corners and its letting the pointer through reach the host", async () => {
+    const { client, inbox, send } = await scriptedHost();
+    send({ type: "structure", frames: [], tiles: [{ id: "t1", frameId: null, kind: "shell", name: "sh" }] });
+    await tick();
+    client.setSurfaceRects([{ tileId: "t1", x: 0, y: 0, w: 10, h: 10, radius: 11, inert: true }]);
+    await tick();
+    expect((inbox.find((m) => m.type === "surfaceRects") as { rects: unknown[] }).rects).toEqual([{ tileId: "t1", x: 0, y: 0, w: 10, h: 10, radius: 11, inert: true }]);
+  });
+
   test("undock from the host drops the rect on the client and fires the event", async () => {
     const { client, inbox, send } = await scriptedHost();
     send({ type: "structure", frames: [], tiles: ["t1", "t2"].map((id) => ({ id, frameId: null, kind: "shell", name: id })) });

@@ -39,8 +39,9 @@ test("the toolbar switches the view, and shows which one you are in", async () =
 
   await expect.poll(activeView).toBe(other);
   await expect(page.locator("[data-view-choice]")).toHaveCount(0); // the menu closed
-  // …and back, the same way.
-  await page.locator("[data-view-switch]").click();
-  await page.locator('[data-view-choice="canvas"]').click();
+  // …and back from the Layers panel's title menu, which every view has: a view may hide the toolbar.
+  await page.locator("[data-layers-title]").click();
+  await page.locator('[data-layers-show-as="canvas"]').click();
   await expect.poll(activeView).toBe("canvas");
+  await expect(page.locator("[data-view-switch]")).toContainText("Canvas");
 });

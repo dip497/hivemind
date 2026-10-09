@@ -11,5 +11,43 @@
   "author": "Hivemind",
   "license": "MIT",
   "layout": "personal",
-  "toolbar": "off"
+  "toolbar": "off",
+  "commands": [
+    {
+      "name": "split-right",
+      "description": "Split the focused pane: its shown tab moves to a new pane on the right."
+    },
+    {
+      "name": "split-down",
+      "description": "Split the focused pane: its shown tab moves to a new pane below."
+    },
+    {
+      "name": "focus-left",
+      "description": "Focus the pane to the left of the focused one."
+    },
+    {
+      "name": "focus-right",
+      "description": "Focus the pane to the right of the focused one."
+    },
+    {
+      "name": "focus-up",
+      "description": "Focus the pane above the focused one."
+    },
+    {
+      "name": "focus-down",
+      "description": "Focus the pane below the focused one."
+    },
+    {
+      "name": "maximize",
+      "description": "Show the focused pane alone, or bring the others back."
+    },
+    {
+      "name": "close-pane",
+      "description": "Close the focused pane; its tabs join the next one."
+    },
+    {
+      "name": "unsplit",
+      "description": "Put every tab back in one pane."
+    }
+  ]
 }

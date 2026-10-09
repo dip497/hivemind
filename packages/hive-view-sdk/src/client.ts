@@ -115,7 +115,10 @@ export interface ViewClient {
   reportFrame(): void;
   readonly framesDrawn: number;
   /** Persist an opaque blob under the plugin id (debounced). */
-  setLayout(data: unknown): void;
+  /** Keep `data` as this view's layout. Saves are gathered for a moment, as a drag makes many; `now`
+   *  sends this one at once, for a change made in one step (a click), so a view switched away from
+   *  straight after it still has it. */
+  setLayout(data: unknown, opts?: { now?: boolean }): void;
   /** Report a non-fatal problem to the host log. */
   error(message: string): void;
 }
@@ -220,6 +223,7 @@ class Client implements ViewClient {
   private frameTimer: ReturnType<typeof setTimeout> | null = null;
   private lastReportedFrames = 0;
   private layoutTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingLayout: { data: unknown } | null = null;
   private ready: Promise<void>;
 
   constructor(private port: MessagePort) {
@@ -548,7 +552,8 @@ class Client implements ViewClient {
   }
 
   setSurfaceRects(rects: SurfaceRect[]) {
-    this.wantedRects = rects.map((r) => ({ tileId: r.tileId, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h), ...(r.chrome ? { chrome: r.chrome } : {}) }));
+    this.wantedRects = rects.map((r) => ({ tileId: r.tileId, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h),
+      ...(r.chrome ? { chrome: r.chrome } : {}), ...(r.radius ? { radius: r.radius } : {}), ...(r.inert ? { inert: true as const } : {}) }));
     this.sendRects();
   }
 
@@ -580,9 +585,19 @@ class Client implements ViewClient {
     }, 1000);
   }
 
-  setLayout(data: unknown) {
+  setLayout(data: unknown, opts?: { now?: boolean }) {
+    this.pendingLayout = { data };
+    if (opts?.now) { this.flushLayout(); return; }
     if (this.layoutTimer) clearTimeout(this.layoutTimer);
-    this.layoutTimer = setTimeout(() => { this.layoutTimer = null; this.send({ type: "layout", data }); }, 250);
+    this.layoutTimer = setTimeout(() => this.flushLayout(), 250);
+  }
+
+  private flushLayout() {
+    if (this.layoutTimer) clearTimeout(this.layoutTimer);
+    this.layoutTimer = null;
+    const pending = this.pendingLayout;
+    this.pendingLayout = null;
+    if (pending) this.send({ type: "layout", data: pending.data });
   }
 
   error(message: string) { this.send({ type: "error", message }); }
