@@ -35,10 +35,14 @@ A view may also say what an agent can run in it while it is the view shown, unde
 `hive ctl plugin call <view> <command>` prints. `examples/views/agent-board` is one: agents pin
 notes to it.
 
-A command may also name the keys that run it, `"keys": "mod+shift+k"`: modifiers (`mod`, which is
+A command may also name the keys that run it, `"keys": "mod+alt+k"`: modifiers (`mod`, which is
 Cmd on a Mac and Ctrl elsewhere, `ctrl`, `meta`, `alt`, `shift`) and one key, with at least one of
-`mod`, `ctrl`, `meta` or `alt`. While the view is shown they work wherever focus is in the app,
-inside a terminal too, which then never sees them; the same handler answers them.
+`mod`, `ctrl` or `meta`. While the view is shown they work wherever focus is in the app, inside a
+terminal too, which then never sees them; the same handler answers them. Keys the terminals and
+the app answer are refused: escape and tab, and unless `alt` is among the modifiers a letter or
+digit (Ctrl+C, Ctrl+Shift+V), an arrow, Home, End, Page Up/Down, Backspace, Delete, Space, F11,
+`[ / = - + _ . ,`, and Enter without `shift`. `mod+\`, `mod+shift+enter` and `mod+alt+arrowleft`
+are free.
 
 `hive views install <dir>` validates the manifest and copies it to
 `$XDG_CONFIG_HOME/hivemind/views/<id>`; `hive views list` reports load errors. In the app,
