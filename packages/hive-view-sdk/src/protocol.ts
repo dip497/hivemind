@@ -96,7 +96,14 @@ export interface ViewRect { x: number; y: number; w: number; h: number }
 /** `chrome` (protocol 1.1, additive): "bar" (default) lets the host draw its
  *  thin slot bar — name, status, pop-out, undock — on the surface; "none"
  *  leaves the whole rect to the surface (the plugin then owns undocking). */
-export interface SurfaceRect extends ViewRect { tileId: string; chrome?: "bar" | "none" }
+export interface SurfaceRect extends ViewRect {
+  tileId: string;
+  chrome?: "bar" | "none";
+  /** 1.13: its corners rounded by this many pixels (0 to 24), so the surface matches the card the view draws around it. */
+  radius?: number;
+}
+/** The roundest a surface's corners may be. */
+export const MAX_SURFACE_RADIUS = 24;
 /** The host theme, resolved. `colors` are the `--color-*` tokens as `#rrggbb`;
  *  the rest (protocol 1.1, additive — a 1.0 host sends only `colors`) is the
  *  user's appearance: mode, accent, radius, fonts, the surface + terminal
@@ -597,8 +604,10 @@ export function parsePluginMessage(raw: unknown): ParseResult<PluginMessage> {
         seen.add((r as SurfaceRect).tileId);
         const c = (r as SurfaceRect).chrome;
         if (c !== undefined && c !== "bar" && c !== "none") return bad("chrome must be \"bar\" or \"none\"");
+        const radius = (r as SurfaceRect).radius;
+        if (radius !== undefined && !(typeof radius === "number" && radius >= 0 && radius <= MAX_SURFACE_RADIUS)) return bad(`radius must be a number from 0 to ${MAX_SURFACE_RADIUS}`);
       }
-      return { ok: true, msg: { type: "surfaceRects", rects: (raw.rects as SurfaceRect[]).map((r) => ({ tileId: r.tileId, x: r.x, y: r.y, w: r.w, h: r.h, ...(r.chrome ? { chrome: r.chrome } : {}) })) } };
+      return { ok: true, msg: { type: "surfaceRects", rects: (raw.rects as SurfaceRect[]).map((r) => ({ tileId: r.tileId, x: r.x, y: r.y, w: r.w, h: r.h, ...(r.chrome ? { chrome: r.chrome } : {}), ...(r.radius ? { radius: r.radius } : {}) })) } };
     }
     case "revealed":
       if (!isNum(raw.requestId)) return bad("requestId must be a number");

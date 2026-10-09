@@ -18,6 +18,7 @@ import { Wrench } from "../components/icons";
 import { resolveToolbar, type ToolbarPreferences } from "@hivemind/core/toolbar";
 import { Button } from "../components/ui/button";
 import { StandardToolbar } from "./standard-toolbar";
+import { AddDialog } from "./add-dialog";
 import { useToolEnabled } from "../tool-availability";
 import { openAppearanceSettings, setBottomInset, setIslandShown, useChromeState } from "./chrome-store";
 import type { ViewChrome } from "./workspace-view";
@@ -71,6 +72,8 @@ export function HostChrome({ chrome, toolbar, ...island }: HostChromeProps) {
   }, [bottom]);
   return (
     <>
+      {/* Wherever it is asked for, with or without a toolbar. */}
+      {island.onBoard && <AddDialog repoPath={island.repoPath} onBoard={island.onBoard} onTile={island.onTile} boardItems={!!island.boardItems} />}
       {showIsland && (
         <div
           className={`pointer-events-none absolute left-1/2 z-30 w-max max-w-[calc(100vw-24px)] -translate-x-1/2 ${placement}`}
@@ -78,7 +81,7 @@ export function HostChrome({ chrome, toolbar, ...island }: HostChromeProps) {
           ref={islandRef}
         >
           <div className="pointer-events-auto">
-            <StandardToolbar {...island} actions={actions} labels={toolbar?.labels ?? false} onTheme={openAppearanceSettings} compact={chrome.island !== "top"} />
+            <StandardToolbar {...island} canAdd={hasBoard} actions={actions} labels={toolbar?.labels ?? false} onTheme={openAppearanceSettings} compact={chrome.island !== "top"} />
           </div>
         </div>
       )}

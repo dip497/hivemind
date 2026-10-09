@@ -96,6 +96,7 @@ import { TileHost } from "./workspace/tile-host";
 import { ViewHost } from "./workspace/view-host";
 import { SayHere } from "./multiplayer/presence";
 import { joinedId } from "./multiplayer/shown";
+import { openAdd } from "./workspace/add-dialog";
 import { HostChrome } from "./workspace/host-chrome";
 import { loadCommunityViews } from "./workspace/views/community/registry";
 import { agentScanProblems, syncAgentPlugins } from "./agent-plugins";
@@ -402,8 +403,16 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   useShownWorkspace(persistKey, !!joinedId(repoPath ?? null));
   useWidgetRuntime(persistKey, board.objects, widgetPackages, updateBoard);
   /** Add from the menu (or `hive ctl plugin open`); a widget's new id, when one was added. */
+  // Where the pointer was when Add opened: the dialog then covers the canvas, and the pick is made on it.
+  const addAtRef = useRef<Point | undefined>(undefined);
+  useEffect(() => {
+    const opened = () => { addAtRef.current = canvasPointRef.current?.(); };
+    window.addEventListener("hivemind:open-add", opened);
+    return () => window.removeEventListener("hivemind:open-add", opened);
+  }, []);
   const addBoard = useCallback((kind: BoardChoice): string | undefined => {
-    const at = canvasPointRef.current?.();
+    const at = addAtRef.current ?? canvasPointRef.current?.();
+    addAtRef.current = undefined;
     const widget = kind.startsWith("widget:") ? kind.slice("widget:".length) : null;
     if (widget) {
       const pkg = widgetPackages.find((p) => p.id === widget);
@@ -850,7 +859,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     onColor: (frameId: string, color: string) => updateFrameColor(frameId, color),
     onDelete: (frameId: string) => requestDeleteFrame(frameId),
     onDetachWorktree: (frameId: string) => unbindBranch(frameId),
-    onAddInFrame: (frameId: string) => window.dispatchEvent(new CustomEvent("hivemind:open-add", { detail: { frameId } })),
+    onAddInFrame: (frameId: string) => openAdd(frameId),
     onUnbindWorkspace: (frameId: string) => unbindWorkspace(frameId),
     onGit: (frameId: string) =>
       window.dispatchEvent(new CustomEvent("hivemind:frame-git", { detail: { frameId } })),

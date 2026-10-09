@@ -9,6 +9,7 @@
  * document, so pinning in a shared workspace moves no one else's rows.
  */
 import { resolveViewId, useViews } from "./workspace/workspace-view";
+import { openAdd } from "./workspace/add-dialog";
 import { setViewMode, useViewMode } from "./workspace/view-mode-store";
 import { statusColor } from "./workspace/tile-status-bucket";
 import { MachineDot, statusWords } from "./machines/status";
@@ -730,7 +731,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       <nav aria-label="Start" className="shrink-0 pb-2">
         <NewAgentRow />
         <ActionRow icon={<FolderPlus size={ICON} />} label="New project" data="project" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:add-project"))} />
-        <ActionRow icon={<AddWidget size={ICON} />} label="Add a tool or widget" data="add" onClick={() => window.dispatchEvent(new CustomEvent("hivemind:open-add"))} />
+        <ActionRow icon={<AddWidget size={ICON} />} label="Add a tool or widget" data="add" onClick={() => openAdd()} />
       </nav>
       )}
 

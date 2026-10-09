@@ -34,8 +34,10 @@ const DialogContent = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     /** "none" for a dialog that lays out its own header/body/footer edge to edge. */
     padding?: "default" | "none"
+    /** The × in its corner; a dialog that is all list, closed with Escape or a click outside, has none. */
+    closeButton?: boolean
   }
->(({ className, children, padding = "default", ...props }, ref) => (
+>(({ className, children, padding = "default", closeButton = true, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -48,10 +50,10 @@ const DialogContent = React.forwardRef<
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 grid place-items-center size-7 rounded-md text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-opacity focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] disabled:pointer-events-none cursor-pointer">
+      {closeButton && <DialogPrimitive.Close className="absolute right-4 top-4 grid place-items-center size-7 rounded-md text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-opacity focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] disabled:pointer-events-none cursor-pointer">
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
-      </DialogPrimitive.Close>
+      </DialogPrimitive.Close>}
     </DialogPrimitive.Content>
   </DialogPortal>
 ))

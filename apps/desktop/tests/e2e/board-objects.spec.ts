@@ -145,7 +145,13 @@ test("a note added in a frame, or dropped in one, moves with it; an arrow joins 
   await addBox(page, "note", frame.x + frame.width / 2, frame.y + frame.height / 2, "inside");
   await page.keyboard.press("Escape"); // deselect
   const frameId = await page.locator(".react-flow__node-frame").getAttribute("data-id");
-  await addBox(page, "note", 350, 320, "outside");
+  // Added from the keyboard with the pointer on an empty spot: it goes under the pointer.
+  await page.mouse.move(350, 320);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-add")));
+  await page.keyboard.type("sticky");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("outside");
+  await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   await expect.poll(async () => (await stored()).map((o) => [o.text, o.frame])).toEqual([["inside", frameId], ["outside", undefined]]);
 
@@ -153,7 +159,8 @@ test("a note added in a frame, or dropped in one, moves with it; an arrow joins 
   const outside = page.locator(`${nodeOf("note")}:has-text("outside")`);
   const ob = (await outside.boundingBox())!;
   const fb = (await page.locator(".react-flow__node-frame").boundingBox())!;
-  await drag(page, { x: ob.x + 20, y: ob.y + 20 },
+  // Held by its right end: its left end may sit under the Layers panel.
+  await drag(page, { x: ob.x + ob.width - 30, y: ob.y + 20 },
     { x: fb.x + fb.width - 10 - (ob.x + ob.width / 2), y: fb.y + fb.height / 2 - (ob.y + ob.height / 2) });
   await expect.poll(async () => (await stored()).find((o) => o.text === "outside")?.frame).toBe(frameId);
 
@@ -173,6 +180,7 @@ test("a note added in a frame, or dropped in one, moves with it; an arrow joins 
   // An arrow from one note to the other, drawn from the Board menu.
   await page.locator('[data-toolbar-action="board"]').click();
   await page.locator('[data-board-choice="arrow"]').click();
+  await expect(page.locator("[data-add-menu]")).toHaveCount(0);
   await inside.click({ force: true });
   await outside.click({ force: true });
   await expect.poll(async () => (await stored()).filter((o) => kindOf(o) === "arrow").map((a) => [a.from?.id, a.to?.id]))

@@ -173,8 +173,9 @@ test("the Add menu offers every tool beside the widgets, by category, found by s
   await expect(menu.locator('[data-add-category="git"]')).toContainText("Worktrees");
   await expect(menu.locator('[data-add-category="monitoring"]')).toContainText("CI runs");
   await expect(menu.locator('[data-add-category="productivity"]')).toContainText("Sticky note");
-  // Its material is the Layers panel's, never thinner (the toolbar's island let the board read through).
-  expect(await menu.evaluate((el) => el.classList.contains("hm-popover"))).toBe(true);
+  // It is a dialog on the app's opaque sheet: the board never reads through it.
+  await expect(menu).toHaveAttribute("role", "dialog");
+  expect(await menu.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toMatch(/^transparent$|^rgba\(.*, 0(\.\d+)?\)$/);
   // Its tabs show one type at a time.
   await menu.locator('[data-add-tab="tool"]').click();
   await expect(menu).toContainText("Worktrees");

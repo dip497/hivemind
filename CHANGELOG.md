@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: "Add a tool or widget" in the Layers panel or a frame's menu did nothing in a view without the toolbar (Windows). Add is now one dialog wherever it is opened, toolbar or not; what it adds on the canvas goes where the pointer was when it opened.
 - Added: the Layers panel closes from a button in its header, and reopens from the same corner; the shortcut is Ctrl+B (⌘B on macOS).
 - Changed: "Join a shared workspace…" is in the Layers panel's title menu, next to Open a folder and Recent folders, and opens straight on the join form.
 - Added: a view's manifest says where the app's toolbar goes, `"toolbar": "top" | "bottom" | "hidden" | "off"`; Settings → Views still overrides it per view.

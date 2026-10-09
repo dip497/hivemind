@@ -343,3 +343,13 @@ test("more tabs than the strip holds: they shrink to a readable name, the active
   await expect.poll(async () => (await geometry()).farInView).toBe(false);
   await expect.poll(async () => (await geometry()).activeInView).toBe(true);
 });
+
+test("with no toolbar, the panel's Add a tool or widget still adds one, as a new tab", async () => {
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "windows" } })));
+  await windowsReady();
+  const before = await tabsOf().count();
+  await page.locator('aside[aria-label="Layers"] [data-layers-action="add"]').click();
+  await page.locator('[data-add-menu] [data-board-choice="tile:shell"]').click();
+  await expect(page.locator("[data-add-menu]")).toHaveCount(0);
+  await expect(tabsOf()).toHaveCount(before + 1);
+});
