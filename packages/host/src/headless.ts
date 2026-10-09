@@ -311,12 +311,15 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       permissionKeys: (bare) => permissionKeys(heldBoards(store), bare),
       deliver: (bare, message) => control.mailbox.deliver(`hm:${bare}`, message),
       plans,
+      approval: (bare) => control.approvalOf(bare),
+      answerApproval: (request, decision) => control.answerApproval(request, decision),
     }),
     // Agents started, interrupted and closed from another of the person's devices, and what they
     // changed (M5, spec/agents.md).
     agentControl({
       programs: () => spawnableAgents().filter((d) => !!findBin(d.bin)),
       core: (repo) => store.getCore(repo),
+      repos: () => store.repos(),
       machines,
       start: (repo, start) => control.start(repo, start),
       status: (bare) => control.status.get(bare),
@@ -373,6 +376,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     windowsUp: () => false,
     ready: () => catalog.current(),
     methods: () => ({
+      reported: (tile, message) => agentFeed?.report(toBareId(tile), message),
       callRenderer: () => Promise.reject(new HcpError("APP_NO_RENDERER", "there is no window here: hive host runs none")),
       reloadSettings: () => catalog.current().then(() => ({ ok: true })),
       defaultAgentId: () => preferredAgent(catalog.settings().agents.defaultAgent, (d) => !!findBin(d.bin))?.id,
@@ -451,7 +455,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     // permissions their phone may allow or deny.
     statuses: () => control.status.all(),
     plans: () => plans.reviews(),
-    facts: manifestFacts,
+    facts: (held) => ({ ...manifestFacts(held), parent: (bare) => control.parentOf(bare), approval: (bare) => control.approvalOf(bare) }),
     machines,
     // Where each of the person's phones is told what happens here.
     subscribe: (device, sub) => pushSubscriptions.set(device, sub),

@@ -1032,6 +1032,7 @@ const control: ControlPlane = new ControlPlane({
   ready: () => agentsScanned,
   diag: (line) => void writeDiagLog(line),
   methods: () => ({
+    reported: (tile, message) => agentFeed()?.report(toBareId(tile), message),
     callRenderer: hcpCallRenderer,
     toolsSettings: () => toolPreferences(getAppSettings()),
     reloadSettings: () => reloadSettings().then((s) => ({ ok: true, preset: s.appearance.preset })),
@@ -1287,6 +1288,8 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     permissionKeys: (bare) => permissionKeys(heldBoards(workspaceStore()), bare),
     deliver: (bare, message) => control.mailbox.deliver(`hm:${bare}`, message),
     plans,
+    approval: (bare) => control.approvalOf(bare),
+    answerApproval: (request, decision) => control.answerApproval(request, decision),
   }),
   // Agents started, interrupted and closed from another of the person's devices, and what they
   // changed (M5, spec/agents.md).
@@ -1296,6 +1299,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
       return spawnableAgents().filter((d) => !!findBin(d.bin));
     },
     core: (repo) => workspaceStore().getCore(repo),
+    repos: () => workspaceStore().repos(),
     machines: knownMachines,
     start: (repo, start) => control.start(repo, start),
     status: (bare) => control.status.get(bare),
@@ -1511,6 +1515,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       statuses: () => control.status.all(),
       onStatus: (listener) => { control.status.subscribe(listener); },
       plans: () => plans.reviews(),
+      workers: { parent: (bare) => control.parentOf(bare), approval: (bare) => control.approvalOf(bare) },
     });
     installWorkspaceStoreIpc(layouts, workspaceIpc.connect, (change) =>
       workspaceServer.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part }));

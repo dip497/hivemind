@@ -202,7 +202,12 @@ export interface MethodDeps {
   join?: (link: string) => Promise<unknown>;
   /** Carries out every verb with an effect, and records it in the audit log (R7). */
   intents: Pick<Intents, "perform">;
+  /** A worker a program started reported `message` to it. */
+  reported?: (tile: string, message: string) => void;
 }
+
+/** A parent that is a program on the drive socket, not an agent's tile. */
+const isClient = (parent: string): boolean => parent.startsWith("client:");
 
 /** How the control plane writes a workspace: its windows hear of it, and it hears of none. */
 const CONTROL = { writer: "control" };
@@ -226,7 +231,16 @@ export interface Dispatcher {
   /** What the control plane's messages call a tile (names.ts). */
   labelOf: (tileId: string) => string;
   /** Spawn an agent, as `tile.spawn_agent` does, without recording it: the caller has (M5). */
-  spawn: (opts: { agent?: string; frame?: string; prompt?: string; model?: string; mode?: string; name?: string; repo: string; attended: true }) => Promise<string>;
+  spawn: (opts: {
+    agent?: string; frame?: string; prompt?: string; model?: string; mode?: string; name?: string; resume?: string;
+    supervise?: string | true; report?: boolean; parent?: string; repo: string; attended: true;
+  }) => Promise<string>;
+  /** Who started `bare` and hears its reports: a tile, or a program (`client:<grant id>`). */
+  parentOf: (bare: string) => string | undefined;
+  /** The approval `bare` waits on, if it waits on one. */
+  approvalOf: (bare: string) => { request: string; tool: string; summary: string; expiresAt: number; supervisor: string } | undefined;
+  /** Answer an approval: false when none of that id waits. */
+  answerApproval: (request: string, decision: "allow" | "deny") => boolean;
   /** Close a tile, as `tile.close` does, without recording it: the caller has (M5). */
   close: (tileId: string) => Promise<unknown>;
 }
@@ -266,7 +280,23 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // Agent-supervised approvals (HCP Phase 6). A supervised worker's PreToolUse
   // broker hook calls `agent.await_approval` (held here until the parent answers
   // via `agent.approve`). `approveCache` remembers always/never per worker+tool.
-  const pendingApprovals = new Map<string, { resolve: (d: { decision: "allow" | "deny"; reason?: string }) => void; timer: ReturnType<typeof setTimeout>; cacheKey: string; worker: string; supervisor: string }>();
+  const pendingApprovals = new Map<string, {
+    resolve: (d: { decision: "allow" | "deny"; reason?: string }) => void; timer: ReturnType<typeof setTimeout>;
+    cacheKey: string; worker: string; supervisor: string; tool: string; summary: string; expiresAt: number;
+  }>();
+  /** Answer the approval `reqId`: always / never also remember it for this worker and tool. False
+   *  when none of that id waits. */
+  const answerApproval = (reqId: string, decision: "allow" | "deny" | "always" | "never", reason?: string): boolean => {
+    const pend = pendingApprovals.get(reqId);
+    if (!pend) return false;
+    if (decision === "always") approveCache.set(pend.cacheKey, "allow");
+    if (decision === "never") approveCache.set(pend.cacheKey, "deny");
+    clearTimeout(pend.timer);
+    pendingApprovals.delete(reqId);
+    deps.awaitingApproval(pend.worker, false); // resolved → clear the "waiting" status
+    pend.resolve({ decision: decision === "allow" || decision === "always" ? "allow" : "deny", reason });
+    return true;
+  };
   const approveCache = new Map<string, "allow" | "deny">();
 
   const armRead = (tileId: string) => {
@@ -295,6 +325,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   const doSpawn = async (opts: {
     agent?: unknown; prompt?: unknown; frame?: unknown; mode?: unknown; model?: unknown;
     callerTile?: unknown; report?: unknown; supervise?: unknown; name?: unknown; resume?: unknown;
+    /** The program on the drive socket that starts it (`client:<grant id>`): it reports, and asks
+     *  its approvals, to that program. */
+    parent?: string;
     /** The workspace to open it in (a person's spawn from another of their devices, M5), not the
      *  caller's or the one the user's window shows. */
     repo?: string;
@@ -321,7 +354,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const sup = normalizeSupervise(opts.supervise);
     // Supervision is brokered TO the caller's tile. Without one there is nobody to ask,
     // and the policy would be dropped silently while the caller believes it has a gate.
-    if (sup && !opts.callerTile) {
+    if (sup && !opts.callerTile && !opts.parent) {
       throw new HcpError("BAD_REQUEST", "supervise needs a supervising agent: run this from an agent tile, or spawn without --supervise");
     }
     // pi cannot be supervised. It has NO permission system, so the only gate would be
@@ -376,6 +409,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         deps.spawnEdge(res.tileId, parentBare, true);
         if (opts.report !== false) deps.connect(res.tileId, parentBare);
       }
+      if (sup) deps.setSupervise(res.tileId, sup);
+    } else if (opts.parent) {
+      parentOf.set(res.tileId, opts.parent);
       if (sup) deps.setSupervise(res.tileId, sup);
     }
     armRead(res.tileId);
@@ -710,6 +746,12 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           if (!parent) throw new HcpError("TILE_NOT_FOUND", "no parent agent to report to");
           const message = String(p.message ?? "").trim();
           if (!message) throw new HcpError("BAD_REQUEST", "message required");
+          // A program that started it hears it as an event of the agent feed.
+          if (isClient(parent)) {
+            deps.reported?.(child, message);
+            deps.turns.markReported(ptyId(child));
+            return { delivered: true, parent };
+          }
           const banner = `\n[hive] report from ${label(child)}:\n${message}\n`;
           // Held if the parent is mid-turn — a report typed into a busy TUI never
           // gets read, and the worker thinks it delivered.
@@ -773,7 +815,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
             // that waited 8 minutes must not then get 1 to be answered.
             const ceiling = setTimeout(() => done("ask"), APPROVAL_MAX_WAIT_MS);
             ceiling.unref?.();
-            pendingApprovals.set(reqId, { resolve, timer: ceiling, cacheKey, worker, supervisor: parent });
+            pendingApprovals.set(reqId, { resolve, timer: ceiling, cacheKey, worker, supervisor: parent, tool, summary, expiresAt: Date.now() + APPROVAL_MAX_WAIT_MS });
             // A hook that stopped waiting (it gave up and asked the agent's own prompt) has no use
             // for an answer: the question ends with it, and an answer after that is told so
             // rather than told it worked.
@@ -786,7 +828,11 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
               const t = setTimeout(() => done("ask"), APPROVAL_TIMEOUT_MS);
               t.unref?.();
               pend.timer = t;
+              pend.expiresAt = Date.now() + APPROVAL_TIMEOUT_MS;
             };
+            // A program asks its own way: the wait is in the agent feed from now, its answer
+            // clock running.
+            if (isClient(parent)) return armAnswerTimeout();
             const delivered = deps.deliverToTile(ptyId(parent), banner, armAnswerTimeout);
             if (!delivered) done("ask"); // parent's pty is gone → don't hang the worker
           });
@@ -806,12 +852,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           const reason = p.reason != null ? String(p.reason) : undefined;
           if (!pend) throw new HcpError("BAD_REQUEST", `no approval ${reqId} is waiting: it was answered, ran out of time, or its worker stopped waiting`);
           if (!d) throw new HcpError("BAD_REQUEST", "decision must be allow | deny | always | never");
-          if (decision === "always") approveCache.set(pend.cacheKey, "allow");
-          if (decision === "never") approveCache.set(pend.cacheKey, "deny");
-          clearTimeout(pend.timer);
-          pendingApprovals.delete(reqId);
-          deps.awaitingApproval(pend.worker, false); // resolved → clear the "waiting" status
-          pend.resolve({ decision: d, reason });
+          answerApproval(reqId, decision as "allow" | "deny" | "always" | "never", reason);
           return { ok: true, decision: d };
         });
       }
@@ -1006,5 +1047,13 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     }
   };
 
-  return { dispatch, forgetTile: forgetTileState, labelOf: label, spawn: doSpawn, close: closeTile };
+  return {
+    dispatch, forgetTile: forgetTileState, labelOf: label, spawn: doSpawn, close: closeTile,
+    parentOf: (bare) => parentOf.get(bare),
+    approvalOf: (bare) => {
+      for (const [request, p] of pendingApprovals) if (p.worker === bare) return { request, tool: p.tool, summary: p.summary, expiresAt: p.expiresAt, supervisor: p.supervisor };
+      return undefined;
+    },
+    answerApproval: (request, decision) => answerApproval(request, decision),
+  };
 }

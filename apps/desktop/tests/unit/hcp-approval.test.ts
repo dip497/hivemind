@@ -23,7 +23,7 @@ useAuthoredAgents();
 import { Mailbox } from "@hivemind/host/control/mailbox";
 import { TurnTracker } from "@hivemind/host/control/turn-tracker";
 import { OutputRecorder } from "@hivemind/host/control/output-recorder";
-import { workspaceDeps, PERSON, fromTile } from "./hcp-workspace.ts";
+import { workspaceDeps, PERSON, REPO, fromTile } from "./hcp-workspace.ts";
 
 test("an approval for a BUSY supervisor is held, then delivered when it hits its prompt", async () => {
   // The screenshot bug, end to end: the parent was mid-turn, so the approval banner was
@@ -235,4 +235,44 @@ test("the hook of an answered question closing does not end the worker's next qu
   assert.deepEqual(waiting.at(-1), [worker, true], "still shown waiting on the second");
   await dispatch("agent.approve", { reqId, decision: "deny" }, fromTile("tile-lead"));
   assert.deepEqual(await second, { decision: "deny", reason: undefined });
+});
+
+test("a program supervises the workers it starts: nothing is typed anywhere, its wait says the tool and what it would do, its answer resolves it, and it hears their reports", async () => {
+  const typed: string[] = [];
+  const reports: Array<[string, string]> = [];
+  const waiting: Array<[string, boolean]> = [];
+  const made = makeDispatch({
+    turns: new TurnTracker(),
+    recorder: new OutputRecorder(),
+    callRenderer: async () => { throw new Error("no window"); },
+    writeToTile: () => true,
+    deliverToTile: (_id: string, t: string) => { typed.push(t); return true; },
+    spawnAllowed: () => true,
+    connect: () => true,
+    disconnect: () => {},
+    forgetPipes: () => {},
+    spawnEdge: () => {},
+    setSupervise: () => {},
+    awaitingApproval: (tile: string, on: boolean) => { waiting.push([tile, on]); },
+    reported: (tile: string, message: string) => { reports.push([tile, message]); },
+    ...workspaceDeps(),
+  } as unknown as Parameters<typeof makeDispatch>[0]);
+  const worker = await made.spawn({ agent: "claude", repo: REPO, attended: true, supervise: true, parent: "client:g1" });
+  assert.equal(made.parentOf(worker), "client:g1");
+
+  const asked = made.dispatch("agent.await_approval", { callerTile: `hm:${worker}`, tool_name: "Bash", tool_input: { command: "rm -rf dist" } }, PERSON);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(typed, [], "a program is asked by its wait, not a banner");
+  assert.deepEqual(waiting, [[worker, true]]);
+  const wait = made.approvalOf(worker)!;
+  assert.deepEqual({ tool: wait.tool, summary: wait.summary, supervisor: wait.supervisor }, { tool: "Bash", summary: "rm -rf dist", supervisor: "client:g1" });
+  assert.ok(wait.expiresAt > Date.now());
+  assert.equal(made.answerApproval(wait.request, "deny"), true);
+  assert.deepEqual(await asked, { decision: "deny", reason: undefined });
+  assert.equal(made.approvalOf(worker), undefined);
+  assert.equal(made.answerApproval(wait.request, "allow"), false, "answered once");
+
+  await made.dispatch("agent.report", { callerTile: `hm:${worker}`, message: "done: 3 files" }, fromTile(worker));
+  assert.deepEqual(reports, [[worker, "done: 3 files"]]);
+  assert.deepEqual(typed, []);
 });

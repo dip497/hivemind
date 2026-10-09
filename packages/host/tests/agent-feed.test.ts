@@ -79,3 +79,13 @@ test("each workspace's changes go to its own folder, and none for a workspace no
   assert.deepEqual([...new Set(h.told.map((t) => `${t.repo}:${"agent" in t.payload ? t.payload.agent.tile : "tile" in t.payload ? t.payload.tile : ""}`))],
     ["/a:1", "/b:2"]);
 });
+
+test("what a worker reports to the program that started it is told to its workspace's readers, numbered on, and kept for one catching up", () => {
+  const h = feed([agent("1"), agent("2", { workspace: "ws-b" })]);
+  h.f.report("1", "done: 3 files");
+  h.f.report("gone", "nobody hears this");
+  assert.deepEqual(events(h.told), ["1:reported:done: 3 files"]);
+  assert.equal(h.told[0]!.repo, "/a");
+  assert.deepEqual(h.f.since("ws-a", 0)?.events.map((e) => [e.kind, e.detail]), [["reported", "done: 3 files"]]);
+  assert.deepEqual(h.f.since("ws-b", 0)?.events, []);
+});

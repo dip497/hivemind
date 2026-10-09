@@ -9,7 +9,7 @@ import type { InputKind } from "@hivemind/agents";
 import { machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
 import type { PlanReview } from "@hivemind/workspace-api/plans";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
-import type { AgentItem } from "@hivemind/workspace-api/agents";
+import type { AgentItem, ApprovalWait } from "@hivemind/workspace-api/agents";
 import { agentOf, folderOf, manifestOf, type HeldBoard, type WaitingStatus } from "./needs.js";
 
 export type { AgentItem } from "@hivemind/workspace-api/agents";
@@ -24,6 +24,10 @@ export interface AgentFacts {
   interrupts(tile: string): boolean;
   /** Whether its agent's manifest maps its session file's records (`session.transcript`). */
   converses(tile: string): boolean;
+  /** Who started it and hears its reports, when one does. */
+  parent?(tile: string): string | undefined;
+  /** The supervised tool use it waits on an answer for, if it waits on one. */
+  approval?(tile: string): ApprovalWait | undefined;
 }
 
 /** What the manifests here say of the agent each tile of `held` runs. */
@@ -53,11 +57,17 @@ export function agentsOf(held: HeldBoard[], statuses: WaitingStatus[], plans: Pl
     if (status.state === "waiting" && status.kind) {
       const plan = status.kind === "plan" ? plans.find((p) => toBareId(p.tileId) === at.tile)?.plan : undefined;
       const decide = status.kind === "permission" && facts.decides(at.tile);
-      waiting = { kind: status.kind, since: status.since, ...(plan === undefined ? {} : { plan }), ...(decide ? { decide } : {}) };
+      const approval = status.kind === "approval" ? facts.approval?.(at.tile) : undefined;
+      waiting = {
+        kind: status.kind, since: status.since, ...(plan === undefined ? {} : { plan }), ...(decide ? { decide } : {}),
+        ...(approval ? { approval: { request: approval.request, tool: approval.tool, summary: approval.summary, expiresAt: approval.expiresAt } } : {}),
+      };
     }
+    const parent = facts.parent?.(at.tile);
     items.push({
       ...at,
       ...(program ? { program } : {}),
+      ...(parent ? { parent } : {}),
       state: status.state,
       since: status.since,
       machine: machineCalled(folderOf(board, at.tile), machines),

@@ -66,6 +66,15 @@ function fire(event, payload) {
   spawnSync("bash", ["-c", cmd], { input: JSON.stringify(payload), stdio: ["pipe", "ignore", "ignore"], env: process.env, timeout: 10_000 });
   return true;
 }
+/** Ask the hook for `event` whose matcher takes `name`, as claude picks one, and give back what it
+ *  printed: how a PreToolUse hook answers. */
+function ask(event, name, payload) {
+  const entry = (HOOKS[event] || []).find((e) => !e.matcher || e.matcher === "*" || new RegExp(`^(?:${e.matcher})$`).test(name));
+  const cmd = entry?.hooks?.[0]?.command;
+  if (!cmd) return `(no hook: ${Object.keys(HOOKS).join(",")})`;
+  const r = spawnSync("bash", ["-c", cmd], { input: JSON.stringify(payload), encoding: "utf8", env: process.env, timeout: 600_000 });
+  return (r.stdout || "").trim() || "(nothing)";
+}
 
 // ── transcript (inside the isolated test profile, derived from the socket path
 // hivemind injects: <userData>/hcp.sock) — droid's plugin reads its reply from here.
@@ -88,6 +97,18 @@ function positionalPrompt() {
 
 // ── one turn ──────────────────────────────────────────────────────────────────
 function turn(prompt) {
+  // `TOOL <name> <input json>`: a tool use, asked of its PreToolUse hook as claude asks it; what the
+  // hook answers is the reply, and is written to $FAKE_TOOL_LOG.
+  const tool = /^TOOL (\S+) (.*)$/.exec(prompt);
+  if (tool) {
+    fire("UserPromptSubmit", { session_id: sessionId, prompt });
+    const answer = ask("PreToolUse", tool[1], { session_id: sessionId, hook_event_name: "PreToolUse", tool_name: tool[1], tool_input: JSON.parse(tool[2]) });
+    if (process.env.FAKE_TOOL_LOG) fs.appendFileSync(process.env.FAKE_TOOL_LOG, `${tool[1]} ${answer}\n`);
+    process.stdout.write(`${answer}\n`);
+    fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false, last_assistant_message: answer });
+    process.stdout.write(`${provider}> `);
+    return;
+  }
   process.stdout.write(`\n[${provider}] ▶ ${prompt}\n`);
   // Like claude: the window title says what the turn is doing, behind a status glyph.
   process.stdout.write(`\x1b]0;✳ ${prompt}\x07`);

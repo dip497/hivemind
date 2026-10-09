@@ -9,25 +9,33 @@ import { optionChoices, type AgentProviderDef } from "@hivemind/agents";
 import { typeKeys } from "@hivemind/agent-host/keys";
 import { machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
 import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
-import { ApiError, fields, text, written } from "@hivemind/workspace-api/protocol";
+import { ApiError, fields, flag, text, written } from "@hivemind/workspace-api/protocol";
 import type { Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { changesIn, type Changes } from "./agent-diff.js";
 
-/** What starting an agent asks for. */
+/** What starting an agent asks for. `supervise`: the tools it asks its starter before using
+ *  (`true`: the usual ones). `parent`: the program that starts it, which it reports and asks to. */
 export interface Start {
   program: string;
   frame?: string;
   prompt?: string;
   model?: string;
   mode?: string;
+  name?: string;
+  resume?: string;
+  supervise?: string | true;
+  report?: boolean;
+  parent?: string;
 }
 
 export interface AgentControlOptions {
   /** The agents this device starts: switched on, their command found here. */
   programs(): AgentProviderDef[] | Promise<AgentProviderDef[]>;
-  /** The board of the workspace at `repo`; null for one not here. */
+  /** The board of the workspace at `repo`; null for one never saved. */
   core(repo: string): CoreLayout | null;
+  /** The workspaces here, by their folder. */
+  repos(): string[];
   /** The machines this device knows, by what each is called. */
   machines: KnownMachines;
   /** Start `start.program` in the workspace at `repo`, in `start.frame` (none: its first frame), as
@@ -79,17 +87,32 @@ function startOf(value: unknown, programs: readonly AgentProviderDef[], core: Co
   }
   const model = choice(s.model, "start.model");
   const mode = choice(s.mode, "start.mode");
-  return { program, ...(frame ? { frame } : {}), ...(prompt ? { prompt } : {}), ...(model ? { model } : {}), ...(mode ? { mode } : {}) };
+  const name = choice(s.name, "start.name");
+  const resume = choice(s.resume, "start.resume");
+  const supervise = superviseOf(s.supervise);
+  const report = flag(s.report, "start.report");
+  return {
+    program, ...(frame ? { frame } : {}), ...(prompt ? { prompt } : {}), ...(model ? { model } : {}), ...(mode ? { mode } : {}),
+    ...(name ? { name } : {}), ...(resume ? { resume } : {}), ...(supervise ? { supervise } : {}), ...(report === false ? { report } : {}),
+  };
+}
+
+/** `start.supervise`: true for the usual tools, "all", or a list of tool names. */
+function superviseOf(value: unknown): string | true | undefined {
+  if (value == null || value === false) return undefined;
+  if (value === true || value === "all") return value;
+  if (Array.isArray(value) && value.length && value.every((t) => typeof t === "string" && /^[A-Za-z][A-Za-z0-9_]*$/.test(t))) return value.join(",");
+  throw new ApiError("BAD_REQUEST", "start.supervise is true, \"all\", or a list of tool names");
 }
 
 /** Whether `folder` is on this machine, where git can read it. */
 const here = (folder: string): boolean => !/^[a-z][a-z0-9+.-]*:\/\//i.test(folder);
 
 export function agentControl(o: AgentControlOptions): Domain<"agent.startable" | "agent.start" | "agent.interrupt" | "agent.close" | "agent.diff"> {
+  /** A workspace's board; an empty one when it was never saved. */
   const board = (repo: string): CoreLayout => {
-    const core = o.core(repo);
-    if (!core) throw new ApiError("BAD_REQUEST", "no such workspace here");
-    return core;
+    if (!o.repos().includes(repo)) throw new ApiError("BAD_REQUEST", "no such workspace here");
+    return o.core(repo) ?? { frames: [], tiles: [], tileNames: {}, editorTabs: {}, frameOf: {} };
   };
   return {
     answers: {
@@ -103,9 +126,11 @@ export function agentControl(o: AgentControlOptions): Domain<"agent.startable" |
         const frames = core.frames.map((f) => ({ id: f.id, name: f.title, machine: machineCalled(f.worktreePath ?? f.workspacePath ?? text(repo, "workspace"), o.machines) }));
         return { programs, frames };
       },
-      "agent.start": async (_from, repo, start) => {
+      "agent.start": async (from, repo, start) => {
         const at = text(repo, "workspace");
-        return { tile: await o.start(at, startOf(start, await o.programs(), board(at))) };
+        // A program on the drive socket is the parent of what it starts.
+        const parent = from.actor.kind === "peer" && from.actor.client ? from.actor.person : undefined;
+        return { tile: await o.start(at, { ...startOf(start, await o.programs(), board(at)), ...(parent ? { parent } : {}) }) };
       },
       "agent.interrupt": (_from, tile) => {
         const bare = toBareId(text(tile, "tile"));

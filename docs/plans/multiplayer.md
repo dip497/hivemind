@@ -8,7 +8,7 @@ here**, then reads the design section for the current item.
 | Design (what and why) | [`docs/design/multiplayer-2026-09-28.md`](../design/multiplayer-2026-09-28.md) — accepted, rev 4 |
 | Research (facts behind it) | [`docs/design/multiplayer-2026-09-28-research.md`](../design/multiplayer-2026-09-28-research.md) |
 | The phone app (M5, from 2026-10-02) | [`docs/design/phone-app-2026-10-02.md`](../design/phone-app-2026-10-02.md) — native Swift and Kotlin over the Rust core; full control of agents; steps P1–P8 (status in its §8) |
-| One API to drive a workspace (from 2026-10-09) | [`docs/design/drive-api-2026-10-09.md`](../design/drive-api-2026-10-09.md) — drive socket, grants, frames, one waits model; steps D1–D8, branch `feat/drive-api`. Status: D1 ☑ (2026-10-09) D2 ☑ (2026-10-09) D3 ☐ D4 ☐ D5 ☐ D6 ☐ D7 ☐ D8 ☐ |
+| One API to drive a workspace (from 2026-10-09) | [`docs/design/drive-api-2026-10-09.md`](../design/drive-api-2026-10-09.md) — drive socket, grants, frames, one waits model; steps D1–D8, branch `feat/drive-api`. Status: D1 ☑ (2026-10-09) D2 ☑ (2026-10-09) D3 ☑ (2026-10-09) D4 ☐ D5 ☐ D6 ☐ D7 ☐ D8 ☐ |
 | Branch | `claude/gpui-kit-performance-2whq9z` (no PR yet) |
 | Order | Phase 0 (R1–R16) → M1 multiplayer board → M2 terminals → M3 your devices + always-on hosting → M4 agents on your machine in their workspace → M5 phone |
 

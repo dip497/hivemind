@@ -46,6 +46,7 @@ function device(repo = "/home/p/api") {
   const domain = agentControl({
     programs: async () => [claude],
     core: (r) => (r === repo ? core : null),
+    repos: () => [repo, "/home/p/fresh"],
     machines: { self: () => ({ device: "d1".repeat(32), name: "desk" }), mine: (d) => (d === BOX ? "build-box" : undefined), whose: () => undefined, saved: () => undefined },
     start: async (r, start) => { started.push({ repo: r, start }); return "t9"; },
     status: (tile) => (tile === "t1" ? { state: state.now } : undefined),
@@ -54,9 +55,10 @@ function device(repo = "/home/p/api") {
     close: async (tile) => tile === "t1",
     folderOf: (tile) => (tile === "t1" ? state.folder : null),
   });
-  const from = {} as never;
-  const call = (method: keyof typeof domain.answers, ...params: unknown[]) => (domain.answers[method] as (f: never, ...p: unknown[]) => unknown)(from, ...params);
-  return { repo, started, typed, state, call, domain };
+  const person = { actor: { kind: "person" } } as never;
+  const as = (from: never) => (method: keyof typeof domain.answers, ...params: unknown[]) => (domain.answers[method] as (f: never, ...p: unknown[]) => unknown)(from, ...params);
+  const call = as(person);
+  return { repo, started, typed, state, call, as, domain };
 }
 
 /** `asked` is refused as a bad request saying `pattern`. */
@@ -197,4 +199,23 @@ test("starting, interrupting and closing an agent from another device is recorde
     { verb: "agent.interrupt", target: "t1", actor: phone },
     { verb: "agent.close", target: "t1", actor: phone },
   ]);
+});
+
+test("a program starts an agent named, resumed and supervised as it asks, and is its parent; a person starting one is no one's", async () => {
+  const d = device();
+  const program = d.as({ actor: { kind: "peer", person: "client:g1", device: "client:g1", access: "agents", client: "bot" } } as never);
+  await program("agent.start", d.repo, { program: "claude", name: "reviewer", resume: "3f2a", supervise: ["Bash", "Edit"], report: false });
+  await d.call("agent.start", d.repo, { program: "claude", supervise: true });
+  assert.deepEqual(d.started.map((s) => s.start), [
+    { program: "claude", name: "reviewer", resume: "3f2a", supervise: "Bash,Edit", report: false, parent: "client:g1" },
+    { program: "claude", supervise: true },
+  ]);
+  await refused(() => program("agent.start", d.repo, { program: "claude", supervise: ["rm -rf"] }), /supervise is true/);
+  await refused(() => program("agent.start", d.repo, { program: "claude", name: "two\nlines" }), /one line/);
+});
+
+test("a workspace open with nothing saved yet starts agents; one that is not here does not", async () => {
+  const d = device();
+  assert.deepEqual(await d.call("agent.start", "/home/p/fresh", { program: "claude" }), { tile: "t9" });
+  await refused(() => d.call("agent.start", "/home/p/nowhere", { program: "claude" }), /no such workspace/);
 });

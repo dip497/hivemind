@@ -1,4 +1,4 @@
-# Agents (0.4)
+# Agents (0.5)
 
 The person's agents, as their phone sees and drives them (M5, `docs/design/phone-app-2026-10-02.md`
 §4): every agent in the workspaces one of their devices holds, live; and starting one, stopping
@@ -33,6 +33,16 @@ holds:
   "interrupt": true, "conversation": true }
 ```
 
+A supervised agent's wait on its starter (0.5, `"kind": "approval"`) also says what it asks, and the
+item who started it:
+
+```json
+{ "parent": "client:<grant id>",
+  "waiting": { "kind": "approval", "since": 1790000000000,
+               "approval": { "request": "<its id>", "tool": "Bash", "summary": "rm -rf dist",
+                             "expiresAt": 1790000540000 } } }
+```
+
 - `agent` and `machine` are as `needs.md` gives them (0.3).
 - `program` is the agent its tile runs, by its manifest's id and label; left out for a tile whose
   command no manifest here names.
@@ -40,6 +50,11 @@ holds:
 - `waiting` is there while it waits with a kind: `kind` (`permission`, `question`, `plan`, `other`,
   or `approval`, on the agent supervising it), `since` the same as the state's, and `plan` and
   `decide` as `needs.md` gives them for a wait on the person.
+- `approval` (0.5) is there on an `approval` wait: the `tool` it would use, a `summary` of what it
+  would do with it (a command, a file, a URL), and `expiresAt`, when it stops waiting and the agent
+  asks at its own prompt instead.
+- `parent` (0.5) is who started it and hears what it reports: an agent's tile, or
+  `client:<grant id>` for a program on the drive socket (`workspace-api.md`, "Drive socket").
 - `interrupt` is `true` when its manifest says which keys interrupt its turn (`interrupt`), so
   `agent.interrupt` stops it; left out otherwise.
 - `conversation` is `true` when its manifest maps its session file's records (`session.transcript`),
@@ -74,9 +89,14 @@ are their `model` and `mode` choices, `values` empty for one taken as typed. `fr
 workspace's frames, as the board orders them.
 
 `agent.start(workspace, start)` starts one there, as `hive ctl spawn` does: `start` is `{ program,
-frame?, prompt?, model?, mode? }`, `program` one `agent.startable` lists, `frame` one of its frames (none: the
+frame?, prompt?, model?, mode?, name?, resume?, supervise?, report? }`, `program` one `agent.startable` lists, `frame` one of its frames (none: the
 workspace's first frame, or none when it has none), `prompt` at most 10,000 characters with no
-control characters but newlines and tabs, and `model` and `mode` lines of at most 200 characters.
+control characters but newlines and tabs, and `model`, `mode`, `name` (its tile's) and `resume` (a session of its to go on with) lines of at
+most 200 characters. `supervise` (0.5) is `true` (the tools its manifest says are supervised),
+`"all"`, or a list of tool names: before using one it waits on its starter (an `approval` wait),
+which answers with `agent.answer`. A program that starts it on the drive socket is its starter, and
+is told what it reports (`hive ctl report`): the workspace's readers get an `agent.event` of kind
+`reported`, unless `report` is `false`.
 It starts as the person launches it at their desktop, with the options they saved for that agent
 and these on top: never in its unattended mode unless `mode` says so. It answers `{ "tile":
 "<the new tile>" }`. Anything else is `BAD_REQUEST`.

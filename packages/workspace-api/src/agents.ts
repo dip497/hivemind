@@ -52,13 +52,30 @@ export interface Startable {
   frames: Array<{ id: string; name: string; machine: string }>;
 }
 
-/** An agent to start, as the person launches one at their desktop. */
+/** An agent to start, as the person launches one at their desktop. `name`: its tile's. `resume`: a
+ *  session of its to go on with. `supervise` (0.20): the tools it asks its starter before using,
+ *  `true` for the usual ones or `"all"`, each asked as an approval wait (`agent.answer`); a program
+ *  that starts it is its starter. `report`: false for a worker gathered in bulk, which its starter
+ *  is not told of as it reports. */
 export interface StartAgent {
   program: string;
   frame?: string;
   prompt?: string;
   model?: string;
   mode?: string;
+  name?: string;
+  resume?: string;
+  supervise?: true | "all" | string[];
+  report?: boolean;
+}
+
+/** A supervised tool use waiting on an answer (0.20): which tool, what it would do, and when it
+ *  stops waiting, falling back to the agent's own prompt. */
+export interface ApprovalWait {
+  request: string;
+  tool: string;
+  summary: string;
+  expiresAt: number;
 }
 
 /** One thing said in an agent's conversation (spec/agents.md "Conversation"): by the person, by
@@ -98,7 +115,10 @@ export interface AgentItem {
   /** What the machine it runs on is called (spec/needs.md 0.3). */
   machine: string;
   /** What it waits for, while it waits: on the person, or on the agent supervising it. */
-  waiting?: { kind: InputKind; since: number; plan?: string; decide?: true };
+  waiting?: { kind: InputKind; since: number; plan?: string; decide?: true; approval?: ApprovalWait };
+  /** Who started it, when it reports to them (0.20): an agent's tile, or `client:<grant id>`, a
+   *  program on the drive socket. */
+  parent?: string;
   /** Its manifest says which keys interrupt its turn. */
   interrupt?: true;
   /** Its manifest maps its session file's records, so `agent.conversation` can say what it and the
@@ -107,13 +127,14 @@ export interface AgentItem {
 }
 
 /** What happened to an agent, as a reader acts on it. */
-export type AgentEventKind = "came" | "went" | "turnEnded" | "waiting" | "answered";
+export type AgentEventKind = "came" | "went" | "turnEnded" | "waiting" | "answered" | "reported";
 export interface AgentEvent {
   seq: number;
   at: number;
   kind: AgentEventKind;
   tile: string;
-  /** turnEnded: how (done, failed, interrupted, limited). waiting: on what. */
+  /** turnEnded: how (done, failed, interrupted, limited). waiting: on what. reported (0.20): what
+   *  it reported to the program that started it. */
   detail?: string;
 }
 

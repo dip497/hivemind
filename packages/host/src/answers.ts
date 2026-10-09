@@ -11,7 +11,7 @@
 import type { InputKind, PermissionKeys } from "@hivemind/agents";
 import { typeKeys } from "@hivemind/agent-host/keys";
 import { ApiError, oneOf, text, written } from "@hivemind/workspace-api/protocol";
-import type { Domain } from "@hivemind/workspace-api/server";
+import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { waitsOnThePerson } from "./needs.js";
 import type { Plans } from "./plans.js";
@@ -29,7 +29,18 @@ export interface AnswersOptions {
   deliver(tile: string, text: string): boolean;
   /** The plans agents hand off, decided here as at the desktop. */
   plans: Plans;
+  /** The supervised tool use `tile` waits on an answer for, and who supervises it. */
+  approval?(tile: string): { request: string; supervisor: string } | undefined;
+  /** Answer the approval `request`: false when it waits no more. */
+  answerApproval?(request: string, decision: "allow" | "deny"): boolean;
 }
+
+/** Who may answer a supervised worker's approval: the person, their own devices, and the program
+ *  supervising it; not a guest, nor another program. (The agent supervising one answers with
+ *  `hive ctl approve`.) */
+const mayApprove = (from: Connection, supervisor: string): boolean =>
+  from.actor.kind === "person"
+  || (from.actor.kind === "peer" && ((from.actor.access === "owner" && !from.actor.client) || from.actor.person === supervisor));
 
 /** The longest line an answer types. */
 export const ANSWER_MAX = 1000;
@@ -54,6 +65,14 @@ export function answers(o: AnswersOptions): Domain<"agent.answer" | "agent.send"
         const a = (answer ?? {}) as { text?: unknown; decision?: unknown; feedback?: unknown };
         const status = o.status(bare);
         const wait = `${bare}@${since}`;
+        // A supervised worker waits on its supervisor, not the person: answered with its decision.
+        if (status?.state === "waiting" && status.kind === "approval") {
+          const pending = o.approval?.(bare);
+          if (status.since !== since || !pending) return { answered: false };
+          if (!mayApprove(from, pending.supervisor)) throw new ApiError("FORBIDDEN", "only the person, or the program supervising it, answers what a supervised agent asks");
+          const decision = oneOf(a.decision, "answer.decision", ["allow", "deny"] as const);
+          return { answered: o.answerApproval?.(pending.request, decision) ?? false };
+        }
         // Waits on the person no more, or on another wait, or answered already: nothing.
         if (!status || !waitsOnThePerson(status) || status.since !== since || answered.has(wait)) return { answered: false };
         let done: boolean;

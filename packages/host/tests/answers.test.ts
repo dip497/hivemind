@@ -142,3 +142,32 @@ test("a message is one line of text: anything else is a bad request, and nothing
   }
   assert.deepEqual(c.delivered, []);
 });
+
+test("a supervised worker's approval is answered by the program supervising it, or the person, once; not by a guest or another program", () => {
+  const answered: Array<[string, string]> = [];
+  let pending: { request: string; supervisor: string } | undefined = { request: "r1", supervisor: "client:g1" };
+  const domain = answers({
+    status: () => ({ state: "waiting", kind: "approval", since: T }),
+    type: () => true,
+    permissionKeys: () => undefined,
+    deliver: () => true,
+    plans: new Plans({ publish: () => {}, who: () => ({ person: "p", name: "P" }) as never, repoOf: () => "/work/api" }),
+    approval: () => pending,
+    answerApproval: (request, decision) => { answered.push([request, decision]); pending = undefined; return true; },
+  });
+  const as = (actor: Connection["actor"]): Connection => ({ actor, send: () => {}, closed: new AbortController().signal });
+  const answer = (from: Connection, a: unknown, since = T) => domain.answers["agent.answer"]!(from, "t1", since, a) as { answered: boolean };
+  const supervisor = as({ kind: "peer", person: "client:g1", device: "client:g1", access: "agents", client: "bot" });
+  const other = as({ kind: "peer", person: "client:g2", device: "client:g2", access: "agents", client: "other" });
+  const guest = as({ kind: "peer", person: "q".repeat(64), device: "e".repeat(64), access: "agents" });
+  assert.equal(code(() => answer(other, { decision: "allow" })), "FORBIDDEN");
+  assert.equal(code(() => answer(guest, { decision: "allow" })), "FORBIDDEN");
+  assert.equal(code(() => answer(supervisor, { text: "yes" })), "BAD_REQUEST", "an approval is a decision");
+  assert.deepEqual(answer(supervisor, { decision: "allow" }, T + 1), { answered: false }, "another wait");
+  assert.deepEqual(answer(supervisor, { decision: "deny" }), { answered: true });
+  assert.deepEqual(answered, [["r1", "deny"]]);
+  assert.deepEqual(answer(as({ kind: "person" }), { decision: "allow" }), { answered: false }, "answered already");
+  pending = { request: "r2", supervisor: "client:g1" };
+  assert.deepEqual(answer(as({ kind: "person" }), { decision: "allow" }), { answered: true });
+  assert.deepEqual(answered, [["r1", "deny"], ["r2", "allow"]]);
+});

@@ -36,7 +36,7 @@ import { broadcast, userWindow } from "./windows.js";
 import { onWorkspaceChange, sharedStore, workspaceStore } from "./workspace-store-ipc.js";
 import { PeerLinks, type ShownMachine } from "@hivemind/host/peer-links";
 import { heldBoards, participantNamed, permissionKeys, type WaitingStatus } from "@hivemind/host/needs";
-import { manifestFacts } from "@hivemind/host/agent-list";
+import { manifestFacts, type AgentFacts } from "@hivemind/host/agent-list";
 import type { KnownMachines } from "@hivemind/core/remote-uri";
 import { machines as savedMachines } from "@hivemind/host/remote/catalog";
 import { PushNotices, PushSubscriptions, postNotice } from "@hivemind/host/push";
@@ -510,6 +510,8 @@ export interface NetworkSources {
   statuses: () => WaitingStatus[];
   onStatus: (listener: (change: WaitingStatus) => void) => void;
   plans: () => PlanReview[];
+  /** Who started each agent, and the approval each waits on: the control plane's. */
+  workers?: Pick<AgentFacts, "parent" | "approval">;
 }
 
 // The same invite can be submitted from two windows, or after the join dialog is reopened
@@ -544,7 +546,7 @@ export async function joinLink(text: unknown): Promise<JoinReply> {
   finally { if (joining.get(key) === attempt) joining.delete(key); }
 }
 
-export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, statuses, onStatus, plans }: NetworkSources): void {
+export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, statuses, onStatus, plans, workers }: NetworkSources): void {
   apiServer = server;
   daemonHere = daemon;
   // A permission an agent here asks that the person's phone may allow or deny: its agent says
@@ -553,7 +555,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
   peers = new PeerLinks({
     store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), granted,
     phone: (device) => pairedDevices().list().some((d) => d.device === device && d.kind === "phone"),
-    statuses, plans, facts: manifestFacts,
+    statuses, plans, facts: (held) => ({ ...manifestFacts(held), ...workers }),
     machines: knownMachines,
     subscribe: (device, sub) => pushSubscriptions().set(device, sub),
     // A phone unpairing itself, recorded as that phone.

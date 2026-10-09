@@ -37,6 +37,8 @@ test("every agent here is the spec's: its state and since when, what it waits on
       decides: (tile: string) => (c.decides ?? []).includes(tile),
       interrupts: (tile: string) => c.interrupts.includes(tile),
       converses: (tile: string) => (c.conversations ?? []).includes(tile),
+      parent: (tile: string) => c.parents?.[tile],
+      approval: (tile: string) => c.approvals?.[tile],
     };
     assert.deepEqual(agentsOf(c.held, c.statuses, c.plans, machines, facts), c.agents, c.about);
     assert.equal(workingIn(c.held, c.statuses), c.working, c.about);

@@ -1,4 +1,4 @@
-# Needs you (0.5)
+# Needs you (0.6)
 
 What waits on the person (M5, design §9.2 "Home: Needs you"): each agent waiting on them, in the
 workspaces one of their devices holds, as their phone lists it. The device that runs the agents
@@ -67,8 +67,12 @@ and once: an answer for a wait that is over, or one answered already, does nothi
 - for anything else, `{ "text": "<one line>" }`: typed into the agent's terminal, Enter after it.
   It is one line of at most 1000 characters, with no control characters.
 
+- for an `approval` (0.6), `{ "decision": "allow" | "deny" }`: the supervised agent's own hook
+  gets it, and the tool runs or is refused. It may be answered by the person, their own devices, and
+  the program on the drive socket that started the agent; anyone else is `FORBIDDEN`.
+
 Anything else is `BAD_REQUEST`: a decision for an agent that says no keys, or for a wait that is
-neither a plan nor a permission, among it. One may answer who may drive the workspace's agents, and the
+neither a plan, a permission nor an approval, among it. One may answer who may drive the workspace's agents, and the
 person's own devices, a phone among them.
 
 ## Sending

@@ -506,6 +506,104 @@
     }
    ],
    "working": 2
+  },
+  {
+   "about": "a worker says who started it (0.20): an agent's tile, or a program on the drive socket; and a supervised one waiting on its approval says the tool, what it would do and until when",
+   "held": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "repo": "/home/p/api",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "w1",
+        "kind": "claude",
+        "label": "Claude"
+       },
+       {
+        "id": "w2",
+        "kind": "claude",
+        "label": "Claude"
+       }
+      ]
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "hm:w1",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000001000,
+      "kind": "approval"
+     }
+    },
+    {
+     "tileId": "hm:w2",
+     "status": {
+      "state": "working",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000002000
+     }
+    }
+   ],
+   "plans": [],
+   "programs": {},
+   "interrupts": [],
+   "parents": {
+    "w1": "client:3f2a9c",
+    "w2": "t-lead"
+   },
+   "approvals": {
+    "w1": {
+     "request": "r-1",
+     "tool": "Bash",
+     "summary": "rm -rf dist",
+     "expiresAt": 1790000541000
+    }
+   },
+   "agents": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "w1",
+     "agent": "Claude",
+     "parent": "client:3f2a9c",
+     "state": "waiting",
+     "since": 1790000001000,
+     "machine": "desk",
+     "waiting": {
+      "kind": "approval",
+      "since": 1790000001000,
+      "approval": {
+       "request": "r-1",
+       "tool": "Bash",
+       "summary": "rm -rf dist",
+       "expiresAt": 1790000541000
+      }
+     }
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "w2",
+     "agent": "Claude",
+     "parent": "t-lead",
+     "state": "working",
+     "since": 1790000002000,
+     "machine": "desk"
+    }
+   ],
+   "working": 1
   }
  ],
  "phone": [

@@ -152,10 +152,28 @@ export class ControlPlane {
    *  `tile.spawn_agent` starts one: with its gates, and their saved options for it with these on
    *  top, never its unattended mode unless `mode` says so; `name`, its tile's. Its tile. The caller
    *  records it. */
-  async start(repo: string, start: { program?: string; frame?: string; prompt?: string; model?: string; mode?: string; name?: string }): Promise<string> {
+  async start(repo: string, start: {
+    program?: string; frame?: string; prompt?: string; model?: string; mode?: string; name?: string; resume?: string;
+    supervise?: string | true; report?: boolean; parent?: string;
+  }): Promise<string> {
     await this.o.ready?.();
     const { program, ...rest } = start;
     return this.dispatcher.spawn({ agent: program, ...rest, repo, attended: true });
+  }
+
+  /** Who started `bare` and hears its reports: a tile, or a program (`client:<grant id>`). */
+  parentOf(bare: string): string | undefined {
+    return this.made?.parentOf(bare);
+  }
+
+  /** The approval `bare` waits on, if it waits on one. */
+  approvalOf(bare: string): ReturnType<Dispatcher["approvalOf"]> {
+    return this.made?.approvalOf(bare);
+  }
+
+  /** Answer the approval `request`: false when none of that id waits. */
+  answerApproval(request: string, decision: "allow" | "deny"): boolean {
+    return this.dispatcher.answerApproval(request, decision);
   }
 
   /** Close `tile` as `tile.close` does: whether a workspace had it. The caller records it. */

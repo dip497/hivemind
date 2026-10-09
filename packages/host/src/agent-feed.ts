@@ -31,6 +31,8 @@ export interface AgentFeedOptions {
 }
 
 const TURN_ENDS = new Set(["done", "failed", "interrupted", "limited"]);
+/** The longest report the feed carries. */
+const REPORT_MAX = 10_000;
 
 export class AgentFeed {
   private agents = new Map<string, AgentItem>();
@@ -96,6 +98,13 @@ export class AgentFeed {
       this.tell(was.workspace, undefined, { seq: ++this.seq, at: this.lastAt, tile, kind: "went" });
     }
     this.agents = next;
+  }
+
+  /** The agent `tile` reported `message` to the program that started it: told to its workspace's
+   *  readers, as long as the feed knows the agent. */
+  report(tile: string, message: string): void {
+    const agent = this.agents.get(tile);
+    if (agent) this.tell(agent.workspace, undefined, { seq: ++this.seq, at: this.now(), tile, kind: "reported", detail: message.slice(0, REPORT_MAX) });
   }
 
   /** Stop: nothing more is worked out. */
