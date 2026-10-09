@@ -28,11 +28,11 @@
  * writer is gone (`forgetWriter`: a window closed).
  */
 import { UndoManager, VersionVector, type LoroDoc } from "loro-crdt";
-import { addTile, hasCore, readCore, removeTile, tileIds, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
+import { addFrame, addTile, hasCore, readCore, removeFrame, removeTile, tileIds, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
 import { readObjects, writeObjects } from "@hivemind/workspace-doc/objects";
 import { readView, readViews, writeView } from "@hivemind/workspace-doc/views";
 import { readOwnership, replaceOwnership, stampOwnership, stampSchema, type Ownership } from "@hivemind/workspace-doc/schema";
-import type { BoardObject, CoreLayout, TileRecord, ViewLayout } from "@hivemind/workspace-doc/shapes";
+import type { BoardObject, CoreLayout, FrameRecord, TileRecord, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "./layout.js";
 import { readDoc, removeDoc, storedKeys, writeDoc } from "./doc-file.js";
 import { idOf, newWorkspaceId, workspaceSeed, type Seed } from "./identity.js";
@@ -215,6 +215,22 @@ export class WorkspaceStore {
     let added = false;
     this.write(repo, "core", LAYOUT, from, (doc) => { added = addTile(doc, tile, at); });
     return added;
+  }
+
+  /** Add `frame` to the workspace `repo`, under its `parentFrameId`. False when it already holds a
+   *  frame with its id. */
+  addFrame(repo: string, frame: FrameRecord, from: Writer = {}): boolean {
+    let added = false;
+    this.write(repo, "core", LAYOUT, from, (doc) => { added = addFrame(doc, frame); });
+    return added;
+  }
+
+  /** Take the frame `frameId` out of the workspace `repo`, with the frames nested in it; their
+   *  tiles stay, in no frame. The ids taken out. */
+  removeFrame(repo: string, frameId: string, from: Writer = {}): string[] {
+    let gone: string[] = [];
+    this.write(repo, "core", LAYOUT, from, (doc) => { gone = removeFrame(doc, frameId); });
+    return gone;
   }
 
   /** Take the tile `tileId` out of the workspace that holds it. That workspace and what the tile

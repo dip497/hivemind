@@ -11,6 +11,7 @@ import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals
 import type { Answerer, PlanDecided, PlanReview } from "./plans.js";
 import type { JoinQuestion, JoinRequests, PersonHere } from "./people.js";
 import type { ClientGrant, NewGrant } from "./grants.js";
+import type { FrameClose, FrameClosed, FrameOpened, FrameSpec } from "./frames.js";
 import type { ViewFile, ViewListing, ViewScreen } from "./views.js";
 import type { HostMessage, PluginMessage, SurfaceRect } from "@hivemind/view-sdk/protocol";
 import type { Answering, LinkRole, Role } from "@hivemind/workspace-host/access";
@@ -156,6 +157,11 @@ export interface WorkspaceMethods {
   "people.requests": (repo: string) => JoinRequests;
   /** How `repo` lets in someone with a valid invite: asked about first, or at once at its role. */
   "people.answering": (repo: string, rule: Answering) => void;
+  /** Open a frame in `repo` for a folder of it, or for a worktree of it on a branch, made when it is
+   *  not there; the frame already bound to that folder when there is one (0.20). */
+  "frame.open": (repo: string, spec: FrameSpec) => FrameOpened;
+  /** Close the frame `frame` of `repo`, with the frames nested in it (0.20). */
+  "frame.close": (repo: string, frame: string, opts?: FrameClose) => FrameClosed;
   /** The programs let drive workspaces here (0.20). */
   "grant.list": () => ClientGrant[];
   /** Let a program drive `repos` at `role`: the grant, and its token, which is never shown again. */

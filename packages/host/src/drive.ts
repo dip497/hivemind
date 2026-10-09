@@ -31,6 +31,8 @@ export interface DriveOptions {
   repos(): string[];
   /** Whether a tile is in the workspace at `repo`. */
   holds(repo: string, tile: string): boolean;
+  /** The folders of the workspace at `repo` besides it: its frames' worktrees. */
+  places?(repo: string): string[];
   /** The workspace's id, once it has one. */
   workspaceId?(repo: string): string | null;
   onWarn?(message: string): void;
@@ -136,6 +138,7 @@ export function serveDrive(sockPath: string, o: DriveOptions): DriveServer {
         repo,
         url: repo,
         holds: (tile) => o.holds(repo, tile),
+        places: () => o.places?.(repo) ?? [],
         allows: () => o.grants.live(grant.id),
       });
     }

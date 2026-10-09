@@ -84,8 +84,9 @@ after a minute without it, and never what was typed.
 A peer names the workspace by its id, `hive://<workspaceId>`, wherever a call takes a repo (or a
 `cwd` inside it); the host reads that as its repo. A guest's call or notice about a workspace
 (`store.*`, `git.*`, `worktree.*`, `file.*`, `issue.*`, `review.*`, `people.*`, `plan.list`,
-`presence.set`, `agent.startable`, `agent.start`, and `view.open`, whose second param names it) names this one, or a place in it, and nothing else on the host: another folder, a
-path out of it (`..`), another workspace or a machine is `FORBIDDEN` (a notice is dropped). The
+`presence.set`, `agent.startable`, `agent.start`, `frame.*`, and `view.open`, whose second param names it) names this one, or a place in it, and nothing else on the host: another folder, a
+path out of it (`..`), another workspace or a machine is `FORBIDDEN` (a notice is dropped). A
+place in it is its repo or the worktree of one of its frames, wherever git put it (0.20). The
 person's own devices are the owner, there as here. What the host answers of every agent it runs
 (`status.all`, `link.list`) a peer is answered for the workspace's own agents alone, as it hears
 only their events. One of the owner's phones (`pairing.md` 0.3) opens a workspace's API on an `api`
@@ -176,7 +177,9 @@ sends, and one participant per device.
 | `git.writeResolved` | `repo`, `file`, `contents` | `null` | target the file |
 | `git.handOff` | `repo`, `branch`, `bundle` (a git bundle of it, base64, 32 MB at most) | `{branch, base}`: the branch it landed as, `handoff/<who>/<branch>` (`who` the caller's name, made plain), and the branch checked out here that a Diff tile on the board now shows it against. The bundle is checked against the repo first (`FAILED`, saying the repo lacks commits it builds on, when it does: send its whole history); the repo's working tree, index and own branches are untouched, and a branch lands only over a hand-off of the same person's | target `repo`, detail the branch |
 | `worktree.list` | `repo` | `[{path, branch, head, locked, prunable, bare}]` | read |
-| `worktree.create` | `repo`, `{branch, path?, sparse?, partial?, includeFiles?}` | `{path, branch}` | target `repo`, detail the branch |
+| `worktree.create` | `repo`, `{branch, base?, path?, sparse?, partial?, includeFiles?}` (`base`, 0.20: where a new branch starts; an existing branch is checked out as it is) | `{path, branch}` | target `repo`, detail the branch |
+| `frame.open` | `repo`, `{path}` or `{worktree: {branch, base?}}`, with `title?`, `parent?` | `{frame, path, opened, created}` (0.20): the frame bound to that folder, made when there is none (`opened`), on a worktree made when the branch has none (`created`); a worktree frame nests in the workspace's own frame unless `parent` says another. A guest or a program names only the workspace's folders. A window shows a frame it is handed with no place in the next free slot | target `repo`, detail the branch or folder |
+| `frame.close` | `repo`, `frame`, `{closeTiles?, removeWorktree?, force?}`? | `{closed, tilesClosed, worktreeRemoved}` (0.20): the frame and those nested in it go; one holding tiles only with `closeTiles`, which ends them; its worktree only with `removeWorktree`, removed first, so git refusing one with changes (without `force`) closes nothing | target the frame |
 | `worktree.remove` | `repo`, `worktree`, `force`? | `null` | target the worktree |
 | `worktree.prune` | `repo` | `{removed}` | target `repo` |
 

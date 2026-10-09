@@ -103,6 +103,8 @@ import { appearance } from "@hivemind/host/appearance";
 import { Plans } from "@hivemind/host/plans";
 import { Grants, grantsDomain } from "@hivemind/host/grants";
 import { serveDrive } from "@hivemind/host/drive";
+import { frameWorktrees, framesDomain } from "@hivemind/host/frames";
+import { worktreeCreate, worktreeList, worktreeRemove } from "@hivemind/host/git-adapter";
 import { answers } from "@hivemind/host/answers";
 import { heldBoards, manifestOf, permissionKeys, runsIn } from "@hivemind/host/needs";
 import { agentControl } from "@hivemind/host/agent-control";
@@ -1328,6 +1330,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   appearance({ current: () => getAppSettings().appearance, onChange: (l) => { onSettingsChange((s) => l(s.appearance)); }, server: () => workspaceServer }),
   peopleHere.domain,
   grantsDomain(grants),
+  framesDomain({ store: workspaceStore, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare) }),
   // A participant's branch, handed off from their machine (M4).
   handOff({ who: whoIs, place: (repo, tile, name) => { workspaceStore().addTile(repo, tile, { name }, HANDED_OFF); } }),
 ], hostIntents(), (m) => console.warn(`[workspace] ${m}`));
@@ -1927,6 +1930,7 @@ function startHcpControlPlane(): void {
       grants: grants(),
       repos: () => workspaceStore().repos(),
       holds: (repo, tile) => workspaceStore().workspaceOf(toBareId(tile)) === repo,
+      places: (repo) => frameWorktrees(workspaceStore().getCore(repo)),
       workspaceId: (repo) => workspaceStore().ownership(repo)?.workspaceId ?? null,
       onWarn: (m) => console.warn(`[drive] ${m}`),
     });

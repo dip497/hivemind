@@ -106,7 +106,10 @@ export interface WorktreeEntry {
 export interface WorktreeCreateOpts {
   /** Branch name to create the worktree on (will be created if missing). */
   branch: string;
-  /** Directory to place the worktree (relative or absolute). Default: under repo .hivemind-worktrees/<branch-slug>/. */
+  /** Where a new branch starts (a branch, tag or commit; 0.20). Default: the repo's HEAD. A branch
+   *  that exists is checked out as it is. */
+  base?: string;
+  /** Directory to place the worktree, relative to the repo. Default: `../<repo>-worktrees/<branch-slug>`. */
   path?: string;
   /** Sparse-checkout cone roots (empty = full checkout). */
   sparse?: string[];

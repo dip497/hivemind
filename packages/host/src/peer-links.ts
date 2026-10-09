@@ -49,6 +49,7 @@ import type { AccessLists } from "@hivemind/workspace-host/access";
 import { parseSync, serveReplica, type Changes } from "@hivemind/workspace-host/doc-sync";
 import { serveList } from "@hivemind/workspace-host/list-sync";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
+import { frameWorktrees } from "./frames.js";
 import { servePeer, type TextChannel } from "@hivemind/workspace-api/peers";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
@@ -311,6 +312,7 @@ export class PeerLinks {
             workspace,
             repo,
             holds: (tile) => store.workspaceOf(toBareId(tile)) === repo,
+            places: () => frameWorktrees(store.getCore(repo)),
             allows: phoneMay,
           });
         });
@@ -372,6 +374,7 @@ export class PeerLinks {
         repo,
         // A terminal is named by its session (`hm:<tile>`), the document by the tile.
         holds: (tile) => store.workspaceOf(toBareId(tile)) === repo,
+        places: () => frameWorktrees(store.getCore(repo)),
       });
       const entry: Served = { workspace: hello.workspace, person, link, stop };
       this.served.add(entry);

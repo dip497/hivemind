@@ -80,3 +80,32 @@ test("a program let in from Settings drives this workspace at its role, and is c
   await expect.poll(() => (again.heard[0]?.error as { code?: string } | undefined)?.code).toBe("FORBIDDEN");
   again.socket.destroy();
 });
+
+test("a program opens a frame on a new worktree, and the window shows it in a place of its own", async () => {
+  const page = await launch();
+  const repo = fs.realpathSync(path.join(root, "api"));
+  execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "first"]);
+  const person = program(path.join(root, "config", "hivemind-dev", "drive.sock"), { token: fs.readFileSync(path.join(root, "config", "hivemind-dev", "hcp.token"), "utf8").trim() });
+  const { token } = (await person.call("grant.create", [{ name: "orchestrator", repos: [repo], role: "agents" }])).result as { token: string };
+  person.socket.destroy();
+
+  const p = program(path.join(root, "config", "hivemind-dev", "drive.sock"), { token, workspace: repo });
+  const answer = await p.call("frame.open", [repo, { worktree: { branch: "fix-1" } }]);
+  expect(answer.error).toBeUndefined();
+  const opened = answer.result as { frame: string; path: string; opened: boolean };
+  expect(opened.opened).toBe(true);
+  expect(fs.existsSync(opened.path)).toBe(true);
+  const frame = page.locator(`.react-flow__node-frame[data-id="${opened.frame}"]`);
+  await expect(frame).toBeVisible();
+  await expect(frame).toContainText("fix-1");
+  const box = (await frame.boundingBox())!;
+  expect(box.width).toBeGreaterThan(0);
+
+  const again = (await p.call("frame.open", [repo, { worktree: { branch: "fix-1" } }])).result as { frame: string; opened: boolean };
+  expect(again).toMatchObject({ frame: opened.frame, opened: false });
+  const closed = (await p.call("frame.close", [repo, opened.frame, { removeWorktree: true }])).result as { worktreeRemoved: boolean };
+  expect(closed.worktreeRemoved).toBe(true);
+  await expect(frame).toHaveCount(0);
+  expect(fs.existsSync(opened.path)).toBe(false);
+  p.socket.destroy();
+});

@@ -15,6 +15,7 @@ import type { TileKind } from "./tile-kinds";
 import { tileKind } from "./tiles";
 import { pinsOfTiles, type LegacyPin, type Pins } from "./workspace/pins";
 import { readCore, rereadCore, writeCore } from "./workspace/workspace-store-client";
+import { placeFrames } from "./frame-place";
 
 /** On POSIX: `-i` keeps the shell interactive so it doesn't exit, `-l` sources
  *  the login profile (PATH includes ~/.local/bin → claude resolves). Windows
@@ -140,7 +141,8 @@ export function reloadLayout(repoPath: string): LayoutReload {
 function layoutOf(stored: unknown): LayoutSnapshot {
   const p = (typeof stored === "object" && stored !== null ? stored : {}) as Partial<PersistedLayout>;
   return {
-    frames: Array.isArray(p.frames) ? p.frames : [],
+    // A frame opened without a window has no place yet: it gets one as the window reads it.
+    frames: Array.isArray(p.frames) ? placeFrames(p.frames) : [],
     frameOf: p.frameOf ?? {},
     tileNames: p.tileNames ?? {},
     tiles: Array.isArray(p.tiles) ? p.tiles.map(withoutPin) : [],

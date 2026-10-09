@@ -42,6 +42,9 @@ export interface PeerOf {
   url?: string;
   /** Whether a tile is in the workspace. */
   holds(tile: string): boolean;
+  /** The folders of the workspace besides its repo: its frames' worktrees, wherever git put them.
+   *  None: the repo alone. */
+  places?(): string[];
   /** What this peer may ask at all, whatever its role: a phone watches and types into the
    *  workspace's terminals and answers and messages its agents, and does nothing else there (M5).
    *  None: what its role allows. */
@@ -53,7 +56,7 @@ const refused = (message: string): Answer => ({ error: { code: "FORBIDDEN", mess
 /** Methods and notices whose first param names a tile. */
 const BY_TILE = /^(terminal\.(write|show|resize|flow|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.(answer|send|interrupt|close|diff|conversation))$/;
 /** Methods and notices whose first param names the workspace, or a place in it (its `.hivemind`). */
-const BY_WORKSPACE = /^(store|git|worktree|file|issue|review|people)\.|^(plan\.list|agent\.(list|since)|presence\.set|widget\.(all|draw|run|release|asset|packages|press)|agent\.(startable|start))$/;
+const BY_WORKSPACE = /^(store|git|worktree|file|issue|review|people|frame)\.|^(plan\.list|agent\.(list|since)|presence\.set|widget\.(all|draw|run|release|asset|packages|press)|agent\.(startable|start))$/;
 /** Methods whose second param names the workspace, after what they open there (a view, P8). */
 const BY_WORKSPACE_SECOND = /^view\.open$/;
 /** The workspace a call names, if it names one. A desktop's view listing and files name it
@@ -233,6 +236,8 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
   server.connect(connection);
   void channel.closed.then(() => gone.abort());
 
+  /** The folders this workspace is: its repo, then its worktrees. */
+  const roots = (): string[] => [peer.repo, ...(peer.places?.() ?? [])];
   const check = (method: unknown, params: unknown[]): string | null => {
     // Showing a terminal that is running already is watching it; starting one is not.
     const attaching = method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true;
@@ -243,15 +248,16 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     // A guest names this workspace, by its id, and nothing else on the host. The person's own
     // devices are the owner, there as here.
     const place = placeOf(method, params);
-    if (peer.actor.access !== "owner" && place != null && !(typeof place === "string" && inWorkspace(peer.repo, place))) {
+    if (peer.actor.access !== "owner" && place != null && !(typeof place === "string" && roots().some((r) => inWorkspace(r, place)))) {
       return "name this workspace by its id: nothing else of the host's is open to you";
     }
     if (method === "terminal.watchActivity" && Array.isArray(params[0]) && !params[0].every((t) => peer.holds(String(t)))) return "a tile there is not of this workspace";
     return null;
   };
 
-  /** Check a local path against the workspace on disk, including symlinked ancestors. A missing
-   *  path may still be named by a read, so check its nearest existing ancestor in that case. */
+  /** Check a local path against the workspace on disk (its repo or one of its worktrees),
+   *  including symlinked ancestors. A missing path may still be named by a read, so check its
+   *  nearest existing ancestor in that case. */
   const realPlace = async (place: string, mayBeMissing: boolean): Promise<boolean> => {
     try {
       let root: string;
@@ -261,6 +267,7 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
         // A missing workspace has no files to expose; the handler keeps its existing result.
         return mayBeMissing && (e as NodeJS.ErrnoException).code === "ENOENT";
       }
+      const others = (await Promise.all((peer.places?.() ?? []).map((p) => realpath(p).catch(() => null)))).filter((p): p is string => p !== null);
       let at = place;
       let target: string;
       for (;;) {
@@ -274,8 +281,10 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
           at = parent;
         }
       }
-      const relative = path.relative(root, target);
-      return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+      return [root, ...others].some((r) => {
+        const relative = path.relative(r, target);
+        return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+      });
     } catch {
       return false;
     }

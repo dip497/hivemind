@@ -5,7 +5,7 @@
  * records only what changed and edits from two writers merge; given the layout the writer
  * started from, it writes only what the writer changed (rebase.ts). `readCore` builds it back;
  * `tileIds` lists the tiles, `addTile` opens one, `writeTileName` names it and `removeTile` takes
- * it out.
+ * it out; `addFrame` and `removeFrame` do the same for a frame.
  */
 import type { LoroDoc, LoroMap, LoroTree, LoroTreeNode, TreeID } from "loro-crdt";
 import { isMap, writeFields } from "./fields.js";
@@ -78,6 +78,51 @@ export function removeTile(doc: LoroDoc, tileId: string): TileRecord | null {
   const listed = order.toArray();
   for (let at = listed.length - 1; at >= 0; at--) if (listed[at] === tileId) order.delete(at, 1);
   return { ...fields, id: tileId } as unknown as TileRecord;
+}
+
+/**
+ * Add `frame`, last among its siblings, under its `parentFrameId` (none: at the top level). False
+ * when `doc` already holds a frame with its id. A frame without an id or a title, or under a parent
+ * `doc` does not hold, is refused.
+ */
+export function addFrame(doc: LoroDoc, frame: FrameRecord): boolean {
+  if (!isObject(frame) || typeof frame.id !== "string" || !frame.id || typeof frame.title !== "string") {
+    throw new TypeError("workspace doc: a frame has an id and a title");
+  }
+  const tree = doc.getTree(FRAMES);
+  const nodes = frameNodes(tree);
+  if (nodes.has(frame.id)) return false;
+  const parent = frame.parentFrameId === undefined ? undefined : nodes.get(frame.parentFrameId);
+  if (frame.parentFrameId !== undefined && parent === undefined) throw new TypeError(`workspace doc: no frame ${frame.parentFrameId} to put a frame in`);
+  stampSchema(doc);
+  const { parentFrameId: _nested, ...fields } = frame as FrameRecord & Fields;
+  writeFields(tree.createNode(parent).data, fields);
+  const meta = doc.getMap(META);
+  if (meta.get("core") !== true) meta.set("core", true);
+  return true;
+}
+
+/** Take the frame `frameId` out, with the frames nested in it; their tiles stay, in no frame.
+ *  The ids of the frames taken out, none when `doc` has no such frame. */
+export function removeFrame(doc: LoroDoc, frameId: string): string[] {
+  if (typeof frameId !== "string") throw new TypeError("workspace doc: a frame's id is a string");
+  const tree = doc.getTree(FRAMES);
+  const node = frameNodes(tree).get(frameId);
+  if (node === undefined) return [];
+  const gone: string[] = [];
+  const visit = (n: LoroTreeNode): void => {
+    const id = n.data.get("id");
+    if (typeof id === "string") gone.push(id);
+    for (const child of n.children() ?? []) visit(child);
+  };
+  visit(tree.getNodeByID(node)!);
+  tree.delete(node);
+  const tiles = doc.getMap(TILES);
+  for (const id of tiles.keys()) {
+    const record = tiles.get(id);
+    if (isMap(record) && gone.includes(record.get("frame") as string)) record.delete("frame");
+  }
+  return gone;
 }
 
 /** Name the tile `tileId`, or take its name away with "". False when `doc` has no such tile. */

@@ -26,6 +26,8 @@ import { hcpSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token
 import { ipcPath } from "@hivemind/core/ipc";
 import { serveDrive } from "./drive.js";
 import { Grants, grantsDomain } from "./grants.js";
+import { frameWorktrees, framesDomain } from "./frames.js";
+import { worktreeCreate, worktreeList, worktreeRemove } from "./git-adapter.js";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
 import { agentForCmd, preferredAgent, setCatalog, spawnableAgents } from "@hivemind/agents";
 import { findBin } from "@hivemind/agents/discover";
@@ -299,6 +301,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     appearance({ current: () => appearanceNow(), onChange: () => {}, server: () => api }),
     peopleHere.domain,
     grantsDomain(() => grants),
+    framesDomain({ store: () => store, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare) }),
     // A participant's branch, handed off from their machine (M4).
     handOff({ who, place: (repo, tile, name) => { store.addTile(repo, tile, { name }, HANDED_OFF); } }),
     // What an agent here waits on the person for, answered from another of their devices (M5).
@@ -406,6 +409,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     grants,
     repos: () => store.repos(),
     holds: (repo, tile) => store.workspaceOf(toBareId(tile)) === repo,
+    places: (repo) => frameWorktrees(store.getCore(repo)),
     workspaceId: (repo) => store.ownership(repo)?.workspaceId ?? null,
     onWarn: o.onWarn,
   });

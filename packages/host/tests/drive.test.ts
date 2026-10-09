@@ -17,6 +17,9 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-drive-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const repoA = fs.mkdirSync(path.join(tmp, "a"), { recursive: true })!;
 const repoB = fs.mkdirSync(path.join(tmp, "b"), { recursive: true })!;
+/** A worktree of repo A, beside it as git puts one, and a folder beside it that is not one. */
+const worktreeA = fs.mkdirSync(path.join(tmp, "a-worktrees", "fix"), { recursive: true })!;
+const besideA = fs.mkdirSync(path.join(tmp, "a-other"), { recursive: true })!;
 const INSTALL = "install-token";
 const tileIn: Record<string, string> = { "tile-a": repoA, "tile-b": repoB };
 
@@ -26,6 +29,7 @@ const domain = {
   answers: {
     "agent.start": (from: { actor: unknown }) => asked(from),
     "git.push": (from: { actor: unknown }) => asked(from),
+    "git.status": (from: { actor: unknown }) => asked(from),
   },
   effects: {},
 } as unknown as Domain<never>;
@@ -40,6 +44,7 @@ const drive = serveDrive(sock, {
   grants,
   repos: () => [repoA, repoB],
   holds: (repo, tile) => tileIn[tile.replace(/^hm:/, "")] === repo,
+  places: (repo) => (repo === repoA ? [worktreeA] : []),
 });
 /** Every program's socket, closed at the end whatever a test left open. */
 const opened = new Set<net.Socket>();
@@ -107,6 +112,15 @@ test("a program with a grant drives its workspace at its role, and is refused wh
   assert.equal((pushed.error as { code: string }).code, "FORBIDDEN");
   const granted = await p.call("grant.create", [{ name: "more", repos: [repoA], role: "agents" }]);
   assert.equal((granted.error as { code: string }).code, "FORBIDDEN");
+  p.socket.destroy();
+});
+
+test("a program reaches its workspace's worktrees, wherever git put them, and no folder beside them", async () => {
+  const { token } = grants.create({ name: "wt-bot", repos: [repoA], role: "view" });
+  const p = await connect({ token, workspace: repoA });
+  await p.next((m) => "hello" in m);
+  assert.ok("result" in (await p.call("git.status", [worktreeA])));
+  assert.equal(((await p.call("git.status", [besideA])).error as { code: string }).code, "FORBIDDEN");
   p.socket.destroy();
 });
 

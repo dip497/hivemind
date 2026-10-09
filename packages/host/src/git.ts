@@ -67,6 +67,10 @@ function worktreeOptsOf(value: unknown): WorktreeCreateOpts {
   const opts = fields(value, "opts");
   const branch = notOption(opts.branch, "opts.branch");
   if (!/^[A-Za-z0-9._/-]+$/.test(branch) || branch.includes("..")) bad(`invalid branch name: ${JSON.stringify(branch)}`);
+  if (opts.base != null) {
+    const base = notOption(opts.base, "opts.base");
+    if (!/^[A-Za-z0-9._/~^-]+$/.test(base) || base.includes("..")) bad(`invalid base: ${JSON.stringify(base)}`);
+  }
   if (opts.path != null) relative(text(opts.path, "opts.path"), "opts.path");
   for (const list of ["sparse", "includeFiles"] as const) {
     if (opts[list] == null) continue;

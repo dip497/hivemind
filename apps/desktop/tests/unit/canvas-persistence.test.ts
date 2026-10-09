@@ -55,3 +55,23 @@ test("corrupt JSON → safe empty layout (no throw)", () => {
   const l = loadLayout(repo);
   assert.deepEqual(l.frames, []);
 });
+
+test("a frame stored with no place (opened without a window) is placed as the window reads it: nested in its parent's free slot, or right of the others", () => {
+  const repo = "/tmp/repo-unplaced";
+  const own = { id: "own", x: 100, y: 100, w: 2000, h: 1200, title: "api", color: "#123", z: 2, workspacePath: "/work/api" };
+  saveLayout(repo, { ...SNAP, frames: [own], frameOf: {} });
+  for (const [key, value] of store) {
+    const blob = JSON.parse(value) as { frames: unknown[] };
+    blob.frames.push({ id: "wt", title: "fix-1", branch: "fix-1", worktreePath: "/work/api-worktrees/fix-1", parentFrameId: "own" }, { id: "top", title: "docs", workspacePath: "/work/docs" });
+    store.set(key, JSON.stringify(blob));
+  }
+  const [, wt, top] = loadLayout(repo).frames;
+  assert.ok(wt!.x > own.x && wt!.y > own.y && wt!.x + wt!.w <= own.x + own.w, "inside its parent");
+  assert.ok(top!.x >= own.x + own.w, "right of the others");
+  for (const f of [wt!, top!]) {
+    assert.ok([f.x, f.y, f.w, f.h, f.z].every(Number.isFinite), `${f.id} has a place, a size and a depth`);
+    assert.equal(typeof f.color, "string");
+    assert.ok(f.z > own.z);
+  }
+  assert.deepEqual(loadLayout(repo).frames[0], own, "a placed frame is kept as it was");
+});

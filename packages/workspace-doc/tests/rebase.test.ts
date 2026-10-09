@@ -3,7 +3,7 @@
 // write keeps its own changes and leaves everyone else's as they are.
 import { expect, test } from "bun:test";
 import { LoroDoc } from "loro-crdt";
-import { addTile, readCore, removeTile, writeCore, writeTileName } from "../src/core.ts";
+import { addFrame, addTile, readCore, removeFrame, removeTile, writeCore, writeTileName } from "../src/core.ts";
 import { readObjects, writeObjects } from "../src/objects.ts";
 import { readView, writeView } from "../src/views.ts";
 import type { BoardObject } from "../src/shapes.ts";
@@ -148,4 +148,35 @@ test("a board written from an older reading changes what its writer changed, fie
   // since, stays deleted.
   writeObjects(doc, [note("n1", "ship R15", { x: 40 }), note("n2", "tests", { color: "pink" })], read);
   expect(readObjects(doc)).toEqual([note("n1", "ship R5", { x: 40 }), note("n3", "docs")]);
+});
+
+test("a frame is added on its own, last among its siblings, under its parent; one already there, malformed, or under a parent not there is not", () => {
+  const doc = new LoroDoc();
+  writeCore(doc, READ);
+  const wt = { id: "wt", title: "fix", branch: "fix", worktreePath: "/work/api-fix", parentFrameId: READ.frames[0]!.id };
+  expect(addFrame(doc, wt)).toBe(true);
+  expect(addFrame(doc, { id: "top", title: "top" })).toBe(true);
+  const [f1, f2, f3] = READ.frames;
+  // A frame reads back after its parent, and the tree keeps it there: f1, then its child, then the rest.
+  expect(readCore(doc)?.frames).toEqual([f1, wt, f2, f3, { id: "top", title: "top" }]);
+  expect(addFrame(doc, { id: "wt", title: "again" })).toBe(false);
+  expect(() => addFrame(doc, { id: "x" } as never)).toThrow(TypeError);
+  expect(() => addFrame(doc, { id: "y", title: "y", parentFrameId: "gone" })).toThrow(TypeError);
+  expect(readCore(doc)?.tiles).toEqual(READ.tiles);
+});
+
+test("a frame is taken out with the frames nested in it; their tiles stay, in no frame", () => {
+  const doc = new LoroDoc();
+  writeCore(doc, READ);
+  const parent = READ.frames[0]!.id;
+  addFrame(doc, { id: "wt", title: "fix", parentFrameId: parent });
+  writeCore(doc, { ...readCore(doc)!, frameOf: { ...readCore(doc)!.frameOf, t1: "wt" } });
+  const gone = removeFrame(doc, parent);
+  expect(gone).toContain(parent);
+  expect(gone).toContain("wt");
+  const after = readCore(doc)!;
+  expect(after.frames.some((f) => gone.includes(f.id))).toBe(false);
+  expect(Object.values(after.frameOf).some((f) => gone.includes(f))).toBe(false);
+  expect(after.tiles).toEqual(READ.tiles);
+  expect(removeFrame(doc, "gone")).toEqual([]);
 });

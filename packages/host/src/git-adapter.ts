@@ -723,6 +723,7 @@ export async function worktreeCreate(
   if (!branchExists) args.push("-b", opts.branch);
   args.push(wtDir);
   if (branchExists) args.push(opts.branch);
+  else if (opts.base) args.push(opts.base);
   await rawGit(repoPath, args);
 
   // Apply sparse-checkout cone + partial-clone post-fetch if requested.
