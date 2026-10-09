@@ -273,6 +273,10 @@ export interface AgentHooks {
   /** The commands name no tile: for an agent that asks its user to trust each distinct hook
    *  command once, so every tile runs the same commands and the tile rides the spawn env. */
   stable?: boolean;
+  /** The agent runs a hook only once its user has trusted that exact handler, and reads that
+   *  trust from its configuration too: the document then carries the trust for the hooks it
+   *  wrote, so the agent never asks about ours. Any other hook it still asks about. */
+  trust?: "codex";
 }
 
 /** A file an agent needs on disk before it runs: a bridge extension, a hook script, a

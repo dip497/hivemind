@@ -36,13 +36,15 @@ test("tiles Hivemind starts skip the startup update check and keep the wheel", (
   expect(codex().launch?.args).toEqual([
     "-c", "check_for_update_on_startup=false",
     "-c", "tui.fullscreen_transcript=false",
-    "--dangerously-bypass-hook-trust",
   ]);
 });
 
-test("waiving its hook review is disclosed, because it waives the review of your own hooks too", () => {
+test("it is told our hooks are trusted and waives no review: any other hook it still asks about, and the user answers", () => {
   const lines = agentDisclosures(codex());
-  expect(lines.some((l) => l.includes("hook review waived"))).toBe(true);
+  expect(lines.some((l) => l.includes("its hooks for Hivemind are trusted"))).toBe(true);
+  expect(lines.some((l) => l.includes("hook review waived"))).toBe(false);
+  // Its review of any other hook is the user's to answer, never skipped for them.
+  expect(codex().dismiss ?? []).toEqual([]);
 });
 
 test("what it is printing is not what it is asking: a working screen quoting a question stays working", () => {
@@ -56,20 +58,4 @@ test("what it is printing is not what it is asking: a working screen quoting a q
   expect(codex().detect!(streaming)).toBe("working");
   // And a real prompt, at the bottom where it lives, still reads as waiting.
   expect(codex().detect!(`${streaming}\n  Allow command?\n› 1. Yes (y)\n  2. No`)).toBe("blocked");
-});
-
-test("the hook review it opens before it will take a task is skipped, not answered", () => {
-  const d = codex().dismiss ?? [];
-  expect(d.length).toBe(1);
-  // Esc is its own "skip": it trusts nothing and writes nothing. The launch flags already
-  // told it to run the hooks.
-  expect(d[0]!.keys).toEqual(["Escape"]);
-  const review = [
-    "  Hooks need review", "  11 hooks are new or changed.",
-    "› 1. Review hooks", "  2. Trust all and continue", "  3. Continue without trusting (hooks won't run)",
-  ].join("\n");
-  expect(d[0]!.match(review)).toBe(true);
-  // Its per-hook screen is NOT dismissed: that one the user opened themselves.
-  expect(d[0]!.match("  PostToolUse hooks\n  1 hook needs review before it can run.\n  space/enter toggle · esc back")).toBe(false);
-  expect(d[0]!.match("› Ask Codex to do anything")).toBe(false);
 });

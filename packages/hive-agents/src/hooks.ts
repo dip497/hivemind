@@ -12,6 +12,7 @@
  * `when: supervised` appears only for a supervised tile, `matcher: supervise` becomes the
  * tools that tile's policy covers, and the whole document is omitted when nothing is left.
  */
+import { createHash } from "node:crypto";
 import { shq } from "./shq.js";
 import type { AgentHookEntry, AgentHooks, AgentProviderDef } from "./types.js";
 import type { HookScript, LaunchRequest } from "./runtime.js";
@@ -179,12 +180,48 @@ function toTomlInline(v: unknown): string {
   return JSON.stringify(v);
 }
 
+/** JSON with every object's keys sorted, as codex serializes a hook before hashing it. */
+function sortedJson(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(sortedJson).join(",")}]`;
+  if (v && typeof v === "object") return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${sortedJson((v as Record<string, unknown>)[k])}`).join(",")}}`;
+  return JSON.stringify(v);
+}
+
+/** Events whose matcher codex ignores, and leaves out of the hash. */
+const CODEX_NO_MATCHER = new Set(["user_prompt_submit", "stop", "interrupt"]);
+
+/** What codex records once its user trusts each of these hooks, keyed as it keys hooks passed on
+ *  its command line: the sha256 of the hook as it reads it (event, matcher, the handler with its
+ *  defaults filled in). Given at launch, the hooks this document wires run without asking. */
+function codexTrust(events: Record<string, unknown[]>): Record<string, { trusted_hash: string }> {
+  const out: Record<string, { trusted_hash: string }> = {};
+  for (const [event, groups] of Object.entries(events)) {
+    const label = event.replace(/(?<!^)([A-Z])/g, "_$1").toLowerCase();
+    groups.forEach((g, gi) => {
+      const group = g as { matcher?: string; hooks?: Array<Record<string, unknown>> };
+      (group.hooks ?? []).forEach((h, hi) => {
+        if (h.type !== "command") return;
+        const t = typeof h.timeout === "number" ? h.timeout : undefined;
+        const timeout = label === "session_end" || label === "interrupt" ? Math.min(3, Math.max(1, t ?? 1)) : Math.max(1, t ?? 600);
+        const handler = { type: "command", command: h.command, timeout, async: h.async === true,
+          ...(typeof h.statusMessage === "string" ? { statusMessage: h.statusMessage } : {}),
+          ...(typeof h.commandWindows === "string" ? { commandWindows: h.commandWindows } : {}) };
+        const matcher = CODEX_NO_MATCHER.has(label) ? undefined : group.matcher;
+        const identity = { event_name: label, hooks: [handler], ...(matcher !== undefined ? { matcher } : {}) };
+        out[`/<session-flags>/config.toml:${label}:${gi}:${hi}`] = { trusted_hash: `sha256:${createHash("sha256").update(sortedJson(identity)).digest("hex")}` };
+      });
+    });
+  }
+  return out;
+}
+
 /** The whole document, in the shape the agent's own configuration wants. */
 export function renderHookDocument(def: AgentProviderDef, req: LaunchRequest): string | undefined {
   if (!def.hooks) return undefined;
   // Commands every tile shares carry no tile id; the tile is in the spawn environment.
-  const events = renderHookEvents(def.hooks, def.hooks.stable ? { ...req, tileId: "", supervise: undefined } : req);
-  if (!events) return undefined;
+  const rendered = renderHookEvents(def.hooks, def.hooks.stable ? { ...req, tileId: "", supervise: undefined } : req);
+  if (!rendered) return undefined;
+  const events = def.hooks.trust === "codex" ? { ...rendered, state: codexTrust(rendered) } : rendered;
   const template = def.hooks.template ?? "{events}";
   return template.replace("{events}", def.hooks.format === "toml" ? toTomlInline(events) : JSON.stringify(events));
 }

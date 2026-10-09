@@ -47,3 +47,15 @@ test("run through a shell with the environment its launch gave it, a hook comman
   expect(ran.arg).toBe(join(root, "hcp.sock"));
   expect(ran.event).toBeTruthy();
 });
+
+test("codex is handed its trust for exactly the hooks we wire, as it records it, so it never asks about them", () => {
+  const plan = launch(paths("/home/u/.config/hivemind", "/home/u/app"), "hm:a");
+  const doc = plan.argsBefore![plan.argsBefore!.indexOf("-c") + 1]!;
+  const { hooks } = Bun.TOML.parse(doc) as { hooks: { state: Record<string, { trusted_hash: string }> } & Record<string, unknown> };
+  // What codex 0.160.1 itself wrote to its config.toml when its user chose "Trust all" for this
+  // document without the trust: the same keys and hashes, and nothing for any other hook.
+  const recorded = JSON.parse(readFileSync(join(import.meta.dir, "fixtures", "codex-trusted.json"), "utf8")) as Record<string, string>;
+  expect(Object.fromEntries(Object.entries(hooks.state).map(([k, v]) => [k, v.trusted_hash]))).toEqual(recorded);
+  // Nor does it skip codex's question about every other hook.
+  expect(plan.args ?? []).not.toContain("--dangerously-bypass-hook-trust");
+});

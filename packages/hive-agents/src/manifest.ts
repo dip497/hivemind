@@ -331,6 +331,11 @@ function validateHooks(raw: unknown): AgentHooks {
   }
   if (m.format !== undefined) { req(m.format === "json" || m.format === "toml", "hooks.format must be json or toml"); out.format = m.format; }
   if (m.stable !== undefined) { req(m.stable === true, "hooks.stable must be true"); out.stable = true; }
+  if (m.trust !== undefined) {
+    // The trust rides in the same TOML document, read from the command line.
+    req(m.trust === "codex" && out.format === "toml" && out.arg !== undefined, 'hooks.trust: only "codex", with format: toml and arg');
+    out.trust = "codex";
+  }
   req(!!out.arg !== !!out.file, "hooks needs exactly one of `arg` (inline) or `file` (written)");
   return out;
 }
@@ -706,6 +711,10 @@ export function agentDisclosures(def: AgentProviderDef): string[] {
   if (def.session?.resume?.find) out.push(`reads ${def.session.resume.find.root} to find a session to resume`);
   if (def.launch?.hcp && (def.hooks || def.assets?.length)) {
     out.push("reports its status and approval prompts to Hivemind through its own hooks, which can also read and type into your other tiles");
+  }
+  // A CLI that gates its hooks behind a per-hook review, handed its trust for ours alone.
+  if (def.hooks?.trust) {
+    out.push(`tells ${def.bin} its hooks for Hivemind are trusted, so it does not ask about them; it still asks about any other hook`);
   }
   // A CLI that gates its own hooks behind a per-hook review, waived for tiles Hivemind starts.
   if (def.launch?.args?.some((a) => a.includes("bypass-hook-trust"))) {
