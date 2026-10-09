@@ -39,6 +39,37 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
+test("switching between a pane's tabs resizes neither terminal: the one switched away from waits at its size", async () => {
+  const tabs = view().locator('[role="tab"]');
+  const logs: string[] = [];
+  // A program in each of two tabs writes down every size it is told.
+  for (const i of [0, 1]) {
+    const log = path.join(root, `winch-${i}`);
+    logs.push(log);
+    await tabs.nth(i).click();
+    await page.locator(`[data-community-slot="${await tabs.nth(i).getAttribute("data-tile-id")}"] .xterm-screen`).click();
+    await page.keyboard.type(`node -e 'process.stdout.on("resize",()=>require("fs").appendFileSync(${JSON.stringify(log)},"x"));setInterval(()=>{},1e6)'\n`);
+  }
+  const told = () => logs.map((l) => (fs.existsSync(l) ? fs.readFileSync(l, "utf8").length : 0));
+  await page.waitForTimeout(800);
+  const before = told();
+  for (let k = 0; k < 4; k++) {
+    await tabs.nth(k % 2).click();
+    await expect(page.locator(`[data-community-slot="${await tabs.nth(k % 2).getAttribute("data-tile-id")}"]`)).toHaveCount(1);
+  }
+  await page.waitForTimeout(800);
+  expect(told()).toEqual(before);
+  // Both are listening. A window made smaller reaches the tab shown at once, and the other one only
+  // when it is shown.
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await expect.poll(() => told()[1]! > before[1]!).toBe(true);
+  expect(told()[0]).toBe(before[0]);
+  await tabs.nth(0).click();
+  await expect.poll(() => told()[0]! > before[0]!).toBe(true);
+  await page.setViewportSize({ width: 1400, height: 860 });
+  for (const i of [0, 1]) { await tabs.nth(i).click(); await page.keyboard.press("Control+C"); }
+});
+
 test("a tab split right takes a pane of its own: two terminals side by side, each the tab its pane shows", async () => {
   await expect(slots()).toHaveCount(1);
   const moved = await view().locator('[role="tab"][aria-selected="true"]').getAttribute("data-tile-id");
@@ -104,5 +135,55 @@ test("a closed pane gives its tabs to the one that takes its room; every tile is
   await pane.locator(".w-bar").hover();
   await pane.locator('[data-pane-tool="Close pane"]').click();
   await expect(panesOf()).toHaveCount(2);
+  await expect(view().locator('[role="tab"]')).toHaveCount(3);
+});
+
+test("the view's keys work from inside a terminal, which never sees them", async () => {
+  await expect(panesOf()).toHaveCount(2);
+  const id = (await slots().first().getAttribute("data-community-slot"))!;
+  await page.locator(`[data-community-slot="${id}"] .xterm-screen`).click();
+  // `cat -v` would quit on Ctrl+\, and show any other key it is given.
+  await page.keyboard.type("cat -v\n");
+  await page.waitForTimeout(300);
+  await page.keyboard.press("Control+Backslash");
+  await expect(panesOf()).toHaveCount(3);
+  const screen = () => page.evaluate((tile) => ((document.querySelector(`[data-tile-slot="${tile}"] .xterm`)?.parentElement as unknown as { __hmScreen?: () => string } | undefined)?.__hmScreen?.() ?? ""), id);
+  await page.waitForTimeout(300);
+  expect(await screen()).not.toMatch(/Quit|\^\\/);
+  await page.locator(`[data-community-slot="${id}"] .xterm-screen`).click();
+  await page.keyboard.press("Control+C");
+});
+
+test("a tab dragged onto another pane's tabs joins them there; onto a pane's edge it splits that pane", async () => {
+  // Panes by id: one left with no tab closes, and the others move up.
+  const [source, target] = await panesOf().evaluateAll((els) => els.slice(0, 2).map((el) => el.getAttribute("data-pane")!));
+  const strip = (pane: string) => view().locator(`[data-pane="${pane}"] [role="tab"]`);
+  const before = await strip(target!).count();
+  const tab = strip(source!).first();
+  const moved = await tab.getAttribute("data-tile-id");
+  const from = (await tab.boundingBox())!;
+  const to = (await strip(target!).first().boundingBox())!;
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2 + 20, from.y + from.height / 2, { steps: 4 });
+  // The terminals step aside while a tab is dragged, so where it would land shows.
+  await expect(slots()).toHaveCount(0);
+  await page.mouse.move(to.x + 4, to.y + to.height / 2, { steps: 8 });
+  await expect(view().locator('.w-drop[data-kind="tabs"]')).toBeVisible();
+  await page.mouse.up();
+  await expect(strip(target!)).toHaveCount(before + 1);
+  await expect(strip(target!).first()).toHaveAttribute("data-tile-id", moved!);
+  await expect(slots()).not.toHaveCount(0);
+
+  const panesBefore = await panesOf().count();
+  const drag = strip(target!).first();
+  const d = (await drag.boundingBox())!;
+  const stage = (await view().locator(`[data-pane="${target}"] .w-stage`).boundingBox())!;
+  await page.mouse.move(d.x + d.width / 2, d.y + d.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(stage.x + stage.width - 8, stage.y + stage.height / 2, { steps: 10 });
+  await expect(view().locator('.w-drop[data-kind="split"]')).toBeVisible();
+  await page.mouse.up();
+  await expect(panesOf()).toHaveCount(panesBefore + 1);
   await expect(view().locator('[role="tab"]')).toHaveCount(3);
 });

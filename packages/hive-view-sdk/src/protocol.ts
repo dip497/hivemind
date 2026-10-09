@@ -104,6 +104,8 @@ export interface SurfaceRect extends ViewRect {
   /** 1.13: the pointer passes through it to the view, while the view drags something across it. */
   inert?: true;
 }
+/** A command and the keys that run it (its manifest's `keys`). */
+export interface CommandKeys { keys: string; command: string }
 /** The roundest a surface's corners may be. */
 export const MAX_SURFACE_RADIUS = 24;
 /** The host theme, resolved. `colors` are the `--color-*` tokens as `#rrggbb`;
@@ -341,7 +343,7 @@ export interface ViewParticipant {
 // ── host → plugin ───────────────────────────────────────────────────────────
 
 export type HostMessage =
-  | { type: "hello"; v: number; pluginId: string; capabilities: ViewPermission[]; theme: ViewTheme; layout: unknown; viewport: { w: number; h: number }; visible: boolean; /** 1.3 */ features?: ViewFeature[]; /** 1.5 */ device?: ViewDevice; /** 1.7 */ settings?: Record<string, SettingValue> }
+  | { type: "hello"; v: number; pluginId: string; capabilities: ViewPermission[]; theme: ViewTheme; layout: unknown; viewport: { w: number; h: number }; visible: boolean; /** 1.3 */ features?: ViewFeature[]; /** 1.5 */ device?: ViewDevice; /** 1.7 */ settings?: Record<string, SettingValue>; /** 1.13: the declared commands' keys, run in the plugin's frame */ keys?: CommandKeys[] }
   /** Frames / tiles / membership (+ the current names). Structural only. */
   | { type: "structure"; frames: ViewFrame[]; tiles: ViewTile[]; /** 1.2 */ links?: ViewLinks }
   /** Display names changed (renames, agent titles) — nothing structural did. */

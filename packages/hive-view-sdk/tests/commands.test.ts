@@ -2,7 +2,7 @@
 // when the host invokes one: the handler's result, its error, or that nothing answers that name.
 import { expect, test } from "bun:test";
 import { fakeHost } from "../src/testing.js";
-import { parsePluginCommands } from "../src/commands.js";
+import { chordMatches, parsePluginCommands } from "../src/commands.js";
 import { validateViewManifest } from "../src/manifest.js";
 
 test("a manifest's commands are named, described, and say what they take; anything else is refused", () => {
@@ -50,4 +50,42 @@ test("a call that arrives before its handler is registered (the plugin has just 
   hm.onCommand("late", () => "here");
   for (let i = 0; i < 20 && !host.received.some((m) => m.type === "invokeResult"); i++) await new Promise((r) => setTimeout(r, 50));
   expect(host.received.filter((m) => m.type === "invokeResult")).toEqual([{ type: "invokeResult", invokeId: 9, ok: true, result: "here" }]);
+});
+
+const press = (key: string, code: string, mods: { ctrl?: boolean; meta?: boolean; alt?: boolean; shift?: boolean } = {}) =>
+  ({ key, code, ctrlKey: !!mods.ctrl, metaKey: !!mods.meta, altKey: !!mods.alt, shiftKey: !!mods.shift });
+
+test("a command's keys are modifiers and one key; a plain key, shift and a key, or the same keys twice are refused", () => {
+  expect(parsePluginCommands([{ name: "split", description: "Split.", keys: "mod+\\" }])).toEqual({ commands: [{ name: "split", description: "Split.", keys: "mod+\\" }] });
+  for (const keys of ["k", "shift+k", "mod+", "mod+k+j", "mod+mod+k", "mod+banana", 3]) {
+    expect("error" in parsePluginCommands([{ name: "a", description: "x", keys }])).toBe(true);
+  }
+  expect("error" in parsePluginCommands([{ name: "a", description: "x", keys: "mod+k" }, { name: "b", description: "y", keys: "MOD+K" }])).toBe(true);
+});
+
+test("keys are matched by the key pressed, whatever shift makes of it; mod is Cmd on a Mac and Ctrl elsewhere", () => {
+  expect(chordMatches("mod+shift+\\", press("|", "Backslash", { ctrl: true, shift: true }), false)).toBe(true);
+  expect(chordMatches("mod+shift+\\", press("|", "Backslash", { meta: true, shift: true }), true)).toBe(true);
+  expect(chordMatches("mod+shift+\\", press("|", "Backslash", { ctrl: true, shift: true }), true)).toBe(false);
+  expect(chordMatches("mod+\\", press("\\", "Backslash", { ctrl: true, shift: true }), false)).toBe(false);
+  expect(chordMatches("mod+alt+arrowleft", press("ArrowLeft", "ArrowLeft", { ctrl: true, alt: true }), false)).toBe(true);
+  expect(chordMatches("mod+k", press("k", "KeyK", { ctrl: true }), false)).toBe(true);
+  expect(chordMatches("mod+k", press("k", "KeyJ", { ctrl: true }), false)).toBe(false);
+});
+
+test("keys the host names in hello run their command while focus is in the view", async () => {
+  const host = fakeHost({ keys: [{ keys: "mod+\\", command: "split" }] });
+  const hm = await host.connect();
+  let ran = 0;
+  hm.onCommand("split", () => { ran++; });
+  const key = (k: string, code: string, ctrl: boolean) => {
+    const e = new Event("keydown", { cancelable: true });
+    Object.assign(e, { key: k, code, ctrlKey: ctrl, metaKey: false, altKey: false, shiftKey: false });
+    globalThis.dispatchEvent(e);
+    return e.defaultPrevented;
+  };
+  expect(key("\\", "Backslash", true)).toBe(true);
+  expect(key("\\", "Backslash", false)).toBe(false);
+  await new Promise((r) => setTimeout(r, 0));
+  expect(ran).toBe(1);
 });

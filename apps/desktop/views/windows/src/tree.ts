@@ -144,14 +144,20 @@ export function unsplit(tree: Tree): Tree {
   return { root: { ...keep, tabs }, focus: keep.id, zoom: null };
 }
 
-/** `tile` shown in pane `to`, taken from the pane it was in. */
-export function moveTab(tree: Tree, tile: string, to: string): Tree {
+/** `tile` shown in pane `to`, taken from the pane it was in: at tab `at` of the others there (the
+ *  end when not given), which also moves it along its own pane's tabs. */
+export function moveTab(tree: Tree, tile: string, to: string, at?: number): Tree {
   const from = paneOf(tree, tile);
-  if (!from || from.id === to || !paneById(tree, to)) return tree;
+  if (!from || (from.id === to && at === undefined) || !paneById(tree, to)) return tree;
+  const put = (tabs: string[]) => {
+    const rest = tabs.filter((t) => t !== tile);
+    const i = Math.max(0, Math.min(at ?? rest.length, rest.length));
+    return [...rest.slice(0, i), tile, ...rest.slice(i)];
+  };
   const root = mapPanes(tree.root, (p) =>
-    p.id === from.id ? { ...p, tabs: p.tabs.filter((t) => t !== tile), active: p.active === tile ? p.tabs.find((t) => t !== tile) ?? null : p.active }
-      : p.id === to ? { ...p, tabs: [...p.tabs, tile], active: tile } : p);
-  return { root: prune(root, to)!, focus: to, zoom: tree.zoom === from.id ? null : tree.zoom };
+    p.id === to ? { ...p, tabs: put(p.tabs), active: tile }
+      : p.id === from.id ? { ...p, tabs: p.tabs.filter((t) => t !== tile), active: p.active === tile ? p.tabs.find((t) => t !== tile) ?? null : p.active } : p);
+  return { root: prune(root, to)!, focus: to, zoom: from.id !== to && tree.zoom === from.id ? null : tree.zoom };
 }
 
 /** Pane `id` shows `tile` (one of its tabs) and has the focus. */

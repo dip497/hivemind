@@ -5,8 +5,7 @@ import { PORT_HANDSHAKE, type HostMessage, type PluginMessage, type SurfaceRect 
 import type { ViewScreen } from "@hivemind/workspace-api/views";
 import type { ViewPackageInfo } from "../../../../../shared/ipc";
 import type { WorkspaceViewProps } from "../../workspace-view";
-import { TileSlot } from "../../tile-host";
-import { SlotBar } from "../../slot-chrome";
+import { SurfaceSlots } from "./surface-slots";
 import { readTheme } from "../../plugin-theme";
 
 export function RemoteCommunityView({ pkg, model, commands }: WorkspaceViewProps & { pkg: ViewPackageInfo }) {
@@ -72,14 +71,8 @@ export function RemoteCommunityView({ pkg, model, commands }: WorkspaceViewProps
   return <div ref={root} className="relative flex-1 min-h-0 overflow-hidden" data-community-view={pkg.id} data-community-ready={ready ? "1" : "0"}>
     {!error && <iframe ref={iframe} name={`hm-view:${pkg.id}`} title={pkg.manifest?.name ?? pkg.id} src={pkg.url ?? undefined}
       sandbox="allow-scripts" referrerPolicy="no-referrer" onLoad={onLoad} className="absolute inset-0 h-full w-full border-0 bg-transparent" />}
-    <div className="pointer-events-none absolute inset-0" data-community-surfaces>
-      {rects.map((r) => <div key={r.tileId} className={`${r.inert ? "pointer-events-none [&_*]:!pointer-events-none" : "pointer-events-auto"} absolute flex flex-col overflow-hidden bg-[var(--color-bg)]`}
-        style={{ left: r.x, top: r.y, width: r.w, height: r.h, borderRadius: r.radius }} data-community-slot={r.tileId} data-slot-bare={r.chrome === "none" ? "" : undefined}>
-        {r.chrome !== "none" && <SlotBar tileId={r.tileId} name={nameOf.get(r.tileId) ?? r.tileId} commands={commands}
-          onUndock={() => { setRects((old) => old.filter((item) => item.tileId !== r.tileId)); deliver({ type: "undock", tileId: r.tileId }); }} />}
-        <TileSlot tileId={r.tileId} transient className="relative z-10 min-h-0 flex-1" />
-      </div>)}
-    </div>
+    <SurfaceSlots rects={rects} width={root.current?.clientWidth ?? 0} names={nameOf} commands={commands}
+      onUndock={(tileId) => { setRects((old) => old.filter((item) => item.tileId !== tileId)); deliver({ type: "undock", tileId }); }} />
     {error && <div role="alert" className="absolute inset-0 grid place-items-center text-[var(--color-fg2)]">{error}</div>}
     {!ready && !error && <div className="pointer-events-none absolute inset-0 grid place-items-center text-[var(--color-fg2)]">Loading {pkg.manifest?.name ?? pkg.id}…</div>}
   </div>;

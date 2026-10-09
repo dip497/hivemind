@@ -15,31 +15,38 @@
   "commands": [
     {
       "name": "split-right",
-      "description": "Split the focused pane: its shown tab moves to a new pane on the right."
+      "description": "Split the focused pane: its shown tab moves to a new pane on the right.",
+      "keys": "mod+\\"
     },
     {
       "name": "split-down",
-      "description": "Split the focused pane: its shown tab moves to a new pane below."
+      "description": "Split the focused pane: its shown tab moves to a new pane below.",
+      "keys": "mod+shift+\\"
     },
     {
       "name": "focus-left",
-      "description": "Focus the pane to the left of the focused one."
+      "description": "Focus the pane to the left of the focused one.",
+      "keys": "mod+alt+arrowleft"
     },
     {
       "name": "focus-right",
-      "description": "Focus the pane to the right of the focused one."
+      "description": "Focus the pane to the right of the focused one.",
+      "keys": "mod+alt+arrowright"
     },
     {
       "name": "focus-up",
-      "description": "Focus the pane above the focused one."
+      "description": "Focus the pane above the focused one.",
+      "keys": "mod+alt+arrowup"
     },
     {
       "name": "focus-down",
-      "description": "Focus the pane below the focused one."
+      "description": "Focus the pane below the focused one.",
+      "keys": "mod+alt+arrowdown"
     },
     {
       "name": "maximize",
-      "description": "Show the focused pane alone, or bring the others back."
+      "description": "Show the focused pane alone, or bring the others back.",
+      "keys": "mod+shift+enter"
     },
     {
       "name": "close-pane",

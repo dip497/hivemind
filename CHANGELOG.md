@@ -9,6 +9,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: in the Windows view, drag a tab onto another pane's tabs to move it there, or onto the edge of a pane to split it; Escape cancels. Along its own tabs a drag reorders them.
+- Fixed: the Windows view's keys (Ctrl+\\ to split, Ctrl+Shift+Enter to maximize, Ctrl+Alt+arrows to move between panes) did nothing while a terminal had focus, and Ctrl+\\ reached the shell. They now work wherever focus is.
+- Added: a view's command can name the keys that run it (`"keys": "mod+shift+k"` in its manifest). While the view is shown they work anywhere in the app, terminals included, and in the view's own frame (view protocol 1.13, `hello.keys`).
 - Added: the Windows view splits like an editor. Split a pane right or down from its tab bar (or Ctrl+\\ and Ctrl+Shift+\\), drag the divider between panes, double-click it to make them equal, maximize a pane, close one into its neighbour, and move between panes with Ctrl+Alt+arrows. Each pane has its own tabs, and the arrangement is kept per person. An agent can do the same with `hive ctl plugin call windows split-right` and the view's other commands.
 - Added: view protocol 1.13: a surface rect can let the pointer through to the view while it drags (`inert`), and `setLayout(data, { now: true })` saves at once instead of after 250 ms.
 - Fixed: a view's rounded surfaces (`radius`) were dropped by the view SDK before they reached the app.

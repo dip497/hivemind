@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  MAX_PANES, closePane, equalize, layout, moveTab, neighbor, normalize, paneOf, panes, readTree, resize, single, split, toggleZoom, unsplit,
+  MAX_PANES, closePane, equalize, layout, moveTab, neighbor, normalize, paneById, paneOf, panes, readTree, resize, single, split, toggleZoom, unsplit,
   type Node, type Tree,
 } from "../../views/windows/src/tree.ts";
 
@@ -82,6 +82,17 @@ test("a tab moved to another pane leaves the first, which goes when it is empty"
   assert.deepEqual(panes(t.root).map((p) => [p.id, p.tabs, p.active]), [["p2", ["b", "a"], "a"]]);
 });
 
+test("a tab dropped among another pane's tabs lands where it was dropped; in its own pane it only moves along", () => {
+  let t = normalize(single("p1"), ["a", "b", "c", "d"]);
+  t = split(t, "p1", "right", "d", "p2"); // p1: a b c · p2: d
+  t = moveTab(t, "a", "p2", 0);
+  assert.deepEqual(panes(t.root).map((p) => [p.id, p.tabs, p.active]), [["p1", ["b", "c"], "b"], ["p2", ["a", "d"], "a"]]);
+  t = moveTab(t, "c", "p1", 0);
+  assert.deepEqual(paneById(t, "p1")?.tabs, ["c", "b"]);
+  assert.equal(moveTab(t, "c", "p1"), t, "its own pane, nowhere in particular: nothing moves");
+  holds(normalize(t, ["a", "b", "c", "d"]), ["a", "b", "c", "d"]);
+});
+
 test("a divider moves its two panes' share, never below the smallest; equalize gives them the same", () => {
   let t = normalize(single("p1"), ["a", "b"]);
   t = split(t, "p1", "right", "b", "p2");
@@ -138,7 +149,7 @@ test("any sequence of operations keeps the rules", () => {
     switch (rand(8)) {
       case 0: t = split(t, some, (["left", "right", "up", "down"] as const)[rand(4)]!, rand(2) ? tile : null, `p${step + 1}`); break;
       case 1: t = closePane(t, some); break;
-      case 2: if (tile) t = moveTab(t, tile, some); break;
+      case 2: if (tile) t = moveTab(t, tile, some, rand(2) ? rand(4) : undefined); break;
       case 3: t = resize(t, [], 0, (rand(100) - 50) / 100); break;
       case 4: t = toggleZoom(t, some); break;
       case 5: open = all.filter(() => rand(3) > 0); break;

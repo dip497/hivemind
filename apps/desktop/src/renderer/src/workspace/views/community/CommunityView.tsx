@@ -3,8 +3,7 @@
  * iframe (its own `hm-view://<id>` origin, no `allow-same-origin`, strict CSP
  * stamped by main/view-packages.ts, no preload → no `window.hive`, no node),
  * one MessagePort to it (the plugin link every plugin's `hm` client talks to,
- * `../../plugin-link`), and an overlay of real `<TileSlot>`s positioned wherever
- * the plugin punches a hole (`surfaceRects`).
+ * `../../plugin-link`), and the slots the plugin punches holes for (`surface-slots`).
  *
  * Misbehaviour (malformed traffic, floods, a runaway render loop attributed to
  * its iframe) disables it for the session; the registry then resolves the
@@ -18,15 +17,12 @@ import { PORT_HANDSHAKE, type SurfaceRect, type ViewPermission } from "@hivemind
 import type { CommunityLink } from "@hivemind/view-host/link";
 import type { ViewPackageInfo } from "../../../../../shared/ipc";
 import type { WorkspaceViewProps } from "../../workspace-view";
-import { TileSlot } from "../../tile-host";
-import { SlotBar } from "../../slot-chrome";
-import { Wallpaper } from "../../../Wallpaper";
-import { useSurfacePolicy } from "../../../theme-store";
 import { usePluginLink } from "../../plugin-link";
 import { LayersPanel } from "../../../LayersPanel";
 import { disableCommunityView } from "./registry";
 import { edgeBandClip } from "./edge-band";
 import { RemoteCommunityView } from "./RemoteCommunityView";
+import { SurfaceSlots } from "./surface-slots";
 
 /** The host for one package. Rendered through the lazy wrapper in registry.ts
  *  (`pkg` is fixed per registered view; the props are the view contract). */
@@ -108,7 +104,6 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     // `inset()` so the two layers never overlap; a rect clip is free, unlike a
     // polygon mask. Floating rects stay plain overlays.
     const hostBox = useMemo(() => box(), [rects]); // eslint-disable-line react-hooks/exhaustive-deps
-    const policy = useSurfacePolicy();
     const { bottomInset } = useChromeState();
     const clip = useMemo(() => edgeBandClip(rects, hostBox), [rects, hostBox]);
 
@@ -143,35 +138,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
           style={clip ? { clipPath: clip } : undefined}
           data-community-clip={clip ?? undefined}
         />
-        {/* The hole-punch overlay: one live slot per rect, pointer events only
-            on the slots. Unless the rect says `chrome: "none"`, the host's slot
-            bar sits at the top of it (name, status, pop-out, undock). */}
-        <div className="pointer-events-none absolute inset-0" data-community-surfaces>
-          {rects.map((r) => (
-            <div
-              key={r.tileId}
-              className={`${r.inert ? "pointer-events-none [&_*]:!pointer-events-none" : "pointer-events-auto"} absolute flex flex-col overflow-hidden bg-[var(--color-bg)]`}
-              // App's top-right New/Settings cluster overlays every view; a slot
-              // flush with the top-right corner keeps its bar below it (the
-              // World's dock pane does the same with pt-12).
-              style={{ left: r.x, top: r.y, width: r.w, height: r.h, borderRadius: r.radius, paddingTop: r.y <= 1 && r.x + r.w >= hostBox.w - 1 ? 48 : 0 }}
-              data-community-slot={r.tileId}
-              data-slot-bare={r.chrome === "none" ? "" : undefined}
-            >
-              {/* The user's theme wins everywhere: with pluginSurfaces "theme"
-                  the wallpaper is painted behind THIS slot only (clipped by the
-                  slot box), so the docked terminal frosts exactly as on the
-                  canvas while nothing full-window is composited. */}
-              {policy.slotWallpaper && <Wallpaper embedded />}
-              {r.chrome !== "none" && (
-                <div className="relative z-10 shrink-0">
-                  <SlotBar tileId={r.tileId} name={nameOf.get(r.tileId) ?? r.tileId} commands={commands} onUndock={() => undock(r.tileId)} />
-                </div>
-              )}
-              <TileSlot tileId={r.tileId} transient className="relative z-10 min-h-0 flex-1" />
-            </div>
-          ))}
-        </div>
+        <SurfaceSlots rects={rects} width={hostBox.w} names={nameOf} commands={commands} onUndock={undock} />
         {dialogs}
         {!ready && (
           <div className="pointer-events-none absolute inset-0 grid place-items-center text-[12px] text-[var(--color-fg3)]">

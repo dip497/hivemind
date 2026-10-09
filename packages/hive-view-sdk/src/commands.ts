@@ -8,6 +8,9 @@ export interface PluginCommand {
   description: string;
   /** What its JSON argument holds, in a line: `{ "text": string }`. Absent: it takes none. */
   args?: string;
+  /** The keys that run it (`mod+shift+k`, `mod+alt+arrowleft`): while focus is in the plugin, and
+   *  for the active view anywhere in the app, a terminal too. `mod` is Cmd on a Mac, Ctrl elsewhere. */
+  keys?: string;
 }
 
 export const COMMAND_NAME_RE = /^[a-z][a-z0-9-]{0,39}$/;
@@ -24,7 +27,59 @@ export function parsePluginCommands(raw: unknown): { commands: PluginCommand[] }
     if (commands.some((x) => x.name === o.name)) return { error: `command "${o.name}" is listed twice` };
     if (typeof o.description !== "string" || !o.description.trim() || o.description.length > 300) return { error: `command "${o.name}" needs a "description" of at most 300 characters` };
     if (o.args !== undefined && (typeof o.args !== "string" || o.args.length > 300)) return { error: `command "${o.name}": "args" is one line saying what its JSON argument holds` };
-    commands.push({ name: o.name, description: o.description.trim(), ...(typeof o.args === "string" ? { args: o.args } : {}) });
+    if (o.keys !== undefined && (typeof o.keys !== "string" || !parseChord(o.keys))) {
+      return { error: `command "${o.name}": "keys" is modifiers and one key, as "mod+shift+k", with at least mod, ctrl, meta or alt` };
+    }
+    if (typeof o.keys === "string" && commands.some((x) => x.keys && sameChord(x.keys, o.keys as string))) return { error: `keys "${o.keys}" are given twice` };
+    commands.push({ name: o.name, description: o.description.trim(), ...(typeof o.args === "string" ? { args: o.args } : {}), ...(typeof o.keys === "string" ? { keys: o.keys } : {}) });
   }
   return { commands };
+}
+
+interface Chord { mod: boolean; ctrl: boolean; meta: boolean; alt: boolean; shift: boolean; key: string }
+
+/** The physical key a printable character names, so `shift` does not change what it is. */
+const CODE: Record<string, string> = {
+  "\\": "Backslash", "/": "Slash", "[": "BracketLeft", "]": "BracketRight", ",": "Comma", ".": "Period",
+  ";": "Semicolon", "'": "Quote", "`": "Backquote", "-": "Minus", "=": "Equal",
+};
+const NAMED = new Set(["enter", "escape", "tab", "space", "backspace", "delete", "home", "end", "pageup", "pagedown",
+  "arrowleft", "arrowright", "arrowup", "arrowdown", ...Array.from({ length: 12 }, (_, i) => `f${i + 1}`)]);
+
+/** `mod+shift+k` read, or null when it is not modifiers and one key with at least one of mod, ctrl,
+ *  meta or alt: a plain key, or shift and a key, is typing, never a plugin's. */
+export function parseChord(raw: string): Chord | null {
+  const parts = raw.toLowerCase().split("+");
+  // `+` itself is the key when the chord ends in it: "mod++".
+  if (raw.endsWith("++")) { parts.splice(-2, 2, "+"); }
+  const c: Chord = { mod: false, ctrl: false, meta: false, alt: false, shift: false, key: "" };
+  for (const p of parts) {
+    if (p === "mod" || p === "ctrl" || p === "meta" || p === "alt" || p === "shift") {
+      if (c[p]) return null;
+      c[p] = true;
+    } else if (!c.key && (p.length === 1 || NAMED.has(p))) c.key = p;
+    else return null;
+  }
+  return c.key && (c.mod || c.ctrl || c.meta || c.alt) ? c : null;
+}
+
+function sameChord(a: string, b: string): boolean {
+  const x = parseChord(a), y = parseChord(b);
+  return !!x && !!y && JSON.stringify(x) === JSON.stringify(y);
+}
+
+/** The fields of a key event a chord is matched against. */
+export interface KeyPress { key: string; code: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }
+
+/** Whether this key press is the chord. `mac`: `mod` is Cmd, otherwise Ctrl. */
+export function chordMatches(chord: string, e: KeyPress, mac: boolean): boolean {
+  const c = parseChord(chord);
+  if (!c) return false;
+  const ctrl = c.ctrl || (c.mod && !mac);
+  const meta = c.meta || (c.mod && mac);
+  if (e.ctrlKey !== ctrl || e.metaKey !== meta || e.altKey !== c.alt || e.shiftKey !== c.shift) return false;
+  if (NAMED.has(c.key)) return c.key === "space" ? e.code === "Space" : e.key.toLowerCase() === c.key;
+  if (/^[a-z]$/.test(c.key)) return e.code === `Key${c.key.toUpperCase()}`;
+  if (/^[0-9]$/.test(c.key)) return e.code === `Digit${c.key}`;
+  return CODE[c.key] ? e.code === CODE[c.key] : e.key === c.key;
 }

@@ -6,7 +6,7 @@
  * to the permissions its manifest was granted. Who holds the other end of the port is the
  * caller's: a frame's window, or a client in this window.
  */
-import type { PluginCommand } from "@hivemind/view-sdk/commands";
+import { chordMatches, type PluginCommand } from "@hivemind/view-sdk/commands";
 import { offerCommands, type CommandOffer } from "./plugin-commands";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { PROTOCOL_VERSION, type HostMessage, type ShareOutcome, type SurfaceRect, type ViewPermission } from "@hivemind/view-sdk/protocol";
@@ -196,6 +196,7 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
       viewport: box(), visible: !document.hidden, features: [...link.features, "settings"],
       // A desktop: whether its pointer is a finger, never a phone's screen.
       device: { touch: matchMedia("(pointer: coarse)").matches, compact: false },
+      keys: (o.commands ?? []).flatMap((c) => (c.keys ? [{ keys: c.keys, command: c.name }] : [])),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
@@ -287,6 +288,25 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- declaredKey stands for `declared`
   }, [link, ready, declaredKey, o.pluginId, o.record.kind, instanceId, instanceLabel]);
+
+  // The active view's keys run wherever focus is in the app, a terminal too: caught before the
+  // terminal takes them. In its own frame its client runs them (`hello.keys`).
+  useEffect(() => {
+    const bound = declared.filter((c) => c.keys);
+    if (!bound.length || !ready || o.record.kind !== "view") return;
+    const mac = /mac/i.test(navigator.platform);
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as Element | null)?.closest?.('[role="dialog"]')) return;
+      const c = bound.find((x) => chordMatches(x.keys!, e, mac));
+      if (!c) return;
+      e.preventDefault();
+      e.stopPropagation();
+      link.invoke(c.name, null).catch(() => {});
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- declaredKey stands for `declared`
+  }, [link, ready, declaredKey, o.record.kind]);
 
   const dialogs = (
     <>

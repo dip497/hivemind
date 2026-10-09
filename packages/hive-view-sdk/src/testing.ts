@@ -18,7 +18,7 @@ import type { SettingValue } from "./settings.js";
 import { connect, type ViewClient } from "./client.js";
 import {
   PORT_HANDSHAKE, PROTOCOL_VERSION, VIEW_FEATURES, parsePluginMessage, refusal,
-  type CommandName, type HostMessage, type HostScope, type PluginMessage, type RequestErrorCode, type SurfaceRect,
+  type CommandKeys, type CommandName, type HostMessage, type HostScope, type PluginMessage, type RequestErrorCode, type SurfaceRect,
   type ViewDevice, type ViewEventKind, type ViewFeature, type ViewPermission, type ViewRect, type ViewTheme,
 } from "./protocol.js";
 
@@ -40,6 +40,8 @@ export interface FakeHostOptions {
   settings?: Record<string, SettingValue>;
   /** The layout the view saved last time, back in `hello.layout`. */
   layout?: unknown;
+  /** Its commands' keys, as its manifest declares them, in `hello.keys` (1.13). */
+  keys?: CommandKeys[];
   viewport?: { w: number; h: number };
   visible?: boolean;
   /** The result for each request, by name; one not given is answered `UNSUPPORTED`. A throw is
@@ -134,7 +136,7 @@ export function fakeHost(opts: FakeHostOptions = {}): FakeHost {
       post({
         type: "hello", v: PROTOCOL_VERSION, pluginId: opts.pluginId ?? "test-view", capabilities, theme: opts.theme ?? THEME,
         layout: opts.layout ?? null, viewport: opts.viewport ?? { w: 1280, h: 800 }, visible: opts.visible ?? true, features, device: opts.device ?? DESKTOP,
-        ...(opts.settings ? { settings: opts.settings } : {}),
+        ...(opts.settings ? { settings: opts.settings } : {}), ...(opts.keys ? { keys: opts.keys } : {}),
       });
       return;
     }
