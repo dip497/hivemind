@@ -74,7 +74,7 @@ export function RemoteCommunityView({ pkg, model, commands }: WorkspaceViewProps
       sandbox="allow-scripts" referrerPolicy="no-referrer" onLoad={onLoad} className="absolute inset-0 h-full w-full border-0 bg-transparent" />}
     <div className="pointer-events-none absolute inset-0" data-community-surfaces>
       {rects.map((r) => <div key={r.tileId} className="pointer-events-auto absolute flex flex-col overflow-hidden bg-[var(--color-bg)]"
-        style={{ left: r.x, top: r.y, width: r.w, height: r.h }} data-community-slot={r.tileId} data-slot-bare={r.chrome === "none" ? "" : undefined}>
+        style={{ left: r.x, top: r.y, width: r.w, height: r.h, borderRadius: r.radius }} data-community-slot={r.tileId} data-slot-bare={r.chrome === "none" ? "" : undefined}>
         {r.chrome !== "none" && <SlotBar tileId={r.tileId} name={nameOf.get(r.tileId) ?? r.tileId} commands={commands}
           onUndock={() => { setRects((old) => old.filter((item) => item.tileId !== r.tileId)); deliver({ type: "undock", tileId: r.tileId }); }} />}
         <TileSlot tileId={r.tileId} transient className="relative z-10 min-h-0 flex-1" />

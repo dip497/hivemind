@@ -154,7 +154,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
               // App's top-right New/Settings cluster overlays every view; a slot
               // flush with the top-right corner keeps its bar below it (the
               // World's dock pane does the same with pt-12).
-              style={{ left: r.x, top: r.y, width: r.w, height: r.h, paddingTop: r.y <= 1 && r.x + r.w >= hostBox.w - 1 ? 48 : 0 }}
+              style={{ left: r.x, top: r.y, width: r.w, height: r.h, borderRadius: r.radius, paddingTop: r.y <= 1 && r.x + r.w >= hostBox.w - 1 ? 48 : 0 }}
               data-community-slot={r.tileId}
               data-slot-bare={r.chrome === "none" ? "" : undefined}
             >

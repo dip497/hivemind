@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  ACTIVITY_MAX_TILES, CUSTOM_DATA_MAX_BYTES, LAYOUT_MAX_BYTES, MAX_SURFACE_RECTS, NAME_MAX, PROMPT_MAX, SHARE_MAX_BYTES,
+  ACTIVITY_MAX_TILES, CUSTOM_DATA_MAX_BYTES, LAYOUT_MAX_BYTES, MAX_SURFACE_RECTS, MAX_SURFACE_RADIUS, NAME_MAX, PROMPT_MAX, SHARE_MAX_BYTES,
   customDataProblem, customNameMatches, isCustomEventName, isDay, parseHostMessage, parsePluginMessage, promptProblem, refusal,
   type HostScope, type PluginMessage,
 } from "../src/protocol.js";
@@ -25,6 +25,7 @@ describe("parsePluginMessage", () => {
       { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4 }] },
       { type: "surfaceRects", rects: [] },
       { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, chrome: "none" }] },
+      { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, radius: 14 }] },
       { type: "revealed", requestId: 3, rect: null },
       { type: "revealed", requestId: 3, rect: { x: 0, y: 0, w: 1, h: 1 } },
       { type: "framesDrawn", count: 0 },
@@ -59,6 +60,9 @@ describe("parsePluginMessage", () => {
       { type: "surfaceRects", rects: [{ tileId: "t", x: 0, y: 0, w: 1, h: 1 }, { tileId: "t", x: 0, y: 0, w: 1, h: 1 }] },
       { type: "surfaceRects", rects: Array.from({ length: MAX_SURFACE_RECTS + 1 }, (_, i) => ({ tileId: `t${i}`, x: 0, y: 0, w: 1, h: 1 })) },
       { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, chrome: "sidebar" }] },
+      { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, radius: MAX_SURFACE_RADIUS + 1 }] },
+      { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, radius: -1 }] },
+      { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, radius: "8" }] },
       { type: "revealed", requestId: "3", rect: null },
       { type: "framesDrawn", count: -1 },
       { type: "layout", data: "x".repeat(LAYOUT_MAX_BYTES + 1) },

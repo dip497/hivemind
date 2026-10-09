@@ -9,10 +9,12 @@ import { applyThemeVars, connect, type ViewFrame, type ViewTile } from "@hivemin
 
 interface Saved { v: 1; minimized: string[]; active: string | null }
 
-const BAR_H = 36; // .w-bar's height in windows.css
 
 const tabsEl = document.querySelector(".w-tabs") as HTMLElement;
 const emptyEl = document.querySelector(".w-empty") as HTMLElement;
+const stageEl = document.querySelector(".w-stage") as HTMLElement;
+/** The stage card's corner radius in windows.css: the surface drawn into it matches. */
+const STAGE_RADIUS = 12;
 
 const hm = await connect();
 applyThemeVars(hm);
@@ -98,9 +100,9 @@ function render() {
   }
   emptyEl.hidden = !!active;
   emptyEl.textContent = tabs().length ? "Select a tab to view it." : "Nothing open. Spawn a tile (1–7) or restore one from the rail.";
-  // The active tile's live surface fills the stage; the rest wait, alive, in the app.
-  const { w, h } = hm.viewport;
-  hm.setSurfaceRects(active ? [{ tileId: active, x: 0, y: BAR_H, w, h: Math.max(0, h - BAR_H), chrome: "none" }] : []);
+  // The active tile's live surface fills the stage card, inside its edge.
+  const r = stageEl.getBoundingClientRect();
+  hm.setSurfaceRects(active ? [{ tileId: active, x: r.left + 1, y: r.top + 1, w: Math.max(0, r.width - 2), h: Math.max(0, r.height - 2), chrome: "none", radius: STAGE_RADIUS - 1 }] : []);
 }
 
 hm.on("structure", (s) => {
