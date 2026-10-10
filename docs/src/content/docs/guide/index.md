@@ -71,22 +71,12 @@ only colour that means *a human is being waited on*.
 Press <kbd>N</kbd> to jump to the next tile that needs you, <kbd>Esc</kbd> to release it, and
 <kbd>⌘E</kbd> to change how the whole workspace is drawn.
 
-## Four ways to look at the same work
+## Two ways to look at the same work
 
-The runtime owns frames, tiles and sessions; a view only arranges them. Switching costs nothing
-and loses nothing.
+The runtime owns frames, tiles and sessions; a view only arranges them. Canvas lays tiles out on
+a board, Windows puts them in tabs and split panes. Switching costs nothing and loses nothing.
 
-<figure>
-  <img src="../shots/view-queue.webp" alt="Queue view: agents grouped by status, the one needing attention at the top." />
-  <figcaption>Queue — grouped by who needs you, keyboard-first</figcaption>
-</figure>
-
-<figure>
-  <img src="../shots/view-board.webp" alt="Board view: tiles as cards in columns by status." />
-  <figcaption>Board — the same tiles as cards, by status</figcaption>
-</figure>
-
-[See all four, and write your own →](views/)
+[Both, and how to write your own →](views/)
 
 ## Start here
 
