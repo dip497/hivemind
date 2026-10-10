@@ -155,10 +155,8 @@ select option { background: var(--color-bg2); color: var(--color-fg); }
 .plugin-row[data-state=off] .plugin-row-name { color: var(--color-fg2); }
 .plugin-row[data-state=missing] .plugin-row-detail { color: var(--color-warn); }
 .plugin-row[data-state=unavailable] .plugin-row-detail { color: var(--color-err); }
-.plugin-choice { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; min-width: 22px; height: 24px; justify-content: center; padding: 0 10px; border-radius: 999px; font-size: 11.5px; color: var(--color-fg2); }
-.plugin-choice[aria-checked=true] { border: 1px solid var(--color-brand); color: var(--color-fg); background: color-mix(in oklab, var(--color-brand) 12%, transparent); }
-.plugin-choice-dot { width: 12px; height: 12px; border-radius: 999px; border: 1px solid var(--color-line2); }
-.plugin-row:hover .plugin-choice-dot, .plugin-choice:focus-visible .plugin-choice-dot { border-color: var(--color-fg2); }
+.row-choice-offer { color: var(--color-fg2); transition: opacity var(--hm-dur-1) var(--hm-ease-out); }
+.plugin-row:not(:hover):not(:focus-within) .row-choice-offer { opacity: 0; }
 .agent-badge { font-size: 11px; font-weight: 500; padding: 2px 9px; border-radius: 10px; color: var(--color-brand); background: color-mix(in oklab, var(--color-brand) 16%, transparent); }
 .agent-facts { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 4px; padding: 0; list-style: none; }
 .agent-facts li { font-size: 11px; padding: 3px 9px; border-radius: 10px; background: color-mix(in oklab, var(--color-ok) 12%, transparent); color: var(--color-fg); }
@@ -278,7 +276,7 @@ select option { background: var(--color-bg2); color: var(--color-fg); }
 /* Press feedback. 0.96 exactly — below 0.95 reads as a flinch. Compact
    controls only: a full-width row scaled by 4% moves its edges far enough to
    read as the layout shifting, so those answer with their hover fill instead. */
-.settings-icon-button:active, .plugin-choice:active {
+.settings-icon-button:active {
   scale: 0.96;
   transition-duration: var(--hm-dur-1);
   transition-timing-function: var(--hm-ease-out);
@@ -292,7 +290,7 @@ select option { background: var(--color-bg2); color: var(--color-fg); }
 
 @media (prefers-reduced-motion: reduce) {
   .settings-dialog, .settings-dialog * { transition-duration: 1ms !important; }
-  .settings-icon-button:active, .plugin-choice:active { scale: 1; }
+  .settings-icon-button:active { scale: 1; }
 }
 
 /* One measure, centred. The content is capped at a readable width, but it was pinned to

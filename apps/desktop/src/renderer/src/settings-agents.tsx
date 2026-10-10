@@ -7,6 +7,7 @@ import {
 } from "@hivemind/agents";
 import { patchSettings, useSettings, setPluginOption } from "./settings-store";
 import { Button } from "./components/ui/button";
+import { RowChoice } from "./plugins/RowChoice";
 import { Input } from "./components/ui/input";
 import { MenuItem } from "./components/ui/menu-item";
 import { Switch } from "./components/ui/switch";
@@ -101,9 +102,9 @@ export function AgentsSection({ matches }: { matches: (text: string) => boolean 
         </span>
       </MenuItem>
       {state(c) === "on" && (
-        <Button size="xs" variant={c.id === defaultId ? "secondary" : "outline"} data-default-choice={c.id} role="radio" aria-checked={c.id === defaultId}
-          aria-label={c.id === defaultId ? `${label(c)} is the default` : `Make ${label(c)} the default`} title="Default agent"
-          onClick={() => patchSettings("agents.defaultAgent", c.id)}>{c.id === defaultId ? "Default" : <span className="plugin-choice-dot" aria-hidden="true" />}</Button>
+        <RowChoice chosen={c.id === defaultId} said="Default" offer="Make default" data-default-choice={c.id}
+          aria-label={c.id === defaultId ? `${label(c)} is the default` : `Make ${label(c)} the default`}
+          onClick={() => patchSettings("agents.defaultAgent", c.id)} />
       )}
       <ChevronRight className="plugin-row-go" size={15} />
     </div>

@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { isPluginEnabled } from "@hivemind/core/plugin-settings";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ExternalLink, Puzzle, Trash } from "./components/icons";
 import { Button } from "./components/ui/button";
+import { RowChoice } from "./plugins/RowChoice";
 import { MenuItem } from "./components/ui/menu-item";
 import { Switch } from "./components/ui/switch";
 import { getSettings, patchSettings, useSettings, setPluginEnabled } from "./settings-store";
@@ -34,9 +35,9 @@ export function ViewsSection({ matches }: { matches: (text: string) => boolean }
         </span>
       </MenuItem>
       {(state === "on" || state === "ready") && (
-        <Button size="xs" variant={mode === id ? "secondary" : "outline"} data-view-choice={id} role="radio" aria-checked={mode === id}
-          aria-label={mode === id ? `${label} is in use` : `Use ${label}`} title="Workspace view"
-          onClick={() => setViewMode(id)}>{mode === id ? "In use" : <span className="plugin-choice-dot" aria-hidden="true" />}</Button>
+        <RowChoice chosen={mode === id} said="In use" offer="Use" data-view-choice={id}
+          aria-label={mode === id ? `${label} is in use` : `Use ${label}`}
+          onClick={() => setViewMode(id)} />
       )}
       <ChevronRight className="plugin-row-go" size={15} />
     </div>

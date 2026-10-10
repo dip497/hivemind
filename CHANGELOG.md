@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Changed: in Settings ▸ Plugins, the agent that is not the default offers "Make default" (a view, "Use") when you point at its row, instead of an empty circle in a box.
+- Fixed: Settings opened at a section (Plugins from the rail) put the keyboard on Profile; it starts on the section it opened at.
 - Changed: a frame on the canvas is a hairline and a faint fill with its name at the top left; the dashed border and the bar across its top are gone, and its ⋯ menu shows when you point at it.
 - Fixed: Fit to view (Esc), a focus or a zoom asked for while the camera was still settling from the last move could be cut short, leaving the canvas stopped part way.
 - Fixed: a tab restored from the rail in the Windows view could come back minimized when you switched views at once on a busy machine: the view's last saved layout was dropped as it was let go.

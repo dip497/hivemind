@@ -234,6 +234,14 @@ test("a catalog agent can be switched off too, and any launchable agent can be t
   await openAgent("codex");
   await detail().getByRole("switch").click();
   await openSettings("plugins");
-  await page.locator('[data-default-choice="claude"]').click();
-  await expect(page.locator('[data-default-choice="claude"]')).toHaveAttribute("aria-checked", "true");
+  // Another row offers it in words, and only while the row is pointed at.
+  const claude = page.locator('[data-default-choice="claude"]');
+  await page.mouse.move(0, 0);
+  await expect(claude).toHaveText("Make default");
+  await expect(claude).toHaveCSS("opacity", "0");
+  await card("claude").hover();
+  await expect(claude).toHaveCSS("opacity", "1");
+  await claude.click();
+  await expect(claude).toHaveAttribute("aria-checked", "true");
+  await expect(claude).toHaveText("Default");
 });

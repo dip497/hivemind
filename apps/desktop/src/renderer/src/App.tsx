@@ -615,7 +615,12 @@ function SettingsModal({
       <SettingsDialog.Portal>
         <SettingsDialog.Overlay className="settings-overlay" />
         <SettingsDialog.Content className="settings-dialog" aria-describedby="settings-description"
-          onOpenAutoFocus={() => { settingsReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }}
+          onOpenAutoFocus={(event) => {
+            settingsReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            // Start on the section it opened at, not the first one.
+            const current = (event.currentTarget as HTMLElement | null)?.querySelector<HTMLElement>('nav [aria-current="page"]');
+            if (current) { event.preventDefault(); current.focus({ preventScroll: true }); }
+          }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             const target = settingsReturnFocus.current;

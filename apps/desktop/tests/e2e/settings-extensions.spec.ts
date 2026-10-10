@@ -148,3 +148,12 @@ test("Tools separates what ships with the app from what you switch on", async ()
   await code.getByRole("switch").click();
   await expect.poll(state).toBeUndefined();
 });
+
+test("Settings opened at a section starts with the keyboard on that section", async () => {
+  if (await page.locator(".settings-dialog").count()) await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "plugins" } })));
+  await expect(page.locator('[data-settings-page="plugins"]')).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
