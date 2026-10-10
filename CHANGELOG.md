@@ -10,6 +10,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ## [Unreleased]
 
 - Fixed: `hive host`, or the app, started from inside an agent's terminal gave every shell it then ran that agent's identity and token, so `hive ctl` in those shells acted as the agent. A terminal's identity is now only its own.
+- Internal: the `hive network` test still chose the hosted network, which is gone.
 - Changed: a link in a terminal (a file path, an address, a link a program prints) opens on Ctrl+click, ⌘+click on a Mac, as in VS Code. A plain click is a click in the terminal, so clicking into one to type no longer opens the file under the pointer. Pointing at a link says so.
 - Fixed: an address clicked in a terminal opened nowhere while the Browser tool was switched off. It opens in your system's browser.
 - Fixed: a terminal tab switched away from just after its pane changed size was told the size of its hidden box, so its program redrew for a size nobody saw, and again when shown.

@@ -1,6 +1,6 @@
 // `hive network` (R16): this computer's network as the app keeps it, verified by hive-net
-// (crates/hive-net's build): the local network until another is chosen; hivemind's servers, or a
-// network from its link, from then on; an update to the network in use signed by someone else is
+// (crates/hive-net's build): the local network until another is chosen; a network from its link
+// from then on; an update to the network in use signed by someone else is
 // refused and changes nothing. On the network's server, `hive network enrol-link` makes a link for
 // more devices with the admin key `hive-net serve` keeps in its data folder.
 import { describe, expect, test } from "bun:test";
@@ -28,9 +28,6 @@ describe("hive network", () => {
 
     let r = hive(["network", "show", "--json"], { env });
     expect(data<{ builtin: string }>(r).builtin).toBe("local");
-    r = hive(["network", "use", "hosted", "--json"], { env });
-    expect(data<{ profile: { name: string } }>(r).profile.name).toBe("hivemind");
-    expect(fs.readFileSync(path.join(tmp, "network", "profile"), "utf8").trim()).toBe("hosted");
 
     const admin = newSeed();
     r = hive(["network", "use", link("Example Corp", admin), "--json"], { env });
