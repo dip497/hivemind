@@ -6,7 +6,7 @@ import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } 
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
-import type { AgentAnswer, AgentChange, Answerer, AgentChanges, AgentEvent, AgentItem, ConversationEntry, Links, PipeChange, SpawnChange, StartAgent, Startable, StatusChange, TileOpened } from "./agents.js";
+import type { AgentAnswer, AgentChange, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, Links, PipeChange, SpawnChange, StartAgent, Startable, StatusChange, TileOpened } from "./agents.js";
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
 import type { JoinQuestion, JoinRequests, PersonHere } from "./people.js";
 import type { ClientGrant, NewGrant } from "./grants.js";
@@ -126,6 +126,46 @@ export interface WorkspaceMethods {
    *  and the session; then each `agent.said` as it is written, from the start of each session it
    *  begins since, until the connection goes. `session` is left out for an agent with none. */
   "agent.conversation": (tile: string, cursor?: number, session?: string) => { entries: ConversationEntry[]; cursor: number; session?: string };
+  /** (0.23) Name the tile `tile`: one line, what every surface shows and the control plane calls it. */
+  "agent.rename": (tile: string, name: string) => { name: string };
+  /** (0.23) Type keys into the agent in `tile` by name (`Down`, `Enter`, `Escape`, `C-c`) or as
+   *  text, each a moment after the last, as answering a picker on its screen takes. */
+  "agent.keys": (tile: string, keys: string[]) => { keys: number };
+  /** (0.23) The agent's reply to the turn after the last message it was sent, waiting for it up to
+   *  `timeoutMs` (2 minutes when not given). `UNSUPPORTED` for an agent that says no turn end. */
+  "agent.read": (tile: string, timeoutMs?: number) => AgentRead;
+  /** (0.23) The sessions `program` keeps in `place` (the workspace's folder or one of its
+   *  worktrees), newest first, `limit` of them at most. */
+  "agent.sessions": (place: string, program: string, limit?: number) => AgentSessions;
+  /** (0.23) Open a tool's tile in the workspace at `repo`: the tool by its id
+   *  (`owner/name/tool`), in `frame` if given, at `url` for one that shows a page. */
+  "tool.open": (repo: string, tool: { tool: string; frame?: string; url?: string }) => { tile: string };
+  /** (0.23) Pipe the replies of the agent in `src` to the one in `dst`, as its next prompts. */
+  "link.connect": (src: string, dst: string) => void;
+  /** (0.23) Stop piping `src`'s replies to `dst`, or to every agent when none is named. */
+  "link.disconnect": (src: string, dst?: string) => void;
+  /** (0.23) The person's, on the drive socket: what only this machine's windows and files do.
+   *  A view event for the view shown (`name` dotted, `data` JSON), from `view` if given. */
+  "view.emit": (name: string, data?: unknown, view?: string) => unknown;
+  /** The commands the plugins running in a window offer. */
+  "plugin.commands": () => unknown;
+  /** Get a plugin running: `tool:owner/name`, `widget:@owner/name` or `view:id`. */
+  "plugin.open": (plugin: string) => unknown;
+  /** Run one of a plugin's commands, and answer what it answered. */
+  "plugin.call": (plugin: string, command: string, args?: unknown, tile?: string) => unknown;
+  /** Bring a tile into view and give it the keyboard. */
+  "tile.focus": (tile: string) => unknown;
+  /** The installed views, agents, widgets or tools changed on disk: read them again. */
+  "views.rescan": () => unknown;
+  "agents.rescan": () => unknown;
+  "widgets.rescan": () => unknown;
+  "tools.rescan": () => unknown;
+  /** `settings.json` changed on disk: read it again. */
+  "settings.reload": () => unknown;
+  /** The workspaces this machine holds, with each one's id once it has one. */
+  "host.status": () => { workspaces: Array<{ repo: string; workspace: string | null }> };
+  /** Join a workspace someone shared, by its link. */
+  "host.join": (link: string) => unknown;
   /** The views installed on this device whose manifest says they work on a phone (P8). */
   "view.list": (workspace?: string, screen?: "desktop") => ViewListing[];
   /** One of view `id`'s files, at `path` inside its package, 4 MiB at most, and the policy to serve

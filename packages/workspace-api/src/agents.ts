@@ -98,6 +98,23 @@ export interface AgentChanges {
   truncated: boolean;
 }
 
+/** An agent's reply to the turn after the last message it was sent (0.23): `text` null when the
+ *  turn carried none (`note` says why), it is still working (`timeout`), or its tile closed. */
+export interface AgentRead {
+  text: string | null;
+  finalStatus: "turn" | "timeout" | "closed";
+  truncated: boolean;
+  note?: string;
+}
+
+/** The sessions an agent keeps in a folder, newest first (0.23). */
+export interface AgentSessions {
+  agent: string;
+  /** Whether `agent.start`'s `resume` can go on with one. */
+  resumable: boolean;
+  sessions: Array<{ id: string; cwd?: string; title?: string; prompt?: string; updated?: number }>;
+}
+
 /** Every link there is now. */
 export interface Links {
   pipes: Array<{ src: string; dst: string }>;

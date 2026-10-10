@@ -16,11 +16,12 @@ import type { AuditLog } from "./audit-log.js";
  *  a person at this machine, outside any tile; or someone on another device, reaching a workspace
  *  shared from here (M1), named by their person and device keys, with what their access allows.
  *  A program the person let drive a workspace is a peer too, held to its grant: `client` is the
- *  grant's name, and its person and device are `client:<grant id>`. */
+ *  grant's name, and its person and device are `client:<grant id>`. An agent on the drive socket
+ *  is a peer of its own workspace: `tile` is its tile, as are its person and device. */
 export type Actor =
   | { kind: "tile"; tile: string }
   | { kind: "person" }
-  | { kind: "peer"; person: string; device: string; access: Access; client?: string };
+  | { kind: "peer"; person: string; device: string; access: Access; client?: string; tile?: string };
 
 /** What is asked. `R` is what carrying it out returns. */
 export interface Intent<R = unknown> {

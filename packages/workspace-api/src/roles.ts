@@ -66,6 +66,15 @@ const LEAST: Record<string, Role> = {
   "frame.open": "agents",
   "frame.close": "agents",
   "agent.interrupt": "agents",
+  // Naming an agent, typing keys to it and piping one's replies to another drive it; reading its
+  // reply and the sessions it keeps see it; opening a tool's tile edits the board (0.23).
+  "agent.rename": "agents",
+  "agent.keys": "agents",
+  "link.connect": "agents",
+  "link.disconnect": "agents",
+  "agent.read": "view",
+  "agent.sessions": "view",
+  "tool.open": "edit",
   "agent.close": "agents",
   "terminal.open": "agents",
   "terminal.close": "agents",

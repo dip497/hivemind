@@ -491,7 +491,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       id: mintId(`tile-${kind.replace(/[^A-Za-z0-9-]/g, "")}`), kind,
       label: `${tool.label} #${nextOrdinal(ws.tiles.map((t) => t.label), (n) => `${tool.label} #${n}`)}`,
       ...(url ? { url } : {}),
-    }), { background: false });
+    }), { background: false, ...(typeof p.repo === "string" ? { repo: p.repo } : {}) });
     return { tileId };
   }
 

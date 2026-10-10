@@ -25,6 +25,7 @@ import { DaemonEndpoint, REATTACH_RESET } from "@hivemind/agent-host/daemon-endp
 import { hcpSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { ipcPath } from "@hivemind/core/ipc";
 import { serveDrive } from "./drive.js";
+import { controlApi } from "./control-api.js";
 import { Grants, grantsDomain } from "./grants.js";
 import { frameWorktrees, framesDomain } from "./frames.js";
 import { worktreeCreate, worktreeList, worktreeRemove } from "./git-adapter.js";
@@ -325,6 +326,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       close: (bare) => control.close(bare),
       folderOf: (bare) => runsIn(heldBoards(store), bare),
     }),
+    // Naming, keys, replies, sessions, tools and pipes, and the person's machine methods (0.23).
+    controlApi({ control: () => control }),
     // What an agent here and the person say to each other, from its session file, as it is
     // written (M5, spec/agents.md "Conversation").
     conversations({ transcriptOf: (bare) => transcriptOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR)) }),

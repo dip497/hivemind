@@ -54,9 +54,9 @@ export interface PeerOf {
 const refused = (message: string): Answer => ({ error: { code: "FORBIDDEN", message } });
 
 /** Methods and notices whose first param names a tile. */
-const BY_TILE = /^(terminal\.(write|show|resize|flow|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.(answer|send|interrupt|close|diff|conversation))$/;
+const BY_TILE = /^(terminal\.(write|show|resize|flow|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.(answer|send|interrupt|close|diff|conversation|rename|keys|read)|link\.(connect|disconnect))$/;
 /** Methods and notices whose first param names the workspace, or a place in it (its `.hivemind`). */
-const BY_WORKSPACE = /^(store|git|worktree|file|issue|review|people|frame)\.|^(plan\.list|agent\.(list|since)|presence\.set|widget\.(all|draw|run|release|asset|packages|press)|agent\.(startable|start))$/;
+const BY_WORKSPACE = /^(store|git|worktree|file|issue|review|people|frame)\.|^(plan\.list|agent\.(list|since|sessions)|presence\.set|widget\.(all|draw|run|release|asset|packages|press)|agent\.(startable|start)|tool\.open)$/;
 /** Methods whose second param names the workspace, after what they open there (a view, P8). */
 const BY_WORKSPACE_SECOND = /^view\.open$/;
 /** The workspace a call names, if it names one. A desktop's view listing and files name it
@@ -249,6 +249,7 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
       return "name this workspace by its id: nothing else of the host's is open to you";
     }
     if (method === "terminal.watchActivity" && Array.isArray(params[0]) && !params[0].every((t) => peer.holds(String(t)))) return "a tile there is not of this workspace";
+    if ((method === "link.connect" || (method === "link.disconnect" && params[1] != null)) && !peer.holds(String(params[1]))) return `${String(params[1])} is not a tile of this workspace`;
     return null;
   };
 

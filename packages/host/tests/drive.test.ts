@@ -180,7 +180,7 @@ test("an agent's token drives the workspace its tile is in, as that agent at the
   const agent = await connect({ token: tileToken(INSTALL, "hm:tile-a") });
   assert.deepEqual((await agent.next((m) => "hello" in m)).hello, { api: "0.23", as: { agent: "tile-a", role: "agents", workspace: repoA } });
   const started = await agent.call("agent.start", [repoA, { program: "claude" }]);
-  assert.deepEqual((started.result as { by: unknown }).by, { kind: "peer", person: "tile-a", device: "tile-a", access: "agents", client: "the tile-a agent" });
+  assert.deepEqual((started.result as { by: unknown }).by, { kind: "peer", person: "tile-a", device: "tile-a", access: "agents", client: "the tile-a agent", tile: "tile-a" });
   assert.equal(((await agent.call("git.push", [repoA])).error as { code: string }).code, "FORBIDDEN");
   assert.equal(((await agent.call("agent.start", [repoB, { program: "claude" }])).error as { code: string }).code, "FORBIDDEN");
   // Its tile leaves the workspace: it drives nothing there any more.

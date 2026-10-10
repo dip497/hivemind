@@ -100,6 +100,7 @@ import { worktreeCreate, worktreeList, worktreeRemove } from "@hivemind/host/git
 import { answers } from "@hivemind/host/answers";
 import { answerKeys, heldBoards, manifestOf, runsIn } from "@hivemind/host/needs";
 import { agentControl } from "@hivemind/host/agent-control";
+import { controlApi } from "@hivemind/host/control-api";
 import { views } from "@hivemind/host/views";
 import { listInstalledViews } from "@hivemind/core/views";
 import { conversations, transcriptOf } from "@hivemind/host/conversations";
@@ -1293,6 +1294,8 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     close: (bare) => control.close(bare),
     folderOf: (bare) => runsIn(heldBoards(workspaceStore()), bare),
   }),
+  // Naming, keys, replies, sessions, tools and pipes, and the person's machine methods (0.23).
+  controlApi({ control: () => control }),
   // What an agent here and the person say to each other, from its session file, as it is written
   // (M5, spec/agents.md "Conversation").
   conversations({ transcriptOf: (bare) => transcriptOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)) }),

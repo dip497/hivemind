@@ -95,7 +95,7 @@ after a minute without it, and never what was typed.
 A peer names the workspace by its id, `hive://<workspaceId>`, wherever a call takes a repo (or a
 `cwd` inside it); the host reads that as its repo. A guest's call or notice about a workspace
 (`store.*`, `git.*`, `worktree.*`, `file.*`, `issue.*`, `review.*`, `people.*`,
-`presence.set`, `agent.startable`, `agent.start`, `frame.*`, and `view.open`, whose second param names it) names this one, or a place in it, and nothing else on the host: another folder, a
+`presence.set`, `agent.startable`, `agent.start`, `agent.sessions`, `tool.open`, `frame.*`, and `view.open`, whose second param names it) names this one, or a place in it, and nothing else on the host: another folder, a
 path out of it (`..`), another workspace or a machine is `FORBIDDEN` (a notice is dropped). A
 place in it is its repo or the worktree of one of its frames, wherever git put it (0.20). The
 person's own devices are the owner, there as here. What the host answers of every agent it runs
@@ -118,10 +118,10 @@ starting an agent, never sizes one, nor gives or takes a keyboard (M5). Each cal
 peer's role on the workspace (design §6) before it runs, and one the role does not allow is
 `FORBIDDEN` (a notice is dropped): reads, watching terminals and showing a community view are anyone's with access; typing
 into and resizing a terminal, and asking for its keyboard or handing it on, *Can use terminals*;
-handing a branch of one's own to the host (`git.handOff`, M4), *Can edit board*;
+handing a branch of one's own to the host (`git.handOff`, M4), and opening a tool's tile (`tool.open`, 0.23), *Can edit board*;
 answering an agent's plan or what it waits on (`agent.answer`), sending one a message
 (`agent.send`), starting one, interrupting its turn and closing it (`agent.start`,
-`agent.interrupt`, `agent.close`, 0.11), and opening and closing tiles, *Can drive agents*; anything else is the
+`agent.interrupt`, `agent.close`, 0.11), naming one, typing keys to it and piping one's replies to another (`agent.rename`, `agent.keys`, `link.*`, 0.23; both ends of a pipe its workspace's), and opening and closing tiles, *Can drive agents*; anything else is the
 owner's (taking a keyboard back among them, and the `store.*` writes). A peer edits the board
 through the workspace document's own sync (the connection's `sync` stream), where the host takes
 only what the peer's role allows, and drops a change that does more, whole: moving, sizing,
@@ -218,6 +218,8 @@ log.
 
 | `status.all` | | `[{tileId, status}]`, every agent session's status (`spec/status.md`) | read |
 | `link.list` | | `{pipes: [{src, dst}], spawns: [{parent, child}]}` | read |
+| `link.connect` | `src`, `dst` | `null`: each reply of the agent in `src` is handed to the one in `dst` as its next prompt, as `hive ctl connect` (0.23) | target `src->dst` |
+| `link.disconnect` | `src`, `dst`? | `null`: that pipe gone, or every pipe out of `src` (0.23) | target `src` |
 | `agent.list` | `repo` | `{seq, agents}`: the workspace's agents as they are now, and the number of the last change (0.18); a plan an agent waits on a review of is in its `waiting` (`plan`), answered with `agent.answer` (0.21: `plan.list`, `plan.decide` and the `plan.*` events are gone); each with the session it is in, `session`, when its agent has said (0.22, `agents.md` 0.6) | read |
 | `agent.since` | `repo`, `seq` | `{seq, changes, events}`: each change and event after `seq`, or null when the host no longer has them all: list again (0.18) | read |
 | `widget.all` | `repo` | what each widget in the workspace last drew, by its id: never stored, drawn again when its code next runs (0.18) | read |
@@ -233,6 +235,11 @@ log.
 | `agent.interrupt` | `tile` | `{interrupted}`: the keys its manifest says interrupt its turn, typed a moment apart, while it works or waits (`agents.md`, "Stopping", 0.11) | target the agent's tile |
 | `agent.close` | `tile` | `{closed}`: its session ended and its tile taken off its board, as `hive ctl close` (`agents.md`, 0.11) | target the agent's tile |
 | `agent.diff` | `tile` | `{files, patch, truncated}`: what it changed in the folder it runs in, against its last commit (`agents.md`, "Changes", 0.11) | — |
+| `agent.rename` | `tile`, `name` | `{name}`: what it is called now, on its tile and to the agents it talks to; an empty `name` takes it away, so it is called what its agent says again (0.23) | target the agent's tile |
+| `agent.keys` | `tile`, `keys` | `{keys}`: each key name (`Enter`, `Escape`, `Up`, `C-c`, …) or text typed into its terminal a moment after the last, how many there were (0.23) | target the agent's tile |
+| `agent.read` | `tile`, `timeoutMs`? | `{text, finalStatus, truncated, note?}`: its reply at the end of its next turn (`finalStatus` `turn`), or what it shows when it closes (`closed`) or `timeoutMs` passes (`timeout`), as `hive ctl read` (0.23) | — |
+| `agent.sessions` | `place`, `program`, `limit`? | `{agent, resumable, sessions}`: the sessions `program` keeps for that folder, newest first, each one `agent.start`'s `resume` takes; `resumable` false when it says none (0.23) | read |
+| `tool.open` | `repo`, `{tool, frame?, url?}` | `{tile}`: an installed tool's tile (`tool` its id) placed on the board, in `frame` or the one in view (0.23) | target the new tile |
 | `view.list` | | `[{id, name, version, entry, page}]`: the community views installed on this device whose manifest says `"phone": true` (below, 0.12), and the page a screen loads to show each (0.14) | read |
 | `view.file` | `id`, `path` | `{data, type, csp}`: one of the view's files as the app serves its windows (below), `path` inside its package (a link out of it, or `..`, is `BAD_REQUEST`), its bytes base64, its type, and the policy to serve it under (0.14); 4 MiB at most | read |
 | `view.open` | `id`, `repo`, `screen`?, `surfaces`? | `{session}`: the view opened on the workspace for this caller, on its screen (below; `screen` 0.14); `surfaces`: the screen places live surfaces itself (0.15) | — |
@@ -268,6 +275,21 @@ Nobody answering within 170 s is a no. A workspace whose rule is `invite` asks n
 | `store.import` | `repo`, `{core?, views?}` | `null`: what the client kept before the store; the host keeps only what it lacks | likewise |
 | `store.undo` | `repo` | whether the client's last board edit was taken back | likewise |
 | `store.redo` | `repo` | whether it was made again | likewise |
+
+The person's own machine, theirs alone at a window or on the drive socket (0.23): no peer, program
+or agent asks these.
+
+| Method | Params | Result | Recorded as |
+|---|---|---|---|
+| `host.status` | | `{workspaces: [{repo, workspace}]}`: what this host serves, each by its folder and its id | read |
+| `host.join` | `link` | what joining a workspace by its link answers, as `hive join` | target the link's workspace |
+| `tile.focus` | `tile` | `null`: the tile brought forward in the window showing it | — |
+| `plugin.commands` | | the commands each plugin running in a window offers | read |
+| `plugin.open` | `plugin` (`tool:<owner>/<name>[/<tool>]`, `widget:@<owner>/<name>` or `view:<id>`) | what opening it answers: a tool's tile placed, a widget added to the board, a view switched to, so its commands can be called | target the plugin |
+| `plugin.call` | `plugin`, `command`, `args`?, `tile`? | what the plugin's command answers, run in a window | target the plugin |
+| `view.emit` | `name`, `data`?, `view`? | `null`: the event sent to the views open in the windows, or to `view`'s alone | — |
+| `views.rescan`, `agents.rescan`, `widgets.rescan`, `tools.rescan` | | `null`: those installed read again from disk | — |
+| `settings.reload` | | `null`: `settings.json` read again | — |
 
 A terminal is named by its session id, `hm:<tile>`; the audit log names it by its tile. `pid` is -1
 when `attachOnly` finds no session.
