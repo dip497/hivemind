@@ -17,7 +17,7 @@
  * claude does, `last_assistant_message`.
  * Follow-up prompts arrive as stdin lines (`hive ctl send` types text + Enter).
  * Lines starting with "[hive]" are control-plane deliveries (reports, approvals):
- * echoed, never executed.
+ * a turn that echoes them, never executes them.
  * With FAKE_GATE set it first shows that text, as an agent shows a startup screen
  * before it takes anything, and the first line it reads only clears it.
  *
@@ -140,7 +140,15 @@ rl.on("line", (line) => {
   }
   const text = line.trim();
   if (!text) { process.stdout.write(`${provider}> `); return; }
-  if (text.startsWith("[hive]")) { process.stdout.write(`(delivered) ${text}\n${provider}> `); return; }
+  // A delivery is a prompt like any other, a turn with its hooks, as claude takes it: the
+  // control plane holds the next delivery until that turn ends.
+  if (text.startsWith("[hive]")) {
+    fire("UserPromptSubmit", { session_id: sessionId, prompt: text });
+    process.stdout.write(`(delivered) ${text}\n`);
+    fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false, last_assistant_message: "(delivered)" });
+    process.stdout.write(`${provider}> `);
+    return;
+  }
   turn(text);
 });
 rl.on("close", () => process.exit(0));
