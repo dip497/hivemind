@@ -78,7 +78,7 @@ function specOf(value: unknown): FrameSpec {
 export function framesDomain(o: FramesOptions): Domain<"frame.open" | "frame.close"> {
   /** The layout of the workspace at `repo`; an empty one when it was never saved. */
   const coreOf = (repo: string): CoreLayout => {
-    if (!o.store().repos().includes(repo)) throw new ApiError("BAD_REQUEST", `no workspace is open at ${repo}`);
+    if (!o.store().repos().includes(repo)) throw new ApiError("NOT_FOUND", `no workspace is open at ${repo}`);
     return o.store().getCore(repo) ?? { frames: [], tiles: [], tileNames: {}, editorTabs: {}, frameOf: {} };
   };
   /** The frame bound to the folder `folder`, if one is. */
@@ -104,7 +104,7 @@ export function framesDomain(o: FramesOptions): Domain<"frame.open" | "frame.clo
         if (!path.isAbsolute(r)) throw new ApiError("BAD_REQUEST", "frames are opened this way in workspaces on this machine");
         const s = specOf(spec);
         const core = coreOf(r);
-        if (s.parent !== undefined && !core.frames.some((f) => f.id === s.parent)) throw new ApiError("BAD_REQUEST", `no frame ${s.parent} in this workspace`);
+        if (s.parent !== undefined && !core.frames.some((f) => f.id === s.parent)) throw new ApiError("NOT_FOUND", `no frame ${s.parent} in this workspace`);
         if (s.path !== undefined) {
           if (!mayName(from, r, s.path)) throw new ApiError("FORBIDDEN", "that folder is not of this workspace");
           if (!fs.statSync(s.path, { throwIfNoEntry: false })?.isDirectory()) throw new ApiError("BAD_REQUEST", `${s.path} is not a folder`);
@@ -140,7 +140,7 @@ export function framesDomain(o: FramesOptions): Domain<"frame.open" | "frame.clo
         const force = flag(c.force, "opts.force") ?? false;
         const core = coreOf(r);
         const frame = core.frames.find((f) => f.id === id);
-        if (!frame) throw new ApiError("BAD_REQUEST", `no frame ${id} in this workspace`);
+        if (!frame) throw new ApiError("NOT_FOUND", `no frame ${id} in this workspace`);
         const under = new Set([id]);
         for (let grew = true; grew;) {
           grew = false;

@@ -98,7 +98,7 @@ test("a tile we never heard a turn from (codex/opencode — no hooks) delivers i
   assert.deepEqual(writes, ["report", "\r"], "unknown ⇒ idle: no regression for hookless agents");
 });
 
-test("dead tile while idle reports failure (so agent.send can raise TILE_NOT_FOUND)", () => {
+test("dead tile while idle reports failure (so agent.send can raise NOT_FOUND)", () => {
   const { mb } = harness(false);
   assert.equal(mb.deliver(PID, "x"), false);
 });

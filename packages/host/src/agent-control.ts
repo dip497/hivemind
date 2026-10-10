@@ -79,7 +79,7 @@ function startOf(value: unknown, programs: readonly AgentProviderDef[], core: Co
   const program = text(s.program, "start.program");
   if (!programs.some((p) => p.id === program)) throw new ApiError("BAD_REQUEST", `${program} is not an agent this device starts`);
   const frame = s.frame == null ? undefined : text(s.frame, "start.frame");
-  if (frame !== undefined && !core.frames.some((f) => f.id === frame)) throw new ApiError("BAD_REQUEST", `no frame ${frame} in this workspace`);
+  if (frame !== undefined && !core.frames.some((f) => f.id === frame)) throw new ApiError("NOT_FOUND", `no frame ${frame} in this workspace`);
   let prompt: string | undefined;
   if (s.prompt != null) {
     prompt = written(s.prompt, "start.prompt");
@@ -111,7 +111,7 @@ const here = (folder: string): boolean => !/^[a-z][a-z0-9+.-]*:\/\//i.test(folde
 export function agentControl(o: AgentControlOptions): Domain<"agent.startable" | "agent.start" | "agent.interrupt" | "agent.close" | "agent.diff"> {
   /** A workspace's board; an empty one when it was never saved. */
   const board = (repo: string): CoreLayout => {
-    if (!o.repos().includes(repo)) throw new ApiError("BAD_REQUEST", "no such workspace here");
+    if (!o.repos().includes(repo)) throw new ApiError("NOT_FOUND", "no such workspace here");
     return o.core(repo) ?? { frames: [], tiles: [], tileNames: {}, editorTabs: {}, frameOf: {} };
   };
   return {
@@ -143,7 +143,7 @@ export function agentControl(o: AgentControlOptions): Domain<"agent.startable" |
       "agent.close": async (_from, tile) => ({ closed: await o.close(toBareId(text(tile, "tile"))) }),
       "agent.diff": async (_from, tile): Promise<Changes> => {
         const folder = o.folderOf(toBareId(text(tile, "tile")));
-        if (folder === null) throw new ApiError("BAD_REQUEST", "no such agent here");
+        if (folder === null) throw new ApiError("NOT_FOUND", "no such agent here");
         if (!here(folder)) throw new ApiError("FAILED", "this agent runs on another machine: what it changed is read there");
         return changesIn(folder);
       },

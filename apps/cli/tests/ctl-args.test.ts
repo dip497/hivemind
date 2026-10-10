@@ -75,12 +75,14 @@ describe("workflowParams", () => {
 describe("exit codes", () => {
   test("server codes map to stable exit statuses", () => {
     expect(exitCodeFor("BAD_REQUEST")).toBe(EXIT.usage);
-    expect(exitCodeFor("APP_NO_RENDERER")).toBe(EXIT.unavailable);
+    expect(exitCodeFor("UNAVAILABLE")).toBe(EXIT.unavailable);
     expect(exitCodeFor("TIMEOUT")).toBe(EXIT.timeout);
-    expect(exitCodeFor("TILE_NOT_FOUND")).toBe(EXIT.notFound);
-    expect(exitCodeFor("UNAUTHORIZED")).toBe(EXIT.unauthorized);
+    expect(exitCodeFor("NOT_FOUND")).toBe(EXIT.notFound);
+    expect(exitCodeFor("FORBIDDEN")).toBe(EXIT.unauthorized);
     expect(exitCodeFor("RATE_LIMITED")).toBe(EXIT.refused);
-    expect(exitCodeFor("INTERNAL")).toBe(EXIT.error);
+    expect(exitCodeFor("DEPTH_EXCEEDED")).toBe(EXIT.refused);
+    expect(exitCodeFor("UNSUPPORTED")).toBe(EXIT.refused);
+    expect(exitCodeFor("FAILED")).toBe(EXIT.error);
   });
 });
 

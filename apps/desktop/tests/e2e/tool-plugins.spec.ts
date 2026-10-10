@@ -70,7 +70,7 @@ test("an added tool opens as a tile drawn by its own code, and its settings reac
 });
 
 test("a tool that is off cannot be opened and its code is not served; switched on, it runs", async () => {
-  expect(hive("ctl", "open-tool", "dip497/git-history/history").data.code).toBe("UNAUTHORIZED");
+  expect(hive("ctl", "open-tool", "dip497/git-history/history").data.code).toBe("FORBIDDEN");
   // Whether the window can import its module: a fresh URL each time, as a failed import is remembered.
   const served = (url: string) => page.evaluate((u) => import(/* @vite-ignore */ `${u}?probe=${Math.random()}`).then(() => "served", () => "refused"), url);
   expect(await served("hm-plugin://dip497--git-history/index.js")).toBe("refused");

@@ -55,7 +55,7 @@ import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { agents } from "./agents.js";
 import { ControlPlane } from "./control/plane.js";
-import { HcpError } from "./control/protocol.js";
+import { ApiError } from "@hivemind/workspace-api/protocol";
 import { daemonSessions } from "./daemon-sessions.js";
 import { deviceSessions, onDevices, participantAt } from "./device-sessions.js";
 import { Hosting } from "./hosting.js";
@@ -374,7 +374,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     ready: () => catalog.current(),
     methods: () => ({
       reported: (tile, message) => agentFeed?.report(toBareId(tile), message),
-      callRenderer: () => Promise.reject(new HcpError("APP_NO_RENDERER", "there is no window here: hive host runs none")),
+      callRenderer: () => Promise.reject(new ApiError("UNAVAILABLE", "there is no window here: hive host runs none")),
       reloadSettings: () => catalog.current().then(() => ({ ok: true })),
       defaultAgentId: () => preferredAgent(catalog.settings().agents.defaultAgent, (d) => !!findBin(d.bin))?.id,
       agentInstalled: (def) => !!findBin(def.bin),

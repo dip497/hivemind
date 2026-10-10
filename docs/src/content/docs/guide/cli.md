@@ -285,6 +285,6 @@ hive plugins disable tool:hivemind/web
 ```
 
 `open-tool` accepts `--frame <frame-id>`. Browser URLs must use HTTP/HTTPS or
-`about:blank`. A disabled Browser returns `UNAUTHORIZED`; disabling does not close
+`about:blank`. A disabled Browser returns `FORBIDDEN`; disabling does not close
 existing browser panels. Fresh profiles start with Browser disabled, while older
 version-1 settings preserve its availability during migration.

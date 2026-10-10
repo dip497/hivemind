@@ -46,7 +46,7 @@ test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: tru
 test("Browser opt-in is shared by Settings, shortcuts, CLI, and view commands; disabling preserves open work", async () => {
   await expect(page.getByTitle(/^Browser  /)).toHaveCount(0);
   expect(await page.evaluate(() => performance.getEntriesByType("resource").some((r) => /\/BrowserTile-/.test(r.name)))).toBe(false);
-  expect(hive("ctl", "open-tool", "hivemind/web/browser", "--url", "about:blank").data.code).toBe("UNAUTHORIZED");
+  expect(hive("ctl", "open-tool", "hivemind/web/browser", "--url", "about:blank").data.code).toBe("FORBIDDEN");
   await page.keyboard.press("7");
   await expect(page.getByText("Browser is disabled. Switch it on in Settings ▸ Plugins.")).toBeVisible();
   await expect(browsers()).toHaveCount(0);
@@ -67,7 +67,7 @@ test("Browser opt-in is shared by Settings, shortcuts, CLI, and view commands; d
   await expect(page.getByTitle(/^Browser  /)).toHaveCount(0);
   await expect(browsers()).toHaveCount(1);
   expect(await page.locator("webview").evaluate((element, old) => element === old, original)).toBe(true);
-  expect(hive("ctl", "open-tool", "hivemind/web/browser").data.code).toBe("UNAUTHORIZED");
+  expect(hive("ctl", "open-tool", "hivemind/web/browser").data.code).toBe("FORBIDDEN");
   const frameId = await page.locator(".react-flow__node-frame").first().getAttribute("data-id");
   await page.evaluate((frameId) => window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId, kind: "browser" } })), frameId);
   await expect(browsers()).toHaveCount(1);
@@ -101,5 +101,5 @@ test("a disabled Browser restores existing panels without enabling new ones", as
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
   await expect(browsers()).toHaveCount(1);
   await expect(page.getByTitle(/^Browser  /)).toHaveCount(0);
-  expect(hive("ctl", "open-tool", "hivemind/web/browser").data.code).toBe("UNAUTHORIZED");
+  expect(hive("ctl", "open-tool", "hivemind/web/browser").data.code).toBe("FORBIDDEN");
 });

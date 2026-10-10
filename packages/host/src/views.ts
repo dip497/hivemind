@@ -212,7 +212,7 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
   const viewNamed = async (id: unknown, repo?: string) => {
     const name = text(id, "view");
     const view = (await availableViews(repo)).find((v) => v.id === name);
-    if (!view) throw new ApiError("BAD_REQUEST", `no view ${name} here`);
+    if (!view) throw new ApiError("NOT_FOUND", `no view ${name} here`);
     // Asked for with no workspace, it is a phone asking.
     if (!repo && !view.manifest.phone) throw new ApiError("BAD_REQUEST", `no view ${name} here works on a phone`);
     return view;
@@ -364,7 +364,7 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
         const shown = screen == null ? UNSAID : screenOf(screen);
         if (!view.manifest.phone && shown.device?.compact !== false) throw new ApiError("BAD_REQUEST", `no view ${view.id} here works on a phone`);
         if (surfaces != null && typeof surfaces !== "boolean") throw new ApiError("BAD_REQUEST", "surfaces is true or false");
-        if (!o.store().getCore(repo)) throw new ApiError("BAD_REQUEST", "no such workspace here");
+        if (!o.store().getCore(repo)) throw new ApiError("NOT_FOUND", "no such workspace here");
         if (view.manifest.protocol > PROTOCOL_VERSION) {
           throw new ApiError("BAD_REQUEST", `${view.id} speaks view protocol ${view.manifest.protocol}, and this device ${PROTOCOL_VERSION}`);
         }
@@ -419,14 +419,14 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
     notices: {
       "view.post": (from, session, message) => {
         const s = sessionOf(from, session);
-        if (!s) throw new ApiError("BAD_REQUEST", "no such view session");
+        if (!s) throw new ApiError("NOT_FOUND", "no such view session");
         s.link.handle(message);
       },
       // The screen changed: a ready view is told what did, as the window tells its iframe; one not
       // ready yet is told it all in `hello`.
       "view.screen": (from, session, screen) => {
         const s = sessionOf(from, session);
-        if (!s) throw new ApiError("BAD_REQUEST", "no such view session");
+        if (!s) throw new ApiError("NOT_FOUND", "no such view session");
         const [was, now] = [s.screen, screenOf(screen)];
         s.screen = now;
         if (!s.link.stats.ready) return;

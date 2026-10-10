@@ -195,8 +195,8 @@ test("an approval is answered by the supervisor it was asked of, or a person —
 
   const question = dispatch("agent.await_approval", { tool_name: "Bash", tool_input: { command: "rm -rf build" } }, fromTile(worker));
   const reqId = await asked(0);
-  await assert.rejects(dispatch("agent.approve", { reqId, decision: "allow" }, fromTile(worker)), { code: "UNAUTHORIZED" });
-  await assert.rejects(dispatch("agent.approve", { reqId, decision: "always" }, fromTile(other)), { code: "UNAUTHORIZED" });
+  await assert.rejects(dispatch("agent.approve", { reqId, decision: "allow" }, fromTile(worker)), { code: "FORBIDDEN" });
+  await assert.rejects(dispatch("agent.approve", { reqId, decision: "always" }, fromTile(other)), { code: "FORBIDDEN" });
   // Refused answers change nothing: it is still the supervisor's to answer.
   await dispatch("agent.approve", { reqId, decision: "deny" }, fromTile("tile-lead"));
   assert.deepEqual(await question, { decision: "deny" });

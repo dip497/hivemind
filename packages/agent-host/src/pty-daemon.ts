@@ -717,10 +717,10 @@ if (STANDALONE) {
       }
       if (m.method === "initialize") {
         authed = !!holderOf(installToken, params.token);
-        if (!authed) return answer?.(m.id, { error: { code: -32000, message: "bad or missing token", data: { code: "UNAUTHORIZED" } } });
+        if (!authed) return answer?.(m.id, { error: { code: -32000, message: "bad or missing token", data: { code: "FORBIDDEN" } } });
         return answer?.(m.id, { result: { protocolVersion: 2, capabilities: { status: false } } });
       }
-      if (!authed) return answer?.(m.id, { error: { code: -32000, message: "call initialize with the token first", data: { code: "UNAUTHORIZED" } } });
+      if (!authed) return answer?.(m.id, { error: { code: -32000, message: "call initialize with the token first", data: { code: "FORBIDDEN" } } });
       if (m.method === "agent.reply") {
         reported(m.method, m.params, heard);
         return answer?.(m.id, { result: { ok: true } });

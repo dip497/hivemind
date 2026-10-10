@@ -78,7 +78,7 @@ test("each verb with an effect is recorded with who asked, what, of what and how
   await assert.rejects(dispatch("view.emit", { name: "ci.build" }, PERSON));
   await dispatch("tile.close", { tileId: w }, LEAD);
   // One that fails is recorded too, with its error's code.
-  await assert.rejects(dispatch("tile.close", { tileId: "tile-ghost" }, PERSON), { code: "TILE_NOT_FOUND" });
+  await assert.rejects(dispatch("tile.close", { tileId: "tile-ghost" }, PERSON), { code: "NOT_FOUND" });
 
   assert.deepEqual(lines(), [
     { actor: lead, verb: "tile.spawn_agent", target: w, outcome: "ok" },
@@ -94,7 +94,7 @@ test("each verb with an effect is recorded with who asked, what, of what and how
     { actor: person, verb: "agents.rescan", outcome: "error" },
     { actor: { kind: "tile", tile: w }, verb: "review.open", detail: "allow", outcome: "ok" },
     { actor: lead, verb: "tile.close", target: w, outcome: "ok" },
-    { actor: person, verb: "tile.close", target: "tile-ghost", outcome: "error", code: "TILE_NOT_FOUND" },
+    { actor: person, verb: "tile.close", target: "tile-ghost", outcome: "error", code: "NOT_FOUND" },
   ]);
 });
 
@@ -141,8 +141,8 @@ test("a workflow's spawns and closes are recorded as its caller's, one by one, a
 test("a tile that names another as its caller is refused, which is recorded, and nothing happens; a person may act for any tile", async () => {
   const { dispatch, ws, lines } = dispatcher();
   const worker = fromTile("tile-worker");
-  await assert.rejects(dispatch("agent.report", { callerTile: "hm:tile-other", message: "forged" }, worker), { code: "UNAUTHORIZED" });
-  await assert.rejects(dispatch("tile.spawn_agent", { agent: "claude", callerTile: "tile-other" }, worker), { code: "UNAUTHORIZED" });
+  await assert.rejects(dispatch("agent.report", { callerTile: "hm:tile-other", message: "forged" }, worker), { code: "FORBIDDEN" });
+  await assert.rejects(dispatch("tile.spawn_agent", { agent: "claude", callerTile: "tile-other" }, worker), { code: "FORBIDDEN" });
   assert.deepEqual(ws.announced, [], "nothing was spawned");
   // Its own id, however it is spelled, is itself.
   await dispatch("tile.list", { callerTile: "hm:tile-worker" }, worker);

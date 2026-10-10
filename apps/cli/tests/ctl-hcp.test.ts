@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { startHcpServer, type HcpServer } from "@hivemind/host/control/hcp-server";
 import { OutputRecorder } from "@hivemind/host/control/output-recorder";
-import { HcpError } from "@hivemind/host/control/protocol";
+import { ApiError } from "@hivemind/workspace-api/protocol";
 import { hiveAsync as hive } from "./helpers.js";
 import { fixtureXDG } from "./agents-fixtures.js";
 
@@ -42,7 +42,7 @@ beforeAll(async () => {
       calls.push({ method, params: p });
       switch (method) {
         case "tile.list":
-          if (p.frame === "nothing") throw new HcpError("NOT_FOUND", "no frame answers to \"nothing\"");
+          if (p.frame === "nothing") throw new ApiError("NOT_FOUND", "no frame answers to \"nothing\"");
           return { frames: [{ id: "f1", tiles: [{ tileId: "w-1", status: "idle" }] }] };
         case "tile.list_frames": return { frames: [] };
         case "tile.spawn_agent": return { tileId: "w-2" };
@@ -54,18 +54,18 @@ beforeAll(async () => {
           await new Promise((r) => setTimeout(r, Math.min(t, 50)));
           return { text: null, finalStatus: "timeout", truncated: false, note: "agent still working — no completed turn within timeout" };
         }
-        case "tile.close": throw new HcpError("TILE_NOT_FOUND", `no tile ${String(p.tileId)}`);
+        case "tile.close": throw new ApiError("NOT_FOUND", `no tile ${String(p.tileId)}`);
         case "view.emit":
-          if (p.name === "old.app") throw new HcpError("UNKNOWN_METHOD", "unknown method: view.emit");
+          if (p.name === "old.app") throw new ApiError("UNKNOWN_METHOD", "unknown method: view.emit");
           if (p.view === "@a/other") return { ok: true, id: "ev_2", delivered: false, view: "@a/valley", reason: "not-active", buffered: true };
           return p.name === "ci.build" ? { ok: true, id: "ev_1", delivered: true, view: "@a/valley" } : { ok: true, id: "ev_3", delivered: false, view: "canvas", reason: "no-listener", buffered: true };
         case "plugin.commands": return { plugins: [{ plugin: "@a/progress", kind: "widget", instance: "w1", label: "Progress", commands: [{ name: "add", description: "Add a step.", args: '{ "text": string }' }] }] };
         case "plugin.call":
-          if (p.command === "check") throw new HcpError("INTERNAL", "there is no step 7");
+          if (p.command === "check") throw new ApiError("FAILED", "there is no step 7");
           return { result: { echoed: p.args, tile: p.tile ?? null } };
-        case "agent.send": if (!p.text) throw new HcpError("BAD_REQUEST", "text required"); return { ok: true };
+        case "agent.send": if (!p.text) throw new ApiError("BAD_REQUEST", "text required"); return { ok: true };
         case "workflow.run": return { shape: p.shape, items: (p.items as string[]).map((item) => ({ item, tileId: "w-x", status: "ok", text: "did " + item })) };
-        default: throw new HcpError("UNKNOWN_METHOD", method);
+        default: throw new ApiError("UNKNOWN_METHOD", method);
       }
     },
   });
@@ -113,13 +113,13 @@ describe("hive ctl over a real HCP socket", () => {
     expect(calls.findLast((c) => c.method === "agent.send")!.params).toEqual({ tileId: "w-1", text: "hi" });
   });
 
-  test("bad token → exit 6 UNAUTHORIZED; unknown tile → exit 5; bad request → exit 2", async () => {
+  test("bad token → exit 6 FORBIDDEN; unknown tile → exit 5; bad request → exit 2", async () => {
     const bad = await hive(["ctl", "list", "--json"], { env: { ...env(), HCP_TOKEN: "wrong" } });
     expect(bad.code).toBe(6);
-    expect(bad.json).toMatchObject({ ok: false, code: "UNAUTHORIZED" });
+    expect(bad.json).toMatchObject({ ok: false, code: "FORBIDDEN" });
     const nf = await hive(["ctl", "close", "ghost", "--json"], { env: env() });
     expect(nf.code).toBe(5);
-    expect(nf.json).toMatchObject({ ok: false, code: "TILE_NOT_FOUND" });
+    expect(nf.json).toMatchObject({ ok: false, code: "NOT_FOUND" });
     const br = await hive(["ctl", "send", "w-1", "", "--json"], { env: env() });
     expect(br.code).toBe(2);
     expect((br.json as { code: string }).code).toBe("BAD_REQUEST");

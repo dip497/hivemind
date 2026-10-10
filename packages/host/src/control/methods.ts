@@ -9,7 +9,8 @@
  */
 import { randomUUID } from "node:crypto";
 import { typeKeys } from "@hivemind/agent-host/keys";
-import { HcpError, type HcpCall } from "./protocol.js";
+import { ApiError } from "@hivemind/workspace-api/protocol";
+import type { HcpCall } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
 import { mintId, toPtyId as ptyId, toBareId as bareOf } from "@hivemind/workspace-api/tile-id";
@@ -36,11 +37,11 @@ export const EMIT_RATE = { perSecond: 10, burst: 30 };
 
 /** Validate `view.emit` params; throws BAD_REQUEST with the reason. */
 export function parseEmit(p: Record<string, unknown>): { name: string; data: unknown; view?: string; from: "shell" | { tileId: string } } {
-  if (!isCustomEventName(p.name)) throw new HcpError("BAD_REQUEST", "name must be dotted lowercase words (a-z, 0-9, -), at most 64 characters, not under hive. or hm.");
+  if (!isCustomEventName(p.name)) throw new ApiError("BAD_REQUEST", "name must be dotted lowercase words (a-z, 0-9, -), at most 64 characters, not under hive. or hm.");
   const data = p.data === undefined ? null : p.data;
   const problem = customDataProblem(data);
-  if (problem) throw new HcpError("BAD_REQUEST", problem);
-  if (p.view !== undefined && (typeof p.view !== "string" || p.view.length === 0 || p.view.length > 256)) throw new HcpError("BAD_REQUEST", "view must be a view id");
+  if (problem) throw new ApiError("BAD_REQUEST", problem);
+  if (p.view !== undefined && (typeof p.view !== "string" || p.view.length === 0 || p.view.length > 256)) throw new ApiError("BAD_REQUEST", "view must be a view id");
   const caller = typeof p.callerTile === "string" && p.callerTile ? bareOf(p.callerTile) : null;
   return { name: p.name, data, ...(p.view ? { view: p.view as string } : {}), from: caller ? { tileId: caller } : "shell" };
 }
@@ -131,7 +132,7 @@ export interface MethodDeps {
    *  capability checks on read/workflow. Optional: HCP-spawned tiles are
    *  tracked internally. */
   agentOf?: (bareTileId: string) => string | undefined;
-  /** Run a renderer verb (returns its result); rejects/throws HcpError on
+  /** Run a renderer verb (returns its result); rejects/throws ApiError on
    *  no-renderer / timeout. */
   callRenderer: (method: string, params: unknown, timeoutMs: number) => Promise<unknown>;
   /** Re-read settings.json (edited by the CLI) and broadcast it. */
@@ -268,7 +269,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const id = providerOf(tileId);
     const def = id ? agentById(id) : undefined;
     if (def && !def.caps.turnSignal) {
-      throw new HcpError("UNSUPPORTED", `${verb}: ${def.id} has no turn signal (${def.note ?? "scrape-only status"}) — drive it by hand or use a worker runtime: ${workerAgents().map((d) => d.id).join(", ")}`);
+      throw new ApiError("UNSUPPORTED", `${verb}: ${def.id} has no turn signal (${def.note ?? "scrape-only status"}) — drive it by hand or use a worker runtime: ${workerAgents().map((d) => d.id).join(", ")}`);
     }
   };
   // Agent-supervised approvals (HCP Phase 6). A supervised worker's PreToolUse broker hook calls
@@ -296,7 +297,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   // Spawn one child tile and wire up its bookkeeping (depth, parent, auto-report,
   // supervision, read epoch). Shared by `tile.spawn_agent` and `workflow.run` so
-  // both enforce the same depth/rate gates. Throws HcpError on depth/rate/spawn
+  // both enforce the same depth/rate gates. Throws ApiError on depth/rate/spawn
   // failure. `report` defaults to on (draws the auto-report edge to the parent);
   // workflow workers pass report:false and gather via waitForTurn instead.
   const doSpawn = async (opts: {
@@ -317,24 +318,24 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const callerDepth = tile ? (depthOf.get(tile) ?? 0) : 0;
     const childDepth = callerDepth + 1;
     if (childDepth > MAX_SPAWN_DEPTH) {
-      throw new HcpError("DEPTH_EXCEEDED", `agent spawn depth ${childDepth} exceeds max ${MAX_SPAWN_DEPTH}`);
+      throw new ApiError("DEPTH_EXCEEDED", `agent spawn depth ${childDepth} exceeds max ${MAX_SPAWN_DEPTH}`);
     }
-    if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
+    if (!deps.spawnAllowed()) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
     const agent = opts.agent != null ? String(opts.agent) : await deps.defaultAgentId?.();
     // Nothing compiled in to fall back to: an empty catalog means no agent can start.
-    if (!agent) throw new HcpError("BAD_REQUEST", "no agent installed — install one from Settings ▸ Plugins");
+    if (!agent) throw new ApiError("BAD_REQUEST", "no agent installed — install one from Settings ▸ Plugins");
     const def = agentById(agent);
     if (!def || !def.enabled) {
-      throw new HcpError("BAD_REQUEST", `unknown agent '${agent}' — spawnable: ${spawnableAgents().map((d) => d.id).join(", ")}`);
+      throw new ApiError("BAD_REQUEST", `unknown agent '${agent}' — spawnable: ${spawnableAgents().map((d) => d.id).join(", ")}`);
     }
     if (deps.agentInstalled && !(await deps.agentInstalled(def, tile ? ptyId(tile) : undefined))) {
-      throw new HcpError("UNSUPPORTED", `${def.label} is not installed on this machine (no ${def.bin} on PATH)${def.install ? ` — get it at ${def.install.url}` : ""}`);
+      throw new ApiError("UNSUPPORTED", `${def.label} is not installed on this machine (no ${def.bin} on PATH)${def.install ? ` — get it at ${def.install.url}` : ""}`);
     }
     const sup = normalizeSupervise(opts.supervise);
     // Supervision is brokered TO the caller's tile. Without one there is nobody to ask,
     // and the policy would be dropped silently while the caller believes it has a gate.
     if (sup && !opts.parent) {
-      throw new HcpError("BAD_REQUEST", "supervise needs a supervising agent: run this from an agent tile, or spawn without --supervise");
+      throw new ApiError("BAD_REQUEST", "supervise needs a supervising agent: run this from an agent tile, or spawn without --supervise");
     }
     // pi cannot be supervised. It has NO permission system, so the only gate would be
     // one we inject — which must fail CLOSED (no human prompt to fall back to) and
@@ -343,7 +344,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     // than no gate. (A user-opened pi tile is fully autonomous too — this changes
     // nothing about pi's actual authority.)
     if (sup && superviseUnsupported(agent)) {
-      throw new HcpError(
+      throw new ApiError(
         "BAD_REQUEST",
         `${agent} workers cannot be supervised — ${agent} has no permission system, so there is nothing to broker. ` +
           `Spawn this worker WITHOUT supervise (it runs autonomously, like any ${agent} tile), ` +
@@ -356,8 +357,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const mode = opts.mode != null ? opts.mode : sup || opts.attended ? undefined : agentOption(def, "mode")?.unattended;
     const resume = opts.resume != null ? String(opts.resume) : undefined;
     if (resume !== undefined) {
-      if (!def.session?.resume) throw new HcpError("UNSUPPORTED", `${def.label} cannot resume a session`);
-      if (!isSessionId(resume)) throw new HcpError("BAD_REQUEST", "resume must be a session id");
+      if (!def.session?.resume) throw new ApiError("UNSUPPORTED", `${def.label} cannot resume a session`);
+      if (!isSessionId(resume)) throw new ApiError("BAD_REQUEST", "resume must be a session id");
     }
     // A spawner-chosen display name ("reviewer", "test-writer") — becomes the tile
     // name and tags every message this worker sends back. One printable line, capped like every
@@ -422,7 +423,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // Then its state here goes. Shared by the `tile.close` verb and workflow's `close_when_done`.
   const closeTile = async (tileId: string): Promise<unknown> => {
     const closed = deps.workspaces.removeTile(bareOf(tileId), CONTROL)?.tile;
-    if (!closed) throw new HcpError("TILE_NOT_FOUND", `no open workspace has tile ${bareOf(tileId)}`);
+    if (!closed) throw new ApiError("NOT_FOUND", `no open workspace has tile ${bareOf(tileId)}`);
     if (isTerminalKind(closed.kind) && !closed.session) deps.endSession(ptyId(tileId));
     forgetTileState(tileId);
     return { ok: true };
@@ -450,12 +451,12 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   ): string => {
     const ws = at.repo === undefined ? workspaceFor(callerTile)
       : deps.workspaces.repos().includes(at.repo) ? { repo: at.repo, core: coreOf(at.repo), frame: null } : null;
-    if (!ws) throw new HcpError("NOT_FOUND", "no workspace is open: open one in the app first");
+    if (!ws) throw new ApiError("NOT_FOUND", "no workspace is open: open one in the app first");
     let frame: FrameRecord | undefined;
     const caller = typeof callerTile === "string" && callerTile ? bareOf(callerTile) : undefined;
     if (named != null && named !== "") {
       frame = frameFor(ws.core.frames, String(named));
-      if (!frame) throw new HcpError("NOT_FOUND", `no frame answers to "${String(named)}"`);
+      if (!frame) throw new ApiError("NOT_FOUND", `no frame answers to "${String(named)}"`);
     } else {
       frame = defaultFrame(ws.core.frames, { caller: caller && ws.core.frameOf?.[caller], selected: ws.frame });
     }
@@ -473,18 +474,18 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     try { registry = createToolRegistry([...BUNDLED_TOOL_PLUGINS, ...(await deps.addedTools?.() ?? [])]); }
     catch { registry = createToolRegistry(BUNDLED_TOOL_PLUGINS); }
     const tool = pick(registry.tools.filter((t) => t.tileKind));
-    if (!tool?.tileKind) throw new HcpError("UNSUPPORTED", `${badId}; \`hive tools list\` shows them`);
+    if (!tool?.tileKind) throw new ApiError("UNSUPPORTED", `${badId}; \`hive tools list\` shows them`);
     const availability = registry.resolve(deps.toolsSettings?.() ?? { enabledPlugins: [], disabledTools: [] }).availability(tool.id);
-    if (!availability.available) throw new HcpError("UNAUTHORIZED", `${tool.label} is disabled; switch it on in Settings ▸ Plugins, or \`hive plugins enable tool:${tool.pluginId}\``);
+    if (!availability.available) throw new ApiError("FORBIDDEN", `${tool.label} is disabled; switch it on in Settings ▸ Plugins, or \`hive plugins enable tool:${tool.pluginId}\``);
     const kind = tool.tileKind;
-    if (p.frame !== undefined && (typeof p.frame !== "string" || !p.frame || p.frame.length > 256)) throw new HcpError("BAD_REQUEST", "frame must be an id");
+    if (p.frame !== undefined && (typeof p.frame !== "string" || !p.frame || p.frame.length > 256)) throw new ApiError("BAD_REQUEST", "frame must be an id");
     if (p.url !== undefined) {
-      if (typeof p.url !== "string" || p.url.length > 8192) throw new HcpError("BAD_REQUEST", "Invalid URL");
+      if (typeof p.url !== "string" || p.url.length > 8192) throw new ApiError("BAD_REQUEST", "Invalid URL");
       let url: URL;
-      try { url = new URL(p.url); } catch { throw new HcpError("BAD_REQUEST", "Invalid URL"); }
-      if (!["http:", "https:"].includes(url.protocol) && p.url !== "about:blank") throw new HcpError("BAD_REQUEST", "URL must use http or https, or be about:blank");
+      try { url = new URL(p.url); } catch { throw new ApiError("BAD_REQUEST", "Invalid URL"); }
+      if (!["http:", "https:"].includes(url.protocol) && p.url !== "about:blank") throw new ApiError("BAD_REQUEST", "URL must use http or https, or be about:blank");
     }
-    if (!deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
+    if (!deps.spawnAllowed()) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
     const url = typeof p.url === "string" ? p.url : undefined;
     const tileId = openTile(p.callerTile, p.frame, (ws) => ({
       id: mintId(`tile-${kind.replace(/[^A-Za-z0-9-]/g, "")}`), kind,
@@ -513,7 +514,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // and record it. The others read, are a hook reporting, or only move a window's view.
   const effect = <R>(call: HcpCall, intent: Intent<R>, run: () => Promise<R>): Promise<R> =>
     deps.intents.perform(call.actor, intent, run).catch((e: unknown) => {
-      throw e instanceof Refused ? new HcpError("UNAUTHORIZED", e.message) : e;
+      throw e instanceof Refused ? new ApiError("FORBIDDEN", e.message) : e;
     });
   const tileOf = (id: unknown): string | undefined => (typeof id === "string" && id ? bareOf(id) : undefined);
   // A pipe, or every pipe out of a tile: `src->dst`, `src->*`.
@@ -533,11 +534,11 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const shape = String(p.shape ?? "fanout");
     const caller = tileOf(p.callerTile);
     const agent = p.agent != null ? String(p.agent) : await deps.defaultAgentId?.();
-    if (!agent) throw new HcpError("BAD_REQUEST", "no agent installed — install one from Settings ▸ Plugins");
+    if (!agent) throw new ApiError("BAD_REQUEST", "no agent installed — install one from Settings ▸ Plugins");
     {
       const def = agentById(agent);
-      if (!def || !def.enabled) throw new HcpError("BAD_REQUEST", `unknown agent '${agent}' — spawnable: ${spawnableAgents().map((d) => d.id).join(", ")}`);
-      if (!def.caps.turnSignal) throw new HcpError("UNSUPPORTED", `workflow.run: ${def.id} has no turn signal, so its workers' replies cannot be gathered (${def.note ?? "scrape-only status"}) — use a worker runtime: ${workerAgents().map((d) => d.id).join(", ")}`);
+      if (!def || !def.enabled) throw new ApiError("BAD_REQUEST", `unknown agent '${agent}' — spawnable: ${spawnableAgents().map((d) => d.id).join(", ")}`);
+      if (!def.caps.turnSignal) throw new ApiError("UNSUPPORTED", `workflow.run: ${def.id} has no turn signal, so its workers' replies cannot be gathered (${def.note ?? "scrape-only status"}) — use a worker runtime: ${workerAgents().map((d) => d.id).join(", ")}`);
     }
     const frame = p.frame != null ? String(p.frame) : undefined;
     // claude-only model alias applied to every worker in the fleet.
@@ -576,7 +577,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       for (let i = 0; ; i++) {
         try { return await doSpawn(opts); }
         catch (e) {
-          if (e instanceof HcpError && e.code === "RATE_LIMITED" && i < WORKFLOW_SPAWN_RETRIES) { await delay(WORKFLOW_SPAWN_RETRY_MS); continue; }
+          if (e instanceof ApiError && e.code === "RATE_LIMITED" && i < WORKFLOW_SPAWN_RETRIES) { await delay(WORKFLOW_SPAWN_RETRY_MS); continue; }
           throw e;
         }
       }
@@ -598,14 +599,14 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
     if (shape === "fanout" || shape === "mapreduce") {
       const items = Array.isArray(p.items) ? p.items.map(String) : [];
-      if (!items.length) throw new HcpError("BAD_REQUEST", "items required (a non-empty array) for fanout/mapreduce");
+      if (!items.length) throw new ApiError("BAD_REQUEST", "items required (a non-empty array) for fanout/mapreduce");
       const prompt = String(p.prompt ?? "");
-      if (!prompt) throw new HcpError("BAD_REQUEST", "prompt required for fanout/mapreduce");
+      if (!prompt) throw new ApiError("BAD_REQUEST", "prompt required for fanout/mapreduce");
       const results = await pool(items, maxConc, (it) => runWorker(it, fill(prompt, it)));
       if (shape === "fanout") return { shape, items: results };
       // mapreduce: feed every worker's output into one reducer tile.
       const reduceTmpl = String(p.reduce_prompt ?? "");
-      if (!reduceTmpl) throw new HcpError("BAD_REQUEST", "reduce_prompt required for mapreduce");
+      if (!reduceTmpl) throw new ApiError("BAD_REQUEST", "reduce_prompt required for mapreduce");
       const joined = results.map((r) => `## ${r.item}\n${r.text ?? "(no output)"}`).join("\n\n");
       const reducer = await runWorker("(reduce)", reduceTmpl.replace(/\{results\}/g, joined));
       return { shape, items: results, reduced: reducer.text, reducerStatus: reducer.status };
@@ -615,7 +616,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // Sequential chain: each stage's prompt may reference {input} (the prior
       // stage's reply). Stops the chain on a timeout/error stage.
       const stages = Array.isArray(p.stages) ? p.stages.map(String) : [];
-      if (!stages.length) throw new HcpError("BAD_REQUEST", "stages required (a non-empty array) for pipeline");
+      if (!stages.length) throw new ApiError("BAD_REQUEST", "stages required (a non-empty array) for pipeline");
       const steps: WR[] = [];
       let prev: string | null = p.input != null ? String(p.input) : null;
       for (let s = 0; s < stages.length; s++) {
@@ -627,7 +628,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       return { shape, steps, output: prev };
     }
 
-    throw new HcpError("BAD_REQUEST", `unknown workflow shape '${shape}' (expected fanout | pipeline | mapreduce)`);
+    throw new ApiError("BAD_REQUEST", `unknown workflow shape '${shape}' (expected fanout | pipeline | mapreduce)`);
   };
 
   const dispatch = async (method: string, rawParams: unknown, call: HcpCall): Promise<unknown> => {
@@ -655,8 +656,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
       case "agent.sessions": {
         const def = agentById(String(p.agent ?? ""));
-        if (!def) throw new HcpError("BAD_REQUEST", `unknown agent '${String(p.agent ?? "")}'`);
-        if (!canListSessions(def)) throw new HcpError("UNSUPPORTED", `${def.label} does not say where its sessions are, so they cannot be listed`);
+        if (!def) throw new ApiError("BAD_REQUEST", `unknown agent '${String(p.agent ?? "")}'`);
+        if (!canListSessions(def)) throw new ApiError("UNSUPPORTED", `${def.label} does not say where its sessions are, so they cannot be listed`);
         const limit = typeof p.limit === "number" && p.limit > 0 ? Math.min(p.limit, 500) : undefined;
         const sessions = await listSessions(def, { ...(typeof p.cwd === "string" ? { cwd: p.cwd } : {}), ...(limit ? { limit } : {}) });
         return { agent: def.id, resumable: !!def.session?.resume, sessions };
@@ -666,7 +667,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         return effect(call, { verb: method, target: tileOf(p.tileId) }, async () => {
           const tileId = String(p.tileId ?? "");
           const text = String(p.text ?? "");
-          if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
+          if (!tileId) throw new ApiError("BAD_REQUEST", "tileId required");
           const submit = p.submit !== false; // default: press Enter
           const pid = ptyId(tileId);
           // With submit (the default) this is a MESSAGE: deliver via the mailbox, which
@@ -684,7 +685,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
             armRead(tileId); // a raw paste is written immediately, so now IS delivery
             ok = deps.writeToTile(pid, text);
           }
-          if (!ok) throw new HcpError("TILE_NOT_FOUND", `no live agent for tile ${tileId}`);
+          if (!ok) throw new ApiError("NOT_FOUND", `no live agent for tile ${tileId}`);
           return { ok: true };
         });
 
@@ -695,13 +696,13 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           // (arrows/enter/esc/…) or is sent as literal text. Staggered so the TUI
           // registers each key — a bundled arrow+enter write can miss the move.
           const tileId = String(p.tileId ?? "");
-          if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
+          if (!tileId) throw new ApiError("BAD_REQUEST", "tileId required");
           const raw = p.keys;
           const keys = Array.isArray(raw) ? raw.map(String) : raw != null ? [String(raw)] : [];
-          if (!keys.length) throw new HcpError("BAD_REQUEST", "keys required");
+          if (!keys.length) throw new ApiError("BAD_REQUEST", "keys required");
           const pid = ptyId(tileId);
           armRead(tileId); // keys can submit a prompt; a following read wants the turn they cause
-          if (!typeKeys((bytes) => deps.writeToTile(pid, bytes), keys)) throw new HcpError("TILE_NOT_FOUND", `no live agent for tile ${tileId}`);
+          if (!typeKeys((bytes) => deps.writeToTile(pid, bytes), keys)) throw new ApiError("NOT_FOUND", `no live agent for tile ${tileId}`);
           return { ok: true, keys: keys.length };
         });
 
@@ -713,9 +714,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           // Enter, like agent.send) so the parent reads it on its next turn.
           const child = bareOf(String(p.callerTile ?? ""));
           const parent = parentOf.get(child);
-          if (!parent) throw new HcpError("TILE_NOT_FOUND", "no parent agent to report to");
+          if (!parent) throw new ApiError("NOT_FOUND", "no parent agent to report to");
           const message = String(p.message ?? "").trim();
-          if (!message) throw new HcpError("BAD_REQUEST", "message required");
+          if (!message) throw new ApiError("BAD_REQUEST", "message required");
           // A program that started it hears it as an event of the agent feed.
           if (isClient(parent)) {
             deps.reported?.(child, message);
@@ -726,7 +727,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           // Held if the parent is mid-turn — a report typed into a busy TUI never
           // gets read, and the worker thinks it delivered.
           if (!deps.deliverToTile(ptyId(parent), banner)) {
-            throw new HcpError("TILE_NOT_FOUND", `parent agent ${parent} is gone — report not delivered`);
+            throw new ApiError("NOT_FOUND", `parent agent ${parent} is gone — report not delivered`);
           }
           // Single-delivery ladder: the worker authored its own summary this turn, so
           // when its turn ends, DON'T also auto-forward the raw turn (that would be a
@@ -739,7 +740,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // The agent's plugin hands over this turn's reply before it reports the turn end.
         const tileId = String(p.tileId ?? "");
         const text = typeof p.text === "string" ? p.text : "";
-        if (!tileId || !text) throw new HcpError("BAD_REQUEST", "tileId and text required");
+        if (!tileId || !text) throw new ApiError("BAD_REQUEST", "tileId and text required");
         deps.turns.recordReply(ptyId(tileId), text);
         return { ok: true };
       }
@@ -807,8 +808,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const d = decision === "allow" || decision === "always" ? "allow" : decision === "deny" || decision === "never" ? "deny" : null;
         return effect(call, { verb: method, target: wait?.tile, detail: d ? decision : undefined, onlyBy: wait?.answerer }, async () => {
           const reason = p.reason != null ? String(p.reason) : undefined;
-          if (!wait || wait.kind !== "approval") throw new HcpError("BAD_REQUEST", `no approval ${reqId} is waiting: it was answered, ran out of time, or its worker stopped waiting`);
-          if (!d) throw new HcpError("BAD_REQUEST", "decision must be allow | deny | always | never");
+          if (!wait || wait.kind !== "approval") throw new ApiError("BAD_REQUEST", `no approval ${reqId} is waiting: it was answered, ran out of time, or its worker stopped waiting`);
+          if (!d) throw new ApiError("BAD_REQUEST", "decision must be allow | deny | always | never");
           if (decision === "always" || decision === "never") approveCache.set(`${wait.tile}:${wait.tool}`, d);
           deps.waits.answer(wait.tile, wait.since, d, reason);
           return { ok: true, decision: d };
@@ -817,7 +818,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
       case "agent.read": {
         const tileId = String(p.tileId ?? "");
-        if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
+        if (!tileId) throw new ApiError("BAD_REQUEST", "tileId required");
         requireTurnSignal(tileId, "agent.read");
         const timeoutMs = typeof p.timeoutMs === "number" ? p.timeoutMs : DEFAULT_READ_TIMEOUT;
         const pid = ptyId(tileId);
@@ -825,7 +826,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // rather than wait out the timeout for a turn that cannot come. A tile still starting
         // is in its workspace already.
         if (deps.workspaces.workspaceOf(bareOf(tileId)) === null && !deps.sessionHeld(pid)) {
-          throw new HcpError("TILE_NOT_FOUND", `no tile ${bareOf(tileId)} is open`);
+          throw new ApiError("NOT_FOUND", `no tile ${bareOf(tileId)} is open`);
         }
         // A send may still be queued behind the turn in flight; its epoch is armed when
         // it is typed, so wait for that before deciding which turn this read wants.
@@ -858,13 +859,13 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
       // ── canvas verbs (renderer) ──────────────────────────────────────────
       case "tool.open":
-        if (typeof p.tool !== "string") throw new HcpError("BAD_REQUEST", "tool must be an id: owner/name/tool");
+        if (typeof p.tool !== "string") throw new ApiError("BAD_REQUEST", "tool must be an id: owner/name/tool");
         return effect(call, { verb: method, target: (r) => r.tileId }, () => openTool(p, (tools) => tools.find((t) => t.id === p.tool), "Unknown tool id"));
       case "tile.list": {
         // One frame, named the way spawn names one; a name no frame answers to is refused.
         const ws = layoutFor(p.callerTile);
         const only = p.frame ? frameFor(ws.frames, String(p.frame)) : undefined;
-        if (p.frame && !only) throw new HcpError("NOT_FOUND", `no frame answers to "${String(p.frame)}"`);
+        if (p.frame && !only) throw new ApiError("NOT_FOUND", `no frame answers to "${String(p.frame)}"`);
         return listTiles({ frames: ws.frames, tiles: ws.tiles, frameOf: ws.frameOf ?? {}, names: ws.tileNames ?? {} }, factsOf(ws.tiles), only);
       }
       case "tile.list_frames": {
@@ -874,7 +875,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // `hive ctl view emit`: a named JSON event for the active view (protocol 1.3).
       case "view.emit": {
         const ev = parseEmit(p as Record<string, unknown>);
-        if (!emitBucket.take()) throw new HcpError("RATE_LIMITED", `at most ${EMIT_RATE.perSecond} view events a second`);
+        if (!emitBucket.take()) throw new ApiError("RATE_LIMITED", `at most ${EMIT_RATE.perSecond} view events a second`);
         return await deps.callRenderer("view.emit", ev, RENDERER_TIMEOUT);
       }
       // `hive ctl plugin commands`: what the plugins running in the window let an agent run.
@@ -885,20 +886,20 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // board, a view switched to.
       case "plugin.open": {
         const m = typeof p.plugin === "string" && p.plugin.length <= 200 ? /^(tool|widget|view):(.+)$/.exec(p.plugin) : null;
-        if (!m) throw new HcpError("BAD_REQUEST", "plugin must be a record: tool:owner/name, widget:@owner/name or view:id, as `hive plugins list` shows it");
+        if (!m) throw new ApiError("BAD_REQUEST", "plugin must be a record: tool:owner/name, widget:@owner/name or view:id, as `hive plugins list` shows it");
         const [, kind, id] = m as unknown as [string, "tool" | "widget" | "view", string];
         if (kind === "tool") {
           return effect(call, { verb: method, target: `${kind}:${id}` }, () => openTool(p, (tools) => tools.find((t) => t.id === id) ?? tools.find((t) => t.pluginId === id), `${id} has no tool to open`));
         }
-        if (kind === "widget" && !deps.spawnAllowed()) throw new HcpError("RATE_LIMITED", "spawn rate limit exceeded");
+        if (kind === "widget" && !deps.spawnAllowed()) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
         return effect(call, { verb: method, target: `${kind}:${id}` }, () => deps.callRenderer("plugin.open", { kind, id }, RENDERER_TIMEOUT));
       }
       // `hive ctl plugin call`: run one, and answer with what the plugin answered.
       case "plugin.call": {
-        if (typeof p.plugin !== "string" || !p.plugin || p.plugin.length > 200) throw new HcpError("BAD_REQUEST", "plugin must be an id, as `hive ctl plugin commands` lists it");
-        if (typeof p.command !== "string" || !COMMAND_NAME_RE.test(p.command)) throw new HcpError("BAD_REQUEST", "command must be one of the plugin's command names");
-        if (p.tile !== undefined && (typeof p.tile !== "string" || !p.tile || p.tile.length > 256)) throw new HcpError("BAD_REQUEST", "tile must be an id");
-        if (!callBucket.take()) throw new HcpError("RATE_LIMITED", `at most ${EMIT_RATE.perSecond} plugin calls a second`);
+        if (typeof p.plugin !== "string" || !p.plugin || p.plugin.length > 200) throw new ApiError("BAD_REQUEST", "plugin must be an id, as `hive ctl plugin commands` lists it");
+        if (typeof p.command !== "string" || !COMMAND_NAME_RE.test(p.command)) throw new ApiError("BAD_REQUEST", "command must be one of the plugin's command names");
+        if (p.tile !== undefined && (typeof p.tile !== "string" || !p.tile || p.tile.length > 256)) throw new ApiError("BAD_REQUEST", "tile must be an id");
+        if (!callBucket.take()) throw new ApiError("RATE_LIMITED", `at most ${EMIT_RATE.perSecond} plugin calls a second`);
         const params = { plugin: p.plugin, command: p.command, args: p.args ?? null, ...(p.tile ? { tile: p.tile } : {}) };
         return effect(call, { verb: method, target: `${p.plugin}:${p.command}` }, () => deps.callRenderer("plugin.call", params, PLUGIN_CALL_TIMEOUT));
       }
@@ -928,19 +929,19 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         return effect(call, { verb: method, target: tileOf(p.tileId) }, async () => {
           // The name every surface shows, and the one main's messages call the tile by.
           const tileId = bareOf(String(p.tileId ?? ""));
-          if (!tileId) throw new HcpError("BAD_REQUEST", "tileId required");
+          if (!tileId) throw new ApiError("BAD_REQUEST", "tileId required");
           const name = cleanName(typeof p.name === "string" ? p.name : "");
-          if (deps.workspaces.renameTile(tileId, name, CONTROL) === null) throw new HcpError("TILE_NOT_FOUND", `no open workspace has tile ${tileId}`);
+          if (deps.workspaces.renameTile(tileId, name, CONTROL) === null) throw new ApiError("NOT_FOUND", `no open workspace has tile ${tileId}`);
           return { ok: true, name };
         });
 
       case "tile.focus": {
-        if (!p.tileId) throw new HcpError("BAD_REQUEST", "tileId required");
+        if (!p.tileId) throw new ApiError("BAD_REQUEST", "tileId required");
         return await deps.callRenderer("tile.focus", { tileId: p.tileId }, RENDERER_TIMEOUT);
       }
       case "tile.close":
         return effect(call, { verb: method, target: tileOf(p.tileId) }, async () => {
-          if (!p.tileId) throw new HcpError("BAD_REQUEST", "tileId required");
+          if (!p.tileId) throw new ApiError("BAD_REQUEST", "tileId required");
           // closeTile drops ALL per-tile state (pipes/turns/recorder/epochs/parent/
           // depth/supervision) + resolves any in-flight approvals for the worker.
           return await closeTile(String(p.tileId));
@@ -955,15 +956,15 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           return decision === "allow" || decision === "deny" ? decision : undefined;
         };
         return effect(call, { verb: method, detail: decided }, async () => {
-          if (!p.plan) throw new HcpError("BAD_REQUEST", "plan required");
+          if (!p.plan) throw new ApiError("BAD_REQUEST", "plan required");
           const tile = tileOf(p.callerTile);
-          if (!tile) throw new HcpError("BAD_REQUEST", "a plan is reviewed for the agent that wrote it: run this in its tile, or pass --tile");
+          if (!tile) throw new ApiError("BAD_REQUEST", "a plan is reviewed for the agent that wrote it: run this in its tile, or pass --tile");
           return await new Promise((resolve, reject) => {
             let why = "it waits on something else now";
             const wait = deps.waits.ask(tile, { kind: "plan", plan: String(p.plan), cwd: String(p.cwd ?? "") }, (decision, feedback) => {
               clearTimeout(timer);
               if (decision) resolve({ decision, ...(feedback ? { feedback } : {}) });
-              else reject(new HcpError("TIMEOUT", `the plan was not reviewed: ${why}`));
+              else reject(new ApiError("TIMEOUT", `the plan was not reviewed: ${why}`));
             });
             const unanswered = (reason: string) => { why = reason; deps.waits.drop(wait.request); };
             const timer = setTimeout(() => unanswered("nobody reviewed it in time"), REVIEW_TIMEOUT);
@@ -978,14 +979,14 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         return effect(call, { verb: method, target: pipeOf(p.srcTileId, p.dstTileId) }, async () => {
           const src = String(p.srcTileId ?? "");
           const dst = String(p.dstTileId ?? "");
-          if (!src || !dst) throw new HcpError("BAD_REQUEST", "srcTileId and dstTileId required");
-          if (!deps.connect(src, dst)) throw new HcpError("BAD_REQUEST", "cannot pipe a tile to itself or create a cycle");
+          if (!src || !dst) throw new ApiError("BAD_REQUEST", "srcTileId and dstTileId required");
+          if (!deps.connect(src, dst)) throw new ApiError("BAD_REQUEST", "cannot pipe a tile to itself or create a cycle");
           return { ok: true };
         });
       case "tile.disconnect":
         return effect(call, { verb: method, target: pipeOf(p.srcTileId, p.dstTileId) }, async () => {
           const src = String(p.srcTileId ?? "");
-          if (!src) throw new HcpError("BAD_REQUEST", "srcTileId required");
+          if (!src) throw new ApiError("BAD_REQUEST", "srcTileId required");
           deps.disconnect(src, p.dstTileId ? String(p.dstTileId) : undefined);
           return { ok: true };
         });
@@ -996,25 +997,25 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // The agents of a workspace as its feed says (agent-feed.ts): the caller's own, or `repo`.
       case "agent.list":
       case "agent.since": {
-        if (!deps.workspaceApi) throw new HcpError("UNSUPPORTED", "the agent feed is not served here");
+        if (!deps.workspaceApi) throw new ApiError("UNSUPPORTED", "the agent feed is not served here");
         const repo = typeof p.repo === "string" && p.repo ? p.repo
           : call.actor.kind === "tile" ? deps.workspaces.workspaceOf(bareOf(call.actor.tile)) : null;
-        if (!repo) throw new HcpError("BAD_REQUEST", "which workspace? give repo (a folder `hive ctl list-workspaces` lists)");
+        if (!repo) throw new ApiError("BAD_REQUEST", "which workspace? give repo (a folder `hive ctl list-workspaces` lists)");
         return await deps.workspaceApi(method, method === "agent.list" ? [repo] : [repo, Number(p.seq)], call.actor);
       }
       case "host.people": {
-        if (call.actor.kind !== "person") throw new HcpError("UNAUTHORIZED", "only the person at this machine shares and answers who joins, not an agent");
+        if (call.actor.kind !== "person") throw new ApiError("FORBIDDEN", "only the person at this machine shares and answers who joins, not an agent");
         const verb = String(p.method ?? "");
-        if (!verb.startsWith("people.") || !deps.workspaceApi) throw new HcpError("BAD_REQUEST", `host.people answers people.*, not ${verb}`);
+        if (!verb.startsWith("people.") || !deps.workspaceApi) throw new ApiError("BAD_REQUEST", `host.people answers people.*, not ${verb}`);
         return await deps.workspaceApi(verb, Array.isArray(p.params) ? p.params : [], call.actor);
       }
       case "host.join":
-        if (call.actor.kind !== "person") throw new HcpError("UNAUTHORIZED", "only the person at this machine joins a workspace, not an agent");
-        if (!deps.join) throw new HcpError("UNSUPPORTED", "joining is not served here");
+        if (call.actor.kind !== "person") throw new ApiError("FORBIDDEN", "only the person at this machine joins a workspace, not an agent");
+        if (!deps.join) throw new ApiError("UNSUPPORTED", "joining is not served here");
         return await deps.join(String(p.link ?? ""));
 
       default:
-        throw new HcpError("UNKNOWN_METHOD", `unknown method: ${method}`);
+        throw new ApiError("UNKNOWN_METHOD", `unknown method: ${method}`);
     }
   };
 

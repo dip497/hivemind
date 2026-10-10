@@ -11,6 +11,7 @@
  *     notifications until unsubscribed or disconnected.
  */
 import type { Actor } from "@hivemind/workspace-host/intents";
+import { ApiError, type ErrorCode } from "@hivemind/workspace-api/protocol";
 
 export const HCP_VERSION = 2;
 
@@ -27,33 +28,11 @@ export type RpcRequest = { jsonrpc: "2.0"; id: RpcId; method: string; params?: u
 export type RpcNotification = { jsonrpc: "2.0"; method: string; params?: unknown };
 export type RpcResponse =
   | { jsonrpc: "2.0"; id: RpcId | null; result: unknown }
-  | { jsonrpc: "2.0"; id: RpcId | null; error: { code: number; message: string; data?: { code: HcpErrorCode } } };
+  | { jsonrpc: "2.0"; id: RpcId | null; error: { code: number; message: string; data?: { code: ErrorCode } } };
 
-/** JSON-RPC's reserved codes, and the one server-defined code that carries ours in `data.code`. */
+/** JSON-RPC's reserved codes, and the one server-defined code that carries the workspace API's
+ *  error code in `data.code`. */
 export const RPC = { parse: -32700, invalid: -32600, method: -32601, hcp: -32000 } as const;
-
-export type HcpErrorCode =
-  | "BAD_REQUEST"
-  | "UNKNOWN_METHOD"
-  | "UNAUTHORIZED"
-  | "APP_NO_RENDERER"
-  | "RATE_LIMITED"
-  | "DEPTH_EXCEEDED"
-  | "TILE_NOT_FOUND"
-  /** Something else the caller named (a frame) is not there. */
-  | "NOT_FOUND"
-  | "TIMEOUT"
-  /** The target provider lacks the capability the verb needs (no turn signal →
-   *  nothing to read/gather; no permission system → nothing to supervise). */
-  | "UNSUPPORTED"
-  | "INTERNAL";
-
-export class HcpError extends Error {
-  constructor(public code: HcpErrorCode, message: string) {
-    super(message);
-    this.name = "HcpError";
-  }
-}
 
 /** Max accepted line length — a runaway/garbage client can't OOM us (1 MiB). */
 export const HCP_MAX_LINE = 1 << 20;
@@ -70,6 +49,6 @@ export function takeLines(buf: string): { lines: string[]; rest: string } {
     }
   }
   const rest = buf.slice(start);
-  if (rest.length > HCP_MAX_LINE) throw new HcpError("BAD_REQUEST", "line too long");
+  if (rest.length > HCP_MAX_LINE) throw new ApiError("BAD_REQUEST", "line too long");
   return { lines, rest };
 }

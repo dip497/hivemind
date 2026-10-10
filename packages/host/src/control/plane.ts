@@ -178,7 +178,7 @@ export class ControlPlane {
       await this.dispatcher.close(tile);
       return true;
     } catch (e) {
-      if ((e as { code?: unknown }).code === "TILE_NOT_FOUND") return false;
+      if ((e as { code?: unknown }).code === "NOT_FOUND") return false;
       throw e;
     }
   }

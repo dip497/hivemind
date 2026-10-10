@@ -71,7 +71,7 @@ import { REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
 import type { ReadScreen } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { hcpSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
-import { HcpError } from "@hivemind/host/control/protocol";
+import { ApiError } from "@hivemind/workspace-api/protocol";
 import { appViewsDir, handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog, viewSdk } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, onSettingsChange, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
@@ -1007,7 +1007,7 @@ function writeTile(tileId: string, data: string, paste?: boolean): boolean {
   if (onYourDevices.holds(tileId)) { onYourDevices.write(tileId, data, paste); return true; }
   if (hasRemotePty(tileId)) { writeRemotePty(tileId, data, paste); return true; }
   if (hasSession(tileId)) { writePty(tileId, data, paste); return true; }
-  return false; // dead/unknown tile → agent.send surfaces TILE_NOT_FOUND
+  return false; // dead/unknown tile → agent.send surfaces NOT_FOUND
 }
 
 const control: ControlPlane = new ControlPlane({
@@ -1796,7 +1796,7 @@ const pendingHcp = new Map<string, { resolve: (v: unknown) => void; reject: (e: 
 const EVERY_WINDOW = new Set(["views.rescan", "agents.rescan"]);
 function hcpCallRenderer(method: string, params: unknown, timeoutMs: number): Promise<unknown> {
   const win = userWindow();
-  if (!win) return Promise.reject(new HcpError("APP_NO_RENDERER", "hivemind window not open"));
+  if (!win) return Promise.reject(new ApiError("UNAVAILABLE", "hivemind window not open"));
   if (EVERY_WINDOW.has(method)) {
     for (const other of openWindows()) {
       if (other !== win) callWindow(other, method, params, timeoutMs).catch((e: unknown) => console.warn(`[hcp] ${method} in another window:`, e));
@@ -1809,7 +1809,7 @@ function callWindow(win: BrowserWindow, method: string, params: unknown, timeout
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       pendingHcp.delete(id);
-      reject(new HcpError("TIMEOUT", `renderer verb ${method} timed out`));
+      reject(new ApiError("TIMEOUT", `renderer verb ${method} timed out`));
     }, timeoutMs);
     pendingHcp.set(id, { resolve, reject, timer });
     win.webContents.send("hcp:command", { id, method, params });
@@ -1823,7 +1823,7 @@ handle(
     pendingHcp.delete(id);
     clearTimeout(p.timer);
     if (ok) p.resolve(result);
-    else p.reject(new HcpError("INTERNAL", errorMessage || "renderer verb failed"));
+    else p.reject(new ApiError("FAILED", errorMessage || "renderer verb failed"));
   }),
 );
 /** View protocol 1.3 host services: the status ledger, presence, and sharing an image. */

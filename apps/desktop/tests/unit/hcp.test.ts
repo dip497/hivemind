@@ -6,7 +6,8 @@ import net from "node:net";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { takeLines, HCP_MAX_LINE, HcpError } from "@hivemind/host/control/protocol";
+import { takeLines, HCP_MAX_LINE } from "@hivemind/host/control/protocol";
+import { ApiError } from "@hivemind/workspace-api/protocol";
 import { TurnTracker } from "@hivemind/host/control/turn-tracker";
 import { OutputRecorder, stripAnsi } from "@hivemind/host/control/output-recorder";
 import { makeDispatch } from "@hivemind/host/control/methods";
@@ -142,7 +143,7 @@ test("dispatch agent.read: a tile nothing knows of is not found at once; one ope
   deps.workspaces.addTile(REPO, { id: "tile-new", kind: "claude", label: "claude #1" });
   const { dispatch } = makeDispatch(deps);
   const started = Date.now();
-  await assert.rejects(dispatch("agent.read", { tileId: "tile-gone", timeoutMs: 5_000 }, PERSON), (e: unknown) => e instanceof HcpError && e.code === "TILE_NOT_FOUND");
+  await assert.rejects(dispatch("agent.read", { tileId: "tile-gone", timeoutMs: 5_000 }, PERSON), (e: unknown) => e instanceof ApiError && e.code === "NOT_FOUND");
   assert.ok(Date.now() - started < 1_000, "answered at once, not at the timeout");
   assert.deepEqual(await dispatch("agent.read", { tileId: "tile-new", timeoutMs: 50 }, PERSON), { text: null, finalStatus: "timeout", truncated: false, note: "agent still working — no completed turn within timeout" });
 });
@@ -265,7 +266,7 @@ test("dispatch tile.spawn_agent writes the tile in main: beside its caller, else
   assert.equal(frameOf(await spawn({})), "f2", "a caller in no tile: where the user is");
   assert.equal(frameOf(await spawn({ callerTile: "hm:tile-lead", frame: "NOTES" })), "f2", "a frame named any way spawn takes");
   assert.equal(ws.announced.at(-1)?.near, undefined, "laid out beside its caller only in the caller's frame");
-  await assert.rejects(spawn({ frame: "nothing" }), (e: unknown) => e instanceof HcpError && e.code === "NOT_FOUND");
+  await assert.rejects(spawn({ frame: "nothing" }), (e: unknown) => e instanceof ApiError && e.code === "NOT_FOUND");
   assert.equal(ws.workspaces.getCore(REPO)!.tiles.length, 4, "a refused spawn opens nothing");
   assert.deepEqual(heardFirst, [true, true, true], "the windows hear of each tile before it is written");
 
@@ -273,7 +274,7 @@ test("dispatch tile.spawn_agent writes the tile in main: beside its caller, else
   const loose = ((await makeDispatch(fakeDeps({ ...ws, shownWorkspace: () => ({ repo: "/bare", frame: null }) }).deps).dispatch("tile.spawn_agent", { agent: "claude" }, PERSON)) as { tileId: string }).tileId;
   assert.deepEqual(ws.workspaces.getCore("/bare")?.frameOf, {}, "a workspace with no frame: loose, for the window to frame");
   assert.ok(ws.workspaces.getCore("/bare")?.tiles.some((t) => t.id === loose));
-  await assert.rejects(makeDispatch(fakeDeps({ ...ws, shownWorkspace: () => null }).deps).dispatch("tile.spawn_agent", { agent: "claude" }, PERSON), (e: unknown) => e instanceof HcpError && e.code === "NOT_FOUND");
+  await assert.rejects(makeDispatch(fakeDeps({ ...ws, shownWorkspace: () => null }).deps).dispatch("tile.spawn_agent", { agent: "claude" }, PERSON), (e: unknown) => e instanceof ApiError && e.code === "NOT_FOUND");
 });
 
 test("dispatch tile.spawn_agent: rate-limited → RATE_LIMITED", async () => {
@@ -348,7 +349,7 @@ test("dispatch tile.close needs no window: the tile leaves its workspace, and th
   assert.deepEqual(ended, ["hm:tile-a"]);
   assert.deepEqual(store.getCore("/w")?.tiles, []);
   assert.equal(((await read) as { finalStatus: string }).finalStatus, "closed", "a read waiting on it is answered at once");
-  await assert.rejects(dispatch("tile.close", { tileId: "tile-a" }, PERSON), (e: unknown) => e instanceof HcpError && e.code === "TILE_NOT_FOUND");
+  await assert.rejects(dispatch("tile.close", { tileId: "tile-a" }, PERSON), (e: unknown) => e instanceof ApiError && e.code === "NOT_FOUND");
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -382,7 +383,7 @@ test("dispatch tile.list needs no window: the caller's workspace, else the one t
   ] });
   // One frame, named any way spawn takes; a name no frame answers to is refused.
   assert.deepEqual(await dispatch("tile.list", { callerTile: "tile-a", frame: "docs" }, PERSON), { frames: [{ frameId: "f2", title: "Docs", repo: null, branch: null, tiles: [] }], loose: [] });
-  await assert.rejects(dispatch("tile.list", { callerTile: "tile-a", frame: "nothing" }, PERSON), (e: unknown) => e instanceof HcpError && e.code === "NOT_FOUND");
+  await assert.rejects(dispatch("tile.list", { callerTile: "tile-a", frame: "nothing" }, PERSON), (e: unknown) => e instanceof ApiError && e.code === "NOT_FOUND");
   shown = null; // no caller, and no window showing a workspace
   assert.deepEqual(await dispatch("tile.list", {}, PERSON), { frames: [], loose: [] });
   fs.rmSync(dir, { recursive: true, force: true });
@@ -424,11 +425,11 @@ test("tool.open: optional tools default off and recheck activation for every req
   const { deps } = fakeDeps({ toolsSettings: () => ({ enabledPlugins: enabled ? ["hivemind/web"] : [], disabledTools: [] }) });
   const { dispatch } = makeDispatch(deps);
   const request = { tool: "hivemind/web/browser", url: "about:blank" };
-  await assert.rejects(dispatch("tool.open", request, PERSON), { code: "UNAUTHORIZED" });
+  await assert.rejects(dispatch("tool.open", request, PERSON), { code: "FORBIDDEN" });
   enabled = true;
   const { tileId } = (await dispatch("tool.open", request, PERSON)) as { tileId: string };
   enabled = false;
-  await assert.rejects(dispatch("tool.open", request, PERSON), { code: "UNAUTHORIZED" });
+  await assert.rejects(dispatch("tool.open", request, PERSON), { code: "FORBIDDEN" });
   assert.deepEqual(deps.workspaces.getCore(REPO)?.tiles, [{ id: tileId, kind: "browser", label: "Browser #1", url: "about:blank" }]);
 });
 
@@ -445,7 +446,7 @@ test("tool.open: unknown tools, disabled contributions, invalid URLs and spawn f
     await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser", url }, PERSON), { code: "BAD_REQUEST" });
   }
   disabledTools = ["hivemind/web/browser"];
-  await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser" }, PERSON), { code: "UNAUTHORIZED" });
+  await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser" }, PERSON), { code: "FORBIDDEN" });
   disabledTools = []; spawn = false;
   await assert.rejects(dispatch("tool.open", { tool: "hivemind/web/browser" }, PERSON), { code: "RATE_LIMITED" });
   assert.deepEqual(deps.workspaces.getCore(REPO)?.tiles, [], "no refused request opened a tile");
@@ -484,16 +485,16 @@ test("hcp-server: nothing before initialize with a token it knows; then methods,
   const sock = tmpSock();
   const srv = startHcpServer(sock, {
     authenticate: knownTokens, rendererUp: () => true, onEvent: () => {},
-    dispatch: async (method, params, call) => { if (method === "boom") throw new HcpError("TILE_NOT_FOUND", "no such tile"); return { echoed: method, params, by: call.actor }; },
+    dispatch: async (method, params, call) => { if (method === "boom") throw new ApiError("NOT_FOUND", "no such tile"); return { echoed: method, params, by: call.actor }; },
   });
   await new Promise((r) => setTimeout(r, 50));
   const s = await session(sock);
-  assert.equal((await s.call("x.y")).error.data.code, "UNAUTHORIZED", "nothing before initialize");
+  assert.equal((await s.call("x.y")).error.data.code, "FORBIDDEN", "nothing before initialize");
   assert.equal((await s.call("initialize", { token: "wrong" })).error.code, -32000);
-  assert.equal((await s.call("x.y")).error.data.code, "UNAUTHORIZED", "nor after a token it does not know");
+  assert.equal((await s.call("x.y")).error.data.code, "FORBIDDEN", "nor after a token it does not know");
   assert.deepEqual((await s.call("initialize", { token: "secret" })).result, { protocolVersion: 2, rendererUp: true, capabilities: { status: false } });
   assert.deepEqual((await s.call("x.y", { a: 1 })).result, { echoed: "x.y", params: { a: 1 }, by: { kind: "person" } });
-  assert.deepEqual((await s.call("boom")).error, { code: -32000, message: "no such tile", data: { code: "TILE_NOT_FOUND" } });
+  assert.deepEqual((await s.call("boom")).error, { code: -32000, message: "no such tile", data: { code: "NOT_FOUND" } });
   const agent = await session(sock);
   await agent.call("initialize", { token: "t1-token" });
   assert.deepEqual((await agent.call("x.y")).result.by, { kind: "tile", tile: "t1" });

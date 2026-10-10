@@ -22,7 +22,7 @@ import { ipcPath } from "@hivemind/core";
 /** Exit codes — stable, documented in the hivemind skill. */
 export const EXIT = {
   ok: 0,
-  /** Unexpected failure / server INTERNAL. */
+  /** Unexpected failure / server FAILED. */
   error: 1,
   /** Bad arguments (client-side) or BAD_REQUEST / UNKNOWN_METHOD from the server. */
   usage: 2,
@@ -30,9 +30,9 @@ export const EXIT = {
   unavailable: 3,
   /** The wait (read / open-review / workflow) ran out of time. */
   timeout: 4,
-  /** TILE_NOT_FOUND (or an issue/workspace that does not exist). */
+  /** NOT_FOUND: a tile, frame, issue or workspace that is not there. */
   notFound: 5,
-  /** UNAUTHORIZED — bad/missing HCP token. */
+  /** FORBIDDEN — a bad or missing token, or a call the caller may not make. */
   unauthorized: 6,
   /** RATE_LIMITED / DEPTH_EXCEEDED — the control plane refused for now — or
    *  UNSUPPORTED: the provider lacks the capability (no turn signal, no
@@ -51,10 +51,10 @@ export class HcpCliError extends Error {
 export function exitCodeFor(code: string): number {
   switch (code) {
     case "BAD_REQUEST": case "UNKNOWN_METHOD": case "USAGE": return EXIT.usage;
-    case "APP_NO_RENDERER": case "UNAVAILABLE": return EXIT.unavailable;
+    case "UNAVAILABLE": return EXIT.unavailable;
     case "TIMEOUT": return EXIT.timeout;
-    case "TILE_NOT_FOUND": case "NOT_FOUND": return EXIT.notFound;
-    case "UNAUTHORIZED": return EXIT.unauthorized;
+    case "NOT_FOUND": return EXIT.notFound;
+    case "FORBIDDEN": return EXIT.unauthorized;
     case "RATE_LIMITED": case "DEPTH_EXCEEDED": case "UNSUPPORTED": return EXIT.refused;
     default: return EXIT.error;
   }
@@ -128,7 +128,7 @@ function unavailable(msg: string): HcpCliError {
 }
 
 function rpcError(m: ServerMsg): HcpCliError {
-  const code = m.error?.data?.code || (m.error?.code === -32601 ? "UNKNOWN_METHOD" : "INTERNAL");
+  const code = m.error?.data?.code || (m.error?.code === -32601 ? "UNKNOWN_METHOD" : "FAILED");
   return new HcpCliError(code, m.error?.message || code, exitCodeFor(code));
 }
 

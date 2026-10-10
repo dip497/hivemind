@@ -135,7 +135,7 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
     expect(listed().map((t) => t.tileId)).not.toContain(busy);
 
     // Nobody sits at it: a verb that needs a window is refused.
-    expect(ctl("focus", worker)).toMatchObject({ code: 3, json: { ok: false, code: "APP_NO_RENDERER" } });
+    expect(ctl("focus", worker)).toMatchObject({ code: 3, json: { ok: false, code: "UNAVAILABLE" } });
 
     watcher.destroy();
     // Stopped, the host gives the socket back: the daemon answers there again, as it does with no

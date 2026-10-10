@@ -10,7 +10,8 @@
 import net from "node:net";
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
-import { HCP_VERSION, HcpError, RPC, takeLines, type HcpCall, type RpcId } from "./protocol.js";
+import { ApiError } from "@hivemind/workspace-api/protocol";
+import { HCP_VERSION, RPC, takeLines, type HcpCall, type RpcId } from "./protocol.js";
 import type { Actor } from "@hivemind/workspace-host/intents";
 
 export interface HcpServerDeps {
@@ -112,10 +113,10 @@ export function startHcpServer(sockPath: string, deps: HcpServerDeps): HcpServer
       }
       if (m.method === "initialize") {
         actor = deps.authenticate(params.token);
-        if (!actor) return fail(RPC.hcp, "bad or missing token", "UNAUTHORIZED");
+        if (!actor) return fail(RPC.hcp, "bad or missing token", "FORBIDDEN");
         return reply({ protocolVersion: HCP_VERSION, rendererUp: deps.rendererUp(), capabilities: { status: !!deps.status } });
       }
-      if (!actor) return fail(RPC.hcp, "call initialize with the token first", "UNAUTHORIZED");
+      if (!actor) return fail(RPC.hcp, "call initialize with the token first", "FORBIDDEN");
 
       switch (m.method) {
         case "agent.stream/subscribe": {
@@ -156,7 +157,7 @@ export function startHcpServer(sockPath: string, deps: HcpServerDeps): HcpServer
           return reply(null);
       }
       deps.dispatch(m.method, params, { actor, signal: gone.signal }).then(reply, (e) => {
-        const err = e instanceof HcpError ? e : new HcpError("INTERNAL", (e as Error)?.message ?? String(e));
+        const err = e instanceof ApiError ? e : new ApiError("FAILED", (e as Error)?.message ?? String(e));
         fail(err.code === "UNKNOWN_METHOD" ? RPC.method : RPC.hcp, err.message, err.code);
       });
     }

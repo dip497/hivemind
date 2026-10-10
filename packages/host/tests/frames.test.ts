@@ -94,5 +94,5 @@ test("a workspace open with nothing saved yet takes a frame; a folder that is no
   assert.equal(opened.opened, true);
   assert.ok(store.getCore(fresh)!.frames.some((f) => f.id === opened.frame));
   const none = await call(person, "frame.open", path.join(tmp, "nowhere"), { path: tmp });
-  assert.equal("error" in none && none.error.code, "BAD_REQUEST");
+  assert.equal("error" in none && none.error.code, "NOT_FOUND");
 });

@@ -44,7 +44,7 @@ function print(result: unknown, json: boolean): void {
 }
 
 function fail(e: unknown, json: boolean): never {
-  let code = "INTERNAL", message = String((e as Error)?.message ?? e), exit: number = EXIT.error;
+  let code = "FAILED", message = String((e as Error)?.message ?? e), exit: number = EXIT.error;
   if (e instanceof HcpCliError) { code = e.code; exit = e.exit; }
   else if (e instanceof UsageError) { code = "USAGE"; exit = EXIT.usage; }
   else if (e instanceof UnsupportedError) { code = "UNSUPPORTED"; exit = EXIT.refused; }

@@ -62,8 +62,8 @@ function device(repo = "/home/p/api") {
 }
 
 /** `asked` is refused as a bad request saying `pattern`. */
-const refused = async (asked: () => unknown, pattern: RegExp) =>
-  assert.rejects(Promise.resolve().then(asked), (e: Error & { code?: string }) => e.code === "BAD_REQUEST" && pattern.test(e.message));
+const refused = async (asked: () => unknown, pattern: RegExp, code = "BAD_REQUEST") =>
+  assert.rejects(Promise.resolve().then(asked), (e: Error & { code?: string }) => e.code === code && pattern.test(e.message));
 
 test("what may be started: the agents this device starts with their model and mode choices, and the workspace's frames on the machine each one's folder is on", async () => {
   const d = device();
@@ -74,7 +74,7 @@ test("what may be started: the agents this device starts with their model and mo
     ] }],
     frames: [{ id: "f-api", name: "api", machine: "desk" }, { id: "f-box", name: "on the box", machine: "build-box" }],
   });
-  await refused(() => d.call("agent.startable", "/home/p/elsewhere"), /no such workspace/);
+  await refused(() => d.call("agent.startable", "/home/p/elsewhere"), /no such workspace/, "NOT_FOUND");
 });
 
 test("starting asks for what was given, checked: an agent this device starts, one of the workspace's frames, a prompt of at most 10,000 characters with no control characters but newlines and tabs, and lines for model and mode", async () => {
@@ -86,13 +86,13 @@ test("starting asks for what was given, checked: an agent this device starts, on
     { repo: d.repo, start: { program: "claude" } },
   ]);
   await refused(() => d.call("agent.start", d.repo, { program: "codex" }), /not an agent this device starts/);
-  await refused(() => d.call("agent.start", d.repo, { program: "claude", frame: "f-gone" }), /no frame f-gone/);
+  await refused(() => d.call("agent.start", d.repo, { program: "claude", frame: "f-gone" }), /no frame f-gone/, "NOT_FOUND");
   await refused(() => d.call("agent.start", d.repo, { program: "claude", prompt: "x".repeat(PROMPT_MAX + 1) }), /at most 10000 characters/);
   await refused(() => d.call("agent.start", d.repo, { program: "claude", prompt: "go\x1b[2J" }), /no control characters/);
   await refused(() => d.call("agent.start", d.repo, { program: "claude", model: "opus\n--dangerously-skip-permissions" }), /one line/);
   await refused(() => d.call("agent.start", d.repo, { program: "claude", mode: "y".repeat(201) }), /one line of at most 200/);
   await refused(() => d.call("agent.start", d.repo, "claude"), /start must be an object/);
-  await refused(() => d.call("agent.start", "/home/p/elsewhere", { program: "claude" }), /no such workspace/);
+  await refused(() => d.call("agent.start", "/home/p/elsewhere", { program: "claude" }), /no such workspace/, "NOT_FOUND");
   assert.equal(d.started.length, 2, "nothing refused was started");
 });
 
@@ -179,7 +179,7 @@ test("a patch past 512 KiB is cut at the end of a line and says so; a folder tha
   assert.deepEqual(await d.call("agent.diff", "t1"), { files: [], patch: "", truncated: false });
   d.state.folder = `machine://${BOX}/srv/api`;
   await assert.rejects(Promise.resolve().then(() => d.call("agent.diff", "t1")), (e: Error & { code?: string }) => e.code === "FAILED" && /another machine/.test(e.message));
-  await refused(() => d.call("agent.diff", "t7"), /no such agent/);
+  await refused(() => d.call("agent.diff", "t7"), /no such agent/, "NOT_FOUND");
 });
 
 test("starting, interrupting and closing an agent from another device is recorded against its tile as that device; seeing what may be started, or what an agent changed, is not", async () => {
@@ -217,5 +217,5 @@ test("a program starts an agent named, resumed and supervised as it asks, and is
 test("a workspace open with nothing saved yet starts agents; one that is not here does not", async () => {
   const d = device();
   assert.deepEqual(await d.call("agent.start", "/home/p/fresh", { program: "claude" }), { tile: "t9" });
-  await refused(() => d.call("agent.start", "/home/p/nowhere", { program: "claude" }), /no such workspace/);
+  await refused(() => d.call("agent.start", "/home/p/nowhere", { program: "claude" }), /no such workspace/, "NOT_FOUND");
 });

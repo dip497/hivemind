@@ -8,10 +8,10 @@ agent the host started, else `<config>/hivemind/hcp.sock` and `hcp.token`.
 ## Connection
 
 1. `initialize {"token"}` → `{"protocolVersion": 2, "rendererUp", "capabilities": {"status"}}`.
-   Every other request before it is refused with `UNAUTHORIZED`. The token says who calls: the
+   Every other request before it is refused with `FORBIDDEN`. The token says who calls: the
    host's own (`hcp.token`) is the person at the machine; an agent the host started is given one
    of its own, `<tile>.<MAC>`, which names its tile. A call made with a tile's token is that
-   tile's: a `callerTile` naming another tile is refused with `UNAUTHORIZED`, and one naming none
+   tile's: a `callerTile` naming another tile is refused with `FORBIDDEN`, and one naming none
    is taken as the tile's own. The person may name any tile.
 2. Requests and notifications, in any order. A hook's `agent.event` notification needs no
    `initialize` (see `hook-protocol.md`).
@@ -19,8 +19,9 @@ agent the host started, else `<config>/hivemind/hcp.sock` and `hcp.token`.
 ## Errors
 
 `{"code": -32000, "message", "data": {"code"}}` for the host's own failures, `data.code` one of
-`BAD_REQUEST`, `UNKNOWN_METHOD`, `UNAUTHORIZED`, `APP_NO_RENDERER`, `RATE_LIMITED`,
-`DEPTH_EXCEEDED`, `TILE_NOT_FOUND`, `TIMEOUT`, `UNSUPPORTED`, `UNAVAILABLE`, `INTERNAL`.
+the workspace API's error codes (`workspace-api.md`, "Errors"): `BAD_REQUEST`, `UNKNOWN_METHOD`,
+`FORBIDDEN`, `NOT_FOUND`, `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `TIMEOUT`,
+`UNAVAILABLE`, `FAILED`.
 `-32601` for an unknown method, `-32600` for a malformed message, `-32700` for bad JSON.
 
 ## Streams
@@ -42,7 +43,7 @@ host records each one with an effect in its audit log (`audit.jsonl` beside `hcp
 asked, what, of what, and whether it happened.
 
 `agent.approve` is answered by the tile the approval was asked of, or with the host's own token;
-from any other tile, the worker's own included, it is refused with `UNAUTHORIZED`. An approval
+from any other tile, the worker's own included, it is refused with `FORBIDDEN`. An approval
 ends when the connection that asked for it closes, and an answer after that gets `BAD_REQUEST`.
 
 `agent.sessions {"agent", "cwd"?, "limit"?}` → `{"agent", "resumable", "sessions": [{"id",

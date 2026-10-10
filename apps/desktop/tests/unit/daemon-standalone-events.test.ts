@@ -107,7 +107,7 @@ test("standalone: hook events reach event viewers, requests are answered at once
   // An agent here reports with the token its tile was given, which the machine knows too; one it
   // did not give is refused.
   assert.deepEqual(await ask("r2", "agent.reply", { tileId: "hm:tile-1", text: "again" }, tileToken(token, "hm:tile-1")), { jsonrpc: "2.0", id: "r2", result: { ok: true } });
-  assert.equal((await ask("r3", "agent.reply", { tileId: "hm:tile-1", text: "forged" }, "hm:tile-1.forged")).error.data.code, "UNAUTHORIZED");
+  assert.equal((await ask("r3", "agent.reply", { tileId: "hm:tile-1", text: "forged" }, "hm:tile-1.forged")).error.data.code, "FORBIDDEN");
   viewer.destroy();
   srv.close();
 });

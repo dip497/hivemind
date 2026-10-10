@@ -152,7 +152,7 @@ test("the views here that say they work on a phone are offered with the page to 
   assert.ok(entry.text.includes(`<script type="module" nonce="${entry.nonce}" src="./view.js"></script>`), entry.text);
   assert.equal(((await c.call("view.file", ["priya-board", "whole.bin"], phone)) as { data: string }).data.length, Math.ceil((4 * 1024 * 1024) / 3) * 4);
   for (const [view, at] of [["priya-board", "../desk-only/index.html"], ["priya-board", "leak.txt"], ["priya-board", "big.bin"], ["priya-board", "big.html"], ["priya-board", "gone.js"], ["priya-board", "__entry.html"], ["desk-only", "index.html"], ["bad", "index.html"]]) {
-    assert.equal(await code(c.call("view.file", [view, at], phone)), "BAD_REQUEST", `${view} ${at}`);
+    assert.equal(await code(c.call("view.file", [view, at], phone)), view === "bad" ? "NOT_FOUND" : "BAD_REQUEST", `${view} ${at}`);
   }
   // A view here that is not for a phone says so; one that is not here says that.
   const said = async (p: Promise<unknown>) => { try { await p; return "ok"; } catch (e) { return (e as Error).message; } };
@@ -183,7 +183,7 @@ test("a view opened on a workspace here is told, once ready, where it is (a phon
   const c = computer();
   installed("priya-board", { name: "Priya's board", phone: true, permissions: ["workspace:spawn", "workspace:close", "workspace:edit", "workspace:prompt", "workspace:sessions"] });
   const [phone, other] = [c.caller(), c.caller()];
-  assert.equal(await code(c.call("view.open", ["priya-board", path.join(tmp, "elsewhere")], phone)), "BAD_REQUEST");
+  assert.equal(await code(c.call("view.open", ["priya-board", path.join(tmp, "elsewhere")], phone)), "NOT_FOUND");
   const { session } = (await c.call("view.open", ["priya-board", c.repo], phone)) as { session: string };
   assert.deepEqual(c.said(phone, session), [], "nothing before the view says it is ready");
   c.post(phone, session, { type: "ready", v: 1 });

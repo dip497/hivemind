@@ -9,8 +9,21 @@ export type ErrorCode =
   /** The params are not what the method takes, or name something it may not reach (a path outside its repo). */
   | "BAD_REQUEST"
   | "UNKNOWN_METHOD"
-  /** The caller may not do this: their role on this workspace does not allow it (M1). */
+  /** The caller may not do this: their role on this workspace does not allow it (M1), or no token
+   *  says who they are. */
   | "FORBIDDEN"
+  /** What it names is not there: a tile, a frame, a workspace. */
+  | "NOT_FOUND"
+  /** The agent cannot do what it asks: no turn signal to read a reply by, no permission system to
+   *  supervise, no session to resume. */
+  | "UNSUPPORTED"
+  /** Too many started at once, or too deep: ask again later, or from higher up. */
+  | "RATE_LIMITED"
+  | "DEPTH_EXCEEDED"
+  /** What it waited on did not come in time. */
+  | "TIMEOUT"
+  /** It needs a window, and none is open here. */
+  | "UNAVAILABLE"
   /** It ran and failed: git refused, a file could not be written. */
   | "FAILED";
 

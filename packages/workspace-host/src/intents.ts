@@ -56,7 +56,7 @@ export interface AuditRecord {
   detail?: string;
   /** `refused`: the policy said no, and it never ran. */
   outcome: "ok" | "error" | "refused";
-  /** The code of the error it failed with (`TILE_NOT_FOUND`, `RATE_LIMITED`, …), if it had one. */
+  /** The code of the error it failed with (`NOT_FOUND`, `RATE_LIMITED`, …), if it had one. */
   code?: string;
 }
 
