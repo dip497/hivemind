@@ -467,8 +467,10 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const shown = deps.shownWorkspace();
     const repo = held ?? shown?.repo ?? null;
     if (repo === null) return null;
-    return { repo, core: deps.workspaces.getCore(repo) ?? { frames: [], tiles: [] }, frame: shown?.repo === repo ? shown.frame : null };
+    return { repo, core: coreOf(repo), frame: shown?.repo === repo ? shown.frame : null };
   };
+  // A workspace the store holds whose window has not laid it out yet is open, with nothing in it.
+  const coreOf = (repo: string): CoreLayout => deps.workspaces.getCore(repo) ?? { frames: [], tiles: [] };
   const layoutFor = (callerTile: unknown): CoreLayout => workspaceFor(callerTile)?.core ?? { frames: [], tiles: [] };
 
   // Where the control plane opens a tile, and tells the windows so: the workspace and frame (the
@@ -478,8 +480,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     callerTile: unknown, named: unknown,
     make: (ws: CoreLayout) => TileRecord, at: { name?: string; prompt?: string; background: boolean; repo?: string },
   ): string => {
-    const core = at.repo === undefined ? null : deps.workspaces.getCore(at.repo);
-    const ws = at.repo === undefined ? workspaceFor(callerTile) : core && { repo: at.repo, core, frame: null };
+    const ws = at.repo === undefined ? workspaceFor(callerTile)
+      : deps.workspaces.repos().includes(at.repo) ? { repo: at.repo, core: coreOf(at.repo), frame: null } : null;
     if (!ws) throw new HcpError("NOT_FOUND", "no workspace is open: open one in the app first");
     let frame: FrameRecord | undefined;
     const caller = typeof callerTile === "string" && callerTile ? bareOf(callerTile) : undefined;
