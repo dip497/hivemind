@@ -526,10 +526,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     };
     // Restore keyboard focus after an operation that recreates the renderer canvas
     // (acquire/release/context-loss) — a focused selected terminal must not silently
-    // lose input. Deferred a frame so it runs after the DOM swap settles.
+    // lose input. Deferred a frame so it runs after the DOM swap settles. Only focus the
+    // swap dropped: focus put elsewhere since (a menu, a field) stays there.
     const restoreFocusIfSelected = () => {
       if (!selectedRef.current) return;
       requestAnimationFrame(() => {
+        const at = document.activeElement;
+        if (at && at !== document.body && !termRef.current?.element?.contains(at)) return;
         try { if (selectedRef.current) termRef.current?.focus(); } catch { /* torn down */ }
       });
     };

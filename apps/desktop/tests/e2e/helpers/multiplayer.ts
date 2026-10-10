@@ -8,7 +8,8 @@ import path from "node:path";
 
 /** Settings → Share, for the workspace the window shows. */
 export async function openShare(page: Page): Promise<void> {
-  await page.locator('[aria-label="settings"]').click();
+  // As the toolbar's and the Layers panel's Settings buttons do: a view may show either, or neither.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: {} })));
   await page.locator('[data-settings-page="share"]').click();
 }
 

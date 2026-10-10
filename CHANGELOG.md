@@ -9,6 +9,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: clicking Add (or reopening any dialog) just after picking from it did nothing, or opened a dialog that took no clicks until Escape. A closing dialog now lets the page under it take the click, and comes back whole when opened again mid-close.
+- Fixed: a selected terminal whose renderer was rebuilt (the GPU dropping it, another terminal taking its place) took the keyboard back from a field you had moved to, such as the Layers search.
+- Fixed: a phone asking for a view made only for a desk is told the view is not for a phone, rather than that it does not exist.
+- Internal: the host-view, phone-pairing and guest-machine e2e specs had fallen behind the app (Settings opened from an event, the features a phone is offered, a prompt that ended in `#` only as root).
 - Fixed: switching between tabs in the Windows view, or showing a hidden terminal again, made its program redraw as if resized, even when nothing had happened in it meanwhile. A terminal is now sent its screen again, and its program asked to redraw, only when it missed output while hidden.
 - Internal: five e2e specs had fallen behind the app (the frame menu's Arrange, Terminal in Add, the Layers row's status dot, the Windows view in its own frame) and failed every run.
 - **Breaking:** the workspace API's `plan.list`, `plan.decide`, `plan.review` and `plan.decided` are gone (0.21). A plan an agent waits on is in `agent.list` (`waiting.plan`) and is answered with `agent.answer`, like a supervised tool use; an answer that comes second hears who answered first (`by`), and the `answered` event says the decision and who gave it. `hive ctl open-review` runs in the agent's tile, or names it with `--tile`.

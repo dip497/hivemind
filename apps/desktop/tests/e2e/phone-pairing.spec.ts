@@ -530,7 +530,7 @@ test("a community view that says it works on a phone is offered there with its f
   await expect.poll(structures, { timeout: 30_000 }).toEqual([[probe]]);
   expect(told[0]).toMatchObject({
     type: "hello", pluginId: "priya-board", capabilities: ["workspace:spawn"], device: { touch: true, compact: true }, viewport: { w: 390, h: 844 }, theme: { colors: {} },
-    features: ["agentStatus"],
+    features: ["agentStatus", "widgets", "invoke"],
   });
   // A screen that places the view's live surfaces itself (as the phone's app does over its web
   // view) says so, and the view is told it may ask for them (workspace API 0.15, view protocol 1.6).
@@ -540,7 +540,7 @@ test("a community view that says it works on a phone is offered there with its f
   placing.stdout!.on("data", (b: Buffer) => { placed += b.toString(); });
   placing.stdin!.write(`${JSON.stringify({ type: "ready", v: 1 })}\n`);
   const placingHello = () => placed.split("\n").filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>).find((m) => m.type === "hello");
-  await expect.poll(() => placingHello()?.features, { timeout: 30_000 }).toEqual(["agentStatus", "surfaces"]);
+  await expect.poll(() => placingHello()?.features, { timeout: 30_000 }).toEqual(["agentStatus", "widgets", "invoke", "surfaces"]);
   placing.stdin!.end();
 
   // What it may not do is refused: the rename never reaches the board. What it may, it does, as the
@@ -621,7 +621,7 @@ test("a computer away is shown with what it last said needed the person, and whe
   expect(backs()).toEqual([]);
 
   // The computer goes away: what it said last is shown, and when.
-  await closeApp(apps.pop()!);
+  await apps.pop()!.close();
   const away = await needsOf(phone);
   expect(away).toMatchObject({ needs: [], working: 0, away: [{ device: d.me.deviceId, name: os.hostname(), heard: { needs: [waiting], working: 0 } }] });
   expect(Math.abs((away.away[0]!.heard as { at: number }).at - asked)).toBeLessThan(15_000);
@@ -645,7 +645,7 @@ test("a computer away is shown with what it last said needed the person, and whe
   expect((await needsOf(phone)).away).toEqual([]);
 
   // Unpaired from the phone while away: the phone forgets it, and says the computer was not told.
-  await closeApp(apps.pop()!);
+  await apps.pop()!.close();
   const unpaired = JSON.parse((await run(HIVE_PHONE, ["unpair", os.hostname(), "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as unknown;
   expect(unpaired).toEqual({ device: d.me.deviceId, name: os.hostname(), told: false });
   expect(JSON.parse((await run(HIVE_PHONE, ["devices", "--identity", phone, "--json"])).stdout)).toEqual([]);

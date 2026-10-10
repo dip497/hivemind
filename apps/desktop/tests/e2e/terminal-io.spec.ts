@@ -43,3 +43,23 @@ test("keys typed into a terminal reach its shell, and what it prints reaches the
   });
   await expect.poll(screen, { timeout: 10_000 }).toContain("printed-42");
 });
+
+test("a terminal whose renderer is rebuilt leaves focus put elsewhere since where it is", async () => {
+  await page.locator('[data-toolbar-action="board"]').click();
+  await page.locator('[data-add-menu] [data-board-choice="tile:shell"]').click();
+  const term = page.locator(".react-flow__node-terminal").last();
+  // Fresh and selected, it draws with WebGL: on a canvas of its own, beside the link layer's.
+  const canvas = term.locator('.xterm-screen canvas:not([class$="-layer"])');
+  await expect(canvas).toHaveCount(1);
+  // The person goes to search the tiles, the terminal still selected.
+  await page.locator("[data-layers-search-toggle]").click();
+  const search = page.locator("[data-layers-search]");
+  await expect(search).toBeFocused();
+  // The GPU drops its context: the terminal falls back to the DOM renderer.
+  await canvas.evaluate((c: HTMLCanvasElement) => c.getContext("webgl2")!.getExtension("WEBGL_lose_context")!.loseContext());
+  await expect(canvas).toHaveCount(0);
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  await expect(search).toBeFocused();
+  await page.keyboard.type("zz");
+  await expect(search).toHaveValue("zz");
+});

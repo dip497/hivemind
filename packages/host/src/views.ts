@@ -211,8 +211,10 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
     (await availableViews()).filter((v) => v.manifest.phone === true);
   const viewNamed = async (id: unknown, repo?: string) => {
     const name = text(id, "view");
-    const view = (await (repo ? availableViews(repo) : phoneViews())).find((v) => v.id === name);
+    const view = (await availableViews(repo)).find((v) => v.id === name);
     if (!view) throw new ApiError("BAD_REQUEST", `no view ${name} here`);
+    // Asked for with no workspace, it is a phone asking.
+    if (!repo && !view.manifest.phone) throw new ApiError("BAD_REQUEST", `no view ${name} here works on a phone`);
     return view;
   };
 

@@ -154,6 +154,10 @@ test("the views here that say they work on a phone are offered with the page to 
   for (const [view, at] of [["priya-board", "../desk-only/index.html"], ["priya-board", "leak.txt"], ["priya-board", "big.bin"], ["priya-board", "big.html"], ["priya-board", "gone.js"], ["priya-board", "__entry.html"], ["desk-only", "index.html"], ["bad", "index.html"]]) {
     assert.equal(await code(c.call("view.file", [view, at], phone)), "BAD_REQUEST", `${view} ${at}`);
   }
+  // A view here that is not for a phone says so; one that is not here says that.
+  const said = async (p: Promise<unknown>) => { try { await p; return "ok"; } catch (e) { return (e as Error).message; } };
+  assert.equal(await said(c.call("view.file", ["desk-only", "index.html"], phone)), "no view desk-only here works on a phone");
+  assert.equal(await said(c.call("view.file", ["nowhere", "index.html"], phone)), "no view nowhere here");
 });
 
 test("a guest desktop can load the host's desktop view without installing it, with view-role commands withheld", async () => {

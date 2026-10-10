@@ -173,7 +173,9 @@ test("a guest puts a frame of their own on their computer: a shell they open in 
   await expect(guest.locator(`.react-flow__node-terminal[data-id="${planted}"] .xterm`)).toHaveCount(1, { timeout: 20_000 });
   await host.reload();
   await focusTile(guest, planted);
-  await expect.poll(() => screenOf(guest, planted), { timeout: 30_000 }).toContain(`${folder}#`);
+  // Its prompt, in their folder: `#` as root, `$` otherwise.
+  const prompt = new RegExp(`${folder.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[#$]`);
+  await expect.poll(() => screenOf(guest, planted), { timeout: 30_000 }).toMatch(prompt);
   expect(await screenOf(guest, planted)).not.toMatch(/someone else placed|not running/);
   const started = await openShell(host, frame);
   await expect.poll(() => tiles(guest), { timeout: 15_000 }).toContain(started);
