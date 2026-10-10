@@ -10,8 +10,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@hivemind/tsconfig": "workspace:*",

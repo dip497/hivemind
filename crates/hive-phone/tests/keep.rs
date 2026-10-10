@@ -641,9 +641,9 @@ fn the_network_an_app_gives_is_kept_and_reached_through_until_another_persons_ap
 
     // Another person's app: its network, or the local one alone.
     let mut theirs = paired(&phone, 20, &sam);
-    theirs.network = Some("hosted".into());
+    theirs.network = Some("local".into());
     phone.keep(&theirs, 3).unwrap();
-    assert_eq!(phone.network().unwrap().builtin, Some("hosted"));
+    assert_eq!(phone.network().unwrap().builtin, Some("local"));
     phone.keep(&paired(&phone, 30, &key(3)), 4).unwrap();
     assert!(phone.network().is_none());
     assert_eq!(phone.reach(), Reach::local());
