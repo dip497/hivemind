@@ -964,6 +964,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     // to display-refresh rate and stops the resize handle from jittering.
     let fitRaf = 0;
     const doFit = () => {
+      // Put off to a frame or a burst's end, it may be hidden by then: it fits once shown.
+      if (parked || !hostShown()) { pendingFitRef.current = true; return; }
       try {
         const buf = term.buffer.active;
         const atBottom = buf.viewportY >= buf.baseY;
