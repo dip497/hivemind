@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Internal: `apps/desktop/scripts/e2e.sh` runs the e2e suite, or named specs, headless with its log and summary, one run at a time; `--fresh N` runs a spec N times with a new app each time, to measure a flaky one.
 - **Breaking:** one set of error codes for the workspace API, the drive socket and `hive ctl` (workspace API 0.23). The API adds `NOT_FOUND`, `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `TIMEOUT` and `UNAVAILABLE`, so a program on `drive.sock` can tell a missing tile or a full spawn queue from a failure; a frame, workspace, agent or view that is not there is now `NOT_FOUND` rather than `BAD_REQUEST`. The control plane's own codes go: `TILE_NOT_FOUND` is `NOT_FOUND`, `UNAUTHORIZED` is `FORBIDDEN`, `APP_NO_RENDERER` is `UNAVAILABLE` and `INTERNAL` is `FAILED`, in `hive ctl --json` too; exit statuses are unchanged.
 - Internal: e2e runs under xvfb opened the app's windows on a Wayland desktop anyway, over whatever you were doing and taking the keyboard, and could show its notifications there. The e2e config now keeps Electron on the X display xvfb-run gives and off your session bus.
 - Internal: the widgets e2e spec pressed a widget's button in a view the moment it was drawn, before the window routed the pointer into the view's frame, so about one run in seven the click landed on the window instead. It now points at the button until the frame says the pointer reached it.

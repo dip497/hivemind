@@ -100,7 +100,7 @@ tile bodies live in the TileHost and are never remounted by a view.
   `xxxRef.current = …` patches stay where a handler needs a synchronous read.
 - e2e drag tests probe `.tile-drag-handle` via element-from-point — don't move
   the handle class off the header.
-- Run e2e headless: `xvfb-run -a --server-args="-screen 0 1600x1000x24" npx playwright test …`
+- Run e2e with `scripts/e2e.sh [spec…]`: headless on a private X display (never your desktop), a log, the summary. `--fresh N` reruns a spec N times with a new app each time; `--repeat-each` reuses one app across repeats, so its failures there are piled-up state.
   (else Electron windows open on your desktop). `playwright.config.ts` isolates the
   profile via a fresh `XDG_CONFIG_HOME` per run: settings.json and the agents live there
   whatever `--user-data-dir` says, and a spec launched without `--user-data-dir` uses its
