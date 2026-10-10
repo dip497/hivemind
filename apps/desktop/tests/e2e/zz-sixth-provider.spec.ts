@@ -12,6 +12,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { tileToken } from "@hivemind/agent-host/hooks/token";
 import { stopDaemons } from "./helpers/daemons";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -26,7 +27,7 @@ let app: ElectronApplication | undefined;
 let page: Page;
 let repo: string;
 let fakeBin: string;
-let sock: string;
+let userData: string;
 let token: string;
 
 function onPath(bin: string): string {
@@ -38,13 +39,16 @@ function onPath(bin: string): string {
 }
 function hive(args: string[], env: Record<string, string> = {}) {
   const r = spawnSync(onPath("bun"), [CLI, ...args], {
-    encoding: "utf8", timeout: 120_000,
-    env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, HIVE_HCP_SOCK: sock, HCP_TOKEN: token, ...env },
+    cwd: repo, encoding: "utf8", timeout: 120_000,
+    env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, HIVEMIND_APP_DATA: userData, ...env },
   });
   let json: any;
   try { json = JSON.parse(r.stdout.trim()); } catch { try { json = JSON.parse(r.stdout.trim().split("\n").pop() || ""); } catch { /* not json */ } }
   return { code: r.status, stdout: r.stdout, stderr: r.stderr, json };
 }
+/** What an agent's `hive` is given: the token of its own tile. */
+const asAgent = (tile: string) => ({ HCP_TOKEN: tileToken(token, `hm:${tile}`) });
+const agents = (): Array<{ tile: string; state: string }> => hive(["ctl", "agents", "--json"]).json.agents;
 /** Drop the agent in the way anyone would: a manifest and the file it needs, in the user's
  *  own agents folder. Nothing compiled in, nothing of ours edited, no rebuild. */
 function installFauxAgent(): void {
@@ -78,9 +82,8 @@ test.beforeAll(async () => {
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
-  const userData = path.join(process.env.XDG_CONFIG_HOME!, "hivemind-dev");
-  sock = path.join(userData, "hcp.sock");
-  await expect.poll(() => fs.existsSync(sock) && fs.existsSync(path.join(userData, "hcp.token")), { timeout: 20_000 }).toBe(true);
+  userData = path.join(process.env.XDG_CONFIG_HOME!, "hivemind-dev");
+  await expect.poll(() => fs.existsSync(path.join(userData, "drive.sock")) && fs.existsSync(path.join(userData, "hcp.token")), { timeout: 20_000 }).toBe(true);
   token = fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim();
 });
 
@@ -121,24 +124,21 @@ test("the CLI offers and validates it; `hive agent detect` probes its binary", a
 });
 
 test("lifecycle proof: spawn → working/idle → send → read → report → workflow → close", async () => {
-  // Spawn from the launcher via HCP; the argv prompt runs; hooks report the turn.
+  // Spawn from the launcher on the drive socket; the argv prompt runs; hooks report the turn.
   const orch = hive(["ctl", "spawn", "--agent", "claude", "--name", "orchestrator", "--prompt", "echo up", "--json"]);
   expect(orch.code, orch.stderr).toBe(0);
-  const orchestrator: string = orch.json.tileId;
+  const orchestrator: string = orch.json.tile;
   expect(hive(["ctl", "read", orchestrator, "--timeout", "40000", "--json"]).json.text).toBe("up");
 
-  const w = hive(["ctl", "spawn", "--agent", "faux", "--name", "faux-1", "--prompt", "echo faux ready from $HIVE_AGENT_ID", "--json"], { HIVEMIND_TILE: orchestrator });
+  const w = hive(["ctl", "spawn", "--agent", "faux", "--name", "faux-1", "--prompt", "echo faux ready from $HIVE_AGENT_ID", "--json"], asAgent(orchestrator));
   expect(w.code, w.stderr).toBe(0);
-  const worker: string = w.json.tileId;
+  const worker: string = w.json.tile;
   // Turn signal → read returns the transcript reply, not a timeout.
   const first = hive(["ctl", "read", worker, "--timeout", "40000", "--json"]);
   expect(first.code, first.stdout + first.stderr).toBe(0);
   expect(first.json).toMatchObject({ text: "faux ready from faux", finalStatus: "turn" });
-  // Status: the tile went working then idle (hook-driven) — visible through list.
-  await expect.poll(() => {
-    const l = hive(["ctl", "list", "--json"]).json;
-    return l.frames.flatMap((f: any) => f.tiles).find((t: any) => t.tileId === worker)?.status;
-  }, { timeout: 10_000 }).toBe("idle");
+  // Status: the tile went working, then its turn ended (hook-driven) — visible through agents.
+  await expect.poll(() => agents().find((a) => a.tile === worker)?.state, { timeout: 10_000 }).toBe("done");
   // send → read a follow-up turn.
   hive(["ctl", "send", worker, "echo second"]);
   expect(hive(["ctl", "read", worker, "--timeout", "40000", "--json"]).json.text).toBe("second");
@@ -148,10 +148,10 @@ test("lifecycle proof: spawn → working/idle → send → read → report → w
   expect(JSON.parse(rep.json.text)).toMatchObject({ delivered: true });
   await expect.poll(() => hive(["ctl", "stream", orchestrator, "--lines", "60", "--snapshot"]).stdout, { timeout: 30_000, intervals: [500] }).toContain("faux done");
   // workflow gathers from a fleet of the new runtime.
-  const wf = hive(["ctl", "workflow", "--shape", "fanout", "--agent", "faux", "--items", "x || y", "--prompt", "echo did {item}", "--timeout", "60000", "--close", "--json"], { HIVEMIND_TILE: orchestrator });
+  const wf = hive(["ctl", "workflow", "--shape", "fanout", "--agent", "faux", "--items", "x || y", "--prompt", "echo did {item}", "--timeout", "60000", "--close", "--json"], asAgent(orchestrator));
   expect(wf.code, wf.stdout + wf.stderr).toBe(0);
   expect(wf.json.items.map((i: any) => [i.status, i.text])).toEqual([["turn", "did x"], ["turn", "did y"]]);
   // close → no leaked tile.
-  expect(hive(["ctl", "close", worker, "--json"]).json).toEqual({ ok: true });
-  await expect.poll(() => hive(["ctl", "list", "--json"]).json.frames.flatMap((f: any) => f.tiles.map((t: any) => t.tileId)), { timeout: 10_000 }).not.toContain(worker);
+  expect(hive(["ctl", "close", worker, "--json"]).json).toEqual({ closed: true });
+  await expect.poll(() => agents().map((a) => a.tile), { timeout: 10_000 }).not.toContain(worker);
 });

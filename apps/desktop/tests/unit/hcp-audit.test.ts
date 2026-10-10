@@ -121,23 +121,6 @@ test("a supervised worker's question and its supervisor's answer are recorded; o
   ]);
 });
 
-test("a workflow's spawns and closes are recorded as its caller's, one by one, and so is the workflow", async () => {
-  const { dispatch, turns, ws, lines } = dispatcher();
-  const run = dispatch("workflow.run", { shape: "fanout", items: ["a", "b"], prompt: "do {item}", close_when_done: true, timeout_ms: 5000 }, LEAD);
-  await until(() => ws.announced.length === 2);
-  // Each worker finishes its turn once it is running.
-  for (const { tileId } of ws.announced) { turns.recordReply(`hm:${tileId}`, `did ${tileId}`); turns.recordTurn(`hm:${tileId}`); }
-  await run;
-
-  const workers = ws.announced.map((s) => s.tileId).sort();
-  const recorded = lines();
-  const of = (verb: string) => recorded.filter((l) => l.verb === verb);
-  assert.deepEqual(of("tile.spawn_agent").map((l) => l.target).sort(), workers);
-  assert.deepEqual(of("tile.close").map((l) => l.target).sort(), workers);
-  assert.ok(recorded.every((l) => l.outcome === "ok" && l.actor.kind === "tile" && l.actor.tile === "tile-lead"));
-  assert.deepEqual(recorded.at(-1), { actor: lead, verb: "workflow.run", outcome: "ok" } satisfies Omit<AuditRecord, "at">);
-});
-
 test("a tile that names another as its caller is refused, which is recorded, and nothing happens; a person may act for any tile", async () => {
   const { dispatch, ws, lines } = dispatcher();
   const worker = fromTile("tile-worker");

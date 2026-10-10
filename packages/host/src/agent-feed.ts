@@ -10,7 +10,9 @@
  * asks `since` for them; when they are older than the feed keeps, it lists again.
  *
  * However often statuses change, the feed works the agents out at most every `every` ms (titles
- * change about every 600 ms while an agent writes) and tells only what changed.
+ * change about every 600 ms while an agent writes) and tells only what changed; a reader that
+ * lists or catches up meanwhile has what is waiting worked out first, so what it was just told
+ * was done (a rename) is what it reads.
  */
 import type { AgentChange, AgentEvent, AgentItem, Answerer } from "@hivemind/workspace-api/agents";
 
@@ -63,14 +65,21 @@ export class AgentFeed {
     (this.due as { unref?: () => void }).unref?.();
   }
 
+  /** What waits out the interval, worked out now. */
+  private settle(): void {
+    if (this.due) this.refresh();
+  }
+
   /** The agents of the workspace `workspace` now, and the feed's position. */
   list(workspace: string): { seq: number; agents: AgentItem[] } {
+    this.settle();
     return { seq: this.seq, agents: [...this.agents.values()].filter((a) => a.workspace === workspace) };
   }
 
   /** What `workspace`'s readers were told after `seq`, or null when the feed no longer keeps all
    *  of it: list again. */
   since(workspace: string, seq: number): { seq: number; changes: AgentChange[]; events: AgentEvent[] } | null {
+    this.settle();
     if (seq > this.seq) return null;
     const oldest = this.told[0]?.change?.seq ?? this.told[0]?.event?.seq ?? this.seq + 1;
     if (seq < this.seq && seq + 1 < oldest) return null;

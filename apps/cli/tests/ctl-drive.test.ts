@@ -72,7 +72,8 @@ beforeAll(async () => {
   server = new WorkspaceServer([{ answers, effects: {} }], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
   drive = serveDrive(sock, {
     server, installToken: () => TOKEN, grants: new Grants(path.join(dir, "grants.json")), repos: () => [repoA, repoB],
-    workspaceOf: (tile) => (tile === "me-1" ? repoA : null), nameOf: (tile) => `the ${tile} agent`,
+    // The agent, and the one it starts, are in workspace a.
+    workspaceOf: (tile) => (tile === "me-1" || tile === "w-2" ? repoA : null), nameOf: (tile) => `the ${tile} agent`,
   });
   while (!fs.existsSync(sock)) await new Promise((r) => setTimeout(r, 10));
 });
@@ -105,6 +106,12 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
       params: [repoA, { program: "codex", name: "w", frame: "f1", model: "m", prompt: "go", report: false, supervise: ["Bash", "Edit"] }],
       by: { kind: "peer", access: "agents", tile: "me-1", client: "the me-1 agent" },
     });
+    // A frame by its name, in any case; one no frame answers to is not found, and nothing starts.
+    await hive(["ctl", "spawn", "--agent", "codex", "--frame", "A", "--json"], { cwd: dir, env: asAgent() });
+    expect(last("agent.start").params).toEqual([repoA, { program: "codex", frame: "f1" }]);
+    calls.length = 0;
+    const nowhere = await hive(["ctl", "spawn", "--agent", "codex", "--frame", "b", "--json"], { cwd: dir, env: asAgent() });
+    expect([nowhere.code, (nowhere.json as { code: string }).code, calls.some((c) => c.method === "agent.start")]).toEqual([5, "NOT_FOUND", false]);
     const elsewhere = await hive(["ctl", "spawn", "--agent", "codex", "--repo", repoB, "--json"], { env: asAgent() });
     expect([elsewhere.code, (elsewhere.json as { code: string }).code]).toEqual([6, "FORBIDDEN"]);
   });
@@ -178,6 +185,17 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
       watch.kill();
       expect(out.trim().split("\n").map((l) => JSON.parse(l))).toEqual([event(4, "w-1")]);
     }
+  });
+
+  test("workflow: an agent's workers are started in its workspace, as silent workers, each reply read and closed once in", async () => {
+    calls.length = 0; reads = 0; turnAfterReads = 0;
+    const r = await hive(["ctl", "workflow", "--items", "a || b", "--prompt", "do {item}", "--frame", "A", "--max-concurrent", "1", "--close", "--json"], { env: asAgent() });
+    expect([r.code, r.json]).toEqual([0, { shape: "fanout", items: [{ item: "a", tile: "w-2", status: "turn", text: "reply 1" }, { item: "b", tile: "w-2", status: "turn", text: "reply 2" }] }]);
+    expect(calls.map((c) => [c.method, c.params])).toEqual([
+      ["agent.startable", [repoA]],
+      ["agent.start", [repoA, { program: "claude", prompt: "do a", name: "a", report: false, frame: "f1" }]], ["agent.read", ["w-2", 10_000]], ["agent.close", ["w-2"]],
+      ["agent.start", [repoA, { program: "claude", prompt: "do b", name: "b", report: false, frame: "f1" }]], ["agent.read", ["w-2", 10_000]], ["agent.close", ["w-2"]],
+    ]);
   });
 
   test("stream: --snapshot prints the last lines it printed; live, what it prints as it comes, never a copy of its screen, until it ends; nothing running is exit 5", async () => {

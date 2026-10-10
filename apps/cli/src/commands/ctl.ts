@@ -15,7 +15,7 @@
  *     `error [CODE] message` on stderr, and exit non-zero (see EXIT in hcp.ts:
  *     2 usage · 3 app not running · 4 timeout · 5 not found · 6 unauthorized ·
  *     7 refused · 1 anything else).
- *   • blocking waits are made of SHORT HCP requests (≤ 10 s each) so they
+ *   • blocking waits are made of short requests (≤ 10 s each) so they
  *     never trip a caller's tool timeout — `read --timeout` is honoured
  *     end-to-end and `--poll` returns immediately.
  */
@@ -29,7 +29,8 @@ import {
 import { EXIT, HcpCliError, exitCodeFor, hcpCall, ownTile } from "../hcp.js";
 import { stripAnsi } from "@hivemind/host/control/output-recorder";
 import { openDrive, type Drive } from "../drive.js";
-import { UnsupportedError, UsageError, boolFlag, emitArgs, durationFlag, intFlag, parseKeys, readSchedule, resolveAgent, workflowParams } from "../ctl-args.js";
+import { UnsupportedError, UsageError, boolFlag, emitArgs, durationFlag, intFlag, parseKeys, resolveAgent, superviseOf, workflowPlan } from "../ctl-args.js";
+import { readTurn, runWorkflow } from "../workflow.js";
 import { ensureAgentCatalog } from "../agent-catalog.js";
 import { detectWho } from "../who.js";
 
@@ -161,15 +162,20 @@ const agents = defineCommand({
 const frames = sub("frames", "The workspace's frames, where an agent may be started (id, name, machine)", repoArg,
   (a) => onDrive(async (d) => ((await d.call("agent.startable", [await workspaceOf(d, a.repo)])) as { frames: unknown[] }).frames));
 
+/** `--frame`: a frame of the workspace by its id, or by its name in any case, as `frames` lists them. */
+async function frameIn(d: Drive, repo: string, given: string): Promise<string> {
+  const { frames } = await d.call("agent.startable", [repo]) as { frames: Array<{ id: string; name: string }> };
+  const frame = frames.find((f) => f.id === given) ?? frames.find((f) => f.name.toLowerCase() === given.toLowerCase());
+  if (!frame) throw new HcpCliError("NOT_FOUND", `no frame ${given} in this workspace: \`hive ctl frames\` lists them`, EXIT.notFound);
+  return frame.id;
+}
+
 const openTool = sub("open-tool", "Open an enabled tool plugin", {
   tool: { type: "positional", required: true, description: "tool id (for example hivemind/web/browser)" },
   frame: { type: "string", description: "target frame (id, repo name, or title; default: beside the calling agent, else the one selected); exit 5 when none answers to it" },
   url: { type: "string", description: "Browser URL: http, https, or about:blank" },
   ...repoArg,
 }, (a) => onDrive(async (d) => d.call("tool.open", [await workspaceOf(d, a.repo), { tool: a.tool, ...(a.frame ? { frame: a.frame } : {}), ...(a.url ? { url: a.url } : {}) }])));
-
-/** `--supervise all`, or the tools named. */
-const superviseOf = (v: string): "all" | string[] => (v === "all" ? "all" : v.split(",").map((t) => t.trim()).filter(Boolean));
 
 const spawn = sub("spawn", "Spawn an agent tile; prints { tileId, … }", {
   // Named, not listed: help is built before the agents on this machine are loaded, so a
@@ -178,7 +184,7 @@ const spawn = sub("spawn", "Spawn an agent tile; prints { tileId, … }", {
   agent: { type: "string", description: "agent id — `hive agents list` (default: your default agent, or the first one installed)" },
   prompt: { type: "string", description: "initial task" },
   name: { type: "string", description: "tile title" },
-  frame: { type: "string", description: "frame to spawn into (id, repo/worktree name, or title); default: the caller's frame, else the one selected; exit 5 when none answers to it" },
+  frame: { type: "string", description: "frame to spawn into, by its id or name (`hive ctl frames`); default: the caller's frame, else the one selected; exit 5 when none answers to it" },
   mode: { type: "string", description: "permission mode; yolo = ask nothing" },
   model: { type: "string", description: "model override" },
   report: { type: "boolean", description: "worker auto-reports its finished reply to the caller (--no-report to disable)" },
@@ -189,13 +195,17 @@ const spawn = sub("spawn", "Spawn an agent tile; prints { tileId, … }", {
   await ensureAgentCatalog(); // --agent may name an agent added from a manifest
   const program = resolveAgent(a.agent);
   const report = boolFlag(a.report);
-  const given = { prompt: a.prompt, name: a.name, frame: a.frame, mode: a.mode, model: a.model, resume: a.resume };
-  return onDrive(async (d) => d.call("agent.start", [await workspaceOf(d, a.repo), {
-    program,
-    ...Object.fromEntries(Object.entries(given).filter(([, v]) => typeof v === "string" && v)),
-    ...(report !== undefined ? { report } : {}),
-    ...(a.supervise ? { supervise: superviseOf(String(a.supervise)) } : {}),
-  }]));
+  const given = { prompt: a.prompt, name: a.name, mode: a.mode, model: a.model, resume: a.resume };
+  return onDrive(async (d) => {
+    const repo = await workspaceOf(d, a.repo);
+    return d.call("agent.start", [repo, {
+      program,
+      ...Object.fromEntries(Object.entries(given).filter(([, v]) => typeof v === "string" && v)),
+      ...(a.frame ? { frame: await frameIn(d, repo, String(a.frame)) } : {}),
+      ...(report !== undefined ? { report } : {}),
+      ...(a.supervise ? { supervise: superviseOf(String(a.supervise)) } : {}),
+    }]);
+  });
 });
 
 const sessions = sub("sessions", "An agent's past sessions in a folder, newest first, to resume with `hive ctl spawn --resume <id>`", {
@@ -226,8 +236,6 @@ const keys = sub("keys", "Send key tokens to a tile's TUI (comma-separated, e.g.
     return onDrive((d) => d.call("agent.keys", [a.tileId, keys]));
   });
 
-/** Wire ceiling for one read slice: the slice plus slack for the transcript flush. */
-const READ_SLACK_MS = 5_000;
 const READ_DEFAULT_MS = 100_000; // under Claude Code's 120 s Bash default
 
 const read = sub("read", "Wait for an agent's turn to finish and print its reply (exit 4 on timeout, 5 if it closes)", {
@@ -237,15 +245,10 @@ const read = sub("read", "Wait for an agent's turn to finish and print its reply
 }, async (a) => {
   const total = a.poll ? 0 : durationFlag(a.timeout, "timeout", READ_DEFAULT_MS);
   return onDrive(async (d) => {
-    let last: unknown = null;
-    for (const slice of readSchedule(total)) {
-      last = await d.call("agent.read", [a.tileId, slice], slice + READ_SLACK_MS);
-      const status = (last as { finalStatus?: string }).finalStatus;
-      if (status === "turn") return last;
-      // Closed while we waited: no turn is coming, so the rest of the wait would be for nothing.
-      if (status === "closed") return { __exit: EXIT.notFound, result: last };
-    }
-    return a.poll ? last : { __exit: EXIT.timeout, result: last };
+    const r = await readTurn(d, String(a.tileId), total);
+    if (r.finalStatus === "turn" || a.poll) return r;
+    // Closed while we waited: no turn is coming.
+    return { __exit: r.finalStatus === "closed" ? EXIT.notFound : EXIT.timeout, result: r };
   });
 });
 
@@ -276,15 +279,19 @@ const workflow = sub("workflow", "Run a multi-agent workflow (fanout | pipeline 
   "reduce-prompt": { type: "string", description: "mapreduce: reducer prompt; use {results}" },
   agent: { type: "string", description: "runtime per worker: an agent that reports back — `hive agents list` (default: your default agent, or the first one installed)" },
   model: { type: "string", description: "model override for every worker" },
-  frame: { type: "string", description: "frame to spawn workers into (id, repo name, or title)" },
+  frame: { type: "string", description: "frame to spawn workers into, by its id or name (`hive ctl frames`)" },
   supervise: { type: "string", description: "broker workers' tool perms to this CLI: 'all' or a comma-list of tools" },
   "max-concurrent": { type: "string", description: "max workers live at once (default 6, cap 12)" },
   timeout: { type: "string", description: "per-worker turn ceiling, e.g. 10m (default 10m)" },
   close: { type: "boolean", description: "close worker tiles after collecting their replies" },
+  ...repoArg,
 }, async (a) => {
   await ensureAgentCatalog();
-  const { params, ceilingMs } = workflowParams(a);
-  return hcpCall("workflow.run", params, ceilingMs);
+  const plan = workflowPlan(a);
+  return onDrive(async (d) => {
+    const repo = await workspaceOf(d, a.repo);
+    return runWorkflow(d, repo, plan.frame ? { ...plan, frame: await frameIn(d, repo, plan.frame) } : plan);
+  });
 });
 
 type Waiting = { tile: string; waiting?: { since: number; approval?: { request: string } } };

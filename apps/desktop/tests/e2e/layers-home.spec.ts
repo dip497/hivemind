@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { tileToken } from "@hivemind/agent-host/hooks/token";
 import { seedAgents } from "./helpers/agents";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-layers-home-"));
@@ -23,7 +24,6 @@ const env = {
   PATH: `${bin}${path.delimiter}${process.env.PATH}`,
 } as Record<string, string>;
 delete env.ELECTRON_RUN_AS_NODE;
-delete env.HIVE_HCP_SOCK; delete env.HCP_TOKEN; delete env.HIVEMIND_TILE;
 let app: ElectronApplication;
 let page: Page;
 
@@ -96,9 +96,9 @@ test("an agent's started agents are listed under it, and fold away", async () =>
   // As an agent does it: `hive ctl spawn` from inside its tile.
   const ud = path.join(root, "ud");
   const { stdout } = await promisify(execFile)("bun", [cli, "ctl", "spawn", "--agent", "claude", "--name", "helper", "--json"], {
-    env: { ...env, HIVE_HCP_SOCK: path.join(ud, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(ud, "hcp.token"), "utf8").trim(), HIVEMIND_TILE: parent },
+    env: { ...env, HIVEMIND_APP_DATA: ud, HCP_TOKEN: tileToken(fs.readFileSync(path.join(ud, "hcp.token"), "utf8").trim(), `hm:${parent}`) },
   });
-  const child = JSON.parse(stdout.trim().split("\n").pop()!).tileId as string;
+  const child = JSON.parse(stdout.trim().split("\n").pop()!).tile as string;
   const started = panel().locator(`[data-layer-started="${parent}"]`);
   await expect(started.locator(`[data-layer-tile="${child}"]`)).toBeVisible({ timeout: 15_000 });
   await expect(panel().locator(`[data-layer-tile="${child}"]`)).toHaveCount(1);

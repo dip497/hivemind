@@ -88,7 +88,7 @@ async function launch(): Promise<void> {
   await page.waitForSelector(".react-flow", { timeout: 30_000 });
   const userData = path.join(xdg, "hivemind-dev");
   await expect.poll(() => fs.existsSync(path.join(userData, "hcp.token"))).toBe(true);
-  hcp = { HIVE_HCP_SOCK: path.join(userData, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim() };
+  hcp = { HIVEMIND_APP_DATA: userData };
 }
 test.afterAll(async () => {
   await app?.close();
@@ -205,7 +205,7 @@ test("the Add menu offers every tool beside the widgets, by category, found by s
 
 test("text sent to an agent asks which one: agents by frame, searchable, a new one below, chosen by keyboard", async () => {
   expect(hive("ctl", "spawn", "--agent", "claude", "--name", "first").status).toBe(0);
-  const second = hive("ctl", "spawn", "--agent", "claude", "--name", "second").data.tileId as string;
+  const second = hive("ctl", "spawn", "--agent", "claude", "--name", "second").data.tile as string;
   await page.evaluate(() => {
     (window as unknown as { sentTo?: string }).sentTo = undefined;
     window.addEventListener("hivemind:send-to-agent", (e) => { (window as unknown as { sentTo?: string }).sentTo = (e as CustomEvent<{ target: string }>).detail.target; });

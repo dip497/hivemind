@@ -30,7 +30,7 @@ test.beforeAll(async () => {
   await fs.mkdir(bin);
   await fs.writeFile(path.join(bin, "claude"), "#!/bin/sh\n[ \"$1\" = --version ] && echo '2.0.0 (Claude Code)' && exit 0\nexec sleep 60\n", { mode: 0o755 });
   const env = { ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_SHELL_ENV: "0", PATH: `${bin}${path.delimiter}${process.env.PATH}` } as Record<string, string>;
-  delete env.ELECTRON_RUN_AS_NODE; delete env.HIVE_HCP_SOCK; delete env.HCP_TOKEN; delete env.HIVEMIND_TILE;
+  delete env.ELECTRON_RUN_AS_NODE;
   app = await electron.launch({
     args: [
       path.join(APP_DIR, "out/main/index.js"),

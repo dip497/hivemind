@@ -34,7 +34,7 @@ process.stdout.write("ready\\n\\n\\n");
 setInterval(() => { const w = process.stdout.columns; process.stdout.write("\\x1b[2A\\r\\x1b[J" + "=".repeat(w) + "\\n" + "#".repeat(w) + "\\n"); }, 150);
 `, { mode: 0o755 });
   const env = { ...process.env, XDG_CONFIG_HOME: xdg, HOME: root, HIVEMIND_SHELL_ENV: "0", PATH: `${bin}${path.delimiter}${process.env.PATH}` } as Record<string, string>;
-  delete env.ELECTRON_RUN_AS_NODE; delete env.HIVE_HCP_SOCK; delete env.HCP_TOKEN; delete env.HIVEMIND_TILE;
+  delete env.ELECTRON_RUN_AS_NODE;
   app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=${path.join(root, "ud")}`], cwd: repo, env });
   page = await app.firstWindow();
   await page.setViewportSize({ width: 1200, height: 800 });

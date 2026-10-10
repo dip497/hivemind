@@ -94,38 +94,57 @@ export interface WorkflowFlags {
   "max-concurrent"?: string | number; timeout?: string | number; close?: boolean;
 }
 
-/** `ctl workflow` flags → the `workflow.run` params + the wire ceiling. The
- *  ceiling sits ABOVE the worst-case server-side run (workers are concurrent,
- *  so per-turn × units is a safe over-estimate), capped at 24 h. */
-export function workflowParams(f: WorkflowFlags): { params: Record<string, unknown>; ceilingMs: number } {
-  const shape = f.shape ?? "fanout";
-  if (!["fanout", "pipeline", "mapreduce"].includes(shape)) throw new UsageError(`--shape must be fanout | pipeline | mapreduce (got ${shape})`);
-  const items = splitDouble(f.items);
-  const stages = splitDouble(f.stages);
-  if (shape === "pipeline" && !stages) throw new UsageError("pipeline needs --stages 'a || b || c'");
-  if (shape !== "pipeline" && !items) throw new UsageError(`${shape} needs --items 'x || y' and --prompt`);
-  if (shape !== "pipeline" && !f.prompt) throw new UsageError(`${shape} needs --prompt (use {item})`);
-  if (shape === "mapreduce" && !f["reduce-prompt"]) throw new UsageError("mapreduce needs --reduce-prompt (use {results})");
-  const perTurn = durationFlag(f.timeout, "timeout", 600_000);
-  const params: Record<string, unknown> = {
-    shape, items, prompt: f.prompt, stages, input: f.input, reduce_prompt: f["reduce-prompt"],
-    agent: resolveAgent(f.agent, true), model: f.model, frame: f.frame, supervise: f.supervise,
-    max_concurrent: f["max-concurrent"] != null ? intFlag(f["max-concurrent"], "max-concurrent", 6) : undefined,
-    timeout_ms: f.timeout != null ? perTurn : undefined,
-    close_when_done: f.close || undefined,
-  };
-  const units = (items?.length ?? 0) + (stages?.length ?? 0) + 2;
-  const ceilingMs = Math.min(24 * 60 * 60 * 1000, perTurn * units + 30_000);
-  return { params, ceilingMs };
+/** What `ctl workflow` runs: the workers' tasks, what each is started as, and how long and how
+ *  many at once. */
+export interface WorkflowPlan {
+  shape: "fanout" | "pipeline" | "mapreduce";
+  /** fanout / mapreduce: one worker each, filled into the prompt's `{item}`. */
+  items: string[];
+  prompt: string;
+  /** pipeline: one worker each, in turn, the last one's reply its `{input}`. */
+  stages: string[];
+  input: string | null;
+  /** mapreduce: the reducer's task, every reply filled into `{results}`. */
+  reducePrompt: string;
+  program: string;
+  model?: string;
+  frame?: string;
+  supervise?: "all" | string[];
+  /** How long one worker's turn may take. */
+  turnMs: number;
+  /** At most this many workers at once. */
+  concurrency: number;
+  /** Close each worker once its reply is in. */
+  close: boolean;
 }
 
-/** Last `n` lines of a text (used for `stream --lines` when the server has no
- *  replay support and the client must trim a replayed chunk itself). */
-export function tailLines(text: string, n: number): string {
-  if (n <= 0 || !text) return "";
-  const lines = text.split("\n");
-  if (lines[lines.length - 1] === "") lines.pop();
-  return lines.slice(-n).join("\n") + (text.endsWith("\n") ? "\n" : "");
+export const WORKFLOW_TURN_MS = 10 * 60 * 1000;
+export const WORKFLOW_CONCURRENCY = 6;
+export const WORKFLOW_MAX_CONCURRENCY = 12;
+
+/** `--supervise all`, or the tools named. */
+export const superviseOf = (v: string): "all" | string[] => (v === "all" ? "all" : v.split(",").map((t) => t.trim()).filter(Boolean));
+
+/** `ctl workflow` flags → what it runs, checked before any worker starts. */
+export function workflowPlan(f: WorkflowFlags): WorkflowPlan {
+  const shape = f.shape ?? "fanout";
+  if (shape !== "fanout" && shape !== "pipeline" && shape !== "mapreduce") throw new UsageError(`--shape must be fanout | pipeline | mapreduce (got ${shape})`);
+  const items = splitDouble(f.items) ?? [];
+  const stages = splitDouble(f.stages) ?? [];
+  if (shape === "pipeline" && !stages.length) throw new UsageError("pipeline needs --stages 'a || b || c'");
+  if (shape !== "pipeline" && !items.length) throw new UsageError(`${shape} needs --items 'x || y' and --prompt`);
+  if (shape !== "pipeline" && !f.prompt) throw new UsageError(`${shape} needs --prompt (use {item})`);
+  if (shape === "mapreduce" && !f["reduce-prompt"]) throw new UsageError("mapreduce needs --reduce-prompt (use {results})");
+  return {
+    shape, items, prompt: f.prompt ?? "", stages, input: f.input ?? null, reducePrompt: f["reduce-prompt"] ?? "",
+    program: resolveAgent(f.agent, true),
+    ...(f.model ? { model: f.model } : {}),
+    ...(f.frame ? { frame: f.frame } : {}),
+    ...(f.supervise ? { supervise: superviseOf(f.supervise) } : {}),
+    turnMs: durationFlag(f.timeout, "timeout", WORKFLOW_TURN_MS),
+    concurrency: Math.max(1, Math.min(intFlag(f["max-concurrent"], "max-concurrent", WORKFLOW_CONCURRENCY), WORKFLOW_MAX_CONCURRENCY)),
+    close: f.close === true,
+  };
 }
 
 /** `hive ctl view emit <name> [json]`: the name and payload, checked before anything is sent. `-` reads the payload from `stdin`. */

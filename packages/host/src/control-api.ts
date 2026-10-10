@@ -48,7 +48,8 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
         return { keys: r.keys };
       },
       "agent.read": async (from, tile, timeoutMs) => {
-        if (timeoutMs != null && !(typeof timeoutMs === "number" && timeoutMs > 0)) throw new ApiError("BAD_REQUEST", "timeoutMs must be a number of milliseconds");
+        // 0: the turn as it stands, without waiting.
+        if (timeoutMs != null && !(typeof timeoutMs === "number" && timeoutMs >= 0)) throw new ApiError("BAD_REQUEST", "timeoutMs must be a number of milliseconds");
         return (await ask(from, "agent.read", { tileId: text(tile, "tile"), ...(timeoutMs != null ? { timeoutMs } : {}) })) as AgentRead;
       },
       "agent.output": async (from, tile, lines) => {
@@ -70,7 +71,11 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       },
       "view.emit": (from, name, data, view) => ask(from, "view.emit", { name, data, ...(view != null ? { view } : {}) }),
       "plugin.commands": (from) => ask(from, "plugin.commands", {}),
-      "plugin.open": (from, plugin, frame) => ask(from, "plugin.open", { plugin, ...(frame != null ? { frame } : {}) }),
+      "plugin.open": async (from, plugin, frame) => {
+        const r = await ask(from, "plugin.open", { plugin, ...(frame != null ? { frame } : {}) });
+        // A tool's tile, by the name the API gives a tile.
+        return r && typeof r === "object" && "tileId" in r ? { tile: (r as { tileId: string }).tileId } : r;
+      },
       "plugin.call": (from, plugin, command, args, tile) => ask(from, "plugin.call", { plugin, command, args, ...(tile != null ? { tile } : {}) }),
       "tile.focus": done("tile.focus", (tile) => ({ tileId: text(tile, "tile") })),
       "views.rescan": done("views.rescan"),

@@ -80,16 +80,6 @@ const APPROVAL_TIMEOUT_MS = 9 * 60 * 1000;
  *  prompt can't hang the worker (and leak the pending entry) forever. */
 const APPROVAL_MAX_WAIT_MS = 20 * 60 * 1000;
 
-/** Workflow (multi-agent orchestration) defaults. A `workflow.run` fans work out
- *  to visible worker tiles and awaits their turns. `TIMEOUT` bounds one worker's
- *  turn; `CONCURRENCY` bounds how many workers are live at once (on top of the
- *  per-minute spawn rate gate and the depth cap). */
-const WORKFLOW_DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
-const WORKFLOW_DEFAULT_CONCURRENCY = 6;
-const WORKFLOW_MAX_CONCURRENCY = 12;
-/** Backoff between spawn retries when the rate gate trips mid-fan-out. */
-const WORKFLOW_SPAWN_RETRY_MS = 1500;
-const WORKFLOW_SPAWN_RETRIES = 6;
 
 
 
@@ -129,7 +119,7 @@ export interface MethodDeps {
   /** The tool plugins added on this machine that can load (none in safe mode). */
   addedTools?: () => Promise<readonly ToolPluginContribution[]>;
   /** Provider id of a (user-spawned) tile, from its command — for the
-   *  capability checks on read/workflow. Optional: HCP-spawned tiles are
+   *  capability check on read. Optional: HCP-spawned tiles are
    *  tracked internally. */
   agentOf?: (bareTileId: string) => string | undefined;
   /** Run a renderer verb (returns its result); rejects/throws ApiError on
@@ -296,10 +286,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   };
 
   // Spawn one child tile and wire up its bookkeeping (depth, parent, auto-report,
-  // supervision, read epoch). Shared by `tile.spawn_agent` and `workflow.run` so
-  // both enforce the same depth/rate gates. Throws ApiError on depth/rate/spawn
+  // supervision, read epoch), behind the depth/rate gates. Throws ApiError on depth/rate/spawn
   // failure. `report` defaults to on (draws the auto-report edge to the parent);
-  // workflow workers pass report:false and gather via waitForTurn instead.
+  // a worker whose reply is read instead (a workflow's) passes report:false.
   const doSpawn = async (opts: {
     agent?: unknown; prompt?: unknown; frame?: unknown; mode?: unknown; model?: unknown;
     report?: unknown; supervise?: unknown; name?: unknown; resume?: unknown;
@@ -419,7 +408,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   // Close a tile, with no window needed: it leaves its workspace and the session it runs ends, but
   // not one it adopted (`hive run`, another device), which is someone else's job and keeps running.
-  // Then its state here goes. Shared by the `tile.close` verb and workflow's `close_when_done`.
+  // Then its state here goes.
   const closeTile = async (tileId: string): Promise<unknown> => {
     const closed = deps.workspaces.removeTile(bareOf(tileId), CONTROL)?.tile;
     if (!closed) throw new ApiError("NOT_FOUND", `no open workspace has tile ${bareOf(tileId)}`);
@@ -522,114 +511,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     return from && `${from}->${tileOf(dst) ?? "*"}`;
   };
 
-  // Multi-agent orchestration. Fan a list of items out to visible worker
-  // tiles (or chain them as a pipeline), await each worker's turn
-  // deterministically via the turn-tracker (NOT screen-scrape), and return
-  // the aggregated replies. Workers are spawned report:false —
-  // the workflow gathers them itself, so their replies don't also spam the
-  // orchestrator's terminal. The orchestrator's `hive ctl workflow` call blocks until
-  // this returns (`hive ctl workflow` blocks with a matching client ceiling).
-  const runWorkflow = async (p: Record<string, unknown>, call: HcpCall): Promise<unknown> => {
-    const shape = String(p.shape ?? "fanout");
-    const caller = tileOf(p.callerTile);
-    const agent = p.agent != null ? String(p.agent) : await deps.defaultAgentId?.();
-    if (!agent) throw new ApiError("BAD_REQUEST", "no agent installed — install one from Settings ▸ Plugins");
-    {
-      const def = agentById(agent);
-      if (!def || !def.enabled) throw new ApiError("BAD_REQUEST", `unknown agent '${agent}' — spawnable: ${spawnableAgents().map((d) => d.id).join(", ")}`);
-      if (!def.caps.turnSignal) throw new ApiError("UNSUPPORTED", `workflow.run: ${def.id} has no turn signal, so its workers' replies cannot be gathered (${def.note ?? "scrape-only status"}) — use a worker runtime: ${workerAgents().map((d) => d.id).join(", ")}`);
-    }
-    const frame = p.frame != null ? String(p.frame) : undefined;
-    // claude-only model alias applied to every worker in the fleet.
-    const model = p.model != null ? String(p.model) : undefined;
-    const supervise = p.supervise;
-    const perTurnMs = typeof p.timeout_ms === "number" ? p.timeout_ms : WORKFLOW_DEFAULT_TIMEOUT_MS;
-    const maxConc = Math.max(1, Math.min(Number(p.max_concurrent ?? WORKFLOW_DEFAULT_CONCURRENCY), WORKFLOW_MAX_CONCURRENCY));
-    const closeWhenDone = p.close_when_done === true;
-
-    const delay = (ms: number) => new Promise<void>((r) => { const t = setTimeout(r, ms); t.unref?.(); });
-    const fill = (tmpl: string, item: string) => tmpl.replace(/\{item\}/g, item);
-
-    // Spawn one worker (retrying through transient rate-limits), await its
-    // turn, take its reply. Returns a per-worker result. Its spawn and its close
-    // are the caller's intents, as they would be asked one by one.
-    type WR = { item: string; tileId: string | null; status: "turn" | "timeout" | "error"; text: string | null };
-    const runWorker = async (label: string, prompt: string): Promise<WR> => {
-      let tileId: string;
-      try {
-        tileId = await effect(call, { verb: "tile.spawn_agent", target: (id) => id }, () =>
-          spawnRetry({ agent, prompt, frame, model, parent: caller, report: false, supervise, name: label }));
-      } catch (e) {
-        return { item: label, tileId: null, status: "error", text: (e as Error).message };
-      }
-      const pid = ptyId(tileId);
-      const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
-      const rec = await deps.turns.waitForTurn(pid, afterSeq, perTurnMs);
-      const text = rec?.text && rec.text.length > 0 ? rec.text : null;
-      const status: WR["status"] = !rec ? "timeout" : rec.seq === -1 ? "error" : "turn";
-      if (closeWhenDone && status === "turn") {
-        try { await effect(call, { verb: "tile.close", target: tileId }, () => closeTile(tileId)); } catch { /* best-effort */ }
-      }
-      return { item: label, tileId, status, text };
-    };
-    async function spawnRetry(opts: Parameters<typeof doSpawn>[0]): Promise<string> {
-      for (let i = 0; ; i++) {
-        try { return await doSpawn(opts); }
-        catch (e) {
-          if (e instanceof ApiError && e.code === "RATE_LIMITED" && i < WORKFLOW_SPAWN_RETRIES) { await delay(WORKFLOW_SPAWN_RETRY_MS); continue; }
-          throw e;
-        }
-      }
-    }
-    // Fixed-size worker pool: at most `n` runWorker calls live at once.
-    const pool = async <T, R>(xs: T[], n: number, fn: (x: T, i: number) => Promise<R>): Promise<R[]> => {
-      const out = new Array<R>(xs.length);
-      let next = 0;
-      const slot = async () => {
-        for (;;) {
-          const i = next++;
-          if (i >= xs.length) return;
-          out[i] = await fn(xs[i]!, i);
-        }
-      };
-      await Promise.all(Array.from({ length: Math.min(n, xs.length) }, slot));
-      return out;
-    };
-
-    if (shape === "fanout" || shape === "mapreduce") {
-      const items = Array.isArray(p.items) ? p.items.map(String) : [];
-      if (!items.length) throw new ApiError("BAD_REQUEST", "items required (a non-empty array) for fanout/mapreduce");
-      const prompt = String(p.prompt ?? "");
-      if (!prompt) throw new ApiError("BAD_REQUEST", "prompt required for fanout/mapreduce");
-      const results = await pool(items, maxConc, (it) => runWorker(it, fill(prompt, it)));
-      if (shape === "fanout") return { shape, items: results };
-      // mapreduce: feed every worker's output into one reducer tile.
-      const reduceTmpl = String(p.reduce_prompt ?? "");
-      if (!reduceTmpl) throw new ApiError("BAD_REQUEST", "reduce_prompt required for mapreduce");
-      const joined = results.map((r) => `## ${r.item}\n${r.text ?? "(no output)"}`).join("\n\n");
-      const reducer = await runWorker("(reduce)", reduceTmpl.replace(/\{results\}/g, joined));
-      return { shape, items: results, reduced: reducer.text, reducerStatus: reducer.status };
-    }
-
-    if (shape === "pipeline") {
-      // Sequential chain: each stage's prompt may reference {input} (the prior
-      // stage's reply). Stops the chain on a timeout/error stage.
-      const stages = Array.isArray(p.stages) ? p.stages.map(String) : [];
-      if (!stages.length) throw new ApiError("BAD_REQUEST", "stages required (a non-empty array) for pipeline");
-      const steps: WR[] = [];
-      let prev: string | null = p.input != null ? String(p.input) : null;
-      for (let s = 0; s < stages.length; s++) {
-        const r = await runWorker(`stage ${s + 1}`, stages[s]!.replace(/\{input\}/g, prev ?? ""));
-        steps.push(r);
-        if (r.status !== "turn") break; // dead chain — surface the partial run
-        prev = r.text;
-      }
-      return { shape, steps, output: prev };
-    }
-
-    throw new ApiError("BAD_REQUEST", `unknown workflow shape '${shape}' (expected fanout | pipeline | mapreduce)`);
-  };
-
   const dispatch = async (method: string, rawParams: unknown, call: HcpCall): Promise<unknown> => {
     let p = (rawParams ?? {}) as Record<string, unknown>;
     // A tile speaks for itself: the caller a call names is the tile its token names. Naming
@@ -643,8 +524,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     switch (method) {
       case "tile.spawn_agent":
         // Anti-fork-bomb depth + rate gates, parent/auto-report/supervision
-        // wiring, and the read-epoch arm all live in doSpawn (shared with
-        // workflow.run). AUTO-REPORT is on unless report:false; the read epoch is
+        // wiring, and the read-epoch arm all live in doSpawn. AUTO-REPORT is on unless report:false; the read epoch is
         // armed so a follow-up agent.read waits for THIS agent's first turn.
         return effect(call, { verb: method, target: (r) => r.tileId }, async () => ({
           tileId: await doSpawn({
@@ -859,8 +739,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         return { text: null, finalStatus: "timeout", truncated: false, note: "agent still working — no completed turn within timeout" };
       }
 
-      case "workflow.run":
-        return effect(call, { verb: "workflow.run" }, () => runWorkflow(p, call));
 
       // ── canvas verbs (renderer) ──────────────────────────────────────────
       case "tool.open":

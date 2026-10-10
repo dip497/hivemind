@@ -52,7 +52,7 @@ test.beforeAll(async () => {
   await page.waitForSelector(".react-flow", { timeout: 30_000 });
   const userData = path.join(xdg, "hivemind-dev");
   await expect.poll(async () => fs.existsSync(path.join(userData, "hcp.token"))).toBe(true);
-  hcp = { HIVE_HCP_SOCK: path.join(userData, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim() };
+  hcp = { HIVEMIND_APP_DATA: userData };
 });
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
@@ -104,7 +104,7 @@ test("a tool's commands: an agent asks an open Worktrees tile what is there", as
   // Named by its plugin alone: its first tool opens.
   const opened = await hive("ctl", "plugin", "open", "tool:dip497/worktrees", "--json");
   expect(opened.status, opened.err).toBe(0);
-  expect(JSON.parse(opened.out).tileId).toBeTruthy();
+  expect(JSON.parse(opened.out).tile).toBeTruthy();
   await expect.poll(async () => {
     const r = await call("dip497/worktrees", "list");
     return Array.isArray(r.data.result) ? (r.data.result as Array<{ branch: string; main: boolean }>).map((w) => [w.branch, w.main]) : r.data.message;

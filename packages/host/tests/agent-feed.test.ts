@@ -59,6 +59,23 @@ test("a burst of status changes is worked out once, at most every 250 ms", (t) =
   assert.equal(f.list("ws-a").agents[0]!.state, "done");
 });
 
+test("a reader that lists or catches up while a change waits out the interval is given it worked out, and told it once", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  let now = [agent("1")];
+  const told: string[] = [];
+  const f = new AgentFeed({ build: () => now, publish: (event) => told.push(event), repoOf: () => "/a", every: 250 });
+  f.changed(); // first after a quiet spell: at once
+  const from = f.list("ws-a").seq;
+  now = [agent("1", { agent: "renamed" })];
+  f.changed();
+  assert.equal(f.list("ws-a").agents[0]!.agent, "renamed");
+  now = [agent("1", { agent: "again" })];
+  f.changed();
+  assert.deepEqual(f.since("ws-a", from)!.changes.map((c) => "agent" in c && c.agent.agent), ["renamed", "again"]);
+  t.mock.timers.tick(250);
+  assert.deepEqual(told, ["agent.changed", "agent.changed"]);
+});
+
 test("a reader that missed changes catches up on its own workspace's; past what is kept, it lists again", () => {
   const h = feed([agent("1"), agent("9", { workspace: "ws-b" })], 4);
   const from = h.f.list("ws-a").seq;

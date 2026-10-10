@@ -53,7 +53,7 @@ test.beforeAll(async () => {
   const userData = path.join(XDG, "hivemind-dev");
   const sock = path.join(userData, "hcp.sock"), tokenFile = path.join(userData, "hcp.token");
   await expect.poll(() => fs.existsSync(sock) && fs.existsSync(tokenFile), { timeout: 20_000 }).toBe(true);
-  hcpEnv = { HIVE_HCP_SOCK: sock, HCP_TOKEN: fs.readFileSync(tokenFile, "utf8").trim() };
+  hcpEnv = { HIVEMIND_APP_DATA: userData };
   await page.waitForLoadState("domcontentloaded");
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));

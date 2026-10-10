@@ -27,7 +27,7 @@ the workspace API's error codes (`workspace-api.md`, "Errors"): `BAD_REQUEST`, `
 ## Methods
 
 The verbs `hive ctl` uses — `tile.spawn_agent`, `agent.send`, `agent.read`, `agent.report`,
-`agent.approve`, `workflow.run`, … — take and return the shapes `hive ctl --json` prints. The
+`agent.approve`, … — take and return the shapes `hive ctl --json` prints. The
 host records each one with an effect in its audit log (`audit.jsonl` beside `hcp.token`): who
 asked, what, of what, and whether it happened.
 

@@ -382,7 +382,7 @@ Reach for \`hive ctl read\` only when you must block inline for the next reply.
 # fanout — one worker per item; {item} is filled per worker
 hive ctl workflow --shape fanout --items "src/auth.ts || src/pay.ts || src/api.ts" \\
   --prompt "Review {item} for security bugs. List findings as file:line, one per line." --json
-# → {"shape":"fanout","items":[{"item","tileId","status":"turn"|"timeout"|"error","text"},…]}
+# → {"shape":"fanout","items":[{"item","tile","status":"turn"|"timeout"|"closed"|"error","text"},…]}
 
 # mapreduce — the fanout, then ONE reducer fed every output via {results}
 hive ctl workflow --shape mapreduce --items "auth || billing || search" \\
@@ -396,7 +396,7 @@ hive ctl workflow --shape pipeline \\
 # → {"shape":"pipeline","steps":[…],"output":"…"}
 \`\`\`
 
-Options: \`--agent claude|codex|droid|opencode|pi\` (runtime for every worker; must be installed or the worker returns \`status:"error"\`), \`--model opus|sonnet\` (claude only), \`--frame <id|repo|title>\` (default: your frame), \`--supervise all|Bash,Edit\` (broker workers' permission prompts to YOU), \`--max-concurrent N\` (default 6, cap 12), \`--timeout 10m\` per worker turn (default 10m), \`--close\` (remove worker tiles when done).
+Options: \`--agent claude|codex|droid|opencode|pi\` (runtime for every worker; one not installed, or with no turn signal, is refused before any worker starts), \`--model opus|sonnet\` (claude only), \`--frame <id|repo|title>\` (default: your frame), \`--supervise all|Bash,Edit\` (broker workers' permission prompts to YOU), \`--max-concurrent N\` (default 6, cap 12), \`--timeout 10m\` per worker turn (default 10m), \`--close\` (remove worker tiles when done), \`--repo <folder>\` (the workspace, when you are not an agent in one). A worker that could not start is \`status:"error"\` with the reason in \`text\`.
 
 Always check each result's \`status\` before trusting \`text\`. Give the Bash tool a timeout at least as long as the whole run.
 

@@ -127,7 +127,7 @@ hive ctl workflow --shape fanout|pipeline|mapreduce
                   [--stages "draft || critique || rewrite"] [--input "seed"]
                   [--reduce-prompt "Merge {results}"]
                   [--agent claude] [--model m] [--frame f] [--supervise all]
-                  [--max-concurrent 6] [--timeout 10m] [--close]
+                  [--max-concurrent 6] [--timeout 10m] [--close] [--repo dir]
                                         # per-worker timeout; blocks until all replies
 hive ctl approve <reqId> allow|deny|always|never [--reason "…"]
 hive ctl report "summary"               # to the tile that spawned you ($HIVEMIND_TILE)

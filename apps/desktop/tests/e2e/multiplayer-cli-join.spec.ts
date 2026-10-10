@@ -31,7 +31,7 @@ test("hive join through the app opens the workspace in its window", async () => 
   const data = path.join(root, "guest", "hivemind-dev");
   const env = {
     ...process.env, XDG_CONFIG_HOME: path.join(root, "guest"), HIVEMIND_APP_DATA: data,
-    HIVE_HCP_SOCK: path.join(data, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(data, "hcp.token"), "utf8").trim(), HIVEMIND_TILE: "",
+    HIVEMIND_APP_DATA: data,
   };
   const joined = new Promise<string>((resolve) => execFile("bun", [CLI, "join", link, "--json"], { env }, (_e, out) => resolve(out)));
   await host.locator(".hm-join-request").getByRole("button", { name: "Allow" }).click();

@@ -11,6 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { tileToken } from "@hivemind/agent-host/hooks/token";
 import { stopDaemons } from "./helpers/daemons";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -25,6 +26,8 @@ let repo: string;
 let fakeBin: string;
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "hm-windows-home-"));
 let hcp: Record<string, string> = {};
+/** What an agent's `hive` is given: the token of its own tile. */
+let asAgent = (_tile: string): Record<string, string> => ({});
 /** The project the app opens with next, before this spec: a window it opens makes its own that. */
 let lastProject: string | null = null;
 
@@ -38,7 +41,7 @@ function onPath(bin: string): string {
 
 /** Run `hive …` as an agent would: a subprocess with the control plane's socket and token. */
 function hive(args: string[], env: Record<string, string> = {}) {
-  const r = spawnSync(onPath("bun"), [CLI, ...args], { encoding: "utf8", timeout: 120_000, env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, ...hcp, ...env } });
+  const r = spawnSync(onPath("bun"), [CLI, ...args], { cwd: repo, encoding: "utf8", timeout: 120_000, env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, ...hcp, ...env } });
   let json: any;
   try { json = JSON.parse(r.stdout.trim().split("\n").pop() || ""); } catch { /* not json */ }
   return { code: r.status, stdout: r.stdout, stderr: r.stderr, json };
@@ -68,8 +71,10 @@ test.beforeAll(async () => {
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
   lastProject = await page.evaluate(() => localStorage.getItem("hivemind:last-project"));
   const userData = path.join(XDG, "hivemind-dev");
-  await expect.poll(() => fs.existsSync(path.join(userData, "hcp.token")), { timeout: 20_000 }).toBe(true);
-  hcp = { HIVE_HCP_SOCK: path.join(userData, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim() };
+  await expect.poll(() => fs.existsSync(path.join(userData, "hcp.token")) && fs.existsSync(path.join(userData, "drive.sock")), { timeout: 20_000 }).toBe(true);
+  hcp = { HIVEMIND_APP_DATA: userData };
+  const token = fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim();
+  asAgent = (tile) => ({ HCP_TOKEN: tileToken(token, `hm:${tile}`) });
 });
 
 test.afterAll(async () => {
@@ -83,9 +88,9 @@ test.afterAll(async () => {
 
 test("a second window on the workspace shows its terminals live and the wires drawn, and what the control plane spawns, names and closes", async () => {
   // Quotes split each marker in what is typed, so only the output carries it whole.
-  const parent: string = hive(["ctl", "spawn", "--agent", "claude", "--name", "twin-parent", "--prompt", 'echo early""-words', "--json"]).json.tileId;
+  const parent: string = hive(["ctl", "spawn", "--agent", "claude", "--name", "twin-parent", "--prompt", 'echo early""-words', "--json"]).json.tile;
   expect(hive(["ctl", "read", parent, "--timeout", "40000", "--json"]).json).toMatchObject({ text: "early-words" });
-  const child: string = hive(["ctl", "spawn", "--agent", "claude", "--name", "twin-child", "--prompt", "echo child", "--no-report", "--json"], { HIVEMIND_TILE: `hm:${parent}` }).json.tileId;
+  const child: string = hive(["ctl", "spawn", "--agent", "claude", "--name", "twin-child", "--prompt", "echo child", "--no-report", "--json"], asAgent(parent)).json.tile;
   const wire = `[data-testid="rf__edge-spawn-${parent}-${child}"]`;
   await expect(page.locator(wire)).toHaveCount(1);
 
@@ -107,14 +112,14 @@ test("a second window on the workspace shows its terminals live and the wires dr
   for (const w of windows) await expect(working(w)).toHaveCount(0);
 
   // Both windows are told of a spawn, mount it and draw its wire; its typed first task is typed once.
-  const typed: string = hive(["ctl", "spawn", "--agent", "droid", "--name", "twin-typed", "--prompt", 'echo once""-only', "--no-report", "--json"], { HIVEMIND_TILE: `hm:${parent}` }).json.tileId;
+  const typed: string = hive(["ctl", "spawn", "--agent", "droid", "--name", "twin-typed", "--prompt", 'echo once""-only', "--no-report", "--json"], asAgent(parent)).json.tile;
   for (const w of windows) await expect(w.locator(`.react-flow__node[data-id="${typed}"]`)).toHaveCount(1);
   for (const w of windows) await expect(w.locator(`[data-testid="rf__edge-spawn-${parent}-${typed}"]`)).toHaveCount(1);
   expect(hive(["ctl", "read", typed, "--timeout", "40000", "--json"]).json).toMatchObject({ text: "once-only" });
   await page.waitForTimeout(4_000); // a second copy would be typed as the agent settles again
   const output = hive(["ctl", "stream", typed, "--lines", "200", "--snapshot"]).stdout;
   expect(output.match(/once-only/g)?.length, output).toBe(1);
-  expect(hive(["ctl", "rename", typed, "twin-renamed", "--json"]).json).toEqual({ ok: true, name: "twin-renamed" });
+  expect(hive(["ctl", "rename", typed, "twin-renamed", "--json"]).json).toEqual({ name: "twin-renamed" });
   for (const w of windows) await expect(w.locator(".hm-layers").getByText("twin-renamed", { exact: true })).toBeVisible();
   expect(hive(["ctl", "close", typed, "--json"]).code).toBe(0);
   for (const w of windows) await expect(w.locator(`.react-flow__node[data-id="${typed}"]`)).toHaveCount(0);

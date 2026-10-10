@@ -39,7 +39,7 @@ test.beforeAll(async () => {
   await page.waitForSelector(".react-flow");
   const userData = path.join(xdg, "hivemind-dev");
   await expect.poll(() => fs.existsSync(path.join(userData, "hcp.token"))).toBe(true);
-  hcp = { HIVE_HCP_SOCK: path.join(userData, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim() };
+  hcp = { HIVEMIND_APP_DATA: userData };
 });
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
@@ -82,8 +82,8 @@ test("Browser opt-in is shared by Settings, shortcuts, CLI, and view commands; d
   await button.focus(); await page.keyboard.press("Enter");
   await expect.poll(received).toBeGreaterThan(before);
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-  const listed = hive("ctl", "list").data;
-  expect(listed.frames.flatMap((frame: { tiles: { kind: string }[] }) => frame.tiles).filter((tile: { kind: string }) => tile.kind === "browser")).toHaveLength(1);
+  const saved = await page.evaluate((r) => ((window.hive.workspaceCoreSync(r) ?? {}) as { tiles?: Array<{ kind: string }> }).tiles ?? [], root);
+  expect(saved.filter((tile) => tile.kind === "browser")).toHaveLength(1);
   await original?.dispose();
 });
 

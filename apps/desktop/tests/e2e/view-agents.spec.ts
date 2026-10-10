@@ -53,7 +53,7 @@ test.beforeAll(async () => {
   await page.waitForSelector(".react-flow", { timeout: 20_000 });
   const userData = path.join(XDG, "hivemind-dev");
   await expect.poll(() => fs.existsSync(path.join(userData, "hcp.token")), { timeout: 20_000 }).toBe(true);
-  hcp = { HIVE_HCP_SOCK: path.join(userData, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim() };
+  hcp = { HIVEMIND_APP_DATA: userData };
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "agent-driver" } })));
   await page.waitForSelector('[data-community-view="agent-driver"][data-community-ready="1"]', { timeout: 20_000 });
   view = page.frame({ name: "hm-view:agent-driver" })!;

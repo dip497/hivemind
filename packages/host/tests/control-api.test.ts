@@ -22,13 +22,15 @@ function plane(answers: Record<string, unknown> = {}) {
 const code = async (f: () => unknown): Promise<string> => { try { await f(); return "ok"; } catch (e) { return e instanceof ApiError ? e.code : "thrown"; } };
 
 test("each method is the control plane's verb, asked as the caller, its answer in the API's shape", async () => {
-  const c = plane({ "tile.rename": { name: "reviewer" }, "agent.send_keys": { keys: 2 }, "tool.open": { tileId: "hm:t9" }, "agent.read": { text: "done", finalStatus: "turn", truncated: false }, "tools.rescan": { ok: true } });
+  const c = plane({ "tile.rename": { name: "reviewer" }, "agent.send_keys": { keys: 2 }, "tool.open": { tileId: "hm:t9" }, "plugin.open": { tileId: "hm:t8" }, "agent.read": { text: "done", finalStatus: "turn", truncated: false }, "tools.rescan": { ok: true } });
   assert.deepEqual(await c.call(person, "agent.rename", "t1", "reviewer"), { name: "reviewer" });
   assert.deepEqual(await c.call(person, "agent.keys", "t1", ["y", "Enter"]), { keys: 2 });
   assert.deepEqual(await c.call(person, "agent.read", "t1", 5_000), { text: "done", finalStatus: "turn", truncated: false });
+  await c.call(person, "agent.read", "t1", 0);
   await c.call(person, "agent.output", "t1", 12);
   await c.call(person, "agent.sessions", "/work/api", "claude", 3);
   assert.deepEqual(await c.call(person, "tool.open", "/work/api", { tool: "a/b/c", url: "https://x" }), { tile: "hm:t9" });
+  assert.deepEqual(await c.call(person, "plugin.open", "tool:a/b"), { tile: "hm:t8" });
   await c.call(person, "link.connect", "t1", "t2");
   await c.call(person, "link.disconnect", "t1");
   assert.equal(await c.call(person, "tools.rescan"), null, "a machine method asked for what it does answers null");
@@ -36,9 +38,11 @@ test("each method is the control plane's verb, asked as the caller, its answer i
     ["tile.rename", { tileId: "t1", name: "reviewer" }],
     ["agent.send_keys", { tileId: "t1", keys: ["y", "Enter"] }],
     ["agent.read", { tileId: "t1", timeoutMs: 5_000 }],
+    ["agent.read", { tileId: "t1", timeoutMs: 0 }],
     ["agent.output", { tileId: "t1", lines: 12 }],
     ["agent.sessions", { agent: "claude", cwd: "/work/api", limit: 3 }],
     ["tool.open", { repo: "/work/api", tool: "a/b/c", frame: undefined, url: "https://x" }],
+    ["plugin.open", { plugin: "tool:a/b" }],
     ["tile.connect", { srcTileId: "t1", dstTileId: "t2" }],
     ["tile.disconnect", { srcTileId: "t1" }],
     ["tools.rescan", {}],

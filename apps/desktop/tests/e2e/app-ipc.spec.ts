@@ -34,7 +34,7 @@ test.beforeAll(async () => {
   page = await app.firstWindow();
   await page.waitForSelector(".react-flow");
   await expect.poll(() => fs.existsSync(path.join(userData, "hcp.token"))).toBe(true);
-  hcp = { HIVE_HCP_SOCK: path.join(userData, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim() };
+  hcp = { HIVEMIND_APP_DATA: userData };
 });
 test.afterAll(async () => {
   await app?.close();
@@ -77,7 +77,7 @@ test("an app window cannot be registered as a browser tile's page, so the debugg
   expect(hive("plugins", "enable", "tool:hivemind/web").status).toBe(0);
   const opened = hive("ctl", "open-tool", "hivemind/web/browser", "--url", "about:blank");
   expect(opened.status).toBe(0);
-  const tile: string = opened.data.tileId;
+  const tile: string = opened.data.tile;
   await expect.poll(targets, { timeout: 15_000 }).toContain(tile);
   expect(targets()).not.toContain("tile-browser-posing");
   expect(await page.evaluate((t) => window.hive.browserCdp(t, "Runtime.evaluate", { expression: "location.href", returnByValue: true }), tile))

@@ -4,7 +4,8 @@
 > server this doc originally targeted was retired; every `hive_workflow(...)` /
 > `mcp__hive__*` reference below reads as the matching `hive ctl` verb — see the
 > `hive-workflow` skill in packages/hive-core/src/templates.ts for the current
-> vocabulary). The HCP `workflow.run` design here is unchanged.
+> vocabulary). The loop now runs in the CLI (`apps/cli/src/workflow.ts`), from the workspace
+> API's `agent.start`, `agent.read` and `agent.close` on the drive socket; HCP has no `workflow.run`.
 
 ## Goal
 

@@ -33,7 +33,7 @@ async function launch(extra: Record<string, string> = {}): Promise<void> {
   await page.waitForSelector(".react-flow", { timeout: 30_000 });
   const userData = path.join(xdg, "hivemind-dev");
   await expect.poll(() => fs.existsSync(path.join(userData, "hcp.token"))).toBe(true);
-  hcp = { HIVE_HCP_SOCK: path.join(userData, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim() };
+  hcp = { HIVEMIND_APP_DATA: userData };
 }
 
 test.beforeAll(async () => {
@@ -94,7 +94,7 @@ test("a tool that is off cannot be opened and its code is not served; switched o
   await expect(history.locator(".tile-drag-handle")).toContainText("Git history");
   await history.getByRole("button", { name: "close tile" }).click();
   await expect(history).toHaveCount(0);
-  const kinds = () => (hive("ctl", "list").data.frames as Array<{ tiles: Array<{ kind: string }> }>).flatMap((f) => f.tiles.map((t) => t.kind));
+  const kinds = () => page.evaluate((r) => ((window.hive.workspaceCoreSync(r) ?? {}) as { tiles?: Array<{ kind: string }> }).tiles?.map((t) => t.kind) ?? [], repo);
   await expect.poll(kinds).not.toContain("git-history");
 });
 

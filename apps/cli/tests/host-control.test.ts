@@ -38,7 +38,7 @@ async function until<T>(get: () => T | null | undefined | false, what: string, m
   throw new Error(`timed out waiting for ${what}`);
 }
 const ctl = (...args: string[]) => hive(["ctl", ...args, "--json"], { env });
-interface Listed { tile: string; agent: string; state: string; program?: { id: string } }
+interface Listed { tile: string; agent: string; state: string; program?: { id: string }; parent?: string }
 const listed = (): Listed[] => (ctl("agents").json as { agents: Listed[] }).agents;
 /** The processes running for a tile: an agent and what it starts carry the tile's id. */
 const processesOf = (tileId: string): string[] => fs.readdirSync("/proc").filter((pid) => {
@@ -62,6 +62,9 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
     const node = Bun.which("node") ?? process.execPath;
     fs.writeFileSync(path.join(bin, "droid"), `#!/usr/bin/env bash\nexec ${JSON.stringify(node)} ${JSON.stringify(FAKE_AGENT)} droid "$@"\n`, { mode: 0o755 });
     fs.cpSync(DROID, path.join(data, "agents", "droid"), { recursive: true });
+    // This checkout's `hive`, as the agents there run it.
+    const [exe, pre] = cmd([]);
+    fs.writeFileSync(path.join(bin, "hive"), `#!/usr/bin/env bash\nexec ${[Bun.which(exe) ?? exe, ...pre].map((a) => JSON.stringify(a)).join(" ")} "$@"\n`, { mode: 0o755 });
     const repo = path.join(dir, "repo");
     fs.mkdirSync(repo);
 
@@ -101,6 +104,13 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
 
     expect(ctl("send", worker, "echo second").code).toBe(0);
     expect(ctl("read", worker, "--timeout", "40000").json).toMatchObject({ text: "second", finalStatus: "turn" });
+
+    // The agent drives the host itself, on the socket it was given, as itself: what it starts is its.
+    expect(ctl("send", worker, "hive ctl spawn --agent droid --name helper --prompt 'echo helping' --json").code).toBe(0);
+    const said = ctl("read", worker, "--timeout", "40000").json as { text: string };
+    const helper = JSON.parse(said.text) as { tile: string };
+    expect(await until(() => listed().find((t) => t.tile === helper.tile), "the helper to be listed")).toMatchObject({ agent: "helper", parent: worker });
+    expect(ctl("close", helper.tile).code).toBe(0);
 
     // An unnamed one is called by what it says it is doing, as the daemon reads its title: its task
     // first, then what its next turn's title says.

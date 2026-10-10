@@ -18,6 +18,9 @@ delete process.env.WAYLAND_DISPLAY;
 if (process.platform === "linux") process.env.XDG_SESSION_TYPE = "x11";
 // Nor do its notifications reach the person's desktop, over their session bus.
 delete process.env.DBUS_SESSION_BUS_ADDRESS;
+// Run from an agent's terminal, the runner holds that agent's way into the person's own app: no
+// spec, nor any app or `hive` it starts, may inherit it. A spec names its app's data folder.
+for (const name of ["HCP_TOKEN", "HIVE_HCP_SOCK", "HIVE_DRIVE_SOCK", "HIVEMIND_TILE", "HIVEMIND_APP_DATA"]) delete process.env[name];
 
 export default defineConfig({
   testDir: "./tests/e2e",

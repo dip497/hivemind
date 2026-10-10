@@ -224,7 +224,7 @@ test("a phone paired with the app is the person's at the host too: the host lets
     "detect:", "  default: idle", "  rules:",
     "  - when: { contains: 'Allow edit to Nav.tsx?' }", "    then: permission", "",
   ].join("\n"));
-  const onHost = { ...hostEnv(), XDG_CONFIG_HOME: path.join(root, "hostcfg"), PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`, HIVE_HCP_SOCK: "", HCP_TOKEN: "", HIVEMIND_TILE: "" };
+  const onHost = { ...hostEnv(), XDG_CONFIG_HOME: path.join(root, "hostcfg"), PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` };
   const api = path.join(root, "api");
   fs.mkdirSync(api);
   const host = spawn(HIVE, ["host", "run"], { env: onHost, stdio: "ignore" });
@@ -279,7 +279,7 @@ test("a phone paired with the app is the person's at the host too: the host lets
 
   // An agent on the host begins waiting on the person: the phone lists it, on the host, and is
   // told so by the host.
-  const ctl = { ...onHost, HIVE_HCP_SOCK: path.join(root, "server", "hcp-host.sock"), HCP_TOKEN: read(path.join(root, "server", "hcp.token")) };
+  const ctl = onHost;
   const spawned = spawnSync(HIVE, ["ctl", "spawn", "--agent", "probe", "--name", "nav", "--json"], { env: ctl, encoding: "utf8", timeout: 60_000 });
   expect(spawned.status, spawned.stdout + spawned.stderr).toBe(0);
   const needs = async () => JSON.parse((await run(HIVE_PHONE, ["needs", "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as { needs: Array<Record<string, unknown>>; away: unknown[] };

@@ -238,7 +238,7 @@ log.
 | `agent.diff` | `tile` | `{files, patch, truncated}`: what it changed in the folder it runs in, against its last commit (`agents.md`, "Changes", 0.11) | — |
 | `agent.rename` | `tile`, `name` | `{name}`: what it is called now, on its tile and to the agents it talks to; an empty `name` takes it away, so it is called what its agent says again (0.23) | target the agent's tile |
 | `agent.keys` | `tile`, `keys` | `{keys}`: each key name (`Enter`, `Escape`, `Up`, `C-c`, …) or text typed into its terminal a moment after the last, how many there were (0.23) | target the agent's tile |
-| `agent.read` | `tile`, `timeoutMs`? | `{text, finalStatus, truncated, note?}`: its reply at the end of its next turn (`finalStatus` `turn`), or what it shows when it closes (`closed`) or `timeoutMs` passes (`timeout`), as `hive ctl read` (0.23) | — |
+| `agent.read` | `tile`, `timeoutMs`? (0: without waiting) | `{text, finalStatus, truncated, note?}`: its reply at the end of its next turn (`finalStatus` `turn`), or what it shows when it closes (`closed`) or `timeoutMs` passes (`timeout`), as `hive ctl read` (0.23) | — |
 | `agent.output` | `tile`, `lines`? | `{text}`: the last `lines` lines (40) of what it printed, its terminal's escapes taken out, as much as the host keeps; following its output as it comes is `terminal.open` with `attachOnly` (0.23) | — |
 | `agent.sessions` | `place`, `program`, `limit`? | `{agent, resumable, sessions}`: the sessions `program` keeps for that folder, newest first, each one `agent.start`'s `resume` takes; `resumable` false when it says none (0.23) | read |
 | `tool.open` | `repo`, `{tool, frame?, url?}` | `{tile}`: an installed tool's tile (`tool` its id) placed on the board, in `frame` or the one in view (0.23) | target the new tile |
@@ -288,7 +288,7 @@ other devices included, nor a program.
 | `host.join` | `link` | what joining a workspace by its link answers, as `hive join` | target the link's workspace |
 | `tile.focus` | `tile` | `null`: the tile brought forward in the window showing it | — |
 | `plugin.commands` | | the commands each plugin running in a window offers | read |
-| `plugin.open` | `plugin` (`tool:<owner>/<name>[/<tool>]`, `widget:@<owner>/<name>` or `view:<id>`), `frame`? (a tool's tile's) | what opening it answers: a tool's tile placed, a widget added to the board, a view switched to, so its commands can be called | target the plugin |
+| `plugin.open` | `plugin` (`tool:<owner>/<name>[/<tool>]`, `widget:@<owner>/<name>` or `view:<id>`), `frame`? (a tool's tile's) | what opening it answers: a tool's tile placed (`{tile}`), a widget added to the board, a view switched to, so its commands can be called | target the plugin |
 | `plugin.call` | `plugin`, `command`, `args`?, `tile`? | what the plugin's command answers, run in a window | target the plugin |
 | `view.emit` | `name`, `data`?, `view`? | `{id, delivered, view, reason?, buffered?}`: the event sent to the view open in the window, or kept for it until it listens (`view`: only while that one is open) | — |
 | `views.rescan`, `agents.rescan`, `widgets.rescan`, `tools.rescan` | | `null`: those installed read again from disk | — |

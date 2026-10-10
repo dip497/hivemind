@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { READ_SLICE_MS, UsageError, boolFlag, durationFlag, emitArgs, intFlag, parseKeys, readSchedule, splitDouble, tailLines, workflowParams } from "../src/ctl-args.js";
+import { READ_SLICE_MS, UsageError, boolFlag, durationFlag, emitArgs, intFlag, parseKeys, readSchedule, splitDouble, workflowPlan } from "../src/ctl-args.js";
 import { EXIT, exitCodeFor } from "../src/hcp.js";
 import { useFixtureAgents } from "./agents-fixtures.js";
 
@@ -45,30 +45,22 @@ describe("flag parsing", () => {
     expect(boolFlag("false")).toBe(false);
     expect(boolFlag("yes")).toBe(true);
   });
-  test("tailLines keeps the last N lines", () => {
-    expect(tailLines("a\nb\nc\n", 2)).toBe("b\nc\n");
-    expect(tailLines("a\nb", 5)).toBe("a\nb");
-    expect(tailLines("", 3)).toBe("");
-  });
 });
 
-describe("workflowParams", () => {
-  test("fanout → workflow.run params with the MCP field names", () => {
-    const { params, ceilingMs } = workflowParams({ shape: "fanout", items: "x || y", prompt: "do {item}", close: true });
-    expect(params).toMatchObject({ shape: "fanout", items: ["x", "y"], prompt: "do {item}", agent: "claude", close_when_done: true });
-    expect(params.timeout_ms).toBeUndefined();
-    expect(ceilingMs).toBe(600_000 * 4 + 30_000);
+describe("workflowPlan", () => {
+  test("fanout: its items and task, started as the default agent, ten minutes a turn, six at once", () => {
+    expect(workflowPlan({ shape: "fanout", items: "x || y", prompt: "do {item}", close: true, supervise: "Bash, Edit" })).toEqual({
+      shape: "fanout", items: ["x", "y"], prompt: "do {item}", stages: [], input: null, reducePrompt: "",
+      program: "claude", supervise: ["Bash", "Edit"], turnMs: 600_000, concurrency: 6, close: true,
+    });
   });
-  test("pipeline needs stages; mapreduce needs reduce-prompt", () => {
-    expect(() => workflowParams({ shape: "pipeline" })).toThrow(/stages/);
-    expect(() => workflowParams({ shape: "mapreduce", items: "a", prompt: "p" })).toThrow(/reduce-prompt/);
-    expect(() => workflowParams({ shape: "star" })).toThrow(/shape/);
-    const { params } = workflowParams({ shape: "pipeline", stages: "a || b", input: "seed", timeout: "1000" });
-    expect(params).toMatchObject({ stages: ["a", "b"], input: "seed", timeout_ms: 1000 });
-  });
-  test("ceiling is capped at 24h", () => {
-    const { ceilingMs } = workflowParams({ shape: "fanout", items: "a", prompt: "p", timeout: String(10 * 60 * 60 * 1000) });
-    expect(ceilingMs).toBe(24 * 60 * 60 * 1000);
+  test("pipeline needs stages, mapreduce a reducer's task; at least one and at most twelve at once", () => {
+    expect(() => workflowPlan({ shape: "pipeline" })).toThrow(/stages/);
+    expect(() => workflowPlan({ shape: "mapreduce", items: "a", prompt: "p" })).toThrow(/reduce-prompt/);
+    expect(() => workflowPlan({ shape: "star" })).toThrow(/shape/);
+    expect(workflowPlan({ shape: "pipeline", stages: "a || b", input: "seed", timeout: "1000" })).toMatchObject({ stages: ["a", "b"], input: "seed", turnMs: 1000 });
+    expect(workflowPlan({ items: "a", prompt: "p", "max-concurrent": "40" }).concurrency).toBe(12);
+    expect(workflowPlan({ items: "a", prompt: "p", "max-concurrent": "0" }).concurrency).toBe(1);
   });
 });
 
