@@ -93,11 +93,9 @@ test("frame header-drag moves it", async () => {
 
 test("frame arrange menu offers Columns / Rows / Grid", async () => {
   const frame = page.locator(".react-flow__node-frame").first();
-  await frame.click({ position: { x: 30, y: 4 } });
-  const arrange = frame.locator('[aria-label="arrange"]');
-  await expect(arrange).toBeVisible();
-  await arrange.click();
-  // Menu portals to document.body.
+  await frame.locator("[data-frame-actions]").click();
+  // The frame's menu, and its Arrange, portal to document.body.
+  await page.locator('[data-frame-menu-sub="arrange"]').click();
   await expect(page.getByText("Columns", { exact: true })).toBeVisible({ timeout: 2_000 });
   await expect(page.getByText("Rows", { exact: true })).toBeVisible();
   await expect(page.getByText("Grid", { exact: true })).toBeVisible();

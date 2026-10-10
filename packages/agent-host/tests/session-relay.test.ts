@@ -65,6 +65,35 @@ test("a viewer that shows the session nowhere gets nothing while the host keeps 
   expect(c.got).toEqual(["while hidden", "after"]);
 });
 
+test("a viewer shown again that missed nothing keeps what it shows: no screen, and what was held back while it was hidden comes live", async () => {
+  const { relay: r } = relay();
+  const a = viewer(), b = viewer();
+  r.add("t", a); r.add("t", b);
+  let asked = 0;
+  const screen: ReadScreen = (cb) => { asked++; cb("SCREEN"); return true; };
+  r.show("t", b, false, screen);
+  await tick();
+  r.show("t", b, true, screen);
+  expect(asked).toBe(0);
+  // Output still batched when it was hidden is not missed: it goes to it as to the others.
+  r.show("t", b, false, screen);
+  r.push("t", "pending");
+  r.show("t", b, true, screen);
+  await tick();
+  expect(asked).toBe(0);
+  expect(b.got).toEqual(["pending"]);
+  // Output sent to the others while it was hidden is: the screen, once.
+  r.show("t", b, false, screen);
+  r.push("t", "gone by");
+  await tick();
+  r.show("t", b, true, screen);
+  r.show("t", b, false, screen);
+  r.show("t", b, true, screen);
+  expect(asked).toBe(1);
+  expect(a.got).toEqual(["pending", "gone by"]);
+  expect(b.got).toEqual(["pending", `${RESET}SCREEN`]);
+});
+
 test("an exit reaches every viewer after the output before it; one that left, or is gone, gets nothing", async () => {
   const { relay: r } = relay();
   const a = viewer(), b = viewer(), left = viewer(), gone = viewer();

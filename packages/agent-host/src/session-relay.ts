@@ -31,6 +31,9 @@ interface Watch {
   unseen: boolean;
   /** Its screen has been asked for and not yet sent. */
   awaiting: boolean;
+  /** Output went to the others and not to it while it was unseen: shown again, it needs the
+   *  screen. Nothing missed, what it shows is the screen still. */
+  missed: boolean;
 }
 
 export interface SessionRelayOptions {
@@ -97,13 +100,13 @@ export class SessionRelay {
   /** `viewer` shows `tileId` from now on, from the session's own start or an attach that brought
    *  its screen: live bytes only. */
   add(tileId: string, viewer: Viewer): void {
-    this.watches(tileId).set(viewer, { unseen: false, awaiting: false });
+    this.watches(tileId).set(viewer, { unseen: false, awaiting: false, missed: false });
   }
 
   /** `viewer` joins a session others already watch: the host's screen first, then live bytes.
    *  False when the host keeps no screen; it then gets live bytes only. */
   join(tileId: string, viewer: Viewer, screen: ReadScreen): boolean {
-    const watch: Watch = { unseen: true, awaiting: true };
+    const watch: Watch = { unseen: true, awaiting: true, missed: true };
     this.watches(tileId).set(viewer, watch);
     return this.showScreen(tileId, viewer, watch, screen);
   }
@@ -127,7 +130,8 @@ export class SessionRelay {
   }
 
   /** Whether any of `viewer`'s views shows `tileId`. Hidden, it is sent nothing while the host
-   *  keeps the screen (`screen`); shown again, it is sent the screen, then live bytes. */
+   *  keeps the screen (`screen`); shown again, it is sent the screen if it missed output, then
+   *  live bytes. */
   show(tileId: string, viewer: Viewer, shown: boolean, screen: ReadScreen | null): void {
     const watch = this.viewers.get(tileId)?.get(viewer);
     if (!watch) return;
@@ -137,6 +141,7 @@ export class SessionRelay {
       return;
     }
     if (!watch.unseen || watch.awaiting || !screen) return;
+    if (!watch.missed) { watch.unseen = false; return; }
     watch.awaiting = true;
     this.showScreen(tileId, viewer, watch, screen);
   }
@@ -183,6 +188,7 @@ export class SessionRelay {
       // What is pending now is older than this screen: it goes to the others first.
       this.out.flush(tileId);
       watch.unseen = false;
+      watch.missed = false;
       if (replay !== null && viewer.alive()) {
         viewer.data(tileId, this.opts.screenPrefix + replay);
         this.opts.screenShown?.(tileId);
@@ -195,7 +201,8 @@ export class SessionRelay {
   private send(tileId: string, data: string): void {
     this.opts.record(tileId, data);
     for (const [viewer, watch] of this.viewers.get(tileId) ?? []) {
-      if (!watch.unseen && viewer.alive()) viewer.data(tileId, data);
+      if (watch.unseen) watch.missed = true;
+      else if (viewer.alive()) viewer.data(tileId, data);
     }
   }
 }

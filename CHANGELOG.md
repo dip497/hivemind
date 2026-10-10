@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: switching between tabs in the Windows view, or showing a hidden terminal again, made its program redraw as if resized, even when nothing had happened in it meanwhile. A terminal is now sent its screen again, and its program asked to redraw, only when it missed output while hidden.
+- Internal: five e2e specs had fallen behind the app (the frame menu's Arrange, Terminal in Add, the Layers row's status dot, the Windows view in its own frame) and failed every run.
 - **Breaking:** the workspace API's `plan.list`, `plan.decide`, `plan.review` and `plan.decided` are gone (0.21). A plan an agent waits on is in `agent.list` (`waiting.plan`) and is answered with `agent.answer`, like a supervised tool use; an answer that comes second hears who answered first (`by`), and the `answered` event says the decision and who gave it. `hive ctl open-review` runs in the agent's tile, or names it with `--tile`.
 - Fixed: an agent that went from one kind of wait straight to another (a permission, then a question) kept the first wait's name, so an answer to the second could land on the first or be refused as late.
 - Internal: `pnpm test` stopped at the tool-plugin SDK, which has no tests, and skipped every package after it; and the phone core's tests still expected the hosted network, which is gone.

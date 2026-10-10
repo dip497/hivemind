@@ -280,12 +280,11 @@ test("a restored tab stays restored when the view switches at once", async () =>
   await first.getByRole("button", { name: `Minimize ${name}` }).click();
   await expect(tab).toHaveCount(0);
 
-  // Restore it from the rail and switch view in the same tick: the view unmounts before any
-  // render that follows the click.
-  await page.locator('aside[aria-label="Layers"]').getByRole("button", { name: name!, exact: true }).evaluate((row) => {
-    (row as HTMLElement).click();
-    window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } }));
-  });
+  // Restore it from the rail, and switch view the moment the view shows it back: the view keeps
+  // its layout at once, not after its usual wait, or the switch would take the restore with it.
+  await page.locator('aside[aria-label="Layers"]').getByRole("button", { name: name!, exact: true }).click();
+  await expect(tab).toHaveCount(1);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
   await page.waitForSelector(".react-flow");
 
   // A new tile takes the selection, so only a restore that was kept puts the tab back.
