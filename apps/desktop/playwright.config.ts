@@ -12,6 +12,12 @@ seedAgents(process.env.XDG_CONFIG_HOME);
 // No spec may touch the network: the catalog lives on HiveHub, and an unreachable index
 // fails auto-install closed. Specs that build their own registry set their own value.
 process.env.HIVEMIND_PLUGIN_INDEX = "file:///hivemind-e2e-unreachable/index.json";
+// Windows go to the X display xvfb-run gives (DISPLAY): on a Wayland desktop Electron would
+// otherwise open each one there, over the person's work, taking the keyboard.
+delete process.env.WAYLAND_DISPLAY;
+if (process.platform === "linux") process.env.XDG_SESSION_TYPE = "x11";
+// Nor do its notifications reach the person's desktop, over their session bus.
+delete process.env.DBUS_SESSION_BUS_ADDRESS;
 
 export default defineConfig({
   testDir: "./tests/e2e",
