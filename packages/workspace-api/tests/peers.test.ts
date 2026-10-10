@@ -271,7 +271,7 @@ test("a peer hears only the events about its workspace, and is refused a tile ou
   server.publish("presence.changed", "/work/other", [someone("Bo")]);
   server.publish("widget.runner", REPO);
   server.publish("widget.runner", "/work/other");
-  await Bun.sleep(10);
+  await client.call("status.all"); // an answer comes after the events sent before it
   expect(heard).toEqual(["in-1:hello", "in-1 said 1", `changed ${workspaceUrl(W)}`, `here ${workspaceUrl(W)}: Ana`, `runner ${workspaceUrl(W)}`]);
 
   ran.length = 0;
@@ -279,7 +279,7 @@ test("a peer hears only the events about its workspace, and is refused a tile ou
   client.notice("terminal.show", "in-1", true);
   // Being there is anyone's with access.
   client.notice("presence.set", workspaceUrl(W), { name: "Priya", color: "", cursor: null, selection: [] });
-  await Bun.sleep(10);
+  await client.call("status.all"); // and after the notices before it are handled
   expect(ran.map((r) => r.args[0])).toEqual(["in-1", REPO]);
 });
 
@@ -293,7 +293,8 @@ test("a guest hears a tile opened in its workspace, and not one opened in anothe
   await other.client.call("file.read", workspaceUrl(W), "a.ts");
   mine.server.publish("tile.opened", { tileId: "in-1", repo: REPO, background: false });
   other.server.publish("tile.opened", { tileId: "out-1", repo: "/work/other", background: false });
-  await Bun.sleep(10);
+  await mine.client.call("status.all");
+  await other.client.call("status.all");
   // Named by the workspace's id, never the host's folder.
   expect(heard).toEqual({ mine: [`in-1 ${workspaceUrl(W)}`], other: [] });
 });
@@ -312,7 +313,8 @@ test("a guest hears a link removed from its workspace's tile, and not one remove
   mine.server.publish("link.spawn", { child: "in-2", parent: null, connected: false });
   other.server.publish("link.pipe", { src: "out-1", dst: null, connected: false });
   other.server.publish("link.spawn", { child: "out-2", parent: null, connected: false });
-  await Bun.sleep(10);
+  await mine.client.call("status.all");
+  await other.client.call("status.all");
   expect(heard).toEqual({ mine: ["pipe in-1", "spawn in-2"], other: [] });
 });
 
@@ -369,14 +371,14 @@ test("a terminal's keyboard: one who may use terminals asks for it and hands it 
     ["terminal.keyboard.give", "in-1", "peer:someone"], ["terminal.keyboard.give", "out-1", "peer:someone"],
     ["terminal.keyboard.take", "in-1"],
   ] as const) typist.client.notice(method as never, ...(params as never[]));
-  await Bun.sleep(10);
+  await typist.client.call("status.all");
   expect(ran.map((r) => `${r.what} ${String(r.args[0])}`)).toEqual(["terminal.keyboard.ask in-1", "terminal.keyboard.give in-1"]);
 
   const viewer = connect("view");
   viewer.client.notice("terminal.keyboard.ask", "in-1");
   viewer.client.notice("terminal.detach", "in-1");
   viewer.client.notice("terminal.detach", "out-1");
-  await Bun.sleep(10);
+  await viewer.client.call("status.all");
   expect(ran.map((r) => `${r.what} ${String(r.args[0])}`)).toEqual(["terminal.detach in-1"]);
 });
 
@@ -394,7 +396,7 @@ test("a peer hears who holds a terminal's keyboard, who asks for it and the term
     server.publish("terminal.size", tile, 100, 30);
     server.publish("terminal.keyboard", tile, null);
   }
-  await Bun.sleep(10);
+  await client.call("status.all");
   expect(heard).toEqual(["in-1 held by Ana", "in-1 asked by Ana", "in-1 100x30", "in-1 held by the host"]);
 });
 
@@ -408,13 +410,14 @@ test("the events of one moment reach a peer as one frame, and each is heard", as
   frames.length = 0;
   for (let n = 0; n < 10; n++) server.publish("terminal.data", `in-${n}`, `out ${n}`);
   server.publish("terminal.data", "out-1", "secret");
-  await Bun.sleep(10);
-  expect(frames).toHaveLength(1);
+  await client.call("status.all");
+  // The events of that moment in one frame, then the answer.
+  expect(frames.map((f) => (Array.isArray(JSON.parse(f)) ? "events" : "answer"))).toEqual(["events", "answer"]);
   expect(heard).toEqual(Array.from({ length: 10 }, (_, n) => `in-${n}:out ${n}`));
   // One event alone is sent as itself.
   server.publish("terminal.data", "in-1", "alone");
-  await Bun.sleep(PEER_FRAME_MS + 15);
-  expect(JSON.parse(frames[1]!)).toEqual({ event: "terminal.data", params: ["in-1", "alone"] });
+  await client.call("status.all");
+  expect(JSON.parse(frames[2]!)).toEqual({ event: "terminal.data", params: ["in-1", "alone"] });
 });
 
 test("while events stream a peer is sent a frame at most every 25 ms, each heard; after a quiet spell the next goes at once", async () => {
@@ -485,7 +488,7 @@ test("a call waiting when the connection goes fails, and the host lets go of the
   const hanging = new WorkspaceClient(peerTransport({ send: () => {}, on: () => () => {}, closed: Promise.resolve("gone") }));
   expect(await code(hanging.call("file.read", workspaceUrl(W), "a.ts"))).toBe("FAILED");
   close("the peer left");
-  await Bun.sleep(10);
+  for (const end = Date.now() + 2_000; !gone.length && Date.now() < end;) await Bun.sleep(2);
   expect(gone).toHaveLength(1);
 });
 

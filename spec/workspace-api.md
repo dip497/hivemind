@@ -149,7 +149,8 @@ events about its workspace's tiles, and a tile outside the workspace is refused 
 terminal is named by its session, `hm:<tile>`; the tile is the workspace's. Events reach a peer
 in frames of one event, or of a list of the events of one moment; while they stream, a frame at
 most every 25 ms, the first after a quiet spell at once. An answer comes after the events sent
-before it. A
+before it. The host takes a peer's calls and notices in the order it sent them; a call's answer
+may still come before an earlier call's. A
 peer's `presence.set` is its person's (the device's certificate names them), whatever name it
 sends, and one participant per device.
 

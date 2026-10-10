@@ -299,6 +299,9 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     return { result: { pipes: pipes.filter((p) => peer.holds(p.src) && peer.holds(p.dst)), spawns: spawns.filter((s) => peer.holds(s.parent) && peer.holds(s.child)) } };
   };
 
+  // The peer's calls and notices are taken in the order it sent them, though checking one may
+  // read the disk; a call's answer may still come after a later one's.
+  let taken: Promise<unknown> = Promise.resolve();
   channel.on((text) => {
     let m: { id?: unknown; method?: unknown; params?: unknown };
     try {
@@ -323,12 +326,14 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
       }
       return null;
     };
+    const inTurn = taken.then(checked);
+    taken = inTurn.catch(() => {});
     if (typeof m.id !== "number") {
-      void checked().then((denied) => { if (!denied && !connection.closed.aborted) server.notice(m.method, params, connection); });
+      void inTurn.then((denied) => { if (!denied && !connection.closed.aborted) server.notice(m.method, params, connection); });
       return;
     }
     const id = m.id;
-    void checked().then((cwdWhy) => cwdWhy || connection.closed.aborted
+    void inTurn.then((cwdWhy) => cwdWhy || connection.closed.aborted
       ? refused(cwdWhy ?? "connection closed") : server.answer(m.method, params, connection)).then((answer) => {
       flush();
       channel.send(JSON.stringify({ id, ...scoped(m.method, answer) }));
