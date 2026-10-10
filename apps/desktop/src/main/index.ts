@@ -1126,7 +1126,7 @@ const terminals = new Terminals({
   relay: {
     // The HCP output recorder is fed from the coalesced batch, not per pty read: its three
     // strip-ANSI regex passes then run once per batch, and an escape sequence split across two
-    // reads is stripped as a whole. (The agent.stream broadcast stays per chunk.)
+    // reads is stripped as a whole.
     record: (tileId, data) => control.recorder.record(tileId, data),
     screenPrefix: REATTACH_RESET,
     // Every window minimized or hidden: no renderer can paint, so stretch the batching
@@ -1216,7 +1216,7 @@ async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ p
   // The window watches from the first byte: an attach's screen arrives as data.
   const bare = toBareId(opts.tileId);
   const callbacks = {
-    onData: (data: string, replay?: boolean) => { control.output(bare, data); out.data(data, replay); if (!replay) ptyActivity.note(bare, data.length); },
+    onData: (data: string, replay?: boolean) => { out.data(data, replay); if (!replay) ptyActivity.note(bare, data.length); },
     // What is pending (recorded and shipped), then the exit, BEFORE the HCP teardown forgets the tile.
     onExit: (code: number, signal?: number) => { out.exit(code, signal); onPtyExit(opts.tileId); },
   };

@@ -45,7 +45,7 @@ const domain = {
     "agent.answer": (from: Connection, tile: unknown) => { ran.push({ what: "agent.answer", by: from.actor, args: [tile] }); return { answered: true }; },
     "agent.send": (from: Connection, tile: unknown) => { ran.push({ what: "agent.send", by: from.actor, args: [tile] }); return { sent: true }; },
     ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.conversation",
-      "agent.rename", "agent.keys", "agent.read", "agent.sessions", "tool.open", "link.connect", "link.disconnect", "plugin.call", "host.join", "tools.rescan", "tile.focus"].map((what) => [
+      "agent.rename", "agent.keys", "agent.read", "agent.output", "agent.sessions", "tool.open", "link.connect", "link.disconnect", "plugin.call", "host.join", "tools.rescan", "tile.focus"].map((what) => [
       what, (from: Connection, at: unknown) => { ran.push({ what, by: from.actor, args: [at] }); return {}; },
     ])),
     // A view opened for the caller: what it is let do there is what the caller may call.
@@ -322,6 +322,7 @@ test("naming an agent, typing keys to it and piping its replies to another drive
   const here = workspaceUrl(W);
   const viewer = connect("view");
   expect(await code(viewer.client.call("agent.read", "in-1"))).toBe("ok");
+  expect(await code(viewer.client.call("agent.output", "in-1"))).toBe("ok");
   expect(await code(viewer.client.call("agent.sessions", here, "claude"))).toBe("ok");
   for (const [m, ...args] of [["agent.rename", "in-1", "x"], ["agent.keys", "in-1", ["Enter"]], ["link.connect", "in-1", "in-2"], ["tool.open", here, { tool: "a/b/c" }]] as const) {
     expect(await code(viewer.client.call(m, ...args))).toBe("FORBIDDEN");
@@ -334,7 +335,7 @@ test("naming an agent, typing keys to it and piping its replies to another drive
     expect(await code(driver.client.call(m, ...args))).toBe("ok");
   }
   // Another workspace's tile, at either end, or a folder outside it.
-  for (const [m, ...args] of [["agent.keys", "out-1", ["Enter"]], ["agent.read", "out-1"], ["link.connect", "in-1", "out-1"], ["link.connect", "out-1", "in-1"], ["link.disconnect", "in-1", "out-1"], ["agent.sessions", "/work/elsewhere", "claude"]] as const) {
+  for (const [m, ...args] of [["agent.keys", "out-1", ["Enter"]], ["agent.read", "out-1"], ["agent.output", "out-1"], ["link.connect", "in-1", "out-1"], ["link.connect", "out-1", "in-1"], ["link.disconnect", "in-1", "out-1"], ["agent.sessions", "/work/elsewhere", "claude"]] as const) {
     expect(await code(driver.client.call(m, ...args))).toBe("FORBIDDEN");
   }
   expect(ran.map((r) => r.what)).toEqual(["agent.rename", "agent.keys", "link.connect", "link.disconnect", "link.disconnect"]);

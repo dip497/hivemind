@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { StatusStore, isSessionStatus, type SessionStatus, type StatusChange } from "../src/status-store.js";
 
-const store = () => { let t = 1000; const s = new StatusStore({ now: () => ++t, logSize: 5 }); return s; };
+const store = () => { let t = 1000; const s = new StatusStore({ now: () => ++t }); return s; };
 
 test("the screen stands in until the hooks speak; from then on only the hooks decide", () => {
   const s = store();
@@ -90,7 +90,7 @@ test("exit is final whatever the source says next", () => {
   expect(s.get("a")!.state).toBe("exited");
 });
 
-test("changes carry a sequence a client resumes from; past the log's reach it must take a snapshot", () => {
+test("each change is told once, numbered in order; a report that changes nothing is not told", () => {
   const s = store();
   const seen: StatusChange[] = [];
   s.subscribe((c) => seen.push(c));
@@ -98,11 +98,6 @@ test("changes carry a sequence a client resumes from; past the log's reach it mu
   s.event("a", { event: "turn.started" }); // no change, no entry
   s.event("a", { event: "subagent.started", agentId: "x" });
   expect(seen.map((c) => c.seq)).toEqual([1, 2]);
-  expect(s.since(1)!.map((c) => c.seq)).toEqual([2]);
-  expect(s.since(2)).toEqual([]);
-  for (let i = 0; i < 10; i++) s.event("b", { event: i % 2 ? "turn.started" : "turn.ended" });
-  expect(s.since(0)).toBeNull();
-  expect(s.since(s.cursor() - 2)!.length).toBe(2);
 });
 
 test("since moves only when the state changes", () => {

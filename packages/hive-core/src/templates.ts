@@ -265,7 +265,7 @@ hive ctl read <tileId> --timeout 90s --json
 # still working → exit 4 and {"text":null,"finalStatus":"timeout",…}; call again, nothing is lost.
 # closed while you waited → exit 5 and {"text":null,"finalStatus":"closed",…}; it is gone, do not read it again.
 hive ctl read <tileId> --poll --json              # never blocks: current state, exit 0
-hive ctl stream <tileId> --lines 40 --snapshot    # what is on its screen right now (ANSI-stripped)
+hive ctl stream <tileId> --snapshot               # the last 40 lines it printed (ANSI-stripped)
 \`\`\`
 Durations take units (\`90s\`, \`10m\`); a bare number is milliseconds, and one under 1000 is refused. Keep \`--timeout\` below your tool's own limit (Claude Code's Bash default is 120 s) or pass a matching tool timeout. The wait is made of short polls, so it is always safe to interrupt and retry.
 
@@ -316,7 +316,7 @@ Ids from other registered repos resolve automatically.
 ## Also
 \`hive ctl focus <tileId>\` · \`hive ctl close <tileId>\` · \`hive ctl keys <tileId> Down,Enter\` (drive a TUI) ·
 \`hive ctl open-review --file plan.md\` (opens a review tile, blocks until the human decides) ·
-\`hive ctl stream <tileId> --json\` (NDJSON live output with byte offsets; resume with \`--since <offset>\`).
+\`hive ctl stream <tileId> --json\` (NDJSON: what it prints from now on, until it ends; \`--lines N\` prints the last N lines first).
 `;
 
 export const SAMPLE_ISSUE_BODY = `## Description

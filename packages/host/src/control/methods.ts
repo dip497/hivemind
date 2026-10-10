@@ -215,6 +215,8 @@ const RENDERER_TIMEOUT = 15_000;
 /** A plugin's command may do real work (read a repository, ask a server): longer than a window verb. */
 const PLUGIN_CALL_TIMEOUT = 35_000;
 const DEFAULT_READ_TIMEOUT = 120_000;
+/** How much of what an agent printed `agent.output` gives when not asked for more. */
+const DEFAULT_OUTPUT_LINES = 40;
 const REVIEW_TIMEOUT = 24 * 60 * 60 * 1000; // human review may take a long time
 
 export interface Dispatcher {
@@ -809,6 +811,14 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           deps.waits.answer(wait.tile, wait.since, d, { feedback: reason, always: decision === "always" || decision === "never" });
           return { ok: true, decision: d };
         });
+      }
+
+      // The tail of what an agent printed, as the recorder holds it.
+      case "agent.output": {
+        const tileId = String(p.tileId ?? "");
+        if (!tileId) throw new ApiError("BAD_REQUEST", "tileId required");
+        if (deps.workspaces.workspaceOf(bareOf(tileId)) === null && !deps.sessionHeld(ptyId(tileId))) throw new ApiError("NOT_FOUND", `no tile ${bareOf(tileId)} is open`);
+        return { text: deps.recorder.tail(ptyId(tileId), typeof p.lines === "number" ? p.lines : DEFAULT_OUTPUT_LINES) };
       }
 
       case "agent.read": {

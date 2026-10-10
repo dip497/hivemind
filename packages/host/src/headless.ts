@@ -227,7 +227,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       else control.agentOf.delete(bare);
       const supervise = control.supervise.get(bare);
       return sessions.start(supervise ? { ...opts, env: { ...opts.env, HIVE_SUPERVISE: supervise } } : opts, {
-        data: (data, replay) => { control.output(bare, data); out.data(data, replay); },
+        data: (data, replay) => out.data(data, replay),
         exit: (code, signal) => { out.exit(code, signal); control.exited(opts.tileId); },
         size: out.size,
       });

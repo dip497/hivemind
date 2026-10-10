@@ -7,8 +7,6 @@
  *     calls: the app's own is the person at this machine, a tile's agent is given its own.
  *   - A hook reports with the `agent.event` notification and disconnects. It needs no token:
  *     the socket is the owner's alone, and an event is a fact, not a command.
- *   - Streams (`agent.stream/subscribe`, `status/subscribe`) answer with a result, then send
- *     notifications until unsubscribed or disconnected.
  */
 import type { Actor } from "@hivemind/workspace-host/intents";
 import { ApiError, type ErrorCode } from "@hivemind/workspace-api/protocol";

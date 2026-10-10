@@ -7,7 +7,7 @@ agent the host started, else `<config>/hivemind/hcp.sock` and `hcp.token`.
 
 ## Connection
 
-1. `initialize {"token"}` → `{"protocolVersion": 2, "rendererUp", "capabilities": {"status"}}`.
+1. `initialize {"token"}` → `{"protocolVersion": 2, "rendererUp"}`.
    Every other request before it is refused with `FORBIDDEN`. The token says who calls: the
    host's own (`hcp.token`) is the person at the machine; an agent the host started is given one
    of its own, `<tile>.<MAC>`, which names its tile. A call made with a tile's token is that
@@ -23,17 +23,6 @@ the workspace API's error codes (`workspace-api.md`, "Errors"): `BAD_REQUEST`, `
 `FORBIDDEN`, `NOT_FOUND`, `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `TIMEOUT`,
 `UNAVAILABLE`, `FAILED`.
 `-32601` for an unknown method, `-32600` for a malformed message, `-32700` for bad JSON.
-
-## Streams
-
-- `status/subscribe {"since"?}` → `{"cursor", "snapshot"}` (every session's status) or, when
-  `since` is still in the host's log, `{"cursor", "changes"}` (what changed after it). Then
-  `status/changed {"seq","tileId","status"}` notifications, `status` per
-  `status.schema.json` plus `source` (`hooks` | `screen`) and `since` (ms). `status/unsubscribe`.
-- `agent.stream/subscribe {"tileId","since"?,"lines"?}` → `{"subscriptionId","offset"}`, then
-  `agent.stream {"subscriptionId","seq","chunk","offset","replay"?}` notifications: a tile's
-  output as text, `seq` 0 for the catch-up. A gap in `seq` means chunks were dropped for a slow
-  reader. `agent.stream/unsubscribe {"subscriptionId"}`.
 
 ## Methods
 

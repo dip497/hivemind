@@ -22,6 +22,8 @@ export interface Drive {
   as: DriveAs;
   /** Call `method`; `timeoutMs` bounds this call alone. */
   call(method: string, params: unknown[], timeoutMs?: number): Promise<unknown>;
+  /** Tell the host `method`, which it does not answer. */
+  notice(method: string, params: unknown[]): void;
   /** Hear `event`, until the returned function is called. */
   on(event: string, listener: (...params: unknown[]) => void): () => void;
   /** Resolves when the host closes the connection. */
@@ -69,7 +71,7 @@ export function openDrive(where: Where = {}): Promise<Drive> {
         if (!as) {
           if (msg.hello?.as) {
             as = msg.hello.as;
-            resolve({ as, call, on, closed, close: () => c.destroy() });
+            resolve({ as, call, notice: (method, params) => { c.write(`${JSON.stringify({ method, params })}\n`); }, on, closed, close: () => c.destroy() });
           } else {
             reject(refused(msg.error));
             c.destroy();

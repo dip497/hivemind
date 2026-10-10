@@ -73,6 +73,7 @@ const LEAST: Record<string, Role> = {
   "link.connect": "agents",
   "link.disconnect": "agents",
   "agent.read": "view",
+  "agent.output": "view",
   "agent.sessions": "view",
   "tool.open": "edit",
   "agent.close": "agents",

@@ -127,6 +127,15 @@ test("dispatch agent.send: writes text + carriage return", async () => {
   assert.deepEqual(writes, [["hm:t1", "hello"], ["hm:t1", "\r"]]);
 });
 
+test("dispatch agent.output: the last lines a tile printed, escapes taken out; a tile open nowhere is NOT_FOUND", async () => {
+  const { deps, recorder } = fakeDeps({ sessionHeld: (pid: string) => pid === "hm:t1" });
+  const { dispatch } = makeDispatch(deps);
+  recorder.record("hm:t1", "one\n\x1b[31mtwo\x1b[0m\nthree\n");
+  assert.deepEqual(await dispatch("agent.output", { tileId: "t1", lines: 2 }, PERSON), { text: "two\nthree\n" });
+  assert.deepEqual(await dispatch("agent.output", { tileId: "hm:t1" }, PERSON), { text: "one\ntwo\nthree\n" });
+  await assert.rejects(dispatch("agent.output", { tileId: "t2" }, PERSON), { code: "NOT_FOUND" });
+});
+
 test("dispatch agent.read: returns the reply the agent's plugin reported for the turn", async () => {
   const { deps, turns } = fakeDeps({ sessionHeld: (id) => id === "hm:t1" });
   const { dispatch } = makeDispatch(deps);
@@ -492,7 +501,7 @@ test("hcp-server: nothing before initialize with a token it knows; then methods,
   assert.equal((await s.call("x.y")).error.data.code, "FORBIDDEN", "nothing before initialize");
   assert.equal((await s.call("initialize", { token: "wrong" })).error.code, -32000);
   assert.equal((await s.call("x.y")).error.data.code, "FORBIDDEN", "nor after a token it does not know");
-  assert.deepEqual((await s.call("initialize", { token: "secret" })).result, { protocolVersion: 2, rendererUp: true, capabilities: { status: false } });
+  assert.deepEqual((await s.call("initialize", { token: "secret" })).result, { protocolVersion: 2, rendererUp: true });
   assert.deepEqual((await s.call("x.y", { a: 1 })).result, { echoed: "x.y", params: { a: 1 }, by: { kind: "person" } });
   assert.deepEqual((await s.call("boom")).error, { code: -32000, message: "no such tile", data: { code: "NOT_FOUND" } });
   const agent = await session(sock);
@@ -532,57 +541,6 @@ test("hcp-server: a hook's agent.event needs no token; any other unauthenticated
   s.notify("agent.reply", { tileId: "hm:t1", text: "forged" });
   await new Promise((r) => setTimeout(r, 50));
   assert.deepEqual(got, [["agent.event", { tileId: "hm:t1", event: "turn.ended" }]]);
-  s.close();
-  srv.close();
-});
-
-test("hcp-server: agent.stream/subscribe replays what the recorder holds, then live chunks for that tile only", async () => {
-  const sock = tmpSock();
-  const rec = new OutputRecorder();
-  rec.record("t", "a\nb\n");
-  const srv = startHcpServer(sock, {
-    authenticate: knownTokens, rendererUp: () => true, onEvent() {}, dispatch: async () => ({}),
-    replay: (id, o) => (typeof o.lines === "number" ? rec.tail(id, o.lines) : rec.since(id, o.since ?? 0)),
-    offsetOf: (id) => rec.mark(id),
-  });
-  await new Promise((r) => setTimeout(r, 50));
-  const s = await session(sock);
-  await s.call("initialize", { token: "secret" });
-  const sub = await s.call("agent.stream/subscribe", { tileId: "t", lines: 1 });
-  assert.equal(sub.result.offset, 4);
-  const subscriptionId = sub.result.subscriptionId;
-  srv.broadcast("other", "ignored");
-  srv.broadcast("t", "c\n");
-  await s.until((l) => l.method === "agent.stream" && l.params.seq === 1);
-  assert.deepEqual(s.notes("agent.stream").map((n) => n.params), [
-    { subscriptionId, seq: 0, chunk: "b\n", offset: 4, replay: true },
-    { subscriptionId, seq: 1, chunk: "c\n", offset: 4 },
-  ]);
-  await s.call("agent.stream/unsubscribe", { subscriptionId });
-  srv.broadcast("t", "d\n");
-  await new Promise((r) => setTimeout(r, 30));
-  assert.equal(s.notes("agent.stream").length, 2);
-  s.close();
-  srv.close();
-});
-
-test("hcp-server: status/subscribe — the whole picture without a cursor, only what changed with one, then live", async () => {
-  const { StatusStore } = await import("@hivemind/agent-host/status-store");
-  const store = new StatusStore();
-  store.event("hm:a", { event: "turn.started" });
-  const sock = tmpSock();
-  const srv = startHcpServer(sock, { authenticate: knownTokens, rendererUp: () => true, onEvent: () => {}, dispatch: async () => ({}), status: store });
-  await new Promise((r) => setTimeout(r, 50));
-  const s = await session(sock);
-  await s.call("initialize", { token: "secret" });
-  const first = await s.call("status/subscribe", {});
-  assert.equal(first.result.cursor, 1);
-  assert.equal(first.result.snapshot[0].status.state, "working");
-  store.event("hm:a", { event: "turn.ended" });
-  await s.until((l) => l.method === "status/changed");
-  assert.deepEqual(s.notes("status/changed")[0].params, { seq: 2, tileId: "hm:a", status: store.get("hm:a") });
-  const resumed = await s.call("status/subscribe", { since: 1 });
-  assert.deepEqual(resumed.result.changes.map((ch: any) => ch.seq), [2]);
   s.close();
   srv.close();
 });

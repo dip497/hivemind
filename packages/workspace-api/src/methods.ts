@@ -134,6 +134,9 @@ export interface WorkspaceMethods {
   /** (0.23) The agent's reply to the turn after the last message it was sent, waiting for it up to
    *  `timeoutMs` (2 minutes when not given). `UNSUPPORTED` for an agent that says no turn end. */
   "agent.read": (tile: string, timeoutMs?: number) => AgentRead;
+  /** (0.23) The last `lines` lines (40 when not given) of what it printed, its terminal's escapes
+   *  taken out: as much as the host keeps. */
+  "agent.output": (tile: string, lines?: number) => { text: string };
   /** (0.23) The sessions `program` keeps in `place` (the workspace's folder or one of its
    *  worktrees), newest first, `limit` of them at most. */
   "agent.sessions": (place: string, program: string, limit?: number) => AgentSessions;

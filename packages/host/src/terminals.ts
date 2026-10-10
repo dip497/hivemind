@@ -387,11 +387,13 @@ function optsOf(value: unknown): TerminalOpts {
   const o = fields(value, "opts");
   const env = o.env == null ? undefined : fields(o.env, "opts.env");
   if (env) for (const [k, v] of Object.entries(env)) written(v, `opts.env.${k}`);
+  // Showing a session starts nothing: where and what it would run need not be said.
+  const attaching = o.attachOnly === true;
   return {
     tileId: text(o.tileId, "opts.tileId"),
     ...(o.tile == null ? {} : { tile: text(o.tile, "opts.tile") }),
-    cwd: text(o.cwd, "opts.cwd"),
-    cmd: written(o.cmd, "opts.cmd"),
+    cwd: attaching && o.cwd == null ? "" : text(o.cwd, "opts.cwd"),
+    cmd: attaching && o.cmd == null ? "" : written(o.cmd, "opts.cmd"),
     ...(o.args == null ? {} : { args: texts(o.args, "opts.args") }),
     cols: whole(o.cols, "opts.cols", 1),
     rows: whole(o.rows, "opts.rows", 1),

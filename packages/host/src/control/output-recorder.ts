@@ -3,9 +3,8 @@
  * terminal output, fed from the SAME pty data main already relays to the
  * renderer (so it's always on, with no dependency on a tile staying mounted).
  *
- * Phase 1 uses it only as the agent.read FALLBACK: when no Stop turn arrives
- * within the timeout (agent crashed, or a non-claude agent with no Stop hook),
- * return what it printed. Phase 2 builds agent.stream on top of it.
+ * `agent.read` falls back to it when no turn is reported in time (the agent crashed, or has
+ * no hooks), and `agent.output` is its tail.
  */
 const CAP = 256 * 1024; // per-tile ring cap
 

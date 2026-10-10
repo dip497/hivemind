@@ -90,7 +90,6 @@ export class ControlPlane {
   private readonly unstarted = new Set<string>();
   private readonly reaper: SubagentReaper;
   private made: Dispatcher | null = null;
-  private server: HcpServer | null = null;
   private spawnTimes: number[] = [];
 
   constructor(private readonly o: ControlPlaneOptions) {
@@ -197,11 +196,6 @@ export class ControlPlane {
     };
   }
 
-  /** A session's output as it comes (by bare tile id): to whoever streams it. */
-  output(bare: string, chunk: string): void {
-    this.server?.broadcast(bare, chunk);
-  }
-
   /** The session of `tileId` ended (crash, kill, a close): everything kept for it goes, and
    *  whatever waits on it (a parent's read, an approval) is answered now. */
   exited(tileId: string): void {
@@ -297,7 +291,7 @@ export class ControlPlane {
    */
   listen(sock: string, onError?: (err: Error) => void): HcpServer {
     const token = readOrCreateToken(this.o.dir());
-    this.server = startHcpServer(sock, {
+    return startHcpServer(sock, {
       authenticate: (t) => {
         const holder = holderOf(token, t);
         return !holder ? null : "tile" in holder ? { kind: "tile", tile: toBareId(holder.tile) } : { kind: "person" };
@@ -305,15 +299,8 @@ export class ControlPlane {
       ...(onError ? { onListenError: onError } : {}),
       rendererUp: () => this.o.windowsUp(),
       dispatch: (method, params, call) => this.dispatch(method, params, call),
-      // Stream replay/resume for `hive ctl stream --lines/--since`: the recorder is keyed by pty
-      // id, subscriptions by bare tile id.
-      replay: (tileId, opts) =>
-        typeof opts.lines === "number" ? this.recorder.tail(toPtyId(tileId), opts.lines) : this.recorder.since(toPtyId(tileId), opts.since ?? 0),
-      offsetOf: (tileId) => this.recorder.mark(toPtyId(tileId)),
-      status: this.status,
       onEvent: (method, params) => this.event(method, params),
     });
-    return this.server;
   }
 
   private spawnAllowed(): boolean {

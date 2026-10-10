@@ -90,12 +90,14 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
     const worker = (spawned.json as { tile: string }).tile;
     const first = ctl("read", worker, "--timeout", "40000");
     expect(first.json, first.stdout + first.stderr).toMatchObject({ text: `hello from ${repo} as hm:${worker}`, finalStatus: "turn" });
-    expect(listed().find((t) => t.tile === worker)).toMatchObject({ agent: "worker", program: { id: "droid" }, state: "idle" });
     // The daemon heard the turn too, through the socket it passed on: so do the devices watching it.
     await until(() => heard.some((e) => e.topic === "agent.event" && e.data.tileId === `hm:${worker}` && e.data.event === "turn.ended"), "the daemon to tell its watchers");
+    // The host hears it on its own socket: the turn it ended is the state it lists.
+    await until(() => listed().find((t) => t.tile === worker)?.state === "done", "the host to hear the turn end");
+    expect(listed().find((t) => t.tile === worker)).toMatchObject({ agent: "worker", program: { id: "droid" } });
     // Its output is recorded, whoever shows it.
     const tail = hive(["ctl", "stream", worker, "--lines", "40", "--snapshot", "--json"], { env });
-    expect(tail.stdout).toContain(`hello from ${repo}`);
+    expect(tail.stdout, tail.stderr).toContain(`hello from ${repo}`);
 
     expect(ctl("send", worker, "echo second").code).toBe(0);
     expect(ctl("read", worker, "--timeout", "40000").json).toMatchObject({ text: "second", finalStatus: "turn" });

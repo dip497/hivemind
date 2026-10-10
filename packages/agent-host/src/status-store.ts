@@ -66,11 +66,10 @@ export class StatusStore {
   private mirrored = new Set<string>();
   /** Sessions whose hook-reported turn the screen is overriding (see the header). */
   private screenHeld = new Set<string>();
-  private log: StatusChange[] = [];
   private seq = 0;
   private listeners = new Set<(c: StatusChange) => void>();
 
-  constructor(private readonly opts: { now?: () => number; logSize?: number } = {}) {}
+  constructor(private readonly opts: { now?: () => number } = {}) {}
 
   private now(): number { return this.opts.now?.() ?? Date.now(); }
 
@@ -78,17 +77,6 @@ export class StatusStore {
 
   all(): Array<{ tileId: string; status: SessionStatus }> {
     return [...this.sessions].map(([tileId, status]) => ({ tileId, status }));
-  }
-
-  /** The last change's sequence number: what a client resumes from. */
-  cursor(): number { return this.seq; }
-
-  /** Changes after `seq`, or null when the log no longer reaches back that far — then take `all()`. */
-  since(seq: number): StatusChange[] | null {
-    if (seq >= this.seq) return [];
-    const first = this.log[0]?.seq ?? this.seq + 1;
-    if (seq < first - 1) return null;
-    return this.log.filter((c) => c.seq > seq);
   }
 
   subscribe(fn: (c: StatusChange) => void): () => void {
@@ -186,9 +174,6 @@ export class StatusStore {
     if (prev && sameStatus(prev, status)) return;
     this.sessions.set(tileId, status);
     const change: StatusChange = { seq: ++this.seq, tileId, status };
-    this.log.push(change);
-    const cap = this.opts.logSize ?? 1000;
-    if (this.log.length > cap) this.log.splice(0, this.log.length - cap);
     for (const fn of this.listeners) fn(change);
   }
 }

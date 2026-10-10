@@ -81,8 +81,8 @@ hive ctl spawn [--agent claude] [--prompt "…"] [--name "title"]
 hive ctl send <tileId> "text"
 hive ctl keys <tileId> Down,Enter       # Esc, Tab, digits, …
 hive ctl read <tileId> [--timeout 90s] [--poll]   # default wait 100 s; --poll: no wait
-hive ctl stream <tileId> [--lines 40] [--since <offset>] [--timeout 30s]
-                       [--snapshot] [--json]        # NDJSON tail with byte offsets
+hive ctl stream <tileId> [--lines 40] [--timeout 30s]
+                       [--snapshot] [--json]        # what it prints, live; --lines: the last N first
 hive ctl focus <tileId>
 hive ctl close <tileId>                 # ends what runs in it; exit 5 if it is not open
 hive ctl rename <tileId> ["name"]       # no name: back to what its agent says it is doing

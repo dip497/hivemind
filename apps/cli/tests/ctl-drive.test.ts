@@ -63,6 +63,8 @@ beforeAll(async () => {
     answer("link.connect", () => null),
     answer("link.disconnect", () => null),
     answer("tile.focus", () => null),
+    answer("agent.output", (_t, lines) => ({ text: `last ${String(lines)} lines\n` })),
+    answer("terminal.open", (opts) => ({ pid: (opts as { tileId: string }).tileId === "hm:ghost" ? -1 : 7, joined: true })),
     answer("view.emit", (name) => (name === "ci.build" ? { id: "ev_1", delivered: true, view: "@a/valley" } : { id: "ev_3", delivered: false, view: "canvas", reason: "no-listener", buffered: true })),
     answer("plugin.commands", () => ({ plugins: [{ plugin: "@a/progress", kind: "widget", instance: "w1", label: "Progress", commands: [{ name: "add", description: "Add a step.", args: '{ "text": string }' }] }] })),
     answer("plugin.call", (_p, command, args, tile) => { if (command === "check") throw new ApiError("FAILED", "there is no step 7"); return { result: { echoed: args, tile: tile ?? null } }; }),
@@ -176,6 +178,24 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
       watch.kill();
       expect(out.trim().split("\n").map((l) => JSON.parse(l))).toEqual([event(4, "w-1")]);
     }
+  });
+
+  test("stream: --snapshot prints the last lines it printed; live, what it prints as it comes, never a copy of its screen, until it ends; nothing running is exit 5", async () => {
+    const snap = await hive(["ctl", "stream", "w-1", "--snapshot", "--json"], { env: env() });
+    expect([snap.code, snap.stdout.trim().split("\n").map((l) => JSON.parse(l))]).toEqual([0, [{ seq: 0, chunk: "last 40 lines\n", printed: true }, { end: true }]]);
+    expect(last("agent.output").params).toEqual(["w-1", 40]);
+    calls.length = 0;
+    const live = hive(["ctl", "stream", "w-1", "--json"], { env: env() });
+    while (!calls.some((c) => c.method === "terminal.open")) await new Promise((r) => setTimeout(r, 20));
+    expect(last("terminal.open").params).toEqual([{ tileId: "hm:w-1", cols: 80, rows: 24, attachOnly: true, liveOnly: true }]);
+    server.publish("terminal.data", "hm:w-1", "\x1bcthe screen");
+    server.publish("terminal.data", "hm:w-2", "another's");
+    server.publish("terminal.data", "hm:w-1", "\x1b[31mnew\x1b[0m line\n");
+    server.publish("terminal.exit", "hm:w-1", { code: 0 });
+    const r = await live;
+    expect([r.code, r.stdout.trim().split("\n").map((l) => JSON.parse(l))]).toEqual([0, [{ seq: 0, chunk: "new line\n" }, { end: true }]]);
+    const none = await hive(["ctl", "stream", "ghost", "--json"], { env: env() });
+    expect([none.code, (none.json as { code: string }).code]).toEqual([5, "NOT_FOUND"]);
   });
 
   test("view emit: --json shapes for delivered and not listening", async () => {

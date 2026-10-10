@@ -26,6 +26,7 @@ test("each method is the control plane's verb, asked as the caller, its answer i
   assert.deepEqual(await c.call(person, "agent.rename", "t1", "reviewer"), { name: "reviewer" });
   assert.deepEqual(await c.call(person, "agent.keys", "t1", ["y", "Enter"]), { keys: 2 });
   assert.deepEqual(await c.call(person, "agent.read", "t1", 5_000), { text: "done", finalStatus: "turn", truncated: false });
+  await c.call(person, "agent.output", "t1", 12);
   await c.call(person, "agent.sessions", "/work/api", "claude", 3);
   assert.deepEqual(await c.call(person, "tool.open", "/work/api", { tool: "a/b/c", url: "https://x" }), { tile: "hm:t9" });
   await c.call(person, "link.connect", "t1", "t2");
@@ -35,6 +36,7 @@ test("each method is the control plane's verb, asked as the caller, its answer i
     ["tile.rename", { tileId: "t1", name: "reviewer" }],
     ["agent.send_keys", { tileId: "t1", keys: ["y", "Enter"] }],
     ["agent.read", { tileId: "t1", timeoutMs: 5_000 }],
+    ["agent.output", { tileId: "t1", lines: 12 }],
     ["agent.sessions", { agent: "claude", cwd: "/work/api", limit: 3 }],
     ["tool.open", { repo: "/work/api", tool: "a/b/c", frame: undefined, url: "https://x" }],
     ["tile.connect", { srcTileId: "t1", dstTileId: "t2" }],
@@ -57,7 +59,7 @@ test("an agent on the drive socket asks from its own tile; the person asks from 
 test("a malformed call is a bad request, and the control plane is asked nothing", async () => {
   const c = plane();
   for (const [method, ...params] of [
-    ["agent.rename", "", "x"], ["agent.keys", "t1", []], ["agent.keys", "t1", ["y", 3]], ["agent.read", "t1", -1],
+    ["agent.rename", "", "x"], ["agent.keys", "t1", []], ["agent.keys", "t1", ["y", 3]], ["agent.read", "t1", -1], ["agent.output", "t1", 1.5],
     ["agent.sessions", "/work/api", "", 3], ["agent.sessions", "/work/api", "claude", 0], ["tool.open", null, { tool: "a/b/c" }],
     ["link.connect", "t1", null], ["link.disconnect", "t1", 4], ["host.join", ""],
   ] as const) {

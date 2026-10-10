@@ -1,7 +1,6 @@
 /**
- * HCP client for `hive ctl` — one short-lived JSON-RPC connection per request
- * to the running desktop app's control-plane socket, plus a subscription helper
- * for `agent.stream`.
+ * HCP client for the `hive ctl` verbs of the agent channel — one short-lived JSON-RPC
+ * connection per request to the running app's control-plane socket.
  *
  * Socket + token come from env (HIVE_HCP_SOCK / HCP_TOKEN — injected into every
  * agent hivemind spawns) else the app's data folder (app-data.ts).
@@ -144,51 +143,5 @@ export function hcpCall(method: string, params: unknown, timeoutMs = 30_000): Pr
       if (m.error) fail(rpcError(m)); else ok(m.result);
     }, (e) => fail(e ?? unavailable("HCP connection closed")));
     c.on("close", () => fail(unavailable("HCP connection closed before a reply")));
-  });
-}
-
-export interface StreamEvent { seq: number; chunk: string; offset?: number; replay?: boolean }
-
-/** Subscribe to a tile's live output. Resolves when the stream ends (server
- *  closed, `stop()` called, or `timeoutMs` elapsed). */
-export function hcpStream(
-  params: { tileId: string; since?: number; lines?: number },
-  onEvent: (ev: StreamEvent) => void,
-  opts: { timeoutMs?: number; signal?: { stop: () => void } } = {},
-): Promise<{ offset: number }> {
-  const sock = sockPath();
-  if (!fs.existsSync(sock)) return Promise.reject(unavailable(`hivemind app not running (no socket at ${sock})`));
-  return new Promise((resolve, reject) => {
-    const reqId = randomUUID();
-    let subscriptionId: string | undefined;
-    let lastOffset = params.since ?? 0;
-    let done = false;
-    const c = open({ id: reqId, method: "agent.stream/subscribe", params }, (m) => {
-      if (m.id === reqId) {
-        if (m.error) return finish(rpcError(m));
-        const r = (m.result ?? {}) as { subscriptionId?: string; offset?: number };
-        subscriptionId = r.subscriptionId;
-        if (typeof r.offset === "number") lastOffset = r.offset;
-        return;
-      }
-      if (m.method !== "agent.stream") return;
-      const ev = (m.params ?? {}) as StreamEvent & { subscriptionId?: string };
-      if (ev.subscriptionId !== subscriptionId) return;
-      if (typeof ev.offset === "number") lastOffset = ev.offset;
-      onEvent(ev);
-    }, (e) => finish(e));
-    const stop = () => {
-      try { c.write(JSON.stringify({ jsonrpc: "2.0", id: "unsub", method: "agent.stream/unsubscribe", params: { subscriptionId } }) + "\n"); } catch { /* */ }
-      finish();
-    };
-    if (opts.signal) opts.signal.stop = stop;
-    const timer = opts.timeoutMs ? setTimeout(stop, opts.timeoutMs) : undefined;
-    function finish(err?: Error) {
-      if (done) return; done = true;
-      if (timer) clearTimeout(timer);
-      try { c.end(); } catch { /* */ }
-      if (err) reject(err); else resolve({ offset: lastOffset });
-    }
-    c.on("close", () => finish());
   });
 }

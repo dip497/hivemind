@@ -26,7 +26,8 @@ import {
   HiveError, commentOnIssue, deleteIssue, issueToJson, listWorkspaces, readIssue, requireRoot, rootForId, updateIssue,
   type IssueState,
 } from "@hivemind/core";
-import { EXIT, HcpCliError, exitCodeFor, hcpCall, hcpStream, ownTile } from "../hcp.js";
+import { EXIT, HcpCliError, exitCodeFor, hcpCall, ownTile } from "../hcp.js";
+import { stripAnsi } from "@hivemind/host/control/output-recorder";
 import { openDrive, type Drive } from "../drive.js";
 import { UnsupportedError, UsageError, boolFlag, emitArgs, durationFlag, intFlag, parseKeys, readSchedule, resolveAgent, workflowParams } from "../ctl-args.js";
 import { ensureAgentCatalog } from "../agent-catalog.js";
@@ -339,31 +340,49 @@ const openReview = sub("open-review", "Wait on a person's review of this agent's
 
 // ── stream ───────────────────────────────────────────────────────────────────
 
+/** A screen the host sends in place of what a client shows starts so (spec/workspace-api.md). */
+const SCREEN = "\x1bc";
+
 const stream = defineCommand({
-  meta: { name: "stream", description: "Stream a tile's live terminal output to stdout (ANSI-stripped). --lines/--since replay the recorded tail first" },
+  meta: { name: "stream", description: "What an agent prints, ANSI-stripped, as it comes. --lines N prints the last N lines it printed first; --snapshot only those" },
   args: {
     ...tileArg,
-    since: { type: "string", description: "replay from this byte offset (as printed by a previous --json run) before going live" },
-    lines: { type: "string", description: "replay the last N recorded lines before going live" },
-    timeout: { type: "string", description: "stop after this long, e.g. 30s (default: until Ctrl-C)" },
-    snapshot: { type: "boolean", description: "print the replay and exit (no live tail)" },
-    json: { type: "boolean", description: "NDJSON: one {seq,chunk,offset,replay} per event, then {end:true,offset}" },
+    lines: { type: "string", description: "print the last N lines it printed before going live (default with --snapshot: 40)" },
+    timeout: { type: "string", description: "stop after this long, e.g. 30s (default: until Ctrl-C, or the agent ends)" },
+    snapshot: { type: "boolean", description: "print the last lines it printed and exit (no live tail)" },
+    json: { type: "boolean", description: "NDJSON: one {seq,chunk,printed?} per chunk (printed: from before), then {end:true}" },
   },
   async run({ args }) {
     const json = !!args.json;
     try {
-      const since = args.since != null ? intFlag(args.since, "since", 0) : undefined;
-      const lines = args.lines != null ? intFlag(args.lines, "lines", 0) : undefined;
-      let timeoutMs = durationFlag(args.timeout, "timeout", 0);
-      if (args.snapshot && !timeoutMs) timeoutMs = 400; // long enough for the replay event to land
-      const signal = { stop: () => {} };
-      process.on("SIGINT", () => signal.stop());
-      const { offset } = await hcpStream({ tileId: String(args.tileId), since, lines }, (ev) => {
-        if (json) console.log(JSON.stringify(ev));
-        else process.stdout.write(ev.chunk ?? "");
-        if (args.snapshot && ev.replay) signal.stop();
-      }, { timeoutMs: timeoutMs || undefined, signal });
-      if (json) console.log(JSON.stringify({ end: true, offset }));
+      const lines = args.lines != null ? intFlag(args.lines, "lines", 0) : args.snapshot ? 40 : undefined;
+      const timeoutMs = durationFlag(args.timeout, "timeout", 0);
+      const tile = String(args.tileId);
+      const session = tile.startsWith("hm:") ? tile : `hm:${tile}`;
+      const d = await openDrive();
+      let seq = 0;
+      const print = (chunk: string, printed: boolean) => {
+        if (!chunk) return;
+        if (json) console.log(JSON.stringify({ seq: seq++, chunk, ...(printed ? { printed: true } : {}) }));
+        else process.stdout.write(chunk);
+      };
+      if (lines) print(((await d.call("agent.output", [tile, lines])) as { text: string }).text, true);
+      if (!args.snapshot) {
+        let end!: () => void;
+        const ended = new Promise<void>((r) => (end = r));
+        // Its output from now on; a copy of its screen is not output.
+        d.on("terminal.data", (at, data) => { if (at === session && !String(data).startsWith(SCREEN)) print(stripAnsi(String(data)), false); });
+        d.on("terminal.exit", (at) => { if (at === session) end(); });
+        void d.closed.then(end);
+        const { pid } = await d.call("terminal.open", [{ tileId: session, cols: 80, rows: 24, attachOnly: true, liveOnly: true }]) as { pid: number };
+        if (pid === -1) throw new HcpCliError("NOT_FOUND", `no session runs in tile ${tile}`, EXIT.notFound);
+        process.on("SIGINT", end);
+        if (timeoutMs) setTimeout(end, timeoutMs).unref();
+        await ended;
+        d.notice("terminal.detach", [session]);
+      }
+      d.close();
+      if (json) console.log(JSON.stringify({ end: true }));
       process.exit(0);
     } catch (e) { fail(e, json); }
   },

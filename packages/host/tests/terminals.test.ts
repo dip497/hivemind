@@ -85,6 +85,15 @@ test("starting a session is its opener's intent; showing one the host holds, or 
   assert.deepEqual(h.calls, ["start hm:t1", "start hm:t2", "start hm:t3"]);
 });
 
+test("showing a session need not say where or what it runs; opening one to start it must", async () => {
+  const h = host();
+  const a = h.client();
+  await h.open(a, "hm:t1", { attachOnly: true, cwd: undefined, cmd: undefined });
+  await assert.rejects(h.open(a, "hm:t2", { cwd: undefined }), /opts\.cwd/);
+  await assert.rejects(h.open(a, "hm:t3", { cmd: undefined }), /opts\.cmd/);
+  assert.deepEqual(h.calls, ["start hm:t1"]);
+});
+
 test("closing a session ends it and is the closer's intent; a close after it ended ends nothing more of anyone's", async () => {
   const h = host();
   const [a, b] = [h.client(), h.client()];

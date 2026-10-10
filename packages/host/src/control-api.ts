@@ -1,6 +1,6 @@
 /**
  * What the control plane does that the workspace API asks by name (spec/workspace-api.md, 0.23):
- * name an agent, type keys to it, read its next reply, list the sessions it keeps, open a tool's
+ * name an agent, type keys to it, read its next reply or what it printed last, list the sessions it keeps, open a tool's
  * tile, pipe one agent's replies to another; and the person's own machine methods (a view event,
  * the plugins running in a window, a tile brought forward, rescans, settings, joining). The
  * control plane carries each out and records its effect as the caller's, once; an agent on the
@@ -13,7 +13,7 @@ import { toPtyId as ptyId } from "@hivemind/workspace-api/tile-id";
 import type { HcpCall } from "./control/protocol.js";
 
 type Method =
-  | "agent.rename" | "agent.keys" | "agent.read" | "agent.sessions" | "tool.open" | "link.connect" | "link.disconnect"
+  | "agent.rename" | "agent.keys" | "agent.read" | "agent.output" | "agent.sessions" | "tool.open" | "link.connect" | "link.disconnect"
   | "view.emit" | "plugin.commands" | "plugin.open" | "plugin.call" | "tile.focus"
   | "views.rescan" | "agents.rescan" | "widgets.rescan" | "tools.rescan" | "settings.reload" | "host.status" | "host.join";
 
@@ -50,6 +50,10 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       "agent.read": async (from, tile, timeoutMs) => {
         if (timeoutMs != null && !(typeof timeoutMs === "number" && timeoutMs > 0)) throw new ApiError("BAD_REQUEST", "timeoutMs must be a number of milliseconds");
         return (await ask(from, "agent.read", { tileId: text(tile, "tile"), ...(timeoutMs != null ? { timeoutMs } : {}) })) as AgentRead;
+      },
+      "agent.output": async (from, tile, lines) => {
+        if (lines != null && !(Number.isInteger(lines) && (lines as number) > 0)) throw new ApiError("BAD_REQUEST", "lines must be a whole number");
+        return (await ask(from, "agent.output", { tileId: text(tile, "tile"), ...(lines != null ? { lines } : {}) })) as { text: string };
       },
       "agent.sessions": async (from, place, program, limit) => {
         if (limit != null && !(typeof limit === "number" && limit > 0)) throw new ApiError("BAD_REQUEST", "limit must be a number");

@@ -60,7 +60,7 @@ Practical rules:
   `finalStatus:"closed"` at once: it is gone, so do not read it again.
 - `workflow --agent <id>` exits 7 before spawning when that agent has no turn signal;
   `hive agents list` shows which do.
-- `hive ctl stream <tile> --lines 40 --snapshot` shows a tile's screen (ANSI-stripped)
+- `hive ctl stream <tile> --snapshot` shows the last 40 lines a tile printed (ANSI-stripped)
   for runtimes that cannot be read deterministically.
 - `hive ctl open-review --file plan.md` opens a review tile and waits for a human
   decision (default ceiling 24 h).
