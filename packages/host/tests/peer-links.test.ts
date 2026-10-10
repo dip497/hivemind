@@ -209,7 +209,7 @@ function computer() {
     // says which interrupt its turn.
     facts: () => ({
       program: (tile) => (tile === "t1" ? { id: "claude", label: "Claude Code" } : undefined),
-      decides: (tile) => tile === "t1",
+      decides: (tile, status) => tile === "t1" && status.kind === "permission",
       interrupts: (tile) => tile === "t2",
       converses: () => false,
     }),

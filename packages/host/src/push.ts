@@ -12,7 +12,7 @@ import type { JoinQuestion } from "@hivemind/workspace-api/people";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import type { Changes } from "@hivemind/workspace-host/doc-sync";
 import { idOf, signWith, type Seed } from "@hivemind/workspace-host/identity";
-import { agentOf, waitsOnThePerson, type HeldBoard, type WaitingStatus } from "./needs.js";
+import { agentOf, waitsOnThePerson, type Decides, type HeldBoard, type WaitingStatus } from "./needs.js";
 import { encrypt, subscriptionOf, type Subscription } from "./web-push.js";
 
 /** What a phone is told: an agent began waiting on the person, finished, or failed. */
@@ -24,11 +24,12 @@ export interface Notice {
   tile: string;
   /** What the agent is called, its first `AGENT_MAX` characters. */
   agent: string;
-  /** What it waits for (`needs`). */
+  /** What it waits for (`needs`), and what screen, when its agent's manifest names it (`trust`). */
   kind?: InputKind;
+  says?: string;
   /** When its status became what it is, ms since the epoch: with `tile`, which wait (`needs`). */
   since: number;
-  /** A permission the device can allow or deny (`needs`, 0.4): the phone may offer Allow / Deny. */
+  /** What it waits on can be allowed or denied (`needs`, 0.4): the phone may offer Allow / Deny. */
   decide?: true;
 }
 
@@ -77,13 +78,13 @@ export function toldOf(before: Status | undefined, status: Status): Notice["t"] 
   return before.state === status.state ? null : status.state === "done" ? "finished" : "failed";
 }
 
-/** The notice `t` of `change`, for the agent of `held` it is; null while it is on none of them. A
- *  permission is one it can decide when `decides` says so of the agent's tile. */
-function noticeFor(t: Notice["t"], { tileId, status }: WaitingStatus, held: HeldBoard[], decides: (tile: string) => boolean): Notice | null {
+/** The notice `t` of `change`, for the agent of `held` it is; null while it is on none of them.
+ *  What it waits on is decided from the notice when `decides` says so. */
+function noticeFor(t: Notice["t"], { tileId, status }: WaitingStatus, held: HeldBoard[], decides: Decides): Notice | null {
   const at = agentOf(held, tileId, status.title);
   if (!at) return null;
-  const decide = t === "needs" && status.kind === "permission" && decides(at.tile);
-  return { v: 1, t, ...at, name: short(at.name), agent: short(at.agent), ...(t === "needs" ? { kind: status.kind } : {}), since: status.since, ...(decide ? { decide } : {}) };
+  const decide = t === "needs" && decides(at.tile, status);
+  return { v: 1, t, ...at, name: short(at.name), agent: short(at.agent), ...(t === "needs" ? { kind: status.kind, ...(status.says ? { says: status.says } : {}) } : {}), since: status.since, ...(decide ? { decide } : {}) };
 }
 
 /** The phones subscribed here, kept in a file beside this device's keys (0600): one each. */
@@ -124,9 +125,9 @@ export interface PushOptions {
   me(): { device: string; name: string };
   /** The workspaces held here, with their boards, and each change to them. */
   boards(): HeldBoard[];
-  /** Whether a permission the agent of `tile` asks can be allowed or denied from here (its agent
-   *  says which of its keys do). */
-  decides(tile: string): boolean;
+  /** Whether what the agent of `tile` waits on can be allowed or denied from here (its agent says
+   *  which of its keys do). */
+  decides: Decides;
   changes: Changes;
   subscriptions: PushSubscriptions;
   /** Post `body` to `endpoint`, signed when `sign`: the status the push service answered. */
@@ -185,7 +186,7 @@ export class PushNotices {
     else this.before.set(tile, { state, ...(kind ? { kind } : {}), since });
     this.unplaced.delete(tile);
     if (!t) return;
-    const notice = noticeFor(t, change, this.o.boards(), (tile) => this.o.decides(tile));
+    const notice = noticeFor(t, change, this.o.boards(), this.o.decides);
     if (notice) this.tell(notice);
     else this.unplaced.set(tile, { t, change });
   }
@@ -211,7 +212,7 @@ export class PushNotices {
     if (this.unplaced.size === 0) return;
     const held = this.o.boards();
     for (const [tile, { t, change }] of this.unplaced) {
-      const notice = noticeFor(t, change, held, (tile) => this.o.decides(tile));
+      const notice = noticeFor(t, change, held, this.o.decides);
       if (!notice) continue;
       this.unplaced.delete(tile);
       this.tell(notice);

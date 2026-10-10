@@ -14,6 +14,7 @@
  * An agent is one directory: its `agent.yaml` and the files that manifest names.
  */
 import type { AgentEventName, InputKind, TurnOutcome } from "./events.js";
+import type { ScreenReading } from "./detect-rules.js";
 
 /** "blocked" = needs the human (approval or question). */
 export type AgentState = "idle" | "working" | "blocked";
@@ -332,7 +333,7 @@ export interface AgentProviderDef {
    *  recognised for status at all (a user-run tile of it is treated like any
    *  unknown program): it exists for `hive agent detect` / `--assignee` only,
    *  until real screen text is captured. */
-  detect?: (screen: string) => TileStatus;
+  detect?: (screen: string) => ScreenReading;
   /** The agent's mark as inline SVG: the viewBox, the inner markup (paths /
    *  shapes using `currentColor`) and any root attributes (fill / stroke /
    *  fillRule). Rendered by the UI generically — no per-provider React code. */
@@ -369,9 +370,10 @@ export interface AgentProviderDef {
    *  (see ManifestSpawn.dismiss). `keys` are the tokens `hive ctl keys` takes. */
   dismiss?: ReadonlyArray<{ match: (screen: string) => boolean; keys: readonly string[] }>;
   /** How the person's answer to one of the agent's own prompts is typed, from another of their
-   *  devices (a phone's Allow / Deny): `permission`, the keys that allow what it asks and the
-   *  keys that deny it. Tokens as `hive ctl keys` takes them. */
-  answer?: { permission?: PermissionKeys };
+   *  devices (a phone's Allow / Deny): by the wait's name (what its screen says it is, else its
+   *  kind), the keys that allow what it asks and the keys that deny it. Tokens as `hive ctl keys`
+   *  takes them. */
+  answer?: Readonly<Record<string, AnswerKeys>>;
   /** The keys that interrupt its turn, typed from another of the person's devices (a phone's
    *  Stop). Tokens as `hive ctl keys` takes them. */
   interrupt?: readonly string[];
@@ -379,8 +381,8 @@ export interface AgentProviderDef {
   steer?: boolean;
 }
 
-/** The keys that allow, and the keys that deny, a permission an agent asks on its screen. */
-export interface PermissionKeys {
+/** The keys that allow, and the keys that deny, what an agent asks on its screen. */
+export interface AnswerKeys {
   allow: readonly string[];
   deny: readonly string[];
 }

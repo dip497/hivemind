@@ -18,7 +18,7 @@ const { known, computer: cases } = JSON.parse(fs.readFileSync(file, "utf8")) as 
   known: { self: { device: string; name: string }; mine: Record<string, string>; whose: Record<string, string>; saved: Record<string, string> };
   computer: Array<{
     about: string; held: HeldBoard[]; statuses: WaitingStatus[]; waits: Record<string, Wait>;
-    programs: Record<string, { id: string; label: string }>; decides?: string[]; interrupts: string[]; conversations?: string[];
+    programs: Record<string, { id: string; label: string }>; keys?: Record<string, string[]>; interrupts: string[]; conversations?: string[];
     agents: unknown[]; working: number;
   }>;
 };
@@ -34,7 +34,7 @@ test("every agent here is the spec's: its state and since when, what it waits on
   for (const c of cases) {
     const facts = {
       program: (tile: string) => c.programs[tile],
-      decides: (tile: string) => (c.decides ?? []).includes(tile),
+      decides: (tile: string, status: { kind?: string; says?: string }) => (c.keys?.[tile] ?? []).includes((status.says ?? status.kind)!),
       interrupts: (tile: string) => c.interrupts.includes(tile),
       converses: (tile: string) => (c.conversations ?? []).includes(tile),
       parent: (tile: string) => c.parents?.[tile],

@@ -75,9 +75,9 @@ describe("loading agents from disk", () => {
     // The mode a tile was started in is not part of its name: the name says what it is doing.
     expect(acme!.spawnLabel!(2, { mode: "plan" })).toBe("acme #2");
     // and its detector runs
-    expect(acme!.detect!("nothing here")).toBe("idle");
-    expect(acme!.detect!("APPROVE THIS?")).toBe("blocked");
-    expect(acme!.detect!("⠋ Reading files…")).toBe("working");
+    expect(acme!.detect!("nothing here")).toEqual({ status: "idle" });
+    expect(acme!.detect!("APPROVE THIS?")).toEqual({ status: "blocked" });
+    expect(acme!.detect!("⠋ Reading files…")).toEqual({ status: "working" });
     // an agent installed beside it loads with it
     install(root, "codex", published("codex"));
     expect((await loadAgents()).defs.find((d) => d.id === "codex")).toBeDefined();
@@ -250,7 +250,7 @@ describe("what the loader hands the renderer", () => {
     // and rebuilding from the clone gives an equivalent def
     const rebuilt = defFromManifest(cloned);
     expect(rebuilt.id).toBe("acme");
-    expect(rebuilt.detect!("APPROVE THIS?")).toBe("blocked");
+    expect(rebuilt.detect!("APPROVE THIS?")).toEqual({ status: "blocked" });
     expect(spawnArgsFor(rebuilt, { mode: "plan" })).toEqual(["--no-color", "--dry-run"]);
   });
 
@@ -289,7 +289,7 @@ describe("main → IPC → renderer round trip", () => {
     expect(rebuilt.find((d) => d.id === "acme")!.label).toBe("Acme Coder"); // the repo cannot replace it
     // and a plugin's behaviour survives the trip
     const acme = rebuilt.find((d) => d.id === "acme")!;
-    expect(acme.detect!("APPROVE THIS?")).toBe("blocked");
+    expect(acme.detect!("APPROVE THIS?")).toEqual({ status: "blocked" });
     expect(spawnArgsFor(acme, { mode: "plan" })).toEqual(["--no-color", "--dry-run"]);
   });
 

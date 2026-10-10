@@ -196,6 +196,29 @@ Claude Code, for example, takes a digit as that option of its chooser, and its f
 is always "Yes"; Esc is "No, and tell Claude what to do differently". An agent whose file
 says nothing here is answered on your phone as on its screen, with a line of text.
 
+### Screens that ask something else
+
+Some screens ask permission for something other than a tool: Claude Code's "Is this a project
+you trust?" when it opens a new folder, say. Its keys are not a tool prompt's. Give the rule that
+reads the screen a name with `says`, and its keys under that name:
+
+```yaml
+detect:
+  rules:
+    - when: { all: [{ contains: "Yes, I trust this folder" }, { contains: "Enter to confirm" }] }
+      then: permission
+      says: trust
+answer:
+  trust:
+    allow: [down, enter]   # "No, exit" is selected first
+    deny: [escape]
+```
+
+The name is lowercase letters, digits and `-`, and only a rule that waits (`permission`,
+`question`, `blocked`) may give one. Your phone and the agents list show which screen it
+is, and Allow and Deny type that screen's keys. A screen with a name and no keys of its own
+is answered with a line of text, never with a tool prompt's keys.
+
 ## Stop from your phone
 
 Your phone can stop an agent's turn — interrupt what it is doing, as Esc does at your

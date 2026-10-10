@@ -29,7 +29,7 @@ holds:
 { "workspace": "<the workspace's id>", "name": "<the workspace's name>", "tile": "<its tile>",
   "agent": "<what it is called>", "program": { "id": "claude", "label": "Claude Code" },
   "state": "waiting", "since": 1790000000000, "machine": "<the machine it runs on>",
-  "waiting": { "kind": "permission", "since": 1790000000000, "plan": "<markdown>", "decide": true },
+  "waiting": { "kind": "permission", "says": "trust", "since": 1790000000000, "plan": "<markdown>", "decide": true },
   "interrupt": true, "conversation": true }
 ```
 
@@ -48,8 +48,8 @@ item who started it:
   command no manifest here names.
 - `state` is its status's state, `since` when it last changed.
 - `waiting` is there while it waits with a kind: `kind` (`permission`, `question`, `plan`, `other`,
-  or `approval`, on the agent supervising it), `since` the same as the state's, and `plan` and
-  `decide` as `needs.md` gives them for a wait on the person.
+  or `approval`, on the agent supervising it), `since` the same as the state's, and `says` (0.5),
+  `plan` and `decide` as `needs.md` gives them for a wait on the person.
 - `approval` (0.5) is there on an `approval` wait: the `tool` it would use, a `summary` of what it
   would do with it (a command, a file, a URL), and `expiresAt`, when it stops waiting and the agent
   asks at its own prompt instead.

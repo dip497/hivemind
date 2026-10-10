@@ -4,7 +4,7 @@
  *  capability nothing here delivers is refused. */
 import { AGENT_EVENTS, EVENT_HOOK, INPUT_KINDS, TURN_OUTCOMES, isAgentEventName } from "./events.js";
 import type { AgentAsset, AgentCapabilities, AgentHome, AgentHomeFile, AgentHookEntry, AgentHooks, AgentIcon, AgentInstall, AgentLaunch, AgentOption, AgentProviderDef, AgentSession, AgentTranscript, SessionFind, TileStatus, TranscriptRule } from "./types.js";
-import { compileDetect, validateExpr, validateScope, type DetectRules, type Expr, type Scope } from "./detect-rules.js";
+import { compileDetect, validateExpr, validateScope, type DetectRules, type Expr, type Scope, type ScreenReading } from "./detect-rules.js";
 import { GENERIC_AGENT_ICON } from "./icon.js";
 import { RESERVED_AGENTS } from "./reserved.js";
 import { MIN_APP_VERSION_RE } from "./catalog.js";
@@ -66,10 +66,10 @@ export interface AgentManifest {
   minAppVersion?: string;
   detect?: DetectRules;
   /** How the person's answer to one of the agent's own prompts is typed from another of their
-   *  devices: `permission.allow` and `permission.deny`, the keys that allow what it asks and the
-   *  keys that deny it on its screen (a phone's Allow / Deny). Claim them only from the real
-   *  binary: a wrong key answers the wrong way. */
-  answer?: { permission?: { allow: string[]; deny: string[] } };
+   *  devices: for a wait, by what its screen `says` it is (`trust`) or else its kind
+   *  (`permission`), the keys that allow what it asks and the keys that deny it on its screen (a
+   *  phone's Allow / Deny). Claim them only from the real binary: a wrong key answers the wrong way. */
+  answer?: Record<string, { allow: string[]; deny: string[] }>;
   /** The keys that interrupt its turn, as the person stops it from another of their devices (a
    *  phone's Stop). Claim them only from the real binary, as `answer`. */
   interrupt?: string[];
@@ -121,6 +121,9 @@ function safeDef(manifest: unknown): AgentProviderDef | undefined {
  *  scope. Published agents come from the plugins repository, where the name is settled. */
 export const AGENT_ID_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const STATUSES: readonly TileStatus[] = ["idle", "working", "blocked", "permission", "question"];
+const WAITING: readonly TileStatus[] = ["blocked", "permission", "question"];
+/** What a screen says it is, and what `answer` is keyed by. */
+const WAIT_NAME_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const CAP_KEYS = [
   "promptDelivery", "turnSignal", "resume", "supervise",
   "blockedDetection",
@@ -613,10 +616,11 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
   if (m.answer !== undefined) {
     const a = m.answer as Record<string, unknown>;
     req(a && typeof a === "object" && !Array.isArray(a), "answer must be a map");
-    if (a.permission !== undefined) {
-      const p = a.permission as Record<string, unknown>;
-      req(p && typeof p === "object" && !Array.isArray(p), "answer.permission must be a map");
-      for (const k of ["allow", "deny"] as const) req(keyTokens(p[k]), `answer.permission.${k} must be 1-4 key tokens`);
+    for (const [name, keys] of Object.entries(a)) {
+      req(WAIT_NAME_RE.test(name), `answer.${name}: a wait is named in lowercase letters, digits and -`);
+      const p = keys as Record<string, unknown>;
+      req(p && typeof p === "object" && !Array.isArray(p), `answer.${name} must be a map`);
+      for (const k of ["allow", "deny"] as const) req(keyTokens(p[k]), `answer.${name}.${k} must be 1-4 key tokens`);
     }
   }
   req(m.interrupt === undefined || keyTokens(m.interrupt), "interrupt must be 1-4 key tokens");
@@ -636,7 +640,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
       "install.command must be one line");
   }
 
-  let detect: ((screen: string) => TileStatus) | undefined;
+  let detect: ((screen: string) => ScreenReading) | undefined;
   if (m.detect) {
     req(Array.isArray(m.detect.rules), "detect.rules must be an array");
     req(STATUSES.includes(m.detect.default), `detect.default must be one of ${STATUSES.join(", ")}`);
@@ -645,6 +649,8 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     m.detect.rules.forEach((r, i) => {
       req(r && typeof r === "object" && r.when, `detect.rules[${i}] needs a \`when\``);
       req(STATUSES.includes(r.then), `detect.rules[${i}].then must be one of ${STATUSES.join(", ")}`);
+      req(r.says === undefined || (WAITING.includes(r.then) && typeof r.says === "string" && WAIT_NAME_RE.test(r.says)),
+        `detect.rules[${i}].says names the screen of a wait (${WAITING.join(", ")}), in lowercase letters, digits and -`);
       try {
         validateExpr(r.when, `detect.rules[${i}].when`);
         validateScope(r.scope, `detect.rules[${i}].scope`);
@@ -657,7 +663,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
   const dismiss = (m.spawn?.dismiss ?? []).map((d) => ({
     match: compileDetect({ rules: [{ when: d.when, then: "blocked", ...(d.scope ? { scope: d.scope } : {}) }], default: "idle" }),
     keys: d.keys,
-  })).map(({ match, keys }) => ({ match: (screen: string) => match(screen) === "blocked", keys }));
+  })).map(({ match, keys }) => ({ match: (screen: string) => match(screen).status === "blocked", keys }));
 
   const def: AgentProviderDef = {
     id: m.id,
@@ -667,7 +673,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     ...(m.spawn?.args ? { defaultArgs: m.spawn.args } : {}),
     ...(m.spawn?.titles ? { titles: m.spawn.titles } : {}),
     ...(dismiss.length ? { dismiss } : {}),
-    ...(m.answer?.permission ? { answer: { permission: { allow: m.answer.permission.allow, deny: m.answer.permission.deny } } } : {}),
+    ...(m.answer ? { answer: Object.fromEntries(Object.entries(m.answer).map(([name, k]) => [name, { allow: k.allow, deny: k.deny }])) } : {}),
     ...(m.interrupt ? { interrupt: m.interrupt } : {}),
     ...(m.steer ? { steer: true } : {}),
     enabled: m.enabled ?? false,

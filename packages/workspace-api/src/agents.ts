@@ -119,8 +119,10 @@ export interface AgentItem {
   since: number;
   /** What the machine it runs on is called (spec/needs.md 0.3). */
   machine: string;
-  /** What it waits for, while it waits: on the person, or on the agent supervising it. */
-  waiting?: { kind: InputKind; since: number; plan?: string; decide?: true; approval?: ApprovalWait };
+  /** What it waits for, while it waits: on the person, or on the agent supervising it. `says`: what
+   *  screen, when its agent's manifest names it (`trust`); `decide`: it is allowed or denied with
+   *  `agent.answer`'s decision, its agent saying the keys that do. */
+  waiting?: { kind: InputKind; says?: string; since: number; plan?: string; decide?: true; approval?: ApprovalWait };
   /** Who started it, when it reports to them (0.20): an agent's tile, or `client:<grant id>`, a
    *  program on the drive socket. */
   parent?: string;

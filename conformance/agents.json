@@ -1,5 +1,5 @@
 {
- "about": "Cases every implementation of following agents must pass (spec/agents.md \"Following\"): what a device answers ('computer': its boards, its agents' statuses and what they wait on an answer for ('waits'), with the machines it knows ('known'), the program each tile's command starts by its manifest ('programs'), the tiles whose agents' permissions it can decide ('decides'), whose agents say which keys interrupt their turn ('interrupts') and whose agents' manifests map their session files ('conversations'), in; every agent, and how many are at work, out), and what a phone shows of the answers it is given ('phone': each answer with the device it came from, in; every agent it reads, with that device, what waits on the person among them as device/tile in the order shown, and the agents at work, out). Written by hand from the spec.",
+ "about": "Cases every implementation of following agents must pass (spec/agents.md \"Following\"): what a device answers ('computer': its boards, its agents' statuses and what they wait on an answer for ('waits'), with the machines it knows ('known'), the program each tile's command starts by its manifest ('programs'), by tile, the waits whose keys its agent says, each by its name: what its screen says it is, else its kind ('keys'), whose agents say which keys interrupt their turn ('interrupts') and whose agents' manifests map their session files ('conversations'), in; every agent, and how many are at work, out), and what a phone shows of the answers it is given ('phone': each answer with the device it came from, in; every agent it reads, with that device, what waits on the person among them as device/tile in the order shown, and the agents at work, out). Written by hand from the spec.",
  "known": {
   "self": {
    "device": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
@@ -168,7 +168,7 @@
    "working": 1
   },
   {
-   "about": "an agent waiting says on what: on the person, with the plan it hands off and whether a permission can be allowed or denied from here, as the needs list says; on the agent supervising it, as an approval, which is not the person's to decide; a wait with no kind says nothing more than its state",
+   "about": "an agent waiting says on what: on the person, with the plan it hands off and whether a permission can be allowed or denied from here, as the needs list says; on the agent supervising it, as an approval, which is not the person's to decide; a wait with no kind says nothing more than its state; and a wait whose screen says what it is says so, decided from here when its agent says the keys for that screen (0.21)",
    "held": [
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -201,6 +201,11 @@
         "id": "w5",
         "kind": "claude",
         "label": "Claude 5"
+       },
+       {
+        "id": "w6",
+        "kind": "claude",
+        "label": "Claude 1"
        }
       ]
      }
@@ -265,6 +270,19 @@
       "source": "hooks",
       "since": 1790000009000
      }
+    },
+    {
+     "tileId": "hm:w6",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "screen",
+      "since": 1790000010000,
+      "kind": "permission",
+      "says": "trust"
+     }
     }
    ],
    "waits": {
@@ -293,13 +311,12 @@
     "w5": {
      "id": "claude",
      "label": "Claude Code"
+    },
+    "w6": {
+     "id": "claude",
+     "label": "Claude Code"
     }
    },
-   "decides": [
-    "w1",
-    "w3",
-    "w4"
-   ],
    "interrupts": [],
    "agents": [
     {
@@ -384,9 +401,42 @@
      "state": "waiting",
      "since": 1790000009000,
      "machine": "desk"
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "w6",
+     "agent": "Claude 1",
+     "program": {
+      "id": "claude",
+      "label": "Claude Code"
+     },
+     "state": "waiting",
+     "since": 1790000010000,
+     "machine": "desk",
+     "waiting": {
+      "kind": "permission",
+      "says": "trust",
+      "since": 1790000010000,
+      "decide": true
+     }
     }
    ],
-   "working": 0
+   "working": 0,
+   "keys": {
+    "w1": [
+     "permission"
+    ],
+    "w3": [
+     "permission"
+    ],
+    "w4": [
+     "permission"
+    ],
+    "w6": [
+     "trust"
+    ]
+   }
   },
   {
    "about": "an agent runs on the machine its frame's folder is on, its worktree's before its frame's, else its workspace's; called what the person named its tile, else what it says it is doing, else what it was started to do, else its tile's label",

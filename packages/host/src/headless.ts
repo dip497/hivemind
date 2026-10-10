@@ -63,7 +63,7 @@ import { workspaceDomains } from "./domains.js";
 import { HANDED_OFF, handOff } from "./hand-off.js";
 import { answers } from "./answers.js";
 import { PeerLinks } from "./peer-links.js";
-import { heldBoards, manifestOf, participantNamed, permissionKeys, runsIn } from "./needs.js";
+import { answerKeys, heldBoards, manifestOf, participantNamed, runsIn } from "./needs.js";
 import { agentControl } from "./agent-control.js";
 import { conversations, transcriptOf } from "./conversations.js";
 import { views } from "./views.js";
@@ -305,7 +305,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     answers({
       status: (bare) => control.status.get(bare),
       type: (bare, data) => writeTile(`hm:${bare}`, data),
-      permissionKeys: (bare) => permissionKeys(heldBoards(store), bare),
+      answerKeys: (bare, status) => answerKeys(heldBoards(store), bare, status),
       deliver: (bare, message) => control.mailbox.deliver(`hm:${bare}`, message),
       get waits() { return control.waits; },
       who,
@@ -471,7 +471,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   const notices = new PushNotices({
     me: () => ({ device: keys.deviceId, name: deviceName() }),
     boards: () => heldBoards(store),
-    decides: (tile) => !!permissionKeys(heldBoards(store), tile),
+    decides: (tile, status) => !!answerKeys(heldBoards(store), tile, status),
     changes: heard.changes,
     subscriptions: pushSubscriptions,
     post: (endpoint, body, urgency, sign) => postNotice(endpoint, body, urgency, sign ? keys.device : null),

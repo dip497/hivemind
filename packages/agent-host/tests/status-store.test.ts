@@ -124,6 +124,31 @@ test("waiting on something else is a new wait: since moves, so an answer to the 
   expect(s.get("a")!.since).toBeGreaterThan(first);
 });
 
+test("a wait the screen says it is carries what it says; another screen is a new wait, and anything but the screen or a title clears it", () => {
+  const s = store();
+  s.screen("a", "permission", "trust");
+  expect(s.get("a")).toMatchObject({ state: "waiting", kind: "permission", says: "trust", source: "screen" });
+  const trust = s.get("a")!.since;
+  s.screen("a", "permission", "trust");
+  s.title("a", "Claude Code");
+  expect(s.get("a")).toMatchObject({ says: "trust", since: trust });
+  s.screen("a", "permission", "settings");
+  expect(s.get("a")).toMatchObject({ kind: "permission", says: "settings" });
+  expect(s.get("a")!.since).toBeGreaterThan(trust);
+  const settings = s.get("a")!.since;
+  s.screen("a", "permission");
+  expect(s.get("a")!.says).toBeUndefined();
+  expect(s.get("a")!.since).toBeGreaterThan(settings);
+  s.screen("a", "permission", "trust");
+  s.screen("a", "working", "trust");
+  expect(s.get("a")).toMatchObject({ state: "working" });
+  expect(s.get("a")!.says).toBeUndefined();
+  s.screen("a", "permission", "trust");
+  s.event("a", { event: "input.requested", kind: "permission" });
+  expect(s.get("a")).toMatchObject({ state: "waiting", kind: "permission", source: "hooks" });
+  expect(s.get("a")!.says).toBeUndefined();
+});
+
 test("a title rides the session record: set, cleared by an empty title, gone at exit", () => {
   const s = store();
   s.screen("a", "working");
@@ -170,8 +195,9 @@ test("only a status as a host sends it is taken from the wire", () => {
   const ok: SessionStatus = { state: "waiting", kind: "permission", source: "hooks", since: 1, subagents: [], background: 2, compacting: false };
   expect(isSessionStatus(ok)).toBe(true);
   expect(isSessionStatus({ ...ok, source: null, kind: undefined, title: "t" })).toBe(true);
+  expect(isSessionStatus({ ...ok, source: "screen", says: "trust" })).toBe(true);
   for (const bad of [null, "working", { ...ok, state: "busy" }, { ...ok, kind: "coffee" }, { ...ok, subagents: [1] }, { ...ok, source: "guess" },
-    { ...ok, since: "now" }, { ...ok, background: "2" }, { ...ok, compacting: 1 }, { ...ok, title: 7 }]) {
+    { ...ok, since: "now" }, { ...ok, background: "2" }, { ...ok, compacting: 1 }, { ...ok, title: 7 }, { ...ok, says: 7 }]) {
     expect(isSessionStatus(bad)).toBe(false);
   }
 });

@@ -9,7 +9,7 @@
  * handed to it as `hive ctl send` hands one, as its next prompt once it is at its prompt.
  * Electron-free.
  */
-import type { InputKind, PermissionKeys } from "@hivemind/agents";
+import type { AnswerKeys, InputKind } from "@hivemind/agents";
 import { typeKeys } from "@hivemind/agent-host/keys";
 import type { Answerer } from "@hivemind/workspace-api/agents";
 import { ApiError, oneOf, text, written } from "@hivemind/workspace-api/protocol";
@@ -20,12 +20,12 @@ import type { Waits } from "./waits.js";
 
 export interface AnswersOptions {
   /** A tile's agent's status now, by its tile. */
-  status(tile: string): { state: string; kind?: InputKind; since: number } | undefined;
+  status(tile: string): { state: string; kind?: InputKind; says?: string; since: number } | undefined;
   /** Type `data` into the terminal of `tile` now; false when it has none. */
   type(tile: string, data: string): boolean;
-  /** The keys that allow and deny a permission the agent of `tile` asks, as it says; undefined
-   *  when it says none. */
-  permissionKeys(tile: string): PermissionKeys | undefined;
+  /** The keys that allow and deny a permission the agent of `tile` asks, by its status, as it
+   *  says; undefined for another wait, and when it says none. */
+  answerKeys(tile: string, status: { kind?: InputKind; says?: string }): AnswerKeys | undefined;
   /** Hand `text` to the agent of `tile` as a message: typed in, Enter after it, once it is at its
    *  prompt; false when it has no terminal. */
   deliver(tile: string, text: string): boolean;
@@ -78,7 +78,7 @@ export function answers(o: AnswersOptions): Domain<"agent.answer" | "agent.send"
         let done: boolean;
         if (a.decision !== undefined) {
           const decision = oneOf(a.decision, "answer.decision", ["allow", "deny"] as const);
-          const keys = status.kind === "permission" ? o.permissionKeys(bare)?.[decision] : undefined;
+          const keys = o.answerKeys(bare, status)?.[decision];
           if (!keys) throw new ApiError("BAD_REQUEST", "this agent is answered on its screen: it says no keys that allow or deny what it asks");
           done = typeKeys((bytes) => o.type(bare, bytes), keys);
         } else {

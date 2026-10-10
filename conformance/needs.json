@@ -1,5 +1,5 @@
 {
- "about": "Cases every implementation of needs-you must pass (spec/needs.md): what a device answers waits on the person ('computer': its boards, its agents' statuses and what they wait on an answer for ('waits'), in, with the machines it knows ('known': itself, the person's other devices, participants' computers by whose they are, and saved machines) and the tiles whose agents say which keys allow and deny what they ask ('decides', none when not given); the list, each item with the machine its agent runs on, and how many agents are at work, out), and what a phone shows of the answers it is given ('phone': each from the device named in 'from'). Written by hand from the spec.",
+ "about": "Cases every implementation of needs-you must pass (spec/needs.md): what a device answers waits on the person ('computer': its boards, its agents' statuses and what they wait on an answer for ('waits'), in, with the machines it knows ('known': itself, the person's other devices, participants' computers by whose they are, and saved machines) and, by tile, the waits whose keys its agent says, allowing and denying them, each by its name: what its screen says it is, else its kind ('keys', none when not given); the list, each item with the machine its agent runs on, and how many agents are at work, out), and what a phone shows of the answers it is given ('phone': each from the device named in 'from'). Written by hand from the spec.",
  "known": {
   "self": {
    "device": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
@@ -1150,10 +1150,6 @@
     }
    ],
    "waits": {},
-   "decides": [
-    "t1",
-    "t2"
-   ],
    "needs": [
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -1184,7 +1180,109 @@
      "machine": "desk"
     }
    ],
-   "working": 0
+   "working": 0,
+   "keys": {
+    "t1": [
+     "permission"
+    ],
+    "t2": [
+     "permission"
+    ]
+   }
+  },
+  {
+   "about": "a wait whose screen says what it is (0.21) is told so, and decided from here only when its agent says the keys for that screen: keys for a permission do not answer a trust prompt",
+   "held": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "repo": "/home/p/api",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "t1",
+        "kind": "claude",
+        "label": "Claude"
+       },
+       {
+        "id": "t2",
+        "kind": "claude",
+        "label": "Claude"
+       },
+       {
+        "id": "t3",
+        "kind": "probe",
+        "label": "Probe"
+       }
+      ]
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "hm:t1",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "screen",
+      "since": 1790000000000,
+      "kind": "permission",
+      "title": "Editing Nav.tsx",
+      "says": "trust"
+     }
+    },
+    {
+     "tileId": "hm:t3",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "screen",
+      "since": 1790000002000,
+      "kind": "permission",
+      "title": "Running make",
+      "says": "trust"
+     }
+    }
+   ],
+   "waits": {},
+   "needs": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t1",
+     "agent": "Editing Nav.tsx",
+     "kind": "permission",
+     "says": "trust",
+     "since": 1790000000000,
+     "machine": "desk",
+     "decide": true
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t3",
+     "agent": "Running make",
+     "kind": "permission",
+     "says": "trust",
+     "since": 1790000002000,
+     "machine": "desk"
+    }
+   ],
+   "working": 0,
+   "keys": {
+    "t1": [
+     "permission",
+     "trust"
+    ],
+    "t3": [
+     "permission"
+    ]
+   }
   }
  ],
  "phone": [

@@ -35,7 +35,7 @@ import { getSettings } from "./settings-store.js";
 import { broadcast, userWindow } from "./windows.js";
 import { onWorkspaceChange, sharedStore, workspaceStore } from "./workspace-store-ipc.js";
 import { PeerLinks, type ShownMachine } from "@hivemind/host/peer-links";
-import { heldBoards, participantNamed, permissionKeys, type WaitingStatus } from "@hivemind/host/needs";
+import { answerKeys, heldBoards, participantNamed, type Decides, type WaitingStatus } from "@hivemind/host/needs";
 import { manifestFacts, type AgentFacts } from "@hivemind/host/agent-list";
 import type { Waits } from "@hivemind/host/waits";
 import type { KnownMachines } from "@hivemind/core/remote-uri";
@@ -550,9 +550,9 @@ export async function joinLink(text: unknown): Promise<JoinReply> {
 export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, statuses, onStatus, workers, waits }: NetworkSources): void {
   apiServer = server;
   daemonHere = daemon;
-  // A permission an agent here asks that the person's phone may allow or deny: its agent says
-  // which of its keys do (spec/needs.md 0.5).
-  const decides = (tile: string): boolean => !!permissionKeys(heldBoards(workspaceStore()), tile);
+  // What an agent here waits on that the person's phone may allow or deny: its agent says which
+  // of its keys do (spec/needs.md 0.5).
+  const decides: Decides = (tile, status) => !!answerKeys(heldBoards(workspaceStore()), tile, status);
   peers = new PeerLinks({
     store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), granted,
     phone: (device) => pairedDevices().list().some((d) => d.device === device && d.kind === "phone"),

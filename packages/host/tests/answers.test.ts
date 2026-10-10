@@ -11,7 +11,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Connection } from "@hivemind/workspace-api/server";
 import { ApiError } from "@hivemind/workspace-api/protocol";
-import type { InputKind, PermissionKeys } from "@hivemind/agents";
+import type { AnswerKeys, InputKind } from "@hivemind/agents";
 import { StatusStore } from "@hivemind/agent-host/status-store";
 import { KEY_GAP_MS } from "@hivemind/agent-host/keys";
 import { answers, ANSWER_MAX } from "../src/answers.ts";
@@ -20,10 +20,10 @@ import { Waits } from "../src/waits.ts";
 const PRIYA = { person: "p".repeat(64), name: "Priya" };
 const phone: Connection = { actor: { kind: "peer", person: PRIYA.person, device: "d".repeat(64), access: "owner" }, send: () => {}, closed: new AbortController().signal };
 
-/** A computer whose agent is in `t1`, and says `keys` allow and deny a permission it asks: what is
- *  typed into each terminal, what is handed to an agent as its next prompt, and its
- *  `agent.answer`. */
-function computer(keys?: PermissionKeys) {
+/** A computer whose agent is in `t1`, and says `keys` allow and deny what it waits on, by the
+ *  wait's name: what is typed into each terminal, what is handed to an agent as its next prompt,
+ *  and its `agent.answer`. */
+function computer(keys?: Record<string, AnswerKeys>) {
   let now = 1_790_000_000_000;
   const status = new StatusStore({ now: () => (now += 1_000) });
   const waits = new Waits({ status });
@@ -32,7 +32,7 @@ function computer(keys?: PermissionKeys) {
   const domain = answers({
     status: (tile) => status.get(tile),
     type: (tile, data) => { typed.push(`${tile}:${JSON.stringify(data)}`); return tile === "t1"; },
-    permissionKeys: (tile) => (tile === "t1" ? keys : undefined),
+    answerKeys: (tile, status) => (tile === "t1" ? keys?.[(status.says ?? status.kind)!] : undefined),
     deliver: (tile, text) => { delivered.push(`${tile}:${text}`); return tile === "t1"; },
     waits,
     who: () => PRIYA,
@@ -43,9 +43,15 @@ function computer(keys?: PermissionKeys) {
     status.event("t1", { event: "input.requested", kind });
     return status.get("t1")!.since;
   };
+  /** The agent in t1 shows a screen its manifest says is `says`, asking a permission: when the wait
+   *  began. */
+  const screenSays = (says: string): number => {
+    status.screen("t1", "permission", says);
+    return status.get("t1")!.since;
+  };
   const answer = (tile: string, since: number, a: unknown, from = phone) => domain.answers["agent.answer"]!(from, tile, since, a) as { answered: boolean };
   const send = (tile: string, text: unknown) => domain.answers["agent.send"]!(phone, tile, text) as { sent: boolean };
-  return { status, waits, typed, delivered, waitOn, answer, send, effect: domain.effects!["agent.send"]! };
+  return { status, waits, typed, delivered, waitOn, screenSays, answer, send, effect: domain.effects!["agent.send"]! };
 }
 const code = (f: () => unknown): string => { try { f(); return "ok"; } catch (e) { return e instanceof ApiError ? e.code : "thrown"; } };
 
@@ -85,7 +91,7 @@ test("a plan is decided: the agent gets the first answer, and a later one hears 
 test("a permission is allowed or denied with the keys its agent says do that, each a moment after the last, once: again, or for a wait that has passed, nothing", async () => {
   const keys = { allow: ["y", "Enter"], deny: ["Escape"] };
   const settle = () => new Promise((resolve) => setTimeout(resolve, KEY_GAP_MS * 2 + 50));
-  const c = computer(keys);
+  const c = computer({ permission: keys });
   const first = c.waitOn("permission");
   assert.deepEqual(c.answer("hm:t1", first, { decision: "allow" }), { answered: true });
   assert.deepEqual(c.typed, ['t1:"y"'], "the first key at once");
@@ -100,13 +106,24 @@ test("a permission is allowed or denied with the keys its agent says do that, ea
   assert.deepEqual(c.typed, ['t1:"y"', 't1:"\\r"', 't1:"\\u001b"']);
 });
 
+test("a screen that says what it is is decided with the keys its agent says for that screen, not a permission's", async () => {
+  const c = computer({ permission: { allow: ["1"], deny: ["escape"] }, trust: { allow: ["down", "enter"], deny: ["escape"] } });
+  const trust = c.screenSays("trust");
+  assert.deepEqual(c.answer("t1", trust, { decision: "allow" }), { answered: true });
+  await new Promise((resolve) => setTimeout(resolve, KEY_GAP_MS * 2 + 50));
+  assert.deepEqual(c.typed, ['t1:"\\u001b[B"', 't1:"\\r"']);
+  const settings = c.screenSays("settings");
+  assert.equal(code(() => c.answer("t1", settings, { decision: "allow" })), "BAD_REQUEST", "it says no keys for this screen");
+  assert.deepEqual(c.typed, ['t1:"\\u001b[B"', 't1:"\\r"']);
+});
+
 test("an agent that says no keys for what it asks is answered on its screen: a decision for it, or for a question, is a bad request and types nothing", () => {
   const c = computer();
   const since = c.waitOn("permission");
   assert.equal(code(() => c.answer("t1", since, { decision: "allow" })), "BAD_REQUEST");
   assert.deepEqual(c.typed, []);
   assert.deepEqual(c.answer("t1", since, { text: "1" }), { answered: true }, "a line it still takes");
-  const question = computer({ allow: ["y"], deny: ["n"] });
+  const question = computer({ permission: { allow: ["y"], deny: ["n"] } });
   const asked = question.waitOn("question");
   assert.equal(code(() => question.answer("t1", asked, { decision: "allow" })), "BAD_REQUEST");
   assert.equal(code(() => question.answer("t1", asked, { decision: "maybe" })), "BAD_REQUEST");

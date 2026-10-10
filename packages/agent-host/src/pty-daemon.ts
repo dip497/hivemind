@@ -336,9 +336,9 @@ statuses?.subscribe(({ tileId, status }) => { for (const push of eventViewers) p
 const screens = new ScreenWatcher({
   read: (id) => manager.viewport(id),
   detect: (cmd, screen) => agentForCmd(cmd)?.detect?.(screen),
-  report: (id, state) => {
-    statuses?.screen(id, state);
-    for (const push of eventViewers) push({ t: "event", topic: "agent.screen", data: { tileId: id, state } });
+  report: (id, { status: state, says }) => {
+    statuses?.screen(id, state, says);
+    for (const push of eventViewers) push({ t: "event", topic: "agent.screen", data: { tileId: id, state, ...(says ? { says } : {}) } });
   },
 });
 setInterval(() => {
@@ -629,7 +629,7 @@ const server = net.createServer((sock) => {
         if (Array.isArray(msg.caps) && msg.caps.includes("events")) {
           eventViewers.add(send);
           for (const { id, title } of titles.current()) send({ t: "event", topic: "agent.title", data: { tileId: id, title } });
-          for (const [tileId, state] of screens.current()) send({ t: "event", topic: "agent.screen", data: { tileId, state } });
+          for (const [tileId, { status: state, says }] of screens.current()) send({ t: "event", topic: "agent.screen", data: { tileId, state, ...(says ? { says } : {}) } });
           for (const { tileId, status } of statuses?.all() ?? []) send({ t: "event", topic: "agent.status", data: { tileId, status } });
         }
         break;

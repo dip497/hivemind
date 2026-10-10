@@ -24,6 +24,9 @@ export interface SessionStatus extends AgentStatus {
   since: number;
   /** What the agent says it is doing, from its window title; absent when it says nothing. */
   title?: string;
+  /** Waiting: what screen it waits on, as its manifest's rule says (`trust`); absent when no
+   *  rule says. Read from the screen only. */
+  says?: string;
 }
 
 export interface StatusChange {
@@ -51,7 +54,7 @@ export function isSessionStatus(x: unknown): x is SessionStatus {
     && typeof s.background === "number" && typeof s.compacting === "boolean"
     && (s.kind === undefined || (INPUT_KINDS as readonly unknown[]).includes(s.kind))
     && (s.source === null || s.source === "hooks" || s.source === "screen") && typeof s.since === "number"
-    && (s.title === undefined || typeof s.title === "string");
+    && (s.title === undefined || typeof s.title === "string") && (s.says === undefined || typeof s.says === "string");
 }
 
 export class StatusStore {
@@ -100,8 +103,9 @@ export class StatusStore {
     this.apply(tileId, "hooks", (s) => foldStatus(fromScreen ? { ...s, ...INITIAL_STATUS, kind: undefined } : s, input));
   }
 
-  /** The screen, read by whoever renders it. Ignored once the session's hooks have spoken. */
-  screen(tileId: string, state: ScreenState): void {
+  /** The screen, read by whoever renders it, and for a wait what screen it says it is. Ignored
+   *  once the session's hooks have spoken. */
+  screen(tileId: string, state: ScreenState, says?: string): void {
     if (this.mirrored.has(tileId)) return;
     const cur = this.sessions.get(tileId);
     if (cur?.state === "exited") return;
@@ -112,12 +116,12 @@ export class StatusStore {
         if (!waiting) this.screenHeld.delete(tileId);
       } else if (!(waiting && cur.state === "working")) return;
       else this.screenHeld.add(tileId);
-      this.apply(tileId, "hooks", (s) => (waiting ? { ...s, state: "waiting", kind: SCREEN_KIND[state] } : { ...s, state, kind: undefined }));
+      this.apply(tileId, "hooks", (s) => (waiting ? { ...s, state: "waiting", kind: SCREEN_KIND[state] } : { ...s, state, kind: undefined }), says);
       return;
     }
     this.apply(tileId, "screen", (s) => (state === "idle" || state === "working"
       ? { ...s, state, kind: undefined }
-      : { ...s, state: "waiting", kind: SCREEN_KIND[state] }));
+      : { ...s, state: "waiting", kind: SCREEN_KIND[state] }), says);
   }
 
   /** What the user typed into the session. A lone interrupt key during a turn ends it; a key
@@ -145,7 +149,7 @@ export class StatusStore {
     if (this.mirrored.has(tileId)) return;
     const cur = this.sessions.get(tileId);
     if (cur?.state === "exited") return;
-    this.apply(tileId, cur?.source ?? null, (s) => ({ ...s, title: title || undefined }));
+    this.apply(tileId, cur?.source ?? null, (s) => ({ ...s, title: title || undefined }), cur?.says);
   }
 
   /** The session's status as the machine that runs it has it. From now on it is that host's. */
@@ -160,14 +164,17 @@ export class StatusStore {
     this.screenHeld.delete(tileId);
   }
 
-  private apply(tileId: string, source: StatusSource | null, fold: (s: AgentStatus) => AgentStatus): void {
+  /** `says`: what screen it waits on, which only the screen reads, so anything else folded in
+   *  clears it. */
+  private apply(tileId: string, source: StatusSource | null, fold: (s: AgentStatus) => AgentStatus, says?: string): void {
     const prev = this.sessions.get(tileId);
     const base: AgentStatus = prev ?? INITIAL_STATUS;
-    const next = fold(base);
+    const { says: _was, ...next } = fold(base) as SessionStatus;
     const clean = Object.fromEntries(Object.entries(next).filter(([, v]) => v !== undefined)) as unknown as AgentStatus;
+    const screen = clean.state === "waiting" && says ? { says } : {};
     // Waiting on something else is a new wait, which `since` names.
-    const changed = !prev || prev.state !== clean.state || (clean.state === "waiting" && prev.kind !== clean.kind);
-    this.put(tileId, { ...clean, source, since: changed ? this.now() : prev.since });
+    const changed = !prev || prev.state !== clean.state || (clean.state === "waiting" && (prev.kind !== clean.kind || prev.says !== screen.says));
+    this.put(tileId, { ...clean, ...screen, source, since: changed ? this.now() : prev.since });
   }
 
   private put(tileId: string, status: SessionStatus): void {
@@ -183,7 +190,7 @@ export class StatusStore {
 }
 
 function sameStatus(a: SessionStatus, b: SessionStatus): boolean {
-  return a.state === b.state && a.kind === b.kind && a.source === b.source && a.background === b.background && a.title === b.title
+  return a.state === b.state && a.kind === b.kind && a.says === b.says && a.source === b.source && a.background === b.background && a.title === b.title
     && a.compacting === b.compacting && a.subagents.length === b.subagents.length && a.subagents.every((x, i) => x === b.subagents[i]);
 }
 

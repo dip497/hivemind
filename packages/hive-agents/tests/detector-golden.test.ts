@@ -11,10 +11,14 @@ import YAML from "yaml";
 import { defFromManifest } from "../src/manifest.js";
 import { spawnArgsFor, spawnLabelFor } from "../src/catalog.js";
 import type { SpawnOptions } from "../src/types.js";
+import type { ScreenReading } from "../src/detect-rules.js";
 import { CORPUS } from "./corpus.js";
 import { AUTHORED, authoredYaml } from "./authored.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+// A reading as hashed: its status, and what screen when it says (a screen that says nothing
+// hashes as before it could).
+const answered = (r: ScreenReading): string => (r.says ? `${r.status}:${r.says}` : r.status);
 const golden = JSON.parse(readFileSync(join(HERE, "fixtures", "detector-golden.json"), "utf8")) as {
   screens: number;
   corpus: string;
@@ -43,7 +47,7 @@ describe("manifest detectors reproduce the frozen behaviour", () => {
       expect(agent, `${id} is no longer an agent this repository writes`).toBeDefined();
       const def = defFromManifest(YAML.parse(authoredYaml(agent!)) as unknown);
       expect(def.detect).toBeDefined();
-      const states = CORPUS.map((screen) => def.detect!(screen)).join(",");
+      const states = CORPUS.map((screen) => answered(def.detect!(screen))).join(",");
       expect(createHash("sha256").update(states).digest("hex")).toBe(hash);
     });
   }

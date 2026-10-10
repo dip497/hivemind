@@ -4,7 +4,7 @@
  * device's documents, its agents' statuses and what they wait on in, the list out.
  */
 import path from "node:path";
-import { agentForCmd, type AgentProviderDef, type InputKind, type PermissionKeys } from "@hivemind/agents";
+import { agentForCmd, type AgentProviderDef, type AnswerKeys, type InputKind } from "@hivemind/agents";
 import { machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
 import type { AccessLists } from "@hivemind/workspace-host/access";
 import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
@@ -28,15 +28,17 @@ export interface Need {
   tile: string;
   /** What the agent is called. */
   agent: string;
-  /** What it waits for. */
+  /** What it waits for, and what screen, when its agent's manifest names it (`trust`). */
   kind: InputKind;
+  says?: string;
   /** When it began waiting, ms since the epoch: with `tile`, which wait this is. */
   since: number;
   /** A plan it waits on review of: the plan, in markdown. */
   plan?: string;
   /** What the machine it runs on is called (0.3). */
   machine: string;
-  /** A permission the device can allow or deny (0.5), its agent saying which of its keys do. */
+  /** What it asks can be allowed or denied from the device (0.5), its agent saying which of its
+   *  keys do. */
   decide?: true;
 }
 
@@ -76,10 +78,11 @@ export function manifestOf(held: HeldBoard[], tile: string): AgentProviderDef | 
   return agentForCmd(record?.cmd);
 }
 
-/** The keys that allow and deny a permission the agent of `tile` asks, as its manifest says
- *  (`answer.permission`); undefined for an agent that says none, and for a tile on none of `held`. */
-export function permissionKeys(held: HeldBoard[], tile: string): PermissionKeys | undefined {
-  return manifestOf(held, tile)?.answer?.permission;
+/** The keys that allow and deny a permission the agent of `tile` asks, as its manifest says: by
+ *  what its screen says it is (`answer.trust`), else `answer.permission`. Undefined for a wait of
+ *  another kind, one it says no keys for, and a tile on none of `held`. */
+export function answerKeys(held: HeldBoard[], tile: string, status: { kind?: InputKind; says?: string }): AnswerKeys | undefined {
+  return status.kind === "permission" ? manifestOf(held, tile)?.answer?.[status.says ?? "permission"] : undefined;
 }
 
 /** The folder the agent of `tile` runs in on `board`: its frame's worktree's, else its frame's,
@@ -108,10 +111,14 @@ export function participantNamed(lists: Pick<AccessLists, "workspaces" | "people
   return undefined;
 }
 
+/** Whether what the agent of `tile` waits on, by its status, can be allowed or denied from here:
+ *  its agent says the keys that do (`answerKeys`). */
+export type Decides = (tile: string, status: { kind?: InputKind; says?: string }) => boolean;
+
 /** An agent's status, as much of it as says whether it waits on the person. */
 export interface WaitingStatus {
   tileId: string;
-  status: { state: string; kind?: InputKind; since: number; title?: string };
+  status: { state: string; kind?: InputKind; says?: string; since: number; title?: string };
 }
 
 /** How many agents of `held` are at work now. */
@@ -122,9 +129,9 @@ export function workingIn(held: HeldBoard[], statuses: WaitingStatus[]): number 
 /** The agents of `held` waiting on the person, the one waiting longest first (and of two waiting
  *  since the same moment, the one whose tile comes first). An agent is called what the person
  *  named its tile, else what it says it is doing, else what it was started to do, else its tile's
- *  label; and the machine it runs on, as this device knows it (`machines`). A permission is one it
- *  can decide when `decides` says so of the agent's tile. */
-export function needsOf(held: HeldBoard[], statuses: WaitingStatus[], waitOf: (tile: string) => Wait | undefined, machines: KnownMachines, decides: (tile: string) => boolean): Need[] {
+ *  label; and the machine it runs on, as this device knows it (`machines`). What it waits on is
+ *  decided from here when `decides` says so of the agent's tile and status. */
+export function needsOf(held: HeldBoard[], statuses: WaitingStatus[], waitOf: (tile: string) => Wait | undefined, machines: KnownMachines, decides: Decides): Need[] {
   const needs: Need[] = [];
   for (const { tileId, status } of statuses) {
     if (!waitsOnThePerson(status) || !status.kind) continue;
@@ -133,8 +140,8 @@ export function needsOf(held: HeldBoard[], statuses: WaitingStatus[], waitOf: (t
     const plan = status.kind === "plan" ? waitOf(at.tile)?.plan : undefined;
     const board = held.find((h) => h.workspace === at.workspace)!;
     const machine = machineCalled(folderOf(board, at.tile), machines);
-    const decide = status.kind === "permission" && decides(at.tile);
-    needs.push({ ...at, kind: status.kind, since: status.since, ...(plan === undefined ? {} : { plan }), machine, ...(decide ? { decide } : {}) });
+    const decide = decides(at.tile, status);
+    needs.push({ ...at, kind: status.kind, ...(status.says ? { says: status.says } : {}), since: status.since, ...(plan === undefined ? {} : { plan }), machine, ...(decide ? { decide } : {}) });
   }
   return needs.sort((a, b) => a.since - b.since || (a.tile < b.tile ? -1 : a.tile > b.tile ? 1 : 0));
 }

@@ -128,23 +128,26 @@ test("an agent on no board here yet is told of once its window saves its tile, b
   assert.deepEqual(posted, [{ v: 1, t: "needs", workspace: W, name: "ä".repeat(AGENT_MAX), tile: "t2", agent: "🐝".repeat(AGENT_MAX), kind: "permission", since: T }]);
 });
 
-test("a permission the device can allow or deny is told as one, so the phone may offer Allow / Deny; a question of the same agent, or a permission of one that says no keys, is not", async () => {
+test("a permission the device can allow or deny is told as one, so the phone may offer Allow / Deny; a question of the same agent, a permission of one that says no keys, or a screen it says no keys for, is not; and what screen it is goes with it", async () => {
   const a = phone("https://push.example/a");
   const subscriptions = new PushSubscriptions(path.join(tmp, `push-${made++}.json`));
   subscriptions.set("a".repeat(64), a.sub);
   const boards = (): HeldBoard[] => [{ workspace: W, name: "api", repo: "/home/p/api", core: { frames: [], tiles: [{ id: "t1", kind: "claude", label: "Claude" }, { id: "t2", kind: "probe", label: "Probe" }] } }];
   const posted: unknown[] = [];
-  const notices = new PushNotices({ boards, decides: (tile) => tile === "t1", changes: () => () => {}, subscriptions, post: async (_endpoint, body) => { posted.push(read(body, a.key, a.auth)); return 201; } });
+  // t1's agent says the keys for a permission, and for nothing else.
+  const notices = new PushNotices({ boards, decides: (tile, status) => tile === "t1" && (status.says ?? status.kind) === "permission", changes: () => () => {}, subscriptions, post: async (_endpoint, body) => { posted.push(read(body, a.key, a.auth)); return 201; } });
   for (const tile of ["hm:t1", "hm:t2"]) notices.changed(change(st("idle"), tile));
   notices.changed(change(st("waiting", "permission", T), "hm:t1"));
   notices.changed(change(st("waiting", "permission", T + 1), "hm:t2"));
   notices.changed(change(st("waiting", "question", T + 2), "hm:t1"));
+  notices.changed(change({ ...st("waiting", "permission", T + 3), says: "trust" }, "hm:t1"));
   await new Promise((r) => setImmediate(r));
   const told = { v: 1, t: "needs", workspace: W, name: "api" };
   assert.deepEqual(posted, [
     { ...told, tile: "t1", agent: "Claude", kind: "permission", since: T, decide: true },
     { ...told, tile: "t2", agent: "Probe", kind: "permission", since: T + 1 },
     { ...told, tile: "t1", agent: "Claude", kind: "question", since: T + 2 },
+    { ...told, tile: "t1", agent: "Claude", kind: "permission", says: "trust", since: T + 3 },
   ]);
 });
 

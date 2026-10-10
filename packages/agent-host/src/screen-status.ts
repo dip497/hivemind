@@ -3,7 +3,7 @@
  * reported (or that has none). The daemon runs the agent's own detector (its manifest's
  * `detect` rules) on the headless screen it keeps for every session, a poll at a time.
  */
-import type { TileStatus } from "@hivemind/agents";
+import type { ScreenReading, TileStatus } from "@hivemind/agents";
 
 /**
  * A screen, sampled every poll, can show an agent's idle prompt for a moment between two
@@ -37,24 +37,24 @@ export function stabilizeScreenStatus(
 
 
 /** Reads the screens of sessions that produced output since the last tick, and reports each
- *  one's status when it changes. */
+ *  one's reading when it changes: its status, or for a wait, the screen it says it is. */
 export class ScreenWatcher {
   private dirty = new Set<string>();
-  private seen = new Map<string, { status: TileStatus; lastWorkingAt: { t: number | null } }>();
+  private seen = new Map<string, { reading: ScreenReading; lastWorkingAt: { t: number | null } }>();
 
   constructor(private readonly o: {
     /** The session's screen and what it runs, or undefined when it is gone. */
     read: (id: string) => { cmd: string; screen: string } | undefined;
     /** The agent's own detector for what it runs; undefined for a program that is not an agent. */
-    detect: (cmd: string, screen: string) => TileStatus | undefined;
-    report: (id: string, status: TileStatus) => void;
+    detect: (cmd: string, screen: string) => ScreenReading | undefined;
+    report: (id: string, reading: ScreenReading) => void;
     now?: () => number;
   }) {}
 
   output(id: string): void { this.dirty.add(id); }
 
   /** Every session's last reported reading, for a viewer that just connected. */
-  current(): Array<[string, TileStatus]> { return [...this.seen].map(([id, s]) => [id, s.status]); }
+  current(): Array<[string, ScreenReading]> { return [...this.seen].map(([id, s]) => [id, s.reading]); }
 
   forget(id: string): void { this.dirty.delete(id); this.seen.delete(id); }
 
@@ -66,13 +66,14 @@ export class ScreenWatcher {
       if (!s) { this.seen.delete(id); continue; }
       const raw = this.o.detect(s.cmd, s.screen);
       if (!raw) continue;
-      const prev = this.seen.get(id) ?? { status: "idle" as TileStatus, lastWorkingAt: { t: null } };
-      const next = stabilizeScreenStatus(prev.status, raw, this.o.now?.() ?? Date.now(), prev.lastWorkingAt);
+      const prev = this.seen.get(id) ?? { reading: { status: "idle" as TileStatus }, lastWorkingAt: { t: null } };
+      const status = stabilizeScreenStatus(prev.reading.status, raw.status, this.o.now?.() ?? Date.now(), prev.lastWorkingAt);
+      const next: ScreenReading = status === raw.status ? raw : { status };
       const first = !this.seen.has(id);
-      this.seen.set(id, { status: next, lastWorkingAt: prev.lastWorkingAt });
-      if (first || next !== prev.status) this.o.report(id, next);
+      this.seen.set(id, { reading: next, lastWorkingAt: prev.lastWorkingAt });
+      if (first || next.status !== prev.reading.status || next.says !== prev.reading.says) this.o.report(id, next);
       // A held reading is looked at again next tick, output or not, so the hold can end.
-      if (next !== raw) this.dirty.add(id);
+      if (status !== raw.status) this.dirty.add(id);
     }
   }
 }

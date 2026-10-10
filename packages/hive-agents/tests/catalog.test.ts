@@ -18,7 +18,7 @@ describe("agent catalog", () => {
     expect(new Set(bins).size).toBe(bins.length);
     for (const d of getCatalog()) {
       expect(Object.keys(d.caps).sort()).toEqual(["blockedDetection", "promptDelivery", "resume", "supervise", "turnSignal"]);
-      if (d.detect) expect(typeof d.detect("")).toBe("string");
+      if (d.detect) expect(typeof d.detect("").status).toBe("string");
     }
   });
   test("spawn matching is exact-binary; identification also takes aliases", () => {

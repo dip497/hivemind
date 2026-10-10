@@ -8,7 +8,7 @@
 import type { InputKind } from "@hivemind/agents";
 import { machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
 import type { AgentItem } from "@hivemind/workspace-api/agents";
-import { agentOf, folderOf, manifestOf, type HeldBoard, type WaitingStatus } from "./needs.js";
+import { agentOf, answerKeys, folderOf, manifestOf, type Decides, type HeldBoard, type WaitingStatus } from "./needs.js";
 import type { Wait } from "./waits.js";
 
 export type { AgentItem } from "@hivemind/workspace-api/agents";
@@ -17,8 +17,8 @@ export type { AgentItem } from "@hivemind/workspace-api/agents";
 export interface AgentFacts {
   /** The program the tile's command starts, by its manifest; undefined for one none names. */
   program(tile: string): { id: string; label: string } | undefined;
-  /** Whether a permission its agent asks can be allowed or denied from here (spec/needs.md 0.5). */
-  decides(tile: string): boolean;
+  /** Whether what its agent waits on can be allowed or denied from here (spec/needs.md 0.5). */
+  decides: Decides;
   /** Whether its agent says which keys interrupt its turn. */
   interrupts(tile: string): boolean;
   /** Whether its agent's manifest maps its session file's records (`session.transcript`). */
@@ -36,7 +36,7 @@ export function manifestFacts(held: HeldBoard[]): AgentFacts {
       const def = manifestOf(held, tile);
       return def && { id: def.id, label: def.label };
     },
-    decides: (tile) => !!manifestOf(held, tile)?.answer?.permission,
+    decides: (tile, status) => !!answerKeys(held, tile, status),
     interrupts: (tile) => !!manifestOf(held, tile)?.interrupt,
     converses: (tile) => !!manifestOf(held, tile)?.session?.transcript,
   };
@@ -56,9 +56,9 @@ export function agentsOf(held: HeldBoard[], statuses: WaitingStatus[], machines:
     if (status.state === "waiting" && status.kind) {
       const held = facts.wait?.(at.tile);
       const wait = held?.kind === status.kind ? held : undefined;
-      const decide = status.kind === "permission" && facts.decides(at.tile);
+      const decide = facts.decides(at.tile, status);
       waiting = {
-        kind: status.kind, since: status.since, ...(wait?.plan === undefined ? {} : { plan: wait.plan }), ...(decide ? { decide } : {}),
+        kind: status.kind, ...(status.says ? { says: status.says } : {}), since: status.since, ...(wait?.plan === undefined ? {} : { plan: wait.plan }), ...(decide ? { decide } : {}),
         ...(wait?.kind === "approval" ? { approval: { request: wait.request, tool: wait.tool!, summary: wait.summary!, expiresAt: wait.expiresAt! } } : {}),
       };
     }

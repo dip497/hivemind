@@ -238,12 +238,13 @@ export class ControlPlane {
       return;
     }
     if (method === "agent.screen") {
-      // A daemon read an agent's screen: its status until the agent's hooks report.
-      const r = (params ?? {}) as { tileId?: string; state?: ScreenState };
+      // A daemon read an agent's screen: its status until the agent's hooks report, and for a wait
+      // what screen it is.
+      const r = (params ?? {}) as { tileId?: string; state?: ScreenState; says?: unknown };
       if (!r.tileId || !r.state || !SCREEN_STATES.has(r.state)) return;
       const bare = toBareId(r.tileId);
       const was = this.status.get(bare)?.state;
-      this.status.screen(bare, r.state);
+      this.status.screen(bare, r.state, typeof r.says === "string" ? r.says : undefined);
       // A hooked turn the screen showed ending (it died on a limit, so no Stop came):
       // messages held for its end go out now.
       const now = this.status.get(bare);

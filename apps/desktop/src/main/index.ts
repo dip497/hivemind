@@ -98,7 +98,7 @@ import { serveDrive } from "@hivemind/host/drive";
 import { frameWorktrees, framesDomain } from "@hivemind/host/frames";
 import { worktreeCreate, worktreeList, worktreeRemove } from "@hivemind/host/git-adapter";
 import { answers } from "@hivemind/host/answers";
-import { heldBoards, manifestOf, permissionKeys, runsIn } from "@hivemind/host/needs";
+import { answerKeys, heldBoards, manifestOf, runsIn } from "@hivemind/host/needs";
 import { agentControl } from "@hivemind/host/agent-control";
 import { views } from "@hivemind/host/views";
 import { listInstalledViews } from "@hivemind/core/views";
@@ -1270,7 +1270,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   answers({
     status: (bare) => control.status.get(bare),
     type: (bare, data) => writeTile(`hm:${bare}`, data),
-    permissionKeys: (bare) => permissionKeys(heldBoards(workspaceStore()), bare),
+    answerKeys: (bare, status) => answerKeys(heldBoards(workspaceStore()), bare, status),
     deliver: (bare, message) => control.mailbox.deliver(`hm:${bare}`, message),
     waits: control.waits,
     who: whoIs,

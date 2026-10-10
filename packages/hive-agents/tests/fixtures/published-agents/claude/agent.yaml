@@ -48,6 +48,21 @@ answer:
     - '1'
     deny:
     - escape
+  # Its trust prompt, read from claude 2.1.296: "No, exit" is selected first and digits do
+  # nothing, so Down then Enter trusts the folder; Esc exits.
+  trust:
+    allow:
+    - down
+    - enter
+    deny:
+    - escape
+  # A settings file it cannot read, from claude 2.1.296: "3. Continue without these settings";
+  # Esc exits.
+  settings:
+    allow:
+    - '3'
+    deny:
+    - escape
 # The key that interrupts its turn, typed from your phone's Stop: claude 2.1.287 says "esc to
 # interrupt" while it works.
 interrupt:
@@ -77,6 +92,18 @@ detect:
     kind: tail
     n: 20
   rules:
+  - when:
+      all:
+      - contains: Yes, I trust this folder
+      - contains: Enter to confirm
+    then: permission
+    says: trust
+  - when:
+      all:
+      - containsCS: Settings Error
+      - contains: Continue without these settings
+    then: permission
+    says: settings
   - when:
       seq:
       - run: space

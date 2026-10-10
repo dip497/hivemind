@@ -202,8 +202,8 @@ describe("manifest validation refuses what it cannot back", () => {
       detect: { default: "idle", rules: [{ when: { any: [{ contains: "a" }, { line: [{ startsWith: "x" }] }] }, then: "working" }] },
     });
     expect(spawnArgsFor(def, { mode: "plan", model: "z" })).toEqual(["--x", "-p", "-m", "z"]);
-    expect(def.detect!("about")).toBe("working");
-    expect(def.detect!("zzz")).toBe("idle");
+    expect(def.detect!("about")).toEqual({ status: "working" });
+    expect(def.detect!("zzz")).toEqual({ status: "idle" });
   });
 
   test("the keys that allow and deny a permission on the agent's screen are carried as written, and a block that cannot be typed is refused at load", () => {
@@ -216,6 +216,19 @@ describe("manifest validation refuses what it cannot back", () => {
     bad({ answer: { permission: { allow: [], deny: ["n"] } } }, /answer.permission.allow must be 1-4 key tokens/);
     bad({ answer: { permission: { allow: ["y"], deny: ["n", "enter", "n", "enter", "n"] } } }, /answer.permission.deny must be 1-4 key tokens/);
     bad({ answer: { permission: { allow: [1], deny: ["n"] } } }, /answer.permission.allow must be 1-4 key tokens/);
+  });
+
+  test("a waiting rule may say what screen it is, answered by its own keys; a rule that does not wait, or a name that is no name, is refused at load", () => {
+    const detect = (rule: object) => ({ default: "idle", rules: [{ when: { contains: "trust this folder" }, then: "permission", ...rule }] });
+    const def = defFromManifest({ ...base, detect: detect({ says: "trust" }), answer: { trust: { allow: ["down", "enter"], deny: ["escape"] } } });
+    expect(def.detect!("Yes, I trust this folder")).toEqual({ status: "permission", says: "trust" });
+    expect(def.detect!("elsewhere")).toEqual({ status: "idle" });
+    expect(def.answer).toEqual({ trust: { allow: ["down", "enter"], deny: ["escape"] } });
+    bad({ detect: detect({ then: "working", says: "trust" }) }, /says names the screen of a wait/);
+    bad({ detect: detect({ says: "Trust me" }) }, /says names the screen of a wait/);
+    bad({ detect: detect({ says: 7 }) }, /says names the screen of a wait/);
+    bad({ answer: { "Trust me": { allow: ["1"], deny: ["n"] } } }, /a wait is named in lowercase/);
+    bad({ answer: { trust: { allow: ["1"] } } }, /answer.trust.deny must be 1-4 key tokens/);
   });
 
   test("an agent that reads a message typed while it works says so, and anything but a flag is refused at load", () => {

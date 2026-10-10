@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: a screen an agent asks something on can say what it is. An agent's manifest may name the screen a waiting rule reads (`says: trust`), and give keys under that name (`answer.trust`). The agents list (`waiting.says`), the needs list and phone notices say which screen it is, and Allow / Deny type that screen's keys, never a tool prompt's. Claude Code's "do you trust this folder" and unreadable-settings screens are named this way, read from claude 2.1.296; they reach installed copies with the next Claude plugin update.
 - Fixed: clicking Add (or reopening any dialog) just after picking from it did nothing, or opened a dialog that took no clicks until Escape. A closing dialog now lets the page under it take the click, and comes back whole when opened again mid-close.
 - Fixed: a selected terminal whose renderer was rebuilt (the GPU dropping it, another terminal taking its place) took the keyboard back from a field you had moved to, such as the Layers search.
 - Fixed: a phone asking for a view made only for a desk is told the view is not for a phone, rather than that it does not exist.

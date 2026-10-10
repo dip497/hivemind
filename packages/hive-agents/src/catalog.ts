@@ -96,7 +96,7 @@ export function workerAgents(): AgentProviderDef[] {
 
 /** Status for a known provider id (falls back to idle for an unknown id). */
 export function detectStatus(id: string, screen: string): TileStatus {
-  return BY_ID.get(id)?.detect?.(screen) ?? "idle";
+  return BY_ID.get(id)?.detect?.(screen).status ?? "idle";
 }
 
 /** The spawn args a def wants for these options (its own vocabulary, or its
