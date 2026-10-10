@@ -103,6 +103,7 @@ select option { background: var(--color-bg2); color: var(--color-fg); }
 .settings-wallpapers { padding: 8px 0 16px; }
 .settings-dialog dl.settings-shortcuts { display: block; margin: 0; }
 .settings-shortcut { display: flex; justify-content: space-between; align-items: baseline; gap: 24px; padding: 12px 0; border-bottom: 1px solid var(--color-line2); }
+.settings-shortcut:last-child { border-bottom: 0; }
 .settings-shortcut dt { color: var(--color-fg); font-size: 13px; }
 .settings-shortcut dd { text-align: right; color: var(--color-fg2); }
 .settings-colors { flex-wrap: wrap; }

@@ -708,7 +708,7 @@ function SettingsModal({
                   onClick={() => onCheck({ force: true })}
                   disabled={checking}
                 >
-                  {checking ? "Checking…" : "Check now"}
+                  Check now
                 </Button>
               </>
             )}

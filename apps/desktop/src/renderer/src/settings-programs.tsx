@@ -28,7 +28,7 @@ export function ProgramsPrefs() {
   useEffect(load, [load]);
   return (
     <div className="settings-stack">
-      <Section title="Programs that drive this app" hint="Each reaches only its workspaces, and only at its role">
+      <Section title="Let in" hint="Each reaches only its workspaces, and only at its role">
         {grants === undefined ? null : grants === null ? (
           <p className="settings-note">Only the app knows</p>
         ) : grants.length === 0 ? (

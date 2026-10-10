@@ -13,6 +13,7 @@ import { useShown } from "./shown";
 import { useCanShare } from "./workspace-actions";
 import { Check, Copy, Users } from "../components/icons";
 import { Button } from "../components/ui/button";
+import { Switch } from "../components/ui/switch";
 
 type LinkRole = "view" | "edit" | "terminals";
 
@@ -86,10 +87,10 @@ function Share({ repo }: { repo: string }) {
           {EXPIRIES.map(([label, ms]) => <option key={ms} value={ms}>{label}</option>)}
         </select>
       </div>
-      <label className="flex items-center gap-2 text-[12px]">
-        <input type="checkbox" checked={reusable} onChange={(e) => { setReusable(e.target.checked); setLink(null); }} />
-        Anyone with the link can use it, not only the first person
-      </label>
+      <div className="settings-row">
+        <label htmlFor="share-reusable">Anyone with the link can use it, not only the first person</label>
+        <Switch id="share-reusable" checked={reusable} onCheckedChange={(v) => { setReusable(v); setLink(null); }} />
+      </div>
       {link ? (
         <div className="flex min-w-0 items-center gap-2">
           <code className="flex-1 min-w-0 truncate rounded bg-[var(--color-bg3)] px-2 py-1.5 font-mono text-[11px]" data-share-link title={link}>{link}</code>
