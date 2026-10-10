@@ -3,7 +3,8 @@
  * review, and a supervised tool use waiting on its starter. One wait per agent, which its status
  * says while it lasts; named by its tile and when it began (`since`), and by its `request` for the
  * agent answering one with `hive ctl approve`. The first answer is the one the agent gets; a later
- * one changes nothing and hears who was first. A wait that ends before an answer (the agent stopped
+ * one changes nothing and hears who was first. A supervised tool use answered `always` is decided
+ * so for every later use of that tool by that agent, until it goes. A wait that ends before an answer (the agent stopped
  * waiting, or waits on something else now) tells its owner so, with no decision.
  * What waits on the agent's own screen (a permission, a question) is answered there, with keys,
  * and is no wait of these. Electron-free.
@@ -48,6 +49,8 @@ const ANSWERED_KEPT = 256;
 export class Waits {
   private readonly held = new Map<string, { wait: Wait; reply: Reply }>();
   private readonly answered = new Map<string, { decision: Decision; by: Answerer | null }>();
+  /** What an agent's every use of a tool is decided, by `tile:tool`. */
+  private readonly rules = new Map<string, Decision>();
 
   constructor(private readonly o: WaitsOptions) {}
 
@@ -87,15 +90,18 @@ export class Waits {
     this.o.changed?.();
   }
 
-  /** Answer the wait of `tile` that began at `since`, as `by`: whether this answer was the one it
-   *  got, and when it was not, who answered first. */
-  answer(tile: string, since: number, decision: Decision, feedback?: string, by: Answerer | null = null): { answered: boolean; by?: Answerer } {
+  /** Answer the wait of `tile` that began at `since`, as `by`, and for a supervised tool use
+   *  `always` its every later use: whether this answer was the one it got, and when it was not,
+   *  who answered first. */
+  answer(tile: string, since: number, decision: Decision, o: { feedback?: string; by?: Answerer | null; always?: boolean } = {}): { answered: boolean; by?: Answerer } {
+    const { feedback, by = null } = o;
     const held = this.held.get(tile);
     if (!held || held.wait.since !== since) {
       const first = this.answered.get(`${tile}@${since}`)?.by;
       return { answered: false, ...(first ? { by: first } : {}) };
     }
     this.held.delete(tile);
+    if (o.always && held.wait.tool) this.rules.set(`${tile}:${held.wait.tool}`, decision);
     this.answered.set(`${tile}@${since}`, { decision, by });
     if (this.answered.size > ANSWERED_KEPT) this.answered.delete(this.answered.keys().next().value!);
     this.o.status.event(tile, { event: "input.resolved" });
@@ -120,8 +126,14 @@ export class Waits {
     this.o.changed?.();
   }
 
+  /** How every use of `tool` by `tile` is decided, if it was answered `always`. */
+  ruled(tile: string, tool: string): Decision | undefined {
+    return this.rules.get(`${tile}:${tool}`);
+  }
+
   /** The agent `tile` went: what it waited on ends unanswered, and it is told so. */
   forget(tile: string): void {
+    for (const key of this.rules.keys()) if (key.startsWith(`${tile}:`)) this.rules.delete(key);
     const held = this.held.get(tile);
     if (!held) return;
     this.held.delete(tile);

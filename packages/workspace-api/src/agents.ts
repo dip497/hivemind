@@ -47,7 +47,9 @@ export interface Answerer {
 }
 /** What a person answers an agent waiting on them (M5): a plan's decision, or one line typed into
  *  its terminal. */
-export type AgentAnswer = { text: string } | { decision: "allow" | "deny"; feedback?: string };
+/** A line typed, or a decision; `always` (0.23): a supervised tool use decided so from now on, for
+ *  every use of that tool by that agent. */
+export type AgentAnswer = { text: string } | { decision: "allow" | "deny"; feedback?: string; always?: true };
 
 /** What may be started in a workspace (M5, spec/agents.md "Starting"): the agents a device starts,
  *  with their model and mode choices (`values` empty: one taken as typed), and the workspace's

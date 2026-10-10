@@ -26,8 +26,8 @@ test("the agent waits while the wait lasts; the first answer is the one it gets,
   const { state, kind, since } = h.status.get("t1")!;
   assert.deepEqual({ state, kind, since }, { state: "waiting", kind: "plan", since: wait.since });
   assert.equal(h.waits.of("t1")?.plan, "# Plan");
-  assert.deepEqual(h.waits.answer("t1", wait.since, "deny", "split step 2", PRIYA), { answered: true });
-  assert.deepEqual(h.waits.answer("t1", wait.since, "allow", undefined, ADARSH), { answered: false, by: PRIYA });
+  assert.deepEqual(h.waits.answer("t1", wait.since, "deny", { feedback: "split step 2", by: PRIYA }), { answered: true });
+  assert.deepEqual(h.waits.answer("t1", wait.since, "allow", { by: ADARSH }), { answered: false, by: PRIYA });
   assert.deepEqual(h.replies, ["t1 deny split step 2"]);
   assert.equal(h.status.get("t1")?.state, "working");
   assert.equal(h.waits.of("t1"), undefined);
@@ -49,7 +49,7 @@ test("a wait the agent stops on ends unanswered: it waits no more, its owner is 
   h.waits.drop(wait.request);
   h.waits.drop(wait.request);
   assert.equal(h.status.get("t1")?.state, "working");
-  assert.deepEqual(h.waits.answer("t1", wait.since, "allow", undefined, PRIYA), { answered: false });
+  assert.deepEqual(h.waits.answer("t1", wait.since, "allow", { by: PRIYA }), { answered: false });
   assert.deepEqual(h.replies, ["t1 null"]);
   assert.deepEqual(h.waits.all(), []);
 });

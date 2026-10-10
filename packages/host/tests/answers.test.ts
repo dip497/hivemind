@@ -191,3 +191,16 @@ test("a supervised tool use is answered by the program that started the agent, o
   assert.deepEqual(c.answer("t1", second.since, { decision: "allow" }, as({ kind: "person" })), { answered: true });
   assert.deepEqual(answered, ["deny", "allow"]);
 });
+
+test("a supervised tool use answered always is decided so for every later use of that tool by that agent, until it goes; always answers nothing else", () => {
+  const c = computer();
+  const ask = (tool: string) => c.waits.ask("t1", { kind: "approval", tool, summary: "", expiresAt: 0 }, () => {});
+  assert.deepEqual(c.answer("t1", ask("Bash").since, { decision: "deny", always: true }), { answered: true });
+  assert.deepEqual([c.waits.ruled("t1", "Bash"), c.waits.ruled("t1", "Edit"), c.waits.ruled("t2", "Bash")], ["deny", undefined, undefined]);
+  c.answer("t1", ask("Edit").since, { decision: "allow" });
+  assert.equal(c.waits.ruled("t1", "Edit"), undefined, "this use alone");
+  const plan = c.waits.ask("t1", { kind: "plan", plan: "1. Split it" }, () => {});
+  for (const a of [{ decision: "allow", always: true }, { decision: "allow", always: "yes" }]) assert.equal(code(() => c.answer("t1", plan.since, a)), "BAD_REQUEST", JSON.stringify(a));
+  c.waits.forget("t1");
+  assert.equal(c.waits.ruled("t1", "Bash"), undefined, "until it goes");
+});

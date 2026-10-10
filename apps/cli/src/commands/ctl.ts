@@ -286,13 +286,30 @@ const workflow = sub("workflow", "Run a multi-agent workflow (fanout | pipeline 
   return hcpCall("workflow.run", params, ceilingMs);
 });
 
-const approve = sub("approve", "Answer a supervised worker's approval request", {
+type Waiting = { tile: string; waiting?: { since: number; approval?: { request: string } } };
+
+const approve = sub("approve", "Answer a supervised worker's approval request; always / never decide that tool for that worker from now on", {
   reqId: { type: "positional", required: true },
   decision: { type: "positional", required: true, description: "allow | deny | always | never" },
   reason: { type: "string" },
+  ...repoArg,
 }, (a) => {
-  if (!["allow", "deny", "always", "never"].includes(String(a.decision))) throw new UsageError("decision must be allow | deny | always | never");
-  return hcpCall("agent.approve", { reqId: a.reqId, decision: a.decision, reason: a.reason });
+  const decision = String(a.decision);
+  if (!["allow", "deny", "always", "never"].includes(decision)) throw new UsageError("decision must be allow | deny | always | never");
+  const answer = {
+    decision: decision === "allow" || decision === "always" ? "allow" : "deny",
+    ...(a.reason ? { feedback: String(a.reason) } : {}),
+    ...(decision === "always" || decision === "never" ? { always: true } : {}),
+  };
+  return onDrive(async (d) => {
+    const { agents } = await d.call("agent.list", [await workspaceOf(d, a.repo)]) as { agents: Waiting[] };
+    const asking = agents.find((w) => w.waiting?.approval?.request === a.reqId);
+    const gone = () => new HcpCliError("BAD_REQUEST", `no approval ${String(a.reqId)} is waiting: it was answered, ran out of time, or its worker stopped waiting`, EXIT.usage);
+    if (!asking) throw gone();
+    const r = await d.call("agent.answer", [asking.tile, asking.waiting!.since, answer]) as { answered: boolean };
+    if (!r.answered) throw gone();
+    return r;
+  });
 });
 
 const report = sub("report", "Deliver a message to the tile that spawned you (the parent agent)", {

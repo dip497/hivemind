@@ -45,7 +45,8 @@ beforeAll(async () => {
   for (const r of [repoA, repoB]) fs.mkdirSync(path.join(r, "sub"), { recursive: true });
   const answers = Object.fromEntries([
     answer("host.status", () => ({ workspaces: [repoA, nested, repoB].map((repo) => ({ repo, workspace: null })) })),
-    answer("agent.list", () => ({ seq: 3, agents: [{ tile: "w-1", agent: "worker", state: "idle" }] })),
+    answer("agent.list", () => ({ seq: 3, agents: [{ tile: "w-1", agent: "worker", state: "idle" }, asking] })),
+    answer("agent.answer", (_tile, since) => ({ answered: since === 77 })),
     answer("agent.startable", () => ({ programs: [], frames: [{ id: "f1", name: "a", machine: "here" }] })),
     answer("agent.start", () => ({ tile: "w-2" })),
     answer("agent.send", (tile, text) => { if (!text) throw new ApiError("BAD_REQUEST", "text required"); return { sent: tile !== "ghost" }; }),
@@ -78,12 +79,14 @@ afterAll(() => {
   if (unix) fs.rmSync(dir, { recursive: true, force: true });
 });
 const last = (method: string) => calls.findLast((c) => c.method === method)!;
+/** A worker waiting on its supervisor's answer to a tool use. */
+const asking = { tile: "w-3", agent: "asker", state: "waiting", waiting: { kind: "approval", since: 77, approval: { request: "req-1", tool: "Bash", summary: "rm -rf dist", expiresAt: 0 } } };
 
 describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
   test("as the person, a verb acts on the open workspace this folder is in (the innermost), else the only one, else asks which; --repo names it", async () => {
     const r = await hive(["ctl", "agents", "--json"], { cwd: path.join(repoB, "sub"), env: env() });
     expect([r.code, r.stdout.trim().split("\n").length]).toEqual([0, 1]);
-    expect(r.json).toEqual({ seq: 3, agents: [{ tile: "w-1", agent: "worker", state: "idle" }] });
+    expect(r.json).toEqual({ seq: 3, agents: [{ tile: "w-1", agent: "worker", state: "idle" }, asking] });
     expect(last("agent.list").params).toEqual([repoB]);
     await hive(["ctl", "frames", "--repo", repoA, "--json"], { cwd: dir, env: env() });
     expect(last("agent.startable").params).toEqual([repoA]);
@@ -118,6 +121,18 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
       ["agent.close", "w-1"], ["tile.focus", "w-1"], ["link.connect", "w-1", "w-2"], ["link.disconnect", "w-1"], ["link.disconnect", "w-1", "w-2"],
       ["tool.open", repoA, { tool: "a/b/c", url: "https://x" }], ["agent.sessions", repoA, "codex", 5],
     ]);
+  });
+
+  test("approve answers the wait its request names, as agent.answer; always and never decide the tool from now on; one not waiting is exit 2", async () => {
+    for (const [decision, answer] of [["allow", { decision: "allow" }], ["never", { decision: "deny", always: true }], ["always", { decision: "allow", always: true }]] as const) {
+      const r = await hive(["ctl", "approve", "req-1", decision, "--repo", repoA, "--json"], { env: env() });
+      expect([r.code, r.json]).toEqual([0, { answered: true }]);
+      expect(last("agent.answer").params).toEqual(["w-3", 77, answer]);
+    }
+    await hive(["ctl", "approve", "req-1", "deny", "--reason", "not that dir", "--repo", repoA], { env: env() });
+    expect(last("agent.answer").params[2]).toEqual({ decision: "deny", feedback: "not that dir" });
+    const gone = await hive(["ctl", "approve", "req-2", "allow", "--repo", repoA, "--json"], { env: env() });
+    expect([gone.code, (gone.json as { code: string }).code]).toEqual([2, "BAD_REQUEST"]);
   });
 
   test("a bad token → exit 6 FORBIDDEN; an agent nobody runs → exit 5; a bad request → exit 2", async () => {

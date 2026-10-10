@@ -62,13 +62,14 @@ export function answers(o: AnswersOptions): Domain<"agent.answer" | "agent.send"
       "agent.answer": (from, tile, since, answer) => {
         const bare = toBareId(text(tile, "tile"));
         if (typeof since !== "number") throw new ApiError("BAD_REQUEST", "since must be a number");
-        const a = (answer ?? {}) as { text?: unknown; decision?: unknown; feedback?: unknown };
+        const a = (answer ?? {}) as { text?: unknown; decision?: unknown; feedback?: unknown; always?: unknown };
         const held = o.waits.of(bare);
         if (held?.since === since) {
           if (held.answerer && !mayAnswerFor(from, held.answerer)) throw new ApiError("FORBIDDEN", "only the person, or the program that started it, answers what this agent asks");
           const decision = oneOf(a.decision, "answer.decision", ["allow", "deny"] as const);
           const feedback = a.feedback == null ? undefined : written(a.feedback, "answer.feedback");
-          return o.waits.answer(bare, since, decision, feedback, o.who(from));
+          if (a.always !== undefined && (a.always !== true || held.kind !== "approval")) throw new ApiError("BAD_REQUEST", "answer.always is true, and answers a supervised tool use alone");
+          return o.waits.answer(bare, since, decision, { feedback, by: o.who(from), always: a.always === true });
         }
         const before = o.waits.answerOf(bare, since);
         if (before) return { answered: false, ...(before.by ? { by: before.by } : {}) };

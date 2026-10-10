@@ -273,9 +273,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     }
   };
   // Agent-supervised approvals (HCP Phase 6). A supervised worker's PreToolUse broker hook calls
-  // `agent.await_approval`, which waits (`deps.waits`) until its starter answers. `approveCache`
-  // remembers always/never per worker+tool.
-  const approveCache = new Map<string, "allow" | "deny">();
+  // `agent.await_approval`, which waits (`deps.waits`) until its starter answers.
 
   const armRead = (tileId: string) => {
     const pid = ptyId(tileId);
@@ -415,7 +413,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     depthOf.delete(bare);
     deps.setSupervise(bare, null);
     deps.waits.forget(bare);
-    for (const key of approveCache.keys()) if (key.startsWith(`${bare}:`)) approveCache.delete(key);
   };
 
   // Close a tile, with no window needed: it leaves its workspace and the session it runs ends, but
@@ -747,14 +744,13 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
       case "agent.await_approval": {
         // Called by a SUPERVISED worker's PreToolUse broker hook before a tool
-        // runs. Resolve from the remember-cache, else ask the parent and BLOCK
-        // (a wait) until `agent.approve`, `agent.answer` or the timeout.
+        // runs. Decided already when its starter answered `always` for the tool, else ask the
+        // starter and BLOCK (a wait) until `agent.answer` or the timeout.
         const worker = bareOf(String(p.callerTile ?? ""));
         const tool = String(p.tool_name ?? "");
         if (!worker || !tool) return { decision: "ask" };
-        const cacheKey = `${worker}:${tool}`;
-        const cached = approveCache.get(cacheKey);
-        if (cached) return { decision: cached };
+        const ruled = deps.waits.ruled(worker, tool);
+        if (ruled) return { decision: ruled };
         const parent = parentOf.get(worker);
         if (!parent) return { decision: "ask" }; // no supervisor → fall back to human prompt
         // Asking is the effect: the question is typed into the supervisor's terminal, and the
@@ -810,8 +806,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           const reason = p.reason != null ? String(p.reason) : undefined;
           if (!wait || wait.kind !== "approval") throw new ApiError("BAD_REQUEST", `no approval ${reqId} is waiting: it was answered, ran out of time, or its worker stopped waiting`);
           if (!d) throw new ApiError("BAD_REQUEST", "decision must be allow | deny | always | never");
-          if (decision === "always" || decision === "never") approveCache.set(`${wait.tile}:${wait.tool}`, d);
-          deps.waits.answer(wait.tile, wait.since, d, reason);
+          deps.waits.answer(wait.tile, wait.since, d, { feedback: reason, always: decision === "always" || decision === "never" });
           return { ok: true, decision: d };
         });
       }

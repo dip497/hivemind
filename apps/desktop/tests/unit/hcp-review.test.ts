@@ -35,7 +35,7 @@ test("the agent waits on its plan, shown waiting, until it is answered: the answ
   const wait = deps.waits.of("tile-a")!;
   assert.deepEqual({ kind: wait.kind, plan: wait.plan, cwd: wait.cwd }, { kind: "plan", plan: "1. Split it", cwd: "/work/repo" });
   assert.deepEqual({ state: deps.status.get("tile-a")?.state, kind: deps.status.get("tile-a")?.kind }, { state: "waiting", kind: "plan" });
-  deps.waits.answer("tile-a", wait.since, "deny", "smaller steps");
+  deps.waits.answer("tile-a", wait.since, "deny", { feedback: "smaller steps" });
   assert.deepEqual(await reviewed, { decision: "deny", feedback: "smaller steps" });
   assert.notEqual(deps.status.get("tile-a")?.state, "waiting");
 });
