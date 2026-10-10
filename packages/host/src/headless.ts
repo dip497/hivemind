@@ -26,13 +26,15 @@ import { driveSockPath, hcpSockPath, readOrCreateToken } from "@hivemind/agent-h
 import { serveDrive } from "./drive.js";
 import { controlApi } from "./control-api.js";
 import { Grants, grantsDomain } from "./grants.js";
+import { Services, wantedServices } from "./services.js";
 import { frameWorktrees, framesDomain } from "./frames.js";
 import { worktreeCreate, worktreeList, worktreeRemove } from "./git-adapter.js";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
 import { agentForCmd, preferredAgent, setCatalog, spawnableAgents } from "@hivemind/agents";
 import { findBin } from "@hivemind/agents/discover";
 import { loadAgents, userAgentsDir } from "@hivemind/agents/load";
-import { readSettings } from "@hivemind/core/settings";
+import { readSettings, settingsPath } from "@hivemind/core/settings";
+import { listToolPackages, userToolsDir } from "@hivemind/core/tool-packages";
 import { appearance } from "./appearance.js";
 import { DEFAULT_APPEARANCE, type Appearance, type Settings } from "@hivemind/core/settings-schema";
 import { AccessLists } from "@hivemind/workspace-host/access";
@@ -132,12 +134,13 @@ function socketIn(dir: string, file: string, tag: string): string {
 }
 
 /** The agents this machine has and the person's settings for them, as the app reads them: read
- *  at the start, and again before a verb once an agent was installed or removed. */
+ *  at the start, and again before a verb once an agent was installed or removed, or the settings
+ *  changed. */
 function agentCatalog(settingsFile: string): { current(): Promise<void>; settings(): Settings } {
   let settings: Settings | null = null;
-  let stamp: number | undefined;
+  let stamp: string | undefined;
   let reading: Promise<void> | null = null;
-  const dirStamp = () => fs.statSync(userAgentsDir(), { throwIfNoEntry: false })?.mtimeMs;
+  const dirStamp = () => [userAgentsDir(), settingsFile].map((f) => fs.statSync(f, { throwIfNoEntry: false })?.mtimeMs ?? 0).join(":");
   const read = async () => {
     stamp = dirStamp();
     settings = await readSettings(settingsFile);
@@ -346,7 +349,9 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
 
   // The control plane (`hive ctl`): the verbs that need no window, for the agents here and for
   // whoever is at this machine. The agents and settings are the app's, read from this data folder.
-  const catalog = agentCatalog(path.join(o.dir, "settings.json"));
+  // The settings the app and `hive config` keep, wherever this host's own data is.
+  const settingsFile = settingsPath();
+  const catalog = agentCatalog(settingsFile);
   appearanceNow = () => { try { return catalog.settings().appearance; } catch { return DEFAULT_APPEARANCE; } };
   await catalog.current();
   const control: ControlPlane = new ControlPlane({
@@ -371,7 +376,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     methods: () => ({
       reported: (tile, message) => agentFeed?.report(toBareId(tile), message),
       callRenderer: () => Promise.reject(new ApiError("UNAVAILABLE", "there is no window here: hive host runs none")),
-      reloadSettings: () => catalog.current().then(() => ({ ok: true })),
+      reloadSettings: () => catalog.current().then(() => { syncServices(); return { ok: true }; }),
       defaultAgentId: () => preferredAgent(catalog.settings().agents.defaultAgent, (d) => !!findBin(d.bin))?.id,
       agentInstalled: (def) => !!findBin(def.bin),
       workspaces: store,
@@ -401,7 +406,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   }
 
   // Programs drive the workspaces here through the workspace API, held to what they were granted.
-  const drive = serveDrive(driveSockPath(o.dir), {
+  const driveSock = driveSockPath(o.dir);
+  const drive = serveDrive(driveSock, {
     server: api,
     installToken: () => readOrCreateToken(o.dir),
     grants,
@@ -411,6 +417,21 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     places: (repo) => frameWorktrees(store.getCore(repo)),
     workspaceId: (repo) => store.ownership(repo)?.workspaceId ?? null,
     onWarn: o.onWarn,
+  });
+
+  // The services of the tool plugins switched on, while this host serves the drive socket; again
+  // each time the settings or the plugins installed change.
+  const services = new Services({ driveSock, grants, logDir: path.join(o.dir, "services") });
+  let syncing = Promise.resolve();
+  const syncServices = (): void => {
+    syncing = syncing.then(async () => services.sync(wantedServices(await listToolPackages(), (await readSettings(settingsFile)).plugins.state, process.env.HIVEMIND_SAFE_MODE === "1")))
+      .catch((e: unknown) => o.onWarn(`tool plugins' services: ${e instanceof Error ? e.message : String(e)}`));
+  };
+  const servicesWatched = [settingsFile, userToolsDir()];
+  void drive.serving.then((mine) => {
+    if (!mine) return;
+    for (const f of servicesWatched) fs.watchFile(f, { interval: 2_000 }, (now, before) => { if (now.mtimeMs !== before.mtimeMs) syncServices(); });
+    syncServices();
   });
 
   // On the network: hive-net admits the devices the access lists let in, and each is served the
@@ -635,6 +656,9 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       net?.stop();
       // The sessions stay in the daemons; only this host's connections to them go, and the daemon
       // answers on the control-plane socket again.
+      for (const f of servicesWatched) fs.unwatchFile(f);
+      await syncing;
+      await services.stop();
       hcp.close();
       drive.close();
       endpoint.close();

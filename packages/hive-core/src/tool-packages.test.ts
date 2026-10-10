@@ -105,6 +105,24 @@ test("a tool plugin that comes with the app is the tool core says ships, and onl
   }
 });
 
+test("its service is a program on PATH or a file in its folder, with a role; anything else is refused", () => {
+  const read = (service: unknown) => parseToolManifest({ ...MANIFEST, service }, "/x", null).service;
+  expect(read(undefined)).toBeUndefined();
+  expect(read({ command: ["node", "service.js", "--port", "0"], role: "agents" })).toEqual({ command: ["node", "service.js", "--port", "0"], role: "agents" });
+  expect(read({ command: ["./bin/serve"], role: "view" })).toEqual({ command: ["./bin/serve"], role: "view" });
+  for (const [service, why] of [
+    [{ command: [], role: "agents" }, "the program and its arguments"],
+    [{ command: "node service.js", role: "agents" }, "the program and its arguments"],
+    [{ command: ["node", 3], role: "agents" }, "the program and its arguments"],
+    [{ command: ["/usr/bin/node"], role: "agents" }, "a program on PATH, or a file in its folder"],
+    [{ command: ["./../escape"], role: "agents" }, "a program on PATH, or a file in its folder"],
+    [{ command: ["sh -c"], role: "agents" }, "a program on PATH, or a file in its folder"],
+    [{ command: ["node"] }, "service.role"],
+    [{ command: ["node"], role: "Agents!" }, "service.role"],
+    ["node", "service is not an object"],
+  ] as const) expect(() => read(service), JSON.stringify(service)).toThrow(why);
+});
+
 test("its category is what its manifest says, from the list; none is other, and one not on the list is refused", async () => {
   expect((await readToolPackage(plugin({ category: "git" }), null)).category).toBe("git");
   expect((await readToolPackage(plugin(), null)).category).toBe("other");

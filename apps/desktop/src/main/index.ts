@@ -6,6 +6,7 @@ import { toolPreferences } from "@hivemind/core/settings-schema";
 import { installWidgetIpc, widgetAsset, widgetsChanged } from "./widgets.js";
 import { listWidgets } from "@hivemind/core/widgets";
 import { installToolPackageIpc, handleToolProtocol, PLUGIN_SCHEME, safeMode, toolsChanged } from "./tool-packages.js";
+import { installServicesIpc, startServices, stopServices } from "./services.js";
 import { listToolPackages } from "@hivemind/core/tool-packages";
 import { appShortcut, menuKey } from "./shortcuts";
 import { recoverOnProcessLoss } from "./recover";
@@ -626,6 +627,7 @@ handle("relaunchApp", () => {
   const launcher = resolveLauncherPath();
   if (launcher) app.relaunch({ execPath: launcher, args: [] });
   else app.relaunch();
+  stopServices();
   app.exit(0);
 });
 
@@ -1507,6 +1509,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     installViewManagementIpc();
     installWidgetIpc();
     installToolPackageIpc();
+    installServicesIpc();
     installPluginCatalogIpc();
     handle("views:list", wrap(async (_e, repoRoot: string | null) => listViewPackages(repoRoot ? String(repoRoot) : null)));
 
@@ -1885,7 +1888,8 @@ function startHcpControlPlane(): void {
   control.listen(hcpSockPath(app.getPath("userData")), (err: Error) => pushAppError(`Agent control plane is off: ${err.message}. \`hive ctl\` cannot reach this app.`, "hcp"));
   // Programs drive workspaces here through the workspace API, held to what they were granted.
   try {
-    serveDrive(driveSockPath(app.getPath("userData")), {
+    const driveSock = driveSockPath(app.getPath("userData"));
+    const drive = serveDrive(driveSock, {
       server: workspaceServer,
       installToken: () => readOrCreateToken(app.getPath("userData")),
       grants: grants(),
@@ -1896,6 +1900,7 @@ function startHcpControlPlane(): void {
       workspaceId: (repo) => workspaceStore().ownership(repo)?.workspaceId ?? null,
       onWarn: (m) => console.warn(`[drive] ${m}`),
     });
+    startServices({ driveSock, grants: grants(), serving: drive.serving });
   } catch (e) {
     pushAppError(`Programs cannot drive this app: ${(e as Error).message}`, "drive");
   }
@@ -1912,6 +1917,7 @@ function startHcpControlPlane(): void {
 // otherwise lose the canvas tile-layout (localStorage). Flush, then exit a beat
 // later. Closing the socket signals the daemon to detach; sessions keep running.
 function forceExitAfterFlush(): void {
+  stopServices();
   try {
     killAllPtys();
   } catch {

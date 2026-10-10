@@ -44,6 +44,8 @@ export interface DriveOptions {
 }
 
 export interface DriveServer {
+  /** Whether this process serves the socket: false when another app or host on the machine does. */
+  serving: Promise<boolean>;
   close(): void;
 }
 
@@ -122,11 +124,13 @@ export function serveDrive(sockPath: string, o: DriveOptions): DriveServer {
       if (holder) return asAgent(toBareId(holder.tile), hello);
       const grant = o.grants.holder(hello.token);
       if (!grant) return refuse("FORBIDDEN", "that token lets nothing drive here: make a grant with `hive grant create`");
-      if (typeof hello.workspace !== "string" || !hello.workspace) return refuse("BAD_REQUEST", "name the workspace: {\"hello\": {\"token\": …, \"workspace\": \"<its folder>\"}}");
-      const asked = real(hello.workspace);
-      if (!grant.repos.includes(asked)) return refuse("FORBIDDEN", `grant ${grant.name} does not reach ${hello.workspace}`);
+      // A grant that reaches one workspace needs it named no more than an agent does.
+      const named = typeof hello.workspace === "string" && hello.workspace ? hello.workspace : grant.repos.length === 1 ? grant.repos[0]! : null;
+      if (!named) return refuse("BAD_REQUEST", "name the workspace: {\"hello\": {\"token\": …, \"workspace\": \"<its folder>\"}}");
+      const asked = real(named);
+      if (!grant.repos.includes(asked)) return refuse("FORBIDDEN", `grant ${grant.name} does not reach ${named}`);
       const repo = o.repos().find((r) => real(r) === asked);
-      if (!repo) return refuse("BAD_REQUEST", `no workspace is open at ${hello.workspace}: open it in the app first`);
+      if (!repo) return refuse("BAD_REQUEST", `no workspace is open at ${named}: open it in the app first`);
       let sockets = byGrant.get(grant.id);
       if (!sockets) byGrant.set(grant.id, (sockets = new Set()));
       sockets.add(socket);
@@ -187,12 +191,20 @@ export function serveDrive(sockPath: string, o: DriveOptions): DriveServer {
 
   // The app and `hive host` on one machine: whichever came first serves it, and the other says so.
   let mine = false;
-  void listenExclusive(server, sockPath).then((r) => {
-    if (r === "taken") return o.onWarn?.(`programs drive this machine through another app or host already (${sockPath})`);
+  const serving = listenExclusive(server, sockPath).then((r) => {
+    if (r === "taken") {
+      o.onWarn?.(`programs drive this machine through another app or host already (${sockPath})`);
+      return false;
+    }
     mine = true;
     try { fs.chmodSync(sockPath, 0o600); } catch { /* a named pipe */ }
-  }, (e: Error) => o.onWarn?.(`drive socket: ${e.message}`));
+    return true;
+  }, (e: Error) => {
+    o.onWarn?.(`drive socket: ${e.message}`);
+    return false;
+  });
   return {
+    serving,
     close: () => {
       offRevoked();
       try { server.close(); } catch { /* closed */ }

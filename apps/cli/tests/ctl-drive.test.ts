@@ -31,6 +31,7 @@ let reads = 0;
 let turnAfterReads = 0;
 let server: WorkspaceServer;
 let drive: DriveServer;
+const grants = unix ? new Grants(path.join(dir, "grants.json")) : (null as unknown as Grants);
 // The CLI checks --agent against the agents installed; this machine has the fixture ones.
 const xdg = fixtureXDG(["claude", "codex"]);
 const env = (token = TOKEN) => ({ XDG_CONFIG_HOME: xdg, HIVE_DRIVE_SOCK: sock, HCP_TOKEN: token });
@@ -71,7 +72,7 @@ beforeAll(async () => {
   ]);
   server = new WorkspaceServer([{ answers, effects: {} }], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
   drive = serveDrive(sock, {
-    server, installToken: () => TOKEN, grants: new Grants(path.join(dir, "grants.json")), repos: () => [repoA, repoB],
+    server, installToken: () => TOKEN, grants, repos: () => [repoA, repoB],
     // The agent, and the one it starts, are in workspace a.
     workspaceOf: (tile) => (tile === "me-1" || tile === "w-2" ? repoA : null), nameOf: (tile) => `the ${tile} agent`,
   });
@@ -86,6 +87,19 @@ const last = (method: string) => calls.findLast((c) => c.method === method)!;
 const asking = { tile: "w-3", agent: "asker", state: "waiting", waiting: { kind: "approval", since: 77, approval: { request: "req-1", tool: "Bash", summary: "rm -rf dist", expiresAt: 0 } } };
 
 describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
+  test("a program given a grant's token (a plugin's service) is that grant, in its workspace; one reaching several drives the one HIVE_WORKSPACE names", async () => {
+    const { token } = grants.create({ name: "ci", repos: [repoA], role: "agents" });
+    const program = { XDG_CONFIG_HOME: xdg, HIVE_DRIVE_SOCK: sock, HIVE_DRIVE_TOKEN: token };
+    const r = await hive(["ctl", "agents", "--json"], { cwd: dir, env: program });
+    expect(r.code).toBe(0);
+    expect(last("agent.list")).toMatchObject({ params: [repoA], by: { kind: "peer", client: "ci", access: "agents" } });
+    const both = grants.create({ name: "ci-both", repos: [repoA, repoB], role: "agents" }).token;
+    await hive(["ctl", "agents", "--json"], { cwd: dir, env: { ...program, HIVE_DRIVE_TOKEN: both, HIVE_WORKSPACE: repoB } });
+    expect(last("agent.list")).toMatchObject({ params: [repoB], by: { client: "ci-both" } });
+    const unnamed = await hive(["ctl", "agents", "--json"], { cwd: dir, env: { ...program, HIVE_DRIVE_TOKEN: both } });
+    expect([unnamed.code, (unnamed.json as { code: string }).code]).toEqual([2, "BAD_REQUEST"]);
+  });
+
   test("as the person, a verb acts on the open workspace this folder is in (the innermost), else the only one, else asks which; --repo names it", async () => {
     const r = await hive(["ctl", "agents", "--json"], { cwd: path.join(repoB, "sub"), env: env() });
     expect([r.code, r.stdout.trim().split("\n").length]).toEqual([0, 1]);

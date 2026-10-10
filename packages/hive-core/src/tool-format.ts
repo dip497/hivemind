@@ -8,12 +8,15 @@
  *     "description": "…", "entry": "index.js", "permissions": ["workspace:spawn"], "settings": [],
  *     "tools": [{ "key": "prs", "label": "Pull requests", "description": "…",
  *                 "tileKind": "acme-prs", "size": { "width": 1100, "height": 760 },
- *                 "needsRepo": true, "singleton": true, "glyph": "⇅" }]
+ *                 "needsRepo": true, "singleton": true, "glyph": "⇅" }],
+ *     "service": { "command": ["node", "service.js"], "role": "agents" }
  *   }
  *
  * The module's default export is `{ tiles: { [tileKind]: Component } }`; what each is handed is
  * `@hivemind/tile-sdk`'s contract, versioned by `apiVersion`. `permissions` and `settings` are a
- * view's: the same `hm` client, held to the same words. No I/O here.
+ * view's: the same `hm` client, held to the same words. `service` is a program the app keeps
+ * running while the plugin is on, driving the workspaces picked for it through the drive socket at
+ * `role` (docs/design/drive-api-2026-10-09.md, D8). No I/O here.
  */
 import { VIEW_PERMISSIONS, type ViewPermission } from "@hivemind/view-sdk/protocol";
 import { parseCategory, type PluginCategory } from "@hivemind/view-sdk/category";
@@ -43,6 +46,14 @@ export interface ToolTile {
   icon?: string;
 }
 
+/** A program a tool plugin keeps running while it is on. */
+export interface ToolService {
+  /** The program and its arguments: a program on PATH, or a file in the plugin's folder (`./bin/x`). */
+  command: string[];
+  /** What its grant lets it do in the workspaces picked for it; the host knows which roles there are. */
+  role: string;
+}
+
 export interface ToolPackage extends ToolPluginContribution {
   /** "app": it comes with the app; "you": you added it. */
   source: "app" | "you";
@@ -64,6 +75,8 @@ export interface ToolPackage extends ToolPluginContribution {
   settings: SettingField[];
   /** What each tile kind it contributes opens as, by kind. */
   tiles: Record<string, ToolTile>;
+  /** What it keeps running while it is on, if anything. */
+  service?: ToolService;
   /** Its folder on this machine. */
   dir: string;
   /** Why it cannot load here; null when it can. */
@@ -87,6 +100,7 @@ export function parseToolManifest(raw: unknown, dir: string, folderId: string | 
   if (!/^[A-Za-z0-9_.-]+(\/[A-Za-z0-9_.-]+)*\.m?js$/.test(entry) || entry.split("/").includes("..")) throw new Error(`entry "${entry}" is not a .js file inside its folder`);
   const listed = Array.isArray(raw.tools) ? raw.tools : [];
   if (listed.length === 0) throw new Error("it lists no tools");
+  const service = raw.service === undefined ? undefined : parseService(raw.service);
   if (listed.length > 16) throw new Error("it lists more than 16 tools");
   const tools: { key: string; label: string; description?: string; tileKind: string }[] = [];
   const tiles: Record<string, ToolTile> = {};
@@ -125,6 +139,7 @@ export function parseToolManifest(raw: unknown, dir: string, folderId: string | 
     permissions: Array.isArray(raw.permissions)
       ? [...new Set(raw.permissions.filter((p): p is ViewPermission => (VIEW_PERMISSIONS as readonly unknown[]).includes(p)))] : [],
     settings,
+    ...(service ? { service } : {}),
     name: text(raw.name, 60) ?? id,
     description: text(raw.description, 300) ?? "",
     ...(version ? { version } : {}),
@@ -135,3 +150,18 @@ export function parseToolManifest(raw: unknown, dir: string, folderId: string | 
   };
 }
 
+
+function parseService(raw: unknown): ToolService {
+  if (!isObj(raw)) throw new Error("service is not an object");
+  const command = raw.command;
+  if (!Array.isArray(command) || command.length === 0 || command.length > 32 || !command.every((a) => typeof a === "string" && a.length <= 1000)) {
+    throw new Error("service.command is the program and its arguments, as a list of text");
+  }
+  const bin = command[0] as string;
+  const inFolder = bin.startsWith("./");
+  if (inFolder ? !/^\.\/[A-Za-z0-9_.-]+(\/[A-Za-z0-9_.-]+)*$/.test(bin) || bin.split("/").includes("..") : !/^[A-Za-z0-9._-]{1,64}$/.test(bin)) {
+    throw new Error(`service.command starts with "${bin}": a program on PATH, or a file in its folder as ./path`);
+  }
+  if (typeof raw.role !== "string" || !/^[a-z]{1,20}$/.test(raw.role)) throw new Error("service.role is the role it drives its workspaces with, like agents");
+  return { command: [...command] as string[], role: raw.role };
+}

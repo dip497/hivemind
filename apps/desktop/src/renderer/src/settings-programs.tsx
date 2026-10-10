@@ -14,7 +14,8 @@ import { useShown } from "./multiplayer/shown";
 type Role = ClientGrant["role"];
 
 const ROLES: Array<[Role, string]> = [["agents", "Drive agents"], ["terminals", "Use terminals"], ["edit", "Edit"], ["view", "View"]];
-const ROLE_WORDS = Object.fromEntries(ROLES) as Record<Role, string>;
+/** What a grant's role lets a program do, in the words Settings uses for it. */
+export const ROLE_WORDS = Object.fromEntries(ROLES) as Record<Role, string>;
 
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e)).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
 const folder = (p: string): string => p.split(/[\\/]/).filter(Boolean).pop() ?? p;

@@ -2,6 +2,7 @@ import type { SessionStatus } from "@hivemind/agent-host/status-store";
 /** Typed contract for IPC between main and renderer. */
 import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee, LinkType, IssuePatch } from "@hivemind/core/types";
 import type { ViewManifest } from "@hivemind/view-sdk/manifest";
+import type { ServiceState } from "@hivemind/host/services";
 import type { ActivityLevel, HostMessage, PluginMessage, ShareOutcome, SurfaceRect, ViewHistoryDay, ViewSession, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { ViewScreen } from "@hivemind/workspace-api/views";
 import type { NotificationSettings } from "./notification-settings.js";
@@ -325,6 +326,14 @@ export interface HiveIpc {
   toolRun(call: ToolRun): Promise<ToolRunResult>;
   /** The installed tool plugins changed. */
   onToolsChanged(cb: () => void): () => void;
+  /** The folders of the workspaces on this machine: what a program's grant may name. */
+  hostWorkspaces(): Promise<string[]>;
+  /** How each tool plugin's service is. */
+  services(): Promise<ServiceState[]>;
+  /** The end of what a tool plugin's service printed. */
+  serviceLog(plugin: string): Promise<string>;
+  /** A service started, stopped or is starting again. */
+  onServicesChanged(cb: () => void): () => void;
   /** Ids of installed agents whose manifest differs from the one the catalog lists. */
   outdatedAgents(): Promise<string[]>;
   /** Download and verify a catalog plugin, then return it for review. A view installs with

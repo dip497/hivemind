@@ -60,8 +60,10 @@ The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
   `{"hello": {"api": "0.23", "as": "person"}}` and serves every method, as to a window of theirs.
-- **A grant's token** is a program the person let drive workspaces (`grant.create`). It names one
-  of the grant's workspaces by its folder; the host answers
+- **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
+  plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
+  `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
+  be left out when the grant reaches only one; the host answers
   `{"hello": {"api", "as": {"client", "role", "workspace"}}}` and serves that workspace as it does
   a guest at the grant's role (Peers, below): what the role does not name is `FORBIDDEN`, and it
   hears the events of that workspace's tiles alone. Unlike a guest's, its calls and answers name
@@ -74,7 +76,7 @@ The first line says who connects: `{"hello": {"token", "workspace"?}}`.
   reporting to it; a tool use it supervises is its to answer. It is recorded as a peer whose
   `person` and `device` are its tile and whose `client` is what the control plane calls it.
 - **Anything else** is answered `{"error": {"code", "message"}}` and the connection closes. So
-  does a grant that does not name the workspace, or one that ran out.
+  does a grant reaching several workspaces that does not name one, or one that ran out.
 
 Taking a grant back closes its connections; one that runs out closes them then. The host keeps
 grants in `grants.json` beside `hcp.token`, 0600, each token only as its sha256.

@@ -120,6 +120,8 @@ export function hiveOverWorkspace(workspace: WorkspaceClient) {
     viewPrompt: async (tile, text) => {
       if (!(await workspace.call("agent.send", tile, text)).sent) throw new Error(`no agent runs in tile ${tile}`);
     },
+    // The workspaces on this machine, as the drive socket serves them.
+    hostWorkspaces: async () => (await workspace.call("host.status")).workspaces.map((w) => w.repo),
     onAgentChanged: (cb) => workspace.on("agent.changed", cb),
     onAgentEvent: (cb) => workspace.on("agent.event", cb),
     onHcpSpawn: (cb) => workspace.on("link.spawn", cb),

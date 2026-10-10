@@ -24,7 +24,7 @@ export const PLUGIN_SCHEME = "hm-plugin";
 export const appToolsDir = (): string => fileURLToPath(new URL("../tools", import.meta.url));
 /** The packages from the last listing, by id: which folder each is served from. */
 const listed = new Map<string, ToolPackage>();
-const list = async (): Promise<ToolPackage[]> => {
+export const listTools = async (): Promise<ToolPackage[]> => {
   const packages = await listToolPackages(undefined, appToolsDir());
   listed.clear();
   for (const p of packages) if (!listed.has(p.id)) listed.set(p.id, p);
@@ -63,7 +63,7 @@ export function handleToolProtocol(): void {
         return code ? served(code, "text/javascript") : served("no such host module", "text/plain", 404);
       }
       const id = u.host.replace("--", "/");
-      const pkg = isToolId(id) ? listed.get(id) ?? (await list()).find((p) => p.id === id) : undefined;
+      const pkg = isToolId(id) ? listed.get(id) ?? (await listTools()).find((p) => p.id === id) : undefined;
       const app = pkg?.source === "app";
       if (!pkg || (safeMode() && !app) || !isPluginEnabled(getSettings().plugins.state, "tool", id, app)) return served("not switched on", "text/plain", 404);
       const file = toolFile(id, decodeURIComponent(u.pathname.replace(/^\/+/, "")), app ? appToolsDir() : undefined);
@@ -77,8 +77,12 @@ export function handleToolProtocol(): void {
   });
 }
 
+const toolListeners = new Set<() => void>();
+/** Be told each time a tool plugin is added or removed. */
+export const onToolsChanged = (l: () => void): void => { toolListeners.add(l); };
 export const toolsChanged = (): void => {
   for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send("tools:changed");
+  for (const l of toolListeners) l();
 };
 
 /** The program on PATH, by absolute path, never one inside `cwd`: a repository can ship a file
@@ -147,7 +151,7 @@ export async function runTool(call: ToolRun): Promise<ToolRunResult> {
 }
 
 export function installToolPackageIpc(): void {
-  handle("tools:list", async () => ({ packages: await list(), safeMode: safeMode() }));
+  handle("tools:list", async () => ({ packages: await listTools(), safeMode: safeMode() }));
   handle("tools:host-exports", (_e, map: unknown) => {
     if (typeof map !== "object" || map === null) return;
     hostExports = Object.fromEntries(Object.entries(map as Record<string, unknown>)

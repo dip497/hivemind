@@ -112,7 +112,11 @@ export function usePlugins(catalog: CatalogEntry[] | null): PluginRecord[] {
       out.push({
         kind: "tool", id: t.id, name: t.name, description: t.description, origin: "you", installed: true,
         enabled: isPluginEnabled(state, "tool", t.id, false), ...(t.version ? { version: t.version } : {}),
-        can: ["Runs inside the app, with the access it has: your files, your programs and your logins.", ...permissionWords(t.permissions)],
+        can: [
+          "Runs inside the app, with the access it has: your files, your programs and your logins.",
+          ...(t.service ? [`Keeps ${t.service.command.join(" ")} running while it is on, which drives the workspaces you pick for it.`] : []),
+          ...permissionWords(t.permissions),
+        ],
         readme: { dir: t.dir }, problem: t.problem, dir: t.dir,
         ...(listed.get(`tool:${t.id}`) ? { catalog: listed.get(`tool:${t.id}`)! } : {}),
       });

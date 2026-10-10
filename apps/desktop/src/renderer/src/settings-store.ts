@@ -140,6 +140,11 @@ export function patchPluginState(kind: PluginKind, id: string, change: (s: Plugi
   patchSettings(`plugins.state.${key}`, withPluginState(getSettings().plugins.state, kind, id, change)[key] ?? {});
 }
 
+/** The workspaces a tool plugin's service may drive, by their folder. */
+export function setServiceWorkspaces(id: string, workspaces: string[]): void {
+  patchPluginState("tool", id, ({ workspaces: _, ...s }) => (workspaces.length ? { ...s, workspaces } : s));
+}
+
 /** Switch one plugin on or off, whatever its kind. */
 export function setPluginEnabled(kind: PluginKind, id: string, on: boolean): void {
   patchPluginState(kind, id, (s) => ({ ...s, enabled: on }));

@@ -159,6 +159,13 @@ const api: HiveApi = {
     ipcRenderer.on("tools:changed", listener);
     return () => ipcRenderer.removeListener("tools:changed", listener);
   },
+  services: () => ipcRenderer.invoke("services:list"),
+  serviceLog: (plugin) => ipcRenderer.invoke("services:log", plugin),
+  onServicesChanged: (cb) => {
+    const listener = () => cb();
+    ipcRenderer.on("services:changed", listener);
+    return () => ipcRenderer.removeListener("services:changed", listener);
+  },
   outdatedAgents: () => ipcRenderer.invoke("plugins:outdated"),
   reviewCatalogPlugin: (type, id) => ipcRenderer.invoke("plugins:review", type, id),
   installCatalogAgent: (token) => ipcRenderer.invoke("plugins:install-agent", token),

@@ -210,6 +210,7 @@ select option { background: var(--color-bg2); color: var(--color-fg); }
 .plugin-section { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--color-line2); }
 .plugin-section > h3 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
 .plugin-section .agent-options { margin-top: 0; border-top: 0; }
+.service-log { margin-top: 8px; max-height: 240px; overflow: auto; padding: 8px 10px; border-radius: 6px; background: var(--color-bg2); font: 11px/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .settings-link { color: var(--color-fg); text-decoration: underline; text-underline-offset: 3px; }
 .settings-developer-details code + code { padding-top: 0; }
 

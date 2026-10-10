@@ -61,10 +61,11 @@ export function sockPath(where: Where = {}): string {
   return appSocket("hcp.sock", "HIVE_HCP_SOCK", where);
 }
 
-/** Who this is to the app: `HCP_TOKEN`, an agent's own, else the install's, the person's. */
+/** Who this is to the app: `HCP_TOKEN`, an agent's own; `HIVE_DRIVE_TOKEN`, a program's grant (a
+ *  plugin's service is given one); else the install's, the person's. */
 export function token(where: Where = {}): string {
   const { env = process.env } = where;
-  const given = envGet(env, "HCP_TOKEN");
+  const given = envGet(env, "HCP_TOKEN") || envGet(env, "HIVE_DRIVE_TOKEN");
   if (given) return given;
   try {
     return fs.readFileSync(path.join(appData(where), "hcp.token"), "utf8").trim();

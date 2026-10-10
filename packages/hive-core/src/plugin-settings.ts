@@ -28,6 +28,8 @@ export interface PluginState {
   enabled?: boolean;
   /** Values set for its fields, by field id; absent: each field's default. */
   options?: Record<string, string | number | boolean>;
+  /** The workspaces its service may drive, by their folder: none until picked. */
+  workspaces?: string[];
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -50,6 +52,9 @@ const keyOk = (key: string): boolean => {
 };
 const MAX_PLUGINS = 1000;
 const MAX_OPTIONS = 60;
+const MAX_WORKSPACES = 50;
+/** A folder given in full, on any system the settings file came from. */
+const FOLDER = /^(\/|[A-Za-z]:[\\/])/;
 
 /** The stored state from anything (settings.json): each record checked, a bad one dropped. */
 export function parsePluginStates(raw: unknown): Record<string, PluginState> {
@@ -68,7 +73,11 @@ export function parsePluginStates(raw: unknown): Record<string, PluginState> {
       }
       if (Object.keys(options).length) state.options = options;
     }
-    if (state.enabled !== undefined || state.options) out[key] = state;
+    if (Array.isArray(v.workspaces)) {
+      const workspaces = [...new Set(v.workspaces.filter((w): w is string => typeof w === "string" && FOLDER.test(w) && w.length <= 4096))].slice(0, MAX_WORKSPACES);
+      if (workspaces.length) state.workspaces = workspaces;
+    }
+    if (state.enabled !== undefined || state.options || state.workspaces) out[key] = state;
   }
   return out;
 }
@@ -76,6 +85,11 @@ export function parsePluginStates(raw: unknown): Record<string, PluginState> {
 /** Whether a plugin is on: as stored, else as it is by default. */
 export function isPluginEnabled(states: Record<string, PluginState>, kind: PluginKind, id: string, byDefault = true): boolean {
   return states[pluginKey(kind, id)]?.enabled ?? byDefault;
+}
+
+/** The workspaces a tool plugin's service may drive. */
+export function serviceWorkspaces(states: Record<string, PluginState>, id: string): string[] {
+  return states[pluginKey("tool", id)]?.workspaces ?? [];
 }
 
 /** The ids of `kind` switched off. */
@@ -98,7 +112,7 @@ export function withPluginState(states: Record<string, PluginState>, kind: Plugi
   const key = pluginKey(kind, id);
   const next = change({ ...states[key] });
   const out = { ...states };
-  if (next.enabled === undefined && (!next.options || !Object.keys(next.options).length)) delete out[key];
+  if (next.enabled === undefined && (!next.options || !Object.keys(next.options).length) && !next.workspaces?.length) delete out[key];
   else out[key] = next;
   return out;
 }

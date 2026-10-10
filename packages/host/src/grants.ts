@@ -46,10 +46,11 @@ export class Grants {
     return this.grants.map(shown);
   }
 
-  create(spec: NewGrant): { grant: ClientGrant; token: string } {
+  /** `plugin`: the tool plugin whose service it is for. */
+  create(spec: NewGrant, plugin?: string): { grant: ClientGrant; token: string } {
     const id = randomBytes(6).toString("hex");
     const token = `${PREFIX}${id}_${randomBytes(32).toString("base64url")}`;
-    const kept: Kept = { id, name: spec.name, repos: [...new Set(spec.repos.map(real))], role: spec.role, createdAt: Date.now(), expires: spec.expires ?? null, lastUsed: null, hash: hashOf(token) };
+    const kept: Kept = { id, name: spec.name, repos: [...new Set(spec.repos.map(real))], role: spec.role, createdAt: Date.now(), expires: spec.expires ?? null, lastUsed: null, ...(plugin ? { plugin } : {}), hash: hashOf(token) };
     this.grants.push(kept);
     this.save();
     return { grant: shown(kept), token };
@@ -62,6 +63,11 @@ export class Grants {
     this.save();
     for (const told of this.revoked) told(id);
     return true;
+  }
+
+  /** Take back every grant held for `plugin`'s service. */
+  revokePlugin(plugin: string): void {
+    for (const g of this.grants.filter((k) => k.plugin === plugin)) this.revoke(g.id);
   }
 
   /** The grant `token` is, while it holds; null for any other token, and once it expired. */

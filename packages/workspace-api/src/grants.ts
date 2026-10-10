@@ -17,6 +17,8 @@ export interface ClientGrant {
   expires: number | null;
   /** When a program last connected with it; null: never. */
   lastUsed: number | null;
+  /** The tool plugin whose service holds it, while the service runs. */
+  plugin?: string;
 }
 
 /** What makes a grant. `expires`: ms since the epoch. */

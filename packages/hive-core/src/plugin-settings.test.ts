@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { agentSettingFields, disabledPlugins, isPluginEnabled, parsePluginStates, pluginStatesFromLegacy, toolSettingFields, withPluginState } from "./plugin-settings.js";
+import { agentSettingFields, disabledPlugins, isPluginEnabled, parsePluginStates, pluginStatesFromLegacy, serviceWorkspaces, toolSettingFields, withPluginState } from "./plugin-settings.js";
 
 describe("what is stored for each plugin", () => {
   test("a record under a key that is not a plugin of a known kind is dropped", () => {
@@ -35,6 +35,19 @@ describe("what is stored for each plugin", () => {
     states = withPluginState(states, "agent", "codex", ({ enabled: _, ...s }) => s);
     states = withPluginState(states, "agent", "claude", (s) => ({ ...s, options: {} }));
     expect(states).toEqual({});
+  });
+
+  test("the workspaces picked for a plugin's service are folders given in full, each once; a record of only them is kept", () => {
+    const states = parsePluginStates({
+      "tool:acme/ci": { workspaces: ["/work/api", "relative/x", "/work/api", 7, "C:\\work\\web", "D:/w"] },
+      "tool:acme/none": { workspaces: ["nope"] },
+    });
+    expect(serviceWorkspaces(states, "acme/ci")).toEqual(["/work/api", "C:\\work\\web", "D:/w"]);
+    expect(states["tool:acme/none"]).toBeUndefined();
+    expect(serviceWorkspaces(states, "acme/other")).toEqual([]);
+    const picked = withPluginState({}, "tool", "acme/ci", (s) => ({ ...s, workspaces: ["/work/api"] }));
+    expect(picked).toEqual({ "tool:acme/ci": { workspaces: ["/work/api"] } });
+    expect(withPluginState(picked, "tool", "acme/ci", ({ workspaces: _, ...s }) => s)).toEqual({});
   });
 
   test("the keys of a version before plugin state are read into records", () => {

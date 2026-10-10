@@ -6,7 +6,7 @@
  */
 import fs from "node:fs";
 import net from "node:net";
-import { appSocket, type Where } from "./app-data.js";
+import { appSocket, envGet, type Where } from "./app-data.js";
 import { EXIT, HcpCliError, exitCodeFor, token } from "./hcp.js";
 
 /** Where programs drive this machine: `HIVE_DRIVE_SOCK`, given every agent, else the app's own. */
@@ -50,7 +50,9 @@ export function openDrive(where: Where = {}): Promise<Drive> {
     let closedResolve!: () => void;
     const closed = new Promise<void>((r) => (closedResolve = r));
     let as: DriveAs | undefined;
-    const c = net.connect(sock, () => c.write(`${JSON.stringify({ hello: { token: token(where) } })}\n`));
+    // A grant reaching several workspaces drives the one `HIVE_WORKSPACE` names.
+    const workspace = envGet(where.env ?? process.env, "HIVE_WORKSPACE");
+    const c = net.connect(sock, () => c.write(`${JSON.stringify({ hello: { token: token(where), ...(workspace ? { workspace } : {}) } })}\n`));
     c.setEncoding("utf8");
     const hear = (m: { event?: unknown; params?: unknown }) => {
       if (typeof m.event !== "string") return;

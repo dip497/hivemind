@@ -11,6 +11,7 @@ import { useSettingsNavigate } from "./settings-panels";
 import { toolLabel } from "./settings-nav";
 import { useToolPackages, useToolProblem } from "./tiles/tool-plugins";
 import { SettingsForm } from "./plugins/SettingsForm";
+import { ServiceSection } from "./plugins/ServiceSection";
 import { cleanError } from "./settings-plugins";
 import type { ToolPackage } from "@hivemind/core/tool-format";
 
@@ -129,6 +130,7 @@ export function ToolPage({ id }: { id: string }) {
       <h3>Its settings</h3>
       <SettingsForm fields={added.settings} values={resolveSettings(added.settings, pluginOptions(stored, "tool", id))} onChange={(f, v) => setPluginOption("tool", id, f, v)} />
     </section>}
+    {added?.service && <ServiceSection id={id} service={added.service} on={enabled} />}
     {id === BROWSER_PLUGIN_ID && <BrowserControl toolOn={enabled} />}
   </div>;
 }

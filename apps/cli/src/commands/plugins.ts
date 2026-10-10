@@ -9,12 +9,15 @@
  *   hive plugins enable <kind:id>  |  disable <kind:id>
  *   hive plugins set <kind:id> <setting> <value>   checked against the setting (a choice, a number…)
  *   hive plugins reset <kind:id> [setting]         back to its default (every setting, without one)
+ *   hive plugins workspaces <tool:id> [folder…] [--none]   the workspaces a tool's service may drive
  */
+import fs from "node:fs";
+import path from "node:path";
 import { defineCommand } from "citty";
 import { findRoot, listInstalledViews, readSettings, updateSettings } from "@hivemind/core";
 import {
   PLUGIN_KINDS, agentSettingFields, isPluginEnabled, isPluginId, parseSettingValue, pluginKey, pluginOptions, resolveSettings,
-  toolSettingFields, withPluginState, type PluginKind, type PluginState, type SettingField,
+  serviceWorkspaces, toolSettingFields, withPluginState, type PluginKind, type PluginState, type SettingField,
 } from "@hivemind/core/plugin-settings";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
 import { listWidgets } from "@hivemind/core/widgets";
@@ -31,6 +34,8 @@ interface Plugin {
   enabledByDefault: boolean;
   fields: SettingField[];
   problem: string | null;
+  /** What its service runs, for a tool plugin that brings one. */
+  service?: string[];
 }
 
 /** Every plugin this machine has: agents, installed views, widgets (built in and added), tools
@@ -47,7 +52,7 @@ async function inventory(): Promise<Plugin[]> {
     ...views.map((v): Plugin => ({ key: pluginKey("view", v.id), kind: "view", id: v.id, name: v.manifest?.name ?? v.id, enabledByDefault: true, fields: v.manifest?.settings ?? [], problem: v.error })),
     ...widgets.map((w): Plugin => ({ key: pluginKey("widget", w.id), kind: "widget", id: w.id, name: w.name, enabledByDefault: true, fields: [], problem: null })),
     ...BUNDLED_TOOL_PLUGINS.map((t): Plugin => ({ key: pluginKey("tool", t.id), kind: "tool", id: t.id, name: t.tools.map((x) => x.label).join(", "), enabledByDefault: !!t.builtin, fields: toolSettingFields(t), problem: null })),
-    ...added.map((t): Plugin => ({ key: pluginKey("tool", t.id), kind: "tool", id: t.id, name: t.name, enabledByDefault: false, fields: [...toolSettingFields(t), ...t.settings], problem: t.problem })),
+    ...added.map((t): Plugin => ({ key: pluginKey("tool", t.id), kind: "tool", id: t.id, name: t.name, enabledByDefault: false, fields: [...toolSettingFields(t), ...t.settings], problem: t.problem, ...(t.service ? { service: t.service.command } : {}) })),
   ];
   return out;
 }
@@ -167,7 +172,37 @@ const resetCmd = defineCommand({
   },
 });
 
+/** A folder as the drive socket compares it: in full, links followed. */
+const realFolder = (f: string): string => {
+  const full = path.resolve(f);
+  try { return fs.realpathSync(full); } catch { return full; }
+};
+
+const workspacesCmd = defineCommand({
+  meta: { name: "workspaces", description: "The workspaces a tool plugin's service may drive: set them, clear them with --none, or show them" },
+  args: {
+    plugin: { type: "positional", required: true, description: "tool:<owner>/<name>" },
+    none: { type: "boolean", description: "it may drive none: it stops" },
+    json: { type: "boolean" },
+  },
+  async run({ args }) {
+    const ctx = { json: !!args.json };
+    try {
+      const p = await find(String(args.plugin));
+      if (!p.service) throw new Error(`${p.key} brings no service`);
+      const folders = (args._ as string[]).slice(1).map(realFolder);
+      if (!folders.length && !args.none) {
+        const workspaces = serviceWorkspaces((await readSettings()).plugins.state, p.id);
+        return ok(ctx, { key: p.key, workspaces }, () => (workspaces.length ? workspaces.join("\n") : `none: ${p.key}'s service waits for one`));
+      }
+      const { state, reloaded } = await change(p, ({ workspaces: _, ...s }) => (folders.length ? { ...s, workspaces: [...new Set(folders)] } : s));
+      const workspaces = state.workspaces ?? [];
+      return ok(ctx, { key: p.key, workspaces, reloaded }, () => `${p.key}'s service drives ${workspaces.length ? workspaces.join(", ") : "nothing"}; ${note(reloaded)}`);
+    } catch (e) { return fail(ctx, e, "workspaces_failed"); }
+  },
+});
+
 export const pluginsCmd = defineCommand({
   meta: { name: "plugins", description: "Agents, views, widgets and tools: on or off, and their settings" },
-  subCommands: { list: listCmd, show: showCmd, enable: switchCmd(true), disable: switchCmd(false), set: setCmd, reset: resetCmd },
+  subCommands: { list: listCmd, show: showCmd, enable: switchCmd(true), disable: switchCmd(false), set: setCmd, reset: resetCmd, workspaces: workspacesCmd },
 });

@@ -146,6 +146,41 @@ what the agent reads, and what it throws is the agent's error. A command takes o
 `args` in the manifest says, in a line, what it holds. It runs only while a tile of the tool is
 open; with two open, the agent names one with `--tile`.
 
+## A service that keeps running
+
+A tool plugin can bring a program the app keeps running while the plugin is on: an orchestrator,
+a dashboard, a watcher. Declare it in `hivemind-tool.json`:
+
+```json
+"service": { "command": ["node", "service.js"], "role": "agents" }
+```
+
+- `command` is a program on PATH, or a file in the plugin's folder written `./bin/serve`, and its
+  arguments. It runs in the plugin's folder.
+- `role` is what it may do in the workspaces it drives, as for a program you let in from
+  Settings → Programs: `view`, `edit`, `terminals` or `agents`. It can never share a workspace or
+  push.
+
+Switched on, it waits until you pick the workspaces it may drive: on its page, or with
+`hive plugins workspaces tool:acme/prs ~/code/api` on a machine where `hive host` runs it. Then
+it is started with its own token, made for this run and taken back when it stops:
+
+| Variable | What it holds |
+|---|---|
+| `HIVE_DRIVE_SOCK` | the drive socket, where it connects |
+| `HIVE_DRIVE_TOKEN` | its token: the first line it sends is `{"hello": {"token": …, "workspace": …}}` |
+| `HIVE_WORKSPACES` | the folders it may drive, separated as in `PATH` |
+
+With one workspace picked, `workspace` can be left out of the hello. `hive ctl` run by the service
+uses its token as it is; with several workspaces, set `HIVE_WORKSPACE` to the one each call is
+for. From the app's environment the service gets `PATH`, `HOME`, the locale and the temp folder,
+and nothing else.
+
+If it exits with an error, it is started again after 1 s, then 2, 4 and so on up to a minute.
+If it exits cleanly, or its grant is taken back in Settings → Programs, it stays stopped. It
+should exit when its stdin closes: that is the app going away, however it went. What it prints
+is on its page, and in `services/<owner>--<name>.log` in the app's data folder.
+
 ## On a board you share
 
 A guest sees a tool's tile if they have the same plugin switched on; otherwise the tile shows what

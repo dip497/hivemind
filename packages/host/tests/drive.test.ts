@@ -117,6 +117,19 @@ test("a program with a grant drives its workspace at its role, and is refused wh
   p.socket.destroy();
 });
 
+test("a grant that reaches one workspace needs it named no more than an agent does; one that reaches several names one", async () => {
+  const one = await connect({ token: grants.create({ name: "one", repos: [repoA], role: "view" }).token });
+  assert.deepEqual((await one.next((m) => "hello" in m)).hello, { api: "0.23", as: { client: "one", role: "view", workspace: repoA } });
+  one.socket.destroy();
+  const both = grants.create({ name: "both", repos: [repoA, repoB], role: "view" }).token;
+  const unnamed = await connect({ token: both });
+  assert.equal(((await unnamed.next((m) => "error" in m)).error as { code: string }).code, "BAD_REQUEST");
+  await within(unnamed.closed, "the unnamed connection closing");
+  const named = await connect({ token: both, workspace: repoB });
+  assert.deepEqual((await named.next((m) => "hello" in m)).hello, { api: "0.23", as: { client: "both", role: "view", workspace: repoB } });
+  named.socket.destroy();
+});
+
 test("a program reaches its workspace's worktrees, wherever git put them, and no folder beside them", async () => {
   const { token } = grants.create({ name: "wt-bot", repos: [repoA], role: "view" });
   const p = await connect({ token, workspace: repoA });
