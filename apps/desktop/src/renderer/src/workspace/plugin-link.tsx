@@ -23,7 +23,7 @@ import { useSettings } from "../settings-store";
 import { AGENT_TILE_KIND } from "../tile-kinds";
 import { canSpawnKind } from "../tiles/api";
 import type { SharePrepared } from "../../../shared/ipc";
-import type { WorkspaceViewProps } from "./workspace-view";
+import { TILE_KEYBOARD, type WorkspaceViewProps } from "./workspace-view";
 import { loadViewLayout, saveViewLayout, type ViewLayoutSpec } from "./view-layout-store";
 import { cssColorToHexString } from "./css-color";
 import { viewLinkServices } from "./view-services";
@@ -146,6 +146,11 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
         if (name === "subscribeTileStatus" || name === "tileStatus") return commandsRef.current[name];
         // Its answer (was the agent found?) is what the link checks, so it cannot wait for the batch.
         if (name === "spawnAgent") return (...args: Parameters<WorkspaceViewProps["commands"]["spawnAgent"]>) => commandsRef.current.spawnAgent(...args);
+        // The view's frame holds the focus after any click in it: the tile it selects gets the keyboard back.
+        if (name === "selectTile") return (id: string | null) => enqueue(() => {
+          commandsRef.current.selectTile(id);
+          if (id) window.dispatchEvent(new CustomEvent(TILE_KEYBOARD, { detail: id }));
+        });
         return (...args: unknown[]) => enqueue(() => (commandsRef.current[name] as (...a: unknown[]) => void)(...args));
       },
     }),

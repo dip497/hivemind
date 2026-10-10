@@ -174,6 +174,9 @@ function changed() { snapshot = [...views.values()]; for (const l of listeners) 
 /** The view we fall back to when the stored/requested one is unknown or crashes. */
 export const FALLBACK_VIEW_ID = "canvas";
 
+/** Window event, detail a tile id: put the keyboard in that tile if it is the selected one. */
+export const TILE_KEYBOARD = "hivemind:tile-keyboard";
+
 export function registerView(plugin: WorkspaceViewPlugin): void {
   views.set(plugin.id, plugin);
   changed();

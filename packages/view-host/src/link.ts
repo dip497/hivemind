@@ -276,7 +276,12 @@ export class CommunityLink {
     for (const u of this.statusUnsubs.values()) u();
     this.statusUnsubs.clear();
     this.stats.statusSubscriptions = 0;
-    if (this.port) { this.port.onmessage = null; this.port.close?.(); this.port = null; }
+    const port = this.port;
+    this.port = null;
+    if (!port) return;
+    if (this.stats.disabled) { port.onmessage = null; port.close?.(); return; }
+    // A layout the view sent before it was let go may still be on its way from its frame: keep it.
+    port.onmessage = (e) => { if ((e.data as { type?: unknown } | null)?.type === "layout") this.handle(e.data); };
   }
 
   private disable(reason: string) {

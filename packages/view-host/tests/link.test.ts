@@ -3,7 +3,7 @@
 // do at all (a remote screen's).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CommunityLink, LIMITS, PROMPT_DECLINES_MAX, SHARE_DECLINES_MAX, type LinkDeps, type LinkServices } from "../src/link.ts";
+import { CommunityLink, LIMITS, PROMPT_DECLINES_MAX, SHARE_DECLINES_MAX, type LinkDeps, type LinkServices, type PortLike } from "../src/link.ts";
 import type { ActivityLevel, ShareOutcome, ViewParticipant, ViewPresence } from "@hivemind/view-sdk/protocol";
 
 /** A link on a host with `tiles` and the frame `f1`. `lacks`: the commands this host leaves out,
@@ -185,6 +185,22 @@ test("layout and framesDrawn and error are forwarded; dispose releases subscript
   assert.equal(h.link.stats.framesDrawn, 7);
   h.link.dispose();
   assert.equal(h.statusCbs.size, 0);
+});
+
+test("a layout the view sent before the host let go of it is kept; nothing else it sent is", async () => {
+  const h = harness();
+  const { port1, port2 } = new MessageChannel();
+  h.link.attach(port1 as unknown as PortLike);
+  port2.postMessage({ type: "ready", v: 1 });
+  await flush();
+  // A view switch lets go of the view in the same moment it says what it keeps.
+  port2.postMessage({ type: "layout", data: { minimized: [] } });
+  port2.postMessage({ type: "command", name: "selectTile", args: ["t1"] });
+  h.link.dispose();
+  await flush();
+  assert.deepEqual(h.events, ["ready", 'layout:{"minimized":[]}']);
+  assert.deepEqual(h.calls, []);
+  port1.close();
 });
 
 // ── protocol 1.3 ────────────────────────────────────────────────────────────

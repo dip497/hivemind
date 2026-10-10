@@ -28,6 +28,7 @@ import { acquireBoot, bootPosition, cancelBoot, isRestored, subscribeBoot } from
 import { isRemote } from "@hivemind/core/remote-uri";
 import { toPtyId } from "@hivemind/workspace-api/tile-id";
 import { webUrlForInternalBrowser } from "./browser-open";
+import { TILE_KEYBOARD } from "./workspace/workspace-view";
 import { useThemeField, useSurfacePolicy, getTheme, effectiveGlass, type ThemeState } from "./theme-store";
 import { terminalThemeFor } from "@hivemind/core/settings-schema";
 import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
@@ -1219,6 +1220,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       window.removeEventListener("hivemind:reset-scale", onReset);
     };
   }, []);
+
+  useEffect(() => {
+    const onKeyboard = (e: Event) => { if ((e as CustomEvent<string>).detail === tileId && selectedRef.current) termRef.current?.focus(); };
+    window.addEventListener(TILE_KEYBOARD, onKeyboard);
+    return () => window.removeEventListener(TILE_KEYBOARD, onKeyboard);
+  }, [tileId]);
 
   return (
     <div className="hm-term-root flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]" data-term-bg={termBg}>

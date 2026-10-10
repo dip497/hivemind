@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: a tab restored from the rail in the Windows view could come back minimized when you switched views at once on a busy machine: the view's last saved layout was dropped as it was let go.
+- Fixed: in the Windows view, clicking the tab already shown left the keyboard in the tab strip; it goes back to the terminal.
 - Fixed: `hive host` read its settings from its own data folder, not the settings.json the app and `hive config` keep, so on a Mac it ignored them; and it read them again only when an agent was added or removed, not when they changed.
 - Added: a tool plugin can bring a service, a program the app keeps running while the plugin is on (`"service": {"command", "role"}` in `hivemind-tool.json`), such as an orchestrator or a dashboard. It drives the workspaces picked for it on the plugin's page through the drive socket, with a token made for each run and taken back when it stops, and none of the app's own. A failing exit starts it again after 1 s, doubling to a minute. Its state and what it prints are on its page. `hive host` runs them too, with the workspaces set by `hive plugins workspaces <tool:id> <folder>…`. `hive ctl` uses `HIVE_DRIVE_TOKEN` when it is set, and a program whose grant reaches one workspace need not name it.
 - Fixed: `agent.list` straight after a change (a rename) could list the agent as it was; what the feed has waiting is worked out before it is read.

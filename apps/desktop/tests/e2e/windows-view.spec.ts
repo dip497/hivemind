@@ -297,6 +297,25 @@ test("a restored tab stays restored when the view switches at once", async () =>
   await expect(tab).toHaveCount(1);
 });
 
+test("clicking the tab already shown puts the keyboard back in its terminal", async () => {
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "windows" } })));
+  await windowsReady();
+  const tab = tabsOf().first();
+  const id = (await tab.getAttribute("data-tile-id"))!;
+  await tab.click();
+  const typingIn = () => page.evaluate((tile) => {
+    const ae = document.activeElement;
+    return !!ae?.classList.contains("xterm-helper-textarea") && !!ae.closest(`[data-community-slot=${JSON.stringify(tile)}]`);
+  }, id);
+  await expect.poll(typingIn).toBe(true);
+  // A click anywhere else in the view takes the focus into its frame.
+  await view().locator(".w-tools").click({ position: { x: 1, y: 1 } });
+  await expect.poll(typingIn).toBe(false);
+  await expect(tab).toHaveAttribute("aria-selected", "true");
+  await tab.click();
+  await expect.poll(typingIn).toBe(true);
+});
+
 test("more tabs than the strip holds: they shrink to a readable name, the active one is in view, and the wheel reaches the rest", async () => {
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
   await page.waitForSelector(".react-flow");
