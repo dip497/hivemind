@@ -649,23 +649,22 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     const onAdopted = () => {
       parked = false;
       reconcileInterest();
-      // No explicit refit: the park freezes the surface at its last slot size,
-      // so adopting into a different-size slot fires the ResizeObserver below
-      // (one fit per tile), and adopting into a same-size slot needs none. A
-      // second fit here doubled the cost of every switch — a WebGL fit is an
-      // atlas rebuild, and ResizeObserver notifications land AFTER rAF in the
-      // same frame, so the two never coalesced.
+      // The park freezes the surface at its last slot size, so adopting into a
+      // different-size slot fires the ResizeObserver below (one fit per tile),
+      // and adopting into a same-size slot needs none, unless it was parked at
+      // another size than it was drawn at: then it fits once shown.
       reconcileWebglSlots();
+      if (pendingFitRef.current) fitWhenShown();
     };
     const onParked = (e: Event) => {
       parked = true;
       reconcileInterest();
       reconcileWebglSlots();
-      // Parked at a size other than the slot we just left (a dock pane hands
-      // the tile back at its arranging view's size): fit NOW, hidden, so the
-      // switch back finds it at size — paid while nothing is painting, not
-      // during the switch back.
-      if ((e as CustomEvent<{ resized?: boolean }>).detail?.resized) scheduleFitRef.current?.();
+      // Parked at a size other than the slot we just left (a slot overlay hands
+      // the tile back at its arranging view's size): fit when it is shown again,
+      // not now. Hidden, a fit would resize the program for a size nobody sees,
+      // and resize it back when it is shown where it was.
+      if ((e as CustomEvent<{ resized?: boolean }>).detail?.resized) pendingFitRef.current = true;
     };
     surfaceEl?.addEventListener(SURFACE_ADOPTED, onAdopted);
     surfaceEl?.addEventListener(SURFACE_PARKED, onParked);
@@ -1048,17 +1047,21 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         },
         hidden: () => {
           pendingFitRef.current = true;
-          // Hidden for a frame only? xyflow mounts a node `visibility:hidden`
-          // until it has measured it, so a freshly (re)mounted canvas node is
-          // hidden exactly when the ResizeObserver fires. Re-check two frames on;
-          // a tab that stays hidden waits for its selection instead.
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            if (pendingFitRef.current && hostShown()) { pendingFitRef.current = false; scheduleFit(); }
-          }));
+          fitWhenShown();
         },
       });
     });
     scheduleFitRef.current = () => { pendingFitRef.current = false; scheduleFit(); };
+    /** A fit put off while hidden: now if it is shown, else two frames on. Hidden for a frame only?
+     *  xyflow mounts a node `visibility:hidden` until it has measured it, so a freshly (re)mounted
+     *  canvas node is hidden exactly when it is laid out. A tab that stays hidden waits for its
+     *  selection instead. */
+    function fitWhenShown(): void {
+      if (!parked && hostShown()) { scheduleFitRef.current?.(); return; }
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (pendingFitRef.current && !parked && hostShown()) scheduleFitRef.current?.();
+      }));
+    }
     ro.observe(host);
 
     return () => {

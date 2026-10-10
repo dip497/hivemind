@@ -70,6 +70,34 @@ test("switching between a pane's tabs resizes neither terminal: the one switched
   for (const i of [0, 1]) { await tabs.nth(i).click(); await page.keyboard.press("Control+C"); }
 });
 
+test("a terminal shown in a tab, then back on the canvas and not selected there, is told its tile's size there again", async () => {
+  const tabs = view().locator('[role="tab"]');
+  const third = (await tabs.nth(2).getAttribute("data-tile-id"))!;
+  const log = path.join(root, "size-third");
+  const size = () => (fs.existsSync(log) ? fs.readFileSync(log, "utf8") : "");
+  // A program in the third terminal writes down the size it is told.
+  await tabs.nth(2).click();
+  await page.locator(`[data-community-slot="${third}"] .xterm-screen`).click();
+  await page.keyboard.type(`node -e 'const w=()=>require("fs").writeFileSync(${JSON.stringify(log)},process.stdout.columns+"x"+process.stdout.rows);w();process.stdout.on("resize",w);setInterval(()=>{},1e6)'\n`);
+  await expect.poll(size).not.toBe("");
+  const inPane = size();
+  // Selected on the canvas, it takes its tile's size there.
+  await toView("canvas");
+  await expect.poll(size).not.toBe(inPane);
+  const onCanvas = size();
+  // Shown in its tab again, then put away for another tab.
+  await toView("windows");
+  await expect.poll(size).toBe(inPane);
+  await tabs.nth(0).click();
+  // Back on the canvas with the first selected, the third is told its tile's size again.
+  await toView("canvas");
+  await expect.poll(size).toBe(onCanvas);
+  await toView("windows");
+  await tabs.nth(2).click();
+  await page.locator(`[data-community-slot="${third}"] .xterm-screen`).click();
+  await page.keyboard.press("Control+C");
+});
+
 test("a tab split right takes a pane of its own: two terminals side by side, each the tab its pane shows", async () => {
   await expect(slots()).toHaveCount(1);
   const moved = await view().locator('[role="tab"][aria-selected="true"]').getAttribute("data-tile-id");
