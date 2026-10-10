@@ -52,7 +52,7 @@ export const runCmd = defineCommand({
       const c = await connect(sock);
       const cols = process.stdout.columns || 120;
       const rows = process.stdout.rows || 40;
-      c.send({ t: "attach", reqId: "run", id, spec: { cwd: String(args.cwd || process.cwd()), cmd: cmd[0]!, args: cmd.slice(1), cols, rows } });
+      c.send({ t: "attach", reqId: "run", id, spec: { cwd: String(args.cwd || process.cwd()), cmd: cmd[0]!, args: cmd.slice(1), cols, rows }, base: process.env as Record<string, string> });
       const r = await c.next((m): m is Extract<ServerMsg, { t: "attached" }> => m.t === "attached", 15_000);
       // Detach, not kill: it keeps running for whoever attaches next.
       c.send({ t: "detach", id });

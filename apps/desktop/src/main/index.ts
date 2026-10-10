@@ -1234,9 +1234,9 @@ async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ p
     const st = await fsp.stat(opts.cwd).catch(() => null);
     if (!st?.isDirectory()) throw new Error(`pty cwd is not a directory: ${opts.cwd}`);
   }
-  // Ensure the user's PATH/tokens are patched into process.env BEFORE the PTY
-  // (or, in daemon mode, the daemon process that inherits this env) spawns —
-  // otherwise `claude`/`gh`/nvm-node may not resolve. Idempotent + cached.
+  // Ensure the user's PATH/tokens are patched into process.env BEFORE the session starts: it
+  // starts from this env (`attach.base`) — otherwise `claude`/`gh`/nvm-node may not resolve.
+  // Idempotent + cached.
   await applyShellEnvToProcess();
   // A PTY can outlive its windows and emit data/exit after they are gone: the relay skips a
   // viewer whose window is destroyed.

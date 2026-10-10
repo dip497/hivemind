@@ -274,10 +274,14 @@ function registerSnapshots(): SnapshotEntry[] {
 // TERM_PROGRAM). UUID injection happens
 // in transformSpecOnSpawn (so the snapshot persists it) — by the time spec
 // reaches here, the args already carry the session an agent is bound to.
+// The environment sessions start from: the latest a starter sent (`attach.base`), else this
+// process's. A daemon outlives the app that started it; what the person installed or changed in
+// their shell since reaches new sessions through it.
+let base: Record<string, string> | undefined;
 const factory = (spec: SpawnSpec): ManagedPty => {
-  // What this process inherited is cleaned; what the tile asked for is its own.
+  // The base is cleaned; what the tile asked for is its own.
   const env: Record<string, string> = {
-    ...sanitizeShellEnv({ ...(process.env as Record<string, string>) }, envToUnset()),
+    ...sanitizeShellEnv({ ...(base ?? (process.env as Record<string, string>)) }, envToUnset()),
     ...(spec.env ?? {}),
   };
   if (!env.COLORTERM) env.COLORTERM = "truecolor";
@@ -523,6 +527,7 @@ const server = net.createServer((sock) => {
     }
     switch (msg.t) {
       case "attach": {
+        if (msg.base && typeof msg.base === "object") base = msg.base;
         if (msg.noSpawn && !(msg.liveOnly ? manager.hasLive(msg.id) : manager.has(msg.id))) {
           send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: -1, isNew: false, replay: "", error: `no session '${msg.id}'` });
           break;

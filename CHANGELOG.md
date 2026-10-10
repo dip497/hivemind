@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: new terminals started with the environment the background daemon had when it first started, so a tool installed or a PATH changed since (and found by the agent check's Check again) was missing in them until the daemon restarted. Each new terminal now starts from the app's environment as it is now (and `hive run`'s from its shell's).
 - Changed: every terminal runs in the background daemon, the dev bridge's too. `HIVEMIND_PTY_DAEMON=0`, which ran terminals inside the app with none of the agents' hooks, is gone, and the app and `hive daemon` start the daemon one way.
 - Changed: no second Settings button in the window's corner where the Layers panel already has one (the Windows view, the canvas with its toolbar off). Views without Layers and without a toolbar keep it there.
 - Fixed: the terminal daemon kept the app's own pipes and sockets open for as long as it ran, after the app had quit. It now lets go of them as it starts, whether the app or `hive daemon` started it (Linux).

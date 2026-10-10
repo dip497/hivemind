@@ -30,6 +30,8 @@ export const REATTACH_RESET = "\x1bc";
 export interface EndpointOptions {
   /** Open a fresh transport to the daemon; reject when it is unreachable. */
   connect: () => Promise<Duplex>;
+  /** The environment sessions this endpoint starts begin from, as it is now. */
+  env?: () => Record<string, string>;
   retryInitialMs?: number;
   retryMaxMs?: number;
   attachTimeoutMs?: number;
@@ -181,6 +183,11 @@ export class DaemonEndpoint {
     return this.connecting;
   }
 
+  /** What an attach that may start a session carries: the environment it starts from. */
+  private base(): { base?: Record<string, string> } {
+    return this.o.env ? { base: this.o.env() } : {};
+  }
+
   private async send(msg: ClientMsg): Promise<void> {
     (await this.ensure()).write(frame(msg));
   }
@@ -206,7 +213,7 @@ export class DaemonEndpoint {
       for (const [id, spec] of this.specs) {
         if (!this.cbs.has(id)) continue;
         const since = this.pos.get(id);
-        c.write(frame({ t: "attach", reqId: `re${++this.seq}`, id, spec, ...(since ? { since } : {}), ...(this.live.has(id) ? { noSpawn: true } : {}) }));
+        c.write(frame({ t: "attach", reqId: `re${++this.seq}`, id, spec, ...(since ? { since } : {}), ...(this.live.has(id) ? { noSpawn: true } : this.base()) }));
       }
     } catch (e) {
       this.attempts++;
@@ -277,7 +284,7 @@ export class DaemonEndpoint {
       t.unref?.();
     });
     try {
-      await this.send({ t: "attach", reqId, id: opts.tileId, spec, ...(opts.noSpawn ? { noSpawn: true } : {}), ...(opts.liveOnly ? { liveOnly: true } : {}) });
+      await this.send({ t: "attach", reqId, id: opts.tileId, spec, ...(opts.noSpawn ? { noSpawn: true } : this.base()), ...(opts.liveOnly ? { liveOnly: true } : {}) });
     } catch (e) {
       // Unreachable now (e.g. offline): keep retrying so the tile attaches once it is back.
       const msg = e instanceof Error ? e.message : String(e);

@@ -94,6 +94,7 @@ const DAEMON_SRC = path.resolve(__dirname, "../../../../packages/agent-host/src/
 const endpoint = new DaemonEndpoint({
   connect: () => reachDaemon(DAEMON_SOCK, [process.execPath, "--import", "tsx", DAEMON_SRC, DAEMON_SOCK]),
   onEvent: () => {},
+  env: () => process.env as Record<string, string>,
 });
 const terminals = new Terminals({
   intents,

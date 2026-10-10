@@ -342,3 +342,22 @@ test("a daemon that serves no control-plane socket refuses the claim, which is n
     await d.close();
   }
 });
+
+test("an attach that may start a session carries the environment as it is now, and one that only shows a session carries none", async () => {
+  const sock = path.join(dir, "env.sock");
+  const d = fakeDaemon(sock);
+  await d.listen();
+  let probe = "first";
+  const ep = new DaemonEndpoint({ connect: () => new Promise((res, rej) => { const s = net.connect(sock); s.once("connect", () => res(s)); s.once("error", rej); }), env: () => ({ HM_PROBE: probe }) });
+  try {
+    await ep.spawn({ tileId: "t1", cwd: "/", cmd: "sh", cols: 80, rows: 24 }, { onData: () => {}, onExit: () => {} });
+    probe = "later";
+    await ep.spawn({ tileId: "t2", cwd: "/", cmd: "sh", cols: 80, rows: 24 }, { onData: () => {}, onExit: () => {} });
+    await ep.spawn({ tileId: "t3", cwd: "/", cmd: "sh", cols: 80, rows: 24, noSpawn: true }, { onData: () => {}, onExit: () => {} });
+    const attaches = d.got.filter((m): m is Extract<ClientMsg, { t: "attach" }> => m.t === "attach");
+    assert.deepEqual(attaches.map((m) => [m.id, m.base?.HM_PROBE]), [["t1", "first"], ["t2", "later"], ["t3", undefined]]);
+  } finally {
+    ep.close();
+    await d.close();
+  }
+});

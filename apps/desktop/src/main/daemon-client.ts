@@ -101,7 +101,8 @@ export function connectDaemon(): Promise<net.Socket> {
 let eventSink: ((topic: string, data: unknown) => void) | null = null;
 /** Where this computer's daemon's events go: its sessions' screen readings. */
 export function setDaemonEventSink(fn: (topic: string, data: unknown) => void): void { eventSink = fn; }
-const local = new DaemonEndpoint({ connect: doConnect, onEvent: (topic, data) => eventSink?.(topic, data) });
+// New sessions start from this app's environment, the person's shell's as last read.
+const local = new DaemonEndpoint({ connect: doConnect, onEvent: (topic, data) => eventSink?.(topic, data), env: () => process.env as Record<string, string> });
 
 export async function spawnPty(opts: SpawnOpts & { attachOnly?: boolean; liveOnly?: boolean }, cb: Callbacks): Promise<{ pid: number }> {
   const r = await local.spawn({ ...opts, noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly }, cb);

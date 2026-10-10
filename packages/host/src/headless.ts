@@ -184,7 +184,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
 
   // What the daemon tells of its sessions: each one's status as it keeps it (R6), what their hooks
   // reported while no control plane held its socket, what it reads of their screens.
-  const endpoint = new DaemonEndpoint({ connect: o.daemon, onEvent: (topic, data) => control.fromMachine(topic, data) });
+  const endpoint = new DaemonEndpoint({ connect: o.daemon, onEvent: (topic, data) => control.fromMachine(topic, data), env: () => process.env as Record<string, string> });
 
   const nameOf = (person: string): string => {
     for (const ws of lists.workspaces()) {

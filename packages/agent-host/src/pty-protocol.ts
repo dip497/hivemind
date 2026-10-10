@@ -35,8 +35,10 @@ export type ClientMsg =
    *  liveOnly: with noSpawn, a running session only; a frozen one is not restored.
    *  since: resume from this output position (same epoch) instead of a full replay.
    *  view: a viewer that only watches (a workspace's host, shown a session on someone else's
-   *  machine, M4): the session keeps its size and its other viewers' pauses. */
-  | { t: "attach"; reqId: string; id: string; spec: SpawnSpecWire; noSpawn?: boolean; liveOnly?: boolean; since?: { seq: number; epoch: string }; view?: boolean }
+   *  machine, M4): the session keeps its size and its other viewers' pauses.
+   *  base: the environment of whoever starts sessions, as it is now (the app's, after it read the
+   *  person's shell): what a session starts from, under its own `spec.env`. Never saved. */
+  | { t: "attach"; reqId: string; id: string; spec: SpawnSpecWire; noSpawn?: boolean; liveOnly?: boolean; since?: { seq: number; epoch: string }; view?: boolean; base?: Record<string, string> }
   /** Capabilities of this client; "resync" = may be sent a fresh screen instead of every byte when behind. */
   | { t: "hello"; caps: string[] }
   | { t: "write"; id: string; data: string; /** A message pasted into the TUI, not keystrokes (see paste.ts). */ paste?: boolean }
