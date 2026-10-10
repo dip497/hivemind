@@ -256,7 +256,8 @@ describe.skipIf(!built)("hive host", () => {
   });
 
   test("runs terminals for the person's devices in frames on its folders: a shell a laptop starts there runs here, on after the laptop goes; a device not paired cannot", async () => {
-    const own = { ...env, HIVEMIND_APP_DATA: path.join(dir, "data3"), HIVEMIND_PTY_SOCK: path.join(dir, "d3.sock") };
+    // Started from inside an agent's tile: the shells it runs are not that tile.
+    const own = { ...env, HIVEMIND_APP_DATA: path.join(dir, "data3"), HIVEMIND_PTY_SOCK: path.join(dir, "d3.sock"), HCP_TOKEN: "outer", HIVE_HCP_SOCK: "/outer/hcp.sock", HIVEMIND_TILE: "hm:outer" };
     runHost(own);
     await until(() => status(own)?.running || null, "the host to answer");
     const builds = path.join(dir, "builds");
@@ -286,14 +287,14 @@ describe.skipIf(!built)("hive host", () => {
       const sessions = deviceSessions({ dial: (device) => laptop.dial(device, where), mine: () => true });
       // What it is given to run with goes along, but never this machine's control-plane credentials.
       const shell = {
-        tileId: "hm:t-build", cwd: frame, cmd: "sh", args: ["-c", 'pwd > ran.txt; echo "$HCP_TOKEN|$HIVE_HCP_SOCK|$BUILD" > env.txt; sleep 2; echo finished > after.txt; sleep 30'], cols: 80, rows: 24,
+        tileId: "hm:t-build", cwd: frame, cmd: "sh", args: ["-c", 'pwd > ran.txt; echo "$HCP_TOKEN|$HIVE_HCP_SOCK|$HIVEMIND_TILE|$BUILD" > env.txt; sleep 2; echo finished > after.txt; sleep 30'], cols: 80, rows: 24,
         env: { HCP_TOKEN: "secret", HIVE_HCP_SOCK: "/laptop/hcp.sock", BUILD: "release" },
       };
       const started = await sessions.start(shell, { data: () => {}, exit: () => {} });
       expect(started.pid).toBeGreaterThan(0);
       expect(sessions.holds("hm:t-build")).toBe(true);
       expect(await until(() => read(path.join(builds, "ran.txt")), "the shell to run on the host")).toBe(builds);
-      expect(await until(() => read(path.join(builds, "env.txt")), "the shell's environment")).toBe("||release");
+      expect(await until(() => read(path.join(builds, "env.txt")), "the shell's environment")).toBe("|||release");
       // The laptop goes; the shell does not.
       sessions.close();
       laptop.stop();

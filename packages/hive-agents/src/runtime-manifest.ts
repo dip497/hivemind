@@ -76,6 +76,10 @@ const perTileName = (name: string, tileId: string): string => {
   return `${stem}-${tileId.replace(/[^A-Za-z0-9._-]/g, "-")}${ext}`;
 };
 
+/** What says which tile a process is and how it reaches the control plane: each tile's own, given
+ *  at its launch, so never taken from the environment its sessions start from. */
+export const TILE_ENV = ["HIVE_HCP_SOCK", "HCP_TOKEN", "HIVEMIND_TILE", "HIVE_AGENT_ID", "HIVE_AGENT_DEPTH", SDK_ENV.sdk, SDK_ENV.sock, SDK_ENV.planSock] as const;
+
 /** Every agent that reports through the control plane needs the same variables; the SDK's
  *  are there for a plugin that runs inside the agent rather than as a hook command. */
 function hcpEnv(def: AgentProviderDef, req: LaunchRequest): Record<string, string> {

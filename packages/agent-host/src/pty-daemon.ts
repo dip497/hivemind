@@ -28,7 +28,7 @@ import {
 import { applyInitialPrompt, stripInitialPrompt } from "./initial-prompt.js";
 import { sanitizeShellEnv } from "./shell-env.js";
 import { titleBook } from "./title-book.js";
-import { AGENT_EVENT_METHOD, agentForCmd, composeResume, envToUnset, evictTrackedSession, parseAgentEvent, prepareProviders, TILE_SESSIONS_DIR, trackerSource, writeTrackedSession, setCatalog, type AgentEvent } from "@hivemind/agents/node";
+import { AGENT_EVENT_METHOD, agentForCmd, composeResume, envToUnset, evictTrackedSession, parseAgentEvent, prepareProviders, TILE_SESSIONS_DIR, trackerSource, writeTrackedSession, setCatalog, TILE_ENV, type AgentEvent } from "@hivemind/agents/node";
 import { resolveWindowsSpawn } from "@hivemind/agents/discover";
 import { agentEventHookSource } from "./hooks/agent-event-hook-source.js";
 import { SDK_FILE, sdkSource } from "@hivemind/agent-sdk";
@@ -279,9 +279,9 @@ function registerSnapshots(): SnapshotEntry[] {
 // their shell since reaches new sessions through it.
 let base: Record<string, string> | undefined;
 const factory = (spec: SpawnSpec): ManagedPty => {
-  // The base is cleaned; what the tile asked for is its own.
+  // The base is cleaned, the tile it was started from too; what the tile asked for is its own.
   const env: Record<string, string> = {
-    ...sanitizeShellEnv({ ...(base ?? (process.env as Record<string, string>)) }, envToUnset()),
+    ...sanitizeShellEnv({ ...(base ?? (process.env as Record<string, string>)) }, [...envToUnset(), ...TILE_ENV]),
     ...(spec.env ?? {}),
   };
   if (!env.COLORTERM) env.COLORTERM = "truecolor";
