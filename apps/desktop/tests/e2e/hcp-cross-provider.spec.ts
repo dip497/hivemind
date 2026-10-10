@@ -265,7 +265,9 @@ test("an agent's past sessions are listed for its folder, and one can be continu
   fs.writeFileSync(path.join(proj, `${id}.jsonl`), JSON.stringify({ type: "user", cwd: repo, message: { content: "earlier work" } }) + "\n");
   const list = hive(["ctl", "sessions", "claude", "--cwd", repo, "--json"]);
   expect(list.code, list.stderr).toBe(0);
-  expect(list.json).toMatchObject({ agent: "claude", resumable: true, sessions: [{ id, cwd: repo, title: "earlier work" }] });
+  // Beside the sessions the earlier tests' agents left in this folder.
+  expect(list.json).toMatchObject({ agent: "claude", resumable: true });
+  expect(list.json.sessions).toContainEqual(expect.objectContaining({ id, cwd: repo, title: "earlier work" }));
   expect(hive(["ctl", "sessions", "claude", "--cwd", "/nowhere", "--json"]).json.sessions).toEqual([]);
 
   const r = hive(["ctl", "spawn", "--agent", "claude", "--resume", id, "--prompt", "echo resumed=$FAKE_RESUMED", "--json"]);

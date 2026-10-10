@@ -31,7 +31,9 @@ const readline = require("node:readline");
 
 const [, , provider, ...args] = process.argv;
 const tile = process.env.HIVEMIND_TILE || "no-tile";
-const sessionId = `fake-${provider}-${process.pid}`;
+// The session hivemind binds (`--session-id`), as claude takes it; else one of its own.
+const bound = args.includes("--session-id") ? args[args.indexOf("--session-id") + 1] : "";
+const sessionId = bound || `fake-${provider}-${process.pid}`;
 // The session a restore or a `--resume` asked for, for a turn to echo back.
 process.env.FAKE_RESUMED = args.includes("--resume") ? args[args.indexOf("--resume") + 1] || "" : "";
 
@@ -76,12 +78,20 @@ function ask(event, name, payload) {
   return (r.stdout || "").trim() || "(nothing)";
 }
 
-// ── transcript (inside the isolated test profile, derived from the socket path
-// hivemind injects: <userData>/hcp.sock) — droid's plugin reads its reply from here.
+// ── transcript: claude's where claude keeps it, under $HOME/.claude/projects/<its folder>; any
+// other's inside the isolated test profile, derived from the socket path hivemind injects
+// (<userData>/hcp.sock), where droid's plugin reads its reply.
 const userData = path.dirname(process.env.HIVE_HCP_SOCK || path.join(require("node:os").tmpdir(), "x"));
-const transcriptDir = path.join(userData, "droid-home", "fake-transcripts");
+const transcriptDir = provider === "claude"
+  ? path.join(require("node:os").homedir(), ".claude", "projects", process.cwd().replace(/[^A-Za-z0-9]/g, "-"))
+  : path.join(userData, "droid-home", "fake-transcripts");
 fs.mkdirSync(transcriptDir, { recursive: true });
 const transcriptPath = path.join(transcriptDir, `${sessionId}.jsonl`);
+let said = 0;
+/** One record of the transcript, in claude's shape. */
+const record = (type, content) => fs.appendFileSync(transcriptPath, JSON.stringify({
+  type, uuid: `${sessionId}-${++said}`, timestamp: new Date().toISOString(), cwd: process.cwd(), message: { role: type, content },
+}) + "\n");
 
 // ── the initial prompt ────────────────────────────────────────────────────────
 const VALUE_FLAGS = new Set(["--settings", "--session-id", "--permission-mode", "--model", "--resume", "-r", "--auto"]);
@@ -115,10 +125,8 @@ function turn(prompt) {
   fire("UserPromptSubmit", { session_id: sessionId, prompt });
   const r = spawnSync("bash", ["-c", prompt], { encoding: "utf8", env: process.env, timeout: 60_000 });
   const reply = ((r.stdout || "") + (r.status ? `\n[exit ${r.status}] ${r.stderr || ""}` : "")).trim() || "(no output)";
-  fs.appendFileSync(
-    transcriptPath,
-    JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: reply }] } }) + "\n",
-  );
+  record("user", prompt);
+  record("assistant", [{ type: "text", text: reply }]);
   process.stdout.write(`${reply}\n`);
   fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false, last_assistant_message: reply });
   process.stdout.write(`${provider}> `);
