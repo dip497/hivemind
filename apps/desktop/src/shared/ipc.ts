@@ -47,7 +47,7 @@ export interface SharedStatus {
 import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 export type { NotificationSettings };
 export type { AgentChange, AgentEvent, AgentItem } from "@hivemind/workspace-api/agents";
-import type { AgentChange, AgentEvent, AgentItem } from "@hivemind/workspace-api/agents";
+import type { AgentChange, AgentEvent, AgentItem, PipeChange, SpawnChange, StatusChange, TileOpened } from "@hivemind/workspace-api/agents";
 
 export type { WidgetOption, WidgetPackage } from "@hivemind/core/widget-format";
 import type { WidgetPackage } from "@hivemind/core/widget-format";
@@ -760,3 +760,58 @@ export interface AppErrorEvent {
   /** Which subsystem surfaced it — shown as muted context (e.g. "pty-daemon"). */
   source: string;
 }
+
+/** `window.hive`: the IPC surface, and what only a window has. */
+export type HiveApi = HiveIpc & {
+  /** Host OS, exposed synchronously so the first canvas can pick a shell. */
+  platform: NodeJS.Platform;
+  /** Main asks the renderer to run a control-plane canvas verb (HCP). */
+  onHcpCommand: (cb: (cmd: HcpCommand) => void) => () => void;
+  /** An agent pipe was created/removed → draw/erase the data-flow edge. */
+  onHcpPipe: (cb: (e: PipeChange) => void) => () => void;
+  /** An agent spawned another → draw/erase the dashed parentage wire. */
+  onHcpSpawn: (cb: (e: SpawnChange) => void) => () => void;
+  /** The control plane is opening a tile: its prompt, and whether to bring it forward. */
+  onHcpSpawned: (cb: (e: TileOpened) => void) => () => void;
+  /** An agent session's status changed (the host's status store). */
+  onHcpStatus: (cb: (e: StatusChange) => void) => () => void;
+  /** Every agent session's status now — what a (re)loaded window starts from. */
+  hcpStatusAll: () => Promise<Array<{ tileId: string; status: StatusChange["status"] }>>;
+  /** The agent pipes and spawn wires there are now — what a (re)loaded window starts from. */
+  hcpLinks: () => Promise<{ pipes: Array<{ src: string; dst: string }>; spawns: Array<{ parent: string; child: string }> }>;
+  /** A background subsystem hit a non-fatal error → surface as a toast. */
+  onAppError: (cb: (e: AppErrorEvent) => void) => () => void;
+  onPtyData: (tileId: string, cb: (data: string) => void) => () => void;
+  onPtyExit: (
+    tileId: string,
+    cb: (info: { code: number; signal?: number }) => void
+  ) => () => void;
+  onFsChanged: (
+    repoPath: string,
+    cb: (info: { paths: string[] }) => void
+  ) => () => void;
+  /** Path passed on the CLI (`hivemind .` / `hivemind /repo`), or null. */
+  getLaunchTarget: () => Promise<string | null>;
+  /** Another window, on the workspace this one shows. */
+  newWindow: () => Promise<void>;
+  /** A second `hivemind <path>` invocation asks the running window to switch. */
+  onOpenProject: (cb: (path: string) => void) => () => void;
+  onMenuToggleLayers?: (cb: () => void) => () => void;
+  /** Ctrl/Cmd+Shift+F → toggle the selected terminal's fit-to-screen overlay. */
+  onMenuFitOverlay?: (cb: () => void) => () => void;
+  /** Ctrl/Cmd+Shift+0 → reset the selected terminal's scale to the screen best. */
+  onMenuResetScale?: (cb: () => void) => () => void;
+  /** Ctrl/Cmd+. → focus the selected tile (plain `.` is eaten by xterm). */
+  onMenuFocusTile?: (cb: () => void) => () => void;
+  onMenuShortcut?: (cb: (action: string) => void) => () => void;
+  /** Resolve a picked File's absolute path (persistent video wallpaper). */
+  getPathForFile?: (file: File) => string;
+  /** Copy a picked media file into the sandboxed wallpaper dir → its hm-media:// URL. */
+  importWallpaper?: (srcPath: string) => Promise<string | null>;
+  /** Pick a custom media file for a canvas layer (background/overlay) → copied
+   *  into userData/media and served via the sandboxed hivemedia:// protocol. */
+  pickMedia?: (slot: string) => Promise<{ url: string; kind: "video" | "image"; name: string } | null>;
+  /** A BrowserTile guest requested a popup/new window (target=_blank,
+   *  window.open) — the owning tile opens it as a new tab. */
+  onBrowserPopup: (cb: (p: { fromId: number; url: string }) => void) => () => void;
+};

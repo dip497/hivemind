@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Internal: the app's window and the dev bridge's browser page get `window.hive`'s workspace calls from one module, and its type is declared once. The bridge's hand-kept copy had drifted (no presence, widgets, agents or views) and its catch-all answered `null` where a list was due, which crashed the canvas on load; a call it does not answer now fails instead.
 - Fixed: a program on the drive socket that started an agent just after the app opened a folder was refused with "no workspace is open" until the window had laid the folder out. A workspace the app holds is open from the start.
 - Fixed: new terminals started with the environment the background daemon had when it first started, so a tool installed or a PATH changed since (and found by the agent check's Check again) was missing in them until the daemon restarted. Each new terminal now starts from the app's environment as it is now (and `hive run`'s from its shell's).
 - Changed: every terminal runs in the background daemon, the dev bridge's too. `HIVEMIND_PTY_DAEMON=0`, which ran terminals inside the app with none of the agents' hooks, is gone, and the app and `hive daemon` start the daemon one way.

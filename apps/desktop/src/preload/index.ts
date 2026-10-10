@@ -1,9 +1,9 @@
 /// <reference lib="dom" />
 import { contextBridge, ipcRenderer, webUtils } from "electron";
-import type { HiveIpc, HcpCommand, HcpPipeEvent, HcpSpawnEvent, HcpSpawnedEvent, HcpStatusEvent, AppErrorEvent } from "../shared/ipc.js";
+import type { HiveApi, HcpCommand, AppErrorEvent } from "../shared/ipc.js";
+import { hiveOverWorkspace } from "../shared/hive-over-workspace.js";
 import { WorkspaceClient } from "@hivemind/workspace-api/client";
 import type { Answer, EventMessage } from "@hivemind/workspace-api/protocol";
-import type { Role } from "@hivemind/workspace-host/access";
 
 /** The workspace API (R8): this window's connection to main, which answers its calls on one
  *  channel, takes its notices on another, and sends it events on a third. */
@@ -13,107 +13,20 @@ const workspace = new WorkspaceClient({
   events: (listener) => { ipcRenderer.on("workspace:event", (_e, message: EventMessage) => listener(message)); },
 });
 
-/** Listeners for an event that names what it is about first (a terminal, a repo), by that name:
- *  one listener on the client for each, however many tiles listen. */
-function byKey<E extends "terminal.data" | "terminal.exit" | "file.changed">(event: E) {
-  type Rest = E extends "terminal.data" ? string : E extends "terminal.exit" ? { code: number; signal?: number } : { paths: string[] };
-  const listeners = new Map<string, Set<(value: Rest) => void>>();
-  workspace.on(event, ((key: string, value: Rest) => {
-    for (const cb of listeners.get(key) ?? []) cb(value);
-  }) as never);
-  return {
-    on: (key: string, cb: (value: Rest) => void): (() => void) => {
-      let set = listeners.get(key);
-      if (!set) listeners.set(key, (set = new Set()));
-      set.add(cb);
-      return () => {
-        set!.delete(cb);
-        if (set!.size === 0 && listeners.get(key) === set) listeners.delete(key);
-      };
-    },
-  };
-}
-const terminalData = byKey("terminal.data");
-const terminalExit = byKey("terminal.exit");
-const fileChanged = byKey("file.changed");
 
-const api: HiveIpc & {
-  /** The host OS, so the renderer can pick a default shell without an IPC
-   *  round-trip (it needs this while building the very first canvas). */
-  platform: NodeJS.Platform;
-  /** Resolve a picked File's real filesystem path (for the persistent video wallpaper). */
-  getPathForFile: (file: File) => string;
-  /** Copy a picked media file into the sandboxed wallpaper dir → its hm-media:// URL. */
-  importWallpaper: (srcPath: string) => Promise<string | null>;
-  /** Pick a custom media file for a canvas layer → copied into userData/media,
-   *  served via the sandboxed hivemedia:// protocol. Null if the user cancels. */
-  pickMedia: (slot: string) => Promise<{ url: string; kind: "video" | "image"; name: string } | null>;
-  onPtyData: (tileId: string, cb: (data: string) => void) => () => void;
-  onPtyExit: (
-    tileId: string,
-    cb: (info: { code: number; signal?: number }) => void
-  ) => () => void;
-  onFsChanged: (
-    repoPath: string,
-    cb: (info: { paths: string[] }) => void
-  ) => () => void;
-  onMenuToggleLayers: (cb: () => void) => () => void;
-  onMenuFitOverlay: (cb: () => void) => () => void;
-  onMenuResetScale: (cb: () => void) => () => void;
-  onMenuFocusTile: (cb: () => void) => () => void;
-  onMenuShortcut: (cb: (action: string) => void) => () => void;
-  getLaunchTarget: () => Promise<string | null>;
-  /** Another window, on the workspace this one shows. */
-  newWindow: () => Promise<void>;
-  onOpenProject: (cb: (path: string) => void) => () => void;
-  onBrowserPopup: (cb: (p: { fromId: number; url: string }) => void) => () => void;
-  onHcpCommand: (cb: (cmd: HcpCommand) => void) => () => void;
-  onHcpPipe: (cb: (e: HcpPipeEvent) => void) => () => void;
-  onHcpSpawn: (cb: (e: HcpSpawnEvent) => void) => () => void;
-  onHcpSpawned: (cb: (e: HcpSpawnedEvent) => void) => () => void;
-  onHcpStatus: (cb: (e: HcpStatusEvent) => void) => () => void;
-  hcpStatusAll: () => Promise<Array<{ tileId: string; status: HcpStatusEvent["status"] }>>;
-  hcpLinks: () => Promise<{ pipes: Array<{ src: string; dst: string }>; spawns: Array<{ parent: string; child: string }> }>;
-  onAppError: (cb: (e: AppErrorEvent) => void) => () => void;
-} = {
+const api: HiveApi = {
+  ...hiveOverWorkspace(workspace),
   resolveProject: (rootHint) => ipcRenderer.invoke("resolveProject", rootHint),
   pickProjectFolder: () => ipcRenderer.invoke("pickProjectFolder"),
   initWorkspace: (dir, prefix) => ipcRenderer.invoke("initWorkspace", dir, prefix),
   installAgentic: (dir) => ipcRenderer.invoke("installAgentic", dir),
-  listIssues: (root) => workspace.call("issue.list", root),
-  readIssue: (root, id) => workspace.call("issue.read", root, id),
-  updateIssueState: (root, id, state, note) => workspace.call("issue.setState", root, id, state, note),
-  createIssue: (root, opts) => workspace.call("issue.create", root, opts),
-  updateIssue: (root, id, patch) => workspace.call("issue.update", root, id, patch),
-  commentOnIssue: (root, id, message) => workspace.call("issue.comment", root, id, message),
-  deleteIssue: (root, id) => workspace.call("issue.delete", root, id),
 
   listWorkspaces: () => ipcRenderer.invoke("listWorkspaces"),
   workspaceSummaries: () => ipcRenderer.invoke("workspaceSummaries"),
   resolveIssueRoot: (id) => ipcRenderer.invoke("resolveIssueRoot", id),
-  moveIssue: (root, id, destPrefix, mode) => workspace.call("issue.move", root, id, destPrefix, mode),
-  linkIssue: (root, id, otherId, type) => workspace.call("issue.link", root, id, otherId, type),
-  unlinkIssue: (root, id, otherId) => workspace.call("issue.unlink", root, id, otherId),
 
-  reviewList: (repo) => workspace.call("review.list", repo),
-  reviewSave: (repo, comments) => workspace.call("review.save", repo, comments),
 
-  gitStatus: (repo) => workspace.call("git.status", repo),
-  gitListFiles: (repo) => workspace.call("git.listFiles", repo),
-  gitListBranches: (repo) => workspace.call("git.listBranches", repo),
-  gitDiff: (repo, scope, file) => workspace.call("git.diff", repo, scope, file),
-  gitFileContents: (repo, file, rev) => workspace.call("git.fileContents", repo, file, rev),
-  gitStage: (repo, files) => workspace.call("git.stage", repo, files),
-  gitUnstage: (repo, files) => workspace.call("git.unstage", repo, files),
-  gitDiscard: (repo, files) => workspace.call("git.discard", repo, files),
-  gitCommit: (repo, message, allowEmpty) => workspace.call("git.commit", repo, message, allowEmpty),
-  gitPush: (repo, setUpstream) => workspace.call("git.push", repo, setUpstream),
-  gitPull: (repo) => workspace.call("git.pull", repo),
-  gitConflictedFile: (repo, file) => workspace.call("git.conflictedFile", repo, file),
-  gitWriteResolved: (repo, file, contents) => workspace.call("git.writeResolved", repo, file, contents),
 
-  fileRead: (repo, file) => workspace.call("file.read", repo, file),
-  fileWrite: (repo, file, contents) => workspace.call("file.write", repo, file, contents),
   openPathInApp: (cwd, target) => ipcRenderer.invoke("openPathInApp", cwd, target),
 
   diagLog: (line) => ipcRenderer.invoke("diagLog", line),
@@ -134,8 +47,6 @@ const api: HiveIpc & {
   viewHistory: (layoutKey, day) => ipcRenderer.invoke("viewLedger:history", layoutKey, day),
   viewSessions: (agent, cwd) => ipcRenderer.invoke("view:sessions", agent, cwd),
   viewPrompt: (tileId, text) => ipcRenderer.invoke("view:prompt", tileId, text),
-  ptyActivityWatch: (tiles) => workspace.notice("terminal.watchActivity", tiles),
-  onPtyActivity: (cb) => workspace.on("terminal.activity", cb),
   presenceNow: () => ipcRenderer.invoke("presence:now"),
   onPresence: (cb) => {
     const listener = (_e: unknown, p: Parameters<typeof cb>[0]) => cb(p);
@@ -151,25 +62,7 @@ const api: HiveIpc & {
   machineReconnect: (hostId) => ipcRenderer.invoke("machines:reconnect", hostId),
   sshListDir: (uri, dir) => ipcRenderer.invoke("sshListDir", uri, dir),
 
-  worktreeList: (repo) => workspace.call("worktree.list", repo),
-  worktreeCreate: (repo, opts) => workspace.call("worktree.create", repo, opts),
-  worktreeRemove: (repo, worktree, force) => workspace.call("worktree.remove", repo, worktree, force),
-  worktreePrune: (repo) => workspace.call("worktree.prune", repo),
 
-  ptySpawn: (opts) => workspace.call("terminal.open", opts),
-  ptyWrite: (tile, data, paste) => workspace.notice("terminal.write", tile, data, paste),
-  ptyInterest: (tile, shown) => workspace.notice("terminal.show", tile, shown),
-  ptyResize: (tile, cols, rows) => workspace.notice("terminal.resize", tile, cols, rows),
-  ptyKill: (tile) => workspace.notice("terminal.close", tile),
-  ptyDetach: (tile) => workspace.notice("terminal.detach", tile),
-  ptyFlow: (tile, paused) => workspace.notice("terminal.flow", tile, paused),
-  keyboardAsk: (tile) => workspace.notice("terminal.keyboard.ask", tile),
-  keyboardGive: (tile, to) => workspace.notice("terminal.keyboard.give", tile, to),
-  keyboardTake: (tile) => workspace.notice("terminal.keyboard.take", tile),
-  onKeyboard: (cb) => workspace.on("terminal.keyboard", cb),
-  onKeyboardAsked: (cb) => workspace.on("terminal.keyboard.asked", cb),
-  onTerminalSize: (cb) => workspace.on("terminal.size", cb),
-  onTyping: (cb) => workspace.on("terminal.typing", cb),
 
   notifyAgent: (notice) => ipcRenderer.send("notify:agent", notice),
 
@@ -184,18 +77,8 @@ const api: HiveIpc & {
   setBrowserCdpEnabled: (enabled) => ipcRenderer.invoke("setBrowserCdpEnabled", enabled),
   relaunchApp: () => ipcRenderer.invoke("relaunchApp"),
   identity: () => ipcRenderer.invoke("identity:get"),
-  share: (repo, role, expiresIn, reusable) => workspace.call("people.invite", repo, role, expiresIn, reusable),
   joinPreview: (text) => ipcRenderer.invoke("net:join-preview", text),
   join: (text) => ipcRenderer.invoke("net:join", text),
-  onJoinRequest: (cb) => workspace.on("people.asked", (repo, question) => cb({ repo, ...question })),
-  onJoinAnswered: (cb) => workspace.on("people.answered", cb),
-  answerJoin: (repo, req, allow) => void workspace.call("people.answer", repo, req, allow).catch(() => { /* the host went: it declines */ }),
-  people: (repo) => workspace.call("people.list", repo),
-  setRole: (repo, person, role) => workspace.call("people.role", repo, person, role as Role),
-  removePerson: (repo, person) => workspace.call("people.remove", repo, person),
-  grants: () => workspace.call("grant.list"),
-  grantCreate: (grant) => workspace.call("grant.create", grant),
-  grantRevoke: (id) => workspace.call("grant.revoke", id),
   joined: () => ipcRenderer.invoke("net:joined"),
   sharedStatus: (workspace) => ipcRenderer.invoke("net:shared-status", workspace),
   onSharedStatus: (cb) => {
@@ -242,19 +125,6 @@ const api: HiveIpc & {
   workspaceSetObjectsSync: (repo, objects, base) => { ipcRenderer.sendSync("workspace:set-objects-sync", repo, objects, base); },
   workspaceUndoSync: (repo) => ipcRenderer.sendSync("workspace:undo-sync", repo),
   workspaceRedoSync: (repo) => ipcRenderer.sendSync("workspace:redo-sync", repo),
-  onWorkspaceChanged: (cb) => workspace.on("store.changed", cb),
-  workspaceShown: (repo, frame) => workspace.notice("store.shown", repo, frame),
-  boardPresenceSet: (repo, state) => workspace.notice("presence.set", repo, state),
-  onBoardPresence: (cb) => workspace.on("presence.changed", cb),
-  widgetDraw: (repo, id, tree) => workspace.notice("widget.draw", repo, id, tree),
-  widgetsDrawn: (repo) => workspace.call("widget.all", repo),
-  onWidgetDrawn: (cb) => workspace.on("widget.drawn", cb),
-  widgetPress: (repo, id, press) => workspace.notice("widget.press", repo, id, press),
-  onWidgetPressed: (cb) => workspace.on("widget.pressed", cb),
-  widgetRun: (repo) => workspace.call("widget.run", repo),
-  widgetPackagesOf: (repo) => workspace.call("widget.packages", repo),
-  widgetRelease: (repo) => workspace.notice("widget.release", repo),
-  onWidgetRunner: (cb) => workspace.on("widget.runner", cb),
   settingsGet: () => ipcRenderer.invoke("settings:get"),
   settingsSet: (p, v) => ipcRenderer.invoke("settings:set", p, v),
   settingsPatch: (patches) => ipcRenderer.invoke("settings:patch", patches),
@@ -266,13 +136,6 @@ const api: HiveIpc & {
     return () => ipcRenderer.removeListener("settings:changed", listener);
   },
   listViews: (repoRoot) => ipcRenderer.invoke("views:list", repoRoot),
-  viewOpen: (id, repo, screen) => workspace.call("view.open", id, repo, screen, true),
-  viewPost: (session, message, repo) => workspace.notice("view.post", session, message, repo),
-  viewScreen: (session, screen, repo) => workspace.notice("view.screen", session, screen, repo),
-  viewClose: (session, repo) => workspace.call("view.close", session, repo),
-  onViewSaid: (cb) => workspace.on("view.said", cb),
-  onViewRects: (cb) => workspace.on("view.rects", cb),
-  onViewEnded: (cb) => workspace.on("view.ended", cb),
   listAgents: (repoRoot) => ipcRenderer.invoke("agents:list", repoRoot),
   agentOptionChoices: (id) => ipcRenderer.invoke("agents:option-choices", id),
   agentPresence: () => ipcRenderer.invoke("agents:presence"),
@@ -283,11 +146,6 @@ const api: HiveIpc & {
   listWidgets: () => ipcRenderer.invoke("widgets:list"),
   installWidget: () => ipcRenderer.invoke("widgets:install"),
   removeWidget: (id) => ipcRenderer.invoke("widgets:remove", id),
-  widgetAsset: (repo, widget, name) => workspace.call("widget.asset", repo, widget, name),
-  agentList: (repo) => workspace.call("agent.list", repo),
-  agentSince: (repo, seq) => workspace.call("agent.since", repo, seq),
-  onAgentChanged: (cb) => workspace.on("agent.changed", cb),
-  onAgentEvent: (cb) => workspace.on("agent.event", cb),
   onWidgetsChanged: (cb) => {
     const listener = () => cb();
     ipcRenderer.on("widgets:changed", listener);
@@ -329,9 +187,6 @@ const api: HiveIpc & {
     return () => ipcRenderer.removeListener("browser:popup", listener);
   },
 
-  onPtyData: terminalData.on,
-  onPtyExit: terminalExit.on,
-  onFsChanged: fileChanged.on,
 
   // Global accelerator bridge — main intercepts ⌘B before the DOM (xterm would otherwise eat it)
   // and re-emits as IPC.
@@ -372,11 +227,6 @@ const api: HiveIpc & {
     return () => ipcRenderer.removeListener("open-project", listener);
   },
 
-  // Plan review: an agent handed off a plan → open the in-canvas review (M2: to every client).
-  planReviews: (repo) => workspace.call("plan.list", repo),
-  planReviewDecide: (tile, requestId, decision, feedback) => workspace.call("plan.decide", tile, requestId, decision, feedback),
-  onPlanReview: (cb) => workspace.on("plan.review", cb),
-  onPlanDecided: (cb) => workspace.on("plan.decided", cb),
 
   // HCP control plane: main pushes a canvas verb → renderer executes → replies.
   hcpResult: (id, ok, result, errorMessage) =>
@@ -386,12 +236,6 @@ const api: HiveIpc & {
     ipcRenderer.on("hcp:command", listener);
     return () => ipcRenderer.removeListener("hcp:command", listener);
   },
-  onHcpSpawn: (cb) => workspace.on("link.spawn", cb),
-  onHcpSpawned: (cb) => workspace.on("tile.opened", cb),
-  onHcpPipe: (cb) => workspace.on("link.pipe", cb),
-  hcpStatusAll: () => workspace.call("status.all"),
-  hcpLinks: () => workspace.call("link.list"),
-  onHcpStatus: (cb) => workspace.on("status.changed", cb),
   onAppError: (cb: (e: AppErrorEvent) => void) => {
     const listener = (_e: unknown, ev: AppErrorEvent) => cb(ev);
     ipcRenderer.on("app:error", listener);
