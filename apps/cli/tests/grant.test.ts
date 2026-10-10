@@ -25,7 +25,7 @@ beforeAll(async () => {
   for (const r of [repoA, repoB]) fs.mkdirSync(r, { recursive: true });
   grants = new Grants(path.join(dir, "grants.json"));
   const server = new WorkspaceServer([grantsDomain(() => grants)], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
-  drive = serveDrive(sock, { server, installToken: () => TOKEN, grants, repos: () => [repoA, repoB], holds: () => false });
+  drive = serveDrive(sock, { server, installToken: () => TOKEN, grants, repos: () => [repoA, repoB], workspaceOf: () => null, nameOf: (tile) => tile });
   while (!fs.existsSync(sock)) await new Promise((r) => setTimeout(r, 10));
 });
 afterAll(() => {
