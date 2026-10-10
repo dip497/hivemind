@@ -163,6 +163,23 @@ test("a title rides the session record: set, cleared by an empty title, gone at 
   expect(s.get("a")!.title).toBeUndefined();
 });
 
+test("the session is the one the hooks last said: a new one alone is a change; what says none keeps it, and so does the end, to resume it", () => {
+  const s = store();
+  const told: StatusChange[] = [];
+  s.subscribe((c) => told.push(c));
+  s.event("a", { event: "session.started", sessionId: "s1" });
+  s.event("a", { event: "session.started", sessionId: "s1" });
+  expect(told.map((c) => c.status.session)).toEqual(["s1"]);
+  s.event("a", { event: "session.started", sessionId: "s2" }); // cleared: still idle, in another session
+  expect(told.map((c) => [c.status.state, c.status.session])).toEqual([["idle", "s1"], ["idle", "s2"]]);
+  s.event("a", { event: "turn.started" });
+  s.title("a", "Fix it");
+  s.screen("a", "blocked");
+  s.event("a", { event: "turn.ended", outcome: "done" });
+  s.exited("a");
+  expect(s.get("a")).toMatchObject({ state: "exited", session: "s2" });
+});
+
 test("a session another machine hosts shows that host's status; nothing seen here changes it but its end", () => {
   const s = store();
   const told: StatusChange[] = [];
@@ -196,8 +213,9 @@ test("only a status as a host sends it is taken from the wire", () => {
   expect(isSessionStatus(ok)).toBe(true);
   expect(isSessionStatus({ ...ok, source: null, kind: undefined, title: "t" })).toBe(true);
   expect(isSessionStatus({ ...ok, source: "screen", says: "trust" })).toBe(true);
+  expect(isSessionStatus({ ...ok, session: "5f0c3a1e" })).toBe(true);
   for (const bad of [null, "working", { ...ok, state: "busy" }, { ...ok, kind: "coffee" }, { ...ok, subagents: [1] }, { ...ok, source: "guess" },
-    { ...ok, since: "now" }, { ...ok, background: "2" }, { ...ok, compacting: 1 }, { ...ok, title: 7 }, { ...ok, says: 7 }]) {
+    { ...ok, since: "now" }, { ...ok, background: "2" }, { ...ok, compacting: 1 }, { ...ok, title: 7 }, { ...ok, says: 7 }, { ...ok, session: 7 }]) {
     expect(isSessionStatus(bad)).toBe(false);
   }
 });

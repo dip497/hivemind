@@ -118,7 +118,7 @@ export type Decides = (tile: string, status: { kind?: InputKind; says?: string }
 /** An agent's status, as much of it as says whether it waits on the person. */
 export interface WaitingStatus {
   tileId: string;
-  status: { state: string; kind?: InputKind; says?: string; since: number; title?: string };
+  status: { state: string; kind?: InputKind; says?: string; since: number; title?: string; session?: string };
 }
 
 /** How many agents of `held` are at work now. */

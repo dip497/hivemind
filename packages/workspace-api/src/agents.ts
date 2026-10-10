@@ -131,6 +131,8 @@ export interface AgentItem {
   /** Its manifest maps its session file's records, so `agent.conversation` can say what it and the
    *  person said (spec/agents.md 0.4). */
   conversation?: true;
+  /** The session it is in, as its agent last said (0.6): `agent.start`'s `resume` goes on with it. */
+  session?: string;
 }
 
 /** What happened to an agent, as a reader acts on it. */

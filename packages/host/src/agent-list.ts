@@ -2,7 +2,8 @@
  * Every agent in the workspaces this device holds, as the person's devices follow them (M5,
  * spec/agents.md "Following"): each agent with a status whose tile is on a board here, its state
  * and since when, what it waits on, the program it runs, the machine it runs on, whether its turn
- * can be interrupted from afar, and whether it keeps a conversation this device can read.
+ * can be interrupted from afar, whether it keeps a conversation this device can read, and the
+ * session it is in.
  * Electron-free: the device's boards, its agents' statuses and what they wait on in, the list out.
  */
 import type { InputKind } from "@hivemind/agents";
@@ -73,6 +74,7 @@ export function agentsOf(held: HeldBoard[], statuses: WaitingStatus[], machines:
       ...(waiting ? { waiting } : {}),
       ...(facts.interrupts(at.tile) ? { interrupt: true as const } : {}),
       ...(facts.converses(at.tile) ? { conversation: true as const } : {}),
+      ...(status.session ? { session: status.session } : {}),
     });
   }
   return items.sort((a, b) => byCodes(a.workspace, b.workspace) || byCodes(a.tile, b.tile));

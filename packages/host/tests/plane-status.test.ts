@@ -1,5 +1,6 @@
-// A daemon's reading of an agent's screen (`agent.screen`) is the agent's status until its hooks
-// speak: a wait, and what screen it says it is.
+// What the control plane hears of an agent is its status: a daemon's reading of its screen
+// (`agent.screen`) until its hooks speak, a wait and what screen it says it is; and the session its
+// hooks say it is in (`agent.event`).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ControlPlane, type ControlPlaneOptions } from "../src/control/plane.ts";
@@ -22,4 +23,12 @@ test("a screen reading is the agent's status, with what screen it says; one that
   assert.deepEqual(at(), { state: "waiting", kind: "permission", says: undefined });
   p.event("agent.screen", { tileId: "hm:t1", state: "nonsense", says: "trust" });
   assert.deepEqual(at(), { state: "waiting", kind: "permission", says: undefined }, "a state not read from a screen is no reading");
+});
+
+test("the session an agent's hooks say it is in is its status's; one that says none keeps it", () => {
+  const p = plane();
+  p.event("agent.event", { tileId: "hm:t1", event: "session.started", sessionId: "5f0c3a1e" });
+  assert.equal(p.status.get("t1")?.session, "5f0c3a1e");
+  p.event("agent.event", { tileId: "hm:t1", event: "turn.started" });
+  assert.equal(p.status.get("t1")?.session, "5f0c3a1e");
 });

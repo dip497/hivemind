@@ -1,4 +1,4 @@
-# Agents (0.5)
+# Agents (0.6)
 
 The person's agents, as their phone sees and drives them (M5, `docs/design/phone-app-2026-10-02.md`
 §4): every agent in the workspaces one of their devices holds, live; and starting one, stopping
@@ -30,7 +30,7 @@ holds:
   "agent": "<what it is called>", "program": { "id": "claude", "label": "Claude Code" },
   "state": "waiting", "since": 1790000000000, "machine": "<the machine it runs on>",
   "waiting": { "kind": "permission", "says": "trust", "since": 1790000000000, "plan": "<markdown>", "decide": true },
-  "interrupt": true, "conversation": true }
+  "interrupt": true, "conversation": true, "session": "<its session's id>" }
 ```
 
 A supervised agent's wait on its starter (0.5, `"kind": "approval"`) also says what it asks, and the
@@ -60,6 +60,9 @@ item who started it:
 - `conversation` is `true` when its manifest maps its session file's records (`session.transcript`),
   so `agent.conversation` can say what it and the person said to each other ("Conversation"); left
   out otherwise (0.4).
+- `session` (0.6) is the session it is in, as its agent last said: `agent.start`'s `resume` goes on
+  with it. A new one (the person cleared it, or resumed another) changes the item, so a reader
+  following `agent.changed` hears it. Left out until the agent says, and kept once it exits.
 
 Agents are in order of their workspace's id, then their tile (by its characters' codes).
 

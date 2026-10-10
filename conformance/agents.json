@@ -1,5 +1,5 @@
 {
- "about": "Cases every implementation of following agents must pass (spec/agents.md \"Following\"): what a device answers ('computer': its boards, its agents' statuses and what they wait on an answer for ('waits'), with the machines it knows ('known'), the program each tile's command starts by its manifest ('programs'), by tile, the waits whose keys its agent says, each by its name: what its screen says it is, else its kind ('keys'), whose agents say which keys interrupt their turn ('interrupts') and whose agents' manifests map their session files ('conversations'), in; every agent, and how many are at work, out), and what a phone shows of the answers it is given ('phone': each answer with the device it came from, in; every agent it reads, with that device, what waits on the person among them as device/tile in the order shown, and the agents at work, out). Written by hand from the spec.",
+ "about": "Cases every implementation of following agents must pass (spec/agents.md \"Following\"): what a device answers ('computer': its boards, its agents' statuses and what they wait on an answer for ('waits'), with the machines it knows ('known'), the program each tile's command starts by its manifest ('programs'), by tile, the waits whose keys its agent says, each by its name: what its screen says it is, else its kind ('keys'), whose agents say which keys interrupt their turn ('interrupts') and whose agents' manifests map their session files ('conversations'), in; every agent, with the session each says it is in (0.6), and how many are at work, out), and what a phone shows of the answers it is given ('phone': each answer with the device it came from, in; every agent it reads, with that device, what waits on the person among them as device/tile in the order shown, and the agents at work, out). Written by hand from the spec.",
  "known": {
   "self": {
    "device": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
@@ -649,6 +649,146 @@
      "state": "working",
      "since": 1790000002000,
      "machine": "desk"
+    }
+   ],
+   "working": 1
+  },
+  {
+   "about": "each agent with the session it is in, as its agent last said (0.6), kept once it exits, so it can be resumed; one whose agent has said none has none",
+   "held": [
+    {
+     "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+     "name": "web",
+     "repo": "/home/p/web",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "t9",
+        "kind": "codex",
+        "label": "Codex"
+       }
+      ]
+     }
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "repo": "/home/p/api",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "t2",
+        "kind": "claude",
+        "label": "Claude",
+        "task": "fix the nav"
+       },
+       {
+        "id": "t1",
+        "kind": "agent",
+        "label": "Agent 1"
+       },
+       {
+        "id": "t3",
+        "kind": "shell",
+        "label": "Shell"
+       }
+      ],
+      "tileNames": {
+       "t2": "Nav fix"
+      }
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "hm:t2",
+     "status": {
+      "state": "working",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000001000,
+      "title": "Editing Nav.tsx",
+      "session": "5f0c3a1e-8b2d-4c6f-9a7e-1d2b3c4d5e6f"
+     }
+    },
+    {
+     "tileId": "t1",
+     "status": {
+      "state": "idle",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000002000
+     }
+    },
+    {
+     "tileId": "hm:t9",
+     "status": {
+      "state": "exited",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000003000,
+      "session": "019a6c2e-codex"
+     }
+    }
+   ],
+   "waits": {},
+   "programs": {
+    "t2": {
+     "id": "claude",
+     "label": "Claude Code"
+    },
+    "t9": {
+     "id": "codex",
+     "label": "Codex"
+    }
+   },
+   "interrupts": [],
+   "conversations": [],
+   "agents": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t1",
+     "agent": "Agent 1",
+     "state": "idle",
+     "since": 1790000002000,
+     "machine": "desk"
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t2",
+     "agent": "Nav fix",
+     "program": {
+      "id": "claude",
+      "label": "Claude Code"
+     },
+     "state": "working",
+     "since": 1790000001000,
+     "machine": "desk",
+     "session": "5f0c3a1e-8b2d-4c6f-9a7e-1d2b3c4d5e6f"
+    },
+    {
+     "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+     "name": "web",
+     "tile": "t9",
+     "agent": "Codex",
+     "program": {
+      "id": "codex",
+      "label": "Codex"
+     },
+     "state": "exited",
+     "since": 1790000003000,
+     "machine": "desk",
+     "session": "019a6c2e-codex"
     }
    ],
    "working": 1

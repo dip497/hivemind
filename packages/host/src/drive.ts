@@ -18,7 +18,7 @@ import { takeLines } from "./control/protocol.js";
 import type { Grants } from "./grants.js";
 
 /** The workspace API version the drive socket speaks. */
-export const DRIVE_API = "0.21";
+export const DRIVE_API = "0.22";
 /** How long a connection may take to say who it is. */
 const HELLO_WITHIN_MS = 10_000;
 

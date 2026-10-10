@@ -27,6 +27,8 @@ export interface SessionStatus extends AgentStatus {
   /** Waiting: what screen it waits on, as its manifest's rule says (`trust`); absent when no
    *  rule says. Read from the screen only. */
   says?: string;
+  /** The session it is in, as its hooks last said; kept once it exits, as the one to resume. */
+  session?: string;
 }
 
 export interface StatusChange {
@@ -54,7 +56,8 @@ export function isSessionStatus(x: unknown): x is SessionStatus {
     && typeof s.background === "number" && typeof s.compacting === "boolean"
     && (s.kind === undefined || (INPUT_KINDS as readonly unknown[]).includes(s.kind))
     && (s.source === null || s.source === "hooks" || s.source === "screen") && typeof s.since === "number"
-    && (s.title === undefined || typeof s.title === "string") && (s.says === undefined || typeof s.says === "string");
+    && (s.title === undefined || typeof s.title === "string") && (s.says === undefined || typeof s.says === "string")
+    && (s.session === undefined || typeof s.session === "string");
 }
 
 export class StatusStore {
@@ -100,7 +103,8 @@ export class StatusStore {
     const cur = this.sessions.get(tileId);
     const fromScreen = cur?.source !== "hooks" && cur?.state !== "exited";
     this.screenHeld.delete(tileId);
-    this.apply(tileId, "hooks", (s) => foldStatus(fromScreen ? { ...s, ...INITIAL_STATUS, kind: undefined } : s, input));
+    const session = "event" in input && input.sessionId ? { session: input.sessionId } : {};
+    this.apply(tileId, "hooks", (s) => ({ ...foldStatus(fromScreen ? { ...s, ...INITIAL_STATUS, kind: undefined } : s, input), ...session }));
   }
 
   /** The screen, read by whoever renders it, and for a wait what screen it says it is. Ignored
@@ -190,7 +194,7 @@ export class StatusStore {
 }
 
 function sameStatus(a: SessionStatus, b: SessionStatus): boolean {
-  return a.state === b.state && a.kind === b.kind && a.says === b.says && a.source === b.source && a.background === b.background && a.title === b.title
+  return a.state === b.state && a.kind === b.kind && a.says === b.says && a.session === b.session && a.source === b.source && a.background === b.background && a.title === b.title
     && a.compacting === b.compacting && a.subagents.length === b.subagents.length && a.subagents.every((x, i) => x === b.subagents[i]);
 }
 

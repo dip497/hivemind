@@ -1,4 +1,4 @@
-# Workspace API (0.21)
+# Workspace API (0.22)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -54,7 +54,7 @@ whichever starts first does, and the other says so. Lines of JSON both ways, 1 M
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.21", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.22", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`). It names one
   of the grant's workspaces by its folder; the host answers
   `{"hello": {"api", "as": {"client", "role", "workspace"}}}` and serves that workspace as it does
@@ -207,7 +207,7 @@ log.
 
 | `status.all` | | `[{tileId, status}]`, every agent session's status (`spec/status.md`) | read |
 | `link.list` | | `{pipes: [{src, dst}], spawns: [{parent, child}]}` | read |
-| `agent.list` | `repo` | `{seq, agents}`: the workspace's agents as they are now, and the number of the last change (0.18); a plan an agent waits on a review of is in its `waiting` (`plan`), answered with `agent.answer` (0.21: `plan.list`, `plan.decide` and the `plan.*` events are gone) | read |
+| `agent.list` | `repo` | `{seq, agents}`: the workspace's agents as they are now, and the number of the last change (0.18); a plan an agent waits on a review of is in its `waiting` (`plan`), answered with `agent.answer` (0.21: `plan.list`, `plan.decide` and the `plan.*` events are gone); each with the session it is in, `session`, when its agent has said (0.22, `agents.md` 0.6) | read |
 | `agent.since` | `repo`, `seq` | `{seq, changes, events}`: each change and event after `seq`, or null when the host no longer has them all: list again (0.18) | read |
 | `widget.all` | `repo` | what each widget in the workspace last drew, by its id: never stored, drawn again when its code next runs (0.18) | read |
 | `widget.run` | `repo` | whether the caller runs the workspace's widgets: a window of the person's, on the host's machine or on another of their devices with it open, the first to ask, until it lets go (`widget.release`) or goes; someone else's device never does (0.19) | — |
@@ -297,7 +297,7 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | Event | Params | Sent |
 |---|---|---|
 | `status.changed` | `{seq, tileId, status}` | to every client, on each change to an agent session's status |
-| `agent.changed` | `repo`, `{seq, agent}` or `{seq, gone}` | to every client, an agent of the workspace as it is now, or its going (0.18) |
+| `agent.changed` | `repo`, `{seq, agent}` or `{seq, gone}` | to every client, an agent of the workspace as it is now, or its going (0.18); a new session is a change (0.22) |
 | `agent.event` | `repo`, `{seq, at, kind, tile, detail?}` | to every client, what happened to an agent: `came`, `went`, `turnEnded`, `waiting`, `answered` (0.18); `reported`, an agent a program started reporting to it, `detail` what it said (0.20); `answered` for a plan or supervised tool use: `detail` the decision and `by` who gave it, `{person, name}`, when a person did (0.21) |
 | `widget.drawn` | `repo`, `id`, `tree` or null | to every client, what a widget draws now (0.18) |
 | `widget.runner` | `repo` | to every client of the workspace, a peer of the person's included, when no window runs its widgets: the first to ask (`widget.run`) does (0.19) |
