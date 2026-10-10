@@ -63,3 +63,45 @@ test("a terminal whose renderer is rebuilt leaves focus put elsewhere since wher
   await page.keyboard.type("zz");
   await expect(search).toHaveValue("zz");
 });
+
+test("a path or address a terminal shows opens on Ctrl+click only: a plain click on it is a click in the terminal", async () => {
+  fs.writeFileSync(path.join(repo, "notes.ts"), "export {};\n");
+  await page.locator('[data-toolbar-action="board"]').click();
+  await page.locator('[data-add-menu] [data-board-choice="tile:shell"]').click();
+  const term = page.locator(".react-flow__node-terminal").last();
+  const screen = term.locator(".xterm-screen");
+  await screen.click();
+  // An address goes to the system's browser: here, it is only written down.
+  await page.evaluate(() => { const w = window as unknown as { __opened: string[] }; w.__opened = []; window.open = ((u: string) => { w.__opened.push(String(u)); return null; }) as typeof window.open; });
+  const opened = () => page.evaluate(() => (window as unknown as { __opened: string[] }).__opened);
+  const text = () => term.evaluate((el) => ([el, ...el.querySelectorAll("*")].find((e) => "__hmScreen" in e) as (Element & { __hmScreen(): string }) | undefined)?.__hmScreen() ?? "");
+  /** `run` cleared the terminal and printed `shows` alone on its first row. */
+  const printed = (run: string, shows: string) => expect.poll(async () => {
+    await page.keyboard.type(`clear; ${run}\n`);
+    return text().then((t) => t.split("\n")[0]!.trim());
+  }, { timeout: 20_000, intervals: [1000] }).toBe(shows);
+  /** A plain click on what the first row shows does nothing; a Ctrl+click makes `done` true. */
+  const follows = async (what: string, done: () => Promise<boolean>) => {
+    // Where the terminal is now: the canvas may have moved to show what opened last.
+    const box = (await screen.boundingBox())!;
+    const onIt = { x: box.x + 20, y: box.y + 6 };
+    await page.mouse.click(onIt.x, onIt.y);
+    await page.waitForTimeout(500);
+    expect(await done(), `${what}: a plain click`).toBe(false);
+    // The pointer comes back onto it, as a hand does, for the terminal to find the link again.
+    await page.mouse.move(onIt.x + 40, onIt.y + 60);
+    await page.keyboard.down("Control");
+    await page.mouse.click(onIt.x, onIt.y);
+    await page.keyboard.up("Control");
+    await expect.poll(done, { message: `${what}: Ctrl+click` }).toBe(true);
+    await screen.click({ position: { x: box.width - 10, y: box.height - 10 } });
+  };
+  const code = page.locator(".react-flow__node-editor, .react-flow__node-workbench");
+  await printed("echo ./notes.ts", "./notes.ts");
+  await follows("a path", async () => (await code.count()) === 1);
+  await printed("echo http://127.0.0.1:9/text", "http://127.0.0.1:9/text");
+  await follows("an address", async () => (await opened()).includes("http://127.0.0.1:9/text"));
+  // A link a program prints as one (OSC 8), under text of its own.
+  await printed(String.raw`printf '\e]8;;http://127.0.0.1:9/osc\e\\osc-link\e]8;;\e\\\n'`, "osc-link");
+  await follows("a link printed as one", async () => (await opened()).includes("http://127.0.0.1:9/osc"));
+});

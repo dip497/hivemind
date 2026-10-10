@@ -2,11 +2,14 @@ import { bundledToolRegistry, tileKindAvailability, toolIdForTileKind } from "@h
 import { getSettings, useSettings } from "./settings-store";
 import { toolPreferences } from "@hivemind/core/settings-schema";
 import { toast } from "sonner";
+import { kindsThatOpen, type TileIntent } from "./tiles/api";
 
 export function toolCreationAllowed(kind: string): boolean {
   const result = tileKindAvailability(kind, toolPreferences(getSettings()));
   return result === null || result.available;
 }
+/** The kinds that take what another tile hands over now: none switched off. */
+export const kindsThatOpenNow = (intent: TileIntent): string[] => kindsThatOpen(intent).filter(toolCreationAllowed);
 export function useToolEnabled(kind: string): boolean {
   const settings = useSettings();
   const result = tileKindAvailability(kind, toolPreferences(settings));

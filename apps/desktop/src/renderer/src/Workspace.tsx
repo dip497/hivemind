@@ -47,7 +47,8 @@ import type { PinRect } from "./workspace/tile-surfaces";
 import { clampAnchor } from "./pin-anchor";
 import { pickEditorTile } from "./workspace/editor-target";
 import type { TileKind } from "./tile-kinds";
-import { kindsThatOpen, tileKind, useTilesVersion } from "./tiles";
+import { tileKind, useTilesVersion } from "./tiles";
+import { kindsThatOpenNow } from "./tool-availability";
 import {
   loadLayout,
   reloadLayout,
@@ -881,7 +882,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     }
     // No editor in that frame: the fresh one must still open the file the user
     // clicked — spawnTile mints its id, so the path rides in `opts.file`.
-    const kind = kindsThatOpen("file")[0];
+    const kind = kindsThatOpenNow("file")[0];
     if (kind) spawnTile(kind, sourceFrameId ?? null, { file: path });
   }, [openFileInTile, focusTile, spawnTile]);
 
@@ -903,8 +904,10 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       }, 0);
       return;
     }
-    const kind = kindsThatOpen("url")[0];
+    const kind = kindsThatOpenNow("url")[0];
     if (kind) spawnTile(kind, sourceFrameId ?? null, { url });
+    // No tile here opens addresses: the system's browser does (main opens only http(s)).
+    else window.open(url, "_blank", "noopener,noreferrer");
   }, [focusTile, spawnTile]);
 
   // Plan review: an agent waits on a person's review of its plan (M2). Every window showing the

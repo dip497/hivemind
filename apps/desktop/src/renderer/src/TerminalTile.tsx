@@ -4,7 +4,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { registerFileLinks } from "./terminal-file-links";
+import { followsLink, linkHint, registerFileLinks } from "./terminal-file-links";
 import { installCrispDpr } from "./terminal-dpr";
 import { drawnSize, nextPtySize, resizeBurst, scaleToFit, type PtySize } from "./pty-size-sync";
 import { oscColorReply } from "./osc-color";
@@ -38,22 +38,6 @@ import { defaultAgent } from "@hivemind/agents";
 import { useAgentsScanned } from "./agent-plugins";
 import { KeyboardChip, KeyboardPill, useTerminalKeyboard, type TerminalKeyboard } from "./multiplayer/keyboard";
 import { useShown } from "./multiplayer/shown";
-
-/** Open a terminal link in the OS browser. window.open is intercepted by main's
- *  setWindowOpenHandler → shell.openExternal (and the in-app navigation denied),
- *  so no popup window appears. Only http(s) — never file:/ javascript: etc. */
-function openExternalLink(uri: string, openInBrowser?: (url: string) => void): void {
-  try {
-    const u = new URL(uri);
-    if (u.protocol === "http:" || u.protocol === "https:") {
-      if (openInBrowser) {
-        openInBrowser(uri);
-        return;
-      }
-      window.open(uri, "_blank", "noopener,noreferrer");
-    }
-  } catch { /* not a parseable URL — ignore */ }
-}
 
 // Default terminal font size. Each tile remembers its OWN size (useTileFont keyed
 // by tileId) — A−/A+ in the header + Ctrl/Cmd +/−/0 adjust it. Crispness is
@@ -201,6 +185,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   selectedRef.current = selected;
   const openInBrowserRef = useRef(onOpenInBrowser);
   openInBrowserRef.current = onOpenInBrowser;
+  /** An http(s) link opens where the workspace opens addresses; any other kind not at all. */
+  const openLink = (uri: string) => { const web = webUrlForInternalBrowser(uri); if (web) openInBrowserRef.current?.(web); };
   const openInEditorRef = useRef(onOpenInEditor);
   openInEditorRef.current = onOpenInEditor;
   // Live cwd so the terminal file-link provider resolves relative paths against
@@ -373,10 +359,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       minimumContrastRatio: 4.5,          // auto-adjust low-contrast cells to WCAG AA
                                           // (color only — doesn't affect sharpness)
       letterSpacing: 0,
-      // OSC 8 hyperlinks (claude emits these) → prefer the in-app browser tile.
-      // If no canvas callback exists, fall back to the OS browser.
+      // OSC 8 hyperlinks (claude emits these), on Ctrl/⌘+click.
       linkHandler: {
-        activate: (_e, uri) => openExternalLink(uri, openInBrowserRef.current),
+        activate: (e, uri) => { if (followsLink(e)) openLink(uri); },
+        ...linkHint(() => term.element),
       },
       // Rescale glyphs that overflow their cell (powerline, wide Unicode,
       // ligature-ish forms) instead of letting them clip/smear — sharper edges.
@@ -386,15 +372,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       // Atlas (glyph cache) — "dynamic" is the default; be explicit.
       // The WebGL renderer (loaded below) reuses the atlas across frames.
     });
-    // Make plain http(s) URLs in terminal output clickable (claude, build logs,
-    // etc.) — single click opens in the in-app browser when available.
-    term.loadAddon(new WebLinksAddon((_e, uri) => {
-      const web = webUrlForInternalBrowser(uri);
-      if (web && openInBrowserRef.current) openInBrowserRef.current(web);
-      else openExternalLink(uri);
-    }));
-    // Make file PATHS clickable too (open in the OS default app) — WebLinksAddon
-    // only handles http(s) URLs. Disposed with the terminal on unmount.
+    // http(s) URLs in terminal output (claude, build logs, etc.), on Ctrl/⌘+click.
+    term.loadAddon(new WebLinksAddon((e, uri) => { if (followsLink(e)) openLink(uri); }, linkHint(() => term.element)));
+    // File PATHS too (open in the OS default app): WebLinksAddon only handles http(s) URLs.
+    // Disposed with the terminal on unmount.
     registerFileLinks(
       term,
       () => cwdRef.current,

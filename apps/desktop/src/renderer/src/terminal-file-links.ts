@@ -1,7 +1,7 @@
 /**
  * Makes FILE PATHS in terminal output clickable — `/abs/path.html`, `./src/x.ts`,
- * `~/notes.md`, `file://…`, and `path:line:col` from stack traces. Clicking opens
- * the file in the OS default app (`shell.openPath` via the openPathInApp IPC):
+ * `~/notes.md`, `file://…`, and `path:line:col` from stack traces. Ctrl+click (⌘ on a Mac)
+ * opens the file in the OS default app (`shell.openPath` via the openPathInApp IPC):
  * `.html` → browser, source → editor, image → viewer, dir → file manager.
  *
  * (http(s) URLs are handled separately by WebLinksAddon. The match regex is
@@ -10,6 +10,20 @@
  */
 import type { Terminal, ILinkProvider, ILink, IBufferRange, IDisposable } from "@xterm/xterm";
 import { openTargetForTerminalLink } from "./browser-open";
+
+const MAC = /mac/i.test(navigator.platform);
+
+/** A terminal's links are followed with Ctrl+click (⌘ on a Mac): a plain click focuses it or starts a selection. */
+export const followsLink = (e: MouseEvent): boolean => (MAC ? e.metaKey : e.ctrlKey);
+
+/** What a link says while the pointer is on it, on the terminal's element `el`. */
+export function linkHint(el: () => HTMLElement | undefined): { hover(): void; leave(): void } {
+  const hint = `${MAC ? "⌘" : "Ctrl"}+click to follow`;
+  return {
+    hover: () => { const at = el(); if (at) at.title = hint; },
+    leave: () => { const at = el(); if (at) at.title = ""; },
+  };
+}
 
 // A path-like token that contains at least one "/", optional file:// scheme,
 // optional trailing :line[:col].
@@ -41,7 +55,9 @@ export function registerFileLinks(
         links.push({
           text: raw,
           range,
-          activate: () => {
+          ...linkHint(() => term.element),
+          activate: (e) => {
+            if (!followsLink(e)) return;
             const target = openTargetForTerminalLink(getCwd(), raw);
             if (target.kind === "browser" && openInBrowser) { openInBrowser(target.url); return; }
             if (target.kind === "editor" && openInEditor) { openInEditor(target.path); return; }
