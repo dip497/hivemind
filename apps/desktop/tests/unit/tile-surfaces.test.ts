@@ -168,7 +168,7 @@ test("surface type follows the tile kind; a terminal is called its rename, else 
       tile({ id: "sh", kind: "shell", cmd: "/bin/bash", args: ["-il"] }),
       tile({ id: "b", kind: "browser", label: "Browser", url: "https://example.com" }),
       tile({ id: "ed", kind: "editor", label: "Editor" }),
-      tile({ id: "pr", kind: "planReview", label: "Plan", review: { plan: "p", cwd: "/x" } }),
+      tile({ id: "pr", kind: "planReview", label: "Plan", review: { agentTileId: "c", since: 5, plan: "p" } }),
     ],
     tileNames: { sh: "build box" },
     editorTabs: { ed: ["src/a.ts"] },
@@ -188,7 +188,7 @@ test("surface type follows the tile kind; a terminal is called its rename, else 
   assert.equal(data(told, "c").name, "Running tests", "what the agent says now beats what it was started to do");
   assert.deepEqual(data(s, "ed").tabs, ["src/a.ts"]);
   assert.deepEqual(data(s, "b").openReq, { url: "https://x", seq: 3 });
-  assert.equal(data(s, "pr").cwd, "/x");
+  assert.equal(data(s, "pr").cwd, data(s, "sh").cwd, "a plan review names the folder its agent works in");
 });
 
 // A board can name a kind this machine has no plugin for (a guest's, a phone's, one not yet

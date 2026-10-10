@@ -1,7 +1,7 @@
 /**
  * What waits on the person (spec/needs.md, M5): each agent waiting on them in the workspaces this
  * device holds, as their phone lists it, the one waiting longest first. Electron-free: the
- * device's documents, its agents' statuses and the plans they hand off in, the list out.
+ * device's documents, its agents' statuses and what they wait on in, the list out.
  */
 import path from "node:path";
 import { agentForCmd, type AgentProviderDef, type InputKind, type PermissionKeys } from "@hivemind/agents";
@@ -9,8 +9,8 @@ import { machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
 import type { AccessLists } from "@hivemind/workspace-host/access";
 import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
-import type { PlanReview } from "@hivemind/workspace-api/plans";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
+import type { Wait } from "./waits.js";
 
 /** What an agent can wait on the person for. One waiting for an `approval` waits on the agent
  *  that supervises it, not on the person. */
@@ -124,13 +124,13 @@ export function workingIn(held: HeldBoard[], statuses: WaitingStatus[]): number 
  *  named its tile, else what it says it is doing, else what it was started to do, else its tile's
  *  label; and the machine it runs on, as this device knows it (`machines`). A permission is one it
  *  can decide when `decides` says so of the agent's tile. */
-export function needsOf(held: HeldBoard[], statuses: WaitingStatus[], plans: PlanReview[], machines: KnownMachines, decides: (tile: string) => boolean): Need[] {
+export function needsOf(held: HeldBoard[], statuses: WaitingStatus[], waitOf: (tile: string) => Wait | undefined, machines: KnownMachines, decides: (tile: string) => boolean): Need[] {
   const needs: Need[] = [];
   for (const { tileId, status } of statuses) {
     if (!waitsOnThePerson(status) || !status.kind) continue;
     const at = agentOf(held, tileId, status.title);
     if (!at) continue;
-    const plan = status.kind === "plan" ? plans.find((p) => toBareId(p.tileId) === at.tile)?.plan : undefined;
+    const plan = status.kind === "plan" ? waitOf(at.tile)?.plan : undefined;
     const board = held.find((h) => h.workspace === at.workspace)!;
     const machine = machineCalled(folderOf(board, at.tile), machines);
     const decide = status.kind === "permission" && decides(at.tile);

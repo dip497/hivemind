@@ -37,10 +37,10 @@ import { onWorkspaceChange, sharedStore, workspaceStore } from "./workspace-stor
 import { PeerLinks, type ShownMachine } from "@hivemind/host/peer-links";
 import { heldBoards, participantNamed, permissionKeys, type WaitingStatus } from "@hivemind/host/needs";
 import { manifestFacts, type AgentFacts } from "@hivemind/host/agent-list";
+import type { Waits } from "@hivemind/host/waits";
 import type { KnownMachines } from "@hivemind/core/remote-uri";
 import { machines as savedMachines } from "@hivemind/host/remote/catalog";
 import { PushNotices, PushSubscriptions, postNotice } from "@hivemind/host/push";
-import type { PlanReview } from "@hivemind/workspace-api/plans";
 import { participantAt } from "@hivemind/host/device-sessions";
 import type { TerminalMachine } from "@hivemind/host/terminals";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
@@ -503,15 +503,16 @@ let daemonHere: (() => Promise<Duplex>) | undefined;
 /** What the network's links are served from besides the workspace API: this computer's PTY daemon,
  *  where the person's other devices run terminals in frames here (none without one); a participant
  *  lending their machine anew (M4); and this computer's agents' statuses, each change to them, and
- *  the plans they wait on, for what waits on the person and what their phones are told (M5). */
+ *  what they wait on, for what waits on the person and what their phones are told (M5). */
 export interface NetworkSources {
   daemon?: () => Promise<Duplex>;
   granted?: (device: string) => void;
   statuses: () => WaitingStatus[];
   onStatus: (listener: (change: WaitingStatus) => void) => void;
-  plans: () => PlanReview[];
-  /** Who started each agent, and the approval each waits on: the control plane's. */
-  workers?: Pick<AgentFacts, "parent" | "approval">;
+  /** Who started each agent: the control plane's. */
+  workers?: Pick<AgentFacts, "parent">;
+  /** The plans and supervised tool uses agents wait on, and how each was answered. */
+  waits?: Pick<Waits, "of" | "answerOf">;
 }
 
 // The same invite can be submitted from two windows, or after the join dialog is reopened
@@ -546,7 +547,7 @@ export async function joinLink(text: unknown): Promise<JoinReply> {
   finally { if (joining.get(key) === attempt) joining.delete(key); }
 }
 
-export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, statuses, onStatus, plans, workers }: NetworkSources): void {
+export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, statuses, onStatus, workers, waits }: NetworkSources): void {
   apiServer = server;
   daemonHere = daemon;
   // A permission an agent here asks that the person's phone may allow or deny: its agent says
@@ -555,7 +556,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
   peers = new PeerLinks({
     store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), granted,
     phone: (device) => pairedDevices().list().some((d) => d.device === device && d.kind === "phone"),
-    statuses, plans, facts: (held) => ({ ...manifestFacts(held), ...workers }),
+    statuses, facts: (held) => ({ ...manifestFacts(held), ...workers, wait: (tile) => waits?.of(tile) }),
     machines: knownMachines,
     subscribe: (device, sub) => pushSubscriptions().set(device, sub),
     // A phone unpairing itself, recorded as that phone.
@@ -794,6 +795,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     build: () => peers?.agentList().agents ?? [],
     publish: (event, repo, payload) => server.publish(event, repo, payload as never),
     repoOf: (workspace) => heldBoards(workspaceStore()).find((b) => b.workspace === workspace)?.repo ?? null,
+    answerOf: (tile, since) => waits?.answerOf(tile, since),
   });
   onStatus(() => feed?.changed());
   onWorkspaceChange((change) => { if (change.part === "core") feed?.changed(); });

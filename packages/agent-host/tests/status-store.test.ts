@@ -115,6 +115,15 @@ test("since moves only when the state changes", () => {
   expect(s.get("a")!.since).toBeGreaterThan(since);
 });
 
+test("waiting on something else is a new wait: since moves, so an answer to the first is not taken for the second", () => {
+  const s = store();
+  s.event("a", { event: "input.requested", kind: "permission" });
+  const first = s.get("a")!.since;
+  s.event("a", { event: "input.requested", kind: "plan" });
+  expect(s.get("a")).toMatchObject({ state: "waiting", kind: "plan" });
+  expect(s.get("a")!.since).toBeGreaterThan(first);
+});
+
 test("a title rides the session record: set, cleared by an empty title, gone at exit", () => {
   const s = store();
   s.screen("a", "working");

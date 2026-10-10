@@ -93,7 +93,6 @@ import { Layouts, type Shown } from "@hivemind/host/store";
 import { presence } from "@hivemind/host/presence";
 import { widgets } from "@hivemind/host/widgets";
 import { appearance } from "@hivemind/host/appearance";
-import { Plans } from "@hivemind/host/plans";
 import { Grants, grantsDomain } from "@hivemind/host/grants";
 import { serveDrive } from "@hivemind/host/drive";
 import { frameWorktrees, framesDomain } from "@hivemind/host/frames";
@@ -1013,6 +1012,7 @@ function writeTile(tileId: string, data: string, paste?: boolean): boolean {
 
 const control: ControlPlane = new ControlPlane({
   dir: () => app.getPath("userData"),
+  waitsChanged: () => agentFeed()?.changed(),
   publish: (event, ...params) => workspaceServer.publish(event, ...params),
   // Used by agent.send and pipe forwarding.
   write: writeTile,
@@ -1254,13 +1254,6 @@ const layouts = new Layouts(storeFor, {
 });
 
 // The workspace API (R8): git and worktrees, files, issues, review comments, agents' status and
-/** Plans agents hand off, told to every client, answered by one who may drive agents (M2). */
-const plans = new Plans({
-  publish: (event, ...params) => workspaceServer.publish(event, ...params),
-  who: whoIs,
-  repoOf: (bare) => workspaceStore().workspaceOf(bare),
-});
-
 // links, terminals, the store and who is where on it (M1). Each window is a connection to it (workspace-ipc.ts), which is
 // answered as the person at the window, and sent its events.
 /** The programs the person lets drive workspaces here (the drive socket). */
@@ -1273,16 +1266,14 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   layouts.domain,
   agents({ statuses: () => control.status.all(), links: () => control.links(), feed: agentFeed, workspaceOf: (repo) => workspaceStore().ownership(repo)?.workspaceId ?? null }),
   terminals.domain,
-  plans.domain,
   // What an agent here waits on the person for, answered from another of their devices (M5).
   answers({
     status: (bare) => control.status.get(bare),
     type: (bare, data) => writeTile(`hm:${bare}`, data),
     permissionKeys: (bare) => permissionKeys(heldBoards(workspaceStore()), bare),
     deliver: (bare, message) => control.mailbox.deliver(`hm:${bare}`, message),
-    plans,
-    approval: (bare) => control.approvalOf(bare),
-    answerApproval: (request, decision) => control.answerApproval(request, decision),
+    waits: control.waits,
+    who: whoIs,
   }),
   // Agents started, interrupted and closed from another of the person's devices, and what they
   // changed (M5, spec/agents.md).
@@ -1507,8 +1498,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       granted: (device) => terminals.machineChanged(`peer:${device}`),
       statuses: () => control.status.all(),
       onStatus: (listener) => { control.status.subscribe(listener); },
-      plans: () => plans.reviews(),
-      workers: { parent: (bare) => control.parentOf(bare), approval: (bare) => control.approvalOf(bare) },
+      workers: { parent: (bare) => control.parentOf(bare) },
+      waits: control.waits,
     });
     installWorkspaceStoreIpc(layouts, workspaceIpc.connect, (change) =>
       workspaceServer.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part }));
@@ -1780,26 +1771,16 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
 }
 
 // ── plan review bridge ───────────────────────────────────────────────────────
-// The injected PreToolUse(ExitPlanMode) hook connects to this unix socket when
-// an agent hands off a plan. We hold the hook connection (via `reply`) until
-// someone who may drive agents answers it over the workspace API (`plans.ts`:
-// every window and every peer of the workspace is told). Socket path mirrors the
-// one the daemon injects into the hook command (both derive from userData).
+// The injected PreToolUse(ExitPlanMode) hook connects to this unix socket when an agent hands off
+// a plan. The agent waits on the plan (`waits.ts`) until someone who may drive agents answers it,
+// from a window or over the workspace API. Socket path mirrors the one the daemon injects into the
+// hook command (both derive from userData).
 function startPlanReviewBridge(): void {
   const sock = ipcPath(app.getPath("userData"), "plan-bridge.sock");
   startPlanBridge(sock, (req: PlanRequest) => {
     if (openWindows().length === 0) { req.reply("allow"); return; } // fail-open: no UI
-    // The agent waits on a person: that is its status until the review is answered or dropped.
-    const bare = toBareId(req.tileId);
-    control.status.event(bare, { event: "input.requested", kind: "plan" });
-    plans.ask({ requestId: req.requestId, tileId: req.tileId, plan: req.plan, cwd: req.cwd }, (decision, feedback) => {
-      control.status.event(bare, { event: "input.resolved" });
-      req.reply(decision, feedback);
-    });
-    req.onAbort(() => {
-      control.status.event(bare, { event: "input.resolved" });
-      plans.drop(req.requestId);
-    });
+    const wait = control.waits.ask(toBareId(req.tileId), { kind: "plan", plan: req.plan, cwd: req.cwd }, (decision, feedback) => { if (decision) req.reply(decision, feedback); });
+    req.onAbort(() => control.waits.drop(wait.request));
   });
 }
 

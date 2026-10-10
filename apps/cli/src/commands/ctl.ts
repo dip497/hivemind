@@ -259,17 +259,20 @@ const report = sub("report", "Deliver a message to the tile that spawned you (th
   return hcpCall("agent.report", { callerTile, message: a.message });
 });
 
-const openReview = sub("open-review", "Open a plan-review tile and block until the human decides", {
+const openReview = sub("open-review", "Wait on a person's review of this agent's plan, opened beside it, and print the decision", {
   plan: { type: "string", description: "plan markdown (or use --file)" },
   file: { type: "string", description: "read the plan from this file ('-' = stdin)" },
   cwd: { type: "string", description: "repo the plan applies to (default: current directory)" },
   timeout: { type: "string", description: "how long to wait for the decision, e.g. 30m (default 24h — pass a Bash-tool timeout to match)" },
+  tile: { type: "string", description: "the agent whose plan it is, from a terminal (default: $HIVEMIND_TILE — set inside every spawned agent)" },
 }, (a) => {
   let plan = a.plan;
   if (!plan && a.file) plan = a.file === "-" ? fs.readFileSync(0, "utf8") : fs.readFileSync(String(a.file), "utf8");
   if (!plan) throw new UsageError("--plan <markdown> or --file <path> required");
+  const callerTile = a.tile || ownTile();
+  if (!callerTile) throw new UsageError("not inside a hivemind agent tile ($HIVEMIND_TILE unset) — pass --tile <tileId>");
   const ceiling = durationFlag(a.timeout, "timeout", 24 * 60 * 60 * 1000);
-  return hcpCall("review.open", { plan, cwd: a.cwd || process.cwd() }, ceiling);
+  return hcpCall("review.open", { plan, cwd: a.cwd || process.cwd(), callerTile }, ceiling);
 });
 
 // ── stream ───────────────────────────────────────────────────────────────────

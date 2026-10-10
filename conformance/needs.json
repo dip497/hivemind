@@ -1,5 +1,5 @@
 {
- "about": "Cases every implementation of needs-you must pass (spec/needs.md): what a device answers waits on the person ('computer': its boards, its agents' statuses and the plans they hand off, in, with the machines it knows ('known': itself, the person's other devices, participants' computers by whose they are, and saved machines) and the tiles whose agents say which keys allow and deny what they ask ('decides', none when not given); the list, each item with the machine its agent runs on, and how many agents are at work, out), and what a phone shows of the answers it is given ('phone': each from the device named in 'from'). Written by hand from the spec.",
+ "about": "Cases every implementation of needs-you must pass (spec/needs.md): what a device answers waits on the person ('computer': its boards, its agents' statuses and what they wait on an answer for ('waits'), in, with the machines it knows ('known': itself, the person's other devices, participants' computers by whose they are, and saved machines) and the tiles whose agents say which keys allow and deny what they ask ('decides', none when not given); the list, each item with the machine its agent runs on, and how many agents are at work, out), and what a phone shows of the answers it is given ('phone': each from the device named in 'from'). Written by hand from the spec.",
  "known": {
   "self": {
    "device": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
@@ -55,7 +55,7 @@
      }
     }
    ],
-   "plans": [],
+   "waits": {},
    "needs": [
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -140,7 +140,7 @@
      }
     }
    ],
-   "plans": [],
+   "waits": {},
    "needs": [
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -221,20 +221,16 @@
      }
     }
    ],
-   "plans": [
-    {
-     "requestId": "r5",
-     "tileId": "hm:t5",
-     "plan": "1. Read the routes\n2. Split them",
-     "cwd": "/work/api"
+   "waits": {
+    "t5": {
+     "kind": "plan",
+     "plan": "1. Read the routes\n2. Split them"
     },
-    {
-     "requestId": "r6",
-     "tileId": "hm:t6",
-     "plan": "stale",
-     "cwd": "/work/api"
+    "t6": {
+     "kind": "plan",
+     "plan": "stale"
     }
-   ],
+   },
    "needs": [
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -282,7 +278,7 @@
      }
     }
    ],
-   "plans": [],
+   "waits": {},
    "needs": [],
    "working": 0
   },
@@ -398,7 +394,7 @@
      }
     }
    ],
-   "plans": [],
+   "waits": {},
    "needs": [],
    "working": 1
   },
@@ -441,7 +437,7 @@
      }
     }
    ],
-   "plans": [],
+   "waits": {},
    "needs": [],
    "working": 0
   },
@@ -522,7 +518,7 @@
      }
     }
    ],
-   "plans": [],
+   "waits": {},
    "needs": [
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -630,7 +626,7 @@
      }
     }
    ],
-   "plans": [],
+   "waits": {},
    "needs": [
     {
      "workspace": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
@@ -961,7 +957,7 @@
      }
     }
    ],
-   "plans": [],
+   "waits": {},
    "needs": [
     {
      "workspace": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
@@ -1153,7 +1149,7 @@
      }
     }
    ],
-   "plans": [],
+   "waits": {},
    "decides": [
     "t1",
     "t2"

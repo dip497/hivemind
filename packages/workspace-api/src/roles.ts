@@ -51,12 +51,8 @@ const LEAST: Record<string, Role> = {
   "terminal.resize": "terminals",
   "terminal.keyboard.ask": "terminals",
   "terminal.keyboard.give": "terminals",
-  // Seeing the plans agents wait on a person for; answering one, and starting and ending what
-  // runs on the host, is driving agents.
-  "plan.list": "view",
-  "plan.decide": "agents",
-  // Answering what an agent waits on the person for, and sending one a message, from wherever
-  // they are (M5).
+  // Answering what an agent waits on (a plan, a supervised tool use, its screen), and sending one
+  // a message, from wherever the person is (M5), is driving agents.
   "agent.answer": "agents",
   "agent.send": "agents",
   // Seeing what may be started there and what an agent changed; starting one, interrupting its

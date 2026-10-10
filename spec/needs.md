@@ -59,7 +59,8 @@ and once: an answer for a wait that is over, or one answered already, does nothi
 `{ "answered": false }`. The answer is
 
 - for a `plan`, `{ "decision": "allow" | "deny", "feedback"?: "<what to change>" }`: the plan is
-  decided as at the desktop (`plan.decide`), and everyone is told who decided it;
+  decided: the first answer is the one the agent gets, a later one hears who gave it (`by`), and
+  everyone is told who decided it (`agent.event` `answered`);
 - for a `permission` the list says the device can decide (`decide`, 0.5), also
   `{ "decision": "allow" | "deny" }`: the keys the agent's manifest gives for that decision are
   typed into its terminal, the first at once and each next one a moment (40 ms) after the last, so

@@ -5,12 +5,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { AgentItem } from "@hivemind/workspace-api/agents";
-import { AgentFeed, type AgentChange, type AgentEvent } from "../src/agent-feed.ts";
+import { AgentFeed, type AgentChange, type AgentEvent, type AgentFeedOptions } from "../src/agent-feed.ts";
 
 const agent = (tile: string, over: Partial<AgentItem> = {}): AgentItem =>
   ({ workspace: "ws-a", name: "api", tile, agent: `claude #${tile}`, state: "working", since: 1, machine: "here", ...over });
 
-function feed(start: AgentItem[], keep?: number) {
+function feed(start: AgentItem[], keep?: number, answerOf?: AgentFeedOptions["answerOf"]) {
   let now = start;
   const told: Array<{ event: string; repo: string; payload: AgentChange | AgentEvent }> = [];
   const f = new AgentFeed({
@@ -19,6 +19,7 @@ function feed(start: AgentItem[], keep?: number) {
     repoOf: (ws) => ({ "ws-a": "/a", "ws-b": "/b" } as Record<string, string>)[ws] ?? null,
     every: 250,
     ...(keep ? { keep } : {}),
+    ...(answerOf ? { answerOf } : {}),
   });
   return { f, told, set: (next: AgentItem[]) => { now = next; } };
 }
@@ -88,4 +89,16 @@ test("what a worker reports to the program that started it is told to its worksp
   assert.equal(h.told[0]!.repo, "/a");
   assert.deepEqual(h.f.since("ws-a", 0)?.events.map((e) => [e.kind, e.detail]), [["reported", "done: 3 files"]]);
   assert.deepEqual(h.f.since("ws-b", 0)?.events, []);
+});
+
+test("a wait that ends is told answered, with the decision and who gave it when it was decided; one replaced by another wait ended too", () => {
+  const priya = { person: "p".repeat(64), name: "Priya" };
+  const h = feed([agent("1", { state: "waiting", waiting: { kind: "plan", since: 5, plan: "1. Split" } })], undefined, (tile, since) => (tile === "1" && since === 5 ? { decision: "deny", by: priya } : undefined));
+  h.set([agent("1", { state: "waiting", waiting: { kind: "permission", since: 9 } })]);
+  h.f.refresh();
+  h.set([agent("1")]);
+  h.f.refresh();
+  assert.deepEqual(events(h.told), ["1:answered:deny", "1:waiting:permission", "1:answered"]);
+  const answered = h.told.map((t) => t.payload as AgentEvent).filter((e) => e.kind === "answered");
+  assert.deepEqual(answered.map((e) => e.by), [priya, undefined]);
 });

@@ -12,7 +12,7 @@
  * However often statuses change, the feed works the agents out at most every `every` ms (titles
  * change about every 600 ms while an agent writes) and tells only what changed.
  */
-import type { AgentChange, AgentEvent, AgentItem } from "@hivemind/workspace-api/agents";
+import type { AgentChange, AgentEvent, AgentItem, Answerer } from "@hivemind/workspace-api/agents";
 
 export type { AgentChange, AgentEvent, AgentEventKind } from "@hivemind/workspace-api/agents";
 
@@ -23,6 +23,8 @@ export interface AgentFeedOptions {
   publish(event: "agent.changed" | "agent.event", repo: string, payload: AgentChange | AgentEvent): void;
   /** The folder of the workspace with this id, or null when it is not held here. */
   repoOf(workspace: string): string | null;
+  /** How the wait of `tile` that began at `since` was answered, and by whom, when it was. */
+  answerOf?(tile: string, since: number): { decision: string; by: Answerer | null } | undefined;
   /** The least time between two workings-out (ms). */
   every?: number;
   /** How many changes and events the feed keeps for a reader catching up. */
@@ -90,7 +92,7 @@ export class AgentFeed {
       const was = this.agents.get(tile);
       if (was && JSON.stringify(was) === JSON.stringify(agent)) continue;
       this.tell(agent.workspace, { seq: ++this.seq, agent });
-      for (const e of eventsOf(was, agent)) this.tell(agent.workspace, undefined, { seq: ++this.seq, at: this.lastAt, tile, ...e });
+      for (const e of eventsOf(was, agent, this.o.answerOf)) this.tell(agent.workspace, undefined, { seq: ++this.seq, at: this.lastAt, tile, ...e });
     }
     for (const [tile, was] of this.agents) {
       if (next.has(tile)) continue;
@@ -124,11 +126,14 @@ export class AgentFeed {
 }
 
 /** What an agent's change from `was` to `now` means. */
-function eventsOf(was: AgentItem | undefined, now: AgentItem): Array<Pick<AgentEvent, "kind" | "detail">> {
+function eventsOf(was: AgentItem | undefined, now: AgentItem, answerOf: AgentFeedOptions["answerOf"]): Array<Pick<AgentEvent, "kind" | "detail" | "by">> {
   if (!was) return [{ kind: "came" }];
-  const out: Array<Pick<AgentEvent, "kind" | "detail">> = [];
+  const out: Array<Pick<AgentEvent, "kind" | "detail" | "by">> = [];
   if (now.state !== was.state && TURN_ENDS.has(now.state) && !TURN_ENDS.has(was.state)) out.push({ kind: "turnEnded", detail: now.state });
+  if (was.waiting && (!now.waiting || now.waiting.since !== was.waiting.since)) {
+    const answer = answerOf?.(now.tile, was.waiting.since);
+    out.push({ kind: "answered", ...(answer ? { detail: answer.decision, ...(answer.by ? { by: answer.by } : {}) } : {}) });
+  }
   if (now.waiting && (!was.waiting || was.waiting.since !== now.waiting.since)) out.push({ kind: "waiting", detail: now.waiting.kind });
-  if (!now.waiting && was.waiting) out.push({ kind: "answered" });
   return out;
 }

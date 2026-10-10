@@ -1,8 +1,7 @@
 /**
  * HCP verb dispatch. Splits work by where it must run:
- *   - RENDERER verbs (tile.spawn_agent, tile.focus, tool.open, review.open, view.emit) delegate
- *     to `deps.callRenderer` — the request-id-correlated main→renderer channel (the
- *     plan-bridge pattern).
+ *   - RENDERER verbs (tile.focus, view.emit, plugin.*, *.rescan) delegate to
+ *     `deps.callRenderer` — the request-id-correlated main→renderer channel.
  *   - MAIN verbs run here: agent.send writes to the pty; agent.read awaits the next turn and
  *     returns the reply the agent's plugin reported; the canvas verbs tile.list,
  *     tile.list_frames, tile.rename and tile.close read and write main's workspace store, so
@@ -27,6 +26,7 @@ import { COMMAND_NAME_RE } from "@hivemind/view-sdk/commands";
 import { AGENT_TILE_KIND, isTerminalKind, type CoreLayout, type FrameRecord, type TileRecord } from "@hivemind/workspace-doc/shapes";
 import { defaultFrame, frameFor, listFrames, listTiles, type TileFacts } from "@hivemind/workspace-doc/tile-list";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
+import type { Waits } from "../waits.js";
 import { Refused, type Actor, type Intent, type Intents } from "@hivemind/workspace-host/intents";
 import type { StatusStore } from "@hivemind/agent-host/status-store";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
@@ -175,10 +175,8 @@ export interface MethodDeps {
    *  as HIVE_SUPERVISE into the worker's spawn env so the daemon installs the
    *  permission-broker hook. */
   setSupervise: (tileId: string, spec: string | null) => void;
-  /** Push a control-plane "wait" status for a tile (e.g. "awaiting_approval")
-   *  to the renderer's status bus, or null to clear. */
-  /** A supervised worker waits on its supervisor (true) or no longer does (false). */
-  awaitingApproval: (tileId: string, waiting: boolean) => void;
+  /** What agents wait on that an answer ends: a supervised worker's tool use, a plan. */
+  waits: Waits;
   /** The workspaces main has open. The canvas verbs read them, and write them as `control`;
    *  their windows follow. */
   workspaces: Pick<WorkspaceStore, "workspaceOf" | "getCore" | "addTile" | "renameTile" | "removeTile" | "repos" | "ownership">;
@@ -223,8 +221,8 @@ export interface Dispatcher {
   dispatch: (method: string, params: unknown, call: HcpCall) => Promise<unknown>;
   /** Drop ALL per-tile HCP state for a tile that has gone away, WITHOUT closing it
    *  as `tile.close` does. MUST be called on every pty-exit and
-   *  user-close path — otherwise the maps (parentOf/depthOf/sendSeq/approveCache/
-   *  pendingApprovals) leak, a blocked agent.read/approval on the dead worker hangs
+   *  user-close path — otherwise the maps (parentOf/depthOf/sendSeq/approveCache)
+   *  and its wait leak, a blocked agent.read/approval on the dead worker hangs
    *  its full timeout instead of resolving, and its UI "awaiting" status lingers.
    *  Idempotent — safe to call twice (e.g. tile.close then the resulting pty-exit). */
   forgetTile: (tileId: string) => void;
@@ -237,10 +235,6 @@ export interface Dispatcher {
   }) => Promise<string>;
   /** Who started `bare` and hears its reports: a tile, or a program (`client:<grant id>`). */
   parentOf: (bare: string) => string | undefined;
-  /** The approval `bare` waits on, if it waits on one. */
-  approvalOf: (bare: string) => { request: string; tool: string; summary: string; expiresAt: number; supervisor: string } | undefined;
-  /** Answer an approval: false when none of that id waits. */
-  answerApproval: (request: string, decision: "allow" | "deny") => boolean;
   /** Close a tile, as `tile.close` does, without recording it: the caller has (M5). */
   close: (tileId: string) => Promise<unknown>;
 }
@@ -277,26 +271,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       throw new HcpError("UNSUPPORTED", `${verb}: ${def.id} has no turn signal (${def.note ?? "scrape-only status"}) — drive it by hand or use a worker runtime: ${workerAgents().map((d) => d.id).join(", ")}`);
     }
   };
-  // Agent-supervised approvals (HCP Phase 6). A supervised worker's PreToolUse
-  // broker hook calls `agent.await_approval` (held here until the parent answers
-  // via `agent.approve`). `approveCache` remembers always/never per worker+tool.
-  const pendingApprovals = new Map<string, {
-    resolve: (d: { decision: "allow" | "deny"; reason?: string }) => void; timer: ReturnType<typeof setTimeout>;
-    cacheKey: string; worker: string; supervisor: string; tool: string; summary: string; expiresAt: number;
-  }>();
-  /** Answer the approval `reqId`: always / never also remember it for this worker and tool. False
-   *  when none of that id waits. */
-  const answerApproval = (reqId: string, decision: "allow" | "deny" | "always" | "never", reason?: string): boolean => {
-    const pend = pendingApprovals.get(reqId);
-    if (!pend) return false;
-    if (decision === "always") approveCache.set(pend.cacheKey, "allow");
-    if (decision === "never") approveCache.set(pend.cacheKey, "deny");
-    clearTimeout(pend.timer);
-    pendingApprovals.delete(reqId);
-    deps.awaitingApproval(pend.worker, false); // resolved → clear the "waiting" status
-    pend.resolve({ decision: decision === "allow" || decision === "always" ? "allow" : "deny", reason });
-    return true;
-  };
+  // Agent-supervised approvals (HCP Phase 6). A supervised worker's PreToolUse broker hook calls
+  // `agent.await_approval`, which waits (`deps.waits`) until its starter answers. `approveCache`
+  // remembers always/never per worker+tool.
   const approveCache = new Map<string, "allow" | "deny">();
 
   const armRead = (tileId: string) => {
@@ -438,15 +415,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     for (const [child, parent] of parentOf) if (parent === bare) parentOf.delete(child);
     depthOf.delete(bare);
     deps.setSupervise(bare, null);
-    for (const [reqId, pend] of pendingApprovals) {
-      if (pend.cacheKey.startsWith(`${bare}:`)) {
-        clearTimeout(pend.timer);
-        pend.resolve({ decision: "deny", reason: "worker closed" });
-        pendingApprovals.delete(reqId);
-      }
-    }
+    deps.waits.forget(bare);
     for (const key of approveCache.keys()) if (key.startsWith(`${bare}:`)) approveCache.delete(key);
-    deps.awaitingApproval(bare, false);
   };
 
   // Close a tile, with no window needed: it leaves its workspace and the session it runs ends, but
@@ -779,7 +749,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       case "agent.await_approval": {
         // Called by a SUPERVISED worker's PreToolUse broker hook before a tool
         // runs. Resolve from the remember-cache, else ask the parent and BLOCK
-        // (held in pendingApprovals) until `agent.approve` or the timeout.
+        // (a wait) until `agent.approve`, `agent.answer` or the timeout.
         const worker = bareOf(String(p.callerTile ?? ""));
         const tool = String(p.tool_name ?? "");
         if (!worker || !tool) return { decision: "ask" };
@@ -791,52 +761,39 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // Asking is the effect: the question is typed into the supervisor's terminal, and the
         // worker waits for the answer.
         return effect(call, { verb: method, target: parent, detail: tool.slice(0, 128) }, async () => {
-          const inp = (p.tool_input ?? {}) as Record<string, unknown>;
-          const reqId = randomUUID();
-          const summary = summarizeTool(tool, inp);
-          const banner =
-            `\n[hive] APPROVAL — worker ${label(worker)} wants to run ${tool}: ${summary}\n` +
-            `Reply: hive ctl approve ${reqId} allow|deny|always|never  (allow = this call; always = this tool, for this worker)\n`;
-          // Surface the pause in the UI: this worker is now waiting on its parent.
-          deps.awaitingApproval(worker, true);
+          const summary = summarizeTool(tool, (p.tool_input ?? {}) as Record<string, unknown>);
           return await new Promise((resolve) => {
-            const done = (decision: "ask") => {
-              const pend = pendingApprovals.get(reqId);
-              if (!pend) return; // answered already
-              clearTimeout(pend.timer);
-              pendingApprovals.delete(reqId);
-              deps.awaitingApproval(worker, false);
-              resolve({ decision }); // no answer → "ask" (claude: human prompt; pi: blocks)
-            };
-            // Two timers, never both live. Until the banner is DELIVERED, only the
-            // ceiling runs — a supervisor that never returns to its prompt (dead,
-            // wedged) can't hang the worker or leak the pending entry forever. On
-            // delivery, swap the ceiling for the answer clock: it starts WHEN THE
-            // PARENT ACTUALLY SEES THE REQUEST, not when the worker asked — the banner
-            // may have been held minutes while the parent was mid-turn, and a request
-            // that waited 8 minutes must not then get 1 to be answered.
-            const ceiling = setTimeout(() => done("ask"), APPROVAL_MAX_WAIT_MS);
-            ceiling.unref?.();
-            pendingApprovals.set(reqId, { resolve, timer: ceiling, cacheKey, worker, supervisor: parent, tool, summary, expiresAt: Date.now() + APPROVAL_MAX_WAIT_MS });
+            let timer: ReturnType<typeof setTimeout>;
+            // The worker waits on its starter; an answer is the decision its hook gets.
+            // No answer: "ask" (claude: its own prompt; pi: blocks).
+            const wait = deps.waits.ask(worker, { kind: "approval", tool, summary, expiresAt: Date.now() + APPROVAL_MAX_WAIT_MS, answerer: parent }, (decision, reason) => {
+              clearTimeout(timer);
+              resolve(decision ? { decision, ...(reason ? { reason } : {}) } : { decision: "ask" });
+            });
+            const unanswered = () => deps.waits.drop(wait.request);
+            // Two clocks, never both live. Until the question is DELIVERED only the ceiling runs,
+            // so a starter that never returns to its prompt (dead, wedged) cannot hang the worker.
+            // On delivery the answer clock replaces it: it starts when the starter SEES the
+            // question, which may have been held minutes while it was mid-turn.
+            timer = setTimeout(unanswered, APPROVAL_MAX_WAIT_MS);
+            timer.unref?.();
             // A hook that stopped waiting (it gave up and asked the agent's own prompt) has no use
-            // for an answer: the question ends with it, and an answer after that is told so
-            // rather than told it worked.
-            if (call.signal?.aborted) return done("ask");
-            call.signal?.addEventListener("abort", () => done("ask"), { once: true });
+            // for an answer: the wait ends with it, and an answer after that is told so.
+            if (call.signal?.aborted) return unanswered();
+            call.signal?.addEventListener("abort", unanswered, { once: true });
             const armAnswerTimeout = () => {
-              const pend = pendingApprovals.get(reqId);
-              if (!pend) return; // already answered
-              clearTimeout(pend.timer); // drop the ceiling
-              const t = setTimeout(() => done("ask"), APPROVAL_TIMEOUT_MS);
-              t.unref?.();
-              pend.timer = t;
-              pend.expiresAt = Date.now() + APPROVAL_TIMEOUT_MS;
+              if (!deps.waits.named(wait.request)) return;
+              clearTimeout(timer);
+              timer = setTimeout(unanswered, APPROVAL_TIMEOUT_MS);
+              timer.unref?.();
+              deps.waits.expires(wait.request, Date.now() + APPROVAL_TIMEOUT_MS);
             };
-            // A program asks its own way: the wait is in the agent feed from now, its answer
-            // clock running.
+            // A program reads the wait in the agent feed, its answer clock running from now.
             if (isClient(parent)) return armAnswerTimeout();
-            const delivered = deps.deliverToTile(ptyId(parent), banner, armAnswerTimeout);
-            if (!delivered) done("ask"); // parent's pty is gone → don't hang the worker
+            const banner =
+              `\n[hive] APPROVAL — worker ${label(worker)} wants to run ${tool}: ${summary}\n` +
+              `Reply: hive ctl approve ${wait.request} allow|deny|always|never  (allow = this call; always = this tool, for this worker)\n`;
+            if (!deps.deliverToTile(ptyId(parent), banner, armAnswerTimeout)) unanswered(); // parent's pty is gone
           });
         });
       }
@@ -848,13 +805,14 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // person: never the worker itself, nor another worker.
         const reqId = String(p.reqId ?? "");
         const decision = String(p.decision ?? "");
-        const pend = pendingApprovals.get(reqId);
+        const wait = deps.waits.named(reqId);
         const d = decision === "allow" || decision === "always" ? "allow" : decision === "deny" || decision === "never" ? "deny" : null;
-        return effect(call, { verb: method, target: pend?.worker, detail: d ? decision : undefined, onlyBy: pend?.supervisor }, async () => {
+        return effect(call, { verb: method, target: wait?.tile, detail: d ? decision : undefined, onlyBy: wait?.answerer }, async () => {
           const reason = p.reason != null ? String(p.reason) : undefined;
-          if (!pend) throw new HcpError("BAD_REQUEST", `no approval ${reqId} is waiting: it was answered, ran out of time, or its worker stopped waiting`);
+          if (!wait || wait.kind !== "approval") throw new HcpError("BAD_REQUEST", `no approval ${reqId} is waiting: it was answered, ran out of time, or its worker stopped waiting`);
           if (!d) throw new HcpError("BAD_REQUEST", "decision must be allow | deny | always | never");
-          answerApproval(reqId, decision as "allow" | "deny" | "always" | "never", reason);
+          if (decision === "always" || decision === "never") approveCache.set(`${wait.tile}:${wait.tool}`, d);
+          deps.waits.answer(wait.tile, wait.since, d, reason);
           return { ok: true, decision: d };
         });
       }
@@ -990,19 +948,32 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           return await closeTile(String(p.tileId));
         });
 
-      case "review.open":
-        // Open a plan-review tile and BLOCK until the human decides. The
-        // renderer doesn't reply on open — the tile resolves this caller via
-        // hcpResult on the decision, which is why the timeout is generous. The decision it
-        // comes back with is recorded.
+      case "review.open": {
+        // The calling agent waits on a person's review of its plan: a plan wait, answered where
+        // every plan is (beside the agent in each window, `agent.answer`). The decision it comes
+        // back with is recorded.
         const decided = (r: unknown) => {
           const decision = (r as { decision?: unknown } | null)?.decision;
           return decision === "allow" || decision === "deny" ? decision : undefined;
         };
         return effect(call, { verb: method, detail: decided }, async () => {
           if (!p.plan) throw new HcpError("BAD_REQUEST", "plan required");
-          return await deps.callRenderer("review.open", { plan: p.plan, cwd: p.cwd ?? "" }, REVIEW_TIMEOUT);
+          const tile = tileOf(p.callerTile);
+          if (!tile) throw new HcpError("BAD_REQUEST", "a plan is reviewed for the agent that wrote it: run this in its tile, or pass --tile");
+          return await new Promise((resolve, reject) => {
+            let why = "it waits on something else now";
+            const wait = deps.waits.ask(tile, { kind: "plan", plan: String(p.plan), cwd: String(p.cwd ?? "") }, (decision, feedback) => {
+              clearTimeout(timer);
+              if (decision) resolve({ decision, ...(feedback ? { feedback } : {}) });
+              else reject(new HcpError("TIMEOUT", `the plan was not reviewed: ${why}`));
+            });
+            const unanswered = (reason: string) => { why = reason; deps.waits.drop(wait.request); };
+            const timer = setTimeout(() => unanswered("nobody reviewed it in time"), REVIEW_TIMEOUT);
+            timer.unref?.();
+            call.signal?.addEventListener("abort", () => unanswered("the caller stopped waiting"), { once: true });
+          });
         });
+      }
 
       // ── pipes (main) ─────────────────────────────────────────────────────
       case "tile.connect":
@@ -1052,10 +1023,5 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   return {
     dispatch, forgetTile: forgetTileState, labelOf: label, spawn: doSpawn, close: closeTile,
     parentOf: (bare) => parentOf.get(bare),
-    approvalOf: (bare) => {
-      for (const [request, p] of pendingApprovals) if (p.worker === bare) return { request, tool: p.tool, summary: p.summary, expiresAt: p.expiresAt, supervisor: p.supervisor };
-      return undefined;
-    },
-    answerApproval: (request, decision) => answerApproval(request, decision),
   };
 }

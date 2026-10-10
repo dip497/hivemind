@@ -47,7 +47,7 @@ export interface SharedStatus {
 import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 export type { NotificationSettings };
 export type { AgentChange, AgentEvent, AgentItem } from "@hivemind/workspace-api/agents";
-import type { AgentChange, AgentEvent, AgentItem, PipeChange, SpawnChange, StatusChange, TileOpened } from "@hivemind/workspace-api/agents";
+import type { AgentAnswer, AgentChange, AgentEvent, AgentItem, Answerer, PipeChange, SpawnChange, StatusChange, TileOpened } from "@hivemind/workspace-api/agents";
 
 export type { WidgetOption, WidgetPackage } from "@hivemind/core/widget-format";
 import type { WidgetPackage } from "@hivemind/core/widget-format";
@@ -89,7 +89,6 @@ export type {
 } from "@hivemind/workspace-api/git";
 import type { DiffPayload, DiffScope, GitBranchList, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "@hivemind/workspace-api/git";
 import type { Typist } from "@hivemind/workspace-api/terminals";
-import type { Answerer, PlanDecided, PlanReview } from "@hivemind/workspace-api/plans";
 
 // ── machines (saved ssh hosts, shared with `hive machine`) ────────────────
 /** One remote directory entry for the folder picker / tree. */
@@ -307,6 +306,10 @@ export interface HiveIpc {
   agentList(repo: string): Promise<{ seq: number; agents: AgentItem[] }>;
   /** What `repo`'s agent readers were told after `seq`; null: list again. */
   agentSince(repo: string, seq: number): Promise<{ seq: number; changes: AgentChange[]; events: AgentEvent[] } | null>;
+  /** Answer what the agent in `tile` waits on, the wait that began at `since`: a plan, a
+   *  supervised tool use, its screen. `answered` false: it waits on that no more, or someone
+   *  answered first (`by`). */
+  agentAnswer(tile: string, since: number, answer: AgentAnswer): Promise<{ answered: boolean; by?: Answerer }>;
   onAgentChanged(cb: (repo: string, change: AgentChange) => void): () => void;
   onAgentEvent(cb: (repo: string, event: AgentEvent) => void): () => void;
   /** The installed widget packages changed. */
@@ -682,21 +685,6 @@ export interface HiveIpc {
   /** Restart the app so a settings change that needs a fresh launch takes hold. */
   relaunchApp(): Promise<void>;
 
-  /** The plans the agents of `repo` wait on a person for (M2): each opens beside its agent. */
-  planReviews(repo: string): Promise<PlanReview[]>;
-  /** Answer the plan `requestId` the agent in `tileId` handed off: allow → the agent proceeds with
-   *  the plan; deny + feedback → it stays in plan mode and revises. The first answer is the one it
-   *  gets: `answered` false, someone else's came first (`by`). */
-  planReviewDecide(
-    tileId: string,
-    requestId: string,
-    decision: "allow" | "deny",
-    feedback?: string,
-  ): Promise<{ answered: boolean; by: Answerer | null }>;
-  /** An agent handed off a plan: every window, on every machine the workspace is shared with. */
-  onPlanReview(cb: (review: PlanReview) => void): () => void;
-  /** A plan was answered, and by whom; or its agent stopped waiting (`decision` null). */
-  onPlanDecided(cb: (decided: PlanDecided) => void): () => void;
 
   /** Reply to a main→renderer HCP command (a control-plane verb that needs the
    *  canvas, e.g. tile.spawn_agent). `id` correlates with the pushed command. */

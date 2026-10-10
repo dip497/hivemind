@@ -12,10 +12,8 @@
  */
 import net from "node:net";
 import fs from "node:fs";
-import { randomUUID } from "node:crypto";
 
 export interface PlanRequest {
-  requestId: string;
   tileId: string;
   plan: string;
   cwd: string;
@@ -23,7 +21,7 @@ export interface PlanRequest {
    *  agent revises. Idempotent; later calls are ignored. */
   reply: (decision: "allow" | "deny", feedback?: string) => void;
   /** Fires if the hook connection drops before a decision (agent killed, app
-   *  reload). Lets the app close any open review tile for this request. */
+   *  reload): the agent waits on the plan no more. */
   onAbort: (cb: () => void) => void;
 }
 
@@ -66,10 +64,10 @@ export function startPlanBridge(
         reply("allow");
         return;
       }
-      if (!msg.plan) { reply("allow"); return; }
+      // A plan from no agent tile waits on nobody.
+      if (!msg.plan || !msg.tileId) { reply("allow"); return; }
       onRequest({
-        requestId: randomUUID(),
-        tileId: msg.tileId ?? "",
+        tileId: msg.tileId,
         plan: msg.plan,
         cwd: msg.cwd ?? "",
         reply,

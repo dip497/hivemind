@@ -359,21 +359,13 @@ export function useSpawn(ctx: SpawnCtx) {
     spawnTile(canSpawnKind(k) ? k : "shell", frameId);
   }, [spawnTile]);
 
-  // Open a plan-review tile for an agent's plan handoff. Places it in the SAME
-  // frame as the agent tile that produced the plan (so the review sits beside
-  // its terminal), falling back to the active frame. Returns the new tile id so
-  // the caller can close it on abort. Not a SINGLETON_KIND — several agents can
-  // be mid-review at once.
+  // Open a plan-review tile for the plan an agent waits on. Places it in the SAME
+  // frame as the agent's tile (so the review sits beside its terminal), falling
+  // back to the active frame. Returns the new tile id. Not a SINGLETON_KIND —
+  // several agents can be mid-review at once.
   const openPlanReview = useCallback(
-    (payload: { requestId?: string; hcpCmdId?: string; plan: string; cwd: string; agentTileId?: string }): string => {
-      // agentTileId arrives as the agent's HIVEMIND_TILE, which is the PTY id
-      // (`hm:<tileId>`). frameOf is keyed by the bare tile id, so strip the
-      // `hm:` scope prefix before the lookup — otherwise it always misses and
-      // the review tile lands in the active/first frame (the wrong project).
-      const callerTile = payload.agentTileId?.startsWith("hm:")
-        ? payload.agentTileId.slice(3)
-        : payload.agentTileId;
-      const agentFrameId = callerTile ? frameOfRef.current[callerTile] : undefined;
+    (review: { agentTileId: string; since: number; plan: string }): string => {
+      const agentFrameId = frameOfRef.current[review.agentTileId];
       const frame =
         (agentFrameId ? framesRef.current.find((f) => f.id === agentFrameId) : undefined) ?? ensureFrame();
       const newId = mintId("tile-planReview");
@@ -384,7 +376,7 @@ export function useSpawn(ctx: SpawnCtx) {
           id: newId,
           kind: PLAN_REVIEW,
           label: "Plan review",
-          review: { requestId: payload.requestId, hcpCmdId: payload.hcpCmdId, plan: payload.plan, cwd: payload.cwd, agentTileId: callerTile },
+          review,
         },
       ]);
       return newId;

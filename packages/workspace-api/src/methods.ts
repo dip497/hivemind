@@ -6,9 +6,8 @@ import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } 
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
-import type { AgentAnswer, AgentChange, AgentChanges, AgentEvent, AgentItem, ConversationEntry, Links, PipeChange, SpawnChange, StartAgent, Startable, StatusChange, TileOpened } from "./agents.js";
+import type { AgentAnswer, AgentChange, Answerer, AgentChanges, AgentEvent, AgentItem, ConversationEntry, Links, PipeChange, SpawnChange, StartAgent, Startable, StatusChange, TileOpened } from "./agents.js";
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
-import type { Answerer, PlanDecided, PlanReview } from "./plans.js";
 import type { JoinQuestion, JoinRequests, PersonHere } from "./people.js";
 import type { ClientGrant, NewGrant } from "./grants.js";
 import type { FrameClose, FrameClosed, FrameOpened, FrameSpec } from "./frames.js";
@@ -103,15 +102,10 @@ export interface WorkspaceMethods {
   /** Show a terminal: the first to open a session starts it; one that opens it after joins it,
    *  its screen first. `joined`: another client started it. Its output and exit are events. */
   "terminal.open": (opts: TerminalOpts) => { pid: number; joined: boolean };
-  /** The plans the agents of `repo` are waiting on a person for (M2). Each after it is a
-   *  `plan.review` event, and each answer a `plan.decided`. */
-  "plan.list": (repo: string) => PlanReview[];
-  /** Answer the plan `requestId` the agent in `tile` handed off: the first answer is the one the
-   *  agent gets. `answered` false: someone answered first (`by`), or it is no longer waited on. */
-  "plan.decide": (tile: string, requestId: string, decision: "allow" | "deny", feedback?: string) => { answered: boolean; by: Answerer | null };
-  /** Answer what the agent in `tile` waits on the person for, the wait that began at `since` (as
-   *  the needs list says): only while it still waits on that, and once (M5). */
-  "agent.answer": (tile: string, since: number, answer: AgentAnswer) => { answered: boolean };
+  /** Answer what the agent in `tile` waits on, the wait that began at `since` (as `agent.list`
+   *  says it): only while it still waits on that, and once; the first answer is the one the agent
+   *  gets. `answered` false: it waits on that no more, or someone answered first (`by`). */
+  "agent.answer": (tile: string, since: number, answer: AgentAnswer) => { answered: boolean; by?: Answerer };
   /** A message for the agent in `tile`, one line: typed in as its next prompt once it is at its
    *  prompt, Enter after it (M5). `sent` false: no agent runs there. */
   "agent.send": (tile: string, text: string) => { sent: boolean };
@@ -256,10 +250,6 @@ export interface WorkspaceEvents {
   /** Someone types into `tile`: to each client that opened it but theirs, at most once a second
    *  for the same person typing (R4). */
   "terminal.typing": (tile: string, by: Typist) => void;
-  /** An agent handed off a plan for review (M2). */
-  "plan.review": (review: PlanReview) => void;
-  /** A plan was answered, and by whom; or its agent stopped waiting (`decision` null). */
-  "plan.decided": (decided: PlanDecided) => void;
   /** Files changed in a repo the client watches (at most one event every 300 ms). */
   "file.changed": (repo: string, change: { paths: string[] }) => void;
   /** Another writer changed a workspace's layouts: `part` is `core`, `board` or `view:<id>`. */

@@ -128,9 +128,6 @@ function tilesOf(event: EventMessage): string[] | null {
       return [String((p as Record<string, unknown>)?.child), ...[(p as Record<string, unknown>)?.parent].filter((t) => t !== null).map(String)];
     case "tile.opened":
       return [String((p as Record<string, unknown>)?.tileId)];
-    case "plan.review":
-    case "plan.decided":
-      return [String((p as Record<string, unknown>)?.tileId)];
     default:
       return null;
   }

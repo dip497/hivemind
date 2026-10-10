@@ -1,9 +1,9 @@
 /**
  * PlanReviewTile — the in-canvas plan review surface. Opened automatically when
- * an agent hands off a plan (the injected PreToolUse/ExitPlanMode hook → main's
- * plan-bridge → the workspace API's `plan.review`, to every window showing the
- * agent, on every machine the workspace is shared with). The agent is BLOCKED on
- * the hook connection until someone who may drive agents decides here:
+ * an agent waits on a review of its plan (its ExitPlanMode hook, or `hive ctl
+ * open-review`), in every window showing the agent, on every machine the
+ * workspace is shared with. The agent waits until someone who may drive agents
+ * decides here, or answers its wait elsewhere (`agent.answer`):
  *   - Approve plan      → resolve `allow`; the agent exits plan mode and executes.
  *   - Request changes   → resolve `deny` + feedback markdown; the agent stays in
  *                         plan mode and revises (feedback becomes
@@ -23,20 +23,17 @@ import { PlanReviewBody } from "./plan-review/PlanReviewBody";
 import { joinedId, useShown } from "./multiplayer/shown";
 
 interface Props {
-  /** Set when the review came from the plan-bridge hook (PreToolUse). */
-  requestId?: string;
-  /** Set when the review came from a blocked HCP `review.open` caller. */
-  hcpCmdId?: string;
+  /** The agent waiting on the review, and when its wait began: what an answer is to. */
+  agentTileId: string;
+  since: number;
   plan: string;
   cwd: string;
-  /** The agent tile that produced this plan: whose plan an answer is to. */
-  agentTileId?: string;
   /** Remove the tile from the canvas after a decision (or external abort). */
   onClose?: () => void;
 }
 
-export function PlanReviewTile({ requestId, hcpCmdId, plan, cwd, agentTileId, onClose }: Props) {
-  const font = useTileFont(`plan:${requestId ?? hcpCmdId ?? "x"}`, 13);
+export function PlanReviewTile({ agentTileId, since, plan, cwd, onClose }: Props) {
+  const font = useTileFont(`plan:${agentTileId}@${since}`, 13);
   const [sent, setSent] = useState(false);
   // In a workspace joined from elsewhere, answering is driving the host's agents.
   const { repo, shared } = useShown();
@@ -46,12 +43,8 @@ export function PlanReviewTile({ requestId, hcpCmdId, plan, cwd, agentTileId, on
     if (sent) return;
     setSent(true);
     try {
-      // HCP review.open → resolve the blocked caller; else the plan-bridge hook.
-      if (hcpCmdId) await window.hive.hcpResult(hcpCmdId, true, { decision, feedback });
-      else if (requestId && agentTileId) {
-        const { answered, by } = await window.hive.planReviewDecide(agentTileId, requestId, decision, feedback);
-        if (!answered && by) toast(`${by.name || "Someone"} answered the plan first`);
-      }
+      const { answered, by } = await window.hive.agentAnswer(agentTileId, since, { decision, ...(feedback ? { feedback } : {}) });
+      if (!answered && by) toast(`${by.name || "Someone"} answered the plan first`);
     } catch {
       /* main gone — the hook fails open on its side, nothing to recover here */
     }

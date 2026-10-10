@@ -107,7 +107,6 @@ function fakeDeps(over: Partial<Parameters<typeof makeDispatch>[0]> = {}) {
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    awaitingApproval: () => {},
     ...workspaceDeps(),
     ...over,
   };

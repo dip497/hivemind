@@ -29,7 +29,6 @@ function dispatcher(agentInstalled?: () => boolean) {
       forgetPipes: () => {},
       spawnEdge: () => {},
       setSupervise: () => {},
-      awaitingApproval: () => {},
       ...ws,
     } as unknown as Parameters<typeof makeDispatch>[0]),
   };

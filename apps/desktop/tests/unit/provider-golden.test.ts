@@ -104,7 +104,7 @@ function fakeDeps() {
     ...workspaceDeps(),
     writeToTile: () => true,
     deliverToTile: (id: string, data: string, onSent?: () => void) => mailbox.deliver(id, data, onSent),
-    spawnAllowed: () => true, connect: () => true, disconnect: () => {}, forgetPipes: () => {}, spawnEdge: () => {}, setSupervise: () => {}, awaitingApproval: () => {},
+    spawnAllowed: () => true, connect: () => true, disconnect: () => {}, forgetPipes: () => {}, spawnEdge: () => {}, setSupervise: () => {},
   };
 }
 

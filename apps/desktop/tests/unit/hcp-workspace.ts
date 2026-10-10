@@ -1,7 +1,7 @@
 /**
  * The workspace side of the control plane's dependencies, for tests of its dispatch
  * (@hivemind/host/control/methods): a real store with one workspace open and shown in the user's
- * window, a real status store, no saved launch options, a record of every spawn the windows
+ * window, a real status store and the waits it shows, no saved launch options, a record of every spawn the windows
  * would have been told of, and the host's intents writing a real audit log (`audited()` reads
  * it back).
  */
@@ -9,6 +9,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { StatusStore } from "@hivemind/agent-host/status-store";
+import { Waits } from "@hivemind/host/waits";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { newSeed } from "@hivemind/workspace-host/identity";
 import { Intents, type AuditRecord } from "@hivemind/workspace-host/intents";
@@ -28,9 +29,11 @@ export function workspaceDeps() {
   const audit = path.join(dir, "audit.jsonl");
   workspaces.setCore(REPO, { frames: [{ id: "f1", title: "repo", workspacePath: REPO }], tiles: [] });
   const announced: HcpSpawnedEvent[] = [];
+  const status = new StatusStore();
   return {
     workspaces,
-    status: new StatusStore(),
+    status,
+    waits: new Waits({ status }),
     shownWorkspace: () => ({ repo: REPO, frame: null }),
     launchOptions: () => ({}),
     announceSpawn: (spawn: HcpSpawnedEvent) => void announced.push(spawn),

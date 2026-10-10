@@ -1,5 +1,5 @@
 {
- "about": "Cases every implementation of following agents must pass (spec/agents.md \"Following\"): what a device answers ('computer': its boards, its agents' statuses and the plans they hand off, with the machines it knows ('known'), the program each tile's command starts by its manifest ('programs'), the tiles whose agents' permissions it can decide ('decides'), whose agents say which keys interrupt their turn ('interrupts') and whose agents' manifests map their session files ('conversations'), in; every agent, and how many are at work, out), and what a phone shows of the answers it is given ('phone': each answer with the device it came from, in; every agent it reads, with that device, what waits on the person among them as device/tile in the order shown, and the agents at work, out). Written by hand from the spec.",
+ "about": "Cases every implementation of following agents must pass (spec/agents.md \"Following\"): what a device answers ('computer': its boards, its agents' statuses and what they wait on an answer for ('waits'), with the machines it knows ('known'), the program each tile's command starts by its manifest ('programs'), the tiles whose agents' permissions it can decide ('decides'), whose agents say which keys interrupt their turn ('interrupts') and whose agents' manifests map their session files ('conversations'), in; every agent, and how many are at work, out), and what a phone shows of the answers it is given ('phone': each answer with the device it came from, in; every agent it reads, with that device, what waits on the person among them as device/tile in the order shown, and the agents at work, out). Written by hand from the spec.",
  "known": {
   "self": {
    "device": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
@@ -109,7 +109,7 @@
      }
     }
    ],
-   "plans": [],
+   "waits": {},
    "programs": {
     "t2": {
      "id": "claude",
@@ -267,14 +267,12 @@
      }
     }
    ],
-   "plans": [
-    {
-     "tileId": "hm:w2",
-     "requestId": "r1",
-     "plan": "1. Split the nav\n2. Test it",
-     "cwd": "/home/p/api"
+   "waits": {
+    "w2": {
+     "kind": "plan",
+     "plan": "1. Split the nav\n2. Test it"
     }
-   ],
+   },
    "programs": {
     "w1": {
      "id": "claude",
@@ -473,7 +471,7 @@
      }
     }
    ],
-   "plans": [],
+   "waits": {},
    "programs": {},
    "interrupts": [],
    "agents": [
@@ -556,20 +554,20 @@
      }
     }
    ],
-   "plans": [],
-   "programs": {},
-   "interrupts": [],
-   "parents": {
-    "w1": "client:3f2a9c",
-    "w2": "t-lead"
-   },
-   "approvals": {
+   "waits": {
     "w1": {
+     "kind": "approval",
      "request": "r-1",
      "tool": "Bash",
      "summary": "rm -rf dist",
      "expiresAt": 1790000541000
     }
+   },
+   "programs": {},
+   "interrupts": [],
+   "parents": {
+    "w1": "client:3f2a9c",
+    "w2": "t-lead"
    },
    "agents": [
     {

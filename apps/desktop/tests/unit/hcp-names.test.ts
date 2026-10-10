@@ -87,7 +87,6 @@ test("tile.spawn_agent names the tile it opens: it enumerates its params, and a 
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    awaitingApproval: () => {},
     ...ws,
   } as unknown as Parameters<typeof makeDispatch>[0]);
 

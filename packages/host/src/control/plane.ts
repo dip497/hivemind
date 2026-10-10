@@ -24,12 +24,13 @@ import { PipeManager } from "./pipes.js";
 import type { HcpCall } from "./protocol.js";
 import { SubagentReaper } from "./subagent-reaper.js";
 import { TurnTracker } from "./turn-tracker.js";
+import { Waits } from "../waits.js";
 
 /** The verbs' dependencies that only the embedder has; the plane provides the rest. */
 export type EmbedderDeps = Omit<
   MethodDeps,
   | "agentOf" | "writeToTile" | "deliverToTile" | "turns" | "recorder" | "spawnAllowed" | "connect" | "disconnect"
-  | "forgetPipes" | "spawnEdge" | "setSupervise" | "awaitingApproval" | "status" | "announceSpawn"
+  | "forgetPipes" | "spawnEdge" | "setSupervise" | "waits" | "status" | "announceSpawn"
 >;
 
 export interface ControlPlaneOptions {
@@ -53,6 +54,8 @@ export interface ControlPlaneOptions {
   ready?(): Promise<void>;
   /** A line worth keeping in a diagnostic log. */
   diag?(line: string): void;
+  /** A wait began, ended, or its time to answer changed. */
+  waitsChanged?(): void;
 }
 
 /** A lost SubagentStop (the subagent errored, the turn was interrupted, the session compacted)
@@ -71,6 +74,8 @@ export class ControlPlane {
   /** Every agent session's status, by bare tile id: hooks first, the screen for agents without
    *  them, exits and interrupt keys observed here. */
   readonly status = new StatusStore();
+  /** What agents wait on that an answer ends: plans, supervised tool uses. */
+  readonly waits: Waits;
   /** Which agent runs in each tile (bare id → provider id), as it was started. */
   readonly agentOf = new Map<string, string>();
   /** Each supervised worker's policy (bare id → "all" or a tool list), injected as HIVE_SUPERVISE
@@ -89,6 +94,7 @@ export class ControlPlane {
   private spawnTimes: number[] = [];
 
   constructor(private readonly o: ControlPlaneOptions) {
+    this.waits = new Waits({ status: this.status, changed: () => o.waitsChanged?.() });
     this.status.subscribe((change) => o.publish("status.changed", change));
     this.reaper = new SubagentReaper(SUBAGENT_REAP_MS, (tileId) => {
       const left = this.status.get(tileId)?.subagents ?? [];
@@ -125,8 +131,7 @@ export class ControlPlane {
         o.publish("link.spawn", { child, parent, connected });
       },
       setSupervise: (id, spec) => { if (spec) this.supervise.set(id, spec); else this.supervise.delete(id); },
-      awaitingApproval: (tileId, waiting) =>
-        this.status.event(tileId, waiting ? { event: "input.requested", kind: "approval" } : { event: "input.resolved" }),
+      waits: this.waits,
       status: this.status,
       announceSpawn: (spawn) => {
         this.unstarted.add(spawn.tileId);
@@ -164,16 +169,6 @@ export class ControlPlane {
   /** Who started `bare` and hears its reports: a tile, or a program (`client:<grant id>`). */
   parentOf(bare: string): string | undefined {
     return this.made?.parentOf(bare);
-  }
-
-  /** The approval `bare` waits on, if it waits on one. */
-  approvalOf(bare: string): ReturnType<Dispatcher["approvalOf"]> {
-    return this.made?.approvalOf(bare);
-  }
-
-  /** Answer the approval `request`: false when none of that id waits. */
-  answerApproval(request: string, decision: "allow" | "deny"): boolean {
-    return this.dispatcher.answerApproval(request, decision);
   }
 
   /** Close `tile` as `tile.close` does: whether a workspace had it. The caller records it. */

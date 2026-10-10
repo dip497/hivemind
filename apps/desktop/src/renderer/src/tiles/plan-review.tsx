@@ -4,11 +4,10 @@ import type { TilePlugin, TileBodyArgs } from "./api";
 export const PLAN_REVIEW = "planReview";
 
 export type PlanReviewTileData = {
-  requestId?: string;
-  hcpCmdId?: string;
+  agentTileId: string;
+  since: number;
   plan: string;
   cwd: string;
-  agentTileId?: string;
   onClose?: () => void;
 };
 
@@ -19,13 +18,8 @@ export const planReviewTile: TilePlugin<PlanReviewTileData> = {
   kinds: { [PLAN_REVIEW]: { size: { width: 1280, height: 920 }, label: "Plan review", glyph: "▤", ephemeral: true, unpinnable: true, waitsOnPerson: true } },
   data: (t, s) => {
     // Guard a stale/malformed saved tile so it never crashes the build.
-    const r = t.review ?? { plan: "", cwd: "" };
-    return {
-      requestId: r.requestId, hcpCmdId: r.hcpCmdId, plan: r.plan,
-      // A zone rebinds the agent's cwd like any tile's.
-      cwd: s.zoneRepo ?? r.cwd, agentTileId: r.agentTileId,
-      onClose: s.onClose,
-    };
+    const r = t.review ?? { agentTileId: "", since: 0, plan: "" };
+    return { agentTileId: r.agentTileId, since: r.since, plan: r.plan, cwd: s.zoneRepo ?? s.cwd, onClose: s.onClose };
   },
   minSize: { width: 420, height: 300 },
   lazy: true,

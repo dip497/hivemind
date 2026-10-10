@@ -11,8 +11,8 @@
  *
  * Nobody sits at it: someone asking to join is asked about at the owner's devices connected to it,
  * and declined when none is; an agent's approvals go to the agent that supervises it or
- * fall back to the agent's own prompt, answered by whoever drives it, and a verb that needs a
- * window (focus, a plan's review, a view) is refused. It becomes someone's by pairing with one of
+ * fall back to the agent's own prompt, answered by whoever drives it, a plan waits on whoever
+ * drives it, and a verb that needs a window (focus, a view) is refused. It becomes someone's by pairing with one of
  * their devices (spec/pairing.md): it takes their person, after which it is started again as them,
  * and each of their devices it was paired with is the owner of every workspace it holds.
  */
@@ -74,7 +74,6 @@ import { manifestFacts } from "./agent-list.js";
 import { PushNotices, PushSubscriptions, postNotice } from "./push.js";
 import { machines as savedMachines } from "./remote/catalog.js";
 import { People } from "./people.js";
-import { Plans } from "./plans.js";
 import { presence } from "./presence.js";
 import { widgets } from "./widgets.js";
 import { listWidgets, widgetAsset } from "@hivemind/core/widgets";
@@ -248,7 +247,6 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     onError: o.onWarn,
     backend,
   });
-  const plans = new Plans({ publish: (event, ...params) => api.publish(event, ...params), who, repoOf: (bare) => store.workspaceOf(bare) });
   // Who is in its workspaces: their owner manages them, and is asked about someone asking to join,
   // from any of their devices connected here.
   const peopleHere = new People({
@@ -294,7 +292,6 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       feed: () => agentFeed, workspaceOf: (repo) => store.ownership(repo)?.workspaceId ?? null,
     }),
     terminals.domain,
-    plans.domain,
     presence(() => api, () => keys.personId),
     widgetDomain,
     // Nothing changes a headless host's theme while it runs: it answers, and has nothing to tell.
@@ -310,9 +307,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       type: (bare, data) => writeTile(`hm:${bare}`, data),
       permissionKeys: (bare) => permissionKeys(heldBoards(store), bare),
       deliver: (bare, message) => control.mailbox.deliver(`hm:${bare}`, message),
-      plans,
-      approval: (bare) => control.approvalOf(bare),
-      answerApproval: (request, decision) => control.answerApproval(request, decision),
+      get waits() { return control.waits; },
+      who,
     }),
     // Agents started, interrupted and closed from another of the person's devices, and what they
     // changed (M5, spec/agents.md).
@@ -359,6 +355,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   await catalog.current();
   const control: ControlPlane = new ControlPlane({
     dir: () => o.dir,
+    waitsChanged: () => agentFeed?.changed(),
     publish: (event, ...params) => api.publish(event, ...params),
     write: writeTile,
     steers: (bare) => !!manifestOf(heldBoards(store), bare)?.steer,
@@ -454,8 +451,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     // What waits on the person here, for their devices to ask (M5), on which machine, and which
     // permissions their phone may allow or deny.
     statuses: () => control.status.all(),
-    plans: () => plans.reviews(),
-    facts: (held) => ({ ...manifestFacts(held), parent: (bare) => control.parentOf(bare), approval: (bare) => control.approvalOf(bare) }),
+    facts: (held) => ({ ...manifestFacts(held), parent: (bare) => control.parentOf(bare), wait: (bare) => control.waits.of(bare) }),
     machines,
     // Where each of the person's phones is told what happens here.
     subscribe: (device, sub) => pushSubscriptions.set(device, sub),
@@ -487,6 +483,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     build: () => peers.agentList().agents,
     publish: (event, repo, payload) => api.publish(event, repo, payload as never),
     repoOf: (workspace) => heldBoards(store).find((b) => b.workspace === workspace)?.repo ?? null,
+    answerOf: (tile, since) => control.waits.answerOf(tile, since),
   });
   control.status.subscribe(() => agentFeed?.changed());
   /** The workspaces shared with someone that are hosted here, as their records are filed. */

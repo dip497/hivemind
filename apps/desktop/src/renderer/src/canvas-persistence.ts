@@ -41,12 +41,10 @@ export interface TileInstance extends TileRecord {
   args?: string[];
   /** browser only — last/initial URL so the tile restores where it was. */
   url?: string;
-  /** planReview only — the live plan handoff this tile is reviewing. Ephemeral:
-   *  tied to a blocked agent hook, so planReview tiles are NEVER persisted (a
-   *  reloaded requestId is dead — the hook already failed open). `requestId`
-   *  routes the decision to the plan-bridge hook; `hcpCmdId` routes it to a
-   *  blocked HCP `review.open` caller instead (one or the other is set). */
-  review?: { requestId?: string; plan: string; cwd: string; hcpCmdId?: string; agentTileId?: string };
+  /** planReview only — the plan the agent in `agentTileId` waits on a review of, the wait that
+   *  began at `since`. Ephemeral: never persisted, since the wait is the agent's; a window opening
+   *  later opens the review again from the agent list. */
+  review?: { agentTileId: string; since: number; plan: string };
   /** diff only — the two branches it opened comparing (a branch handed off to this host, M4). */
   compare?: { base: string; head: string };
 }
@@ -163,7 +161,7 @@ function withoutPin(tile: TileInstance & LegacyPin): TileInstance {
  *  lives in one place. */
 export function saveLayout(repoPath: string | null, snap: LayoutSnapshot): void {
   if (!repoPath) return;
-  // An ephemeral tile (a plan review tied to a live, blocked agent hook) is
-  // dropped, so a reload doesn't resurrect a dead review with a stale requestId.
+  // An ephemeral tile (a plan review, opened from the agent's wait) is dropped: a reload opens it
+  // again from the agent list while the agent still waits.
   writeCore(repoPath, { ...snap, tiles: snap.tiles.filter((t) => !tileKind(t.kind).ephemeral) });
 }

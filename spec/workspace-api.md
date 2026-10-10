@@ -1,4 +1,4 @@
-# Workspace API (0.20)
+# Workspace API (0.21)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -54,7 +54,7 @@ whichever starts first does, and the other says so. Lines of JSON both ways, 1 M
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.20", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.21", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`). It names one
   of the grant's workspaces by its folder; the host answers
   `{"hello": {"api", "as": {"client", "role", "workspace"}}}` and serves that workspace as it does
@@ -83,7 +83,7 @@ after a minute without it, and never what was typed.
 
 A peer names the workspace by its id, `hive://<workspaceId>`, wherever a call takes a repo (or a
 `cwd` inside it); the host reads that as its repo. A guest's call or notice about a workspace
-(`store.*`, `git.*`, `worktree.*`, `file.*`, `issue.*`, `review.*`, `people.*`, `plan.list`,
+(`store.*`, `git.*`, `worktree.*`, `file.*`, `issue.*`, `review.*`, `people.*`,
 `presence.set`, `agent.startable`, `agent.start`, `frame.*`, and `view.open`, whose second param names it) names this one, or a place in it, and nothing else on the host: another folder, a
 path out of it (`..`), another workspace or a machine is `FORBIDDEN` (a notice is dropped). A
 place in it is its repo or the worktree of one of its frames, wherever git put it (0.20). The
@@ -207,7 +207,7 @@ log.
 
 | `status.all` | | `[{tileId, status}]`, every agent session's status (`spec/status.md`) | read |
 | `link.list` | | `{pipes: [{src, dst}], spawns: [{parent, child}]}` | read |
-| `agent.list` | `repo` | `{seq, agents}`: the workspace's agents as they are now, and the number of the last change (0.18) | read |
+| `agent.list` | `repo` | `{seq, agents}`: the workspace's agents as they are now, and the number of the last change (0.18); a plan an agent waits on a review of is in its `waiting` (`plan`), answered with `agent.answer` (0.21: `plan.list`, `plan.decide` and the `plan.*` events are gone) | read |
 | `agent.since` | `repo`, `seq` | `{seq, changes, events}`: each change and event after `seq`, or null when the host no longer has them all: list again (0.18) | read |
 | `widget.all` | `repo` | what each widget in the workspace last drew, by its id: never stored, drawn again when its code next runs (0.18) | read |
 | `widget.run` | `repo` | whether the caller runs the workspace's widgets: a window of the person's, on the host's machine or on another of their devices with it open, the first to ask, until it lets go (`widget.release`) or goes; someone else's device never does (0.19) | — |
@@ -215,15 +215,13 @@ log.
 | `widget.asset` | `repo`, `widget`, `name` | an image of an installed widget, as a data URL, or null (0.18) | read |
 | `appearance.get` | | the host's look as its guests show its workspaces (0.17): its settings' `appearance`, checked, with nothing that names a file on its disk (a picture or video wallpaper is the default one, no overlays) and the default fonts (a guest reads in its own). A `view` peer may ask | read |
 | `terminal.open` | `{tileId, tile?, cwd, cmd, args?, cols, rows, env?, initialPrompt?, attachOnly?, liveOnly?}` (`tile`: the tile it is the session of, when `tileId` is not `hm:<tile>`) | `{pid, joined}`: the first client to open a session starts it; one that opens it after joins it (`joined`), sent the host's screen of it first | target the tile, detail the program, when it starts a session the host did not ask for itself and the client did not only attach to |
-| `plan.list` | `repo` | the plans the workspace's agents wait on a person for: `[{requestId, tileId, plan, cwd}]`; each after it is a `plan.review` event | |
-| `agent.answer` | `tile`, `since`, `{text}` or `{decision, feedback?}` | `{answered}`: what the agent waits on the person for is answered, a plan decided, a permission allowed or denied with the agent's own keys, a supervised tool use allowed or denied (0.20), or a line typed into its terminal, only while it still waits on that wait (`since`) and once (`needs.md`, "Answering") | target the agent's tile |
+| `agent.answer` | `tile`, `since`, `{text}` or `{decision, feedback?}` | `{answered, by?}`: what the agent waits on the person for is answered, a plan decided, a permission allowed or denied with the agent's own keys, a supervised tool use allowed or denied (0.20), or a line typed into its terminal, only while it still waits on that wait (`since`) and once (`needs.md`, "Answering"); a plan or supervised tool use answered already says who answered first (`by`: `{person, name}`, 0.21) | target the agent's tile |
 | `agent.send` | `tile`, `text` | `{sent}`: a message for the agent, whatever it is doing, one line typed in as its next prompt once it is at its prompt, Enter after it; `sent` false: no agent runs there (`needs.md`, "Sending", 0.10) | target the agent's tile |
 | `agent.startable` | `repo` | `{programs, frames}`: the agents this device starts, with their model and mode choices, and the workspace's frames, each on the machine its folder is on (`agents.md`, "Starting", 0.11) | — |
 | `agent.start` | `repo`, `{program, frame?, prompt?, model?, mode?, name?, resume?, supervise?, report?}` | `{tile}`: an agent started as the person launches one at their desktop, their saved options with these on top, never in its unattended mode unless `mode` says so (`agents.md`, 0.11); `supervise` makes its caller its supervisor, and a program its parent (0.20) | target the new tile |
 | `agent.interrupt` | `tile` | `{interrupted}`: the keys its manifest says interrupt its turn, typed a moment apart, while it works or waits (`agents.md`, "Stopping", 0.11) | target the agent's tile |
 | `agent.close` | `tile` | `{closed}`: its session ended and its tile taken off its board, as `hive ctl close` (`agents.md`, 0.11) | target the agent's tile |
 | `agent.diff` | `tile` | `{files, patch, truncated}`: what it changed in the folder it runs in, against its last commit (`agents.md`, "Changes", 0.11) | — |
-| `plan.decide` | `tile`, `requestId`, `"allow"` or `"deny"`, `feedback`? | `{answered, by}`: the first answer is the one the agent gets; a later one, or one about another tile's plan, answers nothing (`by`: who answered first) | target the agent's tile, detail the answer |
 | `view.list` | | `[{id, name, version, entry, page}]`: the community views installed on this device whose manifest says `"phone": true` (below, 0.12), and the page a screen loads to show each (0.14) | read |
 | `view.file` | `id`, `path` | `{data, type, csp}`: one of the view's files as the app serves its windows (below), `path` inside its package (a link out of it, or `..`, is `BAD_REQUEST`), its bytes base64, its type, and the policy to serve it under (0.14); 4 MiB at most | read |
 | `view.open` | `id`, `repo`, `screen`?, `surfaces`? | `{session}`: the view opened on the workspace for this caller, on its screen (below; `screen` 0.14); `surfaces`: the screen places live surfaces itself (0.15) | — |
@@ -300,7 +298,7 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 |---|---|---|
 | `status.changed` | `{seq, tileId, status}` | to every client, on each change to an agent session's status |
 | `agent.changed` | `repo`, `{seq, agent}` or `{seq, gone}` | to every client, an agent of the workspace as it is now, or its going (0.18) |
-| `agent.event` | `repo`, `{seq, at, kind, tile, detail?}` | to every client, what happened to an agent: `came`, `went`, `turnEnded`, `waiting`, `answered` (0.18); `reported`, an agent a program started reporting to it, `detail` what it said (0.20) |
+| `agent.event` | `repo`, `{seq, at, kind, tile, detail?}` | to every client, what happened to an agent: `came`, `went`, `turnEnded`, `waiting`, `answered` (0.18); `reported`, an agent a program started reporting to it, `detail` what it said (0.20); `answered` for a plan or supervised tool use: `detail` the decision and `by` who gave it, `{person, name}`, when a person did (0.21) |
 | `widget.drawn` | `repo`, `id`, `tree` or null | to every client, what a widget draws now (0.18) |
 | `widget.runner` | `repo` | to every client of the workspace, a peer of the person's included, when no window runs its widgets: the first to ask (`widget.run`) does (0.19) |
 | `widget.pressed` | `repo`, `id`, `{action}` or `{click: true}` | to the window that runs the workspace's widgets, a press made elsewhere (0.19) |
@@ -314,8 +312,6 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `terminal.keyboard.asked` | `tile`, `{id, person, name}` | to the keyboard's holder, as someone asks for it: `id` is who to give it to |
 | `terminal.size` | `tile`, `cols`, `rows` | to every client, as a terminal's session takes a size (on a participant's machine, as that machine says it), and to one that opens it: a client whose own differs draws it at this size |
 | `terminal.typing` | `tile`, `{id, person, name}` | to each client that opened the terminal but the one typing, as someone types into it: at most once a second while the same one types on. A client says so on the terminal for a moment, and does not draw that person's pointer meanwhile |
-| `plan.review` | `{requestId, tileId, plan, cwd}` | to every client, as an agent hands off a plan: it waits until someone who may drive agents answers it |
-| `plan.decided` | `{requestId, tileId, decision, by}` | to every client, as a plan is answered (`by`: `{person, name}`), or its agent stops waiting (`decision` and `by` null) |
 | `file.changed` | `repo`, `{paths}` | to each client watching the repo (the app's window watches the one it opens), at most one every 300 ms |
 | `store.changed` | `{repo, part}` (`core`, `board` or `view:<id>`) | to every client but the one whose write it was, on each change to a workspace's layouts |
 | `presence.changed` | `repo`, `[{id, person, name, color, cursor, over, selection}]` | to every client, as someone in the workspace moves, selects, arrives or leaves (at once after a quiet spell, and at most every 50 ms): everyone there now, one per connection (`id`), `person` their key |
@@ -401,7 +397,7 @@ TypeScript: `StoreReplica` (`packages/workspace-api/src/store-replica.ts`).
 
 TypeScript: `packages/workspace-api` (the methods' types, a client over any transport, and the
 server that answers them, and a replica of the store for a client over a stream); the host's
-domains in `packages/host` (git and worktrees, files, issues, reviews, agents, terminals, plans,
+domains in `packages/host` (git and worktrees, files, issues, reviews, agents and what they wait on, terminals,
 presence, people, the store, community views on a remote screen), which the app's main process,
 the dev-bridge and `hive host` serve, each over its own way of running a session and its own
 store. A view's host is `packages/view-host`, the window's and a remote screen's both. Rust: the

@@ -43,7 +43,6 @@ test("an approval for a BUSY supervisor is held, then delivered when it hits its
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    awaitingApproval: () => {},
     ...workspaceDeps(),
   } as unknown as Parameters<typeof makeDispatch>[0]);
 
@@ -64,7 +63,7 @@ test("an approval for a BUSY supervisor is held, then delivered when it hits its
   const reqId = /hive ctl approve (\S+) allow/.exec(writes.join(""))?.[1];
   assert.ok(reqId, "banner carries a reqId");
   await dispatch("agent.approve", { reqId, decision: "allow" }, PERSON);
-  assert.deepEqual(await asked, { decision: "allow", reason: undefined });
+  assert.deepEqual(await asked, { decision: "allow" });
 });
 
 test("approval with a dead supervisor resolves instead of hanging the worker", async () => {
@@ -80,7 +79,6 @@ test("approval with a dead supervisor resolves instead of hanging the worker", a
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    awaitingApproval: () => {},
     ...workspaceDeps(),
   } as unknown as Parameters<typeof makeDispatch>[0]);
   const worker = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-parent", supervise: true }, PERSON)) as { tileId: string }).tileId;
@@ -105,7 +103,6 @@ test("a plain allow covers THIS call; only `always` is remembered", async () => 
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    awaitingApproval: () => {},
     ...workspaceDeps(),
   } as unknown as Parameters<typeof makeDispatch>[0]);
   const worker = ((await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-parent", supervise: true }, PERSON)) as { tileId: string }).tileId;
@@ -116,7 +113,7 @@ test("a plain allow covers THIS call; only `always` is remembered", async () => 
   const first = ask();
   await new Promise((r) => setTimeout(r, 300));
   await dispatch("agent.approve", { reqId: reqIdOf(), decision: "allow" }, PERSON);
-  assert.deepEqual(await first, { decision: "allow", reason: undefined });
+  assert.deepEqual(await first, { decision: "allow" });
 
   // Same worker, same tool: it is asked again, because "allow" was about that one call.
   const before = writes.length;
@@ -124,7 +121,7 @@ test("a plain allow covers THIS call; only `always` is remembered", async () => 
   await new Promise((r) => setTimeout(r, 300));
   assert.ok(writes.length > before, "the supervisor is asked a second time");
   await dispatch("agent.approve", { reqId: reqIdOf(), decision: "always" }, PERSON);
-  assert.deepEqual(await second, { decision: "allow", reason: undefined });
+  assert.deepEqual(await second, { decision: "allow" });
 
   // Now it is remembered: the third call resolves without troubling the supervisor.
   const quiet = writes.length;
@@ -145,7 +142,6 @@ test("spawning a pi worker with supervise is REFUSED — never silently ungated"
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    awaitingApproval: () => {},
     ...workspaceDeps(),
   } as unknown as Parameters<typeof makeDispatch>[0]);
 
@@ -165,7 +161,7 @@ test("spawning a pi worker with supervise is REFUSED — never silently ungated"
 /** A supervisor ("tile-lead") and what it has been asked, for the answering rules below. */
 function supervised() {
   const writes: string[] = [];
-  const waiting: Array<[string, boolean]> = [];
+  const deps = workspaceDeps();
   const mailbox = new Mailbox((_id, d) => { writes.push(d); return true; }, 1);
   const { dispatch } = makeDispatch({
     turns: new TurnTracker(),
@@ -179,9 +175,10 @@ function supervised() {
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    awaitingApproval: (tile: string, on: boolean) => { waiting.push([tile, on]); },
-    ...workspaceDeps(),
+    ...deps,
   } as unknown as Parameters<typeof makeDispatch>[0]);
+  /** Whether the worker is shown waiting. */
+  const waiting = (tile: string) => deps.status.get(tile)?.state === "waiting";
   const spawnWorker = async () => ((await dispatch("tile.spawn_agent", { agent: "claude", supervise: true }, fromTile("tile-lead"))) as { tileId: string }).tileId;
   // The question the supervisor was asked last: its id is in what was typed to it.
   const asked = async (before: number) => {
@@ -202,11 +199,11 @@ test("an approval is answered by the supervisor it was asked of, or a person —
   await assert.rejects(dispatch("agent.approve", { reqId, decision: "always" }, fromTile(other)), { code: "UNAUTHORIZED" });
   // Refused answers change nothing: it is still the supervisor's to answer.
   await dispatch("agent.approve", { reqId, decision: "deny" }, fromTile("tile-lead"));
-  assert.deepEqual(await question, { decision: "deny", reason: undefined });
+  assert.deepEqual(await question, { decision: "deny" });
 
   const again = dispatch("agent.await_approval", { tool_name: "Bash", tool_input: { command: "ls" } }, fromTile(worker));
   await dispatch("agent.approve", { reqId: await asked(writes.length), decision: "allow" }, PERSON);
-  assert.deepEqual(await again, { decision: "allow", reason: undefined });
+  assert.deepEqual(await again, { decision: "allow" });
 });
 
 test("a question ends when the worker stops waiting for it, and an answer after that is told it came too late", async () => {
@@ -217,7 +214,7 @@ test("a question ends when the worker stops waiting for it, and an answer after 
   const reqId = await asked(0);
   hook.abort(); // the worker's hook gave up and asked the agent's own prompt
   assert.deepEqual(await question, { decision: "ask" });
-  assert.deepEqual(waiting.at(-1), [worker, false], "the worker is no longer shown waiting");
+  assert.equal(waiting(worker), false, "the worker is no longer shown waiting");
   await assert.rejects(dispatch("agent.approve", { reqId, decision: "allow" }, fromTile("tile-lead")), (e: Error & { code?: string }) =>
     e.code === "BAD_REQUEST" && /stopped waiting/.test(e.message));
 });
@@ -232,15 +229,15 @@ test("the hook of an answered question closing does not end the worker's next qu
   const second = dispatch("agent.await_approval", { tool_name: "Edit", tool_input: { file_path: "/b.ts" } }, fromTile(worker));
   const reqId = await asked(writes.length);
   firstHook.abort(); // its hook lets go after its answer, while the next question waits
-  assert.deepEqual(waiting.at(-1), [worker, true], "still shown waiting on the second");
+  assert.equal(waiting(worker), true, "still shown waiting on the second");
   await dispatch("agent.approve", { reqId, decision: "deny" }, fromTile("tile-lead"));
-  assert.deepEqual(await second, { decision: "deny", reason: undefined });
+  assert.deepEqual(await second, { decision: "deny" });
 });
 
 test("a program supervises the workers it starts: nothing is typed anywhere, its wait says the tool and what it would do, its answer resolves it, and it hears their reports", async () => {
   const typed: string[] = [];
   const reports: Array<[string, string]> = [];
-  const waiting: Array<[string, boolean]> = [];
+  const deps = workspaceDeps();
   const made = makeDispatch({
     turns: new TurnTracker(),
     recorder: new OutputRecorder(),
@@ -253,9 +250,8 @@ test("a program supervises the workers it starts: nothing is typed anywhere, its
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    awaitingApproval: (tile: string, on: boolean) => { waiting.push([tile, on]); },
     reported: (tile: string, message: string) => { reports.push([tile, message]); },
-    ...workspaceDeps(),
+    ...deps,
   } as unknown as Parameters<typeof makeDispatch>[0]);
   const worker = await made.spawn({ agent: "claude", repo: REPO, attended: true, supervise: true, parent: "client:g1" });
   assert.equal(made.parentOf(worker), "client:g1");
@@ -263,14 +259,14 @@ test("a program supervises the workers it starts: nothing is typed anywhere, its
   const asked = made.dispatch("agent.await_approval", { callerTile: `hm:${worker}`, tool_name: "Bash", tool_input: { command: "rm -rf dist" } }, PERSON);
   await new Promise((r) => setTimeout(r, 20));
   assert.deepEqual(typed, [], "a program is asked by its wait, not a banner");
-  assert.deepEqual(waiting, [[worker, true]]);
-  const wait = made.approvalOf(worker)!;
-  assert.deepEqual({ tool: wait.tool, summary: wait.summary, supervisor: wait.supervisor }, { tool: "Bash", summary: "rm -rf dist", supervisor: "client:g1" });
-  assert.ok(wait.expiresAt > Date.now());
-  assert.equal(made.answerApproval(wait.request, "deny"), true);
-  assert.deepEqual(await asked, { decision: "deny", reason: undefined });
-  assert.equal(made.approvalOf(worker), undefined);
-  assert.equal(made.answerApproval(wait.request, "allow"), false, "answered once");
+  assert.equal(deps.status.get(worker)?.kind, "approval", "shown waiting on its starter");
+  const wait = deps.waits.of(worker)!;
+  assert.deepEqual({ tool: wait.tool, summary: wait.summary, answerer: wait.answerer }, { tool: "Bash", summary: "rm -rf dist", answerer: "client:g1" });
+  assert.ok(wait.expiresAt! > Date.now());
+  assert.deepEqual(deps.waits.answer(worker, wait.since, "deny"), { answered: true });
+  assert.deepEqual(await asked, { decision: "deny" });
+  assert.equal(deps.waits.of(worker), undefined);
+  assert.deepEqual(deps.waits.answer(worker, wait.since, "allow"), { answered: false }, "answered once");
 
   await made.dispatch("agent.report", { callerTile: `hm:${worker}`, message: "done: 3 files" }, fromTile(worker));
   assert.deepEqual(reports, [[worker, "done: 3 files"]]);

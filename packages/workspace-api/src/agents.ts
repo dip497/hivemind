@@ -40,6 +40,11 @@ export interface TileOpened {
   near?: string;
 }
 
+/** Who answered a wait: a person, by their id and name. */
+export interface Answerer {
+  person: string;
+  name: string;
+}
 /** What a person answers an agent waiting on them (M5): a plan's decision, or one line typed into
  *  its terminal. */
 export type AgentAnswer = { text: string } | { decision: "allow" | "deny"; feedback?: string };
@@ -133,9 +138,12 @@ export interface AgentEvent {
   at: number;
   kind: AgentEventKind;
   tile: string;
-  /** turnEnded: how (done, failed, interrupted, limited). waiting: on what. reported (0.20): what
-   *  it reported to the program that started it. */
+  /** turnEnded: how (done, failed, interrupted, limited). waiting: on what. answered: the
+   *  decision a plan or supervised tool use got (0.21). reported (0.20): what it reported to the
+   *  program that started it. */
   detail?: string;
+  /** answered (0.21): the person who answered, when one did. */
+  by?: Answerer;
 }
 
 /** One numbered change: an agent as it is now, or its going. */

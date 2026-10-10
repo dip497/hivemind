@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- **Breaking:** the workspace API's `plan.list`, `plan.decide`, `plan.review` and `plan.decided` are gone (0.21). A plan an agent waits on is in `agent.list` (`waiting.plan`) and is answered with `agent.answer`, like a supervised tool use; an answer that comes second hears who answered first (`by`), and the `answered` event says the decision and who gave it. `hive ctl open-review` runs in the agent's tile, or names it with `--tile`.
+- Fixed: an agent that went from one kind of wait straight to another (a permission, then a question) kept the first wait's name, so an answer to the second could land on the first or be refused as late.
 - Internal: `pnpm test` stopped at the tool-plugin SDK, which has no tests, and skipped every package after it; and the phone core's tests still expected the hosted network, which is gone.
 - Internal: the app's window and the dev bridge's browser page get `window.hive`'s workspace calls from one module, and its type is declared once. The bridge's hand-kept copy had drifted (no presence, widgets, agents or views) and its catch-all answered `null` where a list was due, which crashed the canvas on load; a call it does not answer now fails instead.
 - Fixed: a program on the drive socket that started an agent just after the app opened a folder was refused with "no workspace is open" until the window had laid the folder out. A workspace the app holds is open from the start.

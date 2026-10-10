@@ -57,54 +57,32 @@ claude (in a PTY tile) calls ExitPlanMode
   → injected PreToolUse hook script (added to the --settings hivemind already injects)
   → reads tool_input.plan from stdin; HIVEMIND_TILE env tells it which tile
   → connects to the plan-bridge unix socket (owned by Electron main)
-  → sends {requestId, tileId, plan, cwd}; BLOCKS holding the connection
-  → main pushes "plan-review:open" → renderer opens a PlanReviewTile in the
-    agent's frame, pre-loaded with the plan
-  → user annotates blocks + clicks Approve / Request changes
-  → renderer → main ("plan-review:decide") → main writes {decision, feedback}
-    back over the held socket
+  → sends {tileId, plan, cwd}; BLOCKS holding the connection
+  → main makes it a plan wait (`packages/host/src/waits.ts`): the agent's status says it waits on
+    a plan, and the agent list carries it (`waiting.plan`, named by the wait's `since`)
+  → every window showing the agent opens a PlanReviewTile beside it, on every machine the
+    workspace is shared with
+  → someone who may drive agents annotates + clicks Approve / Request changes
+  → `agent.answer(tile, since, {decision, feedback?})`: the first answer is written back over the
+    held socket; a later one hears who answered first; everyone hears `answered`, with who
   → hook prints the stdout JSON, exit 0 → claude proceeds / revises
 ```
+
+`hive ctl open-review` makes the same plan wait for the agent in its tile (`review.open`).
 
 Fail-open: if the bridge is unreachable (app closed, socket gone), the hook
 prints `allow` so a missing review UI never bricks the agent.
 
-## Where each piece lives (grounded in real files)
+## Where each piece lives
 
-**main process**
-- `main/plan-bridge.ts` (new) — `net.createServer` over a unix socket
-  (`<userData>/plan-bridge.sock`, mode 0600 — same trust model as the existing
-  daemon socket). NDJSON. Holds each hook connection until `reply()`; registry
-  keyed by `requestId`.
-- `main/plan-review-hook-source.ts` (new) — `planHookSource()` returns a
-  self-contained CJS string (no deps). Reads stdin, connects to the socket,
-  blocks, prints the decision JSON. Fail-open on any error.
-- `main/index.ts` — on ready: bind the bridge; `onRequest` →
-  `webContents.send("plan-review:open", …)` + stash `reply` in a Map;
-  `ipcMain.handle("plan-review:decide", …)` resolves it.
-
-**daemon** (`main/pty-daemon.ts`) — writes `plan-review-hook.cjs` next to the
-tracker; passes `planHookPath` + `planBridgeSock` (derived from `userDataDir`,
-which it already derives at line 42) into `makeClaudeResumeTransforms`.
-
-**injection** (`main/claude-resume.ts`) — `ClaudeResumeDeps` gains
-`planHookPath` + `planBridgeSock`; `trackerSettings()` adds the `PreToolUse`
-hook alongside the existing `SessionStart` hook. Daemon-mode only for v1 (same
-as resume tracking — `makeClaudeResumeTransforms` only runs in the daemon).
-
-**renderer**
-- `tile-kinds.ts` — add `"planReview"`.
-- `canvas-persistence.ts` — `TileInstance.review?: {requestId, plan, cwd}`;
-  exclude `planReview` tiles from the saved layout (ephemeral — tied to a live
-  blocked hook).
-- `PlanReviewTile.tsx` (new) — Phase 1: render plan via `MarkdownPreview`,
-  Approve + Request-changes (textarea). Phase 2: the annotation engine.
-- `canvas-nodes.tsx` — `PlanReviewNode` wrapper + register in `nodeTypes`.
-- `canvas-node-build.ts` — emit the node for kind `planReview`.
-- `Canvas.tsx` — subscribe to `plan-review:open`; spawn the tile in the agent
-  tile's frame; on decide call the IPC + close the tile.
-- `preload/index.ts` — `onPlanReviewOpen(cb)` + `planReviewDecide(...)`.
-- `shared/ipc.ts` — types for the above.
+- `main/plan-bridge.ts` — `net.createServer` over a unix socket (`<userData>/plan-bridge.sock`,
+  mode 0600). NDJSON. Holds each hook connection until its plan wait is answered; a dropped
+  connection ends the wait unanswered.
+- `packages/host/src/waits.ts` — the waits a person answers: plans, and supervised tool uses.
+- `packages/host/src/answers.ts` — `agent.answer`, for every wait the agent list shows.
+- `main/claude-resume.ts` — injects the `PreToolUse` hook alongside the `SessionStart` hook.
+- renderer: `tiles/plan-review.tsx` (the `planReview` tile kind), `PlanReviewTile.tsx`, and the
+  effect in `Workspace.tsx` that opens and closes reviews from the agent list.
 
 ## Phases (each shippable)
 

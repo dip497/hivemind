@@ -27,8 +27,7 @@ function dispatcher() {
   const { dispatch } = makeDispatch({
     turns,
     recorder: new OutputRecorder(),
-    // The window answers a review with its decision; for anything else there is no window.
-    callRenderer: async (m: string) => { if (m === "review.open") return { decision: "allow" }; throw new Error("no window"); },
+    callRenderer: async () => { throw new Error("no window"); },
     reloadSettings: async () => ({ ok: true }),
     toolsSettings: () => ({ enabledPlugins: ["hivemind/web"], disabledTools: [] }),
     writeToTile: write,
@@ -40,7 +39,6 @@ function dispatcher() {
     forgetPipes: () => {},
     spawnEdge: () => {},
     setSupervise: () => {},
-    awaitingApproval: () => {},
     ...ws,
   });
   // A line without its time, which the next test checks on its own.
@@ -54,7 +52,7 @@ const person = { kind: "person" } as const;
 const until = async (ok: () => boolean) => { for (let i = 0; i < 200 && !ok(); i++) await new Promise((r) => setTimeout(r, 10)); assert.ok(ok()); };
 
 test("each verb with an effect is recorded with who asked, what, of what and how it ended; reads, focus and view events are not", async () => {
-  const { dispatch, lines } = dispatcher();
+  const { dispatch, ws, lines } = dispatcher();
   const { tileId: w } = (await dispatch("tile.spawn_agent", { agent: "claude" }, LEAD)) as { tileId: string };
   const { tileId: browser } = (await dispatch("tool.open", { tool: "hivemind/web/browser", url: "about:blank" }, PERSON)) as { tileId: string };
   await dispatch("agent.send", { tileId: w, text: "hello" }, PERSON);
@@ -67,7 +65,10 @@ test("each verb with an effect is recorded with who asked, what, of what and how
   // With no window to carry them out these fail, and are recorded as asked all the same.
   await assert.rejects(dispatch("views.rescan", {}, PERSON));
   await assert.rejects(dispatch("agents.rescan", {}, PERSON));
-  await dispatch("review.open", { plan: "ship it" }, PERSON);
+  // The worker waits on a review of its plan, which a person allows.
+  const reviewed = dispatch("review.open", { plan: "ship it" }, fromTile(w));
+  ws.waits.answer(w, ws.waits.of(w)!.since, "allow");
+  await reviewed;
   // Reads, a window's focus, a view's event and a hook's reply change nothing here.
   await dispatch("tile.list", {}, LEAD);
   await dispatch("tile.list_frames", {}, PERSON);
@@ -91,7 +92,7 @@ test("each verb with an effect is recorded with who asked, what, of what and how
     { actor: person, verb: "settings.reload", outcome: "ok" },
     { actor: person, verb: "views.rescan", outcome: "error" },
     { actor: person, verb: "agents.rescan", outcome: "error" },
-    { actor: person, verb: "review.open", detail: "allow", outcome: "ok" },
+    { actor: { kind: "tile", tile: w }, verb: "review.open", detail: "allow", outcome: "ok" },
     { actor: lead, verb: "tile.close", target: w, outcome: "ok" },
     { actor: person, verb: "tile.close", target: "tile-ghost", outcome: "error", code: "TILE_NOT_FOUND" },
   ]);
@@ -106,7 +107,7 @@ test("a supervised worker's question and its supervisor's answer are recorded; o
   await until(() => /hive ctl approve (\S+) allow/.test(writes.join("")));
   const reqId = /hive ctl approve (\S+) allow/.exec(writes.join(""))![1];
   await dispatch("agent.approve", { reqId, decision: "always" }, LEAD);
-  assert.deepEqual(await asked, { decision: "allow", reason: undefined });
+  assert.deepEqual(await asked, { decision: "allow" });
   // Remembered: this one asks nobody, so nothing happened to record.
   assert.deepEqual(await ask(), { decision: "allow" });
   // An answer to a question nobody is waiting on is recorded as the failure it is.

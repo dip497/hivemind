@@ -105,7 +105,7 @@ async function connect(hello: Record<string, unknown>) {
 test("a program with a grant drives its workspace at its role, and is refused what its role does not reach", async () => {
   const { token } = grants.create({ name: "review-bot", repos: [repoA], role: "agents" });
   const p = await connect({ token, workspace: repoA });
-  assert.deepEqual((await p.next((m) => "hello" in m)).hello, { api: "0.20", as: { client: "review-bot", role: "agents", workspace: repoA } });
+  assert.deepEqual((await p.next((m) => "hello" in m)).hello, { api: "0.21", as: { client: "review-bot", role: "agents", workspace: repoA } });
   const started = await p.call("agent.start", [repoA, { program: "claude" }]);
   assert.equal((started.result as { by: { client?: string } }).by.client, "review-bot");
   const pushed = await p.call("git.push", [repoA]);
@@ -169,7 +169,7 @@ test("a grant that runs out closes its program's connection then, and lets nothi
 
 test("the install's token is the person, with every method; an agent's token is refused here", async () => {
   const person = await connect({ token: INSTALL });
-  assert.deepEqual((await person.next((m) => "hello" in m)).hello, { api: "0.20", as: "person" });
+  assert.deepEqual((await person.next((m) => "hello" in m)).hello, { api: "0.21", as: "person" });
   assert.deepEqual(((await person.call("git.push", [repoA])).result as { by: unknown }).by, { kind: "person" });
   person.socket.destroy();
   const agent = await connect({ token: tileToken(INSTALL, "tile-a") });

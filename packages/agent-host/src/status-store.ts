@@ -165,8 +165,9 @@ export class StatusStore {
     const base: AgentStatus = prev ?? INITIAL_STATUS;
     const next = fold(base);
     const clean = Object.fromEntries(Object.entries(next).filter(([, v]) => v !== undefined)) as unknown as AgentStatus;
-    const changedState = !prev || prev.state !== clean.state;
-    this.put(tileId, { ...clean, source, since: changedState ? this.now() : prev.since });
+    // Waiting on something else is a new wait, which `since` names.
+    const changed = !prev || prev.state !== clean.state || (clean.state === "waiting" && prev.kind !== clean.kind);
+    this.put(tileId, { ...clean, source, since: changed ? this.now() : prev.since });
   }
 
   private put(tileId: string, status: SessionStatus): void {
