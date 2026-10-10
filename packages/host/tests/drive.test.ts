@@ -1,5 +1,6 @@
-// The drive socket: programs the person granted drive one workspace at their grant's role; the
-// install's token is the person; nothing else gets in.
+// The drive socket: programs the person granted drive one workspace at their grant's role; an
+// agent drives the workspace its tile is in, as itself; the install's token is the person; nothing
+// else gets in.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -43,7 +44,8 @@ const drive = serveDrive(sock, {
   installToken: () => INSTALL,
   grants,
   repos: () => [repoA, repoB],
-  holds: (repo, tile) => tileIn[tile.replace(/^hm:/, "")] === repo,
+  workspaceOf: (tile) => tileIn[tile] ?? null,
+  nameOf: (tile) => `the ${tile} agent`,
   places: (repo) => (repo === repoA ? [worktreeA] : []),
 });
 /** Every program's socket, closed at the end whatever a test left open. */
@@ -105,7 +107,7 @@ async function connect(hello: Record<string, unknown>) {
 test("a program with a grant drives its workspace at its role, and is refused what its role does not reach", async () => {
   const { token } = grants.create({ name: "review-bot", repos: [repoA], role: "agents" });
   const p = await connect({ token, workspace: repoA });
-  assert.deepEqual((await p.next((m) => "hello" in m)).hello, { api: "0.22", as: { client: "review-bot", role: "agents", workspace: repoA } });
+  assert.deepEqual((await p.next((m) => "hello" in m)).hello, { api: "0.23", as: { client: "review-bot", role: "agents", workspace: repoA } });
   const started = await p.call("agent.start", [repoA, { program: "claude" }]);
   assert.equal((started.result as { by: { client?: string } }).by.client, "review-bot");
   const pushed = await p.call("git.push", [repoA]);
@@ -167,13 +169,32 @@ test("a grant that runs out closes its program's connection then, and lets nothi
   assert.equal(((await again.next((m) => "error" in m)).error as { code: string }).code, "FORBIDDEN");
 });
 
-test("the install's token is the person, with every method; an agent's token is refused here", async () => {
+test("the install's token is the person, with every method", async () => {
   const person = await connect({ token: INSTALL });
-  assert.deepEqual((await person.next((m) => "hello" in m)).hello, { api: "0.22", as: "person" });
+  assert.deepEqual((await person.next((m) => "hello" in m)).hello, { api: "0.23", as: "person" });
   assert.deepEqual(((await person.call("git.push", [repoA])).result as { by: unknown }).by, { kind: "person" });
   person.socket.destroy();
-  const agent = await connect({ token: tileToken(INSTALL, "tile-a") });
-  assert.equal(((await agent.next((m) => "error" in m)).error as { code: string }).code, "FORBIDDEN");
+});
+
+test("an agent's token drives the workspace its tile is in, as that agent at the role agents, while its tile is there; no other workspace, and none with no tile", async () => {
+  const agent = await connect({ token: tileToken(INSTALL, "hm:tile-a") });
+  assert.deepEqual((await agent.next((m) => "hello" in m)).hello, { api: "0.23", as: { agent: "tile-a", role: "agents", workspace: repoA } });
+  const started = await agent.call("agent.start", [repoA, { program: "claude" }]);
+  assert.deepEqual((started.result as { by: unknown }).by, { kind: "peer", person: "tile-a", device: "tile-a", access: "agents", client: "the tile-a agent" });
+  assert.equal(((await agent.call("git.push", [repoA])).error as { code: string }).code, "FORBIDDEN");
+  assert.equal(((await agent.call("agent.start", [repoB, { program: "claude" }])).error as { code: string }).code, "FORBIDDEN");
+  // Its tile leaves the workspace: it drives nothing there any more.
+  delete tileIn["tile-a"];
+  try {
+    assert.equal(((await agent.call("agent.start", [repoA, { program: "claude" }])).error as { code: string }).code, "FORBIDDEN");
+  } finally {
+    tileIn["tile-a"] = repoA;
+  }
+  agent.socket.destroy();
+  const elsewhere = await connect({ token: tileToken(INSTALL, "tile-a"), workspace: repoB });
+  assert.equal(((await elsewhere.next((m) => "error" in m)).error as { code: string }).code, "FORBIDDEN");
+  const nowhere = await connect({ token: tileToken(INSTALL, "tile-z") });
+  assert.equal(((await nowhere.next((m) => "error" in m)).error as { code: string }).code, "FORBIDDEN");
 });
 
 test("a grant is kept as a hash, never its token, in a file only the person reads", () => {

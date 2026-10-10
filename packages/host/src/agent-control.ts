@@ -128,7 +128,7 @@ export function agentControl(o: AgentControlOptions): Domain<"agent.startable" |
       },
       "agent.start": async (from, repo, start) => {
         const at = text(repo, "workspace");
-        // A program on the drive socket is the parent of what it starts.
+        // A program or an agent on the drive socket is the parent of what it starts.
         const parent = from.actor.kind === "peer" && from.actor.client ? from.actor.person : undefined;
         return { tile: await o.start(at, { ...startOf(start, await o.programs(), board(at)), ...(parent ? { parent } : {}) }) };
       },

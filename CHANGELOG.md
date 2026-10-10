@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: an agent can drive its own workspace on `drive.sock` with its tile's token (`HCP_TOKEN`), at the role `agents`, while its tile is there (workspace API 0.23). What it starts there is its own, as with `hive ctl spawn`: wired to it on the board, reporting to it, at most three levels deep, and a tool use it supervises is its to answer.
+- Internal: the drive-programs e2e spec still expected workspace API 0.21.
 - Fixed: `hive host`, or the app, started from inside an agent's terminal gave every shell it then ran that agent's identity and token, so `hive ctl` in those shells acted as the agent. A terminal's identity is now only its own.
 - Internal: the `hive network` test still chose the hosted network, which is gone.
 - Changed: a link in a terminal (a file path, an address, a link a program prints) opens on Ctrl+click, ⌘+click on a Mac, as in VS Code. A plain click is a click in the terminal, so clicking into one to type no longer opens the file under the pointer. Pointing at a link says so.

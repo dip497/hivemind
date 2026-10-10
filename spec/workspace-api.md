@@ -1,4 +1,4 @@
-# Workspace API (0.22)
+# Workspace API (0.23)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -39,7 +39,7 @@ for it.
 | HTTP | the dev-bridge's page | its event stream: `GET /workspace/events?token=…`, whose first event, `connection`, carries `{id}` | `POST /workspace`, body `{"method", "params"}` → 200 with the answer | `POST /workspace/notice`, same body → 204 | the stream's `data:` lines, one `{event, params}` each |
 
 | hive-net | a peer on another device, reaching a workspace shared from here (M1) | an `api` stream of its `hive/ws/1` connection: a connection may carry several, each a connection of its own (0.13) | a frame on that stream, `{"id", "method", "params"}` → a frame `{"id", "result"}` or `{"id", "error"}` on it | a frame without `id` | frames `{event, params}` on the same stream |
-| Drive socket (0.20) | a program on this machine, `hive grant` among them (below) | the socket connection, from its `hello` until it closes | a line `{"id", "method", "params"}` → a line `{"id", "result"}` or `{"id", "error"}` | a line without `id` | lines `{event, params}`; for a program, one line may be a list of them |
+| Drive socket (0.20) | a program on this machine, `hive grant` among them, or an agent in a tile (0.23; below) | the socket connection, from its `hello` until it closes | a line `{"id", "method", "params"}` → a line `{"id", "result"}` or `{"id", "error"}` | a line without `id` | lines `{event, params}`; for a program, one line may be a list of them |
 
 Over Electron only the main frame of an app window is heard; anything else is rejected. Over HTTP
 every request carries the token (`x-hive-token`, or `token` on the stream) and a call or notice
@@ -54,7 +54,7 @@ whichever starts first does, and the other says so. Lines of JSON both ways, 1 M
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.22", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.23", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`). It names one
   of the grant's workspaces by its folder; the host answers
   `{"hello": {"api", "as": {"client", "role", "workspace"}}}` and serves that workspace as it does
@@ -62,8 +62,14 @@ The first line says who connects: `{"hello": {"token", "workspace"?}}`.
   hears the events of that workspace's tiles alone. Unlike a guest's, its calls and answers name
   the workspace and its files by their paths here. It is recorded in the audit log as a peer whose
   `person` and `device` are `client:<grant id>` and whose `client` is the grant's name.
-- **Anything else**, an agent's tile token among them, is answered `{"error": {"code", "message"}}`
-  and the connection closes. So does a grant that does not name the workspace, or one that ran out.
+- **An agent's tile token** (`HCP_TOKEN`) is that agent (0.23). It drives the workspace its tile
+  is in, and names no other: the host answers `{"hello": {"api", "as": {"agent", "role":
+  "agents", "workspace"}}}` and serves it as a program at the role `agents`, while its tile is
+  there. What it starts is its own (`parent` in `agents.md`, its tile): a level below it, and
+  reporting to it; a tool use it supervises is its to answer. It is recorded as a peer whose
+  `person` and `device` are its tile and whose `client` is what the control plane calls it.
+- **Anything else** is answered `{"error": {"code", "message"}}` and the connection closes. So
+  does a grant that does not name the workspace, or one that ran out.
 
 Taking a grant back closes its connections; one that runs out closes them then. The host keeps
 grants in `grants.json` beside `hcp.token`, 0600, each token only as its sha256.
@@ -218,7 +224,7 @@ log.
 | `agent.answer` | `tile`, `since`, `{text}` or `{decision, feedback?}` | `{answered, by?}`: what the agent waits on the person for is answered, a plan decided, a permission allowed or denied with the agent's own keys, a supervised tool use allowed or denied (0.20), or a line typed into its terminal, only while it still waits on that wait (`since`) and once (`needs.md`, "Answering"); a plan or supervised tool use answered already says who answered first (`by`: `{person, name}`, 0.21) | target the agent's tile |
 | `agent.send` | `tile`, `text` | `{sent}`: a message for the agent, whatever it is doing, one line typed in as its next prompt once it is at its prompt, Enter after it; `sent` false: no agent runs there (`needs.md`, "Sending", 0.10) | target the agent's tile |
 | `agent.startable` | `repo` | `{programs, frames}`: the agents this device starts, with their model and mode choices, and the workspace's frames, each on the machine its folder is on (`agents.md`, "Starting", 0.11) | — |
-| `agent.start` | `repo`, `{program, frame?, prompt?, model?, mode?, name?, resume?, supervise?, report?}` | `{tile}`: an agent started as the person launches one at their desktop, their saved options with these on top, never in its unattended mode unless `mode` says so (`agents.md`, 0.11); `supervise` makes its caller its supervisor, and a program its parent (0.20) | target the new tile |
+| `agent.start` | `repo`, `{program, frame?, prompt?, model?, mode?, name?, resume?, supervise?, report?}` | `{tile}`: an agent started as the person launches one at their desktop, their saved options with these on top, never in its unattended mode unless `mode` says so (`agents.md`, 0.11); `supervise` makes its caller its supervisor, and a program or an agent its parent (0.20; an agent, 0.23) | target the new tile |
 | `agent.interrupt` | `tile` | `{interrupted}`: the keys its manifest says interrupt its turn, typed a moment apart, while it works or waits (`agents.md`, "Stopping", 0.11) | target the agent's tile |
 | `agent.close` | `tile` | `{closed}`: its session ended and its tile taken off its board, as `hive ctl close` (`agents.md`, 0.11) | target the agent's tile |
 | `agent.diff` | `tile` | `{files, patch, truncated}`: what it changed in the folder it runs in, against its last commit (`agents.md`, "Changes", 0.11) | — |

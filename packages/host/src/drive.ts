@@ -3,7 +3,8 @@
  * machine, `hive ctl` among them. A connection's first line says who it is: the install's token
  * is the person, answered as a window of theirs is; a grant's token is a program, served one
  * workspace like a guest, at its grant's role, and closed when the grant is taken back or runs
- * out. Lines of JSON both ways: calls, notices and events as the workspace API's stream carries
+ * out; an agent's tile's token is that agent, served the workspace its tile is in at the role
+ * `agents`, while its tile is there. Lines of JSON both ways: calls, notices and events as the workspace API's stream carries
  * them. 0600, a named pipe on Windows. Electron-free.
  */
 import fs from "node:fs";
@@ -14,11 +15,13 @@ import type { Connection, WorkspaceServer } from "@hivemind/workspace-api/server
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
 import { holderOf } from "@hivemind/agent-host/hooks/token";
 import { listenExclusive } from "@hivemind/agent-host/socket-claim";
+import { toBareId } from "@hivemind/workspace-api/tile-id";
+import type { Actor } from "@hivemind/workspace-host/intents";
 import { takeLines } from "./control/protocol.js";
 import type { Grants } from "./grants.js";
 
 /** The workspace API version the drive socket speaks. */
-export const DRIVE_API = "0.22";
+export const DRIVE_API = "0.23";
 /** How long a connection may take to say who it is. */
 const HELLO_WITHIN_MS = 10_000;
 
@@ -29,8 +32,10 @@ export interface DriveOptions {
   grants: Grants;
   /** The workspaces here, by their folder. */
   repos(): string[];
-  /** Whether a tile is in the workspace at `repo`. */
-  holds(repo: string, tile: string): boolean;
+  /** The workspace a tile is in, by its folder: null when it is in none here. */
+  workspaceOf(tile: string): string | null;
+  /** What the control plane calls a tile. */
+  nameOf(tile: string): string;
   /** The folders of the workspace at `repo` besides it: its frames' worktrees. */
   places?(repo: string): string[];
   /** The workspace's id, once it has one. */
@@ -114,7 +119,7 @@ export function serveDrive(sockPath: string, o: DriveOptions): DriveServer {
     function welcome(hello: Hello): void {
       const holder = holderOf(o.installToken(), hello.token);
       if (holder && "person" in holder) return asPerson();
-      if (holder) return refuse("FORBIDDEN", "an agent drives its workspace with `hive ctl`, not on this socket");
+      if (holder) return asAgent(toBareId(holder.tile), hello);
       const grant = o.grants.holder(hello.token);
       if (!grant) return refuse("FORBIDDEN", "that token lets nothing drive here: make a grant with `hive grant create`");
       if (typeof hello.workspace !== "string" || !hello.workspace) return refuse("BAD_REQUEST", "name the workspace: {\"hello\": {\"token\": …, \"workspace\": \"<its folder>\"}}");
@@ -132,14 +137,27 @@ export function serveDrive(sockPath: string, o: DriveOptions): DriveServer {
       }
       o.grants.used(grant.id);
       write(JSON.stringify({ hello: { api: DRIVE_API, as: { client: grant.name, role: grant.role, workspace: repo } } }));
+      serve(repo, { kind: "peer", person: `client:${grant.id}`, device: `client:${grant.id}`, access: grant.role, client: grant.name }, () => o.grants.live(grant.id));
+    }
+
+    // An agent drives the workspace its tile is in, and starts, and supervises, as itself.
+    function asAgent(tile: string, hello: Hello): void {
+      const repo = o.workspaceOf(tile);
+      if (repo === null) return refuse("FORBIDDEN", "that agent's tile is in no workspace here");
+      if (hello.workspace != null && real(String(hello.workspace)) !== real(repo)) return refuse("FORBIDDEN", `an agent drives the workspace its tile is in, ${repo}`);
+      write(JSON.stringify({ hello: { api: DRIVE_API, as: { agent: tile, role: "agents", workspace: repo } } }));
+      serve(repo, { kind: "peer", person: tile, device: tile, access: "agents", client: o.nameOf(tile) }, () => o.workspaceOf(tile) === repo);
+    }
+
+    function serve(repo: string, actor: Extract<Actor, { kind: "peer" }>, allows: () => boolean): void {
       servePeer(o.server, channel, {
-        actor: { kind: "peer", person: `client:${grant.id}`, device: `client:${grant.id}`, access: grant.role, client: grant.name },
+        actor,
         workspace: o.workspaceId?.(repo) ?? repo,
         repo,
         url: repo,
-        holds: (tile) => o.holds(repo, tile),
+        holds: (tile) => o.workspaceOf(toBareId(tile)) === repo,
         places: () => o.places?.(repo) ?? [],
-        allows: () => o.grants.live(grant.id),
+        allows,
       });
     }
 

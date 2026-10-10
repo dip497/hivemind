@@ -301,9 +301,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // workflow workers pass report:false and gather via waitForTurn instead.
   const doSpawn = async (opts: {
     agent?: unknown; prompt?: unknown; frame?: unknown; mode?: unknown; model?: unknown;
-    callerTile?: unknown; report?: unknown; supervise?: unknown; name?: unknown; resume?: unknown;
-    /** The program on the drive socket that starts it (`client:<grant id>`): it reports, and asks
-     *  its approvals, to that program. */
+    report?: unknown; supervise?: unknown; name?: unknown; resume?: unknown;
+    /** Who starts it: an agent's tile (bare), or a program on the drive socket (`client:<grant id>`). It
+     *  reports, and asks its approvals, to that one. */
     parent?: string;
     /** The workspace to open it in (a person's spawn from another of their devices, M5), not the
      *  caller's or the one the user's window shows. */
@@ -312,7 +312,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
      *  says so. */
     attended?: boolean;
   }): Promise<string> => {
-    const callerDepth = opts.callerTile ? (depthOf.get(bareOf(String(opts.callerTile))) ?? 0) : 0;
+    // An agent that starts one is its tile: the child is a level below it, beside it on the board.
+    const tile = opts.parent && !isClient(opts.parent) ? opts.parent : undefined;
+    const callerDepth = tile ? (depthOf.get(tile) ?? 0) : 0;
     const childDepth = callerDepth + 1;
     if (childDepth > MAX_SPAWN_DEPTH) {
       throw new HcpError("DEPTH_EXCEEDED", `agent spawn depth ${childDepth} exceeds max ${MAX_SPAWN_DEPTH}`);
@@ -325,13 +327,13 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     if (!def || !def.enabled) {
       throw new HcpError("BAD_REQUEST", `unknown agent '${agent}' — spawnable: ${spawnableAgents().map((d) => d.id).join(", ")}`);
     }
-    if (deps.agentInstalled && !(await deps.agentInstalled(def, opts.callerTile ? String(opts.callerTile) : undefined))) {
+    if (deps.agentInstalled && !(await deps.agentInstalled(def, tile ? ptyId(tile) : undefined))) {
       throw new HcpError("UNSUPPORTED", `${def.label} is not installed on this machine (no ${def.bin} on PATH)${def.install ? ` — get it at ${def.install.url}` : ""}`);
     }
     const sup = normalizeSupervise(opts.supervise);
     // Supervision is brokered TO the caller's tile. Without one there is nobody to ask,
     // and the policy would be dropped silently while the caller believes it has a gate.
-    if (sup && !opts.callerTile && !opts.parent) {
+    if (sup && !opts.parent) {
       throw new HcpError("BAD_REQUEST", "supervise needs a supervising agent: run this from an agent tile, or spawn without --supervise");
     }
     // pi cannot be supervised. It has NO permission system, so the only gate would be
@@ -368,28 +370,24 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     if (opts.model) options.model = String(opts.model);
     // `background` = a silent worker (report:false → gathered in bulk, e.g. a workflow worker):
     // its window does not bring it forward, and does not announce each one finishing.
-    const tileId = openTile(opts.callerTile, opts.frame, (ws) => ({
+    const tileId = openTile(tile, opts.frame, (ws) => ({
       id: mintId(`tile-${def.id}`), kind: AGENT_TILE_KIND,
       ...agentLaunch(def, { options, labels: ws.tiles.map((t) => t.label), prompt, resume }),
     }), { name, prompt, background: opts.report === false, repo: opts.repo });
     const res = { tileId };
     depthOf.set(res.tileId, childDepth);
     agentOfTile.set(res.tileId, agent);
-    if (opts.callerTile) {
-      const parentBare = bareOf(String(opts.callerTile));
-      parentOf.set(res.tileId, parentBare);
-      if (parentBare !== res.tileId) {
-        // The parentage WIRE is drawn ALWAYS — for sub-agents AND background
-        // workflow workers (report:false) — so every spawned tile visibly links
-        // to the agent that spawned it. The report/data pipe (animated) is still
-        // separate and only for report:true.
-        deps.spawnEdge(res.tileId, parentBare, true);
-        if (opts.report !== false) deps.connect(res.tileId, parentBare);
-      }
-      if (sup) deps.setSupervise(res.tileId, sup);
-    } else if (opts.parent) {
+    if (opts.parent) {
       parentOf.set(res.tileId, opts.parent);
       if (sup) deps.setSupervise(res.tileId, sup);
+    }
+    if (tile && tile !== res.tileId) {
+      // The parentage WIRE is drawn ALWAYS — for sub-agents AND background
+      // workflow workers (report:false) — so every spawned tile visibly links
+      // to the agent that spawned it. The report/data pipe (animated) is still
+      // separate and only for report:true.
+      deps.spawnEdge(res.tileId, tile, true);
+      if (opts.report !== false) deps.connect(res.tileId, tile);
     }
     armRead(res.tileId);
     return res.tileId;
@@ -533,7 +531,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // this returns (`hive ctl workflow` blocks with a matching client ceiling).
   const runWorkflow = async (p: Record<string, unknown>, call: HcpCall): Promise<unknown> => {
     const shape = String(p.shape ?? "fanout");
-    const caller = p.callerTile != null ? String(p.callerTile) : undefined;
+    const caller = tileOf(p.callerTile);
     const agent = p.agent != null ? String(p.agent) : await deps.defaultAgentId?.();
     if (!agent) throw new HcpError("BAD_REQUEST", "no agent installed — install one from Settings ▸ Plugins");
     {
@@ -560,7 +558,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       let tileId: string;
       try {
         tileId = await effect(call, { verb: "tile.spawn_agent", target: (id) => id }, () =>
-          spawnRetry({ agent, prompt, frame, model, callerTile: caller, report: false, supervise, name: label }));
+          spawnRetry({ agent, prompt, frame, model, parent: caller, report: false, supervise, name: label }));
       } catch (e) {
         return { item: label, tileId: null, status: "error", text: (e as Error).message };
       }
@@ -651,7 +649,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         return effect(call, { verb: method, target: (r) => r.tileId }, async () => ({
           tileId: await doSpawn({
             agent: p.agent, name: p.name, prompt: p.prompt, frame: p.frame, mode: p.mode, model: p.model,
-            callerTile: p.callerTile, report: p.report, supervise: p.supervise, resume: p.resume,
+            parent: tileOf(p.callerTile), report: p.report, supervise: p.supervise, resume: p.resume,
           }),
         }));
 
