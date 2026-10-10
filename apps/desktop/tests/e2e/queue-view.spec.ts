@@ -96,12 +96,17 @@ test("moving through the queue changes the host's selection", async () => {
       return want(await pickedInView());
     }, { timeout: 10_000 }).toBe(true);
   };
+  // The view asks the host to select a row's tile, then to dock it, in that order: once the host
+  // shows it docked, it holds the selection too.
+  const docked = (id: string | null) => expect(page.locator(`[data-community-slot="${id}"]`)).toHaveCount(1);
   await pressUntil(["j"], (id) => id === ids[0] || id === ids[1]);
   const first = await pickedInView();
+  await docked(first);
   expect(await selectedOnCanvas()).toBe(first);
   await pressUntil(["j", "k"], (id) => !!id && id !== first);
   const second = await pickedInView();
   expect(ids).toContain(second);
+  await docked(second);
   expect(await selectedOnCanvas()).toBe(second);
 });
 
