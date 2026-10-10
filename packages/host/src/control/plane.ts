@@ -2,8 +2,9 @@
  * The control plane a machine runs for the agents in its workspaces (`hive ctl`, design R5, R7):
  * what it keeps of them — each session's output (the recorder), its turns and replies, its status,
  * the pipes between agents and who spawned whom, the messages waiting for an agent to be back at
- * its prompt — the events their hooks, a machine's daemon or another device send, and the verbs,
- * served on the control-plane socket (`listen`). The desktop app and `hive host` each make one,
+ * its prompt — the events their hooks, a machine's daemon or another device send, and what it
+ * does: the agent channel, served on the control-plane socket (`listen`), and its part of the
+ * workspace API (`api`). The desktop app and `hive host` each make one,
  * with what only they have (`ControlPlaneOptions.methods`: a window to ask, the settings, the
  * store, sessions to end); the plane is the one owner of the rest. It keeps output, turns and
  * statuses from the moment it is made; its verbs are made with their first use.
@@ -18,7 +19,7 @@ import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import { startHcpServer, type HcpServer } from "./hcp-server.js";
 import { Mailbox } from "./mailbox.js";
-import { makeDispatch, type Dispatcher, type MethodDeps } from "./methods.js";
+import { makeDispatch, type ControlWork, type Dispatcher, type MethodDeps } from "./methods.js";
 import { OutputRecorder } from "./output-recorder.js";
 import { PipeManager } from "./pipes.js";
 import type { HcpCall } from "./protocol.js";
@@ -141,9 +142,16 @@ export class ControlPlane {
     return this.made;
   }
 
-  /** Carry out one verb, made by `call.actor`. */
-  dispatch(method: string, params: unknown, call: HcpCall): Promise<unknown> {
-    return (this.o.ready?.() ?? Promise.resolve()).then(() => this.dispatcher.dispatch(method, params, call));
+  /** One call on the agent channel, made by `call.actor`. */
+  agentChannel(method: string, params: unknown, call: HcpCall): Promise<unknown> {
+    return (this.o.ready?.() ?? Promise.resolve()).then(() => this.dispatcher.agentChannel(method, params, call));
+  }
+
+  /** What the workspace API asks of the control plane (control-api.ts), once what it waits for
+   *  is ready. The API records each effect. */
+  async api(): Promise<ControlWork> {
+    await this.o.ready?.();
+    return this.dispatcher.api;
   }
 
   /** What the control plane's messages call a tile. */
@@ -152,17 +160,17 @@ export class ControlPlane {
   }
 
   /** Start `program` (none: the person's default) in the workspace at `repo` for the person, from
-   *  another of their devices (spec/agents.md "Starting") or a view on one (P8), as
-   *  `tile.spawn_agent` starts one: with its gates, and their saved options for it with these on
-   *  top, never its unattended mode unless `mode` says so; `name`, its tile's. Its tile. The caller
-   *  records it. */
+   *  another of their devices (spec/agents.md "Starting"), a view on one (P8), a program, or an
+   *  agent (`parent`): with its gates, and their saved options for it with these on top, never
+   *  its unattended mode unless `mode` says so or an agent starts it; `name`, its tile's. Its
+   *  tile. The caller records it. */
   async start(repo: string, start: {
     program?: string; frame?: string; prompt?: string; model?: string; mode?: string; name?: string; resume?: string;
     supervise?: string | true; report?: boolean; parent?: string;
   }): Promise<string> {
     await this.o.ready?.();
     const { program, ...rest } = start;
-    return this.dispatcher.spawn({ agent: program, ...rest, repo, attended: true });
+    return this.dispatcher.spawn({ agent: program, ...rest, repo });
   }
 
   /** Who started `bare` and hears its reports: a tile, or a program (`client:<grant id>`). */
@@ -170,7 +178,7 @@ export class ControlPlane {
     return this.made?.parentOf(bare);
   }
 
-  /** Close `tile` as `tile.close` does: whether a workspace had it. The caller records it. */
+  /** Close `tile`: whether a workspace had it. The caller records it. */
   async close(tile: string): Promise<boolean> {
     await this.o.ready?.();
     try {
@@ -286,7 +294,7 @@ export class ControlPlane {
   }
 
   /**
-   * Serve the verbs on the control-plane socket `sock`: the person holds this machine's token,
+   * Serve the agent channel on the control-plane socket `sock`: the person holds this machine's token,
    * each agent its tile's (hooks/token.ts). `onError` hears a socket that could not be opened.
    */
   listen(sock: string, onError?: (err: Error) => void): HcpServer {
@@ -298,7 +306,7 @@ export class ControlPlane {
       },
       ...(onError ? { onListenError: onError } : {}),
       rendererUp: () => this.o.windowsUp(),
-      dispatch: (method, params, call) => this.dispatch(method, params, call),
+      dispatch: (method, params, call) => this.agentChannel(method, params, call),
       onEvent: (method, params) => this.event(method, params),
     });
   }

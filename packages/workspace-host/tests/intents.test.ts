@@ -21,32 +21,32 @@ const MB5 = 5 * 1024 * 1024;
 
 test("an intent that is carried out is recorded with who asked, what, of what, and ok; its result comes back", async () => {
   const intents = new Intents(new AuditLog({ file }));
-  const r = await intents.perform(agent, { verb: "agent.approve", target: "tile-codex-2", detail: "allow" }, () => ({ ok: true }));
+  const r = await intents.perform(agent, { verb: "agent.answer", target: "tile-codex-2", detail: "allow" }, () => ({ ok: true }));
   expect(r).toEqual({ ok: true });
   // An intent that opens a tile is recorded against the tile it opened, one that ends in a
   // decision with the decision.
-  await intents.perform({ kind: "person" }, { verb: "tile.spawn_agent", target: (res: { tileId: string }) => res.tileId }, async () => ({ tileId: "tile-codex-3" }));
+  await intents.perform({ kind: "person" }, { verb: "agent.start", target: (res: { tileId: string }) => res.tileId }, async () => ({ tileId: "tile-codex-3" }));
   await intents.perform(agent, { verb: "review.open", detail: (res: { decision: string }) => res.decision }, async () => ({ decision: "deny" }));
 
   const [approve, spawn, review] = lines();
-  expect(approve).toEqual({ at: expect.any(String), actor: agent, verb: "agent.approve", target: "tile-codex-2", detail: "allow", outcome: "ok" });
+  expect(approve).toEqual({ at: expect.any(String), actor: agent, verb: "agent.answer", target: "tile-codex-2", detail: "allow", outcome: "ok" });
   expect(Number.isNaN(Date.parse(approve.at))).toBe(false);
-  expect(spawn).toEqual({ at: expect.any(String), actor: { kind: "person" }, verb: "tile.spawn_agent", target: "tile-codex-3", outcome: "ok" });
+  expect(spawn).toEqual({ at: expect.any(String), actor: { kind: "person" }, verb: "agent.start", target: "tile-codex-3", outcome: "ok" });
   expect(review).toEqual({ at: expect.any(String), actor: agent, verb: "review.open", detail: "deny", outcome: "ok" });
 });
 
 test("an intent that fails is recorded with its error's code, and the error reaches the caller", async () => {
   const intents = new Intents(new AuditLog({ file }));
   const refused = Object.assign(new Error("spawn rate limit exceeded"), { code: "RATE_LIMITED" });
-  const spawn = intents.perform(agent, { verb: "tile.spawn_agent", target: (res: { tileId: string }) => res.tileId }, async (): Promise<{ tileId: string }> => { throw refused; });
+  const spawn = intents.perform(agent, { verb: "agent.start", target: (res: { tileId: string }) => res.tileId }, async (): Promise<{ tileId: string }> => { throw refused; });
   await expect(spawn).rejects.toBe(refused);
-  await expect(intents.perform(agent, { verb: "tile.close", target: "tile-gone" }, () => { throw new Error("no code"); })).rejects.toThrow("no code");
+  await expect(intents.perform(agent, { verb: "agent.close", target: "tile-gone" }, () => { throw new Error("no code"); })).rejects.toThrow("no code");
   await expect(intents.perform(agent, { verb: "review.open", detail: (res: { decision: string }) => res.decision }, (): { decision: string } => { throw new Error("no window"); })).rejects.toThrow();
 
   expect(lines()).toEqual([
     // Nothing was opened, so there is no tile to name; nothing was decided, so no decision.
-    { at: expect.any(String), actor: agent, verb: "tile.spawn_agent", outcome: "error", code: "RATE_LIMITED" },
-    { at: expect.any(String), actor: agent, verb: "tile.close", target: "tile-gone", outcome: "error" },
+    { at: expect.any(String), actor: agent, verb: "agent.start", outcome: "error", code: "RATE_LIMITED" },
+    { at: expect.any(String), actor: agent, verb: "agent.close", target: "tile-gone", outcome: "error" },
     { at: expect.any(String), actor: agent, verb: "review.open", outcome: "error" },
   ]);
 });
@@ -55,16 +55,16 @@ test("an intent only one tile may ask for is refused to any other tile, which is
   const intents = new Intents(new AuditLog({ file }));
   const worker = { kind: "tile" as const, tile: "tile-worker" };
   let ran = 0;
-  const answer = { verb: "agent.approve", target: "tile-worker", detail: "allow", onlyBy: "tile-lead" };
+  const answer = { verb: "agent.answer", target: "tile-worker", detail: "allow", onlyBy: "tile-lead" };
   await expect(intents.perform(worker, answer, () => { ran++; })).rejects.toBeInstanceOf(Refused);
   expect(ran).toBe(0);
   await intents.perform({ kind: "tile", tile: "tile-lead" }, answer, () => { ran++; });
   await intents.perform({ kind: "person" }, answer, () => { ran++; });
   expect(ran).toBe(2);
   expect(lines()).toEqual([
-    { at: expect.any(String), actor: worker, verb: "agent.approve", target: "tile-worker", detail: "allow", outcome: "refused" },
-    { at: expect.any(String), actor: { kind: "tile", tile: "tile-lead" }, verb: "agent.approve", target: "tile-worker", detail: "allow", outcome: "ok" },
-    { at: expect.any(String), actor: { kind: "person" }, verb: "agent.approve", target: "tile-worker", detail: "allow", outcome: "ok" },
+    { at: expect.any(String), actor: worker, verb: "agent.answer", target: "tile-worker", detail: "allow", outcome: "refused" },
+    { at: expect.any(String), actor: { kind: "tile", tile: "tile-lead" }, verb: "agent.answer", target: "tile-worker", detail: "allow", outcome: "ok" },
+    { at: expect.any(String), actor: { kind: "person" }, verb: "agent.answer", target: "tile-worker", detail: "allow", outcome: "ok" },
   ]);
 });
 
@@ -82,8 +82,8 @@ test("the log is private to its user and appends one line per intent", async () 
   const log = new AuditLog({ file });
   const intents = new Intents(log);
   await intents.perform(agent, { verb: "agent.send", target: "tile-codex-2" }, () => undefined);
-  await intents.perform(agent, { verb: "tile.rename", target: "tile-codex-2" }, () => undefined);
-  expect(lines().map((l) => l.verb)).toEqual(["agent.send", "tile.rename"]);
+  await intents.perform(agent, { verb: "agent.rename", target: "tile-codex-2" }, () => undefined);
+  expect(lines().map((l) => l.verb)).toEqual(["agent.send", "agent.rename"]);
   if (process.platform !== "win32") expect(fs.statSync(file).mode & 0o777).toBe(0o600);
 });
 
@@ -108,9 +108,9 @@ test("past 5 MB the log moves to audit.jsonl.1, replacing the older one, and sta
   const full = fs.readFileSync(file, "utf8");
   fs.appendFileSync(file, "y".repeat(MB5 - full.length - 20));
   const before = fs.readFileSync(file, "utf8");
-  await intents.perform(agent, { verb: "tile.close", target: "t" }, () => undefined);
+  await intents.perform(agent, { verb: "agent.close", target: "t" }, () => undefined);
   expect(fs.readFileSync(`${file}.1`, "utf8")).toBe(before);
-  expect(lines().map((l) => l.verb)).toEqual(["tile.close"]);
+  expect(lines().map((l) => l.verb)).toEqual(["agent.close"]);
 });
 
 test("an intent still happens when its line cannot be written, and the failure is said once until a write works again", async () => {

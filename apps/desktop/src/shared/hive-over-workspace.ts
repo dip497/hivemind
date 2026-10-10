@@ -113,6 +113,13 @@ export function hiveOverWorkspace(workspace: WorkspaceClient) {
     agentList: (repo) => workspace.call("agent.list", repo),
     agentSince: (repo, seq) => workspace.call("agent.since", repo, seq),
     agentAnswer: (tile, since, answer) => workspace.call("agent.answer", tile, since, answer),
+    // View protocol 1.4: a folder's past sessions, without what the agent wrote; a prompt the user
+    // confirmed, held while the agent is mid-turn.
+    viewSessions: async (agent, cwd) => (await workspace.call("agent.sessions", cwd, agent, 100)).sessions
+      .map((s) => ({ id: s.id, ...(s.updated ? { updated: s.updated } : {}), ...(s.prompt ? { prompt: s.prompt } : {}) })),
+    viewPrompt: async (tile, text) => {
+      if (!(await workspace.call("agent.send", tile, text)).sent) throw new Error(`no agent runs in tile ${tile}`);
+    },
     onAgentChanged: (cb) => workspace.on("agent.changed", cb),
     onAgentEvent: (cb) => workspace.on("agent.event", cb),
     onHcpSpawn: (cb) => workspace.on("link.spawn", cb),

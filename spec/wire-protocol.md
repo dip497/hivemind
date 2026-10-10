@@ -1,9 +1,12 @@
 # Wire protocol (HCP 2)
 
-What a client — `hive ctl`, an agent plugin's scripts, a program in any language — speaks to a
-running host. JSON-RPC 2.0, one message per line, over a unix socket only its owner can open
-(a named pipe on Windows). The socket and token are `HIVE_HCP_SOCK` and `HCP_TOKEN` inside an
-agent the host started, else `<config>/hivemind/hcp.sock` and `hcp.token`.
+What an agent's own plugin and hooks say to the host that started it, from its tile: a turn's
+reply, a report to its starter, a tool use its starter approves, a plan a person reviews.
+JSON-RPC 2.0, one message per line, over a unix socket only its owner can open (a named pipe on
+Windows). The socket and token are `HIVE_HCP_SOCK` and `HCP_TOKEN` inside an agent the host
+started, else `<config>/hivemind/hcp.sock` and `hcp.token`. Everything else — starting, sending,
+reading, closing, naming, pipes, tools — is the workspace API on the drive socket
+(`workspace-api.md`, "Drive socket"), which `hive ctl` speaks.
 
 ## Connection
 
@@ -26,16 +29,20 @@ the workspace API's error codes (`workspace-api.md`, "Errors"): `BAD_REQUEST`, `
 
 ## Methods
 
-The verbs `hive ctl` uses — `tile.spawn_agent`, `agent.send`, `agent.read`, `agent.report`,
-`agent.approve`, … — take and return the shapes `hive ctl --json` prints. The
-host records each one with an effect in its audit log (`audit.jsonl` beside `hcp.token`): who
-asked, what, of what, and whether it happened.
+Each is the caller's tile's, and each but `agent.reply` is recorded in the host's audit log
+(`audit.jsonl` beside `hcp.token`): who asked, what, of what, and whether it happened. Any other
+method is `UNKNOWN_METHOD`.
 
-`agent.approve` is answered by the tile the approval was asked of, or with the host's own token;
-from any other tile, the worker's own included, it is refused with `FORBIDDEN`. An approval
-ends when the connection that asked for it closes, and an answer after that gets `BAD_REQUEST`.
-
-`agent.sessions {"agent", "cwd"?, "limit"?}` → `{"agent", "resumable", "sessions": [{"id",
-"cwd"?, "title"?, "updated"?}]}`, newest first; only sessions started in `cwd` when it is given.
-`UNSUPPORTED` for an agent whose manifest does not say where its sessions are.
-`tile.spawn_agent {"resume": id}` starts the agent on that session instead of a new one.
+- `agent.reply {"tileId", "text"}` → `{"ok": true}`: the reply of the turn the agent is ending,
+  sent before the `turn.ended` event it belongs to. What `agent.read` answers with.
+- `agent.report {"message"}` → `{"delivered": true, "parent"}`: a message to the agent or program
+  that started this one, typed into its starter's terminal once it is at its prompt (an
+  `agent.event` of kind `reported` for a program). This turn's reply is then not forwarded to it
+  as well. `NOT_FOUND` with no starter, or one that is gone.
+- `agent.await_approval {"tool_name", "tool_input"}` → `{"decision": "allow" | "deny" | "ask",
+  "reason"?}`: a supervised worker's hook, before a tool runs. Its starter is asked (an
+  `approval` wait, answered with `agent.answer`); `ask` when nobody can answer, or nobody did in
+  time. The wait ends when the connection that asked closes.
+- `review.open {"plan", "cwd"?}` → `{"decision": "allow" | "deny", "feedback"?}`: the agent waits
+  on a person's review of its plan (a `plan` wait, answered with `agent.answer`). `TIMEOUT` when
+  nobody reviews it, or the caller stops waiting.

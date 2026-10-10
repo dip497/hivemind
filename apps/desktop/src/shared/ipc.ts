@@ -687,7 +687,7 @@ export interface HiveIpc {
 
 
   /** Reply to a main→renderer HCP command (a control-plane verb that needs the
-   *  canvas, e.g. tile.spawn_agent). `id` correlates with the pushed command. */
+   *  canvas, e.g. plugin.open). `id` correlates with the pushed command. */
   hcpResult(id: string, ok: boolean, result?: unknown, errorMessage?: string): Promise<void>;
 }
 

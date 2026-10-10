@@ -21,7 +21,7 @@ export interface PipeChange {
   connected: boolean;
 }
 
-/** An agent spawned another (a workflow's worker, `tile.spawn_agent`), or the wire between them
+/** An agent spawned another (a workflow's worker, `hive ctl spawn`), or the wire between them
  *  went: drawn from parent to child whatever the pipes do. */
 export interface SpawnChange {
   child: string;

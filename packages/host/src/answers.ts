@@ -5,9 +5,7 @@
  * so one that comes late, or again, does nothing and says so. A plan or a supervised tool use is
  * decided (`waits.ts`); a permission on the agent's screen is allowed or denied with the keys its
  * agent says do that (0.5); anything else is one line typed into the agent's terminal, Enter after
- * it. And sending an agent a message, whatever it is doing (spec/needs.md "Sending"): one line,
- * handed to it as `hive ctl send` hands one, as its next prompt once it is at its prompt.
- * Electron-free.
+ * it. Electron-free.
  */
 import type { AnswerKeys, InputKind } from "@hivemind/agents";
 import { typeKeys } from "@hivemind/agent-host/keys";
@@ -26,9 +24,6 @@ export interface AnswersOptions {
   /** The keys that allow and deny a permission the agent of `tile` asks, by its status, as it
    *  says; undefined for another wait, and when it says none. */
   answerKeys(tile: string, status: { kind?: InputKind; says?: string }): AnswerKeys | undefined;
-  /** Hand `text` to the agent of `tile` as a message: typed in, Enter after it, once it is at its
-   *  prompt; false when it has no terminal. */
-  deliver(tile: string, text: string): boolean;
   /** The plans and supervised tool uses agents wait on. */
   waits: Waits;
   /** Who is at a connection. */
@@ -55,7 +50,7 @@ function line(value: unknown, name: string): string {
   return t;
 }
 
-export function answers(o: AnswersOptions): Domain<"agent.answer" | "agent.send"> {
+export function answers(o: AnswersOptions): Domain<"agent.answer"> {
   const answered = new Set<string>();
   return {
     answers: {
@@ -91,11 +86,9 @@ export function answers(o: AnswersOptions): Domain<"agent.answer" | "agent.send"
         }
         return { answered: done };
       },
-      "agent.send": (_from, tile, message) => ({ sent: o.deliver(toBareId(text(tile, "tile")), line(message, "text")) }),
     },
     effects: {
       "agent.answer": (tile) => ({ target: typeof tile === "string" ? toBareId(tile) : undefined }),
-      "agent.send": (tile) => ({ target: typeof tile === "string" ? toBareId(tile) : undefined }),
     },
   };
 }

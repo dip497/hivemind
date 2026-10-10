@@ -40,7 +40,7 @@ export interface AgentControlOptions {
   machines: KnownMachines;
   /** Start `start.program` in the workspace at `repo`, in `start.frame` (none: its first frame), as
    *  the person launches it at their desktop: their saved options for it, with `model` and `mode`
-   *  on top, never its unattended mode unless `mode` says so. Its tile. */
+   *  on top, never its unattended mode unless `mode` says so or an agent starts it. Its tile. */
   start(repo: string, start: Start): Promise<string>;
   /** A tile's agent's status now. */
   status(tile: string): { state: string } | undefined;

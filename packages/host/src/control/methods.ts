@@ -1,49 +1,45 @@
 /**
- * HCP verb dispatch. Splits work by where it must run:
- *   - RENDERER verbs (tile.focus, view.emit, plugin.*, *.rescan) delegate to
- *     `deps.callRenderer` — the request-id-correlated main→renderer channel.
- *   - MAIN verbs run here: agent.send writes to the pty; agent.read awaits the next turn and
- *     returns the reply the agent's plugin reported; the canvas verbs tile.list,
- *     tile.list_frames, tile.rename and tile.close read and write main's workspace store, so
- *     they need no window (docs/design/multiplayer-2026-09-28.md, R5).
+ * What the control plane does. Two callers:
+ *   - the agent channel on hcp.sock (`agentChannel`): what an agent's plugin and hooks say from
+ *     its own tile — its reply, a report to its starter, a tool use its starter approves, a plan
+ *     a person reviews. Each is recorded here.
+ *   - the workspace API (`api`, asked by control-api.ts): sending, keys, reading, naming, tools,
+ *     pipes, and the machine's own methods. The API records each effect, as its caller's; a
+ *     window's work (view.emit, plugin.*, tile.focus, rescans) goes to `deps.callRenderer`.
  */
-import { randomUUID } from "node:crypto";
 import { typeKeys } from "@hivemind/agent-host/keys";
 import { ApiError } from "@hivemind/workspace-api/protocol";
 import type { HcpCall } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
 import { mintId, toPtyId as ptyId, toBareId as bareOf } from "@hivemind/workspace-api/tile-id";
-import type { TileOpened } from "@hivemind/workspace-api/agents";
+import type { AgentRead, AgentSessions, TileOpened } from "@hivemind/workspace-api/agents";
 import { labelOf as labelIn } from "./names.js";
-import { agentById, agentForCmd, agentLaunch, agentOption, cleanName, isSessionId, nextOrdinal, spawnableAgents, workerAgents, type AgentProviderDef, type SpawnOptions } from "@hivemind/agents";
+import { agentById, agentLaunch, agentOption, cleanName, isSessionId, nextOrdinal, spawnableAgents, workerAgents, type AgentProviderDef, type SpawnOptions } from "@hivemind/agents";
 import { canListSessions, listSessions } from "@hivemind/agents/node";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
 import { createToolRegistry, type ToolPluginContribution } from "@hivemind/core/tool-registry";
 import type { ToolsSettings } from "@hivemind/core/settings-schema";
-import { SUBMIT_DELAY_MS } from "@hivemind/agent-host/agent-io";
 import { customDataProblem, isCustomEventName } from "@hivemind/view-sdk/protocol";
 import { COMMAND_NAME_RE } from "@hivemind/view-sdk/commands";
 import { AGENT_TILE_KIND, isTerminalKind, type CoreLayout, type FrameRecord, type TileRecord } from "@hivemind/workspace-doc/shapes";
-import { defaultFrame, frameFor, listFrames, listTiles, type TileFacts } from "@hivemind/workspace-doc/tile-list";
+import { defaultFrame, frameFor } from "@hivemind/workspace-doc/tile-list";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
 import type { Waits } from "../waits.js";
-import { Refused, type Actor, type Intent, type Intents } from "@hivemind/workspace-host/intents";
+import { Refused, type Intent, type Intents } from "@hivemind/workspace-host/intents";
 import type { StatusStore } from "@hivemind/agent-host/status-store";
-import { tileStatusOf } from "@hivemind/agent-host/tile-status";
 
 /** `view.emit` rate: a steady 10 per second, bursts of 30. */
 export const EMIT_RATE = { perSecond: 10, burst: 30 };
 
-/** Validate `view.emit` params; throws BAD_REQUEST with the reason. */
-export function parseEmit(p: Record<string, unknown>): { name: string; data: unknown; view?: string; from: "shell" | { tileId: string } } {
-  if (!isCustomEventName(p.name)) throw new ApiError("BAD_REQUEST", "name must be dotted lowercase words (a-z, 0-9, -), at most 64 characters, not under hive. or hm.");
-  const data = p.data === undefined ? null : p.data;
+/** Validate a `view.emit` from `caller` (an agent's tile, else the shell); throws BAD_REQUEST with the reason. */
+export function parseEmit(name: unknown, rawData: unknown, view: unknown, caller?: string): { name: string; data: unknown; view?: string; from: "shell" | { tileId: string } } {
+  if (!isCustomEventName(name)) throw new ApiError("BAD_REQUEST", "name must be dotted lowercase words (a-z, 0-9, -), at most 64 characters, not under hive. or hm.");
+  const data = rawData === undefined ? null : rawData;
   const problem = customDataProblem(data);
   if (problem) throw new ApiError("BAD_REQUEST", problem);
-  if (p.view !== undefined && (typeof p.view !== "string" || p.view.length === 0 || p.view.length > 256)) throw new ApiError("BAD_REQUEST", "view must be a view id");
-  const caller = typeof p.callerTile === "string" && p.callerTile ? bareOf(p.callerTile) : null;
-  return { name: p.name, data, ...(p.view ? { view: p.view as string } : {}), from: caller ? { tileId: caller } : "shell" };
+  if (view != null && (typeof view !== "string" || view.length === 0 || view.length > 256)) throw new ApiError("BAD_REQUEST", "view must be a view id");
+  return { name, data, ...(view ? { view: view as string } : {}), from: caller ? { tileId: caller } : "shell" };
 }
 
 /** A token bucket: `take()` is false once the burst is spent until it refills. */
@@ -79,10 +75,6 @@ const APPROVAL_TIMEOUT_MS = 9 * 60 * 1000;
 /** Hard ceiling on the whole wait, so a supervisor that never comes back to its
  *  prompt can't hang the worker (and leak the pending entry) forever. */
 const APPROVAL_MAX_WAIT_MS = 20 * 60 * 1000;
-
-
-
-
 
 /** Whether a provider can be supervised is declared in its catalog def
  *  (`caps.supervise`). A runtime with no permission system of its own has
@@ -185,8 +177,6 @@ export interface MethodDeps {
   endSession: (ptyId: string) => void;
   /** Whether main holds a session by this pty id (a window showed it, here or remote). */
   sessionHeld: (ptyId: string) => boolean;
-  /** Call the workspace API as `actor` (`hive share`, `hive people` with no `hive host` here). */
-  workspaceApi?: (method: string, params: unknown[], actor: Actor) => Promise<unknown>;
   /** Ask the host an invite link names to let this person in, as the Join dialog does. */
   join?: (link: string) => Promise<unknown>;
   /** Carries out every verb with an effect, and records it in the audit log (R7). */
@@ -209,26 +199,58 @@ const DEFAULT_READ_TIMEOUT = 120_000;
 const DEFAULT_OUTPUT_LINES = 40;
 const REVIEW_TIMEOUT = 24 * 60 * 60 * 1000; // human review may take a long time
 
+/** The control plane's part of the workspace API (control-api.ts), its params checked there.
+ *  None records itself: the API records each effect, as its caller's. `caller`: the agent's
+ *  tile that asks (bare); none for the person or a program. */
+export interface ControlWork {
+  /** Hand `text` to the agent of `tile` as its next prompt, held while it is in a turn; the read
+   *  that follows waits for the turn it causes. False: no agent runs there. */
+  send(tile: string, text: string): boolean;
+  /** Type `keys` into the terminal of `tile`, one by one: how many. */
+  keys(tile: string, keys: string[]): number;
+  /** The reply of the turn after the last prompt sent to `tile`, waiting up to `timeoutMs`. */
+  read(tile: string, timeoutMs?: number): Promise<AgentRead>;
+  /** The last `lines` of what the agent of `tile` printed. */
+  output(tile: string, lines?: number): { text: string };
+  /** Name `tile`: the name it took. */
+  rename(tile: string, name: string): string;
+  sessions(program: string, cwd: string, limit?: number): Promise<AgentSessions>;
+  /** Open the tool `tool` in the workspace at `repo`: its tile. */
+  openTool(caller: string | undefined, repo: string, tool: string, at: { frame?: unknown; url?: unknown }): Promise<string>;
+  connect(src: string, dst: string): void;
+  disconnect(src: string, dst?: string): void;
+  viewEmit(caller: string | undefined, name: unknown, data: unknown, view: unknown): Promise<unknown>;
+  pluginCommands(): Promise<unknown>;
+  pluginOpen(caller: string | undefined, plugin: unknown, frame: unknown): Promise<unknown>;
+  pluginCall(plugin: unknown, command: unknown, args: unknown, tile: unknown): Promise<unknown>;
+  focus(tile: string): Promise<unknown>;
+  rescan(what: "views" | "agents" | "widgets" | "tools"): Promise<unknown>;
+  reloadSettings(): Promise<unknown>;
+  hostStatus(): { workspaces: Array<{ repo: string; workspace: string | null }> };
+  join(link: string): Promise<unknown>;
+}
+
 export interface Dispatcher {
-  /** Handle one HCP method call, made by `call.actor`. */
-  dispatch: (method: string, params: unknown, call: HcpCall) => Promise<unknown>;
+  /** One call on the agent channel (hcp.sock), made by `call.actor`. */
+  agentChannel: (method: string, params: unknown, call: HcpCall) => Promise<unknown>;
+  api: ControlWork;
   /** Drop ALL per-tile HCP state for a tile that has gone away, WITHOUT closing it
-   *  as `tile.close` does. MUST be called on every pty-exit and
+   *  as `close` does. MUST be called on every pty-exit and
    *  user-close path — otherwise the maps (parentOf/depthOf/sendSeq/approveCache)
    *  and its wait leak, a blocked agent.read/approval on the dead worker hangs
    *  its full timeout instead of resolving, and its UI "awaiting" status lingers.
-   *  Idempotent — safe to call twice (e.g. tile.close then the resulting pty-exit). */
+   *  Idempotent — safe to call twice (e.g. close then the resulting pty-exit). */
   forgetTile: (tileId: string) => void;
   /** What the control plane's messages call a tile (names.ts). */
   labelOf: (tileId: string) => string;
-  /** Spawn an agent, as `tile.spawn_agent` does, without recording it: the caller has (M5). */
+  /** Spawn an agent, without recording it: the caller has (M5). */
   spawn: (opts: {
     agent?: string; frame?: string; prompt?: string; model?: string; mode?: string; name?: string; resume?: string;
-    supervise?: string | true; report?: boolean; parent?: string; repo: string; attended: true;
+    supervise?: string | true; report?: boolean; parent?: string; repo: string;
   }) => Promise<string>;
   /** Who started `bare` and hears its reports: a tile, or a program (`client:<grant id>`). */
   parentOf: (bare: string) => string | undefined;
-  /** Close a tile, as `tile.close` does, without recording it: the caller has (M5). */
+  /** Close a tile, without recording it: the caller has (M5). */
   close: (tileId: string) => Promise<unknown>;
 }
 
@@ -245,7 +267,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // control surface uses the bare id.
 
   // child (bare) → parent (bare): set when a parent spawns a child via
-  // tile.spawn_agent, read by agent.report so a worker can push a result back to
+  // spawn, read by agent.report so a worker can push a result back to
   // the agent that spawned it (mailbox-style, no polling).
   const parentOf = new Map<string, string>();
   // bare tileId → spawn depth (HCP-spawned children only; user-spawned agents
@@ -298,9 +320,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     /** The workspace to open it in (a person's spawn from another of their devices, M5), not the
      *  caller's or the one the user's window shows. */
     repo?: string;
-    /** A person is at it, from another of their devices: never its unattended mode unless `mode`
-     *  says so. */
-    attended?: boolean;
   }): Promise<string> => {
     // An agent that starts one is its tile: the child is a level below it, beside it on the board.
     const tile = opts.parent && !isClient(opts.parent) ? opts.parent : undefined;
@@ -340,10 +359,10 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           `or spawn a claude worker with supervise if you need to gate its tools.`,
       );
     }
-    // No human at a delegated worker's tile, so it runs in the agent's unattended
-    // mode — unless the caller chose one, or it is supervised (its broker hook
-    // only fires while permissions are not skipped).
-    const mode = opts.mode != null ? opts.mode : sup || opts.attended ? undefined : agentOption(def, "mode")?.unattended;
+    // No human at the tile of an agent's worker, so it runs in its agent's unattended mode —
+    // unless the caller chose one, or it is supervised (its broker hook only fires while
+    // permissions are not skipped). One the person or a program starts keeps its prompts.
+    const mode = opts.mode != null ? opts.mode : sup || !tile ? undefined : agentOption(def, "mode")?.unattended;
     const resume = opts.resume != null ? String(opts.resume) : undefined;
     if (resume !== undefined) {
       if (!def.session?.resume) throw new ApiError("UNSUPPORTED", `${def.label} cannot resume a session`);
@@ -385,7 +404,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   // Drop ALL per-tile HCP state (pid-keyed: turns/recorder/epochs; bare-keyed:
   // pipes/parent/depth/supervision/approvals). Runs on EVERY teardown path — the
-  // `tile.close` verb, and (via forgetTile below) every pty-exit/user-close. Wakes
+  // close, and (via forgetTile below) every pty-exit/user-close. Wakes
   // anything blocked on the dead tile (readers via turns.forget → seq -1; approvals
   // resolved "worker closed") so a crash doesn't hang a parent for the full timeout.
   // Idempotent: every op is a delete/forget that no-ops when already gone.
@@ -428,7 +447,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   };
   // A workspace the store holds whose window has not laid it out yet is open, with nothing in it.
   const coreOf = (repo: string): CoreLayout => deps.workspaces.getCore(repo) ?? { frames: [], tiles: [] };
-  const layoutFor = (callerTile: unknown): CoreLayout => workspaceFor(callerTile)?.core ?? { frames: [], tiles: [] };
 
   // Where the control plane opens a tile, and tells the windows so: the workspace and frame (the
   // one named, else beside the caller, else the one the user is in, else the first; none in a
@@ -457,7 +475,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   /** Open a tool plugin's tile: the tool `pick` chooses among the registered ones. */
   type RegisteredTool = ReturnType<typeof createToolRegistry>["tools"][number];
-  async function openTool(p: Record<string, unknown>, pick: (tools: RegisteredTool[]) => RegisteredTool | undefined, badId: string): Promise<{ tileId: string }> {
+  async function openTool(at: { caller?: string; repo?: string; frame?: unknown; url?: unknown }, pick: (tools: RegisteredTool[]) => RegisteredTool | undefined, badId: string): Promise<string> {
     let registry;
     try { registry = createToolRegistry([...BUNDLED_TOOL_PLUGINS, ...(await deps.addedTools?.() ?? [])]); }
     catch { registry = createToolRegistry(BUNDLED_TOOL_PLUGINS); }
@@ -466,52 +484,33 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const availability = registry.resolve(deps.toolsSettings?.() ?? { enabledPlugins: [], disabledTools: [] }).availability(tool.id);
     if (!availability.available) throw new ApiError("FORBIDDEN", `${tool.label} is disabled; switch it on in Settings ▸ Plugins, or \`hive plugins enable tool:${tool.pluginId}\``);
     const kind = tool.tileKind;
-    if (p.frame !== undefined && (typeof p.frame !== "string" || !p.frame || p.frame.length > 256)) throw new ApiError("BAD_REQUEST", "frame must be an id");
-    if (p.url !== undefined) {
-      if (typeof p.url !== "string" || p.url.length > 8192) throw new ApiError("BAD_REQUEST", "Invalid URL");
+    if (at.frame != null && (typeof at.frame !== "string" || !at.frame || at.frame.length > 256)) throw new ApiError("BAD_REQUEST", "frame must be an id");
+    if (at.url != null) {
+      if (typeof at.url !== "string" || at.url.length > 8192) throw new ApiError("BAD_REQUEST", "Invalid URL");
       let url: URL;
-      try { url = new URL(p.url); } catch { throw new ApiError("BAD_REQUEST", "Invalid URL"); }
-      if (!["http:", "https:"].includes(url.protocol) && p.url !== "about:blank") throw new ApiError("BAD_REQUEST", "URL must use http or https, or be about:blank");
+      try { url = new URL(at.url); } catch { throw new ApiError("BAD_REQUEST", "Invalid URL"); }
+      if (!["http:", "https:"].includes(url.protocol) && at.url !== "about:blank") throw new ApiError("BAD_REQUEST", "URL must use http or https, or be about:blank");
     }
     if (!deps.spawnAllowed()) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
-    const url = typeof p.url === "string" ? p.url : undefined;
-    const tileId = openTile(p.callerTile, p.frame, (ws) => ({
+    const url = typeof at.url === "string" ? at.url : undefined;
+    return openTile(at.caller, at.frame, (ws) => ({
       id: mintId(`tile-${kind.replace(/[^A-Za-z0-9-]/g, "")}`), kind,
       label: `${tool.label} #${nextOrdinal(ws.tiles.map((t) => t.label), (n) => `${tool.label} #${n}`)}`,
       ...(url ? { url } : {}),
-    }), { background: false, ...(typeof p.repo === "string" ? { repo: p.repo } : {}) });
-    return { tileId };
+    }), { background: false, ...(at.repo !== undefined ? { repo: at.repo } : {}) });
   }
-
-  // What only the running app knows about a workspace's tiles, for the list.
-  const factsOf = (tiles: readonly TileRecord[]): TileFacts<TileRecord> => ({
-    status: (tileId) => {
-      const s = deps.status.get(tileId);
-      return s ? tileStatusOf(s).status : null;
-    },
-    titles: Object.fromEntries(tiles.flatMap((t) => {
-      const title = deps.status.get(t.id)?.title;
-      return title ? [[t.id, title]] : [];
-    })),
-    agent: (t) => (t.kind === AGENT_TILE_KIND ? agentForCmd(t.cmd)?.id : undefined),
-  });
 
   const label = (tileId: string): string => labelIn(tileId, deps.workspaces, deps.status);
 
-  // A verb with an effect is carried out through the intents, which check it against the policy
-  // and record it. The others read, are a hook reporting, or only move a window's view.
+  // What the agent channel carries out is checked against the policy and recorded through the
+  // intents. (The workspace API records its own.)
   const effect = <R>(call: HcpCall, intent: Intent<R>, run: () => Promise<R>): Promise<R> =>
     deps.intents.perform(call.actor, intent, run).catch((e: unknown) => {
       throw e instanceof Refused ? new ApiError("FORBIDDEN", e.message) : e;
     });
   const tileOf = (id: unknown): string | undefined => (typeof id === "string" && id ? bareOf(id) : undefined);
-  // A pipe, or every pipe out of a tile: `src->dst`, `src->*`.
-  const pipeOf = (src: unknown, dst: unknown): string | undefined => {
-    const from = tileOf(src);
-    return from && `${from}->${tileOf(dst) ?? "*"}`;
-  };
 
-  const dispatch = async (method: string, rawParams: unknown, call: HcpCall): Promise<unknown> => {
+  const agentChannel = async (method: string, rawParams: unknown, call: HcpCall): Promise<unknown> => {
     let p = (rawParams ?? {}) as Record<string, unknown>;
     // A tile speaks for itself: the caller a call names is the tile its token names. Naming
     // another is refused (and recorded); a call that names none is its tile's all the same. A
@@ -522,75 +521,12 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       if (!named) p = { ...p, callerTile: ptyId(call.actor.tile) }; // as `hive ctl` names it: $HIVEMIND_TILE
     }
     switch (method) {
-      case "tile.spawn_agent":
-        // Anti-fork-bomb depth + rate gates, parent/auto-report/supervision
-        // wiring, and the read-epoch arm all live in doSpawn. AUTO-REPORT is on unless report:false; the read epoch is
-        // armed so a follow-up agent.read waits for THIS agent's first turn.
-        return effect(call, { verb: method, target: (r) => r.tileId }, async () => ({
-          tileId: await doSpawn({
-            agent: p.agent, name: p.name, prompt: p.prompt, frame: p.frame, mode: p.mode, model: p.model,
-            parent: tileOf(p.callerTile), report: p.report, supervise: p.supervise, resume: p.resume,
-          }),
-        }));
-
-      case "agent.sessions": {
-        const def = agentById(String(p.agent ?? ""));
-        if (!def) throw new ApiError("BAD_REQUEST", `unknown agent '${String(p.agent ?? "")}'`);
-        if (!canListSessions(def)) throw new ApiError("UNSUPPORTED", `${def.label} does not say where its sessions are, so they cannot be listed`);
-        const limit = typeof p.limit === "number" && p.limit > 0 ? Math.min(p.limit, 500) : undefined;
-        const sessions = await listSessions(def, { ...(typeof p.cwd === "string" ? { cwd: p.cwd } : {}), ...(limit ? { limit } : {}) });
-        return { agent: def.id, resumable: !!def.session?.resume, sessions };
-      }
-
-      case "agent.send":
-        return effect(call, { verb: method, target: tileOf(p.tileId) }, async () => {
-          const tileId = String(p.tileId ?? "");
-          const text = String(p.text ?? "");
-          if (!tileId) throw new ApiError("BAD_REQUEST", "tileId required");
-          const submit = p.submit !== false; // default: press Enter
-          const pid = ptyId(tileId);
-          // With submit (the default) this is a MESSAGE: deliver via the mailbox, which
-          // types text-then-Enter as separate writes (a bundled newline is dropped by
-          // claude's TUI) and, crucially, HOLDS it if the target agent is mid-turn —
-          // otherwise it strands in the composer, unsubmitted and unread.
-          // submit:false is a raw paste into the composer, which is only meaningful
-          // right now, so it stays an immediate write.
-          let ok: boolean;
-          if (submit) {
-            const sent = holdUntilSent(pid);
-            ok = deps.deliverToTile(pid, text, () => { armRead(tileId); sent(); });
-            if (!ok) sent();
-          } else {
-            armRead(tileId); // a raw paste is written immediately, so now IS delivery
-            ok = deps.writeToTile(pid, text);
-          }
-          if (!ok) throw new ApiError("NOT_FOUND", `no live agent for tile ${tileId}`);
-          return { ok: true };
-        });
-
-      case "agent.send_keys":
-        return effect(call, { verb: method, target: tileOf(p.tileId) }, async () => {
-          // Send a sequence of symbolic keys to a tile's TUI (e.g. answer a native
-          // AskUserQuestion picker: ["Down","Enter"]). Each token maps via KEYMAP
-          // (arrows/enter/esc/…) or is sent as literal text. Staggered so the TUI
-          // registers each key — a bundled arrow+enter write can miss the move.
-          const tileId = String(p.tileId ?? "");
-          if (!tileId) throw new ApiError("BAD_REQUEST", "tileId required");
-          const raw = p.keys;
-          const keys = Array.isArray(raw) ? raw.map(String) : raw != null ? [String(raw)] : [];
-          if (!keys.length) throw new ApiError("BAD_REQUEST", "keys required");
-          const pid = ptyId(tileId);
-          armRead(tileId); // keys can submit a prompt; a following read wants the turn they cause
-          if (!typeKeys((bytes) => deps.writeToTile(pid, bytes), keys)) throw new ApiError("NOT_FOUND", `no live agent for tile ${tileId}`);
-          return { ok: true, keys: keys.length };
-        });
-
       case "agent.report":
         return effect(call, { verb: method, target: (r) => r.parent }, async () => {
           // A spawned worker pushes a result back to the agent that spawned it.
           // The caller passes its OWN tile id (HIVEMIND_TILE); we look up its
           // parent and deliver the message into the parent's terminal (typed +
-          // Enter, like agent.send) so the parent reads it on its next turn.
+          // Enter, as a send is) so the parent reads it on its next turn.
           const child = bareOf(String(p.callerTile ?? ""));
           const parent = parentOf.get(child);
           if (!parent) throw new ApiError("NOT_FOUND", "no parent agent to report to");
@@ -675,161 +611,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         });
       }
 
-      case "agent.approve": {
-        // The supervising agent answers an approval request (by reqId). always /
-        // never also remember the decision for this worker+tool (no more
-        // round-trips for it). Only the supervisor it was asked of may answer it, or a
-        // person: never the worker itself, nor another worker.
-        const reqId = String(p.reqId ?? "");
-        const decision = String(p.decision ?? "");
-        const wait = deps.waits.named(reqId);
-        const d = decision === "allow" || decision === "always" ? "allow" : decision === "deny" || decision === "never" ? "deny" : null;
-        return effect(call, { verb: method, target: wait?.tile, detail: d ? decision : undefined, onlyBy: wait?.answerer }, async () => {
-          const reason = p.reason != null ? String(p.reason) : undefined;
-          if (!wait || wait.kind !== "approval") throw new ApiError("BAD_REQUEST", `no approval ${reqId} is waiting: it was answered, ran out of time, or its worker stopped waiting`);
-          if (!d) throw new ApiError("BAD_REQUEST", "decision must be allow | deny | always | never");
-          deps.waits.answer(wait.tile, wait.since, d, { feedback: reason, always: decision === "always" || decision === "never" });
-          return { ok: true, decision: d };
-        });
-      }
-
-      // The tail of what an agent printed, as the recorder holds it.
-      case "agent.output": {
-        const tileId = String(p.tileId ?? "");
-        if (!tileId) throw new ApiError("BAD_REQUEST", "tileId required");
-        if (deps.workspaces.workspaceOf(bareOf(tileId)) === null && !deps.sessionHeld(ptyId(tileId))) throw new ApiError("NOT_FOUND", `no tile ${bareOf(tileId)} is open`);
-        return { text: deps.recorder.tail(ptyId(tileId), typeof p.lines === "number" ? p.lines : DEFAULT_OUTPUT_LINES) };
-      }
-
-      case "agent.read": {
-        const tileId = String(p.tileId ?? "");
-        if (!tileId) throw new ApiError("BAD_REQUEST", "tileId required");
-        requireTurnSignal(tileId, "agent.read");
-        const timeoutMs = typeof p.timeoutMs === "number" ? p.timeoutMs : DEFAULT_READ_TIMEOUT;
-        const pid = ptyId(tileId);
-        // A tile no open workspace holds, running no session main holds, is gone: say so now
-        // rather than wait out the timeout for a turn that cannot come. A tile still starting
-        // is in its workspace already.
-        if (deps.workspaces.workspaceOf(bareOf(tileId)) === null && !deps.sessionHeld(pid)) {
-          throw new ApiError("NOT_FOUND", `no tile ${bareOf(tileId)} is open`);
-        }
-        // A send may still be queued behind the turn in flight; its epoch is armed when
-        // it is typed, so wait for that before deciding which turn this read wants.
-        // One budget for the whole read: waiting for a held send to be typed must not
-        // extend the call past the ceiling the caller (and the CLI) is waiting on.
-        const deadline = Date.now() + timeoutMs;
-        const pending = pendingSend.get(pid);
-        if (pending) await Promise.race([pending, new Promise<void>((r) => { const t = setTimeout(r, timeoutMs); t.unref?.(); })]);
-        const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
-        const rec = await deps.turns.waitForTurn(pid, afterSeq, Math.max(0, deadline - Date.now()));
-        // A tile that died under us is not "still working" — say so, and keep the read's
-        // shape so a caller parsing finalStatus does not have to special-case an error.
-        if (rec && rec.seq === -1) {
-          return { text: null, finalStatus: "closed", truncated: false, note: "tile closed while waiting" };
-        }
-        // Consume this turn: without advancing the epoch the NEXT read returns the same
-        // turn instantly, so a poll loop can never tell a new answer from the old one.
-        if (rec) sendSeq.set(pid, rec.seq);
-        if (rec && typeof rec.text === "string" && rec.text.length > 0) return { text: rec.text, finalStatus: "turn", truncated: false };
-        if (rec) return { text: null, finalStatus: "turn", truncated: false, note: "turn completed but carried no readable reply" };
-        // No completed turn within the timeout. Report status honestly instead of
-        // scraping the raw ANSI terminal buffer (which returned garbled bytes, not
-        // the agent's words). The agent is still working; if it was spawned with
-        // report:true it will auto-deliver its reply to the parent when done.
-        return { text: null, finalStatus: "timeout", truncated: false, note: "agent still working — no completed turn within timeout" };
-      }
-
-
-      // ── canvas verbs (renderer) ──────────────────────────────────────────
-      case "tool.open":
-        if (typeof p.tool !== "string") throw new ApiError("BAD_REQUEST", "tool must be an id: owner/name/tool");
-        return effect(call, { verb: method, target: (r) => r.tileId }, () => openTool(p, (tools) => tools.find((t) => t.id === p.tool), "Unknown tool id"));
-      case "tile.list": {
-        // One frame, named the way spawn names one; a name no frame answers to is refused.
-        const ws = layoutFor(p.callerTile);
-        const only = p.frame ? frameFor(ws.frames, String(p.frame)) : undefined;
-        if (p.frame && !only) throw new ApiError("NOT_FOUND", `no frame answers to "${String(p.frame)}"`);
-        return listTiles({ frames: ws.frames, tiles: ws.tiles, frameOf: ws.frameOf ?? {}, names: ws.tileNames ?? {} }, factsOf(ws.tiles), only);
-      }
-      case "tile.list_frames": {
-        const ws = layoutFor(p.callerTile);
-        return { frames: listFrames({ frames: ws.frames, tiles: ws.tiles, frameOf: ws.frameOf ?? {} }) };
-      }
-      // `hive ctl view emit`: a named JSON event for the active view (protocol 1.3).
-      case "view.emit": {
-        const ev = parseEmit(p as Record<string, unknown>);
-        if (!emitBucket.take()) throw new ApiError("RATE_LIMITED", `at most ${EMIT_RATE.perSecond} view events a second`);
-        return await deps.callRenderer("view.emit", ev, RENDERER_TIMEOUT);
-      }
-      // `hive ctl plugin commands`: what the plugins running in the window let an agent run.
-      case "plugin.commands":
-        return await deps.callRenderer("plugin.commands", {}, RENDERER_TIMEOUT);
-      // `hive ctl plugin open`: get a plugin running, so its commands can be called: a tool's tile
-      // opened (`tool:owner/name`, its first tool, or `tool:owner/name/tool`), a widget added to the
-      // board, a view switched to.
-      case "plugin.open": {
-        const m = typeof p.plugin === "string" && p.plugin.length <= 200 ? /^(tool|widget|view):(.+)$/.exec(p.plugin) : null;
-        if (!m) throw new ApiError("BAD_REQUEST", "plugin must be a record: tool:owner/name, widget:@owner/name or view:id, as `hive plugins list` shows it");
-        const [, kind, id] = m as unknown as [string, "tool" | "widget" | "view", string];
-        if (kind === "tool") {
-          return effect(call, { verb: method, target: `${kind}:${id}` }, () => openTool(p, (tools) => tools.find((t) => t.id === id) ?? tools.find((t) => t.pluginId === id), `${id} has no tool to open`));
-        }
-        if (kind === "widget" && !deps.spawnAllowed()) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
-        return effect(call, { verb: method, target: `${kind}:${id}` }, () => deps.callRenderer("plugin.open", { kind, id }, RENDERER_TIMEOUT));
-      }
-      // `hive ctl plugin call`: run one, and answer with what the plugin answered.
-      case "plugin.call": {
-        if (typeof p.plugin !== "string" || !p.plugin || p.plugin.length > 200) throw new ApiError("BAD_REQUEST", "plugin must be an id, as `hive ctl plugin commands` lists it");
-        if (typeof p.command !== "string" || !COMMAND_NAME_RE.test(p.command)) throw new ApiError("BAD_REQUEST", "command must be one of the plugin's command names");
-        if (p.tile !== undefined && (typeof p.tile !== "string" || !p.tile || p.tile.length > 256)) throw new ApiError("BAD_REQUEST", "tile must be an id");
-        if (!callBucket.take()) throw new ApiError("RATE_LIMITED", `at most ${EMIT_RATE.perSecond} plugin calls a second`);
-        const params = { plugin: p.plugin, command: p.command, args: p.args ?? null, ...(p.tile ? { tile: p.tile } : {}) };
-        return effect(call, { verb: method, target: `${p.plugin}:${p.command}` }, () => deps.callRenderer("plugin.call", params, PLUGIN_CALL_TIMEOUT));
-      }
-      // Community view packages are scanned when the registry loads; `hive
-      // views install|remove` calls this so a running app picks the change
-      // up without a restart (the renderer re-reads both roots and updates
-      // its registry — the switcher and ⌘E order follow, an active view that
-      // vanished falls back to the canvas).
-      case "views.rescan":
-        return effect(call, { verb: method }, () => deps.callRenderer("views.rescan", {}, RENDERER_TIMEOUT));
-      // `hive agents install|remove` calls this so a running app picks the change
-      // up without a restart. The renderer owns the workspace root, so it runs
-      // the scan (through main, which refreshes its own catalog on the way).
-      case "agents.rescan":
-        return effect(call, { verb: method }, () => deps.callRenderer("agents.rescan", {}, RENDERER_TIMEOUT));
-      // `hive widgets install|remove` changed the widgets folder: every window lists them again.
-      case "widgets.rescan":
-        return effect(call, { verb: method }, async () => { deps.widgetsChanged?.(); return { ok: true }; });
-      // `hive tools install|remove` changed the tools folder: every window loads them again.
-      case "tools.rescan":
-        return effect(call, { verb: method }, async () => { deps.toolsChanged?.(); return { ok: true }; });
-      // `hive config set` / `hive theme use` edited settings.json: re-read it
-      // and push the result to the renderer (main owns the file while running).
-      case "settings.reload":
-        return effect(call, { verb: method }, () => deps.reloadSettings());
-      case "tile.rename":
-        return effect(call, { verb: method, target: tileOf(p.tileId) }, async () => {
-          // The name every surface shows, and the one main's messages call the tile by.
-          const tileId = bareOf(String(p.tileId ?? ""));
-          if (!tileId) throw new ApiError("BAD_REQUEST", "tileId required");
-          const name = cleanName(typeof p.name === "string" ? p.name : "");
-          if (deps.workspaces.renameTile(tileId, name, CONTROL) === null) throw new ApiError("NOT_FOUND", `no open workspace has tile ${tileId}`);
-          return { ok: true, name };
-        });
-
-      case "tile.focus": {
-        if (!p.tileId) throw new ApiError("BAD_REQUEST", "tileId required");
-        return await deps.callRenderer("tile.focus", { tileId: p.tileId }, RENDERER_TIMEOUT);
-      }
-      case "tile.close":
-        return effect(call, { verb: method, target: tileOf(p.tileId) }, async () => {
-          if (!p.tileId) throw new ApiError("BAD_REQUEST", "tileId required");
-          // closeTile drops ALL per-tile state (pipes/turns/recorder/epochs/parent/
-          // depth/supervision) + resolves any in-flight approvals for the worker.
-          return await closeTile(String(p.tileId));
-        });
-
       case "review.open": {
         // The calling agent waits on a person's review of its plan: a plan wait, answered where
         // every plan is (beside the agent in each window, `agent.answer`). The decision it comes
@@ -857,53 +638,141 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         });
       }
 
-      // ── pipes (main) ─────────────────────────────────────────────────────
-      case "tile.connect":
-        return effect(call, { verb: method, target: pipeOf(p.srcTileId, p.dstTileId) }, async () => {
-          const src = String(p.srcTileId ?? "");
-          const dst = String(p.dstTileId ?? "");
-          if (!src || !dst) throw new ApiError("BAD_REQUEST", "srcTileId and dstTileId required");
-          if (!deps.connect(src, dst)) throw new ApiError("BAD_REQUEST", "cannot pipe a tile to itself or create a cycle");
-          return { ok: true };
-        });
-      case "tile.disconnect":
-        return effect(call, { verb: method, target: pipeOf(p.srcTileId, p.dstTileId) }, async () => {
-          const src = String(p.srcTileId ?? "");
-          if (!src) throw new ApiError("BAD_REQUEST", "srcTileId required");
-          deps.disconnect(src, p.dstTileId ? String(p.dstTileId) : undefined);
-          return { ok: true };
-        });
-
-      // `hive share`, `hive people`, `hive join` where the app, not `hive host`, serves this machine.
-      case "host.status":
-        return { workspaces: deps.workspaces.repos().map((repo) => ({ repo, workspace: deps.workspaces.ownership(repo)?.workspaceId ?? null })) };
-      // The agents of a workspace as its feed says (agent-feed.ts): the caller's own, or `repo`.
-      case "agent.list":
-      case "agent.since": {
-        if (!deps.workspaceApi) throw new ApiError("UNSUPPORTED", "the agent feed is not served here");
-        const repo = typeof p.repo === "string" && p.repo ? p.repo
-          : call.actor.kind === "tile" ? deps.workspaces.workspaceOf(bareOf(call.actor.tile)) : null;
-        if (!repo) throw new ApiError("BAD_REQUEST", "which workspace? give repo (a folder `hive ctl list-workspaces` lists)");
-        return await deps.workspaceApi(method, method === "agent.list" ? [repo] : [repo, Number(p.seq)], call.actor);
-      }
-      case "host.people": {
-        if (call.actor.kind !== "person") throw new ApiError("FORBIDDEN", "only the person at this machine shares and answers who joins, not an agent");
-        const verb = String(p.method ?? "");
-        if (!verb.startsWith("people.") || !deps.workspaceApi) throw new ApiError("BAD_REQUEST", `host.people answers people.*, not ${verb}`);
-        return await deps.workspaceApi(verb, Array.isArray(p.params) ? p.params : [], call.actor);
-      }
-      case "host.join":
-        if (call.actor.kind !== "person") throw new ApiError("FORBIDDEN", "only the person at this machine joins a workspace, not an agent");
-        if (!deps.join) throw new ApiError("UNSUPPORTED", "joining is not served here");
-        return await deps.join(String(p.link ?? ""));
-
       default:
-        throw new ApiError("UNKNOWN_METHOD", `unknown method: ${method}`);
+        throw new ApiError("UNKNOWN_METHOD", `unknown method: ${method} (the agent channel carries agent.reply, agent.report, agent.await_approval and review.open; drive the rest with \`hive ctl\`)`);
     }
   };
 
+  // A tile no open workspace holds, running no session main holds, is gone.
+  const requireOpen = (tile: string): void => {
+    if (deps.workspaces.workspaceOf(bareOf(tile)) === null && !deps.sessionHeld(ptyId(tile))) throw new ApiError("NOT_FOUND", `no tile ${bareOf(tile)} is open`);
+  };
+
+  const api: ControlWork = {
+    send(tile, text) {
+      // Delivered through the mailbox, which types text-then-Enter as separate writes (a bundled
+      // newline is dropped by claude's TUI) and HOLDS it while the agent is mid-turn, where it
+      // would strand in the composer unread.
+      const pid = ptyId(tile);
+      const sent = holdUntilSent(pid);
+      const ok = deps.deliverToTile(pid, text, () => { armRead(tile); sent(); });
+      if (!ok) sent();
+      return ok;
+    },
+
+    keys(tile, keys) {
+      // Each token maps via KEYMAP (arrows/enter/esc/…) or is sent as literal text, staggered so
+      // the TUI registers each key: a bundled arrow+enter write can miss the move.
+      const pid = ptyId(tile);
+      armRead(tile); // keys can submit a prompt; a following read wants the turn they cause
+      if (!typeKeys((bytes) => deps.writeToTile(pid, bytes), keys)) throw new ApiError("NOT_FOUND", `no live agent for tile ${bareOf(tile)}`);
+      return keys.length;
+    },
+
+    async read(tile, timeoutMs = DEFAULT_READ_TIMEOUT) {
+      requireTurnSignal(tile, "agent.read");
+      const pid = ptyId(tile);
+      // Say a gone tile is gone now, rather than wait out the timeout for a turn that cannot
+      // come. A tile still starting is in its workspace already.
+      requireOpen(tile);
+      // A send may still be queued behind the turn in flight; its epoch is armed when
+      // it is typed, so wait for that before deciding which turn this read wants.
+      // One budget for the whole read: waiting for a held send to be typed must not
+      // extend the call past the ceiling the caller (and the CLI) is waiting on.
+      const deadline = Date.now() + timeoutMs;
+      const pending = pendingSend.get(pid);
+      if (pending) await Promise.race([pending, new Promise<void>((r) => { const t = setTimeout(r, timeoutMs); t.unref?.(); })]);
+      const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
+      const rec = await deps.turns.waitForTurn(pid, afterSeq, Math.max(0, deadline - Date.now()));
+      // A tile that died under us is not "still working" — say so, and keep the read's
+      // shape so a caller parsing finalStatus does not have to special-case an error.
+      if (rec && rec.seq === -1) return { text: null, finalStatus: "closed", truncated: false, note: "tile closed while waiting" };
+      // Consume this turn: without advancing the epoch the NEXT read returns the same
+      // turn instantly, so a poll loop can never tell a new answer from the old one.
+      if (rec) sendSeq.set(pid, rec.seq);
+      if (rec && typeof rec.text === "string" && rec.text.length > 0) return { text: rec.text, finalStatus: "turn", truncated: false };
+      if (rec) return { text: null, finalStatus: "turn", truncated: false, note: "turn completed but carried no readable reply" };
+      // No completed turn within the timeout: the agent is still working. Spawned with
+      // report:true, it delivers its reply to its starter when done.
+      return { text: null, finalStatus: "timeout", truncated: false, note: "agent still working — no completed turn within timeout" };
+    },
+
+    // The tail of what an agent printed, as the recorder holds it.
+    output(tile, lines = DEFAULT_OUTPUT_LINES) {
+      requireOpen(tile);
+      return { text: deps.recorder.tail(ptyId(tile), lines) };
+    },
+
+    rename(tile, raw) {
+      // The name every surface shows, and the one main's messages call the tile by.
+      const name = cleanName(raw);
+      if (deps.workspaces.renameTile(bareOf(tile), name, CONTROL) === null) throw new ApiError("NOT_FOUND", `no open workspace has tile ${bareOf(tile)}`);
+      return name;
+    },
+
+    async sessions(program, cwd, limit) {
+      const def = agentById(program);
+      if (!def) throw new ApiError("BAD_REQUEST", `unknown agent '${program}'`);
+      if (!canListSessions(def)) throw new ApiError("UNSUPPORTED", `${def.label} does not say where its sessions are, so they cannot be listed`);
+      const sessions = await listSessions(def, { cwd, ...(limit ? { limit: Math.min(limit, 500) } : {}) });
+      return { agent: def.id, resumable: !!def.session?.resume, sessions };
+    },
+
+    openTool: (caller, repo, tool, at) => openTool({ caller, repo, ...at }, (tools) => tools.find((t) => t.id === tool), "Unknown tool id"),
+
+    connect(src, dst) {
+      if (!deps.connect(src, dst)) throw new ApiError("BAD_REQUEST", "cannot pipe a tile to itself or create a cycle");
+    },
+    disconnect: (src, dst) => deps.disconnect(src, dst),
+
+    // A named JSON event for the active view (protocol 1.3).
+    async viewEmit(caller, name, data, view) {
+      const ev = parseEmit(name, data, view, caller);
+      if (!emitBucket.take()) throw new ApiError("RATE_LIMITED", `at most ${EMIT_RATE.perSecond} view events a second`);
+      return await deps.callRenderer("view.emit", ev, RENDERER_TIMEOUT);
+    },
+    // What the plugins running in the window let an agent run.
+    pluginCommands: () => deps.callRenderer("plugin.commands", {}, RENDERER_TIMEOUT),
+    // Get a plugin running, so its commands can be called: a tool's tile opened (`tool:owner/name`,
+    // its first tool, or `tool:owner/name/tool`), a widget added to the board, a view switched to.
+    async pluginOpen(caller, plugin, frame) {
+      const m = typeof plugin === "string" && plugin.length <= 200 ? /^(tool|widget|view):(.+)$/.exec(plugin) : null;
+      if (!m) throw new ApiError("BAD_REQUEST", "plugin must be a record: tool:owner/name, widget:@owner/name or view:id, as `hive plugins list` shows it");
+      const [, kind, id] = m as unknown as [string, "tool" | "widget" | "view", string];
+      if (kind === "tool") return { tile: await openTool({ caller, frame }, (tools) => tools.find((t) => t.id === id) ?? tools.find((t) => t.pluginId === id), `${id} has no tool to open`) };
+      if (kind === "widget" && !deps.spawnAllowed()) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
+      return await deps.callRenderer("plugin.open", { kind, id }, RENDERER_TIMEOUT);
+    },
+    // Run one, and answer with what the plugin answered.
+    async pluginCall(plugin, command, args, tile) {
+      if (typeof plugin !== "string" || !plugin || plugin.length > 200) throw new ApiError("BAD_REQUEST", "plugin must be an id, as `hive ctl plugin commands` lists it");
+      if (typeof command !== "string" || !COMMAND_NAME_RE.test(command)) throw new ApiError("BAD_REQUEST", "command must be one of the plugin's command names");
+      if (tile != null && (typeof tile !== "string" || !tile || tile.length > 256)) throw new ApiError("BAD_REQUEST", "tile must be an id");
+      if (!callBucket.take()) throw new ApiError("RATE_LIMITED", `at most ${EMIT_RATE.perSecond} plugin calls a second`);
+      return await deps.callRenderer("plugin.call", { plugin, command, args: args ?? null, ...(tile ? { tile } : {}) }, PLUGIN_CALL_TIMEOUT);
+    },
+    focus: (tile) => deps.callRenderer("tile.focus", { tileId: tile }, RENDERER_TIMEOUT),
+    // A plugins folder changed (`hive … install|remove`): a running app picks it up without a
+    // restart. Views and agents are scanned by the window, which owns the workspace root; widgets
+    // and tools are listed again here, and every window told.
+    async rescan(what) {
+      if (what === "views" || what === "agents") return await deps.callRenderer(`${what}.rescan`, {}, RENDERER_TIMEOUT);
+      if (what === "widgets") deps.widgetsChanged?.();
+      else deps.toolsChanged?.();
+      return { ok: true };
+    },
+    // `hive config set` / `hive theme use` edited settings.json: main, which owns the file while
+    // it runs, reads it again and tells the windows.
+    reloadSettings: () => deps.reloadSettings(),
+    hostStatus: () => ({ workspaces: deps.workspaces.repos().map((repo) => ({ repo, workspace: deps.workspaces.ownership(repo)?.workspaceId ?? null })) }),
+    async join(link) {
+      if (!deps.join) throw new ApiError("UNSUPPORTED", "joining is not served here");
+      return await deps.join(link);
+    },
+  };
+
   return {
-    dispatch, forgetTile: forgetTileState, labelOf: label, spawn: doSpawn, close: closeTile,
+    agentChannel, api, forgetTile: forgetTileState, labelOf: label, spawn: doSpawn, close: closeTile,
     parentOf: (bare) => parentOf.get(bare),
   };
 }

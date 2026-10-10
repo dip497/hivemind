@@ -1,9 +1,9 @@
 /**
- * The control plane's verbs with effects go through the host's intents (R7): each leaves one line
+ * What the agent channel carries out goes through the host's intents (R7): each leaves one line
  * in the audit log, naming who asked (the tile whose token the call came with, or a person at
- * this machine), what it acted on, and how it ended. Verbs that only read, a hook reporting, and
- * a view moving leave none. A tile speaks only for itself. Checked against the real dispatch and a
- * real audit file.
+ * this machine), what it acted on, and how it ended. A hook handing over a reply leaves none. A
+ * tile speaks only for itself. Checked against the real control plane and a real audit file. (The
+ * workspace API records its own: control-api.test.ts.)
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -16,7 +16,7 @@ import { Mailbox } from "@hivemind/host/control/mailbox";
 import { TurnTracker } from "@hivemind/host/control/turn-tracker";
 import { OutputRecorder } from "@hivemind/host/control/output-recorder";
 import type { AuditRecord } from "@hivemind/workspace-host/intents";
-import { PERSON, fromTile, workspaceDeps } from "./hcp-workspace.ts";
+import { PERSON, REPO, fromTile, workspaceDeps } from "./hcp-workspace.ts";
 
 function dispatcher() {
   const writes: string[] = [];
@@ -24,7 +24,7 @@ function dispatcher() {
   const mailbox = new Mailbox(write, 1);
   const turns = new TurnTracker();
   const ws = workspaceDeps();
-  const { dispatch } = makeDispatch({
+  const made = makeDispatch({
     turns,
     recorder: new OutputRecorder(),
     callRenderer: async () => { throw new Error("no window"); },
@@ -43,97 +43,66 @@ function dispatcher() {
   });
   // A line without its time, which the next test checks on its own.
   const lines = () => ws.audited().map(({ at, ...rest }) => { assert.ok(!Number.isNaN(Date.parse(at))); return rest; });
-  return { dispatch, turns, ws, writes, lines };
+  const worker = (opts: { supervise?: true } = {}) => made.spawn({ agent: "claude", parent: "tile-lead", repo: REPO, ...opts });
+  return { ...made, turns, ws, writes, lines, worker };
 }
 
-const lead = { kind: "tile", tile: "tile-lead" } as const;
-const LEAD = fromTile("tile-lead");
 const person = { kind: "person" } as const;
 const until = async (ok: () => boolean) => { for (let i = 0; i < 200 && !ok(); i++) await new Promise((r) => setTimeout(r, 10)); assert.ok(ok()); };
 
-test("each verb with an effect is recorded with who asked, what, of what and how it ended; reads, focus and view events are not", async () => {
-  const { dispatch, ws, lines } = dispatcher();
-  const { tileId: w } = (await dispatch("tile.spawn_agent", { agent: "claude" }, LEAD)) as { tileId: string };
-  const { tileId: browser } = (await dispatch("tool.open", { tool: "hivemind/web/browser", url: "about:blank" }, PERSON)) as { tileId: string };
-  await dispatch("agent.send", { tileId: w, text: "hello" }, PERSON);
-  await dispatch("agent.send_keys", { tileId: w, keys: ["Enter"] }, LEAD);
-  await dispatch("agent.report", { message: "done" }, fromTile(w));
-  await dispatch("tile.rename", { tileId: w, name: "worker" }, LEAD);
-  await dispatch("tile.connect", { srcTileId: w, dstTileId: "tile-lead" }, PERSON);
-  await dispatch("tile.disconnect", { srcTileId: w }, PERSON);
-  await dispatch("settings.reload", {}, PERSON);
-  // With no window to carry them out these fail, and are recorded as asked all the same.
-  await assert.rejects(dispatch("views.rescan", {}, PERSON));
-  await assert.rejects(dispatch("agents.rescan", {}, PERSON));
+test("a report, a question and a review are recorded with who asked, of what and how it ended; a hook's reply is not", async () => {
+  const { agentChannel, ws, lines, worker } = dispatcher();
+  const w = await worker();
+  await agentChannel("agent.report", { message: "done" }, fromTile(w));
   // The worker waits on a review of its plan, which a person allows.
-  const reviewed = dispatch("review.open", { plan: "ship it" }, fromTile(w));
+  const reviewed = agentChannel("review.open", { plan: "ship it" }, fromTile(w));
   ws.waits.answer(w, ws.waits.of(w)!.since, "allow");
   await reviewed;
-  // Reads, a window's focus, a view's event and a hook's reply change nothing here.
-  await dispatch("tile.list", {}, LEAD);
-  await dispatch("tile.list_frames", {}, PERSON);
-  await dispatch("agent.read", { tileId: w, timeoutMs: 0 }, PERSON);
-  await dispatch("agent.reply", { tileId: w, text: "done" }, PERSON);
-  await assert.rejects(dispatch("tile.focus", { tileId: w }, PERSON));
-  await assert.rejects(dispatch("view.emit", { name: "ci.build" }, PERSON));
-  await dispatch("tile.close", { tileId: w }, LEAD);
+  await agentChannel("agent.reply", { tileId: w, text: "done" }, PERSON);
   // One that fails is recorded too, with its error's code.
-  await assert.rejects(dispatch("tile.close", { tileId: "tile-ghost" }, PERSON), { code: "NOT_FOUND" });
+  await assert.rejects(agentChannel("agent.report", { message: "done" }, fromTile("tile-orphan")), { code: "NOT_FOUND" });
 
   assert.deepEqual(lines(), [
-    { actor: lead, verb: "tile.spawn_agent", target: w, outcome: "ok" },
-    { actor: person, verb: "tool.open", target: browser, outcome: "ok" },
-    { actor: person, verb: "agent.send", target: w, outcome: "ok" },
-    { actor: lead, verb: "agent.send_keys", target: w, outcome: "ok" },
     { actor: { kind: "tile", tile: w }, verb: "agent.report", target: "tile-lead", outcome: "ok" },
-    { actor: lead, verb: "tile.rename", target: w, outcome: "ok" },
-    { actor: person, verb: "tile.connect", target: `${w}->tile-lead`, outcome: "ok" },
-    { actor: person, verb: "tile.disconnect", target: `${w}->*`, outcome: "ok" },
-    { actor: person, verb: "settings.reload", outcome: "ok" },
-    { actor: person, verb: "views.rescan", outcome: "error" },
-    { actor: person, verb: "agents.rescan", outcome: "error" },
     { actor: { kind: "tile", tile: w }, verb: "review.open", detail: "allow", outcome: "ok" },
-    { actor: lead, verb: "tile.close", target: w, outcome: "ok" },
-    { actor: person, verb: "tile.close", target: "tile-ghost", outcome: "error", code: "NOT_FOUND" },
+    { actor: { kind: "tile", tile: "tile-orphan" }, verb: "agent.report", outcome: "error", code: "NOT_FOUND" },
   ]);
 });
 
-test("a supervised worker's question and its supervisor's answer are recorded; one the worker's standing answer settles is not", async () => {
-  const { dispatch, writes, lines } = dispatcher();
-  const { tileId: worker } = (await dispatch("tile.spawn_agent", { agent: "claude", supervise: true }, LEAD)) as { tileId: string };
-  const ask = () => dispatch("agent.await_approval", { tool_name: "Edit", tool_input: { file_path: "/x.ts" } }, fromTile(worker));
+test("a supervised worker's question is recorded; one the worker's standing answer settles is not", async () => {
+  const { agentChannel, ws, writes, lines, worker } = dispatcher();
+  const w = await worker({ supervise: true });
+  const ask = () => agentChannel("agent.await_approval", { tool_name: "Edit", tool_input: { file_path: "/x.ts" } }, fromTile(w));
 
   const asked = ask();
   await until(() => /hive ctl approve (\S+) allow/.test(writes.join("")));
-  const reqId = /hive ctl approve (\S+) allow/.exec(writes.join(""))![1];
-  await dispatch("agent.approve", { reqId, decision: "always" }, LEAD);
+  const wait = ws.waits.of(w)!;
+  ws.waits.answer(w, wait.since, "allow", { always: true });
   assert.deepEqual(await asked, { decision: "allow" });
   // Remembered: this one asks nobody, so nothing happened to record.
   assert.deepEqual(await ask(), { decision: "allow" });
-  // An answer to a question nobody is waiting on is recorded as the failure it is.
-  await assert.rejects(dispatch("agent.approve", { reqId, decision: "deny" }, LEAD), { code: "BAD_REQUEST" });
 
-  const recorded = lines();
-  assert.deepEqual(recorded.filter((l) => l.verb !== "tile.spawn_agent").sort((a, b) => a.verb.localeCompare(b.verb) || a.outcome.localeCompare(b.outcome)), [
-    { actor: lead, verb: "agent.approve", detail: "deny", outcome: "error", code: "BAD_REQUEST" },
-    { actor: lead, verb: "agent.approve", target: worker, detail: "always", outcome: "ok" },
-    { actor: { kind: "tile", tile: worker }, verb: "agent.await_approval", target: "tile-lead", detail: "Edit", outcome: "ok" },
+  assert.deepEqual(lines(), [
+    { actor: { kind: "tile", tile: w }, verb: "agent.await_approval", target: "tile-lead", detail: "Edit", outcome: "ok" },
   ]);
 });
 
 test("a tile that names another as its caller is refused, which is recorded, and nothing happens; a person may act for any tile", async () => {
-  const { dispatch, ws, lines } = dispatcher();
-  const worker = fromTile("tile-worker");
-  await assert.rejects(dispatch("agent.report", { callerTile: "hm:tile-other", message: "forged" }, worker), { code: "FORBIDDEN" });
-  await assert.rejects(dispatch("tile.spawn_agent", { agent: "claude", callerTile: "tile-other" }, worker), { code: "FORBIDDEN" });
-  assert.deepEqual(ws.announced, [], "nothing was spawned");
+  const { agentChannel, ws, writes, lines, worker } = dispatcher();
+  const w = await worker();
+  const other = fromTile("tile-other");
+  await assert.rejects(agentChannel("agent.report", { callerTile: `hm:${w}`, message: "forged" }, other), { code: "FORBIDDEN" });
+  await assert.rejects(agentChannel("review.open", { callerTile: w, plan: "forged" }, other), { code: "FORBIDDEN" });
+  assert.equal(ws.waits.of(w), undefined, "nothing waits");
+  assert.deepEqual(writes, [], "nothing was typed");
   // Its own id, however it is spelled, is itself.
-  await dispatch("tile.list", { callerTile: "hm:tile-worker" }, worker);
-  const { tileId } = (await dispatch("tile.spawn_agent", { agent: "claude", callerTile: "hm:tile-lead" }, PERSON)) as { tileId: string };
+  await agentChannel("agent.report", { callerTile: `hm:${w}`, message: "mine" }, fromTile(w));
+  await agentChannel("agent.report", { callerTile: w, message: "for it" }, PERSON);
 
   assert.deepEqual(lines(), [
-    { actor: worker.actor, verb: "agent.report", target: "tile-other", outcome: "refused" },
-    { actor: worker.actor, verb: "tile.spawn_agent", target: "tile-other", outcome: "refused" },
-    { actor: person, verb: "tile.spawn_agent", target: tileId, outcome: "ok" },
+    { actor: other.actor, verb: "agent.report", target: w, outcome: "refused" },
+    { actor: other.actor, verb: "review.open", target: w, outcome: "refused" },
+    { actor: { kind: "tile", tile: w }, verb: "agent.report", target: "tile-lead", outcome: "ok" },
+    { actor: person, verb: "agent.report", target: "tile-lead", outcome: "ok" },
   ]);
 });

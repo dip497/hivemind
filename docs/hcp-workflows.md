@@ -5,7 +5,9 @@
 > `mcp__hive__*` reference below reads as the matching `hive ctl` verb — see the
 > `hive-workflow` skill in packages/hive-core/src/templates.ts for the current
 > vocabulary). The loop now runs in the CLI (`apps/cli/src/workflow.ts`), from the workspace
-> API's `agent.start`, `agent.read` and `agent.close` on the drive socket; HCP has no `workflow.run`.
+> API's `agent.start`, `agent.read` and `agent.close` on the drive socket. HCP now carries only
+> an agent's own channel (`spec/wire-protocol.md`): the `tile.*` verbs, `agent.send`, `agent.read`
+> and `workflow.run` below are the workspace API's methods, or gone.
 
 ## Goal
 

@@ -1,92 +1,102 @@
 /**
  * What the control plane does that the workspace API asks by name (spec/workspace-api.md, 0.23):
- * name an agent, type keys to it, read its next reply or what it printed last, list the sessions it keeps, open a tool's
- * tile, pipe one agent's replies to another; and the person's own machine methods (a view event,
- * the plugins running in a window, a tile brought forward, rescans, settings, joining). The
- * control plane carries each out and records its effect as the caller's, once; an agent on the
- * drive socket is its tile, as in `hive ctl`. Electron-free.
+ * send an agent a message, name it, type keys to it, read its next reply or what it printed last,
+ * list the sessions it keeps, open a tool's tile, pipe one agent's replies to another; and the
+ * person's own machine methods (a view event, the plugins running in a window, a tile brought
+ * forward, rescans, settings, joining). Each effect is recorded as the caller's; an agent on the
+ * drive socket asks from its tile, as in `hive ctl`. Electron-free.
  */
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
+import { named } from "@hivemind/workspace-api/server";
 import { ApiError } from "@hivemind/workspace-api/protocol";
-import type { AgentRead, AgentSessions } from "@hivemind/workspace-api/agents";
-import { toPtyId as ptyId } from "@hivemind/workspace-api/tile-id";
-import type { HcpCall } from "./control/protocol.js";
+import { toBareId } from "@hivemind/workspace-api/tile-id";
+import { promptProblem } from "@hivemind/view-sdk/protocol";
+import type { ControlWork } from "./control/methods.js";
 
 type Method =
-  | "agent.rename" | "agent.keys" | "agent.read" | "agent.output" | "agent.sessions" | "tool.open" | "link.connect" | "link.disconnect"
+  | "agent.send" | "agent.rename" | "agent.keys" | "agent.read" | "agent.output" | "agent.sessions" | "tool.open" | "link.connect" | "link.disconnect"
   | "view.emit" | "plugin.commands" | "plugin.open" | "plugin.call" | "tile.focus"
   | "views.rescan" | "agents.rescan" | "widgets.rescan" | "tools.rescan" | "settings.reload" | "host.status" | "host.join";
 
 export interface ControlApiOptions {
-  /** The control plane: what it is asked, as `hive ctl` asks it. */
-  control(): { dispatch(method: string, params: unknown, call: HcpCall): Promise<unknown> };
+  /** The control plane's work, once it is ready. */
+  control(): Promise<ControlWork>;
 }
 
 const text = (v: unknown, what: string): string => {
   if (typeof v !== "string" || !v) throw new ApiError("BAD_REQUEST", `${what} must be text`);
   return v;
 };
+/** The agent's tile a connection asks from: none for the person or a program. */
+const callerOf = (from: Connection): string | undefined => (from.actor.kind === "peer" && from.actor.tile ? toBareId(from.actor.tile) : undefined);
+const tileOf = (v: unknown): string | undefined => { const t = named(v); return t && toBareId(t); };
+/** A pipe, or every pipe out of a tile: `src->dst`, `src->*`. */
+const pipeOf = (src: unknown, dst: unknown): string | undefined => { const from = tileOf(src); return from && `${from}->${tileOf(dst) ?? "*"}`; };
 
 export function controlApi(o: ControlApiOptions): Domain<Method> {
-  /** Ask the control plane `method` as `from`, which the agent on the drive socket asks from its tile. */
-  const ask = (from: Connection, method: string, params: Record<string, unknown>): Promise<unknown> => {
-    const tile = from.actor.kind === "peer" ? from.actor.tile : undefined;
-    return o.control().dispatch(method, { ...params, ...(tile ? { callerTile: ptyId(tile) } : {}) }, { actor: from.actor, signal: from.closed });
-  };
   /** Asked for what it does: the API answers `null`. */
-  const done = (method: string, params: (...p: unknown[]) => Record<string, unknown> = () => ({})) =>
-    async (from: Connection, ...p: unknown[]) => { await ask(from, method, params(...p)); return null; };
+  const done = (run: (w: ControlWork, ...p: unknown[]) => unknown) =>
+    async (_from: Connection, ...p: unknown[]) => { await run(await o.control(), ...p); return null; };
   return {
     answers: {
-      "agent.rename": async (from, tile, name) => {
-        const r = (await ask(from, "tile.rename", { tileId: text(tile, "tile"), name: typeof name === "string" ? name : "" })) as { name: string };
-        return { name: r.name };
+      "agent.send": async (_from, tile, message) => {
+        const problem = promptProblem(message);
+        if (problem) throw new ApiError("BAD_REQUEST", problem);
+        return { sent: (await o.control()).send(text(tile, "tile"), message as string) };
       },
-      "agent.keys": async (from, tile, keys) => {
+      "agent.rename": async (_from, tile, name) => ({ name: (await o.control()).rename(text(tile, "tile"), typeof name === "string" ? name : "") }),
+      "agent.keys": async (_from, tile, keys) => {
         if (!Array.isArray(keys) || !keys.length || !keys.every((k) => typeof k === "string" && k)) throw new ApiError("BAD_REQUEST", "keys must be a list of key names or text");
-        const r = (await ask(from, "agent.send_keys", { tileId: text(tile, "tile"), keys })) as { keys: number };
-        return { keys: r.keys };
+        return { keys: (await o.control()).keys(text(tile, "tile"), keys as string[]) };
       },
-      "agent.read": async (from, tile, timeoutMs) => {
+      "agent.read": async (_from, tile, timeoutMs) => {
         // 0: the turn as it stands, without waiting.
         if (timeoutMs != null && !(typeof timeoutMs === "number" && timeoutMs >= 0)) throw new ApiError("BAD_REQUEST", "timeoutMs must be a number of milliseconds");
-        return (await ask(from, "agent.read", { tileId: text(tile, "tile"), ...(timeoutMs != null ? { timeoutMs } : {}) })) as AgentRead;
+        return (await o.control()).read(text(tile, "tile"), (timeoutMs as number | null | undefined) ?? undefined);
       },
-      "agent.output": async (from, tile, lines) => {
+      "agent.output": async (_from, tile, lines) => {
         if (lines != null && !(Number.isInteger(lines) && (lines as number) > 0)) throw new ApiError("BAD_REQUEST", "lines must be a whole number");
-        return (await ask(from, "agent.output", { tileId: text(tile, "tile"), ...(lines != null ? { lines } : {}) })) as { text: string };
+        return (await o.control()).output(text(tile, "tile"), (lines as number | null) ?? undefined);
       },
-      "agent.sessions": async (from, place, program, limit) => {
+      "agent.sessions": async (_from, place, program, limit) => {
         if (limit != null && !(typeof limit === "number" && limit > 0)) throw new ApiError("BAD_REQUEST", "limit must be a number");
-        return (await ask(from, "agent.sessions", { agent: text(program, "program"), cwd: text(place, "place"), ...(limit != null ? { limit } : {}) })) as AgentSessions;
+        return (await o.control()).sessions(text(program, "program"), text(place, "place"), (limit as number | null) ?? undefined);
       },
       "tool.open": async (from, repo, tool) => {
         const t = (tool ?? {}) as { tool?: unknown; frame?: unknown; url?: unknown };
-        const r = (await ask(from, "tool.open", { repo: text(repo, "repo"), tool: t.tool, frame: t.frame, url: t.url })) as { tileId: string };
-        return { tile: r.tileId };
+        const r = text(repo, "repo");
+        if (typeof t.tool !== "string") throw new ApiError("BAD_REQUEST", "tool must be an id: owner/name/tool");
+        return { tile: await (await o.control()).openTool(callerOf(from), r, t.tool, { frame: t.frame, url: t.url }) };
       },
-      "link.connect": async (from, src, dst) => { await ask(from, "tile.connect", { srcTileId: text(src, "src"), dstTileId: text(dst, "dst") }); },
-      "link.disconnect": async (from, src, dst) => {
-        await ask(from, "tile.disconnect", { srcTileId: text(src, "src"), ...(dst != null ? { dstTileId: text(dst, "dst") } : {}) });
-      },
-      "view.emit": (from, name, data, view) => ask(from, "view.emit", { name, data, ...(view != null ? { view } : {}) }),
-      "plugin.commands": (from) => ask(from, "plugin.commands", {}),
-      "plugin.open": async (from, plugin, frame) => {
-        const r = await ask(from, "plugin.open", { plugin, ...(frame != null ? { frame } : {}) });
-        // A tool's tile, by the name the API gives a tile.
-        return r && typeof r === "object" && "tileId" in r ? { tile: (r as { tileId: string }).tileId } : r;
-      },
-      "plugin.call": (from, plugin, command, args, tile) => ask(from, "plugin.call", { plugin, command, args, ...(tile != null ? { tile } : {}) }),
-      "tile.focus": done("tile.focus", (tile) => ({ tileId: text(tile, "tile") })),
-      "views.rescan": done("views.rescan"),
-      "agents.rescan": done("agents.rescan"),
-      "widgets.rescan": done("widgets.rescan"),
-      "tools.rescan": done("tools.rescan"),
-      "settings.reload": done("settings.reload"),
-      "host.status": async (from) => (await ask(from, "host.status", {})) as { workspaces: Array<{ repo: string; workspace: string | null }> },
-      "host.join": (from, link) => ask(from, "host.join", { link: text(link, "link") }),
+      "link.connect": async (_from, src, dst) => { (await o.control()).connect(text(src, "src"), text(dst, "dst")); },
+      "link.disconnect": async (_from, src, dst) => { (await o.control()).disconnect(text(src, "src"), dst != null ? text(dst, "dst") : undefined); },
+      "view.emit": async (from, name, data, view) => (await o.control()).viewEmit(callerOf(from), name, data, view),
+      "plugin.commands": async () => (await o.control()).pluginCommands(),
+      "plugin.open": async (from, plugin, frame) => (await o.control()).pluginOpen(callerOf(from), plugin, frame),
+      "plugin.call": async (_from, plugin, command, args, tile) => (await o.control()).pluginCall(plugin, command, args, tile),
+      "tile.focus": done((w, tile) => w.focus(text(tile, "tile"))),
+      "views.rescan": done((w) => w.rescan("views")),
+      "agents.rescan": done((w) => w.rescan("agents")),
+      "widgets.rescan": done((w) => w.rescan("widgets")),
+      "tools.rescan": done((w) => w.rescan("tools")),
+      "settings.reload": done((w) => w.reloadSettings()),
+      "host.status": async () => (await o.control()).hostStatus(),
+      "host.join": async (_from, link) => (await o.control()).join(text(link, "link")),
     },
-    // The control plane records each effect, as the caller's.
-    effects: {},
+    effects: {
+      "agent.send": (tile) => ({ target: tileOf(tile) }),
+      "agent.rename": (tile) => ({ target: tileOf(tile) }),
+      "agent.keys": (tile) => ({ target: tileOf(tile) }),
+      "tool.open": () => ({ target: (r: { tile: string }) => r.tile }),
+      "link.connect": (src, dst) => ({ target: pipeOf(src, dst) }),
+      "link.disconnect": (src, dst) => ({ target: pipeOf(src, dst) }),
+      "plugin.open": (plugin) => ({ target: named(plugin) }),
+      "plugin.call": (plugin, command) => ({ target: named(plugin) && `${plugin as string}:${named(command) ?? ""}` }),
+      "views.rescan": () => ({}),
+      "agents.rescan": () => ({}),
+      "widgets.rescan": () => ({}),
+      "tools.rescan": () => ({}),
+      "settings.reload": () => ({}),
+    },
   };
 }

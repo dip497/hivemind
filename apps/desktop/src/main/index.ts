@@ -13,7 +13,7 @@ import desktopPkg from "../../package.json" with { type: "json" };
 import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, Menu, nativeImage, net, powerMonitor, protocol, screen, session, shell, webContents, type WebContents } from "electron";
-import { isDay, promptProblem } from "@hivemind/view-sdk/protocol";
+import { isDay } from "@hivemind/view-sdk/protocol";
 import { ActivityMeter } from "./pty-activity.js";
 import { POLL_MS as PRESENCE_POLL_MS, PresenceMonitor, localDay, type PresenceTotals } from "./presence.js";
 import { StatusLedger } from "./status-ledger.js";
@@ -36,7 +36,6 @@ import {
 import os from "node:os";
 import { agentById, agentForCmd, getCatalog, preferredAgent, setCatalog, spawnableAgents, type AgentProviderDef } from "@hivemind/agents";
 import { agentPresence, discoverOptions, findBin, verifyAgent } from "@hivemind/agents/discover";
-import { listSessions } from "@hivemind/agents/node";
 import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
 import * as ptyDaemon from "./daemon-client.js";
 import { isRemote, parseDeviceUri } from "@hivemind/core/remote-uri";
@@ -64,7 +63,7 @@ import type { AppErrorEvent, MachineAddRequest, WorkspaceSummary } from "../shar
 import { startPlanBridge, type PlanRequest } from "./plan-bridge.js";
 import { randomUUID } from "node:crypto";
 import { makeSpawnPacer } from "@hivemind/host/spawn-pacer";
-import { PERSON, handle, handleEffect, on, performed } from "./app-ipc.js";
+import { handle, handleEffect, on } from "./app-ipc.js";
 import { hostIntents } from "./audit.js";
 import { ControlPlane } from "@hivemind/host/control/plane";
 import { REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
@@ -79,9 +78,9 @@ import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
 import { agentFeed, dialDevice, installNetworkIpc, isYourDevice, joinLink, knownMachines, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
 import { elsewhere, mayWriteShared, onceStarted, placedRun, refusedShared, startedByOthers, wroteShared } from "./shared-workspaces.js";
-import { appWindowOf, broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
+import { broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
-import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
+import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
 import { WorkspaceServer, named, type Connection } from "@hivemind/workspace-api/server";
 import { workspaceDomains } from "@hivemind/host/domains";
@@ -1049,11 +1048,6 @@ const control: ControlPlane = new ControlPlane({
     endSession: (tileId) => terminals.end(tileId),
     sessionHeld: (id) => hasSession(id) || hasRemotePty(id),
     intents: hostIntents(),
-    workspaceApi: async (method, params, actor) => {
-      const answer = await workspaceServer.answer(method, params, { actor, send: () => {}, closed: new AbortController().signal });
-      if ("error" in answer) throw new Error(answer.error.message);
-      return answer.result;
-    },
     // `hive join`: in, the window the user is at opens the workspace, as the Join dialog's Open does.
     join: async (link) => {
       const reply = await joinLink(link);
@@ -1074,7 +1068,7 @@ function pushAppError(message: string, source: string): void {
 }
 
 // The ONE teardown path for a tile whose pty has exited (crash, kill, or a
-// tile.close that killed it). Both the local and remote onExit handlers funnel
+// close that killed it). Both the local and remote onExit handlers funnel
 // through here, and so does a kill (ptyKill: a daemon tells its killer nothing
 // of the exit), so no teardown path leaks control-plane state, and a blocked
 // agent.read or approval on it is answered now.
@@ -1272,7 +1266,6 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     status: (bare) => control.status.get(bare),
     type: (bare, data) => writeTile(`hm:${bare}`, data),
     answerKeys: (bare, status) => answerKeys(heldBoards(workspaceStore()), bare, status),
-    deliver: (bare, message) => control.mailbox.deliver(`hm:${bare}`, message),
     waits: control.waits,
     who: whoIs,
   }),
@@ -1295,7 +1288,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     folderOf: (bare) => runsIn(heldBoards(workspaceStore()), bare),
   }),
   // Naming, keys, replies, sessions, tools and pipes, and the person's machine methods (0.23).
-  controlApi({ control: () => control }),
+  controlApi({ control: () => control.api() }),
   // What an agent here and the person say to each other, from its session file, as it is written
   // (M5, spec/agents.md "Conversation").
   conversations({ transcriptOf: (bare) => transcriptOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)) }),
@@ -1889,18 +1882,6 @@ function startViewHost(): void {
 }
 
 function startHcpControlPlane(): void {
-  // View protocol 1.4: a folder's past sessions, without what the agent wrote; a prompt the user
-  // confirmed, delivered like `hive ctl send` (held while the agent is mid-turn).
-  handle("view:sessions", async (_e, agentId: unknown, cwd: unknown) => {
-    const def = typeof agentId === "string" ? agentById(agentId) : undefined;
-    if (!def || typeof cwd !== "string" || !path.isAbsolute(cwd)) throw new Error("bad sessions request");
-    const rows = await listSessions(def, { cwd, limit: 100 });
-    return rows.map((s) => ({ id: s.id, ...(s.updated ? { updated: s.updated } : {}), ...(s.prompt ? { prompt: s.prompt } : {}) }));
-  });
-  handle("view:prompt", async (_e, tileId: unknown, text: unknown) => {
-    if (typeof tileId !== "string" || promptProblem(text)) throw new Error("bad prompt");
-    await control.dispatch("agent.send", { tileId, text }, { actor: { kind: "person" } }); // the person at the window
-  });
   control.listen(hcpSockPath(app.getPath("userData")), (err: Error) => pushAppError(`Agent control plane is off: ${err.message}. \`hive ctl\` cannot reach this app.`, "hcp"));
   // Programs drive workspaces here through the workspace API, held to what they were granted.
   try {

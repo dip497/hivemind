@@ -1,5 +1,5 @@
-// A delegated worker has no human at its tile, so it launches in the mode its
-// agent declares as `unattended` — never a mode borrowed from another agent.
+// An agent's worker has no human at its tile, so it launches in the mode its agent declares as
+// `unattended` — never a mode borrowed from another agent; one the person starts keeps its prompts.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDispatch } from "@hivemind/host/control/methods";
@@ -9,9 +9,9 @@ import { useAuthoredAgents } from "./authored-agents.ts";
 useAuthoredAgents();
 import { TurnTracker } from "@hivemind/host/control/turn-tracker";
 import { OutputRecorder } from "@hivemind/host/control/output-recorder";
-import { REPO, workspaceDeps, PERSON } from "./hcp-workspace.ts";
+import { REPO, workspaceDeps } from "./hcp-workspace.ts";
 
-/** The control plane's dispatch over a real workspace store, and that store. */
+/** The control plane over a real workspace store, and that store. */
 function dispatcher(agentInstalled?: () => boolean) {
   const ws = workspaceDeps();
   return {
@@ -34,11 +34,11 @@ function dispatcher(agentInstalled?: () => boolean) {
   };
 }
 
-/** What the worker a spawn with `params` opens runs with: its arguments, as written into the
+/** What the worker an agent starts with `params` runs with: its arguments, as written into the
  *  workspace. */
-async function spawnedArgs(params: Record<string, unknown>, agentInstalled?: () => boolean): Promise<string[] | undefined> {
-  const { ws, dispatch } = dispatcher(agentInstalled);
-  const { tileId } = (await dispatch("tile.spawn_agent", { callerTile: "hm:tile-p", ...params }, PERSON)) as { tileId: string };
+async function spawnedArgs(params: { agent: string; mode?: string; supervise?: string }, agentInstalled?: () => boolean): Promise<string[] | undefined> {
+  const { ws, spawn } = dispatcher(agentInstalled);
+  const tileId = await spawn({ parent: "tile-p", repo: REPO, ...params });
   return (ws.workspaces.getCore(REPO)?.tiles.find((t) => t.id === tileId) as { args?: string[] } | undefined)?.args;
 }
 
@@ -57,14 +57,16 @@ test("an agent whose CLI is not installed is refused with where to get it, and n
     e.code === "UNSUPPORTED" && /not installed/.test(e.message) && /https:\/\/code\.claude\.com/.test(e.message));
 });
 
-test("an agent the person starts from another of their devices opens in the workspace they name, not the one the window shows, and keeps its prompts: never its unattended mode unless asked", async () => {
+test("an agent the person, or a program, starts opens in the workspace they name, not the one the window shows, and keeps its prompts: never its unattended mode unless asked", async () => {
   const { ws, spawn } = dispatcher();
   const other = "/work/other";
   ws.workspaces.setCore(other, { frames: [{ id: "f9", title: "other", workspacePath: other }], tiles: [] });
-  const tile = await spawn({ agent: "claude", repo: other, attended: true });
+  const tile = await spawn({ agent: "claude", repo: other });
   const opened = ws.workspaces.getCore(other)?.tiles.find((t) => t.id === tile) as { args?: string[] } | undefined;
   assert.deepEqual(opened?.args, [], "claude's own posture: it asks before it acts");
   assert.equal(ws.workspaces.getCore(REPO)?.tiles.length, 0, "nothing opened where the window is");
-  const planned = await spawn({ agent: "claude", repo: other, attended: true, mode: "plan" });
+  const planned = await spawn({ agent: "claude", repo: other, mode: "plan" });
   assert.deepEqual((ws.workspaces.getCore(other)?.tiles.find((t) => t.id === planned) as { args?: string[] }).args, ["--permission-mode", "plan"]);
+  const programs = await spawn({ agent: "claude", repo: other, parent: "client:g1" });
+  assert.deepEqual((ws.workspaces.getCore(other)?.tiles.find((t) => t.id === programs) as { args?: string[] }).args, [], "a program's worker keeps its prompts too");
 });

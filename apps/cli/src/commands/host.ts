@@ -12,7 +12,6 @@
  *                       it shows
  *   hive host add <dir> serve a folder on this machine as one of its workspaces
  *
- * `hive share`, `hive people` and `hive join` (share.ts) ask the running host too.
  *   hive host install   run it as a service of yours (systemd, Linux): at boot, and again if it stops
  *   hive host uninstall stop running it as a service
  */
@@ -118,13 +117,6 @@ const runCmd = defineCommand({
       },
       "pair-enter": async (a) => startAgain(await running().enterPairing(String(a.text ?? ""))),
       add: (a) => running().add(String(a.path ?? "")),
-      // `hive share` and `hive people`: the owner's own `people.*` calls, as a window makes them.
-      people: (a) => {
-        const method = String(a.method ?? "");
-        if (!method.startsWith("people.")) throw new Error(`hive host answers people.* here, not ${method}`);
-        return running().call(method, Array.isArray(a.params) ? a.params : []);
-      },
-      join: (a) => running().join(String(a.link ?? "")),
     });
     if (control.claim === "taken") return err(ctx, "already_running", "hive host is already running here (`hive host status`)", EXIT.unavailable);
     const shutdown = (): Promise<void> => (stopping ??= (async () => {

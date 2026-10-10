@@ -1,7 +1,7 @@
 /**
  * Sharing from the command line: the same `people.*` calls the app's Share and People panel make,
- * answered by the running `hive host`, or by the running app when no host runs here, and recorded
- * in its audit log as the person at this machine.
+ * on the drive socket of the running app or `hive host`, and recorded in its audit log as the
+ * person at this machine.
  *
  *   hive share <workspace> [--role view|edit|terminals] [--uses n] [--expires 7d]
  *   hive people requests | allow <req> [--role] | deny <req> | list | role <person> <role>
@@ -12,10 +12,9 @@ import { defineCommand } from "citty";
 import path from "node:path";
 import type { JoinRequests, PersonHere } from "@hivemind/workspace-api/people";
 import type { JoinReply } from "@hivemind/workspace-host/join";
-import { appData } from "../app-data.js";
+import { driveCall } from "../drive.js";
 import { err, ok, type OutCtx } from "../format.js";
-import { EXIT, HcpCliError, hcpCall } from "../hcp.js";
-import { askHost, controlSocket, HostNotRunning } from "../host-control.js";
+import { EXIT, HcpCliError } from "../hcp.js";
 
 const LINK_ROLES = ["view", "edit", "terminals"];
 const ROLES = [...LINK_ROLES, "agents"];
@@ -27,31 +26,21 @@ export function duration(text: string): number | null {
   return Number(m[1]) * { "": 1, s: 1, m: 60, h: 3600, d: 86_400 }[m[2] as "" | "s" | "m" | "h" | "d"] * 1000;
 }
 
-/** Ask `hive host`; with none here, the running app, on its control-plane socket. */
-async function ask(ctx: OutCtx, cmd: string, args: Record<string, unknown>, ms = 10_000): Promise<unknown> {
+/** Call the workspace API of the running app or `hive host`, waiting up to `ms`. */
+async function callFor(ctx: OutCtx, ms: number, method: string, ...params: unknown[]): Promise<unknown> {
   try {
-    try {
-      return await askHost(controlSocket(appData()), cmd, args, ms);
-    } catch (e) {
-      if (!(e instanceof HostNotRunning)) throw e;
-      try {
-        return await hcpCall(`host.${cmd}`, args, ms);
-      } catch (a) {
-        if (a instanceof HcpCliError && a.code === "UNAVAILABLE") return err(ctx, "host_not_running", `${e.message}; nor is the hivemind app (${a.message})`, EXIT.unavailable);
-        throw a;
-      }
-    }
+    return await driveCall(method, params, ms);
   } catch (e) {
+    if (e instanceof HcpCliError && e.code === "UNAVAILABLE") return err(ctx, "host_not_running", e.message, EXIT.unavailable);
     return err(ctx, "refused", e instanceof Error ? e.message : String(e));
   }
 }
-
-const call = (ctx: OutCtx, method: string, ...params: unknown[]) => ask(ctx, "people", { method, params });
+const call = (ctx: OutCtx, method: string, ...params: unknown[]) => callFor(ctx, 10_000, method, ...params);
 
 /** The folder of the host's workspace `given` names (its folder, its name, or its id's start);
  *  none given: the one this folder is in, or the host's only one. */
 async function workspaceOf(ctx: OutCtx, given: unknown): Promise<string> {
-  const { workspaces } = (await ask(ctx, "status", {})) as { workspaces: Array<{ repo: string; workspace: string | null }> };
+  const { workspaces } = (await call(ctx, "host.status")) as { workspaces: Array<{ repo: string; workspace: string | null }> };
   const g = typeof given === "string" && given ? given : null;
   const cwd = process.cwd();
   const found = g
@@ -220,7 +209,7 @@ export const joinCmd = defineCommand({
     const ctx = { json: !!args.json };
     if (!ctx.json) process.stderr.write("asking the owner… (up to three minutes)\n");
     // The owner has 170 s to answer, and the network a moment to reach them.
-    const reply = (await ask(ctx, "join", { link: String(args.link) }, 200_000)) as JoinReply;
+    const reply = (await callFor(ctx, 200_000, "host.join", String(args.link))) as JoinReply;
     if (!reply.ok) return err(ctx, reply.error, reply.error === "not-admitted" ? `the network turned this machine away: ${reply.message}` : WHY[reply.error] ?? reply.error);
     return ok(ctx, reply, () => `joined, to ${reply.role}`);
   },

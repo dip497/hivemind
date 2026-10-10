@@ -18,7 +18,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { composeResume, composeResumeFrom, hookPathsFor, providers as registry, renderHookDocument } from "@hivemind/agents/node";
 import { authoredDef, authoredAsset, useAuthoredAgents } from "./authored-agents.ts";
-import { workspaceDeps, PERSON } from "./hcp-workspace.ts";
+import { workspaceDeps, REPO } from "./hcp-workspace.ts";
 import type { SpawnSpec } from "@hivemind/agent-host/pty-session-manager";
 import { deliversPromptViaArgv } from "@hivemind/agent-host/agent-io";
 import { applyInitialPrompt, INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
@@ -118,7 +118,7 @@ async function capture(make = () => composeResume(CTX)) {
   process.env.HOME = home;
   const resume = make();
   try {
-    const { dispatch } = makeDispatch(fakeDeps());
+    const { spawn: spawnAgent } = makeDispatch(fakeDeps());
     const out: Record<string, unknown> = {};
     for (const p of PROVIDERS) {
       const base: SpawnSpec = { cwd: "/repo", cmd: p.cmd, args: [...p.defaultArgs], cols: 80, rows: 24, env: { HIVE_AGENT_DEPTH: "1" } };
@@ -131,7 +131,7 @@ async function capture(make = () => composeResume(CTX)) {
       let supervise: unknown;
       // The id is minted fresh each time: the snapshot records that one was, in this agent's name.
       try {
-        const { tileId } = (await dispatch("tile.spawn_agent", { agent: p.id, supervise: "all", callerTile: "parent", report: false }, PERSON)) as { tileId: string };
+        const tileId = await spawnAgent({ agent: p.id, supervise: "all", parent: "parent", report: false, repo: REPO });
         supervise = { tileId: tileId.replace(/-\d+$/, "-<minted>") };
       }
       catch (e) { supervise = { error: (e as { code?: string }).code ?? String(e) }; }

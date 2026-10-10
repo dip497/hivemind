@@ -5,8 +5,7 @@
 // nothing and says so, a decided one saying who was first. One waiting on nothing is not
 // answered; and an answer is one line of text, or a decision. A permission is allowed or denied
 // with the keys its agent says do that on its screen (0.5). A supervised tool use is answered by
-// the program that started the agent, or the person. And a message to an agent, whatever it is
-// doing: one line, handed to it as its next prompt (spec/needs.md "Sending").
+// the agent or program that started the agent, or the person.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Connection } from "@hivemind/workspace-api/server";
@@ -21,19 +20,16 @@ const PRIYA = { person: "p".repeat(64), name: "Priya" };
 const phone: Connection = { actor: { kind: "peer", person: PRIYA.person, device: "d".repeat(64), access: "owner" }, send: () => {}, closed: new AbortController().signal };
 
 /** A computer whose agent is in `t1`, and says `keys` allow and deny what it waits on, by the
- *  wait's name: what is typed into each terminal, what is handed to an agent as its next prompt,
- *  and its `agent.answer`. */
+ *  wait's name: what is typed into each terminal, and its `agent.answer`. */
 function computer(keys?: Record<string, AnswerKeys>) {
   let now = 1_790_000_000_000;
   const status = new StatusStore({ now: () => (now += 1_000) });
   const waits = new Waits({ status });
   const typed: string[] = [];
-  const delivered: string[] = [];
   const domain = answers({
     status: (tile) => status.get(tile),
     type: (tile, data) => { typed.push(`${tile}:${JSON.stringify(data)}`); return tile === "t1"; },
     answerKeys: (tile, status) => (tile === "t1" ? keys?.[(status.says ?? status.kind)!] : undefined),
-    deliver: (tile, text) => { delivered.push(`${tile}:${text}`); return tile === "t1"; },
     waits,
     who: () => PRIYA,
   });
@@ -50,8 +46,7 @@ function computer(keys?: Record<string, AnswerKeys>) {
     return status.get("t1")!.since;
   };
   const answer = (tile: string, since: number, a: unknown, from = phone) => domain.answers["agent.answer"]!(from, tile, since, a) as { answered: boolean };
-  const send = (tile: string, text: unknown) => domain.answers["agent.send"]!(phone, tile, text) as { sent: boolean };
-  return { status, waits, typed, delivered, waitOn, screenSays, answer, send, effect: domain.effects!["agent.send"]! };
+  return { status, waits, typed, waitOn, screenSays, answer };
 }
 const code = (f: () => unknown): string => { try { f(); return "ok"; } catch (e) { return e instanceof ApiError ? e.code : "thrown"; } };
 
@@ -152,25 +147,6 @@ test("an answer is one line of text, or a decision; anything else is a bad reque
   assert.equal(code(() => plan.answer("t1", wait.since, { text: "ok" })), "BAD_REQUEST");
 });
 
-test("a message is handed to the agent as its next prompt, whatever it is doing, to be typed once it is at its prompt; to no agent, it is not sent", () => {
-  const c = computer();
-  c.status.event("t1", { event: "turn.started" });
-  assert.deepEqual(c.send("hm:t1", "also add tests"), { sent: true });
-  assert.deepEqual(c.send("t2", "hello"), { sent: false }, "no such agent");
-  assert.deepEqual(c.delivered, ["t1:also add tests", "t2:hello"]);
-  assert.deepEqual(c.typed, [], "nothing typed past the agent's prompt");
-  // Recorded against the agent it went to.
-  assert.deepEqual(c.effect("hm:t1", "also add tests"), { target: "t1" });
-});
-
-test("a message is one line of text: anything else is a bad request, and nothing is handed on", () => {
-  const c = computer();
-  for (const text of ["two\nlines", "\u001b[2J", "", "x".repeat(ANSWER_MAX + 1), null, 7]) {
-    assert.equal(code(() => c.send("t1", text)), "BAD_REQUEST", JSON.stringify(text));
-  }
-  assert.deepEqual(c.delivered, []);
-});
-
 test("a supervised tool use is answered by the program that started the agent, or the person, once; not by a guest or another program", () => {
   const c = computer();
   const answered: string[] = [];
@@ -189,6 +165,20 @@ test("a supervised tool use is answered by the program that started the agent, o
   assert.equal(c.answer("t1", first.since, { decision: "allow" }, as({ kind: "person" })).answered, false, "answered already");
   const second = ask();
   assert.deepEqual(c.answer("t1", second.since, { decision: "allow" }, as({ kind: "person" })), { answered: true });
+  assert.deepEqual(answered, ["deny", "allow"]);
+});
+
+test("a supervised tool use an agent's worker asks is answered by the agent that started it, or the person; not by the worker itself, nor another worker", () => {
+  const c = computer();
+  const answered: string[] = [];
+  const agentAt = (tile: string): Connection => ({ actor: { kind: "peer", person: tile, device: tile, access: "agents", client: tile, tile }, send: () => {}, closed: new AbortController().signal });
+  const ask = () => c.waits.ask("t1", { kind: "approval", tool: "Bash", summary: "rm -rf build", expiresAt: 0, answerer: "tile-lead" }, (d) => answered.push(d));
+  const first = ask();
+  assert.equal(code(() => c.answer("t1", first.since, { decision: "allow" }, agentAt("t1"))), "FORBIDDEN", "the worker itself");
+  assert.equal(code(() => c.answer("t1", first.since, { decision: "allow", always: true }, agentAt("t2"))), "FORBIDDEN", "another worker");
+  assert.deepEqual(c.answer("t1", first.since, { decision: "deny" }, agentAt("tile-lead")), { answered: true });
+  const second = ask();
+  assert.deepEqual(c.answer("t1", second.since, { decision: "allow" }, { actor: { kind: "person" }, send: () => {}, closed: new AbortController().signal }), { answered: true });
   assert.deepEqual(answered, ["deny", "allow"]);
 });
 

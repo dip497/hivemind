@@ -83,10 +83,12 @@ person's own devices, a phone among them.
 ## Sending
 
 `agent.send(tile, text)` (0.4), a method of the workspace API, sends the agent of `tile` a
-message, whatever it is doing: `text` is one line of at most 1000 characters with no control
-characters (else `BAD_REQUEST`), typed into its terminal as its next prompt once it is at its
-prompt (held while it is in a turn, as `hive ctl send` holds one), Enter after it. It answers
-`{ "sent": true }`, or `{ "sent": false }` when no agent runs there. One may send who may drive
+message, whatever it is doing: `text` is a prompt, at most 32768 characters, its lines broken by
+newlines, with no other control characters and no bidirectional or zero-width marks (else
+`BAD_REQUEST`; 0.23, before it one line of 1000), typed into its terminal as its next prompt once
+it is at its prompt (held while it is in a turn), Enter after it. The `agent.read` after it waits
+for the turn it starts (0.23). It answers `{ "sent": true }`, or `{ "sent": false }` when no agent
+runs there. One may send who may drive
 the workspace's agents, and the person's own devices, a phone among them. A phone may also type
 into a terminal it watches, as the person, asking for its keyboard while someone else holds it
 (`workspace-api.md`, "Peers").

@@ -225,7 +225,7 @@ test("standalone: a control plane that takes the socket answers on it; the daemo
   await until(() => host.msgs.some((m) => m.t === "control"));
   assert.deepEqual(host.msgs.find((m) => m.t === "control"), { t: "control", reqId: "c1" });
 
-  assert.deepEqual(await call(d.hcp, token, "a1", "tile.list", {}), { jsonrpc: "2.0", id: "a1", result: { answeredBy: "plane", method: "tile.list" } });
+  assert.deepEqual(await call(d.hcp, token, "a1", "agent.report", {}), { jsonrpc: "2.0", id: "a1", result: { answeredBy: "plane", method: "agent.report" } });
   // A hook's event reaches the control plane, and through this daemon the other viewers and the
   // phone; the control plane is not told again what it heard itself.
   const needsYou = { tileId: "tile-1", event: "input.requested", kind: "permission" };

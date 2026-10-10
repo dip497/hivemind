@@ -2,7 +2,9 @@
 
 > Status: shipped. The agent-facing calls are now `hive ctl spawn --supervise …` and
 > `hive ctl approve <reqId> allow|deny|always|never` (the MCP server this doc
-> references was retired; `hive_approve(...)` below reads as `hive ctl approve`).
+> references was retired; `hive_approve(...)` below reads as `hive ctl approve`). The answer is
+> the workspace API's `agent.answer`; HCP has no `agent.approve`, and keeps only the asking side
+> (`agent.await_approval`).
 
 > When a spawned worker hits a tool-permission prompt, it **escalates to the agent
 > that spawned it** instead of stopping for a human. The supervisor approves /

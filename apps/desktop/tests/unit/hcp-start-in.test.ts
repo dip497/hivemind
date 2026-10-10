@@ -37,20 +37,20 @@ test("an agent started in a workspace whose window has not laid it out yet lands
   const fresh = "/work/fresh";
   // The window opening it reads its layout first, and finds none.
   assert.equal(deps.workspaces.getCore(fresh), null);
-  const tile = await dispatch.spawn({ agent: "claude", repo: fresh, attended: true });
+  const tile = await dispatch.spawn({ agent: "claude", repo: fresh });
   assert.equal(deps.workspaces.workspaceOf(tile), fresh);
   assert.deepEqual(deps.workspaces.getCore(fresh)!.tiles.map((t) => t.id), [tile]);
 });
 
 test("an agent started in a workspace the store does not hold is refused", async () => {
   const { deps, dispatch } = made();
-  await assert.rejects(dispatch.spawn({ agent: "claude", repo: "/work/never-opened", attended: true }), { code: "NOT_FOUND" });
+  await assert.rejects(dispatch.spawn({ agent: "claude", repo: "/work/never-opened" }), { code: "NOT_FOUND" });
   assert.equal(deps.workspaces.repos().includes("/work/never-opened"), false);
 });
 
 test("an agent that starts one is its parent: wired to it on the board, reporting to it, a level below it, and three levels deep at most", async () => {
   const { dispatch, wires, pipes } = made();
-  const start = (parent: string, report?: boolean) => dispatch.spawn({ agent: "claude", repo: "/work/repo", attended: true, parent, ...(report === false ? { report } : {}) });
+  const start = (parent: string, report?: boolean) => dispatch.spawn({ agent: "claude", repo: "/work/repo", parent, ...(report === false ? { report } : {}) });
   const first = await start("client:g1");
   const second = await start(first);
   const third = await start(second, false);

@@ -25,7 +25,7 @@ export type Actor =
 
 /** What is asked. `R` is what carrying it out returns. */
 export interface Intent<R = unknown> {
-  /** In the control plane's words: `tile.spawn_agent`, `agent.send`, … */
+  /** The method asked: `agent.start`, `agent.send`, … */
   verb: string;
   /** What it acts on: a tile, or a pipe (`src->dst`). An intent that opens a tile names it
    *  from what it returns. */

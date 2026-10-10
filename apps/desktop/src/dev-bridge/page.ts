@@ -97,7 +97,6 @@ const machine: Partial<Hive> = {
   machineSessions: async () => [],
   presenceNow: async () => ({ state: "active", since: Date.now(), focused: document.hasFocus() }),
   viewLedgerSnapshot: async () => [],
-  viewSessions: async () => [],
 };
 const nothing = (name: string): unknown => (/^on[A-Z]/.test(name) ? () => () => {} : /Sync$/.test(name) ? () => null : async () => { throw new Error(`${name} is answered only in the app`); });
 const all: Record<string, unknown> = { ...machine, ...hive };

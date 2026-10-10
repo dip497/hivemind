@@ -116,11 +116,6 @@ export interface HeadlessHost {
   /** Enter the code or link another device offers. Resolves with that device once paired, when the
    *  host must be started again, as that person. */
   enterPairing(text: string): Promise<PairedDevice>;
-  /** Call the workspace API as the person at this machine (`hive share`, `hive people`): as a
-   *  window of the app's calls it, its effects in the audit log. */
-  call(method: string, params: unknown[]): Promise<unknown>;
-  /** Join a workspace with its invite link (`hive join`): resolves once its owner answered. */
-  join(text: string): Promise<JoinReply>;
   stop(): Promise<void>;
 }
 
@@ -306,7 +301,6 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       status: (bare) => control.status.get(bare),
       type: (bare, data) => writeTile(`hm:${bare}`, data),
       answerKeys: (bare, status) => answerKeys(heldBoards(store), bare, status),
-      deliver: (bare, message) => control.mailbox.deliver(`hm:${bare}`, message),
       get waits() { return control.waits; },
       who,
     }),
@@ -326,7 +320,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       folderOf: (bare) => runsIn(heldBoards(store), bare),
     }),
     // Naming, keys, replies, sessions, tools and pipes, and the person's machine methods (0.23).
-    controlApi({ control: () => control }),
+    controlApi({ control: () => control.api() }),
     // What an agent here and the person say to each other, from its session file, as it is
     // written (M5, spec/agents.md "Conversation").
     conversations({ transcriptOf: (bare) => transcriptOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR)) }),
@@ -347,8 +341,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     }),
   ], intents, o.onWarn);
 
-  // The person at this machine's command line: never closed, told nothing.
-  const atCommandLine: Connection = { actor: { kind: "person" }, send: () => {}, closed: new AbortController().signal };
+  // Joining needs the network, which starts below.
+  let joinWith: (link: string) => Promise<JoinReply> = () => Promise.reject(new Error("hive host is starting"));
 
   // The control plane (`hive ctl`): the verbs that need no window, for the agents here and for
   // whoever is at this machine. The agents and settings are the app's, read from this data folder.
@@ -387,6 +381,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       endSession: (ptyId) => terminals.end(ptyId),
       sessionHeld: holds,
       intents,
+      join: (link) => joinWith(link),
     }),
   });
   // Connected now, so the statuses of the sessions already running arrive before anyone asks.
@@ -500,6 +495,17 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   let stopping = false;
   let again: ReturnType<typeof setTimeout> | null = null;
   const profiles = o.hiveNet ? new NetworkProfiles({ dir: path.join(o.dir, "network"), bin: o.hiveNet, identity }) : null;
+  // `hive join`: resolves once the workspace's owner answered.
+  joinWith = async (text) => {
+    const link = parseJoinLink(text);
+    if (!link) throw new Error("that is not an invite link");
+    if (!net || !profiles) throw new Error("this host is not on the network yet: is hive-net installed beside hive?");
+    const { name, color } = catalog.settings().profile;
+    return join(link, {
+      net, profiles, certificate: keys.certificate, profile: { name: name || deviceName(), color },
+      joined: new JoinedList(path.join(o.dir, "joined.json")),
+    });
+  };
   const startNet = async (): Promise<void> => {
     again = null;
     if (!o.hiveNet || !profiles || stopping) return;
@@ -620,21 +626,6 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       const offering = link?.device ?? (await offeringNearby(code, () => on.nearby()));
       const where = link ? { addrs: link.addrs, relay: link.relay } : { addrs: [], relay: null };
       return keep(await enterPairing({ me: me(), code, offering, ask: (hello) => on.pair(offering, where, hello) }));
-    },
-    call: async (method, params) => {
-      const answer = await api.answer(method, params, atCommandLine);
-      if ("error" in answer) throw new Error(answer.error.message);
-      return answer.result;
-    },
-    join: async (text) => {
-      const link = parseJoinLink(text);
-      if (!link) throw new Error("that is not an invite link");
-      if (!net || !profiles) throw new Error("this host is not on the network yet: is hive-net installed beside hive?");
-      const { name, color } = catalog.settings().profile;
-      return join(link, {
-        net, profiles, certificate: keys.certificate, profile: { name: name || deviceName(), color },
-        joined: new JoinedList(path.join(o.dir, "joined.json")),
-      });
     },
     stop: async () => {
       stopping = true;

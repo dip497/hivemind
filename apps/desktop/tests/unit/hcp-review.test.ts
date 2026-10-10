@@ -13,7 +13,7 @@ useAuthoredAgents();
 
 function made() {
   const deps = workspaceDeps();
-  const { dispatch } = makeDispatch({
+  const { agentChannel } = makeDispatch({
     turns: new TurnTracker(),
     recorder: new OutputRecorder(),
     callRenderer: async () => { throw new Error("no window"); },
@@ -26,12 +26,12 @@ function made() {
     spawnEdge: () => {},
     ...deps,
   } as unknown as Parameters<typeof makeDispatch>[0]);
-  return { deps, dispatch };
+  return { deps, agentChannel };
 }
 
 test("the agent waits on its plan, shown waiting, until it is answered: the answer is what the caller gets", async () => {
-  const { deps, dispatch } = made();
-  const reviewed = dispatch("review.open", { plan: "1. Split it", cwd: "/work/repo" }, fromTile("tile-a"));
+  const { deps, agentChannel } = made();
+  const reviewed = agentChannel("review.open", { plan: "1. Split it", cwd: "/work/repo" }, fromTile("tile-a"));
   const wait = deps.waits.of("tile-a")!;
   assert.deepEqual({ kind: wait.kind, plan: wait.plan, cwd: wait.cwd }, { kind: "plan", plan: "1. Split it", cwd: "/work/repo" });
   assert.deepEqual({ state: deps.status.get("tile-a")?.state, kind: deps.status.get("tile-a")?.kind }, { state: "waiting", kind: "plan" });
@@ -41,9 +41,9 @@ test("the agent waits on its plan, shown waiting, until it is answered: the answ
 });
 
 test("a caller that stops waiting ends the wait: the agent is not shown waiting, and a late answer answers nothing", async () => {
-  const { deps, dispatch } = made();
+  const { deps, agentChannel } = made();
   const hook = new AbortController();
-  const reviewed = dispatch("review.open", { plan: "1. Split it" }, { ...fromTile("tile-a"), signal: hook.signal });
+  const reviewed = agentChannel("review.open", { plan: "1. Split it" }, { ...fromTile("tile-a"), signal: hook.signal });
   const { since } = deps.waits.of("tile-a")!;
   hook.abort();
   await assert.rejects(reviewed, (e: Error & { code?: string }) => e.code === "TIMEOUT" && /stopped waiting/.test(e.message));
@@ -52,9 +52,9 @@ test("a caller that stops waiting ends the wait: the agent is not shown waiting,
 });
 
 test("a plan the agent no longer waits on, because it waits on another, ends the first review", async () => {
-  const { deps, dispatch } = made();
-  const first = dispatch("review.open", { plan: "1. Split it" }, fromTile("tile-a"));
-  const second = dispatch("review.open", { plan: "1. Split it smaller" }, fromTile("tile-a"));
+  const { deps, agentChannel } = made();
+  const first = agentChannel("review.open", { plan: "1. Split it" }, fromTile("tile-a"));
+  const second = agentChannel("review.open", { plan: "1. Split it smaller" }, fromTile("tile-a"));
   await assert.rejects(first, (e: Error & { code?: string }) => e.code === "TIMEOUT" && /something else/.test(e.message));
   const wait = deps.waits.of("tile-a")!;
   assert.equal(wait.plan, "1. Split it smaller");
@@ -63,7 +63,7 @@ test("a plan the agent no longer waits on, because it waits on another, ends the
 });
 
 test("a plan is reviewed for the agent that wrote it: with no agent's tile it is a bad request, and nothing waits", async () => {
-  const { deps, dispatch } = made();
-  await assert.rejects(dispatch("review.open", { plan: "1. Split it" }, PERSON), { code: "BAD_REQUEST" });
+  const { deps, agentChannel } = made();
+  await assert.rejects(agentChannel("review.open", { plan: "1. Split it" }, PERSON), { code: "BAD_REQUEST" });
   assert.deepEqual(deps.waits.all(), []);
 });

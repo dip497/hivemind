@@ -101,7 +101,8 @@ which answers with `agent.answer`. A program that starts it on the drive socket 
 is told what it reports (`hive ctl report`): the workspace's readers get an `agent.event` of kind
 `reported`, unless `report` is `false`.
 It starts as the person launches it at their desktop, with the options they saved for that agent
-and these on top: never in its unattended mode unless `mode` says so. It answers `{ "tile":
+and these on top: never in its unattended mode unless `mode` says so, or an agent on the drive
+socket starts it (`hive ctl spawn`) unsupervised, where no one is at its tile. It answers `{ "tile":
 "<the new tile>" }`. Anything else is `BAD_REQUEST`.
 
 ## Stopping

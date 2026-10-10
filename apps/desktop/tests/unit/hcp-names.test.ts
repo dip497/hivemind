@@ -16,7 +16,7 @@ import { StatusStore } from "@hivemind/agent-host/status-store";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { newSeed } from "@hivemind/workspace-host/identity";
 import { labelOf } from "@hivemind/host/control/names";
-import { REPO, workspaceDeps, PERSON } from "./hcp-workspace.ts";
+import { REPO, workspaceDeps } from "./hcp-workspace.ts";
 import { makeDispatch } from "@hivemind/host/control/methods";
 import { TurnTracker } from "@hivemind/host/control/turn-tracker";
 import { OutputRecorder } from "@hivemind/host/control/output-recorder";
@@ -71,11 +71,11 @@ test("a banner calls a tile what every surface does, on one line, with its id; a
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test("tile.spawn_agent names the tile it opens: it enumerates its params, and a dropped one is silent", async () => {
+test("spawn names the tile it opens: it enumerates its params, and a dropped one is silent", async () => {
   // v1.13.0 shipped `name` end-to-end EXCEPT where spawn listed its params by hand: `name`
   // wasn't in the list, and the feature was dead with no error anywhere.
   const ws = workspaceDeps();
-  const { dispatch } = makeDispatch({
+  const { spawn } = makeDispatch({
     turns: new TurnTracker(),
     recorder: new OutputRecorder(),
     callRenderer: async () => { throw new Error("no window"); },
@@ -90,7 +90,7 @@ test("tile.spawn_agent names the tile it opens: it enumerates its params, and a 
     ...ws,
   } as unknown as Parameters<typeof makeDispatch>[0]);
 
-  const { tileId } = (await dispatch("tile.spawn_agent", { agent: "pi", name: "student-fe", callerTile: "hm:tile-p" }, PERSON)) as { tileId: string };
+  const tileId = await spawn({ agent: "pi", name: "student-fe", parent: "tile-p", repo: REPO });
   assert.equal(ws.workspaces.getCore(REPO)?.tileNames?.[tileId], "student-fe", "the tile is named");
   assert.equal(labelOf(tileId, ws.workspaces, ws.status), `student-fe (${tileId})`, "and every report it sends back says so");
 });

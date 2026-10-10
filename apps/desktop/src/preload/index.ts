@@ -45,8 +45,6 @@ const api: HiveApi = {
   viewLedgerAppend: (lines) => ipcRenderer.send("viewLedger:append", lines),
   viewLedgerSnapshot: () => ipcRenderer.invoke("viewLedger:snapshot"),
   viewHistory: (layoutKey, day) => ipcRenderer.invoke("viewLedger:history", layoutKey, day),
-  viewSessions: (agent, cwd) => ipcRenderer.invoke("view:sessions", agent, cwd),
-  viewPrompt: (tileId, text) => ipcRenderer.invoke("view:prompt", tileId, text),
   presenceNow: () => ipcRenderer.invoke("presence:now"),
   onPresence: (cb) => {
     const listener = (_e: unknown, p: Parameters<typeof cb>[0]) => cb(p);
