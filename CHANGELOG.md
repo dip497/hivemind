@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Changed: a frame on the canvas is a hairline and a faint fill with its name at the top left; the dashed border and the bar across its top are gone, and its ⋯ menu shows when you point at it.
+- Fixed: Fit to view (Esc), a focus or a zoom asked for while the camera was still settling from the last move could be cut short, leaving the canvas stopped part way.
 - Fixed: a tab restored from the rail in the Windows view could come back minimized when you switched views at once on a busy machine: the view's last saved layout was dropped as it was let go.
 - Fixed: in the Windows view, clicking the tab already shown left the keyboard in the tab strip; it goes back to the terminal.
 - Fixed: `hive host` read its settings from its own data folder, not the settings.json the app and `hive config` keep, so on a Mac it ignored them; and it read them again only when an agent was added or removed, not when they changed.

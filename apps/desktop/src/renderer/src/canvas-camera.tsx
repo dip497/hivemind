@@ -5,7 +5,7 @@
  * Canvas. Pure presentational adapters with no Canvas state — extracted to keep
  * Canvas.tsx focused on orchestration.
  */
-import { useCallback, useEffect } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo } from "react";
 import { useReactFlow, useStore } from "@xyflow/react";
 import { focusZoom } from "./camera-fit";
 import { tilePlugin } from "./tiles";
@@ -46,8 +46,25 @@ export const FLY = {
   ease: (t: number) => 1 - (1 - t) ** 3,
 };
 
+/** Camera moves, counted by the canvas: a flight from the moment it is asked for, a gesture as it
+ *  starts. Work asked for after a move (the crisp snap) stands down if another has begun since,
+ *  since it would cut that one short. Provided by the canvas around its <ReactFlow>. */
+export const CameraMoves = createContext<{ current: number }>({ current: 0 });
+
+/** The react-flow camera's flights, each counted in CameraMoves when it is asked for: its
+ *  move-start comes only once it begins, which can be a while. */
+export function useCamera() {
+  const { fitView, setCenter, zoomTo, zoomIn, zoomOut } = useReactFlow();
+  const moves = useContext(CameraMoves);
+  return useMemo(() => {
+    const fly = <A extends unknown[], R>(f: (...a: A) => R) => (...a: A): R => { moves.current++; return f(...a); };
+    return { fitView: fly(fitView), setCenter: fly(setCenter), zoomTo: fly(zoomTo), zoomIn: fly(zoomIn), zoomOut: fly(zoomOut) };
+  }, [moves, fitView, setCenter, zoomTo, zoomIn, zoomOut]);
+}
+
 export function FocusMode({ req }: { req: { id: string | null; n: number } | null }) {
-  const { fitView, getNode } = useReactFlow();
+  const { getNode } = useReactFlow();
+  const { fitView } = useCamera();
   useEffect(() => {
     if (!req) return;
     if (req.id) {
@@ -74,7 +91,7 @@ export function FocusOnTile({
 }: {
   req: { id: string; cx: number; cy: number; w?: number; h?: number; n: number; exact?: boolean } | null;
 }) {
-  const { setCenter } = useReactFlow();
+  const { setCenter } = useCamera();
   // Pane size (CSS px). At the exact-path's zoom 1, flow units == screen px, so
   // we can frame the tile against the viewport directly.
   const paneW = useStore((s) => s.width);
@@ -169,35 +186,25 @@ export function PanMomentum({
   return null;
 }
 
-/** Reset zoom to exactly 100% (around the viewport center) when `req` bumps —
- *  fired when a terminal tile is selected. xterm maps the mouse to a cell using
- *  the UNSCALED cell size, so at zoom ≠ 1 selection and link clicks land on the
- *  wrong row; at 100% they're pixel-accurate. Skips if already at 1. Rendered
- *  inside <ReactFlow> so useReactFlow resolves. */
-export function SelectZoomReset({ req }: { req: number }) {
-  const { getZoom, zoomTo } = useReactFlow();
-  useEffect(() => {
-    if (req === 0) return;
-    if (Math.abs(getZoom() - 1) > 0.001) void zoomTo(1, { duration: 150 });
-  }, [req, getZoom, zoomTo]);
-  return null;
-}
-
 /** Snaps the LIVE viewport transform to whole device pixels (and a near-1 zoom
  *  to exactly 1) whenever `req` bumps — the real fix for blurry tiles under the
  *  CSS-transformed viewport (xyflow#3282). `activeRef` (shared with the fling)
  *  tells the parent's onMove/onMoveEnd to ignore our own setViewport. Rendered
- *  inside <ReactFlow> so useReactFlow resolves. */
+ *  inside <ReactFlow> so useReactFlow resolves. An instant setViewport cuts a flight
+ *  short, so a move started after the request (`moveSeq` past `req.seq`) wins: its own
+ *  end asks again. */
 export function ViewportSnap({
   req,
+  moveSeq,
   activeRef,
 }: {
-  req: number;
+  req: { n: number; seq: number } | null;
+  moveSeq: React.MutableRefObject<number>;
   activeRef: React.MutableRefObject<boolean>;
 }) {
   const { getViewport, setViewport } = useReactFlow();
   useEffect(() => {
-    if (req === 0) return;
+    if (!req || moveSeq.current !== req.seq) return;
     const vp = getViewport();
     const snapped = snapViewportCrisp(vp);
     if (snapped.x === vp.x && snapped.y === vp.y && snapped.zoom === vp.zoom) return;
@@ -205,7 +212,7 @@ export function ViewportSnap({
     setViewport(snapped);
     const raf = requestAnimationFrame(() => { activeRef.current = false; });
     return () => { cancelAnimationFrame(raf); activeRef.current = false; };
-  }, [req, getViewport, setViewport, activeRef]);
+  }, [req, moveSeq, getViewport, setViewport, activeRef]);
   return null;
 }
 
@@ -216,7 +223,8 @@ export function ViewportSnap({
  *  (xterm selection, DOM-text crispness) at 1:1. Doing it in one fitView avoids a
  *  second racing zoom-to-1 animation that left the tile mis-positioned. */
 export function useTileFocus(): (id: string, opts?: { exact?: boolean }) => void {
-  const { fitView, getNode } = useReactFlow();
+  const { getNode } = useReactFlow();
+  const { fitView } = useCamera();
   return useCallback(
     (id: string, opts?: { exact?: boolean }) => {
       // For PARENTED tiles, `n.position` is RELATIVE to the parent — setCenter

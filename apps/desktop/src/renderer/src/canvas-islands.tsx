@@ -1,13 +1,14 @@
 /** Canvas camera controls. The standard workspace toolbar lives independently
  *  in workspace/standard-toolbar so scene views do not depend on xyflow here. */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useReactFlow, useStore } from "@xyflow/react";
+import { useStore } from "@xyflow/react";
+import { useCamera } from "./canvas-camera";
 import { Button } from "./components/ui/button";
 
 /** Bottom-left zoom + nav island (Excalidraw footer). Uses react-flow's
  *  imperative camera API; lives inside <ReactFlow> so the hooks resolve. */
 export function ZoomIsland({ tileCount, onReset, minimapOn, onToggleMinimap, onFocus }: { tileCount: number; onReset: () => void; minimapOn: boolean; onToggleMinimap: () => void; onFocus: () => void }) {
-  const { zoomIn, zoomOut, zoomTo, fitView } = useReactFlow();
+  const { zoomIn, zoomOut, zoomTo, fitView } = useCamera();
   const zoom = useStore((s) => s.transform[2]);
   const pct = Math.round(zoom * 100);
   const [fpsOn, setFpsOn] = useState(false);

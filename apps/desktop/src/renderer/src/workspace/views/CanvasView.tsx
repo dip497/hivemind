@@ -39,7 +39,7 @@ import { PresenceLayer, followPerson, onHost, useFollowing, usePeopleHere } from
 import { BoardContext } from "../../board-objects/board-context";
 import { isBoxType } from "../../board-objects/board-model";
 import { useOnViewportChange, useReactFlow, useStore } from "@xyflow/react";
-import { snapViewportCrisp, FocusMode, FocusOnTile, PanMomentum, ViewportSnap } from "../../canvas-camera";
+import { snapViewportCrisp, CameraMoves, FocusMode, FocusOnTile, PanMomentum, ViewportSnap } from "../../canvas-camera";
 import { buildBaseNodes, reuseNodes } from "../../canvas-node-build";
 import type { WorkspaceViewPlugin, WorkspaceViewProps } from "../workspace-view";
 import { useCanvasRuntime } from "./canvas-runtime";
@@ -263,16 +263,20 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
   const inMomentumRef = useRef(false);
   const momentumNonce = useRef(0);
   const [momentumReq, setMomentumReq] = useState<{ vx: number; vy: number; n: number } | null>(null);
-  // Bumped to snap the LIVE viewport crisp (ViewportSnap child applies it): on
-  // pan/zoom settle, on fling settle, and on tile select — the moments a tile is
-  // promoted to its own layer and a fractional transform would blur it.
-  const [snapReq, setSnapReq] = useState(0);
-  const bumpSnap = useCallback(() => setSnapReq((n) => n + 1), []);
-  const { currentViewportRef, setViewport } = rt;
   // Bumped by every move start. A camera flight (focus, fit) interrupted by the next one
   // still emits its move-end; settling work checks this so it never acts on a move that
   // has already been superseded.
   const moveSeqRef = useRef(0);
+  // The count when the move now under way began: a move that ends with the count past it was
+  // overtaken (a flight is counted when it is asked for, before it begins).
+  const moveStartSeqRef = useRef(0);
+  // Bumped to snap the LIVE viewport crisp (ViewportSnap child applies it): on
+  // pan/zoom settle, on fling settle, and on tile select — the moments a tile is
+  // promoted to its own layer and a fractional transform would blur it. It names the
+  // move it was asked after, so a flight started before it is applied is left alone.
+  const [snapReq, setSnapReq] = useState<{ n: number; seq: number } | null>(null);
+  const bumpSnap = useCallback(() => setSnapReq((r) => ({ n: (r?.n ?? 0) + 1, seq: moveSeqRef.current })), []);
+  const { currentViewportRef, setViewport } = rt;
   // Text is sharp only on whole pixels. The camera can rest on a half pixel (an odd-sized pane,
   // a zoom step), so once it is still at 100% each terminal is nudged by its own remainder —
   // a style on the tile, never a camera move, so no flight or fit can be cut short by it.
@@ -305,7 +309,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
     if (s.length > 6) s.shift();
   }, [currentViewportRef, alignText]);
   const onMoveStart = useCallback(() => {
-    moveSeqRef.current++;
+    moveStartSeqRef.current = ++moveSeqRef.current;
     // Ignore move-starts emitted by our OWN momentum setViewport calls — only a
     // real user grab should re-add the motion class + cancel the fling.
     if (inMomentumRef.current) return;
@@ -320,6 +324,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
       flowWrapRef.current?.classList.remove("canvas-moving");
     }, 120);
     if (inMomentumRef.current) return;
+    if (moveSeqRef.current !== moveStartSeqRef.current) { panSamplesRef.current = []; return; }
     // Velocity (px/ms) from the last two recent samples; fling only on a real flick.
     const s = panSamplesRef.current;
     let flung = false;
@@ -573,6 +578,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
             aborts the drag — native, so it also covers portaled tile bodies. */}
         <div ref={flowWrapRef} className="relative flex-1 min-h-0">
         <BoardContext.Provider value={rt.board}>
+        <CameraMoves.Provider value={moveSeqRef}>
         <ReactFlow
           nodes={liveNodes}
           onNodesChange={onNodesChange}
@@ -631,7 +637,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
           <FocusOnTile req={focusReq} />
           <FocusMode req={focusModeReq} />
           <PanMomentum req={momentumReq} activeRef={inMomentumRef} onSettle={bumpSnap} />
-          <ViewportSnap req={snapReq} activeRef={inMomentumRef} />
+          <ViewportSnap req={snapReq} moveSeq={moveSeqRef} activeRef={inMomentumRef} />
           <ViewportMirror target={currentViewportRef} />
           {repoPath && <FollowCamera repo={repoPath} />}
           <BoardPointer target={rt.canvasPointRef} pane={flowWrapRef} />
@@ -691,6 +697,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
             />
           )}
         </ReactFlow>
+        </CameraMoves.Provider>
         </BoardContext.Provider>
         {isEmpty && (
           <CanvasEmptyState

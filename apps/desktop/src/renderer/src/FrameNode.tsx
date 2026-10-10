@@ -101,7 +101,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
 
   return (
     <div
-      className="w-full h-full rounded-xl relative"
+      className="group/frame w-full h-full rounded-xl relative"
       // Frame node is pointer-transparent at the .react-flow__node-frame
       // wrapper level (styles.css). Pan/right-drag/Space+left/rubber-band
       // selection all need pointer events to reach the pane container —
@@ -109,32 +109,26 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
       // starting from a node element. Header bar + NodeResizer handles
       // re-enable events on themselves below.
       style={{
-        // A grouping ZONE, not a tile: faint fill + a DASHED, lower-saturation
-        // border so it reads as a region behind the tiles (a solid 2px high-sat
-        // border made it look like a giant empty tile). Selected = solid accent.
-        // Fill strength is a CSS var so glass mode can dial the frame tint down
-        // (styles.css sets --frame-fill lower under .glass-on) — the frame reads
-        // as a faint zone over the wallpaper instead of a colored block.
+        // A zone behind the tiles, not a tile: a faint fill and a hairline at low strength, one
+        // material with its label. --frame-fill is lower under glass (styles.css).
         background: `color-mix(in oklab, ${data.color} var(--frame-fill, 7%), transparent)`,
         border: selected
-          ? `2px solid ${data.color}`
-          : `1.5px dashed color-mix(in oklab, ${data.color} 45%, transparent)`,
+          ? `1.5px solid ${data.color}`
+          : `1px solid color-mix(in oklab, ${data.color} 32%, transparent)`,
       }}
     >
       {/* No NodeResizer — frames are NOT manually resizable. Their geometry is
           derived reactively from the bounding box of their member tiles (see
           Canvas auto-fit effect): a tile entering grows the frame, leaving
           shrinks it, an empty frame collapses to a placeholder. */}
-      {/* Header bar IS the drag handle — body stays transparent + non-grabbing
-          so child tiles inside the frame remain clickable. */}
+      {/* The label line is the drag handle; the body passes pan and selection through to the
+          pane (pointer-events:none on the wrapper, styles.css) so the tiles inside stay clickable. */}
       <div
-        className="absolute top-0 left-0 right-0 h-7 flex items-center gap-2 px-2 rounded-t-xl tile-drag-handle cursor-grab active:cursor-grabbing"
-        // Re-enable events here — the body wrapper sets pointer-events:none
-        // to pass pan/selection through. Header IS the drag handle + holds
-        // all the chrome (rename, binding, color, delete).
-        style={{ background: `color-mix(in oklab, ${data.color} 20%, transparent)`, pointerEvents: "auto" }}
+        className="absolute top-0 left-0 right-0 h-7 flex items-center gap-2 pl-3 pr-1.5 tile-drag-handle cursor-grab active:cursor-grabbing"
+        style={{ pointerEvents: "auto" }}
         onPointerDown={() => data.onBringToFront(data.id)}
       >
+        <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: data.color }} />
         {editing ? (
           <input
             autoFocus
@@ -162,7 +156,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
               setDraft(data.title);
               setEditing(true);
             }}
-            className="flex-1 text-left text-[12px] font-semibold text-[var(--color-fg)] truncate"
+            className="min-w-0 flex-1 text-left text-[12px] font-semibold text-[var(--color-fg)] truncate"
             title="Double-click to rename"
           >
             {data.title}
@@ -249,9 +243,9 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             />
           );
         })()}
-        {/* Its colour, and its menu: the same one the Layers panel opens. */}
-        <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: data.color }} />
+        {/* Its menu, the one the Layers panel opens: shown on hover, while selected or open, or on focus. */}
         <Button variant="ghost" size="icon-micro" aria-label={`${data.title} actions`} title="Frame actions" data-frame-actions={data.id}
+          className={`transition-opacity duration-150 focus-visible:opacity-100 group-hover/frame:opacity-100 ${selected || menu ? "opacity-100" : "opacity-0"}`}
           onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu((m) => (m ? null : { x: r.right - 230, y: r.bottom })); }}>
           <Ellipsis />
         </Button>
