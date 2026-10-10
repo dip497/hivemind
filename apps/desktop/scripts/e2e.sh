@@ -9,6 +9,7 @@
 #                                          fails. Not --repeat-each, which reruns a spec's tests
 #                                          in the one app its beforeAll launched, piling up state.
 #   scripts/e2e.sh --no-build widgets      skip the build (out/ is current)
+#   scripts/e2e.sh settings -g "first open"  only the tests whose title matches
 #
 # E2E_DISPLAY (default 91) is the X display number; never let xvfb-run pick one (-a), which can
 # land on the desktop's own Xwayland display.
@@ -18,11 +19,14 @@ cd "$(dirname "$0")/.."
 fresh=1
 build=1
 specs=()
+grep=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --fresh) fresh="$2"; shift 2 ;;
     --no-build) build=0; shift ;;
-    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
+    -g|--grep) grep=(--grep "$2"); shift 2 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    -*) echo "unknown option $1" >&2; exit 2 ;;
     *) if [ -f "$1" ]; then specs+=("$1"); else specs+=("tests/e2e/$1.spec.ts"); fi; shift ;;
   esac
 done
@@ -53,7 +57,7 @@ status=0
 for i in $(seq 1 "$fresh"); do
   [ "$fresh" -gt 1 ] && echo "== run $i of $fresh" | tee -a "$log"
   xvfb-run -n "$display" --server-args="-screen 0 1600x1000x24" \
-    pnpm exec playwright test ${specs[@]+"${specs[@]}"} --retries=0 >> "$log" 2>&1 || status=1
+    pnpm exec playwright test ${specs[@]+"${specs[@]}"} ${grep[@]+"${grep[@]}"} --retries=0 >> "$log" 2>&1 || status=1
 done
 
 echo "── summary"

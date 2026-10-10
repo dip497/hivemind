@@ -61,6 +61,8 @@ A test that has never failed proves nothing. For each new test, make one small e
 production code that breaks what the test guards, run the test, see it fail for the reason it
 names, then restore the code. A bug's regression test must fail on the code before the fix.
 Note the mutations that matter in the commit message or the tracker.
+`scripts/mutate.sh <file> <exact text> <replacement> -- <test command>` does the edit, the run
+and the restore; `apps/desktop/scripts/e2e.sh <spec> -g <title>` runs one e2e test.
 
 ## Changing an existing test
 
