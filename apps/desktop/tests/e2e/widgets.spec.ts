@@ -64,7 +64,11 @@ test("a widget is offered, added, drawn in every view, and its button changes wh
     const frame = page.frameLocator('[data-community-view="widget-viewer"] iframe');
     const card = frame.locator('[data-widget="counter"]');
     await expect(card).toContainText("Counter", { timeout: 20_000 });
-    await card.getByRole("button", { name: "Press" }).click();
+    // A frame just shown gets the pointer only once the window routes input to it; until then a
+    // click lands on the window. Point at the button until the frame itself says it is there.
+    const press = card.getByRole("button", { name: "Press" });
+    await expect.poll(async () => { await press.hover(); return frame.locator("body").getAttribute("data-pointer"); }).toBe("1");
+    await press.click();
     await expect.poll(async () => {
       const objects = await page.evaluate((r) => window.hive.workspaceObjectsSync(r), repo) as Array<{ kind: string; state?: { n?: number } }>;
       return objects.find((o) => o.kind === "widget")?.state?.n;

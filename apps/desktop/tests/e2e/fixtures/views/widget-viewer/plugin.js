@@ -36,3 +36,5 @@ window.addEventListener("message", (e) => {
     }
   };
 });
+// Says when the pointer reaches it: a frame just shown gets input only once the window routes it there.
+document.addEventListener("pointermove", () => { document.body.dataset.pointer = "1"; });
