@@ -1,7 +1,6 @@
-/** Integration: `hive ctl` subprocesses against a REAL HCP server (the desktop's
- *  startHcpServer + OutputRecorder) with a scripted dispatch. Proves the wire
- *  contract: token auth, --json shapes, exit codes, read's short-poll loop,
- *  --poll, and stream --lines/--since replay + offsets. */
+/** Integration: the `hive ctl` verbs still on the control plane against a REAL HCP server (the
+ *  desktop's startHcpServer + OutputRecorder) with a scripted dispatch: report, workflow, and
+ *  stream --lines/--since replay + offsets. */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -18,9 +17,6 @@ let server: HcpServer;
 const TOKEN = "t0k3n";
 const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
 const rec = new OutputRecorder();
-/** After this many agent.read calls, the "turn" completes. */
-let turnAfterReads = 0;
-let reads = 0;
 
 // The CLI validates --agent against installed manifests; give the subprocess a machine
 // that has the fixture agents installed.
@@ -41,29 +37,7 @@ beforeAll(async () => {
       const p = (params ?? {}) as Record<string, unknown>;
       calls.push({ method, params: p });
       switch (method) {
-        case "tile.list":
-          if (p.frame === "nothing") throw new ApiError("NOT_FOUND", "no frame answers to \"nothing\"");
-          return { frames: [{ id: "f1", tiles: [{ tileId: "w-1", status: "idle" }] }] };
-        case "tile.list_frames": return { frames: [] };
-        case "tile.spawn_agent": return { tileId: "w-2" };
         case "agent.report": return { delivered: true, parent: "p-1" };
-        case "agent.read": {
-          reads++;
-          const t = Number(p.timeoutMs);
-          if (reads > turnAfterReads) return { text: "reply " + reads, finalStatus: "turn", truncated: false };
-          await new Promise((r) => setTimeout(r, Math.min(t, 50)));
-          return { text: null, finalStatus: "timeout", truncated: false, note: "agent still working — no completed turn within timeout" };
-        }
-        case "tile.close": throw new ApiError("NOT_FOUND", `no tile ${String(p.tileId)}`);
-        case "view.emit":
-          if (p.name === "old.app") throw new ApiError("UNKNOWN_METHOD", "unknown method: view.emit");
-          if (p.view === "@a/other") return { ok: true, id: "ev_2", delivered: false, view: "@a/valley", reason: "not-active", buffered: true };
-          return p.name === "ci.build" ? { ok: true, id: "ev_1", delivered: true, view: "@a/valley" } : { ok: true, id: "ev_3", delivered: false, view: "canvas", reason: "no-listener", buffered: true };
-        case "plugin.commands": return { plugins: [{ plugin: "@a/progress", kind: "widget", instance: "w1", label: "Progress", commands: [{ name: "add", description: "Add a step.", args: '{ "text": string }' }] }] };
-        case "plugin.call":
-          if (p.command === "check") throw new ApiError("FAILED", "there is no step 7");
-          return { result: { echoed: p.args, tile: p.tile ?? null } };
-        case "agent.send": if (!p.text) throw new ApiError("BAD_REQUEST", "text required"); return { ok: true };
         case "workflow.run": return { shape: p.shape, items: (p.items as string[]).map((item) => ({ item, tileId: "w-x", status: "ok", text: "did " + item })) };
         default: throw new ApiError("UNKNOWN_METHOD", method);
       }
@@ -76,78 +50,11 @@ afterAll(async () => {
 });
 
 describe("hive ctl over a real HCP socket", () => {
-  test("list --json prints the raw result on one line; list and frames ask about the caller's workspace", async () => {
-    const r = await hive(["ctl", "list", "--json"], { env: env() });
-    expect(r.code).toBe(0);
-    expect(r.stdout.trim().split("\n")).toHaveLength(1);
-    expect(r.json).toEqual({ frames: [{ id: "f1", tiles: [{ tileId: "w-1", status: "idle" }] }] });
-    expect(calls.findLast((c) => c.method === "tile.list")!.params).toEqual({ callerTile: "me-1" });
-    await hive(["ctl", "frames", "--json"], { env: env() });
-    expect(calls.findLast((c) => c.method === "tile.list_frames")!.params).toEqual({ callerTile: "me-1" });
-    const none = await hive(["ctl", "list", "--frame", "nothing", "--json"], { env: env() });
-    expect(none.code).toBe(5);
-    expect(none.json).toMatchObject({ ok: false, code: "NOT_FOUND" });
-  });
-
-  test("spawn forwards MCP-named params + callerTile from $HIVEMIND_TILE", async () => {
-    const r = await hive(["ctl", "spawn", "--agent", "codex", "--name", "w", "--frame", "repo", "--model", "m", "--no-report", "--prompt", "go", "--json"], { env: env() });
-    expect(r.code).toBe(0);
-    expect(r.json).toEqual({ tileId: "w-2" });
-    const c = calls.findLast((c) => c.method === "tile.spawn_agent")!;
-    expect(c.params).toMatchObject({ agent: "codex", name: "w", frame: "repo", model: "m", report: false, prompt: "go", callerTile: "me-1" });
-  });
-
   test("report uses the caller tile; --tile overrides", async () => {
     expect((await hive(["ctl", "report", "done", "--json"], { env: env() })).json).toEqual({ delivered: true, parent: "p-1" });
     expect(calls.findLast((c) => c.method === "agent.report")!.params).toEqual({ callerTile: "me-1", message: "done" });
     await hive(["ctl", "report", "done", "--tile", "other", "--json"], { env: env() });
     expect(calls.findLast((c) => c.method === "agent.report")!.params.callerTile).toBe("other");
-  });
-
-  test("every call names the tile it runs in, which the app records as who asked; outside a tile none is named", async () => {
-    await hive(["ctl", "send", "w-1", "hi", "--json"], { env: env() });
-    expect(calls.findLast((c) => c.method === "agent.send")!.params).toEqual({ tileId: "w-1", text: "hi", callerTile: "me-1" });
-    await hive(["ctl", "close", "w-1", "--json"], { env: env() });
-    expect(calls.findLast((c) => c.method === "tile.close")!.params).toEqual({ tileId: "w-1", callerTile: "me-1" });
-    await hive(["ctl", "send", "w-1", "hi", "--json"], { env: { ...env(), HIVEMIND_TILE: undefined } });
-    expect(calls.findLast((c) => c.method === "agent.send")!.params).toEqual({ tileId: "w-1", text: "hi" });
-  });
-
-  test("bad token → exit 6 FORBIDDEN; unknown tile → exit 5; bad request → exit 2", async () => {
-    const bad = await hive(["ctl", "list", "--json"], { env: { ...env(), HCP_TOKEN: "wrong" } });
-    expect(bad.code).toBe(6);
-    expect(bad.json).toMatchObject({ ok: false, code: "FORBIDDEN" });
-    const nf = await hive(["ctl", "close", "ghost", "--json"], { env: env() });
-    expect(nf.code).toBe(5);
-    expect(nf.json).toMatchObject({ ok: false, code: "NOT_FOUND" });
-    const br = await hive(["ctl", "send", "w-1", "", "--json"], { env: env() });
-    expect(br.code).toBe(2);
-    expect((br.json as { code: string }).code).toBe("BAD_REQUEST");
-  });
-
-  test("read --timeout is honoured as a loop of short polls, exit 4 when it runs out", async () => {
-    calls.length = 0; reads = 0; turnAfterReads = 1000;
-    const r = await hive(["ctl", "read", "w-1", "--timeout", "25000", "--json"], { env: env() });
-    expect(r.code).toBe(4);
-    expect(r.json).toMatchObject({ text: null, finalStatus: "timeout" });
-    const slices = calls.filter((c) => c.method === "agent.read").map((c) => c.params.timeoutMs);
-    expect(slices).toEqual([10000, 10000, 5000]); // never one 25 s request
-  });
-
-  test("read returns as soon as a turn lands, exit 0", async () => {
-    calls.length = 0; reads = 0; turnAfterReads = 1;
-    const r = await hive(["ctl", "read", "w-1", "--timeout", "30000", "--json"], { env: env() });
-    expect(r.code).toBe(0);
-    expect(r.json).toEqual({ text: "reply 2", finalStatus: "turn", truncated: false });
-    expect(calls.filter((c) => c.method === "agent.read")).toHaveLength(2);
-  });
-
-  test("read --poll returns immediately with the turn state and exit 0", async () => {
-    calls.length = 0; reads = 0; turnAfterReads = 1000;
-    const r = await hive(["ctl", "read", "w-1", "--poll", "--json"], { env: env() });
-    expect(r.code).toBe(0);
-    expect(r.json).toMatchObject({ finalStatus: "timeout" });
-    expect(calls.map((c) => c.params.timeoutMs)).toEqual([0]);
   });
 
   test("workflow builds the workflow.run params and prints the fanout shape", async () => {
@@ -185,45 +92,5 @@ describe("hive ctl over a real HCP socket", () => {
     clearInterval(t);
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/^live \d+\n(live \d+\n)*$/);
-  });
-
-  test("view emit: --json shapes for delivered, not listening and not active; the caller tile rides along", async () => {
-    const d = await hive(["ctl", "view", "emit", "ci.build", '{"state":"failed"}', "--json"], { env: env() });
-    expect(d.code).toBe(0);
-    expect(d.json).toEqual({ ok: true, id: "ev_1", delivered: true, view: "@a/valley" });
-    expect(calls.at(-1)).toEqual({ method: "view.emit", params: { name: "ci.build", data: { state: "failed" }, callerTile: "me-1" } });
-    const none = await hive(["ctl", "view", "emit", "deploy.done"], { env: env() });
-    expect(none.code).toBe(0);
-    expect(none.stdout.trim()).toBe("buffered (active view canvas isn't listening)");
-    const other = await hive(["ctl", "view", "emit", "ci.x", "--view", "@a/other", "--json"], { env: env() });
-    expect(other.json).toEqual({ ok: true, id: "ev_2", delivered: false, view: "@a/valley", reason: "not-active", buffered: true });
-  });
-
-  test("plugin: commands lists what runs; call sends the JSON argument and prints the answer, or the plugin's error", async () => {
-    const list = await hive(["ctl", "plugin", "commands"], { env: env() });
-    expect(list.stdout).toContain("@a/progress  (widget Progress, w1)");
-    expect(list.stdout).toContain('add                Add a step.  args: { "text": string }');
-    const ok = await hive(["ctl", "plugin", "call", "@a/progress", "add", '{"text":"milk"}', "--tile", "w1", "--json"], { env: env() });
-    expect([ok.code, ok.json]).toEqual([0, { result: { echoed: { text: "milk" }, tile: "w1" } }]);
-    expect(calls.at(-1)).toEqual({ method: "plugin.call", params: { plugin: "@a/progress", command: "add", args: { text: "milk" }, tile: "w1", callerTile: "me-1" } });
-    const failed = await hive(["ctl", "plugin", "call", "@a/progress", "check", '{"index":7}', "--json"], { env: env() });
-    expect(failed.code).not.toBe(0);
-    expect(failed.json).toMatchObject({ ok: false, message: "there is no step 7" });
-    const before = calls.length;
-    const bad = await hive(["ctl", "plugin", "call", "@a/progress", "add", "{nope"], { env: env() });
-    expect(bad.code).not.toBe(0);
-    expect(bad.stderr).toContain("must be JSON");
-    expect(calls.length).toBe(before);
-  });
-
-  test("view emit: bad input never reaches the app; an older app says why", async () => {
-    const before = calls.length;
-    const bad = await hive(["ctl", "view", "emit", "ci.build", "{nope", "--json"], { env: env() });
-    expect(bad.code).toBe(2);
-    expect(bad.json).toMatchObject({ ok: false, code: "USAGE" });
-    expect(calls.length).toBe(before);
-    const old = await hive(["ctl", "view", "emit", "old.app", "--json"], { env: env() });
-    expect(old.code).toBe(2);
-    expect(old.json).toMatchObject({ ok: false, code: "UNKNOWN_METHOD", message: expect.stringMatching(/predates view events/) });
   });
 });

@@ -22,8 +22,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import type { Duplex } from "node:stream";
 import { DaemonEndpoint, REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
-import { hcpSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
-import { ipcPath } from "@hivemind/core/ipc";
+import { driveSockPath, hcpSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { serveDrive } from "./drive.js";
 import { controlApi } from "./control-api.js";
 import { Grants, grantsDomain } from "./grants.js";
@@ -407,7 +406,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   }
 
   // Programs drive the workspaces here through the workspace API, held to what they were granted.
-  const drive = serveDrive(ipcPath(o.dir, "drive.sock"), {
+  const drive = serveDrive(driveSockPath(o.dir), {
     server: api,
     installToken: () => readOrCreateToken(o.dir),
     grants,

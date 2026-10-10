@@ -18,7 +18,7 @@ describe("hive plugins", () => {
       settings: [{ id: "columns", label: "Columns", type: "choice", values: ["todo", "all"], default: "todo" }, { id: "max", label: "Most cards", type: "number", min: 1, max: 50, default: 20 }],
     }));
     // No app: a test run inside a Hivemind tile would otherwise reach the live one.
-    const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(xdg, "no-app.sock") };
+    const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(xdg, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(xdg, "no-drive.sock") };
     const run = (...args: string[]) => hive(["plugins", ...args, "--json"], { cwd: xdg, env });
     const stored = () => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind", "settings.json"), "utf8")).plugins.state;
     try {

@@ -19,7 +19,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
-import { cmd, hive, hiveAsync } from "./helpers.js";
+import { cmd, hive, hiveAsync, sealedEnv } from "./helpers.js";
 import { idOf, newSeed, workspaceSeed, type DeviceCertificate } from "@hivemind/workspace-host/identity";
 import { machineKeys } from "@hivemind/workspace-host/keyring";
 import { HiveNet, type Where } from "@hivemind/workspace-host/hive-net";
@@ -56,7 +56,7 @@ const data = <T>(r: ReturnType<typeof hive>) => (r.json as { data: T }).data;
 const running: ChildProcess[] = [];
 
 function runHost(on: Record<string, string> = env): ChildProcess {
-  const c = spawn(...cmd(["host", "run"]), { env: { ...process.env, ...on }, stdio: "ignore" });
+  const c = spawn(...cmd(["host", "run"]), { env: { ...sealedEnv(), ...on }, stdio: "ignore" });
   running.push(c);
   return c;
 }
@@ -170,7 +170,7 @@ describe.skipIf(!built)("hive host", () => {
     });
     try {
       // The host shows a code; the laptop enters its link.
-      const pairing = spawn(...cmd(["host", "pair", "--json"]), { env: { ...process.env, ...env } });
+      const pairing = spawn(...cmd(["host", "pair", "--json"]), { env: { ...sealedEnv(), ...env } });
       running.push(pairing);
       const printed = lines(pairing.stdout!);
       const offer = (JSON.parse(await printed()) as { data: { offer: { link: string } } }).data.offer;
@@ -271,7 +271,7 @@ describe.skipIf(!built)("hive host", () => {
     const { net: stranger } = await standIn("stranger3");
     try {
       // Paired by the host's link, as above.
-      const pairing = spawn(...cmd(["host", "pair", "--json"]), { env: { ...process.env, ...own } });
+      const pairing = spawn(...cmd(["host", "pair", "--json"]), { env: { ...sealedEnv(), ...own } });
       running.push(pairing);
       const printed = lines(pairing.stdout!);
       const link = parsePairLink((JSON.parse(await printed()) as { data: { offer: { link: string } } }).data.offer.link)!;
@@ -352,7 +352,7 @@ describe.skipIf(!built)("hive host", () => {
     const guest = await HiveNet.start({ bin: HIVE_NET, identity: path.join(dir, "guest4", "identity"), socket: path.join(dir, "g4.sock"), profile, onIncoming: (l) => l.close(), onPairRequest: async () => ({ ok: false }) });
     try {
       // Paired with the host by its link: the host is the laptop's person.
-      const pairing = spawn(...cmd(["host", "pair", "--json"]), { env: { ...process.env, ...own } });
+      const pairing = spawn(...cmd(["host", "pair", "--json"]), { env: { ...sealedEnv(), ...own } });
       running.push(pairing);
       const offered = parsePairLink((JSON.parse(await lines(pairing.stdout!)()) as { data: { offer: { link: string } } }).data.offer.link)!;
       where = { addrs: offered.addrs, relay: offered.relay };
@@ -552,7 +552,7 @@ describe.skipIf(!built)("hive host", () => {
     });
     try {
       // Paired with the host by its link, as above, and the workspace moved there.
-      const pairing = spawn(...cmd(["host", "pair", "--json"]), { env: { ...process.env, ...own } });
+      const pairing = spawn(...cmd(["host", "pair", "--json"]), { env: { ...sealedEnv(), ...own } });
       running.push(pairing);
       const offered = parsePairLink((JSON.parse(await lines(pairing.stdout!)()) as { data: { offer: { link: string } } }).data.offer.link)!;
       where = { addrs: offered.addrs, relay: offered.relay };

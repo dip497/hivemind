@@ -11,7 +11,7 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
-import { cmd, hive, hiveAsync } from "./helpers.js";
+import { cmd, hive, hiveAsync, sealedEnv } from "./helpers.js";
 
 setDefaultTimeout(150_000);
 const unix = process.platform !== "win32";
@@ -26,7 +26,7 @@ const DROID = path.resolve(import.meta.dir, "../../../packages/hive-agents/tests
 // Nothing from a tile this test may itself run in: its own socket, token and tile are not these.
 const env = {
   XDG_CONFIG_HOME: config, HIVEMIND_APP_DATA: data, HIVEMIND_SHELL_ENV: "0", HIVEMIND_HIVE_NET: path.join(dir, "none"),
-  PATH: `${bin}:${process.env.PATH}`, HIVE_HCP_SOCK: "", HCP_TOKEN: "", HIVEMIND_TILE: "", HIVEMIND_PTY_SOCK: "",
+  PATH: `${bin}:${process.env.PATH}`, HIVE_HCP_SOCK: "", HIVE_DRIVE_SOCK: "", HCP_TOKEN: "", HIVEMIND_TILE: "", HIVEMIND_PTY_SOCK: "",
 };
 const running: ChildProcess[] = [];
 
@@ -38,11 +38,8 @@ async function until<T>(get: () => T | null | undefined | false, what: string, m
   throw new Error(`timed out waiting for ${what}`);
 }
 const ctl = (...args: string[]) => hive(["ctl", ...args, "--json"], { env });
-interface Listed { tileId: string; name?: string; status?: string | null; agent?: string }
-const listed = (): Listed[] => {
-  const r = ctl("list").json as { frames?: Array<{ tiles: Listed[] }>; loose?: Listed[] };
-  return [...(r.frames ?? []).flatMap((f) => f.tiles), ...(r.loose ?? [])];
-};
+interface Listed { tile: string; agent: string; state: string; program?: { id: string } }
+const listed = (): Listed[] => (ctl("agents").json as { agents: Listed[] }).agents;
 /** The processes running for a tile: an agent and what it starts carry the tile's id. */
 const processesOf = (tileId: string): string[] => fs.readdirSync("/proc").filter((pid) => {
   if (!/^\d+$/.test(pid)) return false;
@@ -68,7 +65,7 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
     const repo = path.join(dir, "repo");
     fs.mkdirSync(repo);
 
-    const host = spawn(...cmd(["host", "run"]), { env: { ...process.env, ...env }, stdio: "ignore" });
+    const host = spawn(...cmd(["host", "run"]), { env: { ...sealedEnv(), ...env }, stdio: "ignore" });
     running.push(host);
     await until(() => (hive(["host", "status", "--json"], { env }).json as { data?: { running?: boolean } })?.data?.running, "the host to answer");
     expect(hive(["host", "add", repo, "--json"], { env }).code).toBe(0);
@@ -90,10 +87,10 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
     // Spawned by the person at this machine, into the one workspace the host serves.
     const spawned = ctl("spawn", "--agent", "droid", "--name", "worker", "--prompt", 'echo "hello from $PWD as $HIVEMIND_TILE"');
     expect(spawned.code, spawned.stdout + spawned.stderr).toBe(0);
-    const worker = (spawned.json as { tileId: string }).tileId;
+    const worker = (spawned.json as { tile: string }).tile;
     const first = ctl("read", worker, "--timeout", "40000");
     expect(first.json, first.stdout + first.stderr).toMatchObject({ text: `hello from ${repo} as hm:${worker}`, finalStatus: "turn" });
-    expect(listed().find((t) => t.tileId === worker)).toMatchObject({ name: "worker", agent: "droid", status: "idle" });
+    expect(listed().find((t) => t.tile === worker)).toMatchObject({ agent: "worker", program: { id: "droid" }, state: "idle" });
     // The daemon heard the turn too, through the socket it passed on: so do the devices watching it.
     await until(() => heard.some((e) => e.topic === "agent.event" && e.data.tileId === `hm:${worker}` && e.data.event === "turn.ended"), "the daemon to tell its watchers");
     // Its output is recorded, whoever shows it.
@@ -105,10 +102,10 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
 
     // An unnamed one is called by what it says it is doing, as the daemon reads its title: its task
     // first, then what its next turn's title says.
-    const unnamed = (ctl("spawn", "--agent", "droid", "--prompt", "echo titled").json as { tileId: string }).tileId;
+    const unnamed = (ctl("spawn", "--agent", "droid", "--prompt", "echo titled").json as { tile: string }).tile;
     expect(ctl("read", unnamed, "--timeout", "40000").json).toMatchObject({ text: "titled", finalStatus: "turn" });
     expect(ctl("send", unnamed, "echo retitled").code).toBe(0);
-    await until(() => listed().find((t) => t.tileId === unnamed)?.name === "echo retitled", "the title to name the tile");
+    await until(() => listed().find((t) => t.tile === unnamed)?.agent === "echo retitled", "the title to name the tile");
 
     // An agent that opens a startup screen its launch flags answered (a stand-in whose manifest
     // says so): the host skips it, reading the screen in the daemon, and the task then goes in.
@@ -120,10 +117,10 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
     fs.writeFileSync(path.join(bin, "gated"), `#!/usr/bin/env bash\nFAKE_GATE="2 hooks need review" exec ${JSON.stringify(node)} ${JSON.stringify(FAKE_AGENT)} droid "$@"\n`, { mode: 0o755 });
     const past = ctl("spawn", "--agent", "gated", "--name", "gated", "--prompt", "echo past the gate");
     expect(past.code, past.stdout + past.stderr).toBe(0);
-    expect(ctl("read", (past.json as { tileId: string }).tileId, "--timeout", "40000").json).toMatchObject({ text: "past the gate", finalStatus: "turn" });
+    expect(ctl("read", (past.json as { tile: string }).tile, "--timeout", "40000").json).toMatchObject({ text: "past the gate", finalStatus: "turn" });
 
     // A read waiting on a worker mid-turn is told at once when it is closed, and the agent ends.
-    const busy = (ctl("spawn", "--agent", "droid", "--name", "busy", "--prompt", "sleep 60; echo late").json as { tileId: string }).tileId;
+    const busy = (ctl("spawn", "--agent", "droid", "--name", "busy", "--prompt", "sleep 60; echo late").json as { tile: string }).tile;
     await until(() => processesOf(busy).length > 0, "the busy worker to run");
     const reading = hiveAsync(["ctl", "read", busy, "--timeout", "40000", "--json"], { env });
     await new Promise((r) => setTimeout(r, 1_500));
@@ -132,7 +129,7 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
     expect(await reading).toMatchObject({ code: 5, json: { finalStatus: "closed" } });
     expect(Date.now() - started).toBeLessThan(10_000);
     await until(() => processesOf(busy).length === 0, "the busy worker to end");
-    expect(listed().map((t) => t.tileId)).not.toContain(busy);
+    expect(listed().map((t) => t.tile)).not.toContain(busy);
 
     // Nobody sits at it: a verb that needs a window is refused.
     expect(ctl("focus", worker)).toMatchObject({ code: 3, json: { ok: false, code: "UNAVAILABLE" } });
@@ -142,6 +139,6 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
     // control plane on the machine.
     expect(hive(["host", "stop", "--json"], { env }).code).toBe(0);
     await until(() => host.exitCode !== null || host.signalCode !== null, "the host to exit");
-    expect(ctl("list")).toMatchObject({ code: 3, json: { ok: false, code: "UNAVAILABLE", message: "no desktop on this machine" } });
+    expect(ctl("agents")).toMatchObject({ code: 3, json: { ok: false, code: "UNAVAILABLE" } });
   });
 });

@@ -20,7 +20,7 @@ import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
 import { listWidgets } from "@hivemind/core/widgets";
 import { listToolPackages } from "@hivemind/core/tool-packages";
 import { err, ok } from "../format.js";
-import { hcpCall } from "../hcp.js";
+import { driveCall } from "../drive.js";
 
 interface Plugin {
   key: string;
@@ -73,7 +73,7 @@ async function find(raw: string): Promise<Plugin> {
 /** One plugin's record changed inside the settings lock, and a running app told. */
 async function change(p: Plugin, fn: (s: PluginState) => PluginState): Promise<{ state: PluginState; reloaded: boolean }> {
   const after = await updateSettings((cur) => ({ ...cur, plugins: { ...cur.plugins, state: withPluginState(cur.plugins.state, p.kind, p.id, fn) } }));
-  const reloaded = await hcpCall("settings.reload", {}, 5000).then(() => true, () => false);
+  const reloaded = await driveCall("settings.reload", [], 5000).then(() => true, () => false);
   return { state: after.plugins.state[p.key] ?? {}, reloaded };
 }
 const note = (reloaded: boolean) => (reloaded ? "app reloaded" : "app not running — applies on next start");

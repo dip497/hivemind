@@ -4,9 +4,7 @@
  * for `agent.stream`.
  *
  * Socket + token come from env (HIVE_HCP_SOCK / HCP_TOKEN — injected into every
- * agent hivemind spawns) else the well-known userData location: on Windows a
- * named pipe + token file derived from %APPDATA%\hivemind (what the packaged
- * app listens on — see ipcPath), elsewhere <config>/hivemind/hcp.{sock,token}.
+ * agent hivemind spawns) else the app's data folder (app-data.ts).
  *
  * Errors are structured: `HcpCliError { code, message, exit }` so every ctl
  * subcommand prints `{ ok:false, code, message }` and exits with a meaningful
@@ -14,10 +12,9 @@
  */
 import net from "node:net";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { ipcPath } from "@hivemind/core";
+import { appData, appSocket, envGet, type Where } from "./app-data.js";
 
 /** Exit codes — stable, documented in the hivemind skill. */
 export const EXIT = {
@@ -60,55 +57,18 @@ export function exitCodeFor(code: string): number {
   }
 }
 
-export function configDir(env: NodeJS.ProcessEnv = process.env): string {
-  return env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+/** The app's control plane: `HIVE_HCP_SOCK`, given every agent, else the app's own. */
+export function sockPath(where: Where = {}): string {
+  return appSocket("hcp.sock", "HIVE_HCP_SOCK", where);
 }
 
-/** Case-insensitive env read; on Windows a process.env spread carries `Path`,
- *  not `PATH`, and system variables keep whatever casing the creator used. */
-function envGet(env: NodeJS.ProcessEnv, name: string): string | undefined {
-  if (name in env) return env[name];
-  const key = Object.keys(env).find((k) => k.toLowerCase() === name.toLowerCase());
-  return key === undefined ? undefined : env[key];
-}
-
-/** The packaged app's userData directory on Windows: Electron puts it at
- *  %APPDATA%\hivemind (see app.setName("hivemind") in desktop main), and the
- *  app's pipes + token are derived from that directory — so the CLI must
- *  re-derive the SAME path. Null when APPDATA is missing from the env. */
-export function win32UserDataDir(env: NodeJS.ProcessEnv = process.env): string | null {
-  const appData = envGet(env, "APPDATA");
-  if (!appData) return null;
-  return path.join(appData, "hivemind");
-}
-
-interface EndpointOpts { platform?: NodeJS.Platform; env?: NodeJS.ProcessEnv; }
-
-export function sockPath(opts: EndpointOpts = {}): string {
-  const { platform = process.platform, env = process.env } = opts;
-  const override = envGet(env, "HIVE_HCP_SOCK");
-  if (override) return override;
-  if (platform === "win32") {
-    const ud = win32UserDataDir(env);
-    if (ud) return ipcPath(ud, "hcp.sock", platform);
-  }
-  return path.join(configDir(env), "hivemind", "hcp.sock");
-}
-
-function tokenPath(opts: EndpointOpts = {}): string {
-  const { platform = process.platform, env = process.env } = opts;
-  if (platform === "win32") {
-    const ud = win32UserDataDir(env);
-    if (ud) return path.join(ud, "hcp.token");
-  }
-  return path.join(configDir(env), "hivemind", "hcp.token");
-}
-export function token(opts: { platform?: NodeJS.Platform; env?: NodeJS.ProcessEnv } = {}): string {
-  const { platform = process.platform, env = process.env } = opts;
-  const override = envGet(env, "HCP_TOKEN");
-  if (override) return override;
+/** Who this is to the app: `HCP_TOKEN`, an agent's own, else the install's, the person's. */
+export function token(where: Where = {}): string {
+  const { env = process.env } = where;
+  const given = envGet(env, "HCP_TOKEN");
+  if (given) return given;
   try {
-    return fs.readFileSync(tokenPath({ platform, env }), "utf8").trim();
+    return fs.readFileSync(path.join(appData(where), "hcp.token"), "utf8").trim();
   } catch {
     return "";
   }

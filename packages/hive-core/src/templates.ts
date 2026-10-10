@@ -239,17 +239,17 @@ description: Use when running inside hivemind ($HIVEMIND_TILE is set) or when as
 
 # hivemind control plane — \`hive ctl\`
 
-\`hive ctl <verb> … --json\` drives the running hivemind app. \`--json\` prints ONE line:
+\`hive ctl <verb> … --json\` drives the running hivemind app, as you, in your own workspace. \`--json\` prints ONE line:
 the result on success, \`{"ok":false,"code":"…","message":"…"}\` on failure.
 Exit codes: 0 ok · 2 usage · 3 app not running · 4 timeout · 5 not found · 6 unauthorized · 7 refused · 1 other.
-Ids are stable strings: a tile id (\`tileId\`) lives as long as the tile; your own is \`$HIVEMIND_TILE\`.
-Frames are repo/worktree groups on the canvas: \`hive ctl frames --json\`. \`hive ctl list --json\` shows every tile with its agent status.
+Ids are stable strings: a tile id (\`tile\`) lives as long as the tile; your own is \`$HIVEMIND_TILE\`.
+Frames are repo/worktree groups on the canvas: \`hive ctl frames --json\`. \`hive ctl agents --json\` shows every agent with its state and what it waits on.
 
 ## Spawn a worker into a frame
 \`\`\`bash
 hive ctl spawn --agent claude --name "auth tests" --frame my-repo \\
   --prompt "Write tests for src/auth.ts. When done run: hive ctl report '<one-paragraph summary>'" --json
-# → {"tileId":"a1b2…"}   omit --frame to spawn beside you; --agent codex|pi|… picks the runtime
+# → {"tile":"a1b2…"}   omit --frame to spawn beside you; --agent codex|pi|… picks the runtime
 \`\`\`
 Reporting is on by default: the worker's finished replies are delivered into YOUR terminal. \`--no-report\` turns it off.
 
@@ -403,12 +403,12 @@ Always check each result's \`status\` before trusting \`text\`. Give the Bash to
 ## Spawning & driving a single worker
 
 \`\`\`bash
-hive ctl spawn --prompt "…" [--agent pi] [--name reviewer] [--frame repo] [--model opus] [--mode plan] [--supervise all] --json   # → {"tileId":"…"}
+hive ctl spawn --prompt "…" [--agent pi] [--name reviewer] [--frame repo] [--model opus] [--mode plan] [--supervise all] --json   # → {"tile":"…"}
 hive ctl send <tileId> "next instruction"                     # a follow-up turn (typed + submitted for you)
 hive ctl read <tileId> --timeout 90s --json                 # block for its reply: {"text","finalStatus":"turn"}; exit 4 + finalStatus "timeout" if still busy, exit 5 + "closed" if it closed
 hive ctl read <tileId> --poll --json                          # never blocks
 hive ctl keys <tileId> Down,Enter                             # drive its TUI picker (AskUserQuestion etc.)
-hive ctl list --json                                          # tiles grouped by frame, each with live status (working / idle / awaiting_approval / …)
+hive ctl agents --json                                        # every agent with its state (working / idle / waiting / …) and what it waits on; --watch follows them
 hive ctl focus <tileId> · hive ctl close <tileId> · hive ctl rename <tileId> "name"   # no name: take it away
 \`\`\`
 
@@ -423,7 +423,7 @@ Spawn (or \`workflow\`) with \`--supervise all\` and YOU are the gatekeeper for 
 Reply: hive ctl approve <reqId> allow|deny|always|never
 \`\`\`
 
-\`allow\` / \`deny\` decide this call; \`always\` / \`never\` also remember it for that worker+tool. Add \`--reason "…"\` on a deny so the worker can adapt. Only you, the agent it asked, or the person can answer it: never the worker. It fails safe: unanswered prompts fall back to the human, and an answer to one that has already fallen back is refused (exit 2). \`hive ctl list --json\` shows workers stuck in \`awaiting_approval\`.
+\`allow\` / \`deny\` decide this call; \`always\` / \`never\` also remember it for that worker+tool. Add \`--reason "…"\` on a deny so the worker can adapt. Only you, the agent it asked, or the person can answer it: never the worker. It fails safe: unanswered prompts fall back to the human, and an answer to one that has already fallen back is refused (exit 2). \`hive ctl agents --json\` shows workers waiting on one.
 
 ## Human sign-off mid-run
 
@@ -434,7 +434,7 @@ Reply: hive ctl approve <reqId> allow|deny|always|never
 - **Fire-and-forget fanout**: \`for f in …; do hive ctl spawn --prompt "Review $f"; done\` — reports land in your terminal as they finish.
 - **Loop-until-dry**: spawn a finder → \`hive ctl read\` → stop after two empty rounds, else spawn another round seeded with what's found.
 - **Judge panel**: fanout N solvers over the same problem (items = variant labels) → fanout M judges per solution → majority verdict.
-- **Pipeline by hand**: \`A=$(hive ctl spawn … --json | jq -r .tileId)\`; \`B=$(…)\`; \`hive ctl connect $A $B\` — A's replies become B's prompts; \`hive ctl disconnect $A $B\` removes the pipe.
+- **Pipeline by hand**: \`A=$(hive ctl spawn … --json | jq -r .tile)\`; \`B=$(…)\`; \`hive ctl connect $A $B\` — A's replies become B's prompts; \`hive ctl disconnect $A $B\` removes the pipe.
 - **Report back as a worker**: \`hive ctl report "Done: …"\` delivers to the tile that spawned you.
 
 ## Durability (optional)

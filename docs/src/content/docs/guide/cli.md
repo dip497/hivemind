@@ -4,8 +4,10 @@ description: Commands, options, and exit codes.
 ---
 
 `hive` has two vocabularies: issue verbs (file operations, work without the app) and
-`hive ctl` (drives the running app over a local socket). Agents use the same CLI from
-Bash; there is no MCP server. Conventions:
+`hive ctl` (drives the running app over a local socket, its drive socket). Agents use the same CLI from
+Bash; there is no MCP server. In an agent's terminal `hive ctl` is that agent, driving its own
+workspace; anywhere else it is you, in the workspace open there whose folder you are in, the only
+one open, or the one `--repo` names. Conventions:
 
 - `--json` prints one line of machine-readable output; errors are
   `{"ok":false,"code":"…","message":"…"}`.
@@ -70,12 +72,12 @@ hive resolve "text"                     # expand @ID mentions to markdown links
 ## `hive ctl` — canvas
 
 ```text
-hive ctl list [--frame f]               # tiles grouped by frame, with status; exit 5 if no frame answers to f
-hive ctl frames                         # frames: id, title, repo, branch, tiles
+hive ctl agents [--watch]               # the workspace's agents, their state and what each waits on
+hive ctl frames                         # frames an agent may start in: id, name, machine
 hive ctl spawn [--agent claude] [--prompt "…"] [--name "title"]
                [--frame id|repo|title] [--mode plan] [--model sonnet]
                [--no-report] [--supervise all|Bash,Edit]
-                                        # → {"tileId":…}; workers auto-report by default
+                                        # → {"tile":…}; workers auto-report by default
 hive ctl send <tileId> "text"
 hive ctl keys <tileId> Down,Enter       # Esc, Tab, digits, …
 hive ctl read <tileId> [--timeout 90s] [--poll]   # default wait 100 s; --poll: no wait

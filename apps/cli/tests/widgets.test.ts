@@ -35,7 +35,7 @@ describe("hive widgets", () => {
     const index = path.join(tmp, "hub", "index.json");
     fs.writeFileSync(index, JSON.stringify({ version: 1, plugins: [entry("@ada/pet", files), entry("@ada/liar", files)] }));
 
-    const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVEMIND_PLUGIN_INDEX: pathToFileURL(index).href };
+    const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock"), HIVEMIND_PLUGIN_INDEX: pathToFileURL(index).href };
     const run = (...args: string[]) => hive(["widgets", ...args, "--json"], { cwd: tmp, env });
     try {
       expect(run("install", counter).json).toMatchObject({ ok: true, data: { id: "counter", name: "Counter", rescanned: false } });
@@ -58,7 +58,7 @@ describe("hive widgets", () => {
 
   test("a new widget works as written: it installs, checks against its own declarations, and is ready to publish", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-widget-new-"));
-    const env = { XDG_CONFIG_HOME: path.join(tmp, "config"), HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock") };
+    const env = { XDG_CONFIG_HOME: path.join(tmp, "config"), HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock") };
     try {
       expect(hive(["widgets", "new", "tally", "--owner", "ada", "--json"], { cwd: tmp, env }).json).toMatchObject({ ok: true, data: { id: "@ada/tally" } });
       const dir = path.join(tmp, "tally");

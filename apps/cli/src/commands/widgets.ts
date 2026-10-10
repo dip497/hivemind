@@ -14,7 +14,7 @@ import path from "node:path";
 import { defineCommand } from "citty";
 import { installWidget, listWidgets, removeWidget } from "@hivemind/core/widgets";
 import { err, ok } from "../format.js";
-import { hcpCall } from "../hcp.js";
+import { driveCall } from "../drive.js";
 import { REGISTRY_NAME, stageFromRegistry } from "../registry.js";
 import { githubLogin } from "./views.js";
 import { WIDGET_TYPES } from "@hivemind/core/widget-api";
@@ -22,7 +22,7 @@ import { pluginBrief } from "../plugin-brief.js";
 
 /** Ask a running app to list the widgets again. False when no app is reachable. */
 async function rescanApp(): Promise<boolean> {
-  try { await hcpCall("widgets.rescan", {}, 5000); return true; } catch { return false; }
+  try { await driveCall("widgets.rescan", [], 5000); return true; } catch { return false; }
 }
 const afterNote = (rescanned: boolean) => (rescanned ? "app updated" : "app not running — it lists them when it starts");
 const fail = (ctx: { json: boolean }, e: unknown, code: string): never => err(ctx, code, e instanceof Error ? e.message : String(e));

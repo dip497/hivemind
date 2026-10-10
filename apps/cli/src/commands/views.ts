@@ -15,7 +15,7 @@ import path from "node:path";
 import { defineCommand } from "citty";
 import { HiveError, findRoot, installView, listInstalledViews, removeView } from "@hivemind/core";
 import { err, ok } from "../format.js";
-import { hcpCall } from "../hcp.js";
+import { driveCall } from "../drive.js";
 import { REGISTRY_NAME, stageFromRegistry } from "../registry.js";
 import { starterFiles } from "../view-starter.js";
 
@@ -23,7 +23,7 @@ import { starterFiles } from "../view-starter.js";
  *  reachable (the change is picked up on the next start or when Settings ▸
  *  View is opened). */
 async function rescanApp(): Promise<boolean> {
-  try { await hcpCall("views.rescan", {}, 5000); return true; } catch { return false; }
+  try { await driveCall("views.rescan", [], 5000); return true; } catch { return false; }
 }
 const afterNote = (rescanned: boolean) => (rescanned ? "app rescanned" : "app not running or unreachable — restart it, or open Settings ▸ Plugins");
 

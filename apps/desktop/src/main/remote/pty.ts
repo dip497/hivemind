@@ -11,7 +11,7 @@ import { app } from "electron";
 import * as nodePty from "@lydell/node-pty";
 import { parseRemote, type RemoteTarget } from "@hivemind/core/remote-uri";
 import { pasteText } from "@hivemind/agent-host/paste";
-import { shq } from "@hivemind/agents/node";
+import { shq, withoutControl } from "@hivemind/agents/node";
 import { remoteConns } from "@hivemind/host/remote/conn";
 import { DaemonEndpoint, type EndpointState } from "@hivemind/agent-host/daemon-endpoint";
 import { acceptRemoteEvent } from "./events.js";
@@ -213,12 +213,6 @@ function remoteEvent(ep: DaemonEndpoint, topic: string, data: unknown): void {
   if (ok) eventSink?.(topic, ok);
 }
 
-/** Local control-plane credentials never travel to another machine. */
-const remoteEnv = (env?: Record<string, string>) => {
-  if (!env) return undefined;
-  const { HCP_TOKEN: _t, HIVE_HCP_SOCK: _s, ...rest } = env;
-  return rest;
-};
 
 /** Spawn a remote PTY at `target` (its cwd, on the host it names). Returns a synthetic negative
  *  pid (the renderer uses pid only as an opaque liveness token). */
@@ -238,7 +232,7 @@ async function spawnThroughDaemon(opts: SpawnOpts, target: RemoteTarget, cb: Cal
   if (ep) {
     daemonTiles.set(opts.tileId, ep);
     const r = await ep.spawn(
-      { tileId: opts.tileId, cwd: target.path, cmd: opts.cmd, args: opts.args ?? [], cols: opts.cols, rows: opts.rows, env: remoteEnv(opts.env), noSpawn: opts.attachOnly },
+      { tileId: opts.tileId, cwd: target.path, cmd: opts.cmd, args: opts.args ?? [], cols: opts.cols, rows: opts.rows, env: withoutControl(opts.env), noSpawn: opts.attachOnly },
       { onData: cb.onData, onExit: (code, signal) => { daemonTiles.delete(opts.tileId); cb.onExit(code, signal); } },
     );
     // A session that could not be opened is let go, so nothing streams into a tile that says it failed.

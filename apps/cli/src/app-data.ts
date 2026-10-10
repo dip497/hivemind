@@ -5,15 +5,45 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { configDir, win32UserDataDir } from "./hcp.js";
+import { ipcPath } from "@hivemind/core";
 
-/** The app's data folder (`HIVEMIND_APP_DATA` names another). */
-export function appData(): string {
-  const named = process.env.HIVEMIND_APP_DATA;
+/** Which machine's paths: this one's unless a test says another. */
+export interface Where { platform?: NodeJS.Platform; env?: NodeJS.ProcessEnv }
+
+/** Case-insensitive env read; on Windows a process.env spread carries `Path`, not `PATH`, and
+ *  system variables keep whatever casing the creator used. */
+export function envGet(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  if (name in env) return env[name];
+  const key = Object.keys(env).find((k) => k.toLowerCase() === name.toLowerCase());
+  return key === undefined ? undefined : env[key];
+}
+
+export function configDir(env: NodeJS.ProcessEnv = process.env): string {
+  return env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+}
+
+/** Where Electron keeps the packaged app's data on Windows, `%APPDATA%\hivemind`; null when
+ *  APPDATA is missing from the env. */
+export function win32UserDataDir(env: NodeJS.ProcessEnv = process.env): string | null {
+  const roaming = envGet(env, "APPDATA");
+  return roaming ? path.join(roaming, "hivemind") : null;
+}
+
+/** The app's data folder, as Electron names it on each platform (`HIVEMIND_APP_DATA` names
+ *  another): its token and every socket it serves are there. */
+export function appData({ platform = process.platform, env = process.env }: Where = {}): string {
+  const named = envGet(env, "HIVEMIND_APP_DATA");
   if (named) return named;
-  if (process.platform === "win32") return win32UserDataDir() ?? path.join(os.homedir(), "AppData", "Roaming", "hivemind");
-  if (process.platform === "darwin") return path.join(os.homedir(), "Library", "Application Support", "hivemind");
-  return path.join(configDir(), "hivemind");
+  if (platform === "win32") return win32UserDataDir(env) ?? path.join(os.homedir(), "AppData", "Roaming", "hivemind");
+  if (platform === "darwin") return path.join(os.homedir(), "Library", "Application Support", "hivemind");
+  return path.join(configDir(env), "hivemind");
+}
+
+/** A socket the app serves, by its name: `override` in the env names another. A named pipe on
+ *  Windows. */
+export function appSocket(name: string, override: string, where: Where = {}): string {
+  const { platform = process.platform, env = process.env } = where;
+  return envGet(env, override) || ipcPath(appData({ platform, env }), name, platform);
 }
 
 /** hive-net: named by HIVEMIND_HIVE_NET, else where the installers put it, else on PATH. */

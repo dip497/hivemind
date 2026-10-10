@@ -11,7 +11,7 @@ describe("hive config / hive theme", () => {
   test("path, get, set (validated), theme list/use/export/import — all against settings.json, app absent", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-config-"));
     // No app: a test run inside a Hivemind tile would otherwise reach the live one.
-    const env = { XDG_CONFIG_HOME: tmp, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock") };
+    const env = { XDG_CONFIG_HOME: tmp, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock") };
     const file = path.join(tmp, "hivemind", "settings.json");
     let r = hive(["config", "path"], { cwd: tmp, env });
     expect(r.stdout.trim()).toBe(file);

@@ -64,9 +64,9 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       "link.disconnect": async (from, src, dst) => {
         await ask(from, "tile.disconnect", { srcTileId: text(src, "src"), ...(dst != null ? { dstTileId: text(dst, "dst") } : {}) });
       },
-      "view.emit": done("view.emit", (name, data, view) => ({ name, data, ...(view != null ? { view } : {}) })),
+      "view.emit": (from, name, data, view) => ask(from, "view.emit", { name, data, ...(view != null ? { view } : {}) }),
       "plugin.commands": (from) => ask(from, "plugin.commands", {}),
-      "plugin.open": (from, plugin) => ask(from, "plugin.open", { plugin }),
+      "plugin.open": (from, plugin, frame) => ask(from, "plugin.open", { plugin, ...(frame != null ? { frame } : {}) }),
       "plugin.call": (from, plugin, command, args, tile) => ask(from, "plugin.call", { plugin, command, args, ...(tile != null ? { tile } : {}) }),
       "tile.focus": done("tile.focus", (tile) => ({ tileId: text(tile, "tile") })),
       "views.rescan": done("views.rescan"),

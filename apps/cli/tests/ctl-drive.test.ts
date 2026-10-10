@@ -1,0 +1,190 @@
+/** `hive ctl` on a REAL drive socket (the host's serveDrive and workspace server, a scripted
+ *  domain): who it is (the person, or the agent whose tile token it holds), the workspace it acts
+ *  on, each verb as its API method, `--json` shapes, exit codes, read's short polls, and
+ *  `agents --watch` following the feed's events. */
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { Intents, type Actor } from "@hivemind/workspace-host/intents";
+import { AuditLog } from "@hivemind/workspace-host/audit-log";
+import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
+import { ApiError } from "@hivemind/workspace-api/protocol";
+import { tileToken } from "@hivemind/agent-host/hooks/token";
+import { serveDrive, type DriveServer } from "@hivemind/host/drive";
+import { Grants } from "@hivemind/host/grants";
+import { cmd, hiveAsync as hive, sealedEnv } from "./helpers.js";
+import { fixtureXDG } from "./agents-fixtures.js";
+
+const unix = process.platform !== "win32";
+// sun_path is ~108 bytes; os.tmpdir() can be deep, /tmp is not.
+const dir = unix ? fs.realpathSync(fs.mkdtempSync("/tmp/hive-ctl-drive-")) : "";
+const sock = path.join(dir, "drive.sock");
+const repoA = path.join(dir, "a");
+const repoB = path.join(dir, "b");
+/** A workspace in another's folder, as a worktree's may be. */
+const nested = path.join(repoA, "sub");
+const TOKEN = "t0k3n";
+const calls: Array<{ method: string; params: unknown[]; by: Actor }> = [];
+let reads = 0;
+/** After this many agent.read calls, the turn completes. */
+let turnAfterReads = 0;
+let server: WorkspaceServer;
+let drive: DriveServer;
+// The CLI checks --agent against the agents installed; this machine has the fixture ones.
+const xdg = fixtureXDG(["claude", "codex"]);
+const env = (token = TOKEN) => ({ XDG_CONFIG_HOME: xdg, HIVE_DRIVE_SOCK: sock, HCP_TOKEN: token });
+const asAgent = () => env(tileToken(TOKEN, "hm:me-1"));
+
+const answer = (method: string, reply: (...params: unknown[]) => unknown) => [method, (from: Connection, ...params: unknown[]) => {
+  calls.push({ method, params, by: from.actor });
+  return reply(...params);
+}] as const;
+
+beforeAll(async () => {
+  for (const r of [repoA, repoB]) fs.mkdirSync(path.join(r, "sub"), { recursive: true });
+  const answers = Object.fromEntries([
+    answer("host.status", () => ({ workspaces: [repoA, nested, repoB].map((repo) => ({ repo, workspace: null })) })),
+    answer("agent.list", () => ({ seq: 3, agents: [{ tile: "w-1", agent: "worker", state: "idle" }] })),
+    answer("agent.startable", () => ({ programs: [], frames: [{ id: "f1", name: "a", machine: "here" }] })),
+    answer("agent.start", () => ({ tile: "w-2" })),
+    answer("agent.send", (tile, text) => { if (!text) throw new ApiError("BAD_REQUEST", "text required"); return { sent: tile !== "ghost" }; }),
+    answer("agent.close", (tile) => ({ closed: tile !== "ghost" })),
+    answer("agent.read", async () => {
+      if (++reads > turnAfterReads) return { text: `reply ${reads}`, finalStatus: "turn", truncated: false };
+      await new Promise((r) => setTimeout(r, 50));
+      return { text: null, finalStatus: "timeout", truncated: false };
+    }),
+    answer("agent.keys", (_t, keys) => ({ keys: (keys as string[]).length })),
+    answer("agent.rename", (_t, name) => ({ name })),
+    answer("agent.sessions", () => ({ agent: "codex", resumable: true, sessions: [] })),
+    answer("tool.open", () => ({ tile: "t-9" })),
+    answer("link.connect", () => null),
+    answer("link.disconnect", () => null),
+    answer("tile.focus", () => null),
+    answer("view.emit", (name) => (name === "ci.build" ? { id: "ev_1", delivered: true, view: "@a/valley" } : { id: "ev_3", delivered: false, view: "canvas", reason: "no-listener", buffered: true })),
+    answer("plugin.commands", () => ({ plugins: [{ plugin: "@a/progress", kind: "widget", instance: "w1", label: "Progress", commands: [{ name: "add", description: "Add a step.", args: '{ "text": string }' }] }] })),
+    answer("plugin.call", (_p, command, args, tile) => { if (command === "check") throw new ApiError("FAILED", "there is no step 7"); return { result: { echoed: args, tile: tile ?? null } }; }),
+  ]);
+  server = new WorkspaceServer([{ answers, effects: {} }], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
+  drive = serveDrive(sock, {
+    server, installToken: () => TOKEN, grants: new Grants(path.join(dir, "grants.json")), repos: () => [repoA, repoB],
+    workspaceOf: (tile) => (tile === "me-1" ? repoA : null), nameOf: (tile) => `the ${tile} agent`,
+  });
+  while (!fs.existsSync(sock)) await new Promise((r) => setTimeout(r, 10));
+});
+afterAll(() => {
+  drive?.close();
+  if (unix) fs.rmSync(dir, { recursive: true, force: true });
+});
+const last = (method: string) => calls.findLast((c) => c.method === method)!;
+
+describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
+  test("as the person, a verb acts on the open workspace this folder is in (the innermost), else the only one, else asks which; --repo names it", async () => {
+    const r = await hive(["ctl", "agents", "--json"], { cwd: path.join(repoB, "sub"), env: env() });
+    expect([r.code, r.stdout.trim().split("\n").length]).toEqual([0, 1]);
+    expect(r.json).toEqual({ seq: 3, agents: [{ tile: "w-1", agent: "worker", state: "idle" }] });
+    expect(last("agent.list").params).toEqual([repoB]);
+    await hive(["ctl", "frames", "--repo", repoA, "--json"], { cwd: dir, env: env() });
+    expect(last("agent.startable").params).toEqual([repoA]);
+    await hive(["ctl", "agents", "--json"], { cwd: nested, env: env() });
+    expect(last("agent.list").params).toEqual([nested]);
+    const which = await hive(["ctl", "agents", "--json"], { cwd: dir, env: env() });
+    expect([which.code, (which.json as { message: string }).message]).toEqual([2, `which workspace? run this inside one, or give --repo: ${repoA}, ${nested}, ${repoB}`]);
+  });
+
+  test("as an agent, by its tile's token, it drives its own workspace as itself; another is refused", async () => {
+    const r = await hive(["ctl", "spawn", "--agent", "codex", "--name", "w", "--frame", "f1", "--model", "m", "--no-report", "--supervise", "Bash, Edit", "--prompt", "go", "--json"], { cwd: dir, env: asAgent() });
+    expect([r.code, r.json]).toEqual([0, { tile: "w-2" }]);
+    expect(last("agent.start")).toMatchObject({
+      params: [repoA, { program: "codex", name: "w", frame: "f1", model: "m", prompt: "go", report: false, supervise: ["Bash", "Edit"] }],
+      by: { kind: "peer", access: "agents", tile: "me-1", client: "the me-1 agent" },
+    });
+    const elsewhere = await hive(["ctl", "spawn", "--agent", "codex", "--repo", repoB, "--json"], { env: asAgent() });
+    expect([elsewhere.code, (elsewhere.json as { code: string }).code]).toEqual([6, "FORBIDDEN"]);
+  });
+
+  test("each verb is its API method", async () => {
+    for (const args of [
+      ["send", "w-1", "hi"], ["keys", "w-1", "Down,Enter"], ["rename", "w-1", "reviewer"], ["rename", "w-1"], ["close", "w-1"], ["focus", "w-1"],
+      ["connect", "w-1", "w-2"], ["disconnect", "w-1"], ["disconnect", "w-1", "w-2"],
+      ["open-tool", "a/b/c", "--url", "https://x", "--repo", repoA], ["sessions", "codex", "--cwd", repoA, "--limit", "5"],
+    ]) {
+      const r = await hive(["ctl", ...args, "--json"], { env: env() });
+      expect(r.code, `${args.join(" ")}: ${r.stdout}${r.stderr}`).toBe(0);
+    }
+    expect(calls.slice(-11).map((c) => [c.method, ...c.params])).toEqual([
+      ["agent.send", "w-1", "hi"], ["agent.keys", "w-1", ["Down", "Enter"]], ["agent.rename", "w-1", "reviewer"], ["agent.rename", "w-1", ""],
+      ["agent.close", "w-1"], ["tile.focus", "w-1"], ["link.connect", "w-1", "w-2"], ["link.disconnect", "w-1"], ["link.disconnect", "w-1", "w-2"],
+      ["tool.open", repoA, { tool: "a/b/c", url: "https://x" }], ["agent.sessions", repoA, "codex", 5],
+    ]);
+  });
+
+  test("a bad token → exit 6 FORBIDDEN; an agent nobody runs → exit 5; a bad request → exit 2", async () => {
+    const bad = await hive(["ctl", "agents", "--json"], { env: env("wrong") });
+    expect([bad.code, (bad.json as { code: string }).code]).toEqual([6, "FORBIDDEN"]);
+    for (const verb of [["send", "ghost", "hi"], ["close", "ghost"]]) {
+      const nf = await hive(["ctl", ...verb, "--json"], { env: env() });
+      expect([nf.code, (nf.json as { code: string }).code]).toEqual([5, "NOT_FOUND"]);
+    }
+    const br = await hive(["ctl", "send", "w-1", "", "--json"], { env: env() });
+    expect([br.code, (br.json as { code: string }).code]).toEqual([2, "BAD_REQUEST"]);
+  });
+
+  test("read --timeout is a loop of short reads, exit 4 when it runs out; it returns as soon as a turn lands; --poll at once", async () => {
+    const slices = () => calls.filter((c) => c.method === "agent.read").map((c) => c.params[1]);
+    calls.length = 0; reads = 0; turnAfterReads = 1000;
+    const out = await hive(["ctl", "read", "w-1", "--timeout", "25000", "--json"], { env: env() });
+    expect([out.code, out.json]).toEqual([4, { text: null, finalStatus: "timeout", truncated: false }]);
+    expect(slices()).toEqual([10000, 10000, 5000]); // never one 25 s request
+    calls.length = 0; reads = 0; turnAfterReads = 1;
+    const turn = await hive(["ctl", "read", "w-1", "--timeout", "30000", "--json"], { env: env() });
+    expect([turn.code, turn.json, slices().length]).toEqual([0, { text: "reply 2", finalStatus: "turn", truncated: false }, 2]);
+    calls.length = 0; reads = 0; turnAfterReads = 1000;
+    const poll = await hive(["ctl", "read", "w-1", "--poll", "--json"], { env: env() });
+    expect([poll.code, slices()]).toEqual([0, [0]]);
+  });
+
+  test("agents --watch prints what happens to the workspace's agents after the list, one JSON a line, and nothing of another's: as the person, and as an agent", async () => {
+    const event = (seq: number, tile: string) => ({ seq, at: 0, kind: "turnEnded", tile, detail: "done" });
+    for (const [who, args] of [[env(), ["--repo", repoA]], [asAgent(), []]] as const) {
+      calls.length = 0;
+      const watch = spawn(...cmd(["ctl", "agents", "--watch", ...args, "--json"]), { env: { ...sealedEnv(), ...who } });
+      let out = "";
+      watch.stdout.setEncoding("utf8").on("data", (d: string) => { out += d; });
+      while (!calls.some((c) => c.method === "agent.list")) await new Promise((r) => setTimeout(r, 20));
+      // In one moment: an agent's connection hears them as one list.
+      server.publish("agent.event", repoA, event(3, "listed"));
+      server.publish("agent.event", repoB, event(4, "elsewhere"));
+      server.publish("agent.event", repoA, event(4, "w-1"));
+      for (const end = Date.now() + 5_000; !out.includes('"w-1"') && Date.now() < end;) await new Promise((r) => setTimeout(r, 20));
+      watch.kill();
+      expect(out.trim().split("\n").map((l) => JSON.parse(l))).toEqual([event(4, "w-1")]);
+    }
+  });
+
+  test("view emit: --json shapes for delivered and not listening", async () => {
+    const d = await hive(["ctl", "view", "emit", "ci.build", '{"state":"failed"}', "--json"], { env: env() });
+    expect([d.code, d.json]).toEqual([0, { id: "ev_1", delivered: true, view: "@a/valley" }]);
+    expect(last("view.emit").params).toEqual(["ci.build", { state: "failed" }]);
+    const none = await hive(["ctl", "view", "emit", "deploy.done"], { env: env() });
+    expect([none.code, none.stdout.trim()]).toEqual([0, "buffered (active view canvas isn't listening)"]);
+    const before = calls.length;
+    const bad = await hive(["ctl", "view", "emit", "ci.build", "{nope", "--json"], { env: env() });
+    expect([bad.code, (bad.json as { code: string }).code, calls.length]).toEqual([2, "USAGE", before]);
+  });
+
+  test("plugin: commands lists what runs; call sends the JSON argument and prints the answer, or the plugin's error", async () => {
+    const list = await hive(["ctl", "plugin", "commands"], { env: env() });
+    expect(list.stdout).toContain("@a/progress  (widget Progress, w1)");
+    expect(list.stdout).toContain('add                Add a step.  args: { "text": string }');
+    const ok = await hive(["ctl", "plugin", "call", "@a/progress", "add", '{"text":"milk"}', "--tile", "w1", "--json"], { env: env() });
+    expect([ok.code, ok.json]).toEqual([0, { result: { echoed: { text: "milk" }, tile: "w1" } }]);
+    expect(last("plugin.call").params).toEqual(["@a/progress", "add", { text: "milk" }, "w1"]);
+    const failed = await hive(["ctl", "plugin", "call", "@a/progress", "check", '{"index":7}', "--json"], { env: env() });
+    expect([failed.code === 0, (failed.json as { message: string }).message]).toEqual([false, "there is no step 7"]);
+    const before = calls.length;
+    const bad = await hive(["ctl", "plugin", "call", "@a/progress", "add", "{nope"], { env: env() });
+    expect([bad.code === 0, bad.stderr.includes("must be JSON"), calls.length]).toEqual([false, true, before]);
+  });
+});

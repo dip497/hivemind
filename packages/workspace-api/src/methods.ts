@@ -144,24 +144,25 @@ export interface WorkspaceMethods {
   "link.connect": (src: string, dst: string) => void;
   /** (0.23) Stop piping `src`'s replies to `dst`, or to every agent when none is named. */
   "link.disconnect": (src: string, dst?: string) => void;
-  /** (0.23) The person's, on the drive socket: what only this machine's windows and files do.
+  /** (0.23) The machine's own: the person's, and an agent's here (all but `host.join`), never a
+   *  peer's; what only this machine's windows and files do.
    *  A view event for the view shown (`name` dotted, `data` JSON), from `view` if given. */
   "view.emit": (name: string, data?: unknown, view?: string) => unknown;
   /** The commands the plugins running in a window offer. */
   "plugin.commands": () => unknown;
   /** Get a plugin running: `tool:owner/name`, `widget:@owner/name` or `view:id`. */
-  "plugin.open": (plugin: string) => unknown;
+  "plugin.open": (plugin: string, frame?: string) => unknown;
   /** Run one of a plugin's commands, and answer what it answered. */
   "plugin.call": (plugin: string, command: string, args?: unknown, tile?: string) => unknown;
   /** Bring a tile into view and give it the keyboard. */
-  "tile.focus": (tile: string) => unknown;
+  "tile.focus": (tile: string) => null;
   /** The installed views, agents, widgets or tools changed on disk: read them again. */
-  "views.rescan": () => unknown;
-  "agents.rescan": () => unknown;
-  "widgets.rescan": () => unknown;
-  "tools.rescan": () => unknown;
+  "views.rescan": () => null;
+  "agents.rescan": () => null;
+  "widgets.rescan": () => null;
+  "tools.rescan": () => null;
   /** `settings.json` changed on disk: read it again. */
-  "settings.reload": () => unknown;
+  "settings.reload": () => null;
   /** The workspaces this machine holds, with each one's id once it has one. */
   "host.status": () => { workspaces: Array<{ repo: string; workspace: string | null }> };
   /** Join a workspace someone shared, by its link. */

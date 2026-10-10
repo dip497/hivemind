@@ -10,7 +10,7 @@ import { hive } from "./helpers.js";
 let ws: string;
 let xdg: string;
 let id: string;
-const env = () => ({ XDG_CONFIG_HOME: xdg, HIVE_AGENT_ID: "tester", HIVEMIND_TILE: undefined, HIVE_HCP_SOCK: undefined });
+const env = () => ({ XDG_CONFIG_HOME: xdg, HIVE_AGENT_ID: "tester", HIVEMIND_TILE: undefined, HIVE_HCP_SOCK: undefined, HIVE_DRIVE_SOCK: undefined });
 
 beforeAll(async () => {
   ws = await fs.mkdtemp(path.join(os.tmpdir(), "hive-ctl-ws-"));
@@ -98,7 +98,7 @@ describe("hive ctl issue verbs", () => {
   });
 
   test("app not running → exit 3 UNAVAILABLE", () => {
-    const r = hive(["ctl", "list", "--json"], { cwd: ws, env: { ...env(), HIVE_HCP_SOCK: path.join(xdg, "nope.sock") } });
+    const r = hive(["ctl", "agents", "--json"], { cwd: ws, env: { ...env(), HIVE_DRIVE_SOCK: path.join(xdg, "nope.sock") } });
     expect(r.code).toBe(3);
     expect(r.json).toMatchObject({ ok: false, code: "UNAVAILABLE" });
   });

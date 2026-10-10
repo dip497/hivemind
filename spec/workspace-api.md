@@ -67,8 +67,8 @@ The first line says who connects: `{"hello": {"token", "workspace"?}}`.
   hears the events of that workspace's tiles alone. Unlike a guest's, its calls and answers name
   the workspace and its files by their paths here. It is recorded in the audit log as a peer whose
   `person` and `device` are `client:<grant id>` and whose `client` is the grant's name.
-- **An agent's tile token** (`HCP_TOKEN`) is that agent (0.23). It drives the workspace its tile
-  is in, and names no other: the host answers `{"hello": {"api", "as": {"agent", "role":
+- **An agent's tile token** (`HCP_TOKEN`) is that agent (0.23), given the socket's path as
+  `HIVE_DRIVE_SOCK`. It drives the workspace its tile is in, and names no other: the host answers `{"hello": {"api", "as": {"agent", "role":
   "agents", "workspace"}}}` and serves it as a program at the role `agents`, while its tile is
   there. What it starts is its own (`parent` in `agents.md`, its tile): a level below it, and
   reporting to it; a tool use it supervises is its to answer. It is recorded as a peer whose
@@ -287,9 +287,9 @@ other devices included, nor a program.
 | `host.join` | `link` | what joining a workspace by its link answers, as `hive join` | target the link's workspace |
 | `tile.focus` | `tile` | `null`: the tile brought forward in the window showing it | — |
 | `plugin.commands` | | the commands each plugin running in a window offers | read |
-| `plugin.open` | `plugin` (`tool:<owner>/<name>[/<tool>]`, `widget:@<owner>/<name>` or `view:<id>`) | what opening it answers: a tool's tile placed, a widget added to the board, a view switched to, so its commands can be called | target the plugin |
+| `plugin.open` | `plugin` (`tool:<owner>/<name>[/<tool>]`, `widget:@<owner>/<name>` or `view:<id>`), `frame`? (a tool's tile's) | what opening it answers: a tool's tile placed, a widget added to the board, a view switched to, so its commands can be called | target the plugin |
 | `plugin.call` | `plugin`, `command`, `args`?, `tile`? | what the plugin's command answers, run in a window | target the plugin |
-| `view.emit` | `name`, `data`?, `view`? | `null`: the event sent to the views open in the windows, or to `view`'s alone | — |
+| `view.emit` | `name`, `data`?, `view`? | `{id, delivered, view, reason?, buffered?}`: the event sent to the view open in the window, or kept for it until it listens (`view`: only while that one is open) | — |
 | `views.rescan`, `agents.rescan`, `widgets.rescan`, `tools.rescan` | | `null`: those installed read again from disk | — |
 | `settings.reload` | | `null`: `settings.json` read again | — |
 

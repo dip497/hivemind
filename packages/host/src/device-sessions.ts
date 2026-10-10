@@ -17,6 +17,7 @@ import { Duplex } from "node:stream";
 import { parseDeviceUri } from "@hivemind/core/remote-uri";
 import { DaemonEndpoint, type EndpointState } from "@hivemind/agent-host/daemon-endpoint";
 import { INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
+import { withoutControl } from "@hivemind/agents/node";
 import type { Link } from "@hivemind/workspace-host/hive-net";
 import type { AccessLists } from "@hivemind/workspace-host/access";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
@@ -48,12 +49,6 @@ export interface DeviceSessions extends SessionBackend {
   close(): void;
 }
 
-/** This machine's control-plane credentials never go to another device. */
-const ownEnvGone = (env?: Record<string, string>): Record<string, string> | undefined => {
-  if (!env) return undefined;
-  const { HCP_TOKEN: _t, HIVE_HCP_SOCK: _s, ...rest } = env;
-  return rest;
-};
 
 /** `stream` on `link` as a duplex of text: what is written goes out in frames, what comes in is
  *  read; it ends with the link, or at the frame `endsAt`. Destroyed, it closes the link, unless it
@@ -149,7 +144,7 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
     const env = opts.initialPrompt ? { ...(opts.env ?? {}), [INITIAL_PROMPT_ENV]: opts.initialPrompt } : opts.env;
     try {
       const r = await ep.spawn(
-        { tileId: opts.tileId, cwd: "", cmd: opts.cmd, cols: opts.cols, rows: opts.rows, ...(opts.attachOnly ? { noSpawn: true, liveOnly: true } : { env: ownEnvGone(env) }) },
+        { tileId: opts.tileId, cwd: "", cmd: opts.cmd, cols: opts.cols, rows: opts.rows, ...(opts.attachOnly ? { noSpawn: true, liveOnly: true } : { env: withoutControl(env) }) },
         {
           onData: (data, replay) => out.data(data, replay),
           onExit: (code, signal) => { tiles.delete(opts.tileId); out.exit(code, signal); },
@@ -188,7 +183,7 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
         const r = await Promise.race([
           ep.spawn(
             {
-              tileId: opts.tileId, cwd: at.path, cmd: opts.cmd, args: opts.args, cols: opts.cols, rows: opts.rows, env: ownEnvGone(env),
+              tileId: opts.tileId, cwd: at.path, cmd: opts.cmd, args: opts.args, cols: opts.cols, rows: opts.rows, env: withoutControl(env),
               noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly,
             },
             { onData: (data, replay) => out.data(data, replay), onExit: (code, signal) => { tiles.delete(opts.tileId); out.exit(code, signal); } },

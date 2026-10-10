@@ -78,13 +78,21 @@ const perTileName = (name: string, tileId: string): string => {
 
 /** What says which tile a process is and how it reaches the control plane: each tile's own, given
  *  at its launch, so never taken from the environment its sessions start from. */
-export const TILE_ENV = ["HIVE_HCP_SOCK", "HCP_TOKEN", "HIVEMIND_TILE", "HIVE_AGENT_ID", "HIVE_AGENT_DEPTH", SDK_ENV.sdk, SDK_ENV.sock, SDK_ENV.planSock] as const;
+export const TILE_ENV = ["HIVE_HCP_SOCK", "HIVE_DRIVE_SOCK", "HCP_TOKEN", "HIVEMIND_TILE", "HIVE_AGENT_ID", "HIVE_AGENT_DEPTH", SDK_ENV.sdk, SDK_ENV.sock, SDK_ENV.planSock] as const;
+
+/** `env` without this machine's control-plane credentials, which never go to another machine. */
+export function withoutControl(env?: Record<string, string>): Record<string, string> | undefined {
+  if (!env) return undefined;
+  const { HCP_TOKEN: _t, HIVE_HCP_SOCK: _s, HIVE_DRIVE_SOCK: _d, ...rest } = env;
+  return rest;
+}
 
 /** Every agent that reports through the control plane needs the same variables; the SDK's
  *  are there for a plugin that runs inside the agent rather than as a hook command. */
 function hcpEnv(def: AgentProviderDef, req: LaunchRequest): Record<string, string> {
   return {
     HIVE_HCP_SOCK: req.paths.hcpSock!,
+    ...(req.paths.driveSock ? { HIVE_DRIVE_SOCK: req.paths.driveSock } : {}),
     HCP_TOKEN: req.paths.hcpToken!(req.tileId), // its own: the calls it makes are known to be this tile's
     HIVEMIND_TILE: req.tileId, // the agent's own `hive ctl` calls attribute to this tile
     HIVE_AGENT_ID: def.id, // signs the Activity rows it writes

@@ -9,11 +9,11 @@ import { tmpdir } from "node:os";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { err, ok } from "../format.js";
-import { hcpCall } from "../hcp.js";
+import { driveCall } from "../drive.js";
 
 /** Ask a running app to re-read its providers. False when none is reachable. */
 async function rescanApp(): Promise<boolean> {
-  try { await hcpCall("agents.rescan", {}, 5000); return true; } catch { return false; }
+  try { await driveCall("agents.rescan", [], 5000); return true; } catch { return false; }
 }
 const afterNote = (rescanned: boolean): string =>
   rescanned ? "app rescanned" : "app not running or unreachable — restart it, or open Settings ▸ Plugins";

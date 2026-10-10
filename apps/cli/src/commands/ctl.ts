@@ -1,6 +1,6 @@
 /**
- * `hive ctl` — drive the RUNNING hivemind desktop app from the shell via the
- * Hivemind Control Plane (HCP): spawn agents on the canvas, send them input,
+ * `hive ctl` — drive the RUNNING hivemind app or `hive host` from the shell, on its drive socket
+ * (the workspace API, as the agent whose tile this runs in or the person): spawn agents, send them input,
  * read their replies, list/focus/close tiles, pipe agents together, run
  * workflows, answer approvals, report back to a parent, and open reviews.
  * Plus the issue verbs the old MCP server carried (set-state, add-comment,
@@ -27,6 +27,7 @@ import {
   type IssueState,
 } from "@hivemind/core";
 import { EXIT, HcpCliError, exitCodeFor, hcpCall, hcpStream, ownTile } from "../hcp.js";
+import { openDrive, type Drive } from "../drive.js";
 import { UnsupportedError, UsageError, boolFlag, emitArgs, durationFlag, intFlag, parseKeys, readSchedule, resolveAgent, workflowParams } from "../ctl-args.js";
 import { ensureAgentCatalog } from "../agent-catalog.js";
 import { detectWho } from "../who.js";
@@ -87,10 +88,30 @@ const tileArg = { tileId: { type: "positional", required: true, description: "ti
 
 // ── canvas ───────────────────────────────────────────────────────────────────
 
-// Inside a tile, its own workspace; anywhere else, the one the app's window shows.
-const list = sub("list", "List tiles on the canvas grouped by frame (with agent status)",
-  { frame: { type: "string", description: "one frame (id, repo name, or title); exit 5 when none answers to it" } },
-  (a) => hcpCall("tile.list", { frame: a.frame }));
+/** Run `use` on the drive socket, as whoever this is. */
+async function onDrive<T>(use: (d: Drive) => Promise<T>): Promise<T> {
+  const d = await openDrive();
+  try {
+    return await use(d);
+  } finally {
+    d.close();
+  }
+}
+
+/** The workspace a command acts on: `--repo`, else an agent's own, else of those open here the one
+ *  this folder is in, or the only one. */
+async function workspaceOf(d: Drive, repo: unknown): Promise<string> {
+  if (typeof repo === "string" && repo) return path.resolve(repo);
+  if (d.as !== "person") return d.as.workspace;
+  const open = ((await d.call("host.status", [])) as { workspaces: Array<{ repo: string }> }).workspaces.map((w) => w.repo);
+  const here = process.cwd();
+  const within = open.filter((r) => here === r || here.startsWith(r + path.sep)).sort((a, b) => b.length - a.length);
+  if (within.length) return within[0]!;
+  if (open.length === 1) return open[0]!;
+  throw new UsageError(open.length ? `which workspace? run this inside one, or give --repo: ${open.join(", ")}` : "no workspace is open: open one in the app, or `hive host add <folder>`");
+}
+
+const repoArg = { repo: { type: "string", description: "the workspace's folder (default: your own, as an agent; else the one this folder is in)" } } as const;
 
 type FeedAgent = { tile: string; agent: string; state: string; waiting?: { kind: string } };
 type FeedEvent = { seq: number; kind: string; tile: string; detail?: string };
@@ -102,46 +123,52 @@ const agentLine = (a: FeedAgent): string => `${a.tile}\t${a.agent}\t${a.state}${
 const agents = defineCommand({
   meta: { name: "agents", description: "The workspace's agents and what each waits on; --watch follows what happens to them" },
   args: {
-    repo: { type: "string", description: "the workspace's folder (default: the calling agent's own workspace)" },
+    ...repoArg,
     watch: { type: "boolean", description: "keep going: print each turn ended, wait and answer as it happens (one JSON per line with --json)" },
     ...JSON_ARG,
   },
   async run({ args }) {
     const json = !!args.json;
-    const repo = args.repo ? path.resolve(String(args.repo)) : undefined;
     try {
-      let listed = await hcpCall("agent.list", { repo }) as { seq: number; agents: FeedAgent[] };
+      const d = await openDrive();
+      const repo = await workspaceOf(d, args.repo);
+      // Heard from before the list, so nothing that happens meanwhile is missed.
+      const heard: FeedEvent[] = [];
+      let show = (e: FeedEvent) => { heard.push(e); };
+      d.on("agent.event", (at, e) => { if (at === repo) show(e as FeedEvent); });
+      let listed = await d.call("agent.list", [repo]) as { seq: number; agents: FeedAgent[] };
       if (!args.watch) {
-        if (json) return print(listed, true);
+        d.close();
+        if (json) return console.log(JSON.stringify(listed));
         console.log(listed.agents.map(agentLine).join("\n") || "no agents");
         return;
       }
       if (!json) for (const a of listed.agents) console.log(agentLine(a));
       let seq = listed.seq;
-      for (;;) {
-        await new Promise((r) => setTimeout(r, 1000));
-        const caught = await hcpCall("agent.since", { repo, seq }) as { seq: number; events: FeedEvent[] } | null;
-        if (caught === null) {
-          // Behind what the feed keeps: list again and carry on from there.
-          listed = await hcpCall("agent.list", { repo }) as typeof listed;
-          seq = listed.seq;
-          continue;
-        }
-        for (const e of caught.events) console.log(json ? JSON.stringify(e) : `${e.tile}\t${e.kind}${e.detail ? `\t${e.detail}` : ""}`);
-        seq = caught.seq;
-      }
+      show = (e) => {
+        if (e.seq <= seq) return;
+        seq = e.seq;
+        console.log(json ? JSON.stringify(e) : `${e.tile}\t${e.kind}${e.detail ? `\t${e.detail}` : ""}`);
+      };
+      for (const e of heard) show(e);
+      await d.closed;
+      throw new HcpCliError("UNAVAILABLE", "the app or host stopped", EXIT.unavailable);
     } catch (e) { fail(e, json); }
   },
 });
 
-const frames = sub("frames", "List canvas frames (id, title, repo, branch, tile count)", {},
-  () => hcpCall("tile.list_frames", {}));
+const frames = sub("frames", "The workspace's frames, where an agent may be started (id, name, machine)", repoArg,
+  (a) => onDrive(async (d) => ((await d.call("agent.startable", [await workspaceOf(d, a.repo)])) as { frames: unknown[] }).frames));
 
 const openTool = sub("open-tool", "Open an enabled tool plugin", {
   tool: { type: "positional", required: true, description: "tool id (for example hivemind/web/browser)" },
   frame: { type: "string", description: "target frame (id, repo name, or title; default: beside the calling agent, else the one selected); exit 5 when none answers to it" },
   url: { type: "string", description: "Browser URL: http, https, or about:blank" },
-}, (a) => hcpCall("tool.open", { tool: a.tool, frame: a.frame, url: a.url }));
+  ...repoArg,
+}, (a) => onDrive(async (d) => d.call("tool.open", [await workspaceOf(d, a.repo), { tool: a.tool, ...(a.frame ? { frame: a.frame } : {}), ...(a.url ? { url: a.url } : {}) }])));
+
+/** `--supervise all`, or the tools named. */
+const superviseOf = (v: string): "all" | string[] => (v === "all" ? "all" : v.split(",").map((t) => t.trim()).filter(Boolean));
 
 const spawn = sub("spawn", "Spawn an agent tile; prints { tileId, … }", {
   // Named, not listed: help is built before the agents on this machine are loaded, so a
@@ -156,35 +183,47 @@ const spawn = sub("spawn", "Spawn an agent tile; prints { tileId, … }", {
   report: { type: "boolean", description: "worker auto-reports its finished reply to the caller (--no-report to disable)" },
   supervise: { type: "string", description: "broker the worker's tool permissions to this CLI/agent: 'all', or a comma-list of tools" },
   resume: { type: "string", description: "continue this session instead of starting one — ids from `hive ctl sessions <agent>`" },
+  ...repoArg,
 }, async (a) => {
   await ensureAgentCatalog(); // --agent may name an agent added from a manifest
-  return hcpCall("tile.spawn_agent", {
-    agent: resolveAgent(a.agent), prompt: a.prompt, name: a.name, frame: a.frame, mode: a.mode, model: a.model,
-    report: boolFlag(a.report), supervise: a.supervise, resume: a.resume,
-  });
+  const program = resolveAgent(a.agent);
+  const report = boolFlag(a.report);
+  const given = { prompt: a.prompt, name: a.name, frame: a.frame, mode: a.mode, model: a.model, resume: a.resume };
+  return onDrive(async (d) => d.call("agent.start", [await workspaceOf(d, a.repo), {
+    program,
+    ...Object.fromEntries(Object.entries(given).filter(([, v]) => typeof v === "string" && v)),
+    ...(report !== undefined ? { report } : {}),
+    ...(a.supervise ? { supervise: superviseOf(String(a.supervise)) } : {}),
+  }]));
 });
 
-const sessions = sub("sessions", "An agent's past sessions, newest first, to resume with `hive ctl spawn --resume <id>`", {
+const sessions = sub("sessions", "An agent's past sessions in a folder, newest first, to resume with `hive ctl spawn --resume <id>`", {
   agent: { type: "positional", required: false, description: "agent id (default: your default agent)" },
-  cwd: { type: "string", description: "only sessions started in this folder (default: the current one)" },
-  all: { type: "boolean", description: "sessions from every folder" },
+  cwd: { type: "string", description: "the folder they were started in (default: the current one)" },
   limit: { type: "string", description: "at most this many (default 100)" },
 }, async (a) => {
   await ensureAgentCatalog();
-  return hcpCall("agent.sessions", {
-    agent: resolveAgent(a.agent as string | undefined),
-    ...(a.all ? {} : { cwd: path.resolve(a.cwd ?? process.cwd()) }),
-    limit: intFlag(a.limit, "limit", 100),
-  });
+  const program = resolveAgent(a.agent as string | undefined);
+  const limit = intFlag(a.limit, "limit", 100);
+  return onDrive((d) => d.call("agent.sessions", [path.resolve(a.cwd ?? process.cwd()), program, limit]));
 });
+
+const notFound = (tile: unknown) => new HcpCliError("NOT_FOUND", `no agent runs in tile ${String(tile)}`, EXIT.notFound);
 
 const send = sub("send", "Send text to an agent tile (submits it as a prompt)",
   { ...tileArg, text: { type: "positional", required: true } },
-  (a) => hcpCall("agent.send", { tileId: a.tileId, text: a.text }));
+  (a) => onDrive(async (d) => {
+    const r = await d.call("agent.send", [a.tileId, a.text]) as { sent: boolean };
+    if (!r.sent) throw notFound(a.tileId);
+    return r;
+  }));
 
 const keys = sub("keys", "Send key tokens to a tile's TUI (comma-separated, e.g. Down,Enter)",
   { ...tileArg, keys: { type: "positional", required: true, description: "comma-separated tokens: Down,Enter,Esc,Tab,1,…" } },
-  (a) => hcpCall("agent.send_keys", { tileId: a.tileId, keys: parseKeys(String(a.keys)) }));
+  (a) => {
+    const keys = parseKeys(String(a.keys));
+    return onDrive((d) => d.call("agent.keys", [a.tileId, keys]));
+  });
 
 /** Wire ceiling for one read slice: the slice plus slack for the transcript flush. */
 const READ_SLACK_MS = 5_000;
@@ -196,30 +235,36 @@ const read = sub("read", "Wait for an agent's turn to finish and print its reply
   poll: { type: "boolean", description: "don't wait: return the current turn state immediately (always exit 0)" },
 }, async (a) => {
   const total = a.poll ? 0 : durationFlag(a.timeout, "timeout", READ_DEFAULT_MS);
-  let last: unknown = null;
-  for (const slice of readSchedule(total)) {
-    last = await hcpCall("agent.read", { tileId: a.tileId, timeoutMs: slice }, slice + READ_SLACK_MS);
-    const status = (last as { finalStatus?: string }).finalStatus;
-    if (status === "turn") return last;
-    // Closed while we waited: no turn is coming, so the rest of the wait would be for nothing.
-    if (status === "closed") return { __exit: EXIT.notFound, result: last };
-  }
-  return a.poll ? last : { __exit: EXIT.timeout, result: last };
+  return onDrive(async (d) => {
+    let last: unknown = null;
+    for (const slice of readSchedule(total)) {
+      last = await d.call("agent.read", [a.tileId, slice], slice + READ_SLACK_MS);
+      const status = (last as { finalStatus?: string }).finalStatus;
+      if (status === "turn") return last;
+      // Closed while we waited: no turn is coming, so the rest of the wait would be for nothing.
+      if (status === "closed") return { __exit: EXIT.notFound, result: last };
+    }
+    return a.poll ? last : { __exit: EXIT.timeout, result: last };
+  });
 });
 
-const focus = sub("focus", "Focus a tile", tileArg, (a) => hcpCall("tile.focus", { tileId: a.tileId }));
-const close = sub("close", "Close a tile", tileArg, (a) => hcpCall("tile.close", { tileId: a.tileId }));
-const rename = sub("rename", "Name a tile; with no name, take its name away",
+const focus = sub("focus", "Bring a tile forward in the window", tileArg, (a) => onDrive((d) => d.call("tile.focus", [a.tileId])));
+const close = sub("close", "Close an agent: its session ends and its tile goes", tileArg, (a) => onDrive(async (d) => {
+  const r = await d.call("agent.close", [a.tileId]) as { closed: boolean };
+  if (!r.closed) throw notFound(a.tileId);
+  return r;
+}));
+const rename = sub("rename", "Name an agent; with no name, take its name away",
   { ...tileArg, name: { type: "positional", required: false, description: "the name every surface shows it by" } },
-  (a) => hcpCall("tile.rename", { tileId: a.tileId, name: a.name ?? "" }));
+  (a) => onDrive((d) => d.call("agent.rename", [a.tileId, a.name ?? ""])));
 
 const connect = sub("connect", "Pipe src agent's replies into dst agent's input",
   { src: { type: "positional", required: true }, dst: { type: "positional", required: true } },
-  (a) => hcpCall("tile.connect", { srcTileId: a.src, dstTileId: a.dst }));
+  (a) => onDrive((d) => d.call("link.connect", [a.src, a.dst])));
 
 const disconnect = sub("disconnect", "Remove pipes from src (optionally only to one dst)",
-  { src: { type: "positional", required: true }, dst: { type: "positional" } },
-  (a) => hcpCall("tile.disconnect", { srcTileId: a.src, dstTileId: a.dst }));
+  { src: { type: "positional", required: true }, dst: { type: "positional", required: false } },
+  (a) => onDrive((d) => d.call("link.disconnect", a.dst ? [a.src, a.dst] : [a.src])));
 
 const workflow = sub("workflow", "Run a multi-agent workflow (fanout | pipeline | mapreduce) of visible worker tiles; blocks until all replies are gathered", {
   shape: { type: "string", default: "fanout", description: "fanout | pipeline | mapreduce" },
@@ -360,7 +405,7 @@ const deleteIssueCmd = sub("delete-issue", "Delete an issue file (irreversible)"
 const listWorkspacesCmd = sub("list-workspaces", "List every registered workspace (prefix, title, repo)", {},
   async () => (await listWorkspaces({ persistPrune: true })).map((w) => ({ prefix: w.prefix, title: w.title, repo: w.repo })));
 
-type EmitResult = { ok: true; id: string; delivered: boolean; view: string; reason?: "no-listener" | "not-active"; buffered?: boolean };
+type EmitResult = { id: string; delivered: boolean; view: string; reason?: "no-listener" | "not-active"; buffered?: boolean };
 
 const viewEmit = defineCommand({
   meta: { name: "emit", description: "Send a named JSON event to the active view (`-` reads the JSON from stdin)" },
@@ -374,13 +419,7 @@ const viewEmit = defineCommand({
     const json = !!args.json;
     try {
       const ev = emitArgs(args.name, args.payload, () => fs.readFileSync(0, "utf8"));
-      let r: EmitResult;
-      try {
-        r = await hcpCall("view.emit", { ...ev, ...(args.view ? { view: String(args.view) } : {}) }) as EmitResult;
-      } catch (e) {
-        if (e instanceof HcpCliError && e.code === "UNKNOWN_METHOD") throw new HcpCliError("UNKNOWN_METHOD", "this Hivemind predates view events (needs view protocol 1.3)", e.exit);
-        throw e;
-      }
+      const r = await onDrive((d) => d.call("view.emit", [ev.name, ev.data, ...(args.view ? [String(args.view)] : [])])) as EmitResult;
       if (json) console.log(JSON.stringify(r));
       else console.log(r.delivered ? `delivered to ${r.view}` : r.reason === "not-active" ? `buffered for ${String(args.view)} (active view is ${r.view})` : `buffered (active view ${r.view} isn't listening)`);
     } catch (e) { fail(e, json); }
@@ -400,7 +439,7 @@ const pluginCommands = defineCommand({
   async run({ args }) {
     const json = !!args.json;
     try {
-      const r = await hcpCall("plugin.commands", {}) as PluginCommands;
+      const r = await onDrive((d) => d.call("plugin.commands", [])) as PluginCommands;
       if (json) { console.log(JSON.stringify(r)); return; }
       if (!r.plugins.length) { console.log("no running plugin has commands"); return; }
       for (const p of r.plugins) {
@@ -428,7 +467,7 @@ const pluginCall = defineCommand({
       if (raw !== undefined && raw !== "") {
         try { payload = JSON.parse(String(raw)); } catch { throw new UsageError("the argument must be JSON, e.g. '{\"text\":\"milk\"}'"); }
       }
-      const r = await hcpCall("plugin.call", { plugin: String(args.plugin), command: String(args.command), args: payload, ...(args.tile ? { tile: String(args.tile) } : {}) }) as { result: unknown };
+      const r = await onDrive((d) => d.call("plugin.call", [String(args.plugin), String(args.command), payload, ...(args.tile ? [String(args.tile)] : [])])) as { result: unknown };
       console.log(json ? JSON.stringify(r) : typeof r.result === "string" ? r.result : JSON.stringify(r.result, null, 2));
     } catch (e) { fail(e, json); }
   },
@@ -444,7 +483,7 @@ const pluginOpen = defineCommand({
   async run({ args }) {
     const json = !!args.json;
     try {
-      const r = await hcpCall("plugin.open", { plugin: String(args.plugin), ...(args.frame ? { frame: String(args.frame) } : {}) }) as { tileId?: string; widget?: string; view?: string };
+      const r = await onDrive((d) => d.call("plugin.open", [String(args.plugin), ...(args.frame ? [String(args.frame)] : [])])) as { tileId?: string; widget?: string; view?: string };
       console.log(json ? JSON.stringify(r) : r.tileId ? `opened tile ${r.tileId}` : r.widget ? `added widget ${r.widget}` : `switched to view ${r.view}`);
     } catch (e) { fail(e, json); }
   },
@@ -458,7 +497,7 @@ const plugin = defineCommand({
 export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/workflow/report) and the issue verbs agents use" },
   subCommands: {
-    list, agents, frames, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, report, "open-review": openReview,
+    agents, frames, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, report, "open-review": openReview,
     focus, close, rename, connect, disconnect, view, plugin,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,

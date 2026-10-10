@@ -67,3 +67,9 @@ export function readOrCreateToken(userDataDir: string): string {
 export function hcpSockPath(userDataDir: string): string {
   return ipcPath(userDataDir, "hcp.sock");
 }
+
+/** Where programs, `hive ctl` and agents drive this machine (spec/workspace-api.md "Drive
+ *  socket"), beside `hcp.sock`; agents receive it as HIVE_DRIVE_SOCK. */
+export function driveSockPath(userDataDir: string): string {
+  return ipcPath(userDataDir, "drive.sock");
+}

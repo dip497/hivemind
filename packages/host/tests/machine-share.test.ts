@@ -296,7 +296,7 @@ test("let type by this machine's person, what the host types reaches what it wat
 
 test("let run agents here by this machine's person, the host starts the session of a tile it put in a frame of theirs here, in that frame's folder, running what the document says, hears of it and ends it; one their copy holds a moment later is waited for; it starts nothing it only watches, nor what is in no frame of theirs, nor once that is taken back", { skip: !unix, timeout: 90_000 }, async () => {
   const m = await machine([], {
-    "hm:planted": sh("echo planted-$((40+2)) $X | tee planted.txt; echo token-$HCP_TOKEN > token.txt; exec sleep 60"),
+    "hm:planted": sh("echo planted-$((40+2)) $X | tee planted.txt; echo token-$HCP_TOKEN-$HIVE_DRIVE_SOCK > token.txt; exec sleep 60"),
     "hm:watched": sh("touch watched-ran; exec sleep 60"),
     "hm:later": sh("touch later-ran; exec sleep 60"),
   });
@@ -312,13 +312,13 @@ test("let run agents here by this machine's person, the host starts the session 
   // Asked for at once: what the host only shows, and what is in no frame of theirs, start nothing.
   const watching = m.watch("hm:watched", { attachOnly: true });
   const elsewhere = m.watch("hm:not-framed");
-  const w = m.watch("hm:planted", { env: { X: "from-host", HCP_TOKEN: "host-secret" } });
+  const w = m.watch("hm:planted", { env: { X: "from-host", HCP_TOKEN: "host-secret", HIVE_DRIVE_SOCK: "/host/drive.sock" } });
   assert.ok((await w.started).pid > 0, "started here");
   assert.ok(await until(() => read(path.join(m.dir, "planted.txt")) === "planted-42 from-host"), "in its folder, as the document says, with what the host gives it");
   assert.ok(await until(() => w.seen.data.includes("planted-42 from-host")), "watched from the host");
   assert.equal(fs.existsSync(path.join(m.dir, "host-cmd-ran")), false, "never the host's own command");
   assert.ok(await until(() => read(path.join(m.dir, "token.txt")).startsWith("token-")));
-  assert.equal(read(path.join(m.dir, "token.txt")).includes("host-secret"), false, "never the host's control-plane credentials");
+  assert.equal(/host-secret|host\/drive/.test(read(path.join(m.dir, "token.txt"))), false, "never the host's control-plane credentials");
   // An agent the host gives a task to starts on it.
   const agent = m.watch("hm:agent", { initialPrompt: "Host work" });
   assert.ok((await agent.started).pid > 0);

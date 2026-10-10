@@ -428,6 +428,8 @@ export interface ProviderSpawnContext {
   /** The SDK a plugin's own hook scripts load (`HIVE_SDK`). */
   sdkPath?: string;
   hcpSock?: string;
+  /** Where the agent drives its workspace (the workspace API's drive socket). */
+  driveSock?: string;
   /** The control-plane token a tile's agent is given: its own, which names the tile. */
   hcpToken?: (tile: string) => string;
   /** Provider-private paths, keyed by provider id — whatever that provider's

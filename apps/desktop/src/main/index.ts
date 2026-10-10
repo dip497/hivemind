@@ -70,7 +70,7 @@ import { ControlPlane } from "@hivemind/host/control/plane";
 import { REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
 import type { ReadScreen } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
-import { hcpSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
+import { driveSockPath, hcpSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { ApiError } from "@hivemind/workspace-api/protocol";
 import { appViewsDir, handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog, viewSdk } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, onSettingsChange, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
@@ -1904,7 +1904,7 @@ function startHcpControlPlane(): void {
   control.listen(hcpSockPath(app.getPath("userData")), (err: Error) => pushAppError(`Agent control plane is off: ${err.message}. \`hive ctl\` cannot reach this app.`, "hcp"));
   // Programs drive workspaces here through the workspace API, held to what they were granted.
   try {
-    serveDrive(ipcPath(app.getPath("userData"), "drive.sock"), {
+    serveDrive(driveSockPath(app.getPath("userData")), {
       server: workspaceServer,
       installToken: () => readOrCreateToken(app.getPath("userData")),
       grants: grants(),

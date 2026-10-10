@@ -5,7 +5,7 @@ setDefaultTimeout(60_000);
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { cmd, hive, hiveAsync, type Run } from "./helpers.js";
+import { cmd, hive, hiveAsync, type Run, sealedEnv } from "./helpers.js";
 import { routeKeys } from "../src/commands/attach.js";
 import { renderSessions } from "../src/commands/ps.js";
 import type { SessionInfo } from "../src/pty-client.js";
@@ -41,7 +41,7 @@ describe.skipIf(!unix)("daemon + sessions", () => {
   test.skipIf(!python)("attach from a phone-sized tty: type, see output, own the size, detach", () => {
     expect(run("run", "--id", "t-attach", "--json", "--", "sh").code).toBe(0);
     const r = spawnSync("python3", [path.join(import.meta.dir, "fixtures", "pty-drive.py"), "45", "30", "1.5",
-      "echo HI-$((6*7)); stty size\\r\\x00\\x02d", "--", ...cmd(["attach", "t-att"]).flat()], { env: { ...process.env, ...env }, encoding: "utf8", timeout: 40_000 });
+      "echo HI-$((6*7)); stty size\\r\\x00\\x02d", "--", ...cmd(["attach", "t-att"]).flat()], { env: { ...sealedEnv(), ...env }, encoding: "utf8", timeout: 40_000 });
     expect(r.stdout).toContain("HI-42");
     expect(r.stdout).toContain("30 45");
     expect(r.stdout).toContain("[detached from t-attach]");

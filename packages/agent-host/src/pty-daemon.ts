@@ -35,7 +35,7 @@ import { SDK_FILE, sdkSource } from "@hivemind/agent-sdk";
 import { ScreenWatcher } from "./screen-status.js";
 import { StatusStore } from "./status-store.js";
 import { cleanName } from "@hivemind/agents";
-import { holderOf, readOrCreateToken, hcpSockPath, tileToken } from "./hooks/token.js";
+import { driveSockPath, holderOf, readOrCreateToken, hcpSockPath, tileToken } from "./hooks/token.js";
 
 // Lazy: node-pty must never be evaluated inside the compiled `hive` (see bun-pty.ts).
 const spawnPty: (file: string, args: string[] | string, opts: { cwd: string; cols: number; rows: number; name: string; env: Record<string, string> }) => {
@@ -158,6 +158,7 @@ const providerCtx = {
   eventHookPath,
   sdkPath,
   hcpSock,
+  driveSock: driveSockPath(userDataDir),
   hcpToken: (tile: string) => tileToken(installToken, tile),
 };
 let providerPaths: Record<string, Record<string, string>> = {};
