@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { app } from "electron";
 import { handle, handleEffect } from "./app-ipc.js";
-import { appMeetsMinVersion, catalogAgentNeedsUpdate, fetchCatalog, fetchReadme, stageEntry, type CatalogEntry } from "@hivemind/core/plugin-catalog";
+import { appMeetsMinVersion, catalogAgentNeedsUpdate, catalogRepoHolds, fetchCatalog, fetchReadme, stageEntry, type CatalogEntry } from "@hivemind/core/plugin-catalog";
 import { installAgent, readAgentManifest, removeAgent, userAgentsDir, AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
 import { findBin, verifyAgent } from "@hivemind/agents/discover";
 import { getSettings, patchSettingsPath } from "./settings-store.js";
@@ -236,13 +236,18 @@ export async function autoUpdateCatalogAgents(listed: CatalogEntry[]): Promise<A
   for (const entry of listed) {
     if (entry.type !== "agent") continue;
     const dir = path.join(userAgentsDir(), entry.id);
-    let have: string;
-    try { have = sha256(await readFile(path.join(dir, AGENT_MANIFEST_FILE))); } catch { continue; }
+    let body: Buffer;
+    try { body = await readFile(path.join(dir, AGENT_MANIFEST_FILE)); } catch { continue; }
+    const have = sha256(body);
     const recorded = await readFile(path.join(dir, CATALOG_MARK), "utf8").then((s) => s.trim(), () => null);
+    const fromCatalog = settings.fromCatalog.includes(entry.id);
     const installed = await readAgentManifest(path.join(dir, AGENT_MANIFEST_FILE), { source: "user" });
+    // Nothing says where an outdated copy came from: its bytes do.
+    const listedSha = entry.files.find((f) => f.path === AGENT_MANIFEST_FILE)?.sha256;
+    const published = !fromCatalog && recorded === null && listedSha !== have && await catalogRepoHolds(entry, body);
     if (!catalogAgentNeedsUpdate(entry, {
-      fromCatalog: settings.fromCatalog.includes(entry.id), manifestSha: have, recordedSha: recorded,
-      appVersion: app.getVersion(), broken: !!installed.error,
+      fromCatalog, manifestSha: have, recordedSha: recorded,
+      appVersion: app.getVersion(), broken: !!installed.error, published,
     })) continue;
     let stage: string | null = null;
     try {

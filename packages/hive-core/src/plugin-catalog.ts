@@ -218,19 +218,39 @@ export { appMeetsMinVersion };
 
 /** Whether an installed agent should become the catalog's current one. Two cases: it is
  *  `broken` — this app refuses its manifest, so it is doing nothing at all and the catalog's
- *  copy can only be better — or the catalog put it there and nobody edited it since
- *  (`recordedSha` is the manifest hash the catalog installed, null for an install from before
- *  that was recorded). Either way this app must be able to run what the catalog lists. */
+ *  copy can only be better — or it is the catalog's copy and nobody edited it since: recorded
+ *  so (`recordedSha` is the manifest hash the catalog installed, null for an install from before
+ *  that was recorded), or `published`, its bytes a version the catalog published. Either way
+ *  this app must be able to run what the catalog lists. */
 export function catalogAgentNeedsUpdate(entry: CatalogEntry, installed: {
   fromCatalog: boolean; manifestSha: string; recordedSha: string | null; appVersion: string;
   /** The installed manifest does not load in this app. */
   broken?: boolean;
+  /** The installed manifest is byte for byte a file of the catalog's repository (catalogRepoHolds). */
+  published?: boolean;
 }): boolean {
   if (entry.type !== "agent") return false;
   if (!appMeetsMinVersion(installed.appVersion, entry.minAppVersion)) return false;
   if (installed.broken) return true;
-  if (!installed.fromCatalog) return false;
   const want = entry.files.find((f) => f.path === AGENT_MANIFEST_FILE)?.sha256;
   if (!want || want === installed.manifestSha) return false;
+  if (installed.published) return true;
+  if (!installed.fromCatalog) return false;
   return installed.recordedSha === null || installed.recordedSha === installed.manifestSha;
+}
+
+/** Whether `body` is a file the catalog's repository holds in some commit. A copy nobody recorded
+ *  installing (an older app's, or `hive agents install`'s) is then the catalog's own, untouched;
+ *  a copy someone edited is not. GitHub names a file's bytes by their git blob id. */
+export async function catalogRepoHolds(entry: CatalogEntry, body: Uint8Array): Promise<boolean> {
+  const repo = entry.source?.match(/^https:\/\/raw\.githubusercontent\.com\/([\w.-]+\/[\w.-]+)\//)?.[1];
+  if (!repo) return false;
+  const blob = createHash("sha1").update(`blob ${body.length}\0`).update(body).digest("hex");
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/git/blobs/${blob}`,
+      { method: "HEAD", signal: AbortSignal.timeout(TIMEOUT_MS), redirect: "error", headers: { "user-agent": "hivemind" } });
+    return res.status === 200;
+  } catch {
+    return false;
+  }
 }
