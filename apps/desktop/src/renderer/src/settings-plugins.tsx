@@ -3,6 +3,7 @@ import { setViewMode } from "./workspace/view-mode-store";
 import { Check, ExternalLink, LayoutGrid, RefreshCw } from "./components/icons";
 import { iconFromManifest } from "@hivemind/agents";
 import { Button } from "./components/ui/button";
+import { Loading } from "./components/ui/loading";
 import { useCommunityReport } from "./workspace/views/community/registry";
 import { syncAgentPlugins, useAgentEntries } from "./agent-plugins";
 import { SvgMark } from "./agents";
@@ -118,7 +119,7 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
       <p>Could not load the plugin catalog: {loadError}</p>
       <div className="settings-actions"><Button size="sm" variant="outline" onClick={load}>Try again</Button></div>
     </div>}
-    {!entries && !loadError && <p role="status" className="settings-note">Loading the catalog…</p>}
+    {!entries && !loadError && <Loading label="Loading the catalog" />}
     {entries && !shown.length && <p className="settings-empty">
       {q ? <>No plugins on HiveHub match “{query}”.</>
         : kind !== "all" ? `No ${kind} plugins have been published yet.` : "Nothing has been published yet."}

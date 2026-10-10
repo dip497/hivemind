@@ -6,6 +6,7 @@ import type { ViewScreen } from "@hivemind/workspace-api/views";
 import type { ViewPackageInfo } from "../../../../../shared/ipc";
 import type { WorkspaceViewProps } from "../../workspace-view";
 import { SurfaceSlots } from "./surface-slots";
+import { Loading } from "../../../components/ui/loading";
 import { readTheme } from "../../plugin-theme";
 
 export function RemoteCommunityView({ pkg, model, commands }: WorkspaceViewProps & { pkg: ViewPackageInfo }) {
@@ -74,6 +75,6 @@ export function RemoteCommunityView({ pkg, model, commands }: WorkspaceViewProps
     <SurfaceSlots rects={rects} width={root.current?.clientWidth ?? 0} names={nameOf} commands={commands}
       onUndock={(tileId) => { setRects((old) => old.filter((item) => item.tileId !== tileId)); deliver({ type: "undock", tileId }); }} />
     {error && <div role="alert" className="absolute inset-0 grid place-items-center text-[var(--color-fg2)]">{error}</div>}
-    {!ready && !error && <div className="pointer-events-none absolute inset-0 grid place-items-center text-[var(--color-fg2)]">Loading {pkg.manifest?.name ?? pkg.id}…</div>}
+    {!ready && !error && <Loading className="pointer-events-none absolute inset-0" label={`Loading ${pkg.manifest?.name ?? pkg.id}`} />}
   </div>;
 }

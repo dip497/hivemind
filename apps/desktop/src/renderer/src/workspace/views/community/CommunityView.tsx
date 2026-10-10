@@ -23,6 +23,7 @@ import { disableCommunityView } from "./registry";
 import { edgeBandClip } from "./edge-band";
 import { RemoteCommunityView } from "./RemoteCommunityView";
 import { SurfaceSlots } from "./surface-slots";
+import { Loading } from "../../../components/ui/loading";
 
 /** The host for one package. Rendered through the lazy wrapper in registry.ts
  *  (`pkg` is fixed per registered view; the props are the view contract). */
@@ -140,11 +141,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
         />
         <SurfaceSlots rects={rects} width={hostBox.w} names={nameOf} commands={commands} onUndock={undock} />
         {dialogs}
-        {!ready && (
-          <div className="pointer-events-none absolute inset-0 grid place-items-center text-[12px] text-[var(--color-fg3)]">
-            Loading {manifest.name}…
-          </div>
-        )}
+        {!ready && <Loading className="pointer-events-none absolute inset-0" label={`Loading ${manifest.name}`} />}
       </div>
       </div>
     );

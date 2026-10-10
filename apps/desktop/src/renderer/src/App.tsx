@@ -14,6 +14,8 @@ import { toast } from "sonner";
 import { UPDATE_START, UPDATE_STEPS, updateProgress, type UpdateProgress } from "../../shared/update-progress";
 import { Bell, ExternalLink, Spinner, X, Palette, PanelsTopLeft, Bot, Keyboard, Info } from "./components/icons";
 import { Button } from "./components/ui/button";
+import { Loading } from "./components/ui/loading";
+import { preloadable } from "./lib/preloadable";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
 import { Switch } from "./components/ui/switch";
@@ -31,7 +33,7 @@ import { flushSettings, patchSettings, saveSettingsNow } from "./settings-store"
 import { useSettingsNav } from "./settings-nav";
 import { getNotificationSettings, setNotificationSettingsCache, subscribeNotificationSettings, saveNotificationSettings } from "./notification-settings";
 import type { NotificationSettings } from "../../shared/ipc";
-const SettingsPages = lazy(() => import("./settings-panels"));
+const SettingsPages = preloadable(() => import("./settings-panels").then((m) => m.default));
 // Sharing's dialogs load when opened: they are nothing the first frame draws.
 const MakePluginDialog = lazy(() => import("./plugins/MakePlugin").then((m) => ({ default: m.MakePluginDialog })));
 const PeopleDialog = lazy(() => import("./multiplayer/people-dialog").then((m) => ({ default: m.PeopleDialog })));
@@ -183,6 +185,11 @@ export function App() {
       off?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Settings' code is fetched while nothing else is happening, so opening it never waits.
+  useEffect(() => {
+    const id = requestIdleCallback(() => void SettingsPages.preload());
+    return () => cancelIdleCallback(id);
   }, []);
   const root = project?.root ?? null;
   const cwd = project?.cwd ?? "";
@@ -368,7 +375,7 @@ export function App() {
   }, []);
 
   if (isLoading) {
-    return <div className="grid place-items-center h-screen text-[var(--color-fg3)]">loading…</div>;
+    return <Loading className="h-screen" label="Opening the workspace" />;
   }
 
   return (
@@ -726,7 +733,7 @@ function SettingsModal({
 
         {/* A page that fails is that page's failure, not the app's: the rest of Settings stays. */}
         <TileErrorBoundary key={page} label="This settings page">
-          <Suspense fallback={<p role="status" className="settings-note">Loading preferences…</p>}><SettingsPages page={page} navigate={go} /></Suspense>
+          <Suspense fallback={<Loading label="Loading Settings" />}><SettingsPages page={page} navigate={go} /></Suspense>
         </TileErrorBoundary>
 
           </div>

@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Changed: opening Settings the first time no longer waits on its code (about 0.6 s on a busy machine, now about 0.1 s): it is fetched while the app is idle. A wait shorter than 0.3 s shows nothing; a longer one shows a spinner and what it is waiting for, the same everywhere.
 - Fixed: Settings pages that said a thing twice or drew it twice: Programs' title and first heading were the same words, About showed "Checking…" as its status and as its button, and Shortcuts ended a group with two rules. Share's "anyone with the link" is a switch like every other setting, not a bare checkbox.
 - Changed: in Settings ▸ Plugins, the agent that is not the default offers "Make default" (a view, "Use") when you point at its row, instead of an empty circle in a box.
 - Fixed: Settings opened at a section (Plugins from the rail) put the keyboard on Profile; it starts on the section it opened at.

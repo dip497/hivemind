@@ -43,6 +43,31 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
+// First in the file: it needs Settings never opened yet.
+test("Settings' code is fetched while the app is idle, so its first open shows no loading", async () => {
+  const cdp = await page.context().newCDPSession(page);
+  const scripts: string[] = [];
+  cdp.on("Debugger.scriptParsed", (e) => scripts.push(e.url));
+  // Enabling replays every script parsed so far.
+  await cdp.send("Debugger.enable");
+  const chunk = () => scripts.find((u) => /settings-panels-[^/]*\.js$/.test(u));
+  await expect.poll(chunk, { message: "Settings' chunk is fetched before anyone opens it" }).toBeTruthy();
+  await cdp.send("Debugger.disable");
+  // The same module record: resolves once it has run; the timeout lets the app's own callbacks finish.
+  await page.evaluate(async (u) => { await import(u); await new Promise((r) => setTimeout(r)); }, chunk()!);
+  await page.evaluate(() => {
+    const w = window as unknown as { loadingSeen: number };
+    w.loadingSeen = 0;
+    new MutationObserver(() => { if (document.querySelector('.settings-dialog [role="status"]')) w.loadingSeen++; })
+      .observe(document.body, { childList: true, subtree: true });
+  });
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "appearance" } })));
+  await expect(page.locator(".settings-dialog [data-preset-select]").first()).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { loadingSeen: number }).loadingSeen)).toBe(0);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
 test("settings has a focused dialog, view-specific automatic toolbar, and independent extension management", async () => {
   await settings("view:canvas");
   await expect(page.getByRole("dialog")).toBeVisible();

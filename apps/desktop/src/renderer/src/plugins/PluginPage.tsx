@@ -8,6 +8,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { ArrowLeft, ExternalLink, LayoutGrid } from "../components/icons";
 import { isPluginEnabled, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
+import { Loading } from "../components/ui/loading";
 import { Switch } from "../components/ui/switch";
 import { useSettingsNavigate } from "../settings-panels";
 import { setPluginEnabled, setPluginOption, useSettings } from "../settings-store";
@@ -90,7 +91,7 @@ export function PluginPage({ kind, id }: { kind: string; id: string }) {
       <div role="tabpanel" aria-label={TAB_LABEL[tab]}>
         {tab === "settings" && <PluginSettings p={p} />}
         {tab === "readme" && <section aria-label="Read me" className="plugin-readme">
-          {readme.loading ? <p role="status" className="settings-note">Loading its README…</p>
+          {readme.loading ? <Loading label="Loading its README" />
             : readme.text ? <Suspense fallback={null}><MarkdownPreview source={readme.text} className="md-preview" /></Suspense>
             : <p className="settings-empty">It has no README.</p>}
         </section>}

@@ -27,6 +27,7 @@ import {
 import { GripVertical, Play, RefreshCw, Search, SlidersHorizontal, ChevronUp, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Maximize, X } from "./components/icons";
 import { ReviewPopover, CommentBox, ActionToolbar, ReviewAnnotation, composerAnchor } from "./review-ui";
 import { Button } from "./components/ui/button";
+import { Loading } from "./components/ui/loading";
 import { MenuItem } from "./components/ui/menu-item";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { FullscreenShell } from "./tile-fullscreen";
@@ -1105,7 +1106,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           </div>
         )}
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden" data-pierre-tile>
-          {statusLoading && <div className="p-3 text-[11px] text-[var(--color-fg3)]">loading git status…</div>}
+          {statusLoading && <Loading label="Reading git status" />}
           {statusError && (
             <div className="p-3 text-[11px] font-mono text-[var(--color-err)]">
               <div className="font-semibold mb-1">git status failed</div>
