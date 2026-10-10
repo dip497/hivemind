@@ -277,8 +277,9 @@ Nobody answering within 170 s is a no. A workspace whose rule is `invite` asks n
 | `store.undo` | `repo` | whether the client's last board edit was taken back | likewise |
 | `store.redo` | `repo` | whether it was made again | likewise |
 
-The person's own machine, theirs alone at a window or on the drive socket (0.23): no peer, program
-or agent asks these.
+The machine's own methods (0.23): the person's, at a window or on the drive socket, and an agent's
+on this machine, as on the control plane, but `host.join`. No peer asks them, the person's own
+other devices included, nor a program.
 
 | Method | Params | Result | Recorded as |
 |---|---|---|---|

@@ -54,7 +54,7 @@ export interface PeerOf {
 const refused = (message: string): Answer => ({ error: { code: "FORBIDDEN", message } });
 
 /** Methods and notices whose first param names a tile. */
-const BY_TILE = /^(terminal\.(write|show|resize|flow|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.(answer|send|interrupt|close|diff|conversation|rename|keys|read)|link\.(connect|disconnect))$/;
+const BY_TILE = /^(terminal\.(write|show|resize|flow|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.(answer|send|interrupt|close|diff|conversation|rename|keys|read)|link\.(connect|disconnect)|tile\.focus)$/;
 /** Methods and notices whose first param names the workspace, or a place in it (its `.hivemind`). */
 const BY_WORKSPACE = /^(store|git|worktree|file|issue|review|people|frame)\.|^(plan\.list|agent\.(list|since|sessions)|presence\.set|widget\.(all|draw|run|release|asset|packages|press)|agent\.(startable|start)|tool\.open)$/;
 /** Methods whose second param names the workspace, after what they open there (a view, P8). */
@@ -217,7 +217,7 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
   const connection: Connection = {
     actor: peer.actor,
     // What a view it opens may do is what the peer may (P8): its role, and what its device asks.
-    may: (method) => (!peer.allows || peer.allows(method, [])) && mayCall(peer.actor.access, method),
+    may: (method) => (!peer.allows || peer.allows(method, [])) && mayCall(peer.actor, method),
     send: (event) => {
       const out = outbound(event);
       if (!out) return;
@@ -240,7 +240,7 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     const attaching = method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true;
     if (peer.allows && !(typeof method === "string" && peer.allows(method, params))) return `${String(method)} is not open to this device`;
     if (method === "terminal.open" && !peer.holds(String((params[0] as { tileId?: unknown } | null)?.tileId))) return "that tile is not of this workspace";
-    if (typeof method !== "string" || !(attaching || mayCall(peer.actor.access, method))) return `${String(method)} is not open to your role on this workspace`;
+    if (typeof method !== "string" || !(attaching || mayCall(peer.actor, method))) return `${String(method)} is not open to your role on this workspace`;
     if (BY_TILE.test(method) && !peer.holds(String(params[0]))) return `${String(params[0])} is not a tile of this workspace`;
     // A guest names this workspace, by its id, and nothing else on the host. The person's own
     // devices are the owner, there as here.

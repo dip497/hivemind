@@ -139,8 +139,8 @@ test("each change is the asker's intent; nobody but the owner may ask", async ()
   await h.call("people.answering", REPO, "invite");
   assert.equal(h.audited().at(-1), `people.answering ${REPO} invite ok`);
   for (const method of ["people.list", "people.role", "people.remove", "people.invite", "people.requests", "people.answering"]) {
-    for (const role of ROLES) assert.equal(mayCall(role, method), false, `${role} may not ${method}`);
-    assert.equal(mayCall("owner", method), true);
+    for (const role of ROLES) assert.equal(mayCall({ access: role }, method), false, `${role} may not ${method}`);
+    assert.equal(mayCall({ access: "owner" }, method), true);
   }
 });
 

@@ -89,9 +89,16 @@ const LEAST: Record<string, Role> = {
   "view.close": "view",
 };
 
-/** Whether someone with `access` may call `method`. */
-export function mayCall(access: Access, method: string): boolean {
-  if (access === "owner") return true;
+/** The machine's own methods (0.23): a peer's device is another machine, so they are no peer's,
+ *  the person's own devices included. An agent on this machine keeps them, but joining. */
+const MACHINE = new Set(["view.emit", "plugin.commands", "plugin.open", "plugin.call", "tile.focus", "views.rescan", "agents.rescan",
+  "widgets.rescan", "tools.rescan", "settings.reload", "host.status", "host.join"]);
+
+/** Whether a peer with `access`, or an agent here in `tile`, may call `method`. */
+export function mayCall(who: { access: Access; tile?: string }, method: string): boolean {
+  if (MACHINE.has(method)) return who.tile !== undefined && method !== "host.join";
+  if (who.access === "owner") return true;
+  const { access } = who;
   const least = Object.hasOwn(LEAST, method) ? LEAST[method] : undefined;
   return least !== undefined && ROLES.indexOf(access) >= ROLES.indexOf(least);
 }

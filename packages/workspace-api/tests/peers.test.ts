@@ -45,7 +45,7 @@ const domain = {
     "agent.answer": (from: Connection, tile: unknown) => { ran.push({ what: "agent.answer", by: from.actor, args: [tile] }); return { answered: true }; },
     "agent.send": (from: Connection, tile: unknown) => { ran.push({ what: "agent.send", by: from.actor, args: [tile] }); return { sent: true }; },
     ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.conversation",
-      "agent.rename", "agent.keys", "agent.read", "agent.sessions", "tool.open", "link.connect", "link.disconnect", "plugin.call", "host.join"].map((what) => [
+      "agent.rename", "agent.keys", "agent.read", "agent.sessions", "tool.open", "link.connect", "link.disconnect", "plugin.call", "host.join", "tools.rescan", "tile.focus"].map((what) => [
       what, (from: Connection, at: unknown) => { ran.push({ what, by: from.actor, args: [at] }); return {}; },
     ])),
     // A view opened for the caller: what it is let do there is what the caller may call.
@@ -81,12 +81,12 @@ function channel(): [TextChannel, TextChannel, (why: string) => void] {
   return [end(toA, toB), end(toB, toA), close];
 }
 
-function connect(access: Access, allows?: (method: string, params: unknown[]) => boolean, repo = REPO) {
+function connect(access: Access, allows?: (method: string, params: unknown[]) => boolean, repo = REPO, tile?: string) {
   ran.length = 0;
   gone.length = 0;
   const server = new WorkspaceServer([domain], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
   const [host, guest, close] = channel();
-  const actor = { kind: "peer", person: "p".repeat(64), device: "d".repeat(64), access } as const;
+  const actor = { kind: "peer", person: "p".repeat(64), device: "d".repeat(64), access, ...(tile ? { tile } : {}) } as const;
   servePeer(server, host, { actor, workspace: W, repo, holds: (t) => t.startsWith("in-"), ...(allows ? { allows } : {}) });
   const client = new WorkspaceClient(peerTransport(guest));
   return { server, client, close, actor, guest };
@@ -337,8 +337,19 @@ test("naming an agent, typing keys to it and piping its replies to another drive
   for (const [m, ...args] of [["agent.keys", "out-1", ["Enter"]], ["agent.read", "out-1"], ["link.connect", "in-1", "out-1"], ["link.connect", "out-1", "in-1"], ["link.disconnect", "in-1", "out-1"], ["agent.sessions", "/work/elsewhere", "claude"]] as const) {
     expect(await code(driver.client.call(m, ...args))).toBe("FORBIDDEN");
   }
-  for (const [m, ...args] of [["plugin.call", "p", "c"], ["host.join", "hive://x"]] as const) expect(await code(driver.client.call(m, ...args))).toBe("FORBIDDEN");
   expect(ran.map((r) => r.what)).toEqual(["agent.rename", "agent.keys", "link.connect", "link.disconnect", "link.disconnect"]);
+});
+
+test("the machine's own methods are no peer's, the person's own devices included; an agent on this machine keeps them, but joining, for its workspace's tiles", async () => {
+  const machine = [["plugin.call", "p", "c"], ["tools.rescan"], ["tile.focus", "in-1"], ["host.join", "hive://x"]] as const;
+  for (const access of ["agents", "owner"] as const) {
+    const peer = connect(access);
+    for (const [m, ...args] of machine) expect(await code(peer.client.call(m, ...args))).toBe("FORBIDDEN");
+  }
+  const agent = connect("agents", undefined, REPO, "in-9");
+  expect(await Promise.all(machine.map(([m, ...args]) => code(agent.client.call(m, ...args))))).toEqual(["ok", "ok", "ok", "FORBIDDEN"]);
+  expect(await code(agent.client.call("tile.focus", "out-1"))).toBe("FORBIDDEN");
+  expect(ran.map((r) => r.what)).toEqual(["plugin.call", "tools.rescan", "tile.focus"]);
 });
 
 test("a peer is answered the statuses and links of its workspace's own agents, never another's", async () => {
