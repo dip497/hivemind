@@ -1,21 +1,37 @@
 // The answers to what an agent waits on (spec/needs.md "Answering"), as the Android app's
 // Answering.kt has them: Allow and Deny for a permission its device can decide, Approve or Ask for
 // changes for a plan, and a line of reply for anything else. One place for the Needs you list and
-// the agent's own screen.
+// the agent's own screen. An answer the computer did not confirm is not offered again: it may have
+// landed, and a second would answer whatever the agent asks next.
 
 import { composer, h, pill } from "./dom.js";
 import { markdown } from "./markdown.js";
+import { NOTICES } from "./words.js";
 import type { Reply, Waiting } from "./types.js";
 
-export function answers(w: Waiting, answer: (reply: Reply) => Promise<boolean>): HTMLElement {
+/** Waits answered with no word back, by tile and since. */
+const unconfirmed = new Set<string>();
+
+export function answers(tile: string, w: Waiting, answer: (reply: Reply) => Promise<boolean | null>): HTMLElement {
   const box = h("div", { class: "answers" });
+  const wait = `${tile}@${w.since}`;
+  const sentAlready = () => box.replaceChildren(h("p", { class: "status problem", "data-unconfirmed": "" }, NOTICES.unconfirmed));
+  if (unconfirmed.has(wait)) {
+    sentAlready();
+    return box;
+  }
   // Answering, or reading the plan, is not opening the agent.
   box.addEventListener("click", (e) => e.stopPropagation());
   // One answer at a time.
   const hold = async (reply: Reply) => {
     box.inert = true;
     try {
-      return await answer(reply);
+      const landed = await answer(reply);
+      if (landed === null) {
+        unconfirmed.add(wait);
+        sentAlready();
+      }
+      return landed;
     } finally {
       box.inert = false;
     }
@@ -30,7 +46,7 @@ export function answers(w: Waiting, answer: (reply: Reply) => Promise<boolean>):
       plan.hidden = false;
       read!.hidden = true;
     }, "", { "data-answer": "plan" });
-    const changes = composer("What to change", (feedback) => hold({ approve: false, feedback }), { "data-changes": "" });
+    const changes = composer("What to change", async (feedback) => (await hold({ approve: false, feedback })) === true, { "data-changes": "" });
     changes.hidden = true;
     const ask = pill("Ask for changes", () => {
       changes.hidden = false;
@@ -40,7 +56,7 @@ export function answers(w: Waiting, answer: (reply: Reply) => Promise<boolean>):
     box.append(...[plan, changes, read].filter((e) => e !== null), h("div", { class: "row" },
       ask, pill("Approve", () => void hold({ approve: true }), "primary", { "data-answer": "approve" })));
   } else {
-    box.append(composer("Reply", (text) => hold({ text }), { "data-reply": "" }));
+    box.append(composer("Reply", async (text) => (await hold({ text })) === true, { "data-reply": "" }));
   }
   return box;
 }

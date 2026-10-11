@@ -13,6 +13,7 @@ import path from "node:path";
 import { AGENT_EVENT_METHOD, cleanName, parseAgentEvent } from "@hivemind/agents";
 import { TILE_SESSIONS_DIR, writeTrackedSession } from "@hivemind/agents/node";
 import { SUBMIT_DELAY_MS } from "@hivemind/agent-host/agent-io";
+import { KEY_GAP_MS } from "@hivemind/agent-host/keys";
 import { holderOf, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { StatusStore, isSessionStatus, type ScreenState } from "@hivemind/agent-host/status-store";
 import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
@@ -90,6 +91,8 @@ export class ControlPlane {
   /** Tiles the control plane spawned whose session nobody has started yet. */
   private readonly unstarted = new Set<string>();
   private readonly reaper: SubagentReaper;
+  /** Terminals an answer's keys are going into, and the writes held until its last is in. */
+  private readonly typing = new Map<string, Array<() => void>>();
   private made: Dispatcher | null = null;
   private spawnTimes: number[] = [];
 
@@ -101,11 +104,46 @@ export class ControlPlane {
       for (const agentId of left) this.status.event(tileId, { event: "subagent.stopped", agentId });
       if (left.length) o.diag?.(`[subagent-reap] tile=${tileId} drained ${left.length} ${SUBAGENT_REAP_MS}ms after the last edge`);
     });
-    this.mailbox = new Mailbox(o.write, SUBMIT_DELAY_MS, (ptyId) => {
+    this.mailbox = new Mailbox((ptyId, data, paste) => this.write(ptyId, data, paste), SUBMIT_DELAY_MS, (ptyId) => {
       // Waiting on a prompt of its own, a message typed there would answer it (Enter allows).
       const bare = toBareId(ptyId);
       return this.status.get(bare)?.state === "working" && (o.steers?.(bare) ?? false);
     });
+  }
+
+  /** A program's write (a message, a pipe, `hive ctl keys`): after the keys of an answer going in. */
+  private write(ptyId: string, data: string, paste?: boolean): boolean {
+    const after = this.typing.get(ptyId);
+    if (!after) return this.o.write(ptyId, data, paste);
+    after.push(() => this.o.write(ptyId, data, paste));
+    return true;
+  }
+
+  /** The person typed `data` into the session of `ptyId`, at a window or from another of their
+   *  devices: the agent's status and the mailbox are told, and it is written. False when no
+   *  session is held for it. */
+  typed(ptyId: string, data: string, paste = false): boolean {
+    this.status.input(toBareId(ptyId), data);
+    this.mailbox.typed(ptyId, data, paste);
+    return this.o.write(ptyId, data, paste);
+  }
+
+  /** Answer as the person: type `parts`, the first now and each next one a moment after the
+   *  last, so a screen takes each, holding the terminal until the last is in. False, typing
+   *  nothing, while another answer is going in there, or when no session is held for it. */
+  answer(ptyId: string, parts: readonly string[]): boolean {
+    const [first, ...rest] = parts;
+    if (first === undefined || this.typing.has(ptyId) || !this.typed(ptyId, first)) return false;
+    if (!rest.length) return true;
+    const after: Array<() => void> = [];
+    this.typing.set(ptyId, after);
+    rest.forEach((bytes, i) => setTimeout(() => {
+      this.typed(ptyId, bytes);
+      if (i < rest.length - 1) return;
+      this.typing.delete(ptyId);
+      for (const write of after) write();
+    }, KEY_GAP_MS * (i + 1)));
+    return true;
   }
 
   /** The verbs, made with the embedder's dependencies the first time they are wanted. */
@@ -116,7 +154,7 @@ export class ControlPlane {
     this.made = makeDispatch({
       ...o.methods(),
       agentOf: (bare) => this.agentOf.get(bare),
-      writeToTile: o.write,
+      writeToTile: (ptyId, data) => this.write(ptyId, data),
       deliverToTile: (ptyId, text, onSent) => this.mailbox.deliver(ptyId, text, onSent),
       turns: this.turns,
       recorder: this.recorder,

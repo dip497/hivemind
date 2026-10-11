@@ -30,6 +30,7 @@ export const NOTICES = {
   notRunning: "No agent runs there now.",
   notStopped: "It was not in a turn.",
   closed: "It was already closed.",
+  unconfirmed: "Not confirmed: check the chat.",
 };
 
 /** An error, as the person is told it. */

@@ -99,7 +99,7 @@ export class AgentScreen {
     this.waitSig = sig;
     if (!w) return this.waits.replaceChildren();
     const label = h("p", { class: "kind" }, `${kindLabel(w.kind)} · `, h("span", { "data-since": w.since }, ago(w.since)));
-    this.waits.replaceChildren(h("div", { class: "card rail waiting", "data-waiting-card": w.kind }, label, answers(w, (reply) => this.app.answer(a, reply))));
+    this.waits.replaceChildren(h("div", { class: "card rail waiting", "data-waiting-card": w.kind }, label, answers(a.tile, w, (reply) => this.app.answer(a, reply))));
   }
 
   private async stopIt(): Promise<void> {

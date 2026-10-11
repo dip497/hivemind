@@ -20,7 +20,7 @@ these; the cases in `../conformance/` decide whether they do. Design:
 | `host-record.md` | Which device hosts a workspace now, signed by the workspace's key | 0.1 |
 | `hosting.md` | Moving a workspace's hosting between the owner's devices, and who follows it | 0.4 |
 | `agents.md` | Every agent of the person's, live, as their phone follows it; starting one from the phone, interrupting its turn with its agent's keys, closing it, what it changed, and what it and the person said to each other; a supervised agent's wait on its starter, and who that is | 0.5 |
-| `needs.md` | What waits on the person, on which machine, how their phone asks for it, answers it (a permission allowed or denied with the agent's own keys) and sends an agent a message; a supervised tool use answered by its starter | 0.6 |
+| `needs.md` | What waits on the person, on which machine, how their phone asks for it, answers it (a permission allowed or denied with the agent's own keys) and sends an agent a message; a supervised tool use answered by its starter; an answer typed as the person, never into another screen, and sent once | 0.7 |
 | `push.md` | What a phone is told while the person is away, encrypted to it, a permission it may allow or deny said so; that a device it found away is back; and the network's push server, which passes on what the devices a phone named sign | 0.4 |
 
 Versions are `major.minor`: a minor adds optional fields or enum values a reader may ignore; a

@@ -20,7 +20,7 @@ export type StatusSource = "hooks" | "screen";
 
 export interface SessionStatus extends AgentStatus {
   source: StatusSource | null;
-  /** When `state` last changed (ms since epoch). */
+  /** When `state` last changed (ms since epoch), later than the time before. */
   since: number;
   /** What the agent says it is doing, from its window title; absent when it says nothing. */
   title?: string;
@@ -39,6 +39,13 @@ export interface StatusChange {
 
 /** A screen reading, for agents without hooks. */
 export type ScreenState = "idle" | "working" | "permission" | "question" | "blocked";
+
+/** What a session's screen was last read as, and when (ms since epoch). */
+export interface ScreenReading {
+  state: ScreenState;
+  says?: string;
+  at: number;
+}
 const SCREEN_KIND = { permission: "permission", question: "question", blocked: "other" } as const;
 
 /** Bytes that interrupt an agent's turn when typed on their own: Esc, Ctrl+C. */
@@ -66,6 +73,8 @@ export class StatusStore {
   private mirrored = new Set<string>();
   /** Sessions whose hook-reported turn the screen is overriding (see the header). */
   private screenHeld = new Set<string>();
+  /** Each session's last screen reading, whoever its authority is. */
+  private readings = new Map<string, ScreenReading>();
   private seq = 0;
   private listeners = new Set<(c: StatusChange) => void>();
 
@@ -74,6 +83,9 @@ export class StatusStore {
   private now(): number { return this.opts.now?.() ?? Date.now(); }
 
   get(tileId: string): SessionStatus | undefined { return this.sessions.get(tileId); }
+
+  /** What the session's screen was last read as; undefined when it never was. */
+  reading(tileId: string): ScreenReading | undefined { return this.readings.get(tileId); }
 
   all(): Array<{ tileId: string; status: SessionStatus }> {
     return [...this.sessions].map(([tileId, status]) => ({ tileId, status }));
@@ -95,9 +107,10 @@ export class StatusStore {
     this.apply(tileId, "hooks", (s) => ({ ...foldStatus(fromScreen ? { ...s, ...INITIAL_STATUS, kind: undefined } : s, input), ...session }));
   }
 
-  /** The screen, read by whoever renders it, and for a wait what screen it says it is. Ignored
-   *  once the session's hooks have spoken. */
+  /** The screen, read by whoever renders it, and for a wait what screen it says it is: kept as
+   *  its last reading; as its status, ignored once the session's hooks have spoken. */
   screen(tileId: string, state: ScreenState, says?: string): void {
+    this.readings.set(tileId, { state, ...(says ? { says } : {}), at: this.now() });
     if (this.mirrored.has(tileId)) return;
     const cur = this.sessions.get(tileId);
     if (cur?.state === "exited") return;
@@ -152,6 +165,7 @@ export class StatusStore {
 
   forget(tileId: string): void {
     this.sessions.delete(tileId);
+    this.readings.delete(tileId);
     this.mirrored.delete(tileId);
     this.screenHeld.delete(tileId);
   }
@@ -164,9 +178,10 @@ export class StatusStore {
     const { says: _was, ...next } = fold(base) as SessionStatus;
     const clean = Object.fromEntries(Object.entries(next).filter(([, v]) => v !== undefined)) as unknown as AgentStatus;
     const screen = clean.state === "waiting" && says ? { says } : {};
-    // Waiting on something else is a new wait, which `since` names.
+    // Waiting on something else is a new wait, which `since` names: never the one before's, even
+    // within a millisecond of it.
     const changed = !prev || prev.state !== clean.state || (clean.state === "waiting" && (prev.kind !== clean.kind || prev.says !== screen.says));
-    this.put(tileId, { ...clean, ...screen, source, since: changed ? this.now() : prev.since });
+    this.put(tileId, { ...clean, ...screen, source, since: changed ? Math.max(this.now(), (prev?.since ?? 0) + 1) : prev.since });
   }
 
   private put(tileId: string, status: SessionStatus): void {

@@ -150,10 +150,12 @@ export class Phone {
     return this.host;
   }
 
-  /** Answer what `agent` waits on the person for. Whether it landed: not when it waits on that no more. */
-  async answer(agent: Agent, reply: Reply): Promise<boolean> {
+  /** Answer what `agent` waits on the person for, once: never sent again. Whether it landed: not
+   *  when it waits on that no more; null when the computer did not say (it may have). */
+  async answer(agent: Agent, reply: Reply): Promise<boolean | null> {
     if (!agent.waiting) return false;
-    return this.reached().answer(agent.workspace, agent.tile, agent.waiting.since, reply);
+    const sent = this.reached().answer(agent.workspace, agent.tile, agent.waiting.since, reply);
+    return within(sent, REACH, "no answer").catch(() => null);
   }
 
   /** Send `agent` a message, typed in at its prompt. Whether it went. */

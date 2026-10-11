@@ -35,7 +35,7 @@ export class Needs {
         h("span", { class: "age mono", "data-since": w.since }, ago(w.since))),
       h("p", { class: "where mono" }, where(a.name, a.machine)),
       h("p", { class: "kind" }, kindLabel(w.kind)),
-      answers(w, (reply) => this.app.answer(a, reply)));
+      answers(a.tile, w, (reply) => this.app.answer(a, reply)));
     card.addEventListener("click", () => this.app.open(a.tile));
     return card;
   }

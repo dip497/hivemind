@@ -1141,12 +1141,7 @@ const terminals = new Terminals({
     start: startSession,
     // Only a person's keystrokes come this way (programmatic writes go through the mailbox), so an
     // interrupt key here is the user stopping the agent's turn.
-    write: (tileId, data, paste) => {
-      control.status.input(toBareId(tileId), data);
-      control.mailbox.typed(tileId, data, paste);
-      if (onYourDevices.holds(tileId)) onYourDevices.write(tileId, data, paste);
-      else if (hasRemotePty(tileId)) writeRemotePty(tileId, data, paste); else writePty(tileId, data, paste);
-    },
+    write: (tileId, data, paste) => { control.typed(tileId, data, paste); },
     echoes: (tileId) => !hasRemotePty(tileId) && !onYourDevices.holds(tileId),
     resize: (tileId, cols, rows) => {
       if (onYourDevices.holds(tileId)) onYourDevices.resize(tileId, cols, rows);
@@ -1265,10 +1260,8 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   terminals.domain,
   // What an agent here waits on the person for, answered from another of their devices (M5).
   answers({
-    status: (bare) => control.status.get(bare),
-    type: (bare, data) => writeTile(`hm:${bare}`, data),
+    plane: () => control,
     answerKeys: (bare, status) => answerKeys(heldBoards(workspaceStore()), bare, status),
-    waits: control.waits,
     who: whoIs,
   }),
   // Agents started, interrupted and closed from another of the person's devices, and what they
@@ -1285,7 +1278,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     status: (bare) => control.status.get(bare),
     interruptKeys: (bare) => manifestOf(heldBoards(workspaceStore()), bare)?.interrupt,
     // As the person types: an interrupt key ends the turn in the agent's status too.
-    type: (bare, data) => { control.status.input(bare, data); return writeTile(`hm:${bare}`, data); },
+    type: (bare, data) => control.typed(`hm:${bare}`, data),
     close: (bare) => control.close(bare),
     folderOf: (bare) => runsIn(heldBoards(workspaceStore()), bare),
   }),

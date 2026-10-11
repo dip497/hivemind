@@ -7,7 +7,8 @@ export interface App {
   /** Show the agent of `tile`; Back comes back here. */
   open(tile: string): void;
   back(): void;
-  answer(agent: Agent, reply: Reply): Promise<boolean>;
+  /** Whether it landed; null when the computer did not say. */
+  answer(agent: Agent, reply: Reply): Promise<boolean | null>;
   send(agent: Agent, text: string): Promise<boolean>;
   stop(agent: Agent): Promise<boolean>;
   close(agent: Agent): Promise<boolean>;

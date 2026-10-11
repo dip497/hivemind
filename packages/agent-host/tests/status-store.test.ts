@@ -119,6 +119,15 @@ test("waiting on something else is a new wait: since moves, so an answer to the 
   expect(s.get("a")!.since).toBeGreaterThan(first);
 });
 
+test("a wait that begins within the same millisecond as the one before is still named apart: its since is later", () => {
+  const s = new StatusStore({ now: () => 1000 });
+  s.event("a", { event: "input.requested", kind: "permission" });
+  const first = s.get("a")!.since;
+  s.event("a", { event: "input.resolved" });
+  s.event("a", { event: "input.requested", kind: "permission" });
+  expect(s.get("a")!.since).toBeGreaterThan(first);
+});
+
 test("a wait the screen says it is carries what it says; another screen is a new wait, and anything but the screen or a title clears it", () => {
   const s = store();
   s.screen("a", "permission", "trust");

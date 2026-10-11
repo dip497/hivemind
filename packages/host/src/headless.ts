@@ -230,7 +230,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
         size: out.size,
       });
     },
-    write: (tile, data, paste) => { control.status.input(toBareId(tile), data); control.mailbox.typed(tile, data, paste); sessions.write(tile, data, paste); },
+    write: (tile, data, paste) => { control.typed(tile, data, paste); },
     // A daemon tells its killer nothing of the exit: what waits on the session is answered now.
     kill: (tile) => { sessions.kill(tile); control.exited(tile); control.forget(tile); },
   };
@@ -301,10 +301,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     handOff({ who, place: (repo, tile, name) => { store.addTile(repo, tile, { name }, HANDED_OFF); } }),
     // What an agent here waits on the person for, answered from another of their devices (M5).
     answers({
-      status: (bare) => control.status.get(bare),
-      type: (bare, data) => writeTile(`hm:${bare}`, data),
+      plane: () => control,
       answerKeys: (bare, status) => answerKeys(heldBoards(store), bare, status),
-      get waits() { return control.waits; },
       who,
     }),
     // Agents started, interrupted and closed from another of the person's devices, and what they
@@ -318,7 +316,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       status: (bare) => control.status.get(bare),
       interruptKeys: (bare) => manifestOf(heldBoards(store), bare)?.interrupt,
       // As the person types: an interrupt key ends the turn in the agent's status too.
-      type: (bare, data) => { control.status.input(bare, data); return writeTile(`hm:${bare}`, data); },
+      type: (bare, data) => control.typed(`hm:${bare}`, data),
       close: (bare) => control.close(bare),
       folderOf: (bare) => runsIn(heldBoards(store), bare),
     }),

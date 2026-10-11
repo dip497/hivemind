@@ -5,30 +5,40 @@
  * so one that comes late, or again, does nothing and says so. A plan or a supervised tool use is
  * decided (`waits.ts`); a permission on the agent's screen is allowed or denied with the keys its
  * agent says do that (0.5); anything else is one line typed into the agent's terminal, Enter after
- * it. Electron-free.
+ * it. Typed as the person types, through the control plane, so the agent's status hears it; not
+ * while the screen shows the agent's prompt or another wait, nor while another answer is going
+ * into that terminal (0.7). Electron-free.
  */
 import type { AnswerKeys, InputKind } from "@hivemind/agents";
-import { typeKeys } from "@hivemind/agent-host/keys";
+import { keyBytes } from "@hivemind/agent-host/keys";
+import type { ScreenReading, SessionStatus } from "@hivemind/agent-host/status-store";
 import type { Answerer } from "@hivemind/workspace-api/agents";
 import { ApiError, oneOf, text, written } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
-import { toBareId } from "@hivemind/workspace-api/tile-id";
+import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
+import type { ControlPlane } from "./control/plane.js";
 import { waitsOnThePerson } from "./needs.js";
-import type { Waits } from "./waits.js";
+
+/** What answering needs of the control plane: the agents' statuses and waits, and typing as the
+ *  person. */
+export type AnswerPlane = Pick<ControlPlane, "status" | "waits" | "answer">;
 
 export interface AnswersOptions {
-  /** A tile's agent's status now, by its tile. */
-  status(tile: string): { state: string; kind?: InputKind; says?: string; since: number } | undefined;
-  /** Type `data` into the terminal of `tile` now; false when it has none. */
-  type(tile: string, data: string): boolean;
+  /** The control plane of the agents here. */
+  plane(): AnswerPlane;
   /** The keys that allow and deny a permission the agent of `tile` asks, by its status, as it
    *  says; undefined for another wait, and when it says none. */
   answerKeys(tile: string, status: { kind?: InputKind; says?: string }): AnswerKeys | undefined;
-  /** The plans and supervised tool uses agents wait on. */
-  waits: Waits;
   /** Who is at a connection. */
   who(connection: Connection): Answerer;
 }
+
+/** Whether the screen, read since the wait began, may still show it: not when it shows the
+ *  agent's prompt, nor a wait its rules say is another screen. A screen its rules cannot place
+ *  reads as working, which says nothing either way. */
+const mayShow = (read: ScreenReading | undefined, wait: SessionStatus): boolean =>
+  !read || read.at < wait.since || read.state === "working"
+  || (read.state !== "idle" && (read.says === undefined || read.says === wait.says));
 
 /** Who may answer what an agent's starter answers (a supervised tool use): the person, their own
  *  devices, and the program that started it; not a guest, nor another program. (An agent that
@@ -50,6 +60,12 @@ function line(value: unknown, name: string): string {
   return t;
 }
 
+/** How an answer is recorded: its decision, else that it was a reply. */
+const decidedOf = (answer: unknown): string => {
+  const d = (answer as { decision?: unknown } | null)?.decision;
+  return d === "allow" || d === "deny" ? d : "reply";
+};
+
 export function answers(o: AnswersOptions): Domain<"agent.answer"> {
   const answered = new Set<string>();
   return {
@@ -58,28 +74,32 @@ export function answers(o: AnswersOptions): Domain<"agent.answer"> {
         const bare = toBareId(text(tile, "tile"));
         if (typeof since !== "number") throw new ApiError("BAD_REQUEST", "since must be a number");
         const a = (answer ?? {}) as { text?: unknown; decision?: unknown; feedback?: unknown; always?: unknown };
-        const held = o.waits.of(bare);
+        const plane = o.plane();
+        const held = plane.waits.of(bare);
         if (held?.since === since) {
           if (held.answerer && !mayAnswerFor(from, held.answerer)) throw new ApiError("FORBIDDEN", "only the person, or the program that started it, answers what this agent asks");
           const decision = oneOf(a.decision, "answer.decision", ["allow", "deny"] as const);
           const feedback = a.feedback == null ? undefined : written(a.feedback, "answer.feedback");
           if (a.always !== undefined && (a.always !== true || held.kind !== "approval")) throw new ApiError("BAD_REQUEST", "answer.always is true, and answers a supervised tool use alone");
-          return o.waits.answer(bare, since, decision, { feedback, by: o.who(from), always: a.always === true });
+          return plane.waits.answer(bare, since, decision, { feedback, by: o.who(from), always: a.always === true });
         }
-        const before = o.waits.answerOf(bare, since);
+        const before = plane.waits.answerOf(bare, since);
         if (before) return { answered: false, ...(before.by ? { by: before.by } : {}) };
-        const status = o.status(bare);
+        const status = plane.status.get(bare);
         // Waits on the person no more, or on another wait, or answered already: nothing.
         if (!status || !waitsOnThePerson(status) || status.since !== since || answered.has(`${bare}@${since}`)) return { answered: false };
-        let done: boolean;
+        let parts: string[];
         if (a.decision !== undefined) {
           const decision = oneOf(a.decision, "answer.decision", ["allow", "deny"] as const);
           const keys = o.answerKeys(bare, status)?.[decision];
           if (!keys) throw new ApiError("BAD_REQUEST", "this agent is answered on its screen: it says no keys that allow or deny what it asks");
-          done = typeKeys((bytes) => o.type(bare, bytes), keys);
+          parts = keys.map(keyBytes);
         } else {
-          done = o.type(bare, `${line(a.text, "answer.text")}\r`);
+          parts = [`${line(a.text, "answer.text")}\r`];
         }
+        // Its screen shows something else now: typed there, the keys would answer that.
+        if (!mayShow(plane.status.reading(bare), status)) return { answered: false };
+        const done = plane.answer(toPtyId(bare), parts);
         if (done) {
           answered.add(`${bare}@${since}`);
           if (answered.size > ANSWERED_KEPT) answered.delete(answered.values().next().value!);
@@ -88,7 +108,11 @@ export function answers(o: AnswersOptions): Domain<"agent.answer"> {
       },
     },
     effects: {
-      "agent.answer": (tile) => ({ target: typeof tile === "string" ? toBareId(tile) : undefined }),
+      // What was decided, never what was said: a reply is recorded as one.
+      "agent.answer": (tile, _since, answer) => ({
+        target: typeof tile === "string" ? toBareId(tile) : undefined,
+        detail: (r: { answered?: boolean } | null) => `${decidedOf(answer)}${r?.answered ? "" : ", not answered"}`,
+      }),
     },
   };
 }

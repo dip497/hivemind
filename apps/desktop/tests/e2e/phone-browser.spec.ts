@@ -35,7 +35,7 @@ test.afterEach(async () => {
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 
-test("a phone's browser opens the page the computer's QR code names and, asked and tapped, pairs through the network's relay, as the person's phone; it answers what waits on the person, sends an agent a message, starts one and closes it, and the computer does each, as that device; reopened offline it shows what it last knew; unpaired on the computer, it is turned away and pairs again; forgotten from it, the computer forgets it too", async ({}, testInfo) => {
+test("a phone's browser opens the page the computer's QR code names and, asked and tapped, pairs through the network's relay, as the person's phone; it answers what waits on the person, never twice when the computer cannot confirm it, sends an agent a message, starts one and closes it, and the computer does each, as that device; reopened offline it shows what it last knew; unpaired on the computer, it is turned away and pairs again; forgotten from it, the computer forgets it too", async ({}, testInfo) => {
   test.skip(!hiveNetBuilt() || !hiveWebBuilt(), "build hive-net (cargo build in crates/hive-net) and the page (crates/hive-web/build.sh) first");
   test.setTimeout(300_000);
   const net = await ownNetwork(root, procs, "closed", WWW);
@@ -118,7 +118,14 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   // Reopened with no network (offline, and the relay's WebSocket refused, which offline alone does
   // not stop): the same device, still paired, and what waited, shown from what the page kept.
   let away = true;
-  await context.routeWebSocket(/./, (ws) => (away ? ws.close() : ws.connectToServer()));
+  // While deaf, what the computer says does not reach the page; what the page says still goes.
+  let deaf = false;
+  await context.routeWebSocket(/./, (ws) => {
+    if (away) return ws.close();
+    const server = ws.connectToServer();
+    ws.onMessage((m) => server.send(m));
+    server.onMessage((m) => { if (!deaf) ws.send(m); });
+  });
   await context.setOffline(true);
   // When the card is put on screen, since the page was asked for, on a CPU a quarter as fast (a
   // mid phone's): measured, not held to the 500 ms budget on a shared machine.
@@ -139,10 +146,17 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   await context.setOffline(false);
   await expect(page.locator("[data-error]")).toBeHidden({ timeout: 30_000 });
 
-  // Allowed from the browser: the computer answers the agent as that device did, and it works.
+  // Allowed from the browser while nothing the computer says reaches it: the computer answers the
+  // agent as that device did, and records it allowed; the page cannot know, so it says so and does
+  // not offer to answer again, which would answer whatever the agent asks next.
+  deaf = true;
   await need.locator('[data-answer="allow"]').click();
-  await expect(page.locator(`[data-agent="${tile}"]`)).toHaveAttribute("data-state", "working", { timeout: 30_000 });
-  await expect.poll(audit, { timeout: 10_000 }).toContainEqual(expect.objectContaining({ verb: "agent.answer", outcome: "ok", actor: expect.objectContaining({ kind: "peer", device: id }) }));
+  await expect(need.locator("[data-unconfirmed]")).toHaveText("Not confirmed: check the chat.", { timeout: 30_000 });
+  await expect(need.locator("[data-answer]")).toHaveCount(0);
+  await expect.poll(audit, { timeout: 10_000 }).toContainEqual(expect.objectContaining({ verb: "agent.answer", detail: "allow", outcome: "ok", actor: expect.objectContaining({ kind: "peer", device: id }) }));
+  // Heard again: it works, and waits on the person no more.
+  deaf = false;
+  await expect(page.locator(`[data-agent="${tile}"]`)).toHaveAttribute("data-state", "working", { timeout: 60_000 });
   await expect(page.locator("[data-need]")).toHaveCount(0);
   await expect(page.locator("[data-working]")).toHaveText("Nothing needs you. 1 agent working.");
 

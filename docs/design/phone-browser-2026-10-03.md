@@ -598,6 +598,36 @@ as Allow/Deny (§11.1), and the reading list, tables, links, `dir=auto`, the com
 - Regression tests that fail on today's code: Allow on a fresh chooser lands; a second Allow with
   the old id is refused; the wait clears after the answer.
 
+*Done (2026-10-12), all but the question and permission detail, which follow:*
+- The probe. `1` allows on Claude 2.1.296's chooser, with its kitty keyboard on and off (a pty
+  driven by hand), and from the paired page on the real binary three times: default mode with an
+  ask rule, started from the page, and acceptEdits through `hive ctl spawn`. Each time the command
+  ran and the wait cleared. The person's own log agrees: an Allow from their phone at 19:07 on
+  another Claude tile ran its command. The 18:52 Allow that did nothing is not reproduced, and
+  nothing kept says what the screen showed then; the guards below are what stops a key going into
+  a screen that is not the wait.
+- The status left on "needs you": the answers typed their keys into the terminal around the
+  agent's status (the desktop's and the headless host's `answers()` wiring wrote straight to the
+  session), so only a later hook could end the wait, and a Deny (Esc) fires none. Seen on the real
+  binary: denied from the page, the card was still there a minute later with Claude at its prompt.
+  Now the control plane has one way to type as the person (`ControlPlane.typed`), which a window's
+  keys, a phone's answer and a phone's Stop all go through, and `answers()` is given the plane
+  rather than a write. Denied again on the real binary: the card goes at once, the agent
+  `interrupted`; allowed, it ran and finished.
+- The guards, in `answers()` and the plane: a wait's `since` is its id and now strictly increases
+  per session (two waits within a millisecond were one id); keys are not typed while the screen,
+  read since the wait began, shows the agent's prompt or another screen (a screen the rules cannot
+  place reads as working and does not stop it, so an unrecognised chooser can still be answered);
+  an answer of several keys holds the terminal until its last key is in, another answer refused
+  and a program's write queued behind it; the page sends an answer once, waits 10 s for the
+  computer to say, and else says "Not confirmed: check the chat." with no buttons for that wait.
+- The audit: `detail` is `allow`, `deny` or `reply` (never a reply's words), `, not answered` when
+  it did not land.
+- Proved to fail: the status not told (answers test 11), the screen check dropped or loosened (13,
+  twice), the hold dropped or not queueing (12, twice), the audit detail dropped (11), `since` not
+  strictly increasing (status-store), and the page retrying an unconfirmed answer (phone-browser
+  spec:154).
+
 **11.2 Home mirrors the Layers panel.** The same tree, names and order as the desktop: machines,
 then projects (the panel's groupings), then tiles, agents first; frames as the desktop names them.
 "Needs you" on top (permission, question, plan), then Working, then the rest; it folds the Needs

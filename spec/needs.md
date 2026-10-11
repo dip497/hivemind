@@ -1,4 +1,4 @@
-# Needs you (0.6)
+# Needs you (0.7)
 
 What waits on the person (M5, design §9.2 "Home: Needs you"): each agent waiting on them, in the
 workspaces one of their devices holds, as their phone lists it. The device that runs the agents
@@ -24,7 +24,8 @@ holds is one item:
   reads the agent's screen as waiting may say what that screen is (`says: trust`, its trust
   prompt). It is left out when no rule names it. A different screen is a different wait.
 - `since` is when it began waiting (ms since the epoch): with `tile`, it says which wait this is,
-  so an answer to an earlier one is told apart (step 4).
+  so an answer to an earlier one is told apart (step 4). Each wait's is later than the one
+  before's, even when the next begins within the same millisecond (0.7).
 - `agent` is what the person named its tile; else what the agent says it is doing (its title);
   else what it was started to do (its task); else its tile's label.
 - `plan` is there for a `plan`, when the agent handed one off for review: its text.
@@ -79,6 +80,22 @@ and once: an answer for a wait that is over, or one answered already, does nothi
 Anything else is `BAD_REQUEST`: a decision for an agent that says no keys, or for a wait that is
 neither a plan, a permission nor an approval, among it. One may answer who may drive the workspace's agents, and the
 person's own devices, a phone among them.
+
+What is typed is typed as the person types it at the agent's tile (0.7), so the agent's status
+hears it: a key that answers its permission sets it working, and Esc or Ctrl+C on its own ends
+its turn, at once, not when the agent next reports. An answer that lands is recorded with what was
+decided (`allow`, `deny`, or `reply` for a line, never its words), one that does not as
+`<decision>, not answered`. Nothing is typed, and it answers `{ "answered": false }`, while
+
+- the agent's screen, read since the wait began, shows its prompt, or a wait its manifest's rules
+  say is another screen (a different `says`): typed there, the keys would answer that. A screen
+  the rules cannot place, or read as another kind of chooser, does not stop it;
+- the keys of another answer are still going into that terminal. A program's message waits until
+  they are in.
+
+The device that runs the agent is the one asked, and a phone sends an answer once, never again
+after a reconnect. When the device does not say within 10 s whether it landed (it may have), the
+phone says "Not confirmed: check the chat." and does not offer to answer that wait again.
 
 ## Sending
 
