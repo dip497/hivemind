@@ -67,3 +67,46 @@ export function talkerAgent(root: string): Record<string, string> {
   ].join("\n"));
   return { PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` };
 }
+
+/** A stand-in agent, read from its screen: it says what it is doing in its title, and asks to
+ *  edit a file until it is answered, then draws its screen afresh, working, and says each line it
+ *  hears from then on. Told no, it says so and asks again a moment later; its manifest says `y`
+ *  and Enter allow what it asks and `n` and Enter deny it. What the desktop's environment needs to
+ *  run it, for the person whose data is under `root/desktop`. */
+export function probeAgent(root: string): Record<string, string> {
+  const bin = path.join(root, "bin");
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, "probe-agent"), [
+    "#!/bin/bash",
+    "printf '\\033]0;Editing Nav.tsx\\007'",
+    "while :; do",
+    "  printf 'Allow edit to Nav.tsx? (y/n) '",
+    "  read -r answer",
+    "  [ \"$answer\" = n ] || break",
+    "  printf '\\033[2J\\033[Hprobe was told no\\n'",
+    "  sleep 2",
+    "done",
+    "printf '\\033[2J\\033[Hprobe is thinking\\n'",
+    "while read -r line; do printf 'heard: %s\\n' \"$line\"; done",
+  ].join("\n"), { mode: 0o755 });
+  const agent = path.join(root, "desktop", "hivemind", "agents", "probe");
+  fs.mkdirSync(agent, { recursive: true });
+  fs.writeFileSync(path.join(agent, "agent.yaml"), [
+    "manifestVersion: 2", "id: probe", "label: Probe", "bin: probe-agent", "enabled: true",
+    "caps: { promptDelivery: typed, turnSignal: false, resume: none, supervise: human, blockedDetection: true }",
+    "answer: { permission: { allow: ['y', enter], deny: ['n', enter] } }",
+    "detect:", "  default: idle", "  rules:",
+    "  - when: { contains: 'Allow edit to Nav.tsx?' }", "    then: permission",
+    "  - when: { contains: probe is thinking }", "    then: working", "",
+  ].join("\n"));
+  return { PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` };
+}
+
+/** The stand-in agent started on the board of the person's computer `desktop`: its tile. */
+export async function startProbe(desktop: Page): Promise<string> {
+  await desktop.evaluate(() => window.hive.settingsSet("agents.defaultAgent", "probe"));
+  await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:shortcut", { detail: "agent" })));
+  const terminal = desktop.locator(".react-flow__node-terminal");
+  await expect(terminal).toHaveCount(1, { timeout: 20_000 });
+  return (await terminal.getAttribute("data-id"))!;
+}

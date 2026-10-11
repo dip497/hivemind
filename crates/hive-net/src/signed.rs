@@ -3,7 +3,7 @@
 //! signed request was made, which a server takes within ten minutes of its own clock. A device
 //! signs; only a server checks (the `server` feature).
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use n0_future::time::SystemTime;
 
 use anyhow::{Context, Result};
 use iroh::PublicKey;
@@ -17,7 +17,7 @@ pub(crate) const CLOCK_SKEW_MS: u64 = 10 * 60 * 1000;
 /// Now, in ms since the epoch.
 pub fn now_ms() -> u64 {
     SystemTime::now()
-        .duration_since(UNIX_EPOCH)
+        .duration_since(SystemTime::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
 }

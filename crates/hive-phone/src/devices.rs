@@ -7,18 +7,19 @@
 
 use std::{collections::BTreeMap, fs, time::Duration};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use hive_net::frames::{read_frame, write_frame};
 use iroh::{endpoint::Connection, Endpoint};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+#[cfg(not(target_family = "wasm"))]
+use crate::{failure::Failure, push};
 use crate::{
-    failure::Failure,
     identity::{write_private, Identity},
     needs,
     pairing::{Paired, PairedWith},
-    person, push,
+    person,
 };
 
 /// How long a device has to answer the phone before it is said to be away.
@@ -183,7 +184,7 @@ impl Identity {
     /// hosts it may reach through it, and whose they are, and keep what they say at `now`
     /// (`learn_all`): one that does not answer leaves what it said before.
     pub async fn learn_from(&self, endpoint: &Endpoint, now: u64) -> Result<()> {
-        let mut asking = tokio::task::JoinSet::new();
+        let mut asking = n0_future::task::JoinSet::new();
         for app in self.devices() {
             if !app.via.is_empty() || app.with.kind != "app" {
                 continue;
@@ -198,7 +199,7 @@ impl Identity {
                     connection.close(0u32.into(), b"done");
                     Ok::<_, anyhow::Error>(answer)
                 };
-                let answer = tokio::time::timeout(ANSWER_WITHIN, asked).await;
+                let answer = n0_future::time::timeout(ANSWER_WITHIN, asked).await;
                 (app.with.device, answer)
             });
         }
@@ -223,6 +224,7 @@ impl Identity {
     /// device whether it could tell it or not, and the devices it learned of from it alone; the push
     /// server it registered at, if any, lets that device tell it nothing more. One it learned of
     /// from an app is unpaired there.
+    #[cfg(not(target_family = "wasm"))]
     pub async fn unpair_from(&self, endpoint: &Endpoint, device: &str) -> Result<Unpaired> {
         let all = self.devices();
         let Some(paired) = all.iter().find(|d| d.with.device == device) else {
@@ -259,6 +261,7 @@ impl Identity {
     /// Unpair this phone from `device`: told on `endpoint`, it forgets the phone, and the phone
     /// forgets it whether it could tell it or not, and the devices it learned of from it alone.
     /// Whether it was told: one that was not still lists the phone.
+    #[cfg(not(target_family = "wasm"))]
     async fn unpair(&self, endpoint: &Endpoint, device: &PairedWith) -> Result<bool> {
         let told = async {
             let at = hive_net::net::addr_of(&device.device, &device.addrs, &device.relay)?;
@@ -266,11 +269,14 @@ impl Identity {
             let answer = ask(&connection, &json!({ "t": "unpair" })).await?;
             connection.close(0u32.into(), b"done");
             if answer.get("ok").and_then(Value::as_bool) != Some(true) {
-                bail!("{}", refusal(&answer));
+                anyhow::bail!("{}", refusal(&answer));
             }
             Ok::<_, anyhow::Error>(())
         };
-        let told = matches!(tokio::time::timeout(ANSWER_WITHIN, told).await, Ok(Ok(())));
+        let told = matches!(
+            n0_future::time::timeout(ANSWER_WITHIN, told).await,
+            Ok(Ok(()))
+        );
         self.forget(&device.device)?;
         self.learn(&device.device, &[], 0)?;
         Ok(told)
@@ -278,6 +284,7 @@ impl Identity {
 }
 
 /// What unpairing a device came to.
+#[cfg(not(target_family = "wasm"))]
 #[derive(Debug)]
 pub struct Unpaired {
     /// Whether the device was told: one that was not still lists the phone.

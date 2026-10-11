@@ -10,6 +10,7 @@ use hive_net::{
     net::Reach,
     profile::{self, Verified},
 };
+use iroh::SecretKey;
 
 use crate::{
     identity::{write_private, Identity},
@@ -17,6 +18,24 @@ use crate::{
 };
 
 const NETWORK: &str = "network.json";
+
+/// Get the device `key` onto the network of a device whose link carries `admission`, to reach it
+/// from anywhere: with the voucher it carries, on a closed network, after which that device vouches
+/// for it as they pair; or registering, on an open one. How.
+pub async fn admit(admission: &Admission, key: &SecretKey) -> Result<&'static str> {
+    Ok(match &admission.voucher {
+        Some(voucher) => {
+            let voucher = serde_json::from_value(voucher.clone())
+                .map_err(|_| anyhow::anyhow!("the link's voucher is not one"))?;
+            hive_net::access::client::redeem(&admission.access, &voucher, key).await?;
+            "vouched for by the app"
+        }
+        None => {
+            hive_net::access::client::register(&admission.access, key).await?;
+            "registered"
+        }
+    })
+}
 
 /// A network as given: what `profile::load` takes, when it verifies.
 pub fn verified(given: &str) -> Option<Verified> {
@@ -46,24 +65,6 @@ impl Identity {
             }
         }
         reach
-    }
-
-    /// Get onto the network of a device whose link carries `admission`, to reach it from
-    /// anywhere: with the voucher it carries, on a closed network, after which that device vouches
-    /// for this phone as they pair; or registering, on an open one. How.
-    pub async fn let_in(&self, admission: &Admission) -> Result<&'static str> {
-        Ok(match &admission.voucher {
-            Some(voucher) => {
-                let voucher = serde_json::from_value(voucher.clone())
-                    .map_err(|_| anyhow::anyhow!("the link's voucher is not one"))?;
-                hive_net::access::client::redeem(&admission.access, &voucher, self.key()).await?;
-                "vouched for by the app"
-            }
-            None => {
-                hive_net::access::client::register(&admission.access, self.key()).await?;
-                "registered"
-            }
-        })
     }
 
     /// Keep `given` as this phone's network, or none.

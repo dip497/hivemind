@@ -2,6 +2,7 @@
 //! trusts what this device's endpoint trusts (`net::trusted`), which a phone links too; and, on a
 //! server, the push role's (`guarded`).
 
+#[cfg(not(target_family = "wasm"))]
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -14,6 +15,7 @@ pub use guarded::Allowed;
 pub(crate) use guarded::{guarded, may_post, upstream};
 
 /// The TLS this device trusts; offering HTTP/2 first when `h2`.
+#[cfg(not(target_family = "wasm"))]
 fn tls(h2: bool) -> Result<rustls::ClientConfig> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let _ = rustls::crypto::ring::default_provider().install_default();
@@ -25,8 +27,15 @@ fn tls(h2: bool) -> Result<rustls::ClientConfig> {
 }
 
 /// A client trusting what this device's endpoint trusts.
+#[cfg(not(target_family = "wasm"))]
 pub(crate) fn trusted() -> Result<reqwest::Client> {
     Ok(reqwest::Client::builder()
         .tls_backend_preconfigured(tls(false)?)
         .build()?)
+}
+
+/// A browser's: its own fetch, and what it trusts.
+#[cfg(target_family = "wasm")]
+pub(crate) fn trusted() -> Result<reqwest::Client> {
+    Ok(reqwest::Client::new())
 }

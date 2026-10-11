@@ -55,9 +55,10 @@ async function run() {
   const t0 = performance.now();
   await init();
   const tInit = performance.now();
-  const device = await Device.start(relay);
+  // A new key each run: the echo host admits any device.
+  const device = await Device.start(crypto.getRandomValues(new Uint8Array(32)), [relay]);
   const tStart = performance.now();
-  const host = await device.dial(hostId);
+  const host = await device.reach(hostId, relay);
   const tDial = performance.now();
   const stream = await host.open('echo');
   log(`device ${device.id()}`);

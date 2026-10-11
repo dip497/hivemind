@@ -5,7 +5,7 @@ iroh compiled to wasm, relay only (a browser cannot send UDP), end-to-end encryp
 `hive/ws/1` streams as the native phone; the relay is the person's own `hive-net serve` (public
 with `--domain`, or on their Tailscale behind `tailscale serve` for HTTPS); there is no hosted
 relay. Later steps add ack-window flow control (as Orca does) and a needs-you-first PWA. B0's
-results are in §9.
+results are in §9; B1's and B2's (pairing, and the agents and needs live) in §10.
 
 It parks the native phone apps (`apps/ios`, `apps/android`,
 [`phone-app-2026-10-02.md`](phone-app-2026-10-02.md)) and puts the phone in the browser first. The
@@ -50,7 +50,7 @@ Considered and not chosen:
 | Host serves a web page over HTTPS (zellij web, code-server, claudecodeui) | Needs a public port or a tunnel and a certificate on the person's machine; a second auth system beside device keys |
 | WebRTC data channel | A signalling server and STUN/TURN beside the relay we have; direct paths would be a later gain, not a need |
 | WebTransport with `serverCertificateHashes` | Direct, but the host needs a reachable UDP port; iroh may add it later (its docs say so) |
-| hive-phone core to wasm | Rewrites its runtime (single-thread, no hyper server, no files) before anything shows; the TS packages already work as a guest |
+| hive-phone core to wasm, whole | Rewrites its runtime (single-thread, no hyper server, no files) before anything shows; the TS packages already work as a guest. Its pairing and its reading of agents and needs do compile to wasm as they are (§10), and the browser uses those |
 
 **Cost**: one extra hop through the relay. Terminal echo is the number to watch (§5).
 
@@ -59,7 +59,9 @@ Considered and not chosen:
 Same model as the native phone, no new auth:
 
 1. The browser makes its device key on first open and keeps it in IndexedDB (the wasm crate holds
-   the ed25519 secret; the page never sends it anywhere).
+   the ed25519 secret; the page never sends it anywhere). iroh signs with the key's bytes, so a
+   non-extractable WebCrypto key cannot be the device key; the seed is kept sealed (AES-GCM) under
+   a non-extractable one, so a copy of the browser's storage alone does not carry it (§10).
 2. The desktop shows a QR / link: `https://<page>/#pair=<code>`. The code is in the **fragment**,
    so it never reaches the server that serves the page (sshx shares its key this way).
 3. The browser dials the desktop on `hive/pair/1` through the relay; the person confirms on the
@@ -236,3 +238,68 @@ you@example.com` (ports 443 and 80 open: Let's Encrypt and the captive-portal ch
 host with `--relay https://relay.example.com`, the page from any HTTPS host (GitHub Pages works:
 it is static), and the same fragment with `relay=https://relay.example.com`. `--relay` alone admits
 every device; a lasting relay runs the access role beside it.
+
+## 10. B1 and B2 results (2026-10-11)
+
+**Works**, end to end in `apps/desktop/tests/e2e/phone-browser.spec.ts`: the desktop on a closed
+network of its own (relay, lookup, access) offers its link in Settings → Devices → Pair a phone; a
+headless Chromium page running hive-web, opened with that link in its fragment, gets onto the
+network with the voucher the link carries, pairs with the desktop through the relay, and is listed
+there as the person's phone. It follows the desktop's agents: the agent waiting on a permission
+(listed, and asked outright as `needs`, `decide: true`), then working once answered on the desktop,
+live. Reloaded, it is the same device, still paired, without the code. Unpaired on the desktop, it
+is refused: `not admitted (code 403)`, the desktop's gate. 15.5 s on a loaded machine.
+
+**One owner for each rule.** No pairing rule is written again for the browser: hive-web links
+hive-phone and hive-net and calls their own code.
+
+- **hive-net and hive-phone build for `wasm32-unknown-unknown`.** Their native-only dependencies
+  (tokio's runtime, mDNS, native certificates, rustls for reqwest, hyper, alacritty) are target
+  dependencies now, and the modules that need them are left out of a wasm build: hive-net's
+  `daemon`, `doctor`, `host_record`, `push`; hive-phone's `connections`, `pacing`, `push`,
+  `screen`, `talking`, `viewing`, `watching`, and `Identity::unpair_from`. Timers and the clock go
+  through `n0-future`, tokio on native and the browser's on wasm, so `pairing::pair`,
+  `needs::ask_on`, `agents::follow` and `hive_net::access::client` run in both. The native builds
+  and tests are unchanged.
+- **Admission** (`spec/pairing.md` 0.6): hive-phone's `Identity::let_in` became
+  `network::admit(admission, key)`, which the phone's `pair_with` and the browser both call.
+- **The access service answers browsers**: `Access-Control-Allow-Origin: *` and the preflight.
+  Every request to it is signed by a device key and none rides on a cookie, so any origin may ask.
+  Without it a browser cannot read the answer and never gets onto a closed or open-pow network.
+
+**The JS surface** (`crates/hive-web`): the wasm exports `pair(seed, link, name)` →
+`{with, certificate, network, admission}`, `deviceId(seed)`, `Device.start(seed, relays)` →
+`reach(id, relay)` → `Host.needs(name)` (`{needs, working}`), `Host.follow(listed)` (each list as
+`{agents, needs, working}`, the phone's own order of what waits), `Host.open(name)` (B0's streams).
+`www/hive-web.js` keeps the key and what pairing gave in IndexedDB and gives the page
+`openPhone()` → `{id, paired, pair(link, name), reach(), forget()}`. `www/pair.html` is a test page:
+`#pair=<link>&name=<name>` pairs and drops the fragment from the address and history.
+
+**Size**: 3,179,290 B raw, 1,149,919 B gzip -9, 885,957 B brotli (B0: 983,348 gzipped); reqwest
+and hive-phone's readers are the growth. Within §5's 2 MB.
+
+**Proved to fail** (`scripts/mutate.sh`): the phone's proof computed over the ids swapped
+(hive-phone `pairing::prove`): never paired; the sealed key not read back (`hive-web.js`): a new
+device on reload; the access service's CORS header removed: never let onto the network, never
+paired.
+
+**Not done, for later steps:**
+
+- The desktop still shows `hivemind://pair/<…>`, for the native phone; the browser takes the same
+  link pasted or in `#pair=`. An `https://<page>/#pair=<link>` QR waits on a page the person can
+  open (B3), and the bundle hash in the dialog (§3) with it.
+- A computer on the local network alone has no relay in its link, and the browser says it cannot
+  reach it. Only one paired computer is kept; the person's other devices (`spec/pairing.md` 0.7),
+  the network profile kept for later dials, and unpairing from the browser are not there yet.
+- The doc's B2 also names the board (`workspace-doc`, `doc-sync`, `list-sync`, the
+  `workspace-api` client) in the browser; `Host.open("api")` carries it, and none of it is wired.
+- Answering a wait, sending a message, starting and stopping agents: hive-phone's `workspace`
+  module compiles to wasm and is not exported yet.
+
+**Rerun:**
+
+```bash
+(cd crates/hive-net && cargo build --bin hive-net)
+crates/hive-web/build.sh        # CC_wasm32_unknown_unknown as in §9 where there is no clang
+apps/desktop/scripts/e2e.sh phone-browser
+```

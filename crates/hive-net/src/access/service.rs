@@ -13,7 +13,7 @@ use std::{
 use anyhow::{bail, ensure, Context, Result};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full, Limited};
-use hyper::{body::Incoming, Request, Response};
+use hyper::{body::Incoming, header::HeaderValue, Request, Response};
 use iroh::PublicKey;
 use iroh_relay::server::{Access, AccessControl, ClientRequest};
 use serde::{Deserialize, Serialize};
@@ -270,12 +270,27 @@ impl Service {
                         "text/plain"
                     },
                 )
+                // A browser asks from any page: each request is signed, none rides on a cookie.
+                .header("access-control-allow-origin", "*")
                 .body(Full::new(Bytes::from(body)))
                 .expect("a response is well formed")
         };
         let (parts, body) = req.into_parts();
         let path = parts.uri.path().to_string();
         match (parts.method.as_str(), path.as_str()) {
+            ("OPTIONS", _) => {
+                let mut preflight = answer(204, String::new());
+                let headers = preflight.headers_mut();
+                headers.insert(
+                    "access-control-allow-methods",
+                    HeaderValue::from_static("GET, POST"),
+                );
+                headers.insert(
+                    "access-control-allow-headers",
+                    HeaderValue::from_static("content-type"),
+                );
+                preflight
+            }
             ("GET", "/healthz") => answer(200, "ok".into()),
             ("GET", "/pow") => answer(200, json!({ "bits": self.bits }).to_string()),
             ("GET", p) if p.starts_with("/allowed/") => {

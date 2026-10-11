@@ -4,6 +4,7 @@
 //! app, and is their device from then on (M5).
 
 pub mod agents;
+#[cfg(not(target_family = "wasm"))]
 pub mod connections;
 pub mod control;
 pub mod conversation;
@@ -13,20 +14,26 @@ pub mod identity;
 pub mod keys;
 pub mod needs;
 pub mod network;
+#[cfg(not(target_family = "wasm"))]
 pub mod pacing;
 pub mod pairing;
 pub mod person;
+#[cfg(not(target_family = "wasm"))]
 pub mod push;
+#[cfg(not(target_family = "wasm"))]
 pub mod screen;
+#[cfg(not(target_family = "wasm"))]
 pub mod talking;
+#[cfg(not(target_family = "wasm"))]
 pub mod viewing;
 pub mod views;
+#[cfg(not(target_family = "wasm"))]
 pub mod watching;
 pub mod workspace;
 
 /// Now, in ms since the epoch: what the phone dates what it keeps by.
 pub fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    n0_future::time::SystemTime::now()
+        .duration_since(n0_future::time::SystemTime::UNIX_EPOCH)
         .map_or(0, |d| d.as_millis() as u64)
 }

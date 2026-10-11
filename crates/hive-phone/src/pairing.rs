@@ -292,7 +292,7 @@ pub async fn pair(endpoint: &Endpoint, name: &str, link: &PairLink) -> Result<Pa
     });
     let hello = prove(&me, name, &addrs, relay.as_deref(), link);
     let at = hive_net::net::addr_of(&link.device, &link.addrs, &link.relay)?;
-    let answer = tokio::time::timeout(ANSWER_WITHIN, hive_net::pair::ask(endpoint, at, &hello))
+    let answer = n0_future::time::timeout(ANSWER_WITHIN, hive_net::pair::ask(endpoint, at, &hello))
         .await
         .map_err(|_| {
             Failure::Unreachable(
@@ -318,8 +318,7 @@ impl Identity {
     /// answer now is told later).
     pub async fn pair_with(&self, name: &str, link: &PairLink) -> Result<Pairing> {
         let admission = match &link.admission {
-            Some(admission) => self
-                .let_in(admission)
+            Some(admission) => crate::network::admit(admission, self.key())
                 .await
                 .context("not let onto the app's network")?,
             None => "none needed",

@@ -1455,6 +1455,7 @@ dependencies = [
  "iroh-dns-server",
  "iroh-mdns-address-lookup",
  "iroh-relay",
+ "n0-future",
  "rand 0.10.3",
  "rcgen",
  "reqwest",

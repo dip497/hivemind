@@ -153,6 +153,13 @@ jobs:
             echo "the phone links hive-net's server roles"; exit 1
           fi
 
+      - name: It builds for a browser
+        # crates/hive-web links its pairing and readers as they are (phone-browser design §10).
+        working-directory: crates/hive-web
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo check --locked --target wasm32-unknown-unknown --lib
+
       - name: Test the facade
         working-directory: crates/hive-phone-ffi
         run: cargo test --locked

@@ -33,7 +33,7 @@ import { parsePairLink } from "@hivemind/workspace-host/pairing";
 import { heldWorkspaces } from "@hivemind/host/peer-links";
 import { pluginCsp, withImportMap } from "@hivemind/core/view-files";
 import { HIVE_NET, hiveNetBuilt, ownNetwork, person } from "./helpers/multiplayer";
-import { offerPhonePairing, talkerAgent } from "./helpers/phone";
+import { offerPhonePairing, probeAgent, startProbe, talkerAgent } from "./helpers/phone";
 import { stopDaemons } from "./helpers/daemons";
 
 const HIVE_PHONE = path.resolve("../../crates/hive-phone/target/debug/hive-phone");
@@ -75,40 +75,6 @@ async function pairPhone(d: Awaited<ReturnType<typeof desktopWith>>) {
   return { link, phone, paired, phoneId };
 }
 
-/** A stand-in agent, read from its screen: it says what it is doing in its title, and asks to
- *  edit a file until it is answered, then draws its screen afresh, working, and says each line it
- *  hears from then on. Told no, it says so and asks again a moment later; its manifest says `y`
- *  and Enter allow what it asks and `n` and Enter deny it. What the desktop's environment needs to
- *  run it. */
-function probeAgent(): Record<string, string> {
-  const bin = path.join(root, "bin");
-  fs.mkdirSync(bin);
-  fs.writeFileSync(path.join(bin, "probe-agent"), [
-    "#!/bin/bash",
-    "printf '\\033]0;Editing Nav.tsx\\007'",
-    "while :; do",
-    "  printf 'Allow edit to Nav.tsx? (y/n) '",
-    "  read -r answer",
-    "  [ \"$answer\" = n ] || break",
-    "  printf '\\033[2J\\033[Hprobe was told no\\n'",
-    "  sleep 2",
-    "done",
-    "printf '\\033[2J\\033[Hprobe is thinking\\n'",
-    "while read -r line; do printf 'heard: %s\\n' \"$line\"; done",
-  ].join("\n"), { mode: 0o755 });
-  const agent = path.join(root, "desktop", "hivemind", "agents", "probe");
-  fs.mkdirSync(agent, { recursive: true });
-  fs.writeFileSync(path.join(agent, "agent.yaml"), [
-    "manifestVersion: 2", "id: probe", "label: Probe", "bin: probe-agent", "enabled: true",
-    "caps: { promptDelivery: typed, turnSignal: false, resume: none, supervise: human, blockedDetection: true }",
-    "answer: { permission: { allow: ['y', enter], deny: ['n', enter] } }",
-    "detect:", "  default: idle", "  rules:",
-    "  - when: { contains: 'Allow edit to Nav.tsx?' }", "    then: permission",
-    "  - when: { contains: probe is thinking }", "    then: working", "",
-  ].join("\n"));
-  return { PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` };
-}
-
 /** A second stand-in agent, one the phone starts: it takes each line it is given as something to
  *  write down, in `notes.txt` in the folder it runs in, saying so on its screen (working), and
  *  stops at Ctrl+C, which its manifest says interrupts its turn. Installed beside the first. */
@@ -133,15 +99,6 @@ function scribeAgent(): void {
     "detect:", "  default: idle", "  rules:",
     "  - when: { contains: scribe is writing }", "    then: working", "",
   ].join("\n"));
-}
-
-/** The stand-in agent started on the board of `d`: its tile. */
-async function startProbe(d: Awaited<ReturnType<typeof desktopWith>>): Promise<string> {
-  await d.desktop.evaluate(() => window.hive.settingsSet("agents.defaultAgent", "probe"));
-  await d.desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:shortcut", { detail: "agent" })));
-  const terminal = d.desktop.locator(".react-flow__node-terminal");
-  await expect(terminal).toHaveCount(1, { timeout: 20_000 });
-  return (await terminal.getAttribute("data-id"))!;
 }
 
 /** The phone gives the computer an address of its own to be told at, and takes each notice
@@ -233,7 +190,7 @@ test("a phone scans the computer's code and is certified as the person's, by the
 test("the phone is told when an agent on the computer begins waiting on the person, and asks what needs them: the agent, by what it says it is doing, in its workspace, on that computer; watches its terminal; answers it, once; nothing waits once it works again, and it is at work; sends it a message and types into it, as the person; and unpaired, it is told nothing more", async () => {
   test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
   test.setTimeout(120_000);
-  const d = await desktopWith(probeAgent());
+  const d = await desktopWith(probeAgent(root));
   const { phone, phoneId } = await pairPhone(d);
   await d.desktop.keyboard.press("Escape");
   const told = listen(phone);
@@ -242,7 +199,7 @@ test("the phone is told when an agent on the computer begins waiting on the pers
   expect(await needs()).toEqual({ needs: [], working: 0, away: [] });
 
   // The agent starts on the desktop, and asks.
-  const tile = await startProbe(d);
+  const tile = await startProbe(d.desktop);
   const terminal = d.desktop.locator(".react-flow__node-terminal");
   let waiting: Record<string, unknown> | undefined;
   await expect.poll(async () => (waiting = (await needs()).needs[0])?.kind, { timeout: 30_000 }).toBe("permission");
@@ -299,12 +256,12 @@ test("the phone is told when an agent on the computer begins waiting on the pers
 test("the phone drives the person's agents in full: it follows every agent there, live; sees what may be started and starts one with a first prompt, on the computer's board; reads what it changed; interrupts its turn with its agent's keys; and closes it; each recorded as the phone", async () => {
   test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
   test.setTimeout(150_000);
-  const env = probeAgent();
+  const env = probeAgent(root);
   scribeAgent();
   const d = await desktopWith(env);
   const { phone, phoneId } = await pairPhone(d);
   await d.desktop.keyboard.press("Escape");
-  const probe = await startProbe(d);
+  const probe = await startProbe(d.desktop);
 
   // Following: every agent, as each list comes.
   const following = spawn(HIVE_PHONE, ["agents", "--follow", "--identity", phone, "--json"]);
@@ -361,7 +318,7 @@ test("the phone drives the person's agents in full: it follows every agent there
 test("the phone follows what an agent and the person say to each other, as the agent's session file keeps it: the last of it, then each piece as it is written, and a session the agent begins since from its start", async () => {
   test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
   test.setTimeout(120_000);
-  const env = probeAgent();
+  const env = probeAgent(root);
   talkerAgent(root);
   const home = path.join(root, "home");
   fs.mkdirSync(home);
@@ -469,7 +426,7 @@ test("the phone follows an agent as its Agent screen does, on its one connection
 test("a community view that says it works on a phone is offered there with its files; opened, its host on the computer tells it it is on a phone and what the board holds; it does only what the phone may, as the phone; and closed, it ends", async () => {
   test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
   test.setTimeout(120_000);
-  const env = probeAgent();
+  const env = probeAgent(root);
   scribeAgent();
   const d = await desktopWith(env);
   // Two views installed on the computer, as `hive views install` installs one: one says it works on
@@ -488,7 +445,7 @@ test("a community view that says it works on a phone is offered there with its f
   install("desk-only", { name: "Desk only" });
   const { phone, phoneId } = await pairPhone(d);
   await d.desktop.keyboard.press("Escape");
-  const probe = await startProbe(d);
+  const probe = await startProbe(d.desktop);
   const phoneCli = async (...args: string[]) => JSON.parse((await run(HIVE_PHONE, [...args, "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as unknown;
   let listed: Array<Record<string, unknown>> = [];
   await expect.poll(async () => (listed = ((await phoneCli("agents")) as { agents: typeof listed }).agents).length, { timeout: 30_000 }).toBe(1);
@@ -564,12 +521,12 @@ test("a community view that says it works on a phone is offered there with its f
 test("what an agent asks, its computer can allow or deny, and says so in the list and the notice; the phone denies it with the agent's own keys, and it is told no and asks again; allows it, and it works; the same answer again does nothing", async () => {
   test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
   test.setTimeout(120_000);
-  const d = await desktopWith(probeAgent());
+  const d = await desktopWith(probeAgent(root));
   const { phone } = await pairPhone(d);
   await d.desktop.keyboard.press("Escape");
   const told = listen(phone);
   await expect.poll(() => told[0], { timeout: 30_000 }).toMatchObject({ told: [os.hostname()] });
-  const tile = await startProbe(d);
+  const tile = await startProbe(d.desktop);
   const asked = async () => (await needsOf(phone)).needs[0] as Record<string, unknown> | undefined;
   let first: Record<string, unknown> | undefined;
   await expect.poll(async () => (first = await asked())?.kind, { timeout: 30_000 }).toBe("permission");
@@ -602,7 +559,7 @@ test("what an agent asks, its computer can allow or deny, and says so in the lis
 test("a computer away is shown with what it last said needed the person, and when; back, as it starts or wakes, it tells the phone, which shows it only after finding it away; unpaired from the phone while away, only the phone forgets it", async () => {
   test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
   test.setTimeout(180_000);
-  const env = probeAgent();
+  const env = probeAgent(root);
   const d = await desktopWith(env);
   const { phone } = await pairPhone(d);
   await d.desktop.keyboard.press("Escape");
@@ -610,7 +567,7 @@ test("a computer away is shown with what it last said needed the person, and whe
   await expect.poll(() => told[0], { timeout: 30_000 }).toMatchObject({ told: [os.hostname()], away: [] });
   const backs = () => told.filter((t) => t.t === "back");
   const wake = () => apps.at(-1)!.evaluate(({ powerMonitor }) => { powerMonitor.emit("resume"); });
-  const tile = await startProbe(d);
+  const tile = await startProbe(d.desktop);
   let waiting: Record<string, unknown> | undefined;
   await expect.poll(async () => (waiting = (await needsOf(phone)).needs[0])?.tile, { timeout: 30_000 }).toBe(tile);
   const asked = Date.now();
@@ -681,7 +638,7 @@ test("on a network with a push server, the phone registers there, naming the com
   test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
   test.setTimeout(120_000);
   const net = await ownNetwork(root, procs, "closed");
-  const d = await desktopWith(probeAgent());
+  const d = await desktopWith(probeAgent(root));
   expect(await d.desktop.evaluate((l) => window.hive.useNetwork(l), net.link)).toMatchObject({ admission: "enrolled" });
   const { phone, phoneId } = await pairPhone(d);
   await d.desktop.keyboard.press("Escape");
@@ -695,7 +652,7 @@ test("on a network with a push server, the phone registers there, naming the com
 
   // An agent on the computer begins waiting on the person: the computer posts it, signed, to the
   // push server, which passes it on to the phone, and the phone decrypts it.
-  const tile = await startProbe(d);
+  const tile = await startProbe(d.desktop);
   await expect.poll(() => told.slice(1), { timeout: 30_000 }).toEqual([expect.objectContaining({ v: 1, t: "needs", name: "api", tile, agent: "Editing Nav.tsx", kind: "permission" })]);
   // What the server keeps names no workspace, agent or wait.
   const kept = fs.readFileSync(path.join(net.data, "push.json"), "utf8");

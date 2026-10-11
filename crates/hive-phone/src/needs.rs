@@ -111,7 +111,7 @@ pub async fn ask(endpoint: &Endpoint, device: &PairedWith) -> Result<Answer> {
         connection.close(0u32.into(), b"done");
         Ok::<_, anyhow::Error>(answer)
     };
-    tokio::time::timeout(ANSWER_WITHIN, asked)
+    n0_future::time::timeout(ANSWER_WITHIN, asked)
         .await
         .map_err(|_| anyhow::anyhow!("{} did not answer", device.name))?
 }

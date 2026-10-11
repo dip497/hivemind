@@ -5,17 +5,21 @@
 //! that a phone, which runs none of them, links none of them.
 
 pub mod access;
+#[cfg(not(target_family = "wasm"))]
 pub mod daemon;
+#[cfg(not(target_family = "wasm"))]
 pub mod doctor;
 pub mod egress;
 pub mod frames;
 pub mod gate;
+#[cfg(not(target_family = "wasm"))]
 pub mod host_record;
 pub mod key;
 pub mod net;
 pub mod pair;
 pub mod ping;
 pub mod profile;
+#[cfg(not(target_family = "wasm"))]
 pub mod push;
 pub mod signed;
 pub mod ws;

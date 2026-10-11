@@ -7,12 +7,15 @@
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
+#[cfg(not(target_family = "wasm"))]
+use iroh::endpoint::EndpointHooks;
 use iroh::{
     address_lookup::{PkarrPublisher, PkarrResolver},
-    endpoint::{presets, Builder, EndpointHooks, RelayMode},
+    endpoint::{presets, Builder, RelayMode},
     tls::CaTlsConfig,
     Endpoint, EndpointAddr, EndpointId, RelayMap, RelayUrl, SecretKey,
 };
+#[cfg(not(target_family = "wasm"))]
 use iroh_mdns_address_lookup::MdnsAddressLookup;
 use url::Url;
 
@@ -47,8 +50,15 @@ impl Reach {
 /// The certificate authorities this device trusts for the network's servers (relays, the lookup
 /// server): the web's public ones, built in, and those this machine trusts (a company's own; or
 /// the ones `SSL_CERT_FILE` names).
+#[cfg(not(target_family = "wasm"))]
 pub fn trusted() -> CaTlsConfig {
     CaTlsConfig::embedded().with_extra_roots(rustls_native_certs::load_native_certs().certs)
+}
+
+/// A browser has no store of its own to read: the web's public ones.
+#[cfg(target_family = "wasm")]
+pub fn trusted() -> CaTlsConfig {
+    CaTlsConfig::embedded()
 }
 
 /// An endpoint of this device, on `reach`'s relays and lookup server; mDNS is added by the caller,
@@ -69,6 +79,7 @@ pub fn builder(key: SecretKey, reach: &Reach) -> Builder {
 }
 
 /// This device's endpoint, answering `alpns`.
+#[cfg(not(target_family = "wasm"))]
 pub async fn endpoint(key: SecretKey, reach: &Reach, alpns: Vec<Vec<u8>>) -> Result<Endpoint> {
     let nearby = local_lookup(&key, reach)?;
     bind(builder(key, reach).alpns(alpns), nearby).await
@@ -76,6 +87,7 @@ pub async fn endpoint(key: SecretKey, reach: &Reach, alpns: Vec<Vec<u8>>) -> Res
 
 /// This device's endpoint, answering `alpns` for the devices `gate` admits; and, when it looks on
 /// the local network, what it finds there (the devices nearby and what each announces).
+#[cfg(not(target_family = "wasm"))]
 pub async fn endpoint_with(
     key: SecretKey,
     reach: &Reach,
@@ -87,7 +99,14 @@ pub async fn endpoint_with(
     Ok((endpoint, nearby))
 }
 
+/// This device's endpoint, answering `alpns`: a browser's, with no local network to look on.
+#[cfg(target_family = "wasm")]
+pub async fn endpoint(key: SecretKey, reach: &Reach, alpns: Vec<Vec<u8>>) -> Result<Endpoint> {
+    Ok(builder(key, reach).alpns(alpns).bind().await?)
+}
+
 /// mDNS among the devices on this network, when the network uses it.
+#[cfg(not(target_family = "wasm"))]
 fn local_lookup(key: &SecretKey, reach: &Reach) -> Result<Option<MdnsAddressLookup>> {
     if !reach.mdns {
         return Ok(None);
@@ -99,6 +118,7 @@ fn local_lookup(key: &SecretKey, reach: &Reach) -> Result<Option<MdnsAddressLook
     ))
 }
 
+#[cfg(not(target_family = "wasm"))]
 async fn bind(mut builder: Builder, nearby: Option<MdnsAddressLookup>) -> Result<Endpoint> {
     if let Some(lookup) = nearby {
         builder = builder.address_lookup(lookup);
