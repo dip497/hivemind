@@ -28,6 +28,7 @@ import { HostRecords, type Hosted } from "@hivemind/workspace-host/host-records"
 import { Hosting } from "@hivemind/host/hosting";
 import { People } from "@hivemind/host/people";
 import { handle, handleEffect } from "./app-ipc.js";
+import { pageHash, phonePageAt, SHIPPED_PAGE } from "./phone-page.js";
 import { hostIntents } from "./audit.js";
 import { displayName, machineIdentity, takePerson } from "./identity.js";
 import { idOf, workspaceSeed, type Seed } from "@hivemind/workspace-host/identity";
@@ -655,21 +656,11 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
 
   // A code for another of the person's devices to enter (a host's `hive host pair <link>`, or
   // another computer's Settings → Devices): this app gives its person.
-  // The phone page, where the relay's server serves it (`hive-net serve --phone`): a phone without
-  // hivemind opens the link in its browser (docs/design/phone-browser-2026-10-03.md §10).
-  const phonePage = async (relay: string | null): Promise<string | null> => {
-    if (!relay) return null;
-    const page = new URL("phone/", relay.endsWith("/") ? relay : `${relay}/`).href;
-    try {
-      const answer = await fetch(new URL("manifest.webmanifest", page), { signal: AbortSignal.timeout(3000) });
-      return answer.ok ? page : null;
-    } catch {
-      return null;
-    }
-  };
   handleEffect("net:pair-offer", () => ({}), async () => {
     const me = await pairingMe();
-    const page = phonePage(me.relay);
+    // The phone page, where the relay's server serves it: a phone without hivemind opens the link
+    // in its browser (docs/design/phone-browser-2026-10-03.md §10).
+    const page = phonePageAt(me.relay);
     const hn = await network();
     // Found from its words by the devices on this network, until it is used or expires.
     const withdraw = () => { if (offered !== offer) return; offered = null; hn.advertise(null); };
@@ -688,6 +679,13 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     const link = formatPairLink({ device: me.device, addrs: me.addrs, relay: me.relay, code: offer.code, name: me.name, kind: "app", ...(admission ? { admission } : {}) });
     const at = await page;
     return { code: offer.code, link, ...(at ? { page: `${at}#pair=${link}` } : {}), expires: offer.expires };
+  });
+
+  // The hash of the phone page `page` serves, and of the one this build goes with: whether a
+  // server serves the page this release made, asked before a phone is given a link there.
+  handle("net:phone-page", async (_e, page: unknown) => {
+    if (typeof page !== "string" || !/^https?:\/\//.test(page)) throw new Error("phone-page: not a page's address");
+    return { served: await pageHash(page), shipped: SHIPPED_PAGE };
   });
 
   // Enter the code or link another of the person's devices shows: a host (`hive host pair`) takes

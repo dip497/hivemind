@@ -173,6 +173,50 @@ jobs:
           git diff --exit-code -- apps/ios/HivePhone/Core/Generated
           test -z "$(git status --porcelain -- apps/ios/HivePhone/Core/Generated)"
 
+  phone-page:
+    # The phone page (crates/hive-web, docs/design/phone-browser-2026-10-03.md): the wasm and the app
+    # built as a release builds them, with wasm-bindgen at Cargo.lock's version; the desktop's hash
+    # of what a server serves is build.sh's; and its lists in a phone-sized Chromium.
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          run_install: false
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+          key: hive-web-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock') }}
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the page
+        run: |
+          tools=$(crates/hive-web/tools.sh "$RUNNER_TEMP/hive-web-tools")
+          eval "$tools"
+          crates/hive-web/build.sh
+
+      - name: The desktop's hash of the page served is build.sh's
+        working-directory: apps/desktop
+        run: pnpm exec tsx --test tests/unit/phone-page.test.ts
+
+      - name: Its lists in a phone-sized Chromium
+        working-directory: apps/desktop
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm exec playwright test tests/e2e/phone-page.spec.ts
+
   compose:
     # R13: the stack self-hosters run (infra/compose.yml), built from this commit, and its checks:
     # the network's link, admission, a device found by id through the lookup server, a host

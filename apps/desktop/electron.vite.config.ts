@@ -1,6 +1,7 @@
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import fs from "node:fs";
 import path from "node:path";
 import { build as viteBuild, type Plugin } from "vite";
 
@@ -84,9 +85,21 @@ function viewSdkPlugin(): Plugin {
   };
 }
 
+// The phone page this build goes with, by its hash (crates/hive-web/build.sh writes it; a release
+// passes it on as HIVEMIND_PHONE_PAGE): Pair a phone says whether a server serves that page.
+function phonePage(): string | null {
+  if (process.env.HIVEMIND_PHONE_PAGE) return process.env.HIVEMIND_PHONE_PAGE;
+  try {
+    return fs.readFileSync(path.resolve("../../crates/hive-web/www/page.sha256"), "utf8").trim();
+  } catch {
+    return null;
+  }
+}
+
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin({ exclude: BUNDLE_INTERNAL }), viewSdkPlugin()],
+    define: { __PHONE_PAGE__: JSON.stringify(phonePage()) },
     build: {
       outDir: "out/main",
       rollupOptions: {

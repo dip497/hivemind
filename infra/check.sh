@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # R13's checks, against the stack `infra/compose.yml` runs (CI runs them on every change, so the
 # stack cannot rot): the network's link printed and kept across a restart, naming its push server,
-# which answers; a device nobody enrolled turned away by the relay, and told why; devices enrolled with the admin's links let
+# which answers; the phone page served; a device nobody enrolled turned away by the relay, and told why; devices enrolled with the admin's links let
 # in; one found by its id alone through the lookup server and reached through the relay; a
 # workspace's host record read back; and after the server restarts, its devices back on it.
 #
@@ -47,6 +47,9 @@ link=$(printed_link)
 check "the server printed the network's link" yes "$([ -n "$link" ] && echo yes || echo no)"
 check "it names this server's relay, lookup, access and push server" yes "$("$BIN" profile verify "$link" | python3 -c "import json,sys; p=json.load(sys.stdin)['profile']; print('yes' if p['relays'][0]['url']=='$BASE' and p['lookup']=='$BASE/pkarr' and p['access']['url']=='$BASE/access' and p['push']['url']=='$BASE/push' and p['push']['kinds']==['unifiedpush'] and len(p['push'].get('vapid',''))==87 else 'no: '+json.dumps(p))")"
 check "its push server answers" '"ok"' "$(curl -sf "$BASE/push/healthz" || echo none)"
+# The phone page beside them: what a phone's browser opens, and the wasm it compiles as it comes.
+check "it serves the phone page" yes "$(curl -sf "$BASE/phone/" | grep -q 'rel="manifest"' && echo yes || echo no)"
+check "and its wasm, as wasm" application/wasm "$(curl -sf -o /dev/null -w '%{content_type}' "$BASE/phone/pkg/hive_web_bg.wasm" || echo none)"
 
 A=$(device a); B=$(device b); STRANGER=$(device stranger)
 refused=$(on_relay "$STRANGER")

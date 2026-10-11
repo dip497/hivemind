@@ -417,6 +417,9 @@ export interface HiveIpc {
    *  phone, a certificate naming it as yours. `page`: the link inside the address of the phone
    *  page, when the network's server serves one, for a phone to open in its browser. */
   pairOffer(): Promise<{ code: string; link: string; page?: string; expires: number }>;
+  /** The hash of the phone page at `page`, worked out from what its server serves, and of the
+   *  page this build goes with (null: a build made without one). */
+  phonePage(page: string): Promise<{ served: string; shipped: string | null }>;
   /** Enter the code or link another of your devices shows: a host takes your person; another
    *  computer gives its own, and this computer becomes that person (`took`). */
   pairEnter(text: string): Promise<PairedDeviceSummary & { took: boolean }>;

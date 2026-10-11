@@ -213,7 +213,7 @@ wasm-bindgen 0.2.129, the desktop's dependencies installed for Playwright):
 crates/hive-web/build.sh
 (cd crates/hive-web && cargo build --release --example echo)
 crates/hive-net/target/release/hive-net serve --relay --bind 127.0.0.1:3340 &
-crates/hive-web/target/release/examples/echo --relay http://127.0.0.1:3340 > /tmp/echo-id &
+crates/target/release/examples/echo --relay http://127.0.0.1:3340 > /tmp/echo-id &
 (cd crates/hive-web/www && python3 -m http.server 8765 --bind 127.0.0.1) &
 sleep 5
 node crates/hive-web/measure.mjs http://127.0.0.1:8765/echo.html http://127.0.0.1:3340 "$(cat /tmp/echo-id)" 1000
@@ -459,3 +459,39 @@ mouse a phone does not have (the harness's). Not measured on a phone yet.
 
 **Proved to fail** (`scripts/mutate.sh`, `phone-page.spec.ts`): B3's `Keyed.set` (rows gone
 removed after the walk); no `content-visibility`; dots that never go still.
+
+**2. CI, the release and the stack.** The page is the same bytes wherever it is built, so a hash
+says which page a server serves. `crates/hive-web/tools.sh` fetches, checked against their hashes,
+what `build.sh` needs at the versions the repository pins: the Rust `rust-toolchain.toml` names
+(1.93.1), wasm-bindgen at `Cargo.lock`'s version (its project's own build), zig 0.17.0 as the C
+compiler for wasm (ring's), and, where there is no `node_modules`, tsc and the fonts at
+`pnpm-lock.yaml`'s. `build.sh` maps this checkout's and Cargo's paths to fixed ones and lists the
+shell in byte order. hive-web's workspace is `crates/` (`crates/Cargo.toml`, the other crates
+excluded): Cargo hashes a path dependency outside the workspace by its absolute path, and with
+hive-phone and hive-net at `../` the wasm differed with the checkout's path (3,221,770 bytes here,
+3,221,793 in a copy elsewhere, 3,221,795 in the image). With all of it, this checkout, a copy in
+another folder and the image's stage all give page `4dd5eb16…`.
+
+- **The page's hash.** `build.sh` writes `www/page.sha256`: the sha256 of `sha256sum`'s list of
+  `index.html`, `sw.js` and every file `shell.json` names, in name order. The desktop works it out
+  the same way from what a server serves (`apps/desktop/src/main/phone-page.ts`) when the person
+  turns on Open in the phone's browser, and Pair a phone says whether it is the page this build
+  goes with (its hash built in: `HIVEMIND_PHONE_PAGE` in a release, `www/page.sha256` in a local
+  build), another one, or, for a build made without one, to compare it with the release's. It
+  cannot see a server that serves the desktop one page and a phone another.
+- **CI** (`ci.yml`, job `phone-page`): builds the page with `tools.sh` and `build.sh`, checks that
+  the desktop's hash of it served is `build.sh`'s, and runs `phone-page.spec.ts` in Chromium.
+- **Release** (`release.yml`, job `build-phone-page`): builds the page once, runs the same spec,
+  publishes `hive-phone-page.tar.gz` (what the server serves, under `phone/`) and
+  `hive-phone-page.sha256`, and hands the hash to the Linux, macOS and Windows desktop builds,
+  which wait for it.
+- **The stack** (`infra/Dockerfile`, `compose.yml`, `compose.public.yml`): a stage builds the page
+  as CI does; the image serves it at `/phone/` (`--phone /phone`); `infra/check.sh` checks the page
+  and its wasm's type.
+
+Checked here: actionlint on `ci.yml` and `release.yml` (clean; it reports `nightly.yml:33`, a
+string passed to a string input, which HEAD has too); `tools.sh` from an empty folder and
+`build.sh` with what it fetched; the image built, the stack's checks run against it, and the hash
+of what it serves at `/phone/` worked out as the desktop does: `4dd5eb16…`, this build's. Not run:
+the workflows themselves, which need the branch on GitHub. Once it is pushed:
+`gh workflow run release.yml --ref feat/hive-web-b0 -f tag=v0.0.0-web-test` (build only).

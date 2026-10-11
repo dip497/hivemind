@@ -1,24 +1,29 @@
 #!/usr/bin/env bash
 # Build the phone page into www/: the wasm and its JS glue (www/pkg), the app's TypeScript
 # (www/js), its fonts, the list the service worker keeps (shell.json), and a compressed copy of
-# each file for `hive-net serve --phone`. Prints the wasm's size raw, gzipped and brotli'd.
+# each file for `hive-net serve --phone`; and the page's hash (www/page.sha256), which the desktop's
+# pairing dialog compares with what a server serves. Prints the wasm's size raw, gzipped and
+# brotli'd, and the hash.
 #
 # Needs: the wasm32-unknown-unknown target; a C compiler for wasm32 (ring's: clang, or set
-# CC_wasm32_unknown_unknown); wasm-bindgen 0.2.129 (or WASM_BINDGEN=<path>); the repo's
-# dependencies installed (pnpm install: tsc and the fonts). No wasm-opt: every level made the raw
-# file smaller and the compressed one, what a browser downloads, larger.
+# CC_wasm32_unknown_unknown); wasm-bindgen at Cargo.lock's version (WASM_BINDGEN=<path>); tsc and
+# the fonts, from the repo's dependencies (pnpm install) or TSC=<path> FONTS=<@fontsource dir>.
+# tools.sh fetches what is missing. No wasm-opt: every level made the raw file smaller and the
+# compressed one, what a browser downloads, larger.
 set -euo pipefail
 cd "$(dirname "$0")"
 repo=../..
 
+# The same bytes wherever it is built (rust-toolchain.toml pins Rust): no path of this machine.
+export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$(cd "$repo" && pwd)=/hivemind --remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo"
 cargo build --release --locked --target wasm32-unknown-unknown --lib
 "${WASM_BINDGEN:-wasm-bindgen}" --target web --out-dir www/pkg \
-  target/wasm32-unknown-unknown/release/hive_web.wasm
+  ../target/wasm32-unknown-unknown/release/hive_web.wasm
 
 rm -rf www/js
-"$repo/node_modules/.bin/tsc" -p www
+"${TSC:-$repo/node_modules/.bin/tsc}" -p www
 
-fonts=$repo/apps/desktop/node_modules/@fontsource
+fonts=${FONTS:-$repo/apps/desktop/node_modules/@fontsource}
 mkdir -p www/fonts
 for w in 400 500 600; do cp "$fonts/geist-sans/files/geist-sans-latin-$w-normal.woff2" "www/fonts/geist-$w.woff2"; done
 for w in 400 500; do cp "$fonts/jetbrains-mono/files/jetbrains-mono-latin-$w-normal.woff2" "www/fonts/mono-$w.woff2"; done
@@ -28,7 +33,7 @@ for w in 400 500; do cp "$fonts/jetbrains-mono/files/jetbrains-mono-latin-$w-nor
   echo '"./"'
   find app.css manifest.webmanifest js pkg fonts icons -type f \
     \( -name '*.css' -o -name '*.webmanifest' -o -name '*.js' -o -name '*.wasm' -o -name '*.woff2' -o -name '*.png' -o -name '*.svg' \) |
-    sort | sed 's/.*/"&"/'
+    LC_ALL=C sort | sed 's/.*/"&"/'
 } | paste -sd, | sed 's/.*/[&]/' > shell.json)
 
 find www -name '*.br' -delete -o -name '*.gz' -delete
@@ -37,7 +42,13 @@ for f in www/index.html www/app.css www/js/*.js www/pkg/*.js www/pkg/*.wasm; do
   if command -v brotli >/dev/null; then brotli -kf -q 11 "$f"; fi
 done
 
+# The page's hash: of each file it runs or keeps, by name, as `sha256sum` lists them, in name order.
+# apps/desktop/src/main/phone-page.ts (pageHash) works it out the same way from what a server serves.
+(cd www && { echo index.html; echo sw.js; tr -d '[]"' < shell.json | tr , '\n' | grep -vx '\./'; } |
+  LC_ALL=C sort | xargs sha256sum | sha256sum | cut -d' ' -f1 > page.sha256)
+
 wasm=www/pkg/hive_web_bg.wasm
-sizes="$(stat -c %s "$wasm") bytes, $(stat -c %s "$wasm.gz") gzipped"
-if [ -f "$wasm.br" ]; then sizes+=", $(stat -c %s "$wasm.br") brotli"; fi
+sizes="$(wc -c < "$wasm" | tr -d " ") bytes, $(wc -c < "$wasm.gz" | tr -d " ") gzipped"
+if [ -f "$wasm.br" ]; then sizes+=", $(wc -c < "$wasm.br" | tr -d " ") brotli"; fi
 echo "wasm: $sizes"
+echo "page: $(cat www/page.sha256)"

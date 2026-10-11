@@ -30,10 +30,3 @@ anyhow = "1"
 hive-net = { path = "../hive-net", default-features = false }
 iroh = "1.3.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
-
-[profile.release]
-opt-level = "z"
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true

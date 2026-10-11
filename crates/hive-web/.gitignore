@@ -3,5 +3,6 @@ www/pkg/
 www/js/
 www/fonts/
 www/shell.json
+www/page.sha256
 www/**/*.br
 www/**/*.gz

@@ -101,6 +101,7 @@ const api: HiveApi = {
     return () => { ipcRenderer.removeListener("net:devices-changed", h); };
   },
   pairOffer: () => ipcRenderer.invoke("net:pair-offer"),
+  phonePage: (page) => ipcRenderer.invoke("net:phone-page", page),
   pairEnter: (text) => ipcRenderer.invoke("net:pair-enter", text),
   unpair: (device) => ipcRenderer.invoke("net:unpair", device),
   deviceWorkspaces: () => ipcRenderer.invoke("net:device-workspaces"),

@@ -1,4 +1,19 @@
-# The build needs hive-net's crate and nothing else of the repository.
+# The build needs hive-net's crate, and for the phone page hive-phone's, hive-web's and their workspace, the pairing
+# words they read and the lockfile naming the page's tools; nothing built here.
 *
+!crates/Cargo.toml
+!crates/Cargo.lock
 !crates/hive-net
-crates/hive-net/target
+!crates/hive-phone
+!crates/hive-web
+!spec
+!pnpm-lock.yaml
+crates/target
+crates/*/target
+crates/hive-web/www/js
+crates/hive-web/www/pkg
+crates/hive-web/www/fonts
+crates/hive-web/www/shell.json
+crates/hive-web/www/page.sha256
+crates/hive-web/www/**/*.br
+crates/hive-web/www/**/*.gz

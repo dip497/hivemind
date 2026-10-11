@@ -51,8 +51,76 @@ env:
   ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.ci-cache/electron-builder
 
 jobs:
+  # The phone page (crates/hive-web), which `hive-net serve --phone` serves: built once, published
+  # with its hash, and that hash built into each desktop, whose Pair a phone compares it with what a
+  # server serves.
+  build-phone-page:
+    name: build the phone page
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      hash: ${{ steps.build.outputs.hash }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6.1.0
+        with:
+          run_install: false
+          cache: true
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates
+          key: release-phone-page
+
+      - name: pnpm install (workspace)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        id: build
+        run: |
+          set -euo pipefail
+          tools=$(crates/hive-web/tools.sh "$RUNNER_TEMP/hive-web-tools")
+          eval "$tools"
+          crates/hive-web/build.sh
+          echo "hash=$(cat crates/hive-web/www/page.sha256)" >> "$GITHUB_OUTPUT"
+
+      - name: Its lists in a phone-sized Chromium
+        working-directory: apps/desktop
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm exec playwright test tests/e2e/phone-page.spec.ts
+
+      - name: Stage release artifacts
+        # What the server serves, under phone/: `hive-net serve --phone <dir>/phone`. Not the
+        # sources, nor B0's echo probe.
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets stage
+          cp -r crates/hive-web/www stage/phone
+          rm -rf stage/phone/app stage/phone/tsconfig.json stage/phone/echo.html stage/phone/pkg/*.d.ts stage/phone/pkg/package.json stage/phone/pkg/.gitignore
+          tar -czf release-assets/hive-phone-page.tar.gz -C stage phone
+          cp crates/hive-web/www/page.sha256 release-assets/hive-phone-page.sha256
+          ls -la release-assets/
+
+      - name: Upload artifacts (workflow result)
+        uses: actions/upload-artifact@v7
+        with:
+          name: phone-page
+          path: release-assets/
+
   build-linux:
     name: build linux x86_64
+    needs: build-phone-page
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -106,6 +174,9 @@ jobs:
 
       - name: Build renderer + main
         run: pnpm --filter @hivemind/desktop run build
+        env:
+          # The phone page this release made: Pair a phone says whether a server serves it.
+          HIVEMIND_PHONE_PAGE: ${{ needs.build-phone-page.outputs.hash }}
 
       - name: pnpm deploy (materialize workspace deps for electron-builder)
         # electron-builder rejects workspace symlinks that point outside the
@@ -238,6 +309,7 @@ jobs:
 
   build-macos:
     name: build macos arm64
+    needs: build-phone-page
     runs-on: macos-26  # Apple Silicon runner
     timeout-minutes: 30
 
@@ -283,6 +355,9 @@ jobs:
 
       - name: Build renderer + main
         run: pnpm --filter @hivemind/desktop run build
+        env:
+          # The phone page this release made: Pair a phone says whether a server serves it.
+          HIVEMIND_PHONE_PAGE: ${{ needs.build-phone-page.outputs.hash }}
 
       - name: pnpm deploy (materialize workspace deps for electron-builder)
         # verifyDepsBeforeRun off here and for electron-builder: see the linux job.
@@ -365,6 +440,7 @@ jobs:
 
   build-windows:
     name: build windows x64
+    needs: build-phone-page
     runs-on: windows-latest
     timeout-minutes: 40
     # Published, but never blocking: the smoke steps below run the build (CLI, a ConPTY
@@ -422,6 +498,9 @@ jobs:
 
       - name: Build renderer + main
         run: pnpm --filter @hivemind/desktop run build
+        env:
+          # The phone page this release made: Pair a phone says whether a server serves it.
+          HIVEMIND_PHONE_PAGE: ${{ needs.build-phone-page.outputs.hash }}
 
       - name: pnpm deploy (materialize workspace deps for electron-builder)
         # verifyDepsBeforeRun off here and for electron-builder: see the linux job.
@@ -762,7 +841,7 @@ jobs:
 
   publish:
     name: publish github release
-    needs: [build-linux, build-linux-arm64, build-macos, build-windows, build-hive-net]
+    needs: [build-phone-page, build-linux, build-linux-arm64, build-macos, build-windows, build-hive-net]
     # A tag push always publishes. A MANUAL run only publishes when it explicitly
     # asks to — the default is build-only, so dispatching to smoke-test a build
     # can never cut an accidental release.
@@ -828,3 +907,5 @@ jobs:
             release-assets/hive-net-linux-arm64
             release-assets/hive-net-darwin-arm64
             release-assets/hive-net-windows-x64.exe
+            release-assets/hive-phone-page.tar.gz
+            release-assets/hive-phone-page.sha256

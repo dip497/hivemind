@@ -57,6 +57,8 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
     return link;
   };
   const link = await inBrowser(app);
+  // The page this build goes with (its hash from build.sh), worked out from what the server serves.
+  await expect(desktop.locator("[data-pair-page]")).toHaveAttribute("data-pair-page", "same", { timeout: 30_000 });
 
   // Opened on a phone: it asks first, naming the computer, as anyone can send a link; nothing is
   // paired until the tap. Then it pairs, let onto the network with the voucher the link carries.

@@ -184,6 +184,7 @@ function OfferCode() {
             <p className="text-[12px] text-[var(--color-fg3)]" data-pair-server={server}>
               The page comes from {server}, this network's server. Whoever runs it could pair as you: turn this on only if that is you.
             </p>
+            {inBrowser && <PageHash page={page.split("#")[0]!} />}
           </div>
         )}
         <div>
@@ -194,6 +195,29 @@ function OfferCode() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** The hash of the phone page `page` serves, and whether it is the page this release made. */
+function PageHash({ page }: { page: string }) {
+  const [hash, setHash] = useState<{ served: string; shipped: string | null } | { error: string } | null>(null);
+  useEffect(() => {
+    let on = true;
+    window.hive.phonePage(page).then((h) => on && setHash(h), (e: unknown) => on && setHash({ error: messageOf(e) }));
+    return () => { on = false; };
+  }, [page]);
+  const short = (h: string) => `${h.slice(0, 16)}…`;
+  if (!hash) return <p className="text-[12px] text-[var(--color-fg3)]">Working out the page's hash…</p>;
+  if ("error" in hash) return <p className="text-[12px] text-[var(--color-err)]" data-pair-page="error">The page's hash could not be worked out: {hash.error}</p>;
+  const { served, shipped } = hash;
+  const verdict = shipped === null ? "unknown" : served === shipped ? "same" : "other";
+  return (
+    <p className="text-[12px] text-[var(--color-fg3)]" data-pair-page={verdict} title={served}>
+      Page <span className="font-mono">{short(served)}</span>
+      {verdict === "same" && ": the page this release of hivemind made."}
+      {verdict === "other" && <span className="text-[var(--color-err)]">: not the page this release made (<span className="font-mono">{short(shipped!)}</span>). It is another version, or was changed.</span>}
+      {verdict === "unknown" && ": compare it with hive-phone-page.sha256 on the release."}
+    </p>
   );
 }
 

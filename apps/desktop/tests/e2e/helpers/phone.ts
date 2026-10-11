@@ -10,7 +10,8 @@ import path from "node:path";
 export async function offerPhonePairing(desktop: Page): Promise<string> {
   await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "devices" } })));
   await desktop.locator("[data-pair-phone]").click();
-  await expect(desktop.locator('[data-pair-offered="phone"] [data-pair-qr]')).toBeVisible();
+  // The offer runs hive-net (a voucher on a closed network): seconds on a loaded machine.
+  await expect(desktop.locator('[data-pair-offered="phone"] [data-pair-qr]')).toBeVisible({ timeout: 20_000 });
   const link = (await desktop.locator("[data-pair-copy]").getAttribute("title"))!;
   expect(link).toMatch(/^hivemind:\/\/pair\//);
   return link;
