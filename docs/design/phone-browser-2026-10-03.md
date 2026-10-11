@@ -550,3 +550,81 @@ cannot get its files from the wasm without an origin of its own. The options:
    loads it as the sandboxed frame's `srcdoc`: no second origin, but a view that loads files as it
    runs (`fetch`, a dynamic `import`) breaks.
 3. No views in the browser; the phone apps show them.
+
+**4. The terminal.** Not built in B4: B5 draws the core's own screen instead of a second emulator
+in the page (§11.4).
+
+## 11. B5: the phone is the desktop in your pocket (brief, 2026-10-12)
+
+What the person sees and can do on the desktop's Layers panel, they see and can do on the phone,
+with what needs them first. The browser app first; the phone apps follow the same design
+(docs/design/phone-app-2026-10-02.md §6.2). Order: §11.1 to §11.6, each step with a test that fails
+first (the test-audit gate, mutation-checked), a commit per section.
+
+**What it replaces in B4.** The terminal (B4 item 4: watch and type, the key bar, the
+keyboard-aware layout, the stream resuming after the tab sleeps) becomes §11.4, which draws the
+core's own screen rather than a second emulator in the page. Views, left as a decision in B4 item
+3, is §11.6, with option 1 taken (a sandboxed frame on an origin of its own). The iPhone findings
+are taken in: an Allow that did nothing and a status left on "needs you" (§11.1), a question shown
+as Allow/Deny (§11.1), and the reading list, tables, links, `dir=auto`, the composer's placeholder
+(§11.5). B4 items 1 to 3 stand as committed.
+
+**Data, decided.**
+- Home is built from the view protocol's `structure` (`packages/view-host/src/structure.ts`, the
+  one builder the window and a device's remote screen already share) plus `agent.since` changes,
+  not the whole agent list on every change (spec/agents.md:19 today). Measured on the live canvas:
+  42 tiles are 6.4 KB a list; state changes p99 11 a minute, at peak 33 in one second.
+- The desktop owns order, pins and each row's last line, sent as fields on the row; the phone only
+  groups and draws. The last line comes from the core's screen (alacritty), not a second parser.
+- Sync: a snapshot with a sequence, then changes after it; on reconnect the phone asks `since` its
+  last sequence; the host caps the replay (count and bytes) and answers "too far behind" with a
+  fresh snapshot. No polling. Layout changes and terminal output in separate sequences.
+
+**11.1 Answer what it actually asks** (first: the bugs the person hit).
+- A question (AskUserQuestion, Elicitation) shows its question and options as buttons, never
+  Allow/Deny. A permission shows the tool and the exact command or diff (the permission-detail
+  design, spec/needs.md 0.7: coordinated with it, not duplicated).
+- Typed-key answers get four guards, in the host, in the one function every answer goes through:
+  each wait carries an id (a revision) and an answer names it, a stale one refused, so an old card
+  cannot type into the next prompt; keys are sent only while the screen rules still say this wait
+  is showing; one write lock per terminal; the answer goes only to the machine that owns the tile
+  and is never replayed after a reconnect, and when it cannot be confirmed the phone says "Not
+  confirmed: check the chat" and offers no retry.
+- After an answer the status leaves "needs you" on the desktop and the phone, and the audit records
+  the decision. Seen on "perm probe" (Claude 2.1.296, mode acceptEdits): Allow from one device was
+  audited ok and did nothing for 90 s; a later answer from the iPhone left Claude at "Interrupted ·
+  What should Claude do instead?" while the desktop and the phone still said it waited, 1,397 s
+  on. First, probe the real binary: does `1` still allow in 2.1.296's chooser?
+- Regression tests that fail on today's code: Allow on a fresh chooser lands; a second Allow with
+  the old id is refused; the wait clears after the answer.
+
+**11.2 Home mirrors the Layers panel.** The same tree, names and order as the desktop: machines,
+then projects (the panel's groupings), then tiles, agents first; frames as the desktop names them.
+"Needs you" on top (permission, question, plan), then Working, then the rest; it folds the Needs
+tab into Home. Pinned first; search; machine chips when there is more than one machine. Each row:
+state, name, last line (what it said, or the exact command or question it waits on). Budget: a
+200-tile canvas opens Home in under 500 ms at 4× CPU throttle, and one change redraws one row.
+
+**11.3 Start an agent.** New agent on Home and inside a project: machine, folder, the agents
+installed there, model and permission mode as the desktop offers them, a prompt (photos
+attachable). Folders: the machine's known projects and recent folders, plus a listing scoped inside
+a known project (directories only, capped); no browsing the whole disk. Close and stop from the
+row.
+
+**11.4 The terminal, one tap from the chat.** The chat stays the default. Draw the core's screen
+(`crates/hive-phone/src/screen.rs`) in the browser. Never resize the phone's emulator locally:
+render at the PTY's columns and scale or pan to fit; an explicit "Fit to phone" resizes the real
+PTY and restores it when the phone leaves. A late join gets a snapshot of the rendered screen, not
+a byte tail; output is flow-controlled by acknowledgements, and on overflow a replacing snapshot is
+sent instead of queued bytes. Key bar: Esc, Tab, arrows, Ctrl-C.
+
+**11.5 Reading.** Markdown tables, tappable https links (`javascript:` stays inert), `dir=auto`
+paragraphs, images in the conversation, tool calls that unfold to their full input and output.
+
+**11.6 Views and widgets.** A view switcher as on the desktop: the installed views that declare
+phone support (P8: the view protocol's `surfaces`, the workspace API's `view.*`). The browser's
+view host is a sandboxed iframe on its own origin under the view's CSP. Widgets through the same
+plugin contract (`widget.drawn`, `widget.press`); no widget gets a code path of its own.
+
+Out of scope, a separate B6 design: answering from the notification itself (end-to-end encrypted
+Web Push with Allow and Deny actions; on an iPhone only once the page is on the Home Screen).
