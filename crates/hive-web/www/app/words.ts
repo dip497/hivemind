@@ -1,0 +1,35 @@
+// What the screens say, as the Android app says it (its strings.xml).
+
+export function ago(since: number, now = Date.now()): string {
+  const s = Math.max(0, Math.floor((now - since) / 1000));
+  if (s < 60) return "now";
+  if (s < 3600) return `${Math.floor(s / 60)} min`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h`;
+  return `${Math.floor(s / 86400)} d`;
+}
+
+const STATES: Record<string, string> = {
+  idle: "idle", working: "working", waiting: "waiting on you", done: "done",
+  failed: "failed", interrupted: "interrupted", limited: "limited", exited: "exited",
+};
+export const stateLabel = (state: string) => STATES[state] ?? state;
+
+const KINDS: Record<string, string> = { permission: "permission", question: "question", plan: "plan" };
+export const kindLabel = (kind: string) => KINDS[kind] ?? "waiting on you";
+
+export const where = (workspace: string, machine: string) => `${workspace} · ${machine}`;
+
+export function noneWaiting(working: number): string {
+  if (working === 0) return "Nothing needs you.";
+  return `Nothing needs you. ${working} ${working === 1 ? "agent" : "agents"} working.`;
+}
+
+/** What it means when an action did not land. */
+export const NOTICES = {
+  answered: "It no longer waits on you.",
+  notRunning: "No agent runs there now.",
+  notStopped: "It was not in a turn.",
+};
+
+/** An error, as the person is told it. */
+export const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));

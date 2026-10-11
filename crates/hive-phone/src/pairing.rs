@@ -142,6 +142,18 @@ fn admission_of(v: Option<&Value>) -> Option<Admission> {
 
 /// The link in `text`, or none when it is not a pairing link.
 pub fn parse_link(text: &str) -> Option<PairLink> {
+    let text = text.trim_matches(is_space);
+    // The phone page's address carries the link in its fragment (spec/pairing.md).
+    match text.split_once('#') {
+        Some((page, fragment)) if page.starts_with("https://") || page.starts_with("http://") => {
+            let (_, link) = form_urlencoded::parse(fragment.as_bytes()).find(|(k, _)| k == "pair")?;
+            link_of(&link)
+        }
+        _ => link_of(text),
+    }
+}
+
+fn link_of(text: &str) -> Option<PairLink> {
     let body = text.trim_matches(is_space).strip_prefix(LINK_PREFIX)?;
     let l: Value = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(body).ok()?).ok()?;
     let l = l.as_object()?;

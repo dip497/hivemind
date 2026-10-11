@@ -133,7 +133,7 @@ function EnterLink() {
 /** A code for another device to enter: shown as its words, a link and a QR code of the link; for a
  *  phone, the QR code to scan. One at a time: this computer keeps one code open. */
 function OfferCode() {
-  const [offer, setOffer] = useState<{ code: string; link: string; expires: number; phone: boolean } | null>(null);
+  const [offer, setOffer] = useState<{ code: string; link: string; page?: string; expires: number; phone: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const show = async (phone: boolean) => {
@@ -152,13 +152,15 @@ function OfferCode() {
     );
   }
   const until = new Date(offer.expires).toLocaleTimeString();
+  // A phone without hivemind opens the page's address in its browser; hivemind reads it as the link.
+  const shown = offer.phone && offer.page ? offer.page : offer.link;
   return (
     <div className="flex items-start gap-4" data-pair-offered={offer.phone ? "phone" : "code"}>
-      <Qr text={offer.link} />
+      <Qr text={shown} />
       <div className="flex min-w-0 flex-col gap-2">
         {offer.phone ? (
           <p className="text-[12px] text-[var(--color-fg2)]">
-            Scan this with hivemind on your phone. It becomes yours, to see what needs you and answer it, and runs nothing itself. It works once, until {until}.
+            {offer.page ? "Scan this with your phone's camera, or with hivemind on it." : "Scan this with hivemind on your phone."} It becomes yours, to see what needs you and answer it, and runs nothing itself. It works once, until {until}.
           </p>
         ) : (
           <>
@@ -169,8 +171,8 @@ function OfferCode() {
           </>
         )}
         <div>
-          <Button size="sm" variant="outline" data-pair-copy title={offer.link}
-            onClick={() => { void navigator.clipboard.writeText(offer.link).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}>
+          <Button size="sm" variant="outline" data-pair-copy title={shown}
+            onClick={() => { void navigator.clipboard.writeText(shown).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}>
             Copy the link {copied ? <Check /> : <Copy />}
           </Button>
         </div>

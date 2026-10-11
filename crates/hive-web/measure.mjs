@@ -1,4 +1,4 @@
-// Open www/index.html in headless Chromium and print what it measured, as JSON.
+// Open www/echo.html in headless Chromium and print what it measured, as JSON.
 //   node measure.mjs <page url> <relay url> <host id> [messages]
 // Playwright is the desktop app's; PLAYWRIGHT_FROM names another package.json to find it from,
 // CHROMIUM a browser binary other than the one Playwright pins.

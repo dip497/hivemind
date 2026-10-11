@@ -4,7 +4,10 @@ use hive_net::{
     frames::{read_frame, write_frame},
     net::{addr_of, Reach},
 };
-use hive_phone::{agents, failure::Failure, needs, network, pairing};
+use hive_phone::{
+    agents, control, conversation, failure::Failure, network, pairing,
+    workspace::{self, Reply},
+};
 use iroh::{
     endpoint::{Connection, RecvStream, SendStream},
     Endpoint, RelayUrl, SecretKey,
@@ -26,7 +29,28 @@ fn to_js(v: &Value) -> Result<JsValue, JsError> {
     js_sys::JSON::parse(&v.to_string()).map_err(|_| err("not JSON"))
 }
 
-/// The device key whose seed is `seed`: the page keeps it (www/hive-web.js), this crate signs with it.
+fn from_js(v: &JsValue) -> Result<Value, JsError> {
+    let text = js_sys::JSON::stringify(v).map_err(|_| err("not JSON"))?;
+    serde_json::from_str(&String::from(text)).map_err(err)
+}
+
+/// The person's answer as the page gives it: `{text}`, `{allow}`, or `{approve, feedback?}`.
+fn reply_of(said: &JsValue) -> Result<Reply, JsError> {
+    let said = from_js(said)?;
+    let text = |k: &str| said.get(k).and_then(Value::as_str).map(str::to_string);
+    let yes = |k: &str| said.get(k).and_then(Value::as_bool);
+    match (text("text"), yes("allow"), yes("approve")) {
+        (Some(text), None, None) => Ok(Reply::Text(text)),
+        (None, Some(allow), None) => Ok(Reply::Decide { allow }),
+        (None, None, Some(approve)) => Ok(Reply::Plan {
+            approve,
+            feedback: text("feedback"),
+        }),
+        _ => Err(err("an answer is {text}, {allow} or {approve, feedback?}")),
+    }
+}
+
+/// The device key whose seed is `seed`: the page keeps it (www/app/store.ts), this crate signs with it.
 fn key_of(seed: &[u8]) -> Result<SecretKey, JsError> {
     let seed: [u8; 32] = seed
         .try_into()
@@ -136,13 +160,6 @@ pub struct Host {
 
 #[wasm_bindgen]
 impl Host {
-    /// What waits on the person there, `{needs, working}`, as the device called `name` answers
-    /// (hive-phone's `needs`).
-    pub async fn needs(&self, name: String) -> Result<JsValue, JsError> {
-        let answer = needs::ask_on(&self.connection, &name).await.map_err(err)?;
-        to_js(&serde_json::to_value(answer).map_err(err)?)
-    }
-
     /// Follow every agent there (hive-phone's `agents::follow`): `listed` is called with
     /// `{agents, needs, working}` as each list comes, the phone's own order of what waits on the
     /// person. Done when the device ends it.
@@ -167,6 +184,88 @@ impl Host {
             send: Mutex::new(send),
             recv: Mutex::new(recv),
         })
+    }
+
+    /// Answer what the agent of `tile` in `workspace` waits on the person for, the wait that
+    /// began at `since`, with `reply` (`{text}`, `{allow}` or `{approve, feedback?}`). Whether it
+    /// landed: not when it waits on that no more.
+    pub async fn answer(
+        &self,
+        workspace: String,
+        tile: String,
+        since: f64,
+        reply: JsValue,
+    ) -> Result<bool, JsError> {
+        let reply = reply_of(&reply)?;
+        workspace::answer(&self.connection, &workspace, &tile, since as u64, &reply)
+            .await
+            .map_err(err)
+    }
+
+    /// Send the agent of `tile` the message `text`, typed in once it is at its prompt. Whether it
+    /// went: not when no agent runs there.
+    pub async fn send(&self, workspace: String, tile: String, text: String) -> Result<bool, JsError> {
+        workspace::send(&self.connection, &workspace, &tile, &text)
+            .await
+            .map_err(err)
+    }
+
+    /// Stop the agent of `tile` in its turn. Whether it was in one.
+    pub async fn stop(&self, workspace: String, tile: String) -> Result<bool, JsError> {
+        control::interrupt(&self.connection, &workspace, &tile)
+            .await
+            .map_err(err)
+    }
+
+    /// Close the agent of `tile`. Whether it was open.
+    #[wasm_bindgen(js_name = closeAgent)]
+    pub async fn close_agent(&self, workspace: String, tile: String) -> Result<bool, JsError> {
+        control::close(&self.connection, &workspace, &tile)
+            .await
+            .map_err(err)
+    }
+
+    /// The agents `workspace` can start, and its frames: `{programs, frames}`.
+    pub async fn startable(&self, workspace: String) -> Result<JsValue, JsError> {
+        let startable = control::startable(&self.connection, &workspace)
+            .await
+            .map_err(err)?;
+        to_js(&serde_json::to_value(startable).map_err(err)?)
+    }
+
+    /// Start an agent in `workspace`, `{program, frame?, prompt?, model?, mode?}`: its tile.
+    pub async fn start(&self, workspace: String, start: JsValue) -> Result<String, JsError> {
+        let start: control::Start = serde_json::from_value(from_js(&start)?).map_err(err)?;
+        control::start(&self.connection, &workspace, &start)
+            .await
+            .map_err(err)
+    }
+
+    /// Follow what the agent of `tile` and the person said (hive-phone's `conversation::follow`):
+    /// `said` is called with `{entries, cursor, session}` for each piece, in order and once, from
+    /// the last of its session; until `until` settles or the device ends it.
+    pub async fn conversation(
+        &self,
+        workspace: String,
+        tile: String,
+        said: js_sys::Function,
+        until: js_sys::Promise,
+    ) -> Result<(), JsError> {
+        let followed = conversation::follow(&self.connection, &workspace, &tile, None, |piece| {
+            let piece = json!({
+                "entries": piece.entries,
+                "cursor": piece.cursor,
+                "session": piece.session,
+            });
+            if let Ok(piece) = to_js(&piece) {
+                let _ = said.call1(&JsValue::NULL, &piece);
+            }
+        });
+        let stopped = async {
+            let _ = wasm_bindgen_futures::JsFuture::from(until).await;
+            Ok(())
+        };
+        n0_future::future::or(followed, stopped).await.map_err(err)
     }
 
     pub fn close(&self) {

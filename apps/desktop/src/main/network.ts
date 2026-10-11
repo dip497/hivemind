@@ -655,6 +655,18 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
 
   // A code for another of the person's devices to enter (a host's `hive host pair <link>`, or
   // another computer's Settings → Devices): this app gives its person.
+  // The phone page, where the relay's server serves it (`hive-net serve --phone`): a phone without
+  // hivemind opens the link in its browser (docs/design/phone-browser-2026-10-03.md §10).
+  const phonePage = async (relay: string | null): Promise<string | null> => {
+    if (!relay) return null;
+    const page = new URL("phone/", relay.endsWith("/") ? relay : `${relay}/`).href;
+    try {
+      const answer = await fetch(new URL("manifest.webmanifest", page), { signal: AbortSignal.timeout(3000) });
+      return answer.ok ? page : null;
+    } catch {
+      return null;
+    }
+  };
   handleEffect("net:pair-offer", () => ({}), async () => {
     const me = await pairingMe();
     const hn = await network();
@@ -673,7 +685,8 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
       voucher: access.policy === "closed" ? await networkProfiles().voucher({ expiresIn: (offer.expires - Date.now()) / 1000, uses: 1 }) : null,
     };
     const link = formatPairLink({ device: me.device, addrs: me.addrs, relay: me.relay, code: offer.code, name: me.name, kind: "app", ...(admission ? { admission } : {}) });
-    return { code: offer.code, link, expires: offer.expires };
+    const page = await phonePage(me.relay);
+    return { code: offer.code, link, ...(page ? { page: `${page}#pair=${link}` } : {}), expires: offer.expires };
   });
 
   // Enter the code or link another of the person's devices shows: a host (`hive host pair`) takes

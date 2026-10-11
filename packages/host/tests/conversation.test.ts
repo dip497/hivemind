@@ -118,6 +118,24 @@ test("asked for an agent's conversation, the caller is answered what it says so 
   }
 });
 
+test("asked before the agent has said anything, its session file not yet there, the caller is answered nothing, then once its file is there sent the last of it and what is written to it", async () => {
+  let kept: Transcript | null = null;
+  const { server, client } = served(() => kept);
+  const phone = client();
+  try {
+    assert.deepEqual(await server.answer("agent.conversation", ["t1"], phone), { result: { entries: [], cursor: 0 } });
+    const at = sessionFile(said(0));
+    kept = { session: "s1", file: at, format: FORMAT };
+    for (let t = 0; t < 4000 && phone.got.length === 0; t += 20) await wait(20);
+    assert.deepEqual(phone.got.map((e) => [ids({ result: { entries: e.params[1] } }), e.params[3]]), [[["u0"], "s1"]]);
+    fs.appendFileSync(at, said(1));
+    for (let t = 0; t < 3000 && phone.got.length === 1; t += 20) await wait(20);
+    assert.deepEqual(phone.got.map((e) => [ids({ result: { entries: e.params[1] } }), e.params[3]]), [[["u0"], "s1"], [["u1"], "s1"]]);
+  } finally {
+    phone.go();
+  }
+});
+
 test("followed, an agent that begins another session (Claude Code's /clear) is followed in it: the last of it, then what is written to it, each named by it; the one before says no more", async () => {
   const before = sessionFile(said(0));
   let kept: Transcript | null = { session: "s1", file: before, format: FORMAT };

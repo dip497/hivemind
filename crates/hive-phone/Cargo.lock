@@ -1607,6 +1607,7 @@ dependencies = [
  "alacritty_terminal",
  "anyhow",
  "base64 0.23.1",
+ "form_urlencoded",
  "hex",
  "hive-net",
  "hmac",

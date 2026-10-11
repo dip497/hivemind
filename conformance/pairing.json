@@ -304,6 +304,46 @@
    "text": "hivemind://pair/!!!",
    "link": null,
    "about": "not base64url JSON"
+  },
+  {
+   "text": "https://relay.example.net/phone/#pair=hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOlsiMTkyLjE2OC4xLjIwOjQxNjQxIiwiW2ZkMDA6OjIwXTo0MTY0MSJdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJQcml5YSdzIGRlc2t0b3AiLCJraW5kIjoiYXBwIn0",
+   "link": {
+    "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "addrs": [
+     "192.168.1.20:41641",
+     "[fd00::20]:41641"
+    ],
+    "relay": null,
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "name": "Priya's desktop",
+    "kind": "app"
+   },
+   "about": "a page's address carrying the link in its fragment, as the computer shows it for a browser"
+  },
+  {
+   "text": "https://relay.example.net/phone/#name=Desk&pair=hivemind%3A%2F%2Fpair%2FeyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOlsiMTkyLjE2OC4xLjIwOjQxNjQxIiwiW2ZkMDA6OjIwXTo0MTY0MSJdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJQcml5YSdzIGRlc2t0b3AiLCJraW5kIjoiYXBwIn0",
+   "link": {
+    "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "addrs": [
+     "192.168.1.20:41641",
+     "[fd00::20]:41641"
+    ],
+    "relay": null,
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "name": "Priya's desktop",
+    "kind": "app"
+   },
+   "about": "the link percent-encoded in the fragment, after another field"
+  },
+  {
+   "text": "https://relay.example.net/phone/#pair=hivemind://network/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOlsiMTkyLjE2OC4xLjIwOjQxNjQxIiwiW2ZkMDA6OjIwXTo0MTY0MSJdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJQcml5YSdzIGRlc2t0b3AiLCJraW5kIjoiYXBwIn0",
+   "link": null,
+   "about": "a page's address carrying something that is not a pairing link"
+  },
+  {
+   "text": "https://relay.example.net/phone/",
+   "link": null,
+   "about": "a page's address carrying no link"
   }
  ],
  "phone": {

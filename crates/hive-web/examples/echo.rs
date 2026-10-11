@@ -1,5 +1,5 @@
 //! A host that answers `hive/ws/1` by sending every frame back on the stream it came on: what the
-//! test page (`www/index.html`) measures against. It is reached through the relay named, alone.
+//! test page (`www/echo.html`) measures against. It is reached through the relay named, alone.
 //!
 //!   cargo run --release --example echo -- --relay http://127.0.0.1:3340
 //!

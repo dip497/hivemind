@@ -56,14 +56,14 @@ export function conversations(o: ConversationsOptions): Domain<"agent.conversati
         if (cursor != null && (typeof cursor !== "number" || !Number.isSafeInteger(cursor) || cursor < 0)) throw new ApiError("BAD_REQUEST", "cursor must be a whole number");
         if (session != null && typeof session !== "string") throw new ApiError("BAD_REQUEST", "session must be text");
         const now = o.transcriptOf(bare);
-        if (!now) return { entries: [], cursor: 0 };
-        // A cursor counts in the session it was given in, and only there.
-        const first = readConversation(now.file, now.format, session === now.session ? (cursor ?? undefined) : undefined);
+        // A cursor counts in the session it was given in, and only there. No file yet (the agent
+        // has said nothing): nothing so far, and its first session is followed once there is one.
+        const first = now ? readConversation(now.file, now.format, session === now.session ? (cursor ?? undefined) : undefined) : { entries: [], cursor: 0 };
         let mine = following.get(from);
         if (!mine) following.set(from, (mine = new Map()));
         mine.get(bare)?.();
         mine.set(bare, followAgent(() => o.transcriptOf(bare), now, first.cursor, (said, of) => from.send({ event: "agent.said", params: [bare, said.entries, said.cursor, of] })));
-        return { ...first, session: now.session };
+        return now ? { ...first, session: now.session } : first;
       },
     },
     effects: {},
@@ -74,17 +74,17 @@ export function conversations(o: ConversationsOptions): Domain<"agent.conversati
   };
 }
 
-/** Follow an agent's conversation from `cursor` in the session `at`: `send` is handed what is
- *  written to its file next, as it comes, and, once `now` says the agent keeps another session
- *  whose file there is, the last of that one, then what is written to it; each with its session.
- *  Stop it with what it returns. */
-function followAgent(now: () => Transcript | null, at: Transcript, cursor: number, send: (said: Said, session: string) => void): () => void {
+/** Follow an agent's conversation from `cursor` in the session `at` (none: it keeps no file yet):
+ *  `send` is handed what is written to its file next, as it comes, and, once `now` says the agent
+ *  keeps another session whose file there is, the last of that one, then what is written to it;
+ *  each with its session. Stop it with what it returns. */
+function followAgent(now: () => Transcript | null, at: Transcript | null, cursor: number, send: (said: Said, session: string) => void): () => void {
   let current = at;
   const follow = (t: Transcript, from: number) => followConversation(t.file, t.format, from, (said) => send(said, t.session));
-  let stop = follow(at, cursor);
+  let stop = at ? follow(at, cursor) : () => {};
   const check = setInterval(() => {
     const next = now();
-    if (!next || next.session === current.session) return;
+    if (!next || next.session === current?.session) return;
     stop();
     current = next;
     const first = readConversation(next.file, next.format);

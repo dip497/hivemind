@@ -1,0 +1,17 @@
+{
+  // The phone app's TypeScript, compiled in place by crates/hive-web/build.sh (no bundler): app/*.ts
+  // into js/, beside the wasm's own glue in pkg/.
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "rootDir": "app",
+    "outDir": "js",
+    "skipLibCheck": true,
+    "noEmitOnError": true
+  },
+  "include": ["app/*.ts"]
+}

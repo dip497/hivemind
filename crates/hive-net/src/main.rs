@@ -49,7 +49,8 @@
 //! `--url
 //! <base>` is how devices reach this server, when it is not what `--domain` or `--bind` says;
 //! with it (or `--domain`), and the admin key kept here, the network's link is printed, its
-//! signed profile kept as `network.json` in `--data`; `--name` names the network.
+//! signed profile kept as `network.json` in `--data`; `--name` names the network. `--phone <dir>`
+//! serves the phone page (crates/hive-web/www, built) at `/phone/`.
 
 use std::{
     net::SocketAddr, path::PathBuf, process::ExitCode, str::FromStr, sync::Arc, time::Duration,
@@ -62,6 +63,7 @@ use hive_net::{
     host_record::{self, HostRecord},
     key,
     net::{self, Reach},
+    pages::Pages,
     ping::{self, Pong},
     profile, push,
     serve::{Certificate, Options, Serving},
@@ -124,6 +126,7 @@ struct Args {
     expires_in: Option<u64>,
     uses: Option<u32>,
     replacing: Option<String>,
+    phone: Option<PathBuf>,
 }
 
 fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
@@ -144,6 +147,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
             "--profile" => args.profile = Some(value(&mut argv, &arg)?),
             "--admin" => args.admin = Some(value(&mut argv, &arg)?.into()),
             "--access" => args.access_role = true,
+            "--phone" => args.phone = Some(value(&mut argv, &arg)?.into()),
             "--lookup" if args.command == "serve" => args.lookup_role = true,
             "--lookup" => args.lookup = Some(value(&mut argv, &arg)?.parse()?),
             "--push" => args.push_role = true,
@@ -461,6 +465,7 @@ async fn serve(args: &Args) -> Result<()> {
         domain: args.domain.clone(),
         access: access.clone(),
         push: push.clone(),
+        pages: args.phone.as_deref().map(Pages::open).transpose()?,
     })
     .await?;
 
@@ -479,6 +484,9 @@ async fn serve(args: &Args) -> Result<()> {
     }
     if push.is_some() {
         println!("push serving on {base}/push");
+    }
+    if args.phone.is_some() {
+        println!("phone page serving on {base}/phone/");
     }
     if let Some(admin) = &admin_key {
         if args.url.is_some() || args.domain.is_some() {

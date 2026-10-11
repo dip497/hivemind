@@ -2,8 +2,9 @@
 //! The phone's own core (hive-phone) compiled to wasm: it pairs with the person's computer as the
 //! phone does, and reaches it through a relay (a browser sends no UDP), end-to-end encrypted, on
 //! `hive/ws/1`'s named streams. JS sees `pair(seed, link, name)`, `Device.start(seed, relays)` →
-//! `reach(id, relay)` → `needs(name)` / `follow(listed)` / `open(name)` → `send` / `recv`; the
-//! page keeps the device key and what pairing gave (www/hive-web.js).
+//! `reach(id, relay)` → a `Host`: `follow(listed)`, `answer`, `send`, `stop`, `closeAgent`,
+//! `startable`, `start`, `conversation`, and `open(name)` → `send` / `recv`. The phone app in
+//! `www/` (its TypeScript in `www/app`) keeps the device key and what pairing gave.
 
 #[cfg(all(target_family = "wasm", target_os = "unknown"))]
 mod wasm;

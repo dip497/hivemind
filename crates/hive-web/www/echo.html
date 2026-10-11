@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hive-web echo</title>
+<style>
+  body { font: 15px/1.4 system-ui, sans-serif; margin: 1rem; max-width: 40rem; }
+  label { display: block; margin: .4rem 0; }
+  input { width: 100%; font: inherit; box-sizing: border-box; }
+  pre { background: #f4f4f4; padding: .6rem; white-space: pre-wrap; word-break: break-all; }
+</style>
+</head>
+<body>
+<h1>hive-web echo</h1>
+<p>Round trips of small frames to a <code>hive/ws/1</code> echo host, through the relay, from this browser.</p>
+<form id="form">
+  <label>Relay <input name="relay" placeholder="http://127.0.0.1:3340"></label>
+  <label>Host id <input name="host"></label>
+  <label>Messages <input name="n" type="number" value="200"></label>
+  <label>Bytes each <input name="size" type="number" value="32"></label>
+  <button>Run</button>
+</form>
+<pre id="out"></pre>
+<script type="module">
+import init, { Device } from './pkg/hive_web.js';
+
+const out = document.getElementById('out');
+const form = document.getElementById('form');
+const log = (line) => { out.textContent += line + '\n'; };
+
+// Values from the query or the fragment, so a phone can open one link.
+const given = new URLSearchParams(location.search + '&' + location.hash.slice(1));
+for (const name of ['relay', 'host', 'n', 'size']) {
+  if (given.get(name)) form.elements[name].value = given.get(name);
+}
+
+async function wasmSize() {
+  const bytes = await (await fetch('./pkg/hive_web_bg.wasm')).arrayBuffer();
+  const gz = await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
+  return { raw: bytes.byteLength, gzip: gz.byteLength };
+}
+
+const pct = (sorted, p) => sorted[Math.max(0, Math.ceil(p * sorted.length) - 1)];
+
+async function run() {
+  out.textContent = '';
+  const relay = form.elements.relay.value.trim();
+  const hostId = form.elements.host.value.trim();
+  const n = Number(form.elements.n.value);
+  const size = Number(form.elements.size.value);
+  const size_ = await wasmSize();
+  log(`wasm ${size_.raw} bytes, ${size_.gzip} gzipped (CompressionStream)`);
+
+  const t0 = performance.now();
+  await init();
+  const tInit = performance.now();
+  // A new key each run: the echo host admits any device.
+  const device = await Device.start(crypto.getRandomValues(new Uint8Array(32)), [relay]);
+  const tStart = performance.now();
+  const host = await device.reach(hostId, relay);
+  const tDial = performance.now();
+  const stream = await host.open('echo');
+  log(`device ${device.id()}`);
+  log(`init ${(tInit - t0).toFixed(1)} ms, start ${(tStart - tInit).toFixed(1)} ms, dial ${(tDial - tStart).toFixed(1)} ms`);
+
+  const once = async () => {
+    const frame = crypto.getRandomValues(new Uint8Array(size));
+    const t = performance.now();
+    await stream.send(frame);
+    const back = await stream.recv();
+    const dt = performance.now() - t;
+    if (!back || back.length !== frame.length || back.some((b, i) => b !== frame[i])) {
+      throw new Error('the echo was not what was sent');
+    }
+    return dt;
+  };
+  for (let i = 0; i < 10; i++) await once();
+  const rtts = [];
+  for (let i = 0; i < n; i++) rtts.push(await once());
+  rtts.sort((a, b) => a - b);
+  const result = {
+    wasm: size_,
+    dialMs: tDial - tStart,
+    n, size,
+    p50: pct(rtts, 0.5),
+    p95: pct(rtts, 0.95),
+    max: rtts[rtts.length - 1],
+    mean: rtts.reduce((a, b) => a + b, 0) / n,
+  };
+  log(`${n} round trips of ${size} bytes: p50 ${result.p50.toFixed(2)} ms, p95 ${result.p95.toFixed(2)} ms, max ${result.max.toFixed(2)} ms, mean ${result.mean.toFixed(2)} ms`);
+  host.close();
+  await device.close();
+  return result;
+}
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  window.result = run().catch((err) => { log('error: ' + err.message); throw err; });
+});
+if (given.get('run')) form.requestSubmit();
+</script>
+</body>
+</html>

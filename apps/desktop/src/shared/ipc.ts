@@ -414,8 +414,9 @@ export interface HiveIpc {
   onDevicesChanged(cb: () => void): () => void;
   /** A code for another of your devices to enter (a host's `hive host pair <link>`, another
    *  computer's Settings → Devices, or a phone scanning its link): it takes your person, or, a
-   *  phone, a certificate naming it as yours. */
-  pairOffer(): Promise<{ code: string; link: string; expires: number }>;
+   *  phone, a certificate naming it as yours. `page`: the link inside the address of the phone
+   *  page, when the network's server serves one, for a phone to open in its browser. */
+  pairOffer(): Promise<{ code: string; link: string; page?: string; expires: number }>;
   /** Enter the code or link another of your devices shows: a host takes your person; another
    *  computer gives its own, and this computer becomes that person (`took`). */
   pairEnter(text: string): Promise<PairedDeviceSummary & { took: boolean }>;

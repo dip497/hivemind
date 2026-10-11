@@ -165,6 +165,13 @@ function admissionOf(v: unknown): { admission?: Admission } {
 /** The link in `text`, or null when it is not a pairing link. */
 export function parsePairLink(text: string): PairLink | null {
   const t = text.trim();
+  // The phone page's address carries the link in its fragment (spec/pairing.md).
+  const page = /^https?:\/\/[^#]*#(.*)$/s.exec(t);
+  return linkOf(page ? (new URLSearchParams(page[1]).get("pair") ?? "") : t);
+}
+
+function linkOf(text: string): PairLink | null {
+  const t = text.trim();
   if (!t.startsWith(LINK_PREFIX)) return null;
   try {
     const l = JSON.parse(Buffer.from(t.slice(LINK_PREFIX.length), "base64url").toString("utf8")) as Record<string, unknown>;

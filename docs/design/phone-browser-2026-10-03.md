@@ -5,7 +5,8 @@ iroh compiled to wasm, relay only (a browser cannot send UDP), end-to-end encryp
 `hive/ws/1` streams as the native phone; the relay is the person's own `hive-net serve` (public
 with `--domain`, or on their Tailscale behind `tailscale serve` for HTTPS); there is no hosted
 relay. Later steps add ack-window flow control (as Orca does) and a needs-you-first PWA. B0's
-results are in §9; B1's and B2's (pairing, and the agents and needs live) in §10.
+results are in §9; B1's and B2's (pairing, and the agents and needs live) and B3's (the phone app,
+and where its page is served from) in §10.
 
 It parks the native phone apps (`apps/ios`, `apps/android`,
 [`phone-app-2026-10-02.md`](phone-app-2026-10-02.md)) and puts the phone in the browser first. The
@@ -62,15 +63,17 @@ Same model as the native phone, no new auth:
    the ed25519 secret; the page never sends it anywhere). iroh signs with the key's bytes, so a
    non-extractable WebCrypto key cannot be the device key; the seed is kept sealed (AES-GCM) under
    a non-extractable one, so a copy of the browser's storage alone does not carry it (§10).
-2. The desktop shows a QR / link: `https://<page>/#pair=<code>`. The code is in the **fragment**,
-   so it never reaches the server that serves the page (sshx shares its key this way).
+2. The desktop shows a QR / link: `https://<relay>/phone/#pair=<link>` (`spec/pairing.md`, §10).
+   The link is in the **fragment**, so it never reaches the server that serves the page (sshx
+   shares its key this way).
 3. The browser dials the desktop on `hive/pair/1` through the relay; the person confirms on the
    desktop; the gate admits that key from then on.
 4. Revoking it is revoking a device, as today.
 
-Where the page comes from: a static bundle (GitHub Pages or `hive-net serve` as a file server). It
-holds no secrets and talks only to devices it is paired with. Pinning: the bundle's hash is shown
-in the desktop's pairing dialog, so a swapped page is noticed. Self-hosters serve the same files.
+Where the page comes from: the person's own `hive-net serve`, as a file server beside the relay
+(`--phone`; decided in §10). It holds no secrets and talks only to devices it is paired with.
+Pinning (not built yet): the bundle's hash shown in the desktop's pairing dialog, so a swapped page
+is noticed.
 
 ## 4. The UI
 
@@ -119,7 +122,7 @@ Each ends green and checked before the next starts.
 | B0 | Spike: a wasm crate (`crates/hive-web`) wrapping iroh, exposing `dial(host) → open(name) → frames` to JS; a test page opens an `api` stream to a running host through the relay | the echo probe meets §5 on the real relay |
 | B1 | Pairing from the browser (§3), device key in IndexedDB, QR in the desktop's device list | a browser pairs, is listed, revoked, refused after |
 | B2 | Owner core in the browser (owner access, every method the desktop has): `workspace-doc`, `doc-sync`, `list-sync`, `workspace-api` client over the B0 transport; `node:` imports removed where found | the board's shapes and the agents list match the desktop's, live |
-| B3 | Phone UI (§4) as a renderer entry `phone.html`, PWA manifest | the screens work on Android Chrome and iPhone Safari, touch only |
+| B3 | Phone UI (§4): plain TypeScript and DOM in `crates/hive-web/www` (no framework), served by `hive-net serve --phone`; PWA | the screens work on Android Chrome and iPhone Safari, touch only |
 | B4 | Terminal: watch and type, key bar, keyboard-aware layout | echo target met on a phone on 4G |
 | B5 | Web Push (§6) | an approval reaches a locked Android phone and an iPhone home-screen app |
 
@@ -155,7 +158,7 @@ Beside it:
 - `examples/echo.rs`, a native host built from hive-net's own `net::endpoint`, `ws::ALPN` and
   `frames`, that sends every frame back on its stream. It lives in hive-web, not in `hive-net`,
   so the product binary gains no test-only role.
-- `www/index.html`: N round trips of small random frames, checked byte for byte, timed with
+- `www/echo.html`: N round trips of small random frames, checked byte for byte, timed with
   `performance.now()` around `send` + `recv` (so the JS↔wasm crossing is counted), p50/p95/max,
   the dial time, and the `.wasm` size raw and gzipped (`CompressionStream`). It takes `relay`,
   `host`, `n`, `size` from the query or the fragment, and `run=1` starts it.
@@ -213,7 +216,7 @@ crates/hive-net/target/release/hive-net serve --relay --bind 127.0.0.1:3340 &
 crates/hive-web/target/release/examples/echo --relay http://127.0.0.1:3340 > /tmp/echo-id &
 (cd crates/hive-web/www && python3 -m http.server 8765 --bind 127.0.0.1) &
 sleep 5
-node crates/hive-web/measure.mjs http://127.0.0.1:8765/index.html http://127.0.0.1:3340 "$(cat /tmp/echo-id)" 1000
+node crates/hive-web/measure.mjs http://127.0.0.1:8765/echo.html http://127.0.0.1:3340 "$(cat /tmp/echo-id)" 1000
 ```
 
 `CHROMIUM=<path>` uses a browser other than the one Playwright pins. The page opened by hand in
@@ -230,7 +233,7 @@ echo --relay http://127.0.0.1:3340                       # the host may use the 
 ```
 
 then open on the phone, over the tailnet:
-`https://<machine>.<tailnet>.ts.net:8443/#relay=https://<machine>.<tailnet>.ts.net&host=<echo id>&n=200&run=1`.
+`https://<machine>.<tailnet>.ts.net:8443/echo.html#relay=https://<machine>.<tailnet>.ts.net&host=<echo id>&n=200&run=1`.
 For the cost of distance, run the relay on a machine elsewhere (a small VPS) and the host at home.
 
 **Through a public relay**: `hive-net serve --relay --domain relay.example.com --contact
@@ -239,7 +242,9 @@ host with `--relay https://relay.example.com`, the page from any HTTPS host (Git
 it is static), and the same fragment with `relay=https://relay.example.com`. `--relay` alone admits
 every device; a lasting relay runs the access role beside it.
 
-## 10. B1 and B2 results (2026-10-11)
+## 10. B1, B2 and B3 results (2026-10-11)
+
+### B1 and B2
 
 **Works**, end to end in `apps/desktop/tests/e2e/phone-browser.spec.ts`: the desktop on a closed
 network of its own (relay, lookup, access) offers its link in Settings → Devices → Pair a phone; a
@@ -269,11 +274,10 @@ hive-phone and hive-net and calls their own code.
 
 **The JS surface** (`crates/hive-web`): the wasm exports `pair(seed, link, name)` →
 `{with, certificate, network, admission}`, `deviceId(seed)`, `Device.start(seed, relays)` →
-`reach(id, relay)` → `Host.needs(name)` (`{needs, working}`), `Host.follow(listed)` (each list as
-`{agents, needs, working}`, the phone's own order of what waits), `Host.open(name)` (B0's streams).
-`www/hive-web.js` keeps the key and what pairing gave in IndexedDB and gives the page
-`openPhone()` → `{id, paired, pair(link, name), reach(), forget()}`. `www/pair.html` is a test page:
-`#pair=<link>&name=<name>` pairs and drops the fragment from the address and history.
+`reach(id, relay)` → `Host.follow(listed)` (each list as `{agents, needs, working}`, the phone's own
+order of what waits), `Host.open(name)` (B0's streams); B3 added the actions (below). The page
+keeps the key and what pairing gave in IndexedDB (`www/app/store.ts`; B1's `hive-web.js` and its
+test page `pair.html` are gone, the app replaced them).
 
 **Size**: 3,179,290 B raw, 1,149,919 B gzip -9, 885,957 B brotli (B0: 983,348 gzipped); reqwest
 and hive-phone's readers are the growth. Within §5's 2 MB.
@@ -285,16 +289,14 @@ paired.
 
 **Not done, for later steps:**
 
-- The desktop still shows `hivemind://pair/<…>`, for the native phone; the browser takes the same
-  link pasted or in `#pair=`. An `https://<page>/#pair=<link>` QR waits on a page the person can
-  open (B3), and the bundle hash in the dialog (§3) with it.
+- ~~The desktop shows `hivemind://pair/<…>` only~~: B3 shows the page's address when there is one.
+  The bundle hash in the dialog (§3) is still to do.
 - A computer on the local network alone has no relay in its link, and the browser says it cannot
   reach it. Only one paired computer is kept; the person's other devices (`spec/pairing.md` 0.7),
   the network profile kept for later dials, and unpairing from the browser are not there yet.
 - The doc's B2 also names the board (`workspace-doc`, `doc-sync`, `list-sync`, the
   `workspace-api` client) in the browser; `Host.open("api")` carries it, and none of it is wired.
-- Answering a wait, sending a message, starting and stopping agents: hive-phone's `workspace`
-  module compiles to wasm and is not exported yet.
+- ~~Answering, sending, starting and stopping not exported~~: done in B3.
 
 **Rerun:**
 
@@ -303,3 +305,96 @@ paired.
 crates/hive-web/build.sh        # CC_wasm32_unknown_unknown as in §9 where there is no clang
 apps/desktop/scripts/e2e.sh phone-browser
 ```
+
+### B3: the phone app in a browser
+
+**Where the page is served from (decided).** From the person's own server: `hive-net serve
+--phone <dir>` serves the built page at `<relay>/phone/`, beside the relay, on the same port and
+under the same certificate. That server already exists on every network a browser can use (a
+browser reaches the computer only through a relay, §2), so the page needs nothing more: HTTPS
+comes from `--domain` (Let's Encrypt) or `--cert`/`--key`, or from `tailscale serve` in front of a
+relay on a tailnet. There is no hosted page, as there is no hosted relay. The desktop's pairing
+offer asks the relay for `phone/manifest.webmanifest` (3 s at most); when it is there, the phone's
+QR code and Copy button carry `https://<relay>/phone/#pair=hivemind://pair/<…>`. A phone's camera
+opens it in the browser; hivemind's own phone app reads the same QR, as the link inside the
+address is now one of the link's forms (`spec/pairing.md`, held to `conformance/pairing.json` by
+hive-phone and workspace-host alike). Without the page, the QR is the bare link, as before. The
+release does not ship the built page yet: build it with `crates/hive-web/build.sh` and pass its
+`www` folder (B4 puts it in the release and in `infra/compose.yml`).
+
+**Works**, end to end in `apps/desktop/tests/e2e/phone-browser.spec.ts`, in a 390×844 touch
+browser: the desktop's QR names the page on the network's own server; opened, the page pairs and
+is listed as the person's phone. **Needs you**: the agent waiting on a permission, as a card with
+an amber rail, Deny and Allow; Allow from the browser, and the computer answers the agent as that
+device (`agent.answer` in its audit log, by the peer device) and it works. **Agents**: by machine
+and workspace, a state dot, status and how long. **One agent**: its chat; a message sent from the
+browser is typed in by the computer as that device (`agent.send` in its audit log), the agent hears
+it (its session file), and the chat shows both sides. Reopened offline, with the relay's WebSocket
+refused, the page shows what waited from what it kept, says the computer is not reached, and
+reconnects when the network is back. Unpaired on the computer, it is refused. 34–52 s.
+
+**The app** (`crates/hive-web/www`): plain TypeScript compiled by the repo's `tsc` into `www/js`
+(no framework, no bundler), one module per screen (`needs.ts`, `agents.ts`, `agent.ts`, `chat.ts`,
+`pair.ts`, `devices.ts`), the connection in `phone.ts`, the kit in `dom.ts`. Lists are kept by key
+(`Keyed`): an element is made once per item, made again only when what it shows changed, moved only
+when out of place; the ages tick in place. The look is the Android app's (`Theme.kt`, `Kit.kt`):
+its palette dark and light, Geist and JetBrains Mono, pills, cards with an amber rail, the
+composer, the floating tab bar (Needs you, Agents, Devices; Views waits on views in the browser).
+Installable: `manifest.webmanifest`, icons from the launcher mark, the iOS meta tags, safe areas;
+`sw.js` keeps every file `build.sh` lists in `shell.json` and serves it at once, fetching it again
+behind (the same ETag is not written again).
+
+**The actions, one owner**: the wasm's `Host` now also has `answer(workspace, tile, since, reply)`
+(`{text}`, `{allow}` or `{approve, feedback?}` mapped onto hive-phone's `Reply`), `send`, `stop`
+(`control::interrupt`), `closeAgent`, `startable`, `start` and `conversation(workspace, tile, said,
+until)` (hive-phone's `conversation::follow` until the promise settles). The page calls them; no
+rule is written again in JS. Close and start have no screen yet.
+
+**Found and fixed on the computer's side**: asked for an agent's conversation before the agent had
+written its session file, the host answered nothing and never followed it, so a phone (native or
+browser) that opened a fresh agent's chat heard nothing of it. It now follows the agent's first
+session once its file is there (`packages/host/src/conversations.ts`, with a test). And the page
+gives up a dial after 10 s and says the computer is not reached; iroh's dial would wait on.
+
+**Measured** (load 12–35 on 16 CPUs, headless Chromium, CPU throttled 4× as a mid phone):
+
+| What | Budget | Measured |
+|---|---|---|
+| First screen from what the page kept, offline, the files from the service worker | 500 ms | 291–445 ms in the spec over four runs (load 19–35); 255–344 ms over 5 reloads at load 14 (40–178 ms unthrottled). It was 366–655 ms until the first screen's modules were preloaded and the wasm's glue loaded after it |
+| One update applied to the three screens (one wait answered), layout included, 40 agents | one frame, 16.7 ms | median 7.7 ms, p95 15.8 ms |
+| The same, 200 agents | | median 24 ms, p95 53 ms: over a frame |
+| wasm | 2 MB gzipped (§5) | 3,239,975 B raw, 1,166,205 B gzip, 895,743 B brotli; `hive-net serve --phone` serves the brotli copy build.sh makes |
+| wasm compiled | `instantiateStreaming`, cached | wasm-bindgen's `init()` streams it (`application/wasm`); the module comes from the service worker's cache |
+
+**Proved to fail** (`scripts/mutate.sh`, the spec unless named): the desktop offering no page
+link; Allow sent as Deny (`reply_of` in the wasm); the message sent empty; the service worker never
+serving its cache; the kept overview not shown on open; no limit on a dial; the host not following
+a session begun after it was asked (its unit test); the conformance cases with either parser not
+reading the page's address; `pages.rs` serving a dotfile, a wasm without its type, or a stale
+compressed copy (its unit test).
+
+**Not done, for B4:**
+
+- The terminal (watch and type, the key bar), and the keyboard-aware layout beyond
+  `interactive-widget=resizes-content` and `visualViewport`; redial on `visibilitychange` is there,
+  resuming a stream from a sequence is not.
+- Not run on a real iPhone or Android phone yet: only Chromium at a phone's size and touch. Safari's
+  service worker, IndexedDB sealing (WebCrypto non-extractable keys) and Add to Home Screen need a
+  real device, over HTTPS (`--domain` or `tailscale serve`).
+- The built page in the release and in `infra/compose.yml`; the bundle hash in the pairing dialog.
+- Close and start from the page (exported, no screen); Views; the person's other devices; unpairing
+  that tells the computer (the page only forgets it); a refused page offering to pair again.
+- Lists of hundreds of agents take more than a frame to apply at 4× (above).
+
+**Rerun:**
+
+```bash
+(cd crates/hive-net && cargo build --bin hive-net)
+crates/hive-web/build.sh                   # as above; it also compiles the app and lists the shell
+apps/desktop/scripts/e2e.sh phone-browser  # prints the first-screen time
+node crates/hive-web/measure-screens.mjs 40 200
+```
+
+To open it from a phone: `hive-net serve --all --domain relay.example.com --phone
+crates/hive-web/www …`, the desktop on that network, Settings → Devices → Pair a phone, and scan
+the QR code with the phone's camera.

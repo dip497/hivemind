@@ -1,0 +1,232 @@
+/* The phone app's look, from the Android app's Theme.kt and Kit.kt, so the two read as one product:
+   the desktop's surfaces, amber only for what waits on the person, Geist and JetBrains Mono. */
+
+@font-face { font-family: Geist; font-weight: 400; font-display: swap; src: url(fonts/geist-400.woff2) format("woff2"); }
+@font-face { font-family: Geist; font-weight: 500; font-display: swap; src: url(fonts/geist-500.woff2) format("woff2"); }
+@font-face { font-family: Geist; font-weight: 600; font-display: swap; src: url(fonts/geist-600.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 400; font-display: swap; src: url(fonts/mono-400.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 500; font-display: swap; src: url(fonts/mono-500.woff2) format("woff2"); }
+
+:root {
+  color-scheme: dark light;
+  --canvas: #0d0e10; --panel: #141517; --card: #1b1d1f; --raised: #252729;
+  --line: #222427; --line2: #36383b;
+  --text: #e6e8ea; --text2: #bbbec1; --text3: #83868a;
+  --accent: #99aec0; --warn: #f1af57; --ok: #88b898; --err: #cc7867;
+  --sans: Geist, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --tabs-clear: calc(112px + env(safe-area-inset-bottom));
+  --vh: 100dvh;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --canvas: #f9fafb; --panel: #f2f4f5; --card: #fff; --raised: #e3e5e7;
+    --line: #e3e5e7; --line2: #cfd2d5;
+    --text: #16191b; --text2: #4b4d50; --text3: #727578;
+    --accent: #5c6b7a; --warn: #be7100; --ok: #42815a; --err: #b94739;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--canvas); color: var(--text); }
+body {
+  font: 400 16px/24px var(--sans);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+[hidden] { display: none !important; }
+.mono { font: 400 12px/16px var(--mono); }
+
+/* One screen at a time, each its own scroller: a screen keeps its place while another is shown. */
+.screen {
+  position: fixed; inset: 0;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) var(--tabs-clear) env(safe-area-inset-left);
+}
+.title {
+  display: flex; align-items: center; gap: 12px;
+  margin: 0; padding: 18px 20px 10px;
+  font: 600 30px/36px var(--sans); letter-spacing: -0.03em;
+}
+.count {
+  font: 500 14px/20px var(--sans); color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  border-radius: 999px; padding: 2px 10px;
+}
+.quiet { color: var(--text3); font-size: 15px; line-height: 22px; padding: 4px 20px; margin: 0; }
+.problem { color: var(--err); }
+
+/* Cards: a hairline round the card colour; what waits on the person carries an amber rail. */
+.card {
+  position: relative; background: var(--card);
+  border: 1px solid var(--line); border-radius: 14px;
+}
+.card.rail::before {
+  content: ""; position: absolute; left: -1px; top: 16px;
+  width: 3px; height: 22px; border-radius: 0 3px 3px 0; background: var(--warn);
+}
+.list { display: flex; flex-direction: column; gap: 10px; padding: 4px 16px 0; }
+
+.need { padding: 14px 14px 14px 18px; }
+.need .head { display: flex; align-items: center; gap: 8px; }
+.need .name { flex: 1; min-width: 0; margin: 0; font: 600 16px/22px var(--sans); letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.where { color: var(--text3); margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.age { color: var(--text3); flex: none; }
+.kind { margin: 10px 0 12px; font: 500 14px/20px var(--sans); color: var(--warn); }
+
+.clear { display: flex; flex-direction: column; align-items: center; padding-top: 96px; text-align: center; color: var(--text2); }
+.clear::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); margin-bottom: 16px; }
+
+/* Buttons are pills: the main one in the text colour, the others raised. */
+.pill {
+  min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px;
+  font: 500 14px/20px var(--sans); background: var(--raised); color: var(--text);
+  transition: transform 90ms ease-out, opacity 90ms;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+.pill:active { transform: scale(0.96); }
+.pill.primary { background: var(--text); color: var(--canvas); }
+.pill.danger { background: color-mix(in srgb, var(--err) 18%, transparent); color: var(--err); }
+.pill.compact { min-height: 36px; padding: 0 14px; }
+.pill:disabled { opacity: 0.45; }
+.answers { display: flex; flex-direction: column; gap: 8px; }
+.answers .row { display: flex; gap: 8px; }
+.answers .row > .pill { flex: 1; }
+.plan {
+  background: var(--panel); border-radius: 10px; padding: 12px;
+  max-height: 320px; overflow-y: auto; color: var(--text2);
+}
+
+/* The composer: a rounded field and a round send button, ready when there is something to send. */
+.composer {
+  display: flex; align-items: flex-end; gap: 6px;
+  background: var(--card); border: 1px solid var(--line2); border-radius: 24px;
+  padding: 6px 6px 6px 16px;
+}
+.composer textarea {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; resize: none;
+  padding: 6px 0; max-height: 132px; font-size: 16px; line-height: 24px;
+}
+.composer textarea::placeholder { color: var(--text3); }
+.send {
+  flex: none; width: 36px; height: 36px; border-radius: 50%; border: 0;
+  display: grid; place-items: center; background: var(--raised); color: var(--text3);
+}
+.send.ready { background: var(--text); color: var(--canvas); }
+.icon { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.send .icon { width: 18px; height: 18px; stroke-width: 2.25; }
+
+/* Agents: by machine, then workspace; a dot for its state. */
+.machine { margin: 0; padding: 20px 20px 2px; font: 500 15px/20px var(--sans); }
+.workspace { margin: 0; padding: 4px 20px 2px; color: var(--text3); }
+.agent {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  padding: 12px 20px; border: 0; background: transparent; text-align: left;
+}
+.agent:active { background: var(--panel); }
+.agent .col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.agent .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status { color: var(--text3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status.waits { color: var(--warn); }
+.dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--text3); }
+.dot[data-state="waiting"] { background: var(--warn); }
+.dot[data-state="working"] { background: var(--text); animation: breathe 900ms ease-in-out infinite alternate; }
+.dot[data-state="done"] { background: var(--ok); }
+.dot[data-state="failed"], .dot[data-state="limited"] { background: var(--err); }
+@keyframes breathe { from { opacity: 0.35; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .dot[data-state="working"] { animation: none; } }
+
+/* One agent: a back bar, its chat, and what it waits on above the reply box. */
+.agent-screen { display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; height: var(--vh); }
+.backbar {
+  flex: none; display: flex; align-items: center; gap: 4px; min-height: 56px;
+  padding: 0 8px 0 4px; border-bottom: 1px solid var(--line);
+}
+.back { width: 48px; height: 48px; border: 0; border-radius: 50%; background: transparent; display: grid; place-items: center; }
+.back:active { background: var(--panel); }
+.backbar .what { flex: 1; min-width: 0; }
+.backbar h1 { margin: 0; font: 600 16px/22px var(--sans); letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.backbar .sub { display: flex; align-items: center; gap: 6px; margin: 0; }
+.backbar .sub .dot { width: 6px; height: 6px; }
+.chat { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
+.said-person {
+  align-self: flex-end; margin-left: 56px; max-width: calc(100% - 56px);
+  background: var(--raised); border-radius: 18px 18px 6px 18px; padding: 9px 14px;
+  font-size: 15px; line-height: 22px; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.said-agent { display: flex; flex-direction: column; gap: 8px; font-size: 15px; line-height: 22px; overflow-wrap: anywhere; }
+.said-agent p, .said-agent h4 { margin: 0; white-space: pre-wrap; }
+.said-agent h4 { font: 500 15px/20px var(--sans); }
+.said-agent .item { display: flex; }
+.said-agent .item > :first-child { min-width: 20px; padding-right: 6px; }
+.said-agent code { font: 400 13px var(--mono); background: var(--raised); border-radius: 4px; padding: 0 3px; }
+.said-agent pre {
+  margin: 0; padding: 12px; overflow-x: auto; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px; font: 400 12px/16px var(--mono);
+}
+.tool { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.tool > button {
+  display: flex; align-items: center; width: 100%; gap: 0; padding: 9px 12px;
+  border: 0; background: transparent; text-align: left;
+}
+.tool .mark { width: 18px; flex: none; color: var(--text3); }
+.tool[data-ended="ok"] .mark { color: var(--ok); }
+.tool[data-ended="failed"] .mark { color: var(--err); }
+.tool .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text3); }
+.tool .label b { color: var(--text2); font-weight: 500; }
+.tool .chev { width: 16px; height: 16px; color: var(--text3); transition: transform 120ms; }
+.tool[data-open] .chev { transform: rotate(90deg); }
+.tool pre {
+  margin: 0; padding: 0 12px 10px 30px; max-height: 360px; overflow: auto;
+  white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text2);
+}
+.tool[data-ended="failed"] pre { color: var(--err); }
+.ended { text-align: center; color: var(--text3); font-size: 13px; }
+.dock {
+  flex: none; display: flex; flex-direction: column; gap: 8px;
+  padding: 8px 12px calc(10px + env(safe-area-inset-bottom));
+}
+.waiting { padding: 12px 12px 12px 18px; display: flex; flex-direction: column; gap: 10px; }
+.waiting .kind { margin: 0; }
+
+/* Pairing and devices. */
+.pair { display: flex; flex-direction: column; gap: 14px; padding: 48px 20px; max-width: 480px; margin: 0 auto; }
+.pair .mark { width: 72px; height: 72px; border-radius: 18px; }
+.pair h1 { margin: 0; font: 600 30px/36px var(--sans); letter-spacing: -0.03em; }
+.pair p { margin: 0; color: var(--text2); }
+.field {
+  width: 100%; background: var(--card); border: 1px solid var(--line2); border-radius: 14px;
+  padding: 12px 14px; outline: 0; resize: vertical;
+}
+.field:focus { border-color: var(--text3); }
+.device { padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; }
+.device h3 { margin: 0; font: 600 16px/22px var(--sans); }
+.device .mono { color: var(--text3); overflow-wrap: anywhere; }
+.label-small { font: 500 11px/14px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3); }
+
+/* The floating tab bar. */
+.tabs {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  display: flex; padding: 6px; gap: 2px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--line2);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+}
+.tabs button {
+  position: relative; width: 78px; padding: 6px 0 4px; border: 0; border-radius: 999px;
+  background: transparent; color: var(--text3);
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font: 500 11px/14px var(--sans);
+}
+.tabs button[aria-current="page"] { background: var(--raised); color: var(--text); }
+.tabs .tab-dot { position: absolute; top: 5px; left: calc(50% + 8px); width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+
+.notice {
+  position: fixed; left: 16px; right: 16px; bottom: calc(96px + env(safe-area-inset-bottom));
+  margin: 0 auto; max-width: 440px; padding: 12px 16px; border-radius: 14px;
+  background: var(--raised); color: var(--text); font-size: 15px; line-height: 22px;
+  border: 1px solid var(--line2);
+}

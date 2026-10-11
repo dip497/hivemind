@@ -31,6 +31,8 @@ pub mod limit;
 #[cfg(feature = "server")]
 pub mod lookup;
 #[cfg(feature = "server")]
+pub mod pages;
+#[cfg(feature = "server")]
 pub mod serve;
 #[cfg(feature = "server")]
 mod state_file;

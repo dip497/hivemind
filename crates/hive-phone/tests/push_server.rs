@@ -124,6 +124,7 @@ async fn a_phone_registers_again_without_the_device_it_unpaired_and_what_that_de
             )
             .unwrap(),
         ),
+        pages: None,
     })
     .await
     .unwrap();

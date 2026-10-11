@@ -49,6 +49,11 @@ device, valid for five minutes and used once. Three wrong proofs void it. It is 
 
 A phone reads a link from its QR code; `kind` is the offering device's, so never `phone`.
 
+For a browser, the link travels inside the address of the phone page (`phone-browser`), in its
+fragment: `https://<host>/phone/#pair=<the link, percent-encoded or not>`, other `&`-separated fields
+allowed. Such an address is read as the link its `pair` field carries; one with no `pair` field, or
+one that is not a link, is none. The fragment never reaches the server serving the page.
+
 `admission` (0.6) is there when the offering device is on a network with an access service
 (`network-access.md`), as an invite carries it: on a `closed` network, a `visit` voucher it signed,
 naming no device, for one use, expiring with the code; on an `open-pow` one, none (the entering
