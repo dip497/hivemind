@@ -2,15 +2,20 @@
 // (hive-phone's core) pairs, signs, reads and acts; this keeps one connection to the computer it
 // paired with, dialled again when it drops, and hands the screens what it is told.
 
-import init, { Device, type Host, deviceId, pair, readLink } from "../pkg/hive_web.js";
+import init, { Device, type Host, deviceId, pair, readLink, readQr } from "../pkg/hive_web.js";
 import { deviceKey, put, remove } from "./store.js";
-import type { Agent, Overview, Paired, Piece, Reply } from "./types.js";
+import type { Agent, Held, Others, Overview, Paired, Piece, Reply, Start, Startable } from "./types.js";
 import { message } from "./words.js";
 
 export interface Told {
   overview(o: Overview): void;
   /** Whether the computer is reached; why not, when it is not. */
   status(live: boolean, error: string | null): void;
+  /** The person's other devices, as the computer tells of them once reached. */
+  others(o: Others): void;
+  /** The computer turned this browser away: it is not one of the person's devices there now. The
+   *  pairing is forgotten here too. */
+  refused(computer: string): void;
 }
 
 /** The longest wait before dialling again. */
@@ -50,6 +55,11 @@ export class Phone {
     return readLink(text) as { device: string; name: string } | null;
   }
 
+  /** The text of a QR code in a camera's frame, or null when none in it reads. */
+  readQr(rgba: Uint8Array, width: number, height: number): string | null {
+    return readQr(rgba, width, height) ?? null;
+  }
+
   /** Pair with the computer whose link `text` is, as the page's address carries it or as copied. */
   async pair(text: string, name: string): Promise<Paired> {
     const given = (await pair(this.seed, text, name)) as Paired;
@@ -66,8 +76,17 @@ export class Phone {
     return given;
   }
 
-  /** Forget the computer: pairing again starts afresh. */
-  async forget(): Promise<void> {
+  /** Forget the computer, and tell it to forget this browser when it is reached (spec/pairing.md,
+   *  "Unpairing"): whether it was told. Pairing again starts afresh. */
+  async forget(): Promise<boolean> {
+    const host = this.host;
+    this.paired = null;
+    const told = host ? await within(host.unpair(), REACH, "no answer").catch(() => false) : false;
+    await this.forgetHere();
+    return told;
+  }
+
+  private async forgetHere(): Promise<void> {
     this.paired = null;
     await remove("paired");
     await remove("overview");
@@ -100,10 +119,15 @@ export class Phone {
         tries = 0;
         this.told.status(true, null);
         for (const f of this.followed) f.start(host);
+        host.devices(paired.certificate).then((o: Others) => this.paired === paired && this.told.others(o), () => {});
         await host.follow((o: Overview) => this.told.overview(o));
         throw new Error(`${name} stopped telling this browser of its agents`);
       } catch (e) {
-        if (this.paired === paired) this.told.status(false, message(e));
+        if (this.paired !== paired) continue;
+        if (e instanceof Error && e.name === "Unpaired") {
+          await this.forgetHere();
+          this.told.refused(paired.with.name);
+        } else this.told.status(false, message(e));
       } finally {
         this.host?.close();
         this.host = null;
@@ -140,6 +164,26 @@ export class Phone {
   /** Stop `agent`'s turn. Whether it was in one. */
   async stop(agent: Agent): Promise<boolean> {
     return this.reached().stop(agent.workspace, agent.tile);
+  }
+
+  /** Close `agent`. Whether it was open. */
+  async close(agent: Agent): Promise<boolean> {
+    return this.reached().closeAgent(agent.workspace, agent.tile);
+  }
+
+  /** The workspaces the computer holds. */
+  async workspaces(): Promise<Held[]> {
+    return (await this.reached().workspaces()) as Held[];
+  }
+
+  /** What may be started in `workspace`. */
+  async startable(workspace: string): Promise<Startable> {
+    return (await this.reached().startable(workspace)) as Startable;
+  }
+
+  /** Start an agent in `workspace`: its tile. */
+  async start(workspace: string, start: Start): Promise<string> {
+    return this.reached().start(workspace, start);
   }
 
   /** Follow what `agent` and the person said, from the last of its session, again after each

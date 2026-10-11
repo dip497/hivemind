@@ -33,7 +33,7 @@ pub struct Held {
 
 /// The workspaces the device on `connection` holds, as it says on its `device` stream: each that
 /// names its id.
-pub(crate) async fn held(connection: &Connection) -> Result<Vec<Held>> {
+pub async fn held(connection: &Connection) -> Result<Vec<Held>> {
     let answer = devices::ask(connection, &json!({ "t": "workspaces" })).await?;
     let held = answer.get("workspaces").and_then(Value::as_array);
     Ok(held

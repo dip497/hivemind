@@ -5,14 +5,18 @@
 // the computer through the network's relay, and is listed there as the person's phone. It is the phone app: what
 // waits on the person, answered from there; every agent, live; one agent's chat, and a message
 // sent to it. The computer sees both, done by that device. Reopened with no network, it shows what
-// it last knew at once; unpaired on the computer, it is refused.
+// it last knew at once. An agent started from it, and closed from it, is started and closed on the
+// computer as that device asked. Unpaired on the computer, it is turned away and offers to pair
+// again; forgotten from it, the computer is told and lists it no more.
 import { test, expect, chromium, type Browser, type ElectronApplication } from "@playwright/test";
 import { execSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { hiveNetBuilt, ownNetwork, person } from "./helpers/multiplayer";
-import { offerPhonePairing, probeAgent, startProbe, talkerAgent } from "./helpers/phone";
+import { cameraOn, offerPhonePairing, probeAgent, startProbe, talkerAgent } from "./helpers/phone";
 import { stopDaemons } from "./helpers/daemons";
+import { parsePairLink } from "@hivemind/workspace-host/pairing";
+import { encode } from "uqr";
 
 const WWW = path.resolve("../../crates/hive-web/www");
 const hiveWebBuilt = () => fs.existsSync(path.join(WWW, "pkg", "hive_web_bg.wasm")) && fs.existsSync(path.join(WWW, "js", "main.js"));
@@ -31,9 +35,9 @@ test.afterEach(async () => {
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 
-test("a phone's browser opens the page the computer's QR code names and, asked and tapped, pairs through the network's relay, as the person's phone; it answers what waits on the person and sends an agent a message, and the computer does both, as that device; reopened offline it shows what it last knew; unpaired on the computer, it is refused", async ({}, testInfo) => {
+test("a phone's browser opens the page the computer's QR code names and, asked and tapped, pairs through the network's relay, as the person's phone; it answers what waits on the person, sends an agent a message, starts one and closes it, and the computer does each, as that device; reopened offline it shows what it last knew; unpaired on the computer, it is turned away and pairs again; forgotten from it, the computer forgets it too", async ({}, testInfo) => {
   test.skip(!hiveNetBuilt() || !hiveWebBuilt(), "build hive-net (cargo build in crates/hive-net) and the page (crates/hive-web/build.sh) first");
-  test.setTimeout(240_000);
+  test.setTimeout(300_000);
   const net = await ownNetwork(root, procs, "closed", WWW);
   const repo = path.join(root, "api");
   fs.mkdirSync(repo);
@@ -53,7 +57,10 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   const inBrowser = async (app: string) => {
     await desktop.locator('[data-pair-browser] [role="switch"]').click();
     const link = (await desktop.locator("[data-pair-copy]").getAttribute("title"))!;
-    expect(link).toBe(`${net.relay}/phone/#pair=${app}`);
+    // The app's link without the addresses, which a browser cannot use: a QR code a camera reads.
+    expect(link.startsWith(`${net.relay}/phone/#pair=hivemind://pair/`)).toBe(true);
+    expect(parsePairLink(link)).toEqual({ ...parsePairLink(app), addrs: [] });
+    console.log(`QR: ${app.length} chars as the app's link, version ${encode(app).version}; ${link.length} as the page's, version ${encode(link).version}`);
     return link;
   };
   const link = await inBrowser(app);
@@ -62,8 +69,11 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
 
   // Opened on a phone: it asks first, naming the computer, as anyone can send a link; nothing is
   // paired until the tap. Then it pairs, let onto the network with the voucher the link carries.
-  browser = await chromium.launch();
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: "dark" });
+  // Its camera, pointed at nothing yet.
+  const camera = path.join(root, "camera.y4m");
+  cameraOn(camera, "nothing to pair with");
+  browser = await chromium.launch({ args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-video-capture=${camera}`] });
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: "dark", permissions: ["camera"] });
   const page = await context.newPage();
   await page.goto(`${link}&name=${encodeURIComponent("Priya's phone")}`);
   await expect(page.locator('[data-screen="pair"] h1')).toHaveText(/^Pair with .+\?$/, { timeout: 30_000 });
@@ -158,10 +168,65 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   await expect(page.locator("[data-message] textarea")).toHaveValue("");
   await page.screenshot({ path: testInfo.outputPath("agent.png") });
 
-  // Unpaired on the computer: refused from then on.
+  // Started from the browser, with a prompt: the computer starts it as that device asked, and its
+  // screen opens in place of the one that started it.
+  await page.locator('[data-screen="agent"] [data-back]').click();
+  await page.locator("[data-start]").click();
+  await page.locator("[data-start-programs] .chip", { hasText: "Talker" }).click({ timeout: 30_000 });
+  await page.locator("[data-start-prompt]").fill("write the tests");
+  await page.locator("[data-start-go]").click();
+  await expect(desktop.locator(".react-flow__node-terminal")).toHaveCount(3, { timeout: 30_000 });
+  await expect.poll(audit, { timeout: 10_000 }).toContainEqual(expect.objectContaining({ verb: "agent.start", outcome: "ok", actor: expect.objectContaining({ kind: "peer", device: id }) }));
+  const started = (await desktop.locator(".react-flow__node-terminal").evaluateAll((els) => els.map((e) => e.getAttribute("data-id")))).find((t) => t !== tile && t !== talker)!;
+  await expect(page.locator('[data-screen="agent"]')).toBeVisible();
+  expect(new URLSearchParams(new URL(page.url()).hash.slice(1)).get("agent")).toBe(started);
+  // The prompt, typed in as it starts: the first thing the person said to it.
+  await expect(page.locator('[data-chat] [data-who="person"]')).toHaveText(["write the tests"], { timeout: 30_000 });
+  await page.screenshot({ path: testInfo.outputPath("started.png") });
+
+  // Closed from the browser, once asked and confirmed: the computer closes it, as that device, and
+  // Back leads to the list it was started from.
+  await page.locator('[data-screen="agent"] [data-close]').click();
+  await expect(page.locator("[data-close-ask]")).toHaveText(/^Close .+\? It stops, and its tile closes on .+\./);
+  await page.locator("[data-close-ask] [data-yes]").click();
+  await expect(desktop.locator(".react-flow__node-terminal")).toHaveCount(2, { timeout: 30_000 });
+  await expect.poll(audit, { timeout: 10_000 }).toContainEqual(expect.objectContaining({ verb: "agent.close", outcome: "ok", actor: expect.objectContaining({ kind: "peer", device: id }) }));
+  await expect(page.locator('[data-screen="agents"]')).toBeVisible();
+  await expect(page.locator(`[data-agent="${started}"]`)).toHaveCount(0, { timeout: 30_000 });
+
+  // Unpaired on the computer: turned away while open, and it offers to pair again, the pairing it
+  // kept forgotten.
   await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "devices" } })));
   await desktop.locator(`[data-device="${id}"] [data-unpair]`).click();
   await expect(desktop.locator(`[data-device="${id}"]`)).toHaveCount(0);
+  await expect(page.locator("[data-pair-refused]")).toHaveText(/^.+ no longer lets this browser in: it was unpaired there\.$/, { timeout: 30_000 });
+  await expect(page.locator('[data-screen="pair"] h1')).toHaveText("Pair again");
   await page.reload();
-  await expect(page.locator("[data-error]")).toContainText("not admitted", { timeout: 30_000 });
+  await expect(page.locator('[data-screen="pair"] h1')).toHaveText("Pair with hivemind", { timeout: 30_000 });
+  await desktop.keyboard.press("Escape");
+
+  // Paired again by scanning the computer's QR code with the camera, read by the page's own wasm:
+  // asked first, as an opened link is.
+  const again = await inBrowser(await offerPhonePairing(desktop));
+  cameraOn(camera, again);
+  await page.locator("[data-scan]").click();
+  await expect(page.locator('[data-screen="pair"] h1')).toHaveText(/^Pair with .+\?$/, { timeout: 30_000 });
+  await expect(page.locator("[data-pair-link]")).toHaveValue(again);
+  await expect(page.locator("[data-scan-video]")).toBeHidden();
+  await page.locator("[data-pair]").click();
+  await expect(page.locator("[data-paired]")).toHaveAttribute("data-paired", me.deviceId, { timeout: 30_000 });
+  await expect(desktop.locator(`[data-device="${id}"][data-device-kind="phone"]`)).toHaveCount(1, { timeout: 10_000 });
+  await desktop.keyboard.press("Escape");
+
+  // Forgotten from the browser, once confirmed: the computer is told, and lists it no more.
+  const listed = () => desktop.evaluate((d) => window.hive.devices().then((all) => all.some((x: { device: string }) => x.device === d)), id);
+  expect(await listed()).toBe(true);
+  await page.locator('[data-tab="devices"]').click();
+  await expect(page.locator("[data-paired] .status")).toHaveText("connected", { timeout: 30_000 });
+  await page.locator("[data-forget]").click();
+  await page.locator("[data-forget-ask] [data-yes]").click();
+  await expect(page.locator('[data-screen="pair"]')).toBeVisible();
+  // Told, so nothing to say: no notice comes.
+  expect(await page.locator("[data-notice]").isHidden()).toBe(true);
+  await expect.poll(listed, { timeout: 20_000 }).toBe(false);
 });

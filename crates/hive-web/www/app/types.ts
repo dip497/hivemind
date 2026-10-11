@@ -56,3 +56,31 @@ export interface Piece {
 
 /** The person's answer to a wait. */
 export type Reply = { text: string } | { allow: boolean } | { approve: boolean; feedback?: string };
+
+/** A workspace the computer holds. */
+export interface Held {
+  workspace: string;
+  name: string;
+  repo?: string;
+}
+
+/** What may be started in a workspace (hive-phone's `control::Startable`). */
+export interface Startable {
+  programs: Array<{ id: string; label: string; options: Array<{ id: string; label: string; values: string[] }> }>;
+  frames: Array<{ id: string; name: string; machine: string }>;
+}
+
+/** An agent to start: which, where, and with what. */
+export interface Start {
+  program: string;
+  frame?: string;
+  prompt?: string;
+  model?: string;
+  mode?: string;
+}
+
+/** The person's other computers and hosts, as the computer tells of them, and whose they are. */
+export interface Others {
+  whose: string | null;
+  devices: Array<{ device: string; name: string; kind: string }>;
+}

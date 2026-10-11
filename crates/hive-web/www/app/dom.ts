@@ -167,3 +167,35 @@ export function composer(hint: string, send: (text: string) => Promise<boolean>,
   });
   return form;
 }
+
+/** A question asked in place of a dialog: the first button runs `yes`; either puts it away. */
+export class Ask {
+  readonly el: HTMLElement;
+  private readonly text = h("p", {});
+
+  constructor(yes: string, onYes: () => void, props: Props = {}) {
+    this.el = h("div", { class: "card ask", hidden: true, role: "group", ...props },
+      this.text,
+      h("div", { class: "row" },
+        pill(yes, () => {
+          this.el.hidden = true;
+          onYes();
+        }, "danger", { "data-yes": "" }),
+        pill("Cancel", () => (this.el.hidden = true), "", { "data-cancel": "" })));
+  }
+
+  ask(question: string): void {
+    this.text.textContent = question;
+    this.el.hidden = false;
+  }
+}
+
+/** Choices as the Android app's FilterChips: the one chosen is pressed. */
+export function chips<T>(items: readonly T[], label: (item: T) => string, chosen: (item: T) => boolean, choose: (item: T) => void, props: Props = {}): HTMLElement {
+  return h("div", { class: "chips", role: "group", ...props },
+    ...items.map((item) => {
+      const chip = h("button", { type: "button", class: "chip", "aria-pressed": String(chosen(item)) }, label(item));
+      chip.addEventListener("click", () => choose(item));
+      return chip;
+    }));
+}

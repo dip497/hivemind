@@ -107,13 +107,8 @@ impl Identity {
         let Some(mine) = self.certificate() else {
             return Ok(());
         };
-        let mut listed: BTreeMap<String, PairedWith> = told
-            .iter()
-            .filter_map(|d| serde_json::from_value::<PairedWith>(d.clone()).ok())
-            .filter(|d| {
-                let c = &d.certificate;
-                d.kind != "phone" && c.verifies() && c.device == d.device && c.person == mine.person
-            })
+        let mut listed: BTreeMap<String, PairedWith> = told_of(&mine.person, told)
+            .into_iter()
             .map(|d| (d.device.clone(), d))
             .collect();
         let before = self.devices();
@@ -281,6 +276,18 @@ impl Identity {
         self.learn(&device.device, &[], 0)?;
         Ok(told)
     }
+}
+
+/// The computers and hosts of `person` among those an app told of (spec/pairing.md 0.7): each
+/// whose certificate verifies and names it as theirs, and no phone.
+pub fn told_of(person: &str, told: &[Value]) -> Vec<PairedWith> {
+    told.iter()
+        .filter_map(|d| serde_json::from_value::<PairedWith>(d.clone()).ok())
+        .filter(|d| {
+            let c = &d.certificate;
+            d.kind != "phone" && c.verifies() && c.device == d.device && c.person == person
+        })
+        .collect()
 }
 
 /// What unpairing a device came to.

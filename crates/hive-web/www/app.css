@@ -215,6 +215,24 @@ button { cursor: pointer; }
 .device h3 { margin: 0; font: 600 16px/22px var(--sans); }
 .device .mono { color: var(--text3); overflow-wrap: anywhere; }
 .label-small { font: 500 11px/14px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3); }
+.title > .pill { margin-left: auto; }
+
+/* A question asked in place, and choices as chips. */
+.ask { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.ask p { margin: 0; }
+.ask .row { display: flex; gap: 8px; }
+.ask .row > .pill { flex: 1; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line2);
+  background: transparent; font: 500 14px/20px var(--sans);
+}
+.chip[aria-pressed="true"] { background: var(--text); color: var(--canvas); border-color: var(--text); }
+
+/* Starting an agent. */
+.start { display: flex; flex-direction: column; gap: 10px; padding: 12px 20px 24px; max-width: 560px; }
+.start h2 { margin: 10px 0 0; }
+.start .problem, .start .quiet { margin: 0; padding: 0; }
 
 /* The floating tab bar. */
 .tabs {
@@ -239,3 +257,4 @@ button { cursor: pointer; }
   background: var(--raised); color: var(--text); font-size: 15px; line-height: 22px;
   border: 1px solid var(--line2);
 }
+.scan { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 14px; background: var(--panel); }

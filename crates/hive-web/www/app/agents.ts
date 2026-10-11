@@ -2,7 +2,7 @@
 // state, what it is doing and for how long. Tapped, it opens.
 
 import type { App } from "./app.js";
-import { Keyed, h } from "./dom.js";
+import { Keyed, h, pill } from "./dom.js";
 import type { Agent, Overview } from "./types.js";
 import { ago, stateLabel } from "./words.js";
 
@@ -15,7 +15,8 @@ export class Agents {
   private readonly rows: Keyed<Row>;
 
   constructor(private readonly app: App) {
-    this.el.append(h("h1", { class: "title" }, "Agents"), this.none, this.list);
+    const start = pill("Start", () => (location.hash = "start"), "compact", { "data-start": "" });
+    this.el.append(h("h1", { class: "title" }, "Agents", start), this.none, this.list);
     this.rows = new Keyed(this.list, (r) => r.key, (r) => ("agent" in r ? sigOf(r.agent) : r.key), (r) => this.row(r));
   }
 
@@ -52,7 +53,7 @@ export class Agents {
         h("span", { class: "name" }, a.agent),
         h("span", { class: `status mono${waits ? " waits" : ""}` }, [stateLabel(a.state), a.program?.label].filter(Boolean).join(" · "))),
       h("span", { class: "age mono", "data-since": a.since }, ago(a.since)));
-    row.addEventListener("click", () => this.app.open(a));
+    row.addEventListener("click", () => this.app.open(a.tile));
     return row;
   }
 }

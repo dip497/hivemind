@@ -1,5 +1,5 @@
-// The phone app in a browser (docs/design/phone-browser-2026-10-03.md, B3): Needs you, Agents, one
-// agent, Devices. The last overview kept in IndexedDB is shown before the wasm is even compiled;
+// The phone app in a browser (docs/design/phone-browser-2026-10-03.md, B3 and B4): Needs you,
+// Agents, one agent, starting one, Devices. The last overview kept in IndexedDB is shown before the wasm is even compiled;
 // what the computer says replaces it, each list applied to what is on screen by key.
 
 import type { App } from "./app.js";
@@ -10,11 +10,12 @@ import { h, icon } from "./dom.js";
 import { Needs } from "./needs.js";
 import { PairScreen, guessName } from "./pair.js";
 import type { Phone } from "./phone.js";
+import { StartScreen } from "./start.js";
 import { get, put } from "./store.js";
 import type { Agent, Overview, Paired } from "./types.js";
 import { NOTICES, ago, message } from "./words.js";
 
-type Tab = "needs" | "agents" | "devices";
+type Tab = "needs" | "agents" | "devices" | "start";
 
 let phone: Phone | null = null;
 let overview: Overview | null = null;
@@ -36,10 +37,19 @@ const act = async (done: () => Promise<boolean>, notLanded: string): Promise<boo
   }
 };
 
+/** The phone, once its wasm is compiled. */
+const reached = (): Phone => {
+  if (!phone) throw new Error("Still starting");
+  return phone;
+};
+
 const app: App = {
-  open(agent) {
+  open(tile) {
+    const at = `#agent=${encodeURIComponent(tile)}`;
+    // An agent just started takes the place of the screen that started it.
+    if (location.hash === "#start") location.replace(at);
+    else location.hash = at;
     opened = true;
-    location.hash = `agent=${encodeURIComponent(agent.tile)}`;
   },
   back() {
     if (opened) history.back();
@@ -48,23 +58,44 @@ const app: App = {
   answer: (agent, reply) => act(() => phone!.answer(agent, reply), NOTICES.answered),
   send: (agent, text) => act(() => phone!.send(agent, text), NOTICES.notRunning),
   stop: (agent) => act(() => phone!.stop(agent), NOTICES.notStopped),
+  close: (agent) => act(() => phone!.close(agent), NOTICES.closed),
   conversation: (agent, said, ended) => phone?.conversation(agent, said, ended) ?? (() => {}),
+  computer: () => paired?.with.name ?? "your computer",
+  workspaces: () => reached().workspaces(),
+  startable: (workspace) => reached().startable(workspace),
+  async start(workspace, start) {
+    try {
+      return await reached().start(workspace, start);
+    } catch (e) {
+      notify(message(e));
+      return null;
+    }
+  },
 };
 
 const needs = new Needs(app);
 const agents = new Agents(app);
 const agent = new AgentScreen(app);
+const starting = new StartScreen(app);
 const devices = new Devices(() => void forget());
 const pairing = new PairScreen((link, name) => pairWith(link, name), () => {
   offered = false;
   pairing.clear();
   route();
-});
-const screens = { needs, agents, agent, devices, pair: pairing };
+}, () => phone && ((rgba, width, height) => phone!.readQr(rgba, width, height)), (text, name) => offer(text, name));
+
+/** A link given this page, opened with it or scanned: shown to pair with on a tap. */
+function offer(link: string, name: string): void {
+  if (!phone) return;
+  offered = true;
+  pairing.offer(link, name, phone.read(link), paired?.with ?? null);
+  route();
+}
+const screens = { needs, agents, agent, start: starting, devices, pair: pairing };
 
 const tabs = h("nav", { class: "tabs", "aria-label": "hivemind" });
 const tabDot = h("span", { class: "tab-dot", hidden: true, "data-tab-dot": "" });
-const TABS: Array<[Tab, string]> = [["needs", "Needs you"], ["agents", "Agents"], ["devices", "Devices"]];
+const TABS: Array<[Exclude<Tab, "start">, string]> = [["needs", "Needs you"], ["agents", "Agents"], ["devices", "Devices"]];
 for (const [tab, label] of TABS) {
   const button = h("button", { type: "button", "data-tab": tab }, icon(tab), label, tab === "needs" && tabDot);
   button.addEventListener("click", () => {
@@ -85,14 +116,19 @@ function notify(text: string): void {
   noticeTimer = setTimeout(() => (notice.hidden = true), 4000);
 }
 
-/** The screen the address names: a tab, or `agent=<tile>`; pairing while paired with nothing or offered a link. */
+/** The screen the address names: a tab, `start`, or `agent=<tile>`; pairing while paired with
+ *  nothing or offered a link. */
+let shownBefore = "";
 function route(): void {
   const asked = new URLSearchParams(location.hash.slice(1));
   const tile = asked.get("agent");
-  const tab = (TABS.find(([t]) => asked.has(t))?.[0] ?? "needs") as Tab;
+  const tab: Tab = asked.has("start") ? "start" : (TABS.find(([t]) => asked.has(t))?.[0] ?? "needs");
   const shown = !paired || offered ? "pair" : tile ? "agent" : tab;
   for (const [name, screen] of Object.entries(screens)) screen.el.hidden = name !== shown;
-  tabs.hidden = shown === "pair" || shown === "agent";
+  tabs.hidden = shown === "pair" || shown === "agent" || shown === "start";
+  if (shown === "start" && shownBefore !== "start") void starting.open();
+  if (shown !== "pair") pairing.stopScan();
+  shownBefore = shown;
   for (const button of tabs.querySelectorAll<HTMLElement>("[data-tab]")) {
     if (button.dataset.tab === shown) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
@@ -125,10 +161,18 @@ async function pairWith(link: string, name: string): Promise<void> {
 }
 
 async function forget(): Promise<void> {
-  await phone?.forget();
+  const computer = app.computer();
+  const told = (await phone?.forget()) ?? false;
+  unpaired();
+  if (!told) notify(`${computer} was not told: unpair this browser on it too.`);
+}
+
+/** Paired with nothing now: the pairing screen. */
+function unpaired(): void {
   paired = null;
   overview = null;
   apply({ agents: [], needs: [], working: 0 });
+  if (phone) devices.show(phone.id, null);
   trouble.hidden = true;
   route();
 }
@@ -164,16 +208,17 @@ async function start(): Promise<void> {
       trouble.hidden = live || error === null;
       trouble.textContent = error ? `${paired?.with.name ?? "Your computer"} is not reached: ${error}` : "";
     },
+    others: (o) => devices.showOthers(o),
+    refused(computer) {
+      pairing.refused(computer);
+      unpaired();
+    },
   });
   devices.show(phone.id, paired);
   addEventListener("online", () => phone!.retry());
   document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && phone!.retry());
   phone.connect();
-  if (linked.has("pair")) {
-    offered = true;
-    pairing.offer(address, linked.get("name") ?? guessName(), phone.read(address), paired?.with ?? null);
-    route();
-  }
+  if (linked.has("pair")) offer(address, linked.get("name") ?? guessName());
 }
 
 start().catch((e: unknown) => {

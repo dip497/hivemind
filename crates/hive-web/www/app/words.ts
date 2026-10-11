@@ -29,6 +29,7 @@ export const NOTICES = {
   answered: "It no longer waits on you.",
   notRunning: "No agent runs there now.",
   notStopped: "It was not in a turn.",
+  closed: "It was already closed.",
 };
 
 /** An error, as the person is told it. */

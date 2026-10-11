@@ -4,7 +4,7 @@
 import type { App } from "./app.js";
 import { answers } from "./answers.js";
 import { Chat } from "./chat.js";
-import { composer, h, icon, pill, say } from "./dom.js";
+import { Ask, composer, h, icon, pill, say } from "./dom.js";
 import type { Agent, Overview } from "./types.js";
 import { NOTICES, ago, kindLabel, stateLabel, where } from "./words.js";
 
@@ -14,6 +14,7 @@ export class AgentScreen {
   private readonly dot = h("span", { class: "dot" });
   private readonly sub = h("span", { class: "status mono" });
   private readonly stop = pill("Stop", () => void this.stopIt(), "danger compact", { "data-stop": "" });
+  private readonly closing = new Ask("Close", () => void this.closeIt(), { "data-close-ask": "" });
   private body: HTMLElement = h("div", {});
   private readonly dock = h("div", { class: "dock" });
   private readonly waits = h("div", { "data-waits": "" });
@@ -29,13 +30,14 @@ export class AgentScreen {
     const back = h("button", { type: "button", class: "back", "aria-label": "Back", "data-back": "" }, icon("back"));
     back.addEventListener("click", () => app.back());
     this.el.append(
-      h("header", { class: "backbar" }, back, h("div", { class: "what" }, this.title, h("p", { class: "sub" }, this.dot, this.sub)), this.stop),
+      h("header", { class: "backbar" }, back, h("div", { class: "what" }, this.title, h("p", { class: "sub" }, this.dot, this.sub)), this.stop,
+        pill("Close", () => this.agent && this.closing.ask(`Close ${this.agent.agent}? It stops, and its tile closes on ${app.computer()}.`), "compact", { "data-close": "" })),
       this.gone,
       this.body,
       this.dock);
     const message = composer("Message", (text) => (this.agent ? app.send(this.agent, text) : Promise.resolve(false)), { "data-message": "" });
     this.message = message.querySelector("textarea")!;
-    this.dock.append(this.waits, message);
+    this.dock.append(this.closing.el, this.waits, message);
   }
 
   /** Show the agent of `tile`, as `o` tells of it, its chat afresh. */
@@ -54,6 +56,7 @@ export class AgentScreen {
 
   /** No longer shown: its conversation is followed no more. */
   close(): void {
+    this.closing.el.hidden = true;
     this.unfollow?.();
     this.unfollow = null;
     this.tile = null;
@@ -101,5 +104,9 @@ export class AgentScreen {
 
   private async stopIt(): Promise<void> {
     if (this.agent) await this.app.stop(this.agent);
+  }
+
+  private async closeIt(): Promise<void> {
+    if (this.agent && (await this.app.close(this.agent))) this.app.back();
   }
 }

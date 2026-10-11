@@ -28,7 +28,7 @@ import { HostRecords, type Hosted } from "@hivemind/workspace-host/host-records"
 import { Hosting } from "@hivemind/host/hosting";
 import { People } from "@hivemind/host/people";
 import { handle, handleEffect } from "./app-ipc.js";
-import { pageHash, phonePageAt, SHIPPED_PAGE } from "./phone-page.js";
+import { pageHash, pageLink, phonePageAt, SHIPPED_PAGE } from "./phone-page.js";
 import { hostIntents } from "./audit.js";
 import { displayName, machineIdentity, takePerson } from "./identity.js";
 import { idOf, workspaceSeed, type Seed } from "@hivemind/workspace-host/identity";
@@ -676,9 +676,9 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
       access: access.url,
       voucher: access.policy === "closed" ? await networkProfiles().voucher({ expiresIn: (offer.expires - Date.now()) / 1000, uses: 1 }) : null,
     };
-    const link = formatPairLink({ device: me.device, addrs: me.addrs, relay: me.relay, code: offer.code, name: me.name, kind: "app", ...(admission ? { admission } : {}) });
+    const pair = { device: me.device, addrs: me.addrs, relay: me.relay, code: offer.code, name: me.name, kind: "app" as const, ...(admission ? { admission } : {}) };
     const at = await page;
-    return { code: offer.code, link, ...(at ? { page: `${at}#pair=${link}` } : {}), expires: offer.expires };
+    return { code: offer.code, link: formatPairLink(pair), ...(at ? { page: pageLink(at, pair) } : {}), expires: offer.expires };
   });
 
   // The hash of the phone page `page` serves, and of the one this build goes with: whether a

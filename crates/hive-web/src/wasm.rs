@@ -5,11 +5,12 @@ use hive_net::{
     net::{addr_of, Reach},
 };
 use hive_phone::{
-    agents, control, conversation, failure::Failure, network, pairing,
+    agents, control, conversation, devices, failure::Failure, identity::DeviceCertificate, network,
+    pairing, person,
     workspace::{self, Reply},
 };
 use iroh::{
-    endpoint::{Connection, RecvStream, SendStream},
+    endpoint::{Connection, ConnectionError, RecvStream, SendStream},
     Endpoint, RelayUrl, SecretKey,
 };
 use serde_json::{json, Value};
@@ -23,6 +24,26 @@ fn start() {
 
 fn err(e: impl std::fmt::Display) -> JsError {
     JsError::new(&format!("{e:#}"))
+}
+
+/// Why a device closed on this browser, when it turned it away: not one of the person's devices
+/// there now (hive-net's gate). Thrown to the page as an error named `Unpaired`.
+fn turned_away<'a>(mut e: Option<&'a (dyn std::error::Error + 'static)>) -> Option<String> {
+    while let Some(at) = e {
+        if let Some(ConnectionError::ApplicationClosed(close)) = at.downcast_ref() {
+            if close.error_code == hive_net::gate::NOT_ADMITTED.into() {
+                return Some(String::from_utf8_lossy(&close.reason).into_owned());
+            }
+        }
+        e = at.source();
+    }
+    None
+}
+
+fn unpaired(why: String) -> JsValue {
+    let e = js_sys::Error::new(&why);
+    e.set_name("Unpaired");
+    e.into()
 }
 
 fn to_js(v: &Value) -> Result<JsValue, JsError> {
@@ -88,6 +109,24 @@ pub fn read_link(text: &str) -> Result<JsValue, JsError> {
     }
 }
 
+/// The text of a QR code in a camera's frame, `rgba` at `width` × `height` as a canvas gives it; none
+/// when no code in it reads.
+#[wasm_bindgen(js_name = readQr)]
+pub fn read_qr(rgba: &[u8], width: usize, height: usize) -> Option<String> {
+    if rgba.len() < width * height * 4 {
+        return None;
+    }
+    let mut image = rqrr::PreparedImage::prepare_from_greyscale(width, height, |x, y| {
+        let at = (y * width + x) * 4;
+        let [r, g, b] = [rgba[at], rgba[at + 1], rgba[at + 2]].map(u32::from);
+        ((r * 299 + g * 587 + b * 114) / 1000) as u8
+    });
+    image
+        .detect_grids()
+        .into_iter()
+        .find_map(|grid| grid.decode().ok().map(|(_, text)| text))
+}
+
 /// Pair the device `seed`, called `name`, with the app whose pairing `link` the person copied, as
 /// the phone does (hive-phone's `Identity::pair_with`): onto the app's network as the link says,
 /// then to the app through its relay. What pairing gave, `{with, certificate, network,
@@ -146,14 +185,15 @@ impl Device {
         self.endpoint.id().to_string()
     }
 
-    /// Connect to the device `id` on `hive/ws/1`, through `relay`.
-    pub async fn reach(&self, id: String, relay: Option<String>) -> Result<Host, JsError> {
+    /// Connect to the device `id` on `hive/ws/1`, through `relay`: an `Unpaired` error when it
+    /// turns this browser away.
+    pub async fn reach(&self, id: String, relay: Option<String>) -> Result<Host, JsValue> {
         let at = addr_of(&id, &[], &relay).map_err(err)?;
         let connection = self
             .endpoint
             .connect(at, hive_net::ws::ALPN)
             .await
-            .map_err(err)?;
+            .map_err(|e| turned_away(Some(&e)).map_or_else(|| err(e).into(), unpaired))?;
         Ok(Host { connection })
     }
 
@@ -172,8 +212,8 @@ pub struct Host {
 impl Host {
     /// Follow every agent there (hive-phone's `agents::follow`): `listed` is called with
     /// `{agents, needs, working}` as each list comes, the phone's own order of what waits on the
-    /// person. Done when the device ends it.
-    pub async fn follow(&self, listed: js_sys::Function) -> Result<(), JsError> {
+    /// person. Done when the device ends it; an `Unpaired` error when it turned this browser away.
+    pub async fn follow(&self, listed: js_sys::Function) -> Result<(), JsValue> {
         let from = self.connection.remote_id().to_string();
         agents::follow(&self.connection, &from, |list| {
             let shown = serde_json::to_value(agents::as_one(vec![list])).unwrap_or(Value::Null);
@@ -182,7 +222,41 @@ impl Host {
             }
         })
         .await
-        .map_err(err)
+        .map_err(|e| {
+            let closed = self.connection.close_reason();
+            let closed = closed.as_ref().map(|c| c as &(dyn std::error::Error + 'static));
+            turned_away(closed).map_or_else(|| err(e).into(), unpaired)
+        })
+    }
+
+    /// The workspaces the device holds: `[{workspace, name, repo?}]`.
+    pub async fn workspaces(&self) -> Result<JsValue, JsError> {
+        let held = workspace::held(&self.connection).await.map_err(err)?;
+        to_js(&serde_json::to_value(held).map_err(err)?)
+    }
+
+    /// The person's other computers and hosts the device tells of, the person being the one this
+    /// browser's `certificate` names: `{whose?, devices: [{device, name, kind}]}`.
+    pub async fn devices(&self, certificate: JsValue) -> Result<JsValue, JsError> {
+        let mine: DeviceCertificate = serde_json::from_value(from_js(&certificate)?).map_err(err)?;
+        let answer = devices::ask(&self.connection, &json!({ "t": "devices" }))
+            .await
+            .map_err(err)?;
+        let told = answer.get("devices").and_then(Value::as_array);
+        let listed: Vec<Value> = devices::told_of(&mine.person, told.map_or(&[], Vec::as_slice))
+            .into_iter()
+            .map(|d| json!({ "device": d.device, "name": d.name, "kind": d.kind }))
+            .collect();
+        let whose = answer.get("profile").and_then(person::read_profile).map(|p| p.name);
+        to_js(&json!({ "whose": whose, "devices": listed }))
+    }
+
+    /// Ask the device to forget this browser (spec/pairing.md, "Unpairing"). Whether it did.
+    pub async fn unpair(&self) -> Result<bool, JsError> {
+        let answer = devices::ask(&self.connection, &json!({ "t": "unpair" }))
+            .await
+            .map_err(err)?;
+        Ok(answer.get("ok").and_then(Value::as_bool) == Some(true))
     }
 
     /// Open the stream `name` (`sync`, `presence`, `api`, …), named in its first frame.

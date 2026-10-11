@@ -36,7 +36,7 @@ export class Needs {
       h("p", { class: "where mono" }, where(a.name, a.machine)),
       h("p", { class: "kind" }, kindLabel(w.kind)),
       answers(w, (reply) => this.app.answer(a, reply)));
-    card.addEventListener("click", () => this.app.open(a));
+    card.addEventListener("click", () => this.app.open(a.tile));
     return card;
   }
 }

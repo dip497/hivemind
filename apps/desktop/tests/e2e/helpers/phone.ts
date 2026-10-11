@@ -1,8 +1,28 @@
 // What the phone specs share (M5): Settings → Devices → Pair a phone on the person's computer, read
-// as the phone reads it, and a stand-in agent there that keeps its conversation as Claude Code does.
+// as the phone reads it, a camera showing its QR code, and a stand-in agent there that keeps its
+// conversation as Claude Code does.
 import { expect, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
+import { encode } from "uqr";
+
+/** A camera pointed at `text`'s QR code, black on white, as Chromium's fake camera plays it
+ *  (`--use-file-for-fake-video-capture=<file>`): a Y4M file, written over whatever it showed. */
+export function cameraOn(file: string, text: string): void {
+  const [W, H] = [640, 480];
+  const { data, size } = encode(text, { border: 4 });
+  const scale = Math.floor(H / size);
+  const [left, top] = [(W - size * scale) >> 1, (H - size * scale) >> 1];
+  const luma = Buffer.alloc(W * H, 235);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (!data[y]![x]) continue;
+      for (let dy = 0; dy < scale; dy++) luma.fill(16, (top + y * scale + dy) * W + left + x * scale, (top + y * scale + dy) * W + left + (x + 1) * scale);
+    }
+  }
+  const frame = Buffer.concat([Buffer.from("FRAME\n"), luma, Buffer.alloc((W / 2) * (H / 2) * 2, 128)]);
+  fs.writeFileSync(file, Buffer.concat([Buffer.from(`YUV4MPEG2 W${W} H${H} F10:1 Ip A1:1 C420jpeg\n`), frame, frame]));
+}
 
 /** Settings → Devices → Pair a phone on the person's computer `desktop`: a QR code of its link (read
  *  here off its Copy button, as the phone reads it off the code), for hivemind on the phone even

@@ -495,3 +495,58 @@ string passed to a string input, which HEAD has too); `tools.sh` from an empty f
 of what it serves at `/phone/` worked out as the desktop does: `4dd5eb16…`, this build's. Not run:
 the workflows themselves, which need the branch on GitHub. Once it is pushed:
 `gh workflow run release.yml --ref feat/hive-web-b0 -f tag=v0.0.0-web-test` (build only).
+
+**3. The rest of the screens.** Each through hive-phone's core, as the Android app does it:
+
+- **Start and close an agent.** Agents has Start: a workspace the computer holds (one is
+  chosen for you), its folder when it has several, the agent and its model and mode when it lists
+  them, a prompt; Start opens the new agent in place of the screen that started it. An agent's
+  screen has Close, asked in place ("Close …? It stops, and its tile closes on …"). The Android app
+  asks the phone's screen lock for both; a browser has none, so Close asks and Start is the tap on
+  Start. WebAuthn user verification could stand in for the lock later.
+- **The person's other devices.** Devices asks the computer (`{t:"devices"}`) and lists the
+  computers and hosts it tells of, each whose certificate verifies and names the person, as the
+  phone learns them (`devices::told_of`, the one filter both use), titled with whose they are. They
+  are listed, not reached: the page keeps one connection, to the computer it paired with.
+- **Forget tells the computer.** Forget this computer, once confirmed, asks it to forget this
+  browser (`{t:"unpair"}` on the `device` stream), then forgets it here; when the computer is not
+  reached the page says it was not told.
+- **A refused page pairs again.** A computer that no longer admits this browser closes on it with
+  hive-net's gate code (403, "not admitted" or "removed"); the wasm tells that apart from a dropped
+  connection (an error named `Unpaired`), the page forgets the pairing and shows Pair again, saying
+  why.
+- **Scan.** The pairing screen has Scan: the rear camera (`getUserMedia`, `facingMode:
+  environment`), a frame every 150 ms at most 640 px wide, read in the page's wasm with `rqrr`
+  (Safari has no BarcodeDetector). A code scanned is asked about before pairing, as a link the page
+  was opened with is. It costs the wasm 181 KB raw, 82 KB brotli'd (3,244,706 → 3,425,541 bytes).
+- **The QR code a camera reads.** The page's link carried the app's whole link, with every
+  address the computer has (each docker bridge, each IPv6): a browser reaches the computer only
+  through the relay, so the page's link now leaves them out (`pageLink`, `phone-page.ts`); the app's
+  own link keeps them. In the spec, the page's link went from 1,354 characters (QR version 26,
+  121×121 modules) to 882 (version 21, 101×101); in the unit test with 14 addresses, from 1,349 to
+  868. What is left is mostly the closed network's voucher (its signer, nonce and signature, ~300
+  characters before base64): a smaller code needs a denser encoding of the link, a format change.
+
+Proved to fail when broken (`phone-browser.spec.ts`, which drives each on the real computer, the
+audit naming the browser's device; `phone-page.test.ts`): the prompt not sent (caught at the new
+agent's chat); Close calling Stop (the computer still had three terminals); a refusal taken as any
+failure, and the gate's code misread in the wasm (no Pair again); Forget telling nobody (first
+survived: `toBeHidden` waited out the notice, and the computer's list was read before it loaded;
+now read at once, and through `window.hive.devices()`); a scanned code ignored (no "Pair with …?");
+the page's link keeping the addresses (unit test and spec).
+
+**Views, not done: a decision.** Android shows a community view in a WebView whose files come
+from the computer through the phone (`views::file`), the view kept apart from the app. In a
+browser the same isolation is a sandboxed iframe (no `allow-same-origin`), whose files would come
+through the page's service worker. Tried in Chromium: a sandboxed iframe is not controlled by any
+service worker, neither its navigation nor what it loads; both went to the network. So a view
+cannot get its files from the wasm without an origin of its own. The options:
+
+1. A second origin on the network's server (another host name or port, with its own
+   certificate) serving only a view shell: a service worker there asks the page, by
+   `postMessage`, for each file, and the page gets it with `views::file`. The view keeps its
+   isolation; each server needs a second name and certificate. Recommended.
+2. The page makes a view one document (scripts and styles inlined, assets as `data:` URLs) and
+   loads it as the sandboxed frame's `srcdoc`: no second origin, but a view that loads files as it
+   runs (`fetch`, a dynamic `import`) breaks.
+3. No views in the browser; the phone apps show them.
