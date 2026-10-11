@@ -13,7 +13,7 @@ import { encode } from "uqr";
 import type { PairedDeviceSummary } from "../../shared/ipc";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
-import { Section } from "./appearance-controls";
+import { Section, Switch } from "./appearance-controls";
 
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e)).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
 
@@ -136,8 +136,10 @@ function OfferCode() {
   const [offer, setOffer] = useState<{ code: string; link: string; page?: string; expires: number; phone: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [inBrowser, setInBrowser] = useState(false);
   const show = async (phone: boolean) => {
     setError(null);
+    setInBrowser(false);
     try { setOffer({ ...(await window.hive.pairOffer()), phone }); } catch (e) { setError(messageOf(e)); }
   };
   if (!offer) {
@@ -153,14 +155,18 @@ function OfferCode() {
   }
   const until = new Date(offer.expires).toLocaleTimeString();
   // A phone without hivemind opens the page's address in its browser; hivemind reads it as the link.
-  const shown = offer.phone && offer.page ? offer.page : offer.link;
+  // Asked for, never the default: the page comes from the network's server, whose operator could
+  // pair as this person with the link it is given.
+  const page = offer.phone ? offer.page : undefined;
+  const shown = page && inBrowser ? page : offer.link;
+  const server = page && new URL(page).host;
   return (
     <div className="flex items-start gap-4" data-pair-offered={offer.phone ? "phone" : "code"}>
       <Qr text={shown} />
       <div className="flex min-w-0 flex-col gap-2">
         {offer.phone ? (
           <p className="text-[12px] text-[var(--color-fg2)]">
-            {offer.page ? "Scan this with your phone's camera, or with hivemind on it." : "Scan this with hivemind on your phone."} It becomes yours, to see what needs you and answer it, and runs nothing itself. It works once, until {until}.
+            {shown === page ? "Scan this with your phone's camera, or with hivemind on it." : "Scan this with hivemind on your phone."} It becomes yours, to see what needs you and answer it, and runs nothing itself. It works once, until {until}.
           </p>
         ) : (
           <>
@@ -169,6 +175,16 @@ function OfferCode() {
               Enter these words (on this network) or the link on the other computer, under Settings → Devices, or run <code className="font-mono">hive host pair</code> with them on a host. It works once, until {until}.
             </p>
           </>
+        )}
+        {page && (
+          <div className="flex flex-col gap-1" data-pair-browser={inBrowser ? "on" : "off"}>
+            <label className="flex items-center gap-2 text-[12px]">
+              <Switch on={inBrowser} onChange={setInBrowser} label="Open in the phone's browser" /> Open in the phone's browser, no app needed
+            </label>
+            <p className="text-[12px] text-[var(--color-fg3)]" data-pair-server={server}>
+              The page comes from {server}, this network's server. Whoever runs it could pair as you: turn this on only if that is you.
+            </p>
+          </div>
         )}
         <div>
           <Button size="sm" variant="outline" data-pair-copy title={shown}

@@ -11,20 +11,22 @@ import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { followConversation, readConversation, type Said } from "./conversation.js";
 import { runsIn, type HeldBoard } from "./needs.js";
 
-/** A session an agent keeps its conversation in: its id, its file, and how the file's records say
- *  what was said, as its manifest maps them. */
+/** A session an agent keeps its conversation in: its id (empty while none is known), its file
+ *  (null until the agent writes it), and how the file's records say what was said, as its manifest
+ *  maps them. */
 export interface Transcript {
   session: string;
-  file: string;
+  file: string | null;
   format: AgentTranscript;
 }
+type Kept = Transcript & { file: string };
 
 /** How often a followed agent is looked at for a session it began since. */
 const SESSION_CHECK_MS = 1000;
 
 /** The session the agent of `tile` keeps its conversation in now, among the boards `held`, and its
  *  file, as its manifest says it is kept (`session.transcript`, `session.resume.exists`); null
- *  when it maps no transcript, or no file is found. The session is the one last recorded for the tile
+ *  when no agent there maps a transcript. The session is the one last recorded for the tile
  *  in `tileSessionsDir` (by its tracker hook, or by the daemon as it bound one at its start), else
  *  the one its manifest would resume. */
 export function transcriptOf(held: HeldBoard[], tile: string, tileSessionsDir: string, home?: string): Transcript | null {
@@ -36,13 +38,12 @@ export function transcriptOf(held: HeldBoard[], tile: string, tileSessionsDir: s
   if (!record || !format || !exists) return null;
   const spec = { cwd: runsIn(held, bare) ?? "", args: record.args ?? [] };
   const session = readTrackedSession(tileSessionsDir, `hm:${bare}`) ?? readTrackedSession(tileSessionsDir, bare) ?? sessionFor(def, spec);
-  const file = session ? sessionFile(exists, session, home) : null;
-  return session && file ? { session, file, format } : null;
+  return { session: session ?? "", file: session ? sessionFile(exists, session, home) : null, format };
 }
 
 export interface ConversationsOptions {
   /** The session the agent of `tile` keeps its conversation in now, its file, and how its manifest
-   *  maps the file's records; null when none. */
+   *  maps the file's records; null when no agent there keeps one. */
   transcriptOf(tile: string): Transcript | null;
 }
 
@@ -56,14 +57,16 @@ export function conversations(o: ConversationsOptions): Domain<"agent.conversati
         if (cursor != null && (typeof cursor !== "number" || !Number.isSafeInteger(cursor) || cursor < 0)) throw new ApiError("BAD_REQUEST", "cursor must be a whole number");
         if (session != null && typeof session !== "string") throw new ApiError("BAD_REQUEST", "session must be text");
         const now = o.transcriptOf(bare);
+        // No agent there keeps a conversation: nothing, and nothing to follow.
+        if (!now) return { entries: [], cursor: 0 };
         // A cursor counts in the session it was given in, and only there. No file yet (the agent
-        // has said nothing): nothing so far, and its first session is followed once there is one.
-        const first = now ? readConversation(now.file, now.format, session === now.session ? (cursor ?? undefined) : undefined) : { entries: [], cursor: 0 };
+        // has said nothing): nothing so far, and its session is followed once its file is there.
+        const first = now.file ? readConversation(now.file, now.format, session === now.session ? (cursor ?? undefined) : undefined) : { entries: [], cursor: 0 };
         let mine = following.get(from);
         if (!mine) following.set(from, (mine = new Map()));
         mine.get(bare)?.();
         mine.set(bare, followAgent(() => o.transcriptOf(bare), now, first.cursor, (said, of) => from.send({ event: "agent.said", params: [bare, said.entries, said.cursor, of] })));
-        return now ? { ...first, session: now.session } : first;
+        return now.file ? { ...first, session: now.session } : first;
       },
     },
     effects: {},
@@ -74,22 +77,22 @@ export function conversations(o: ConversationsOptions): Domain<"agent.conversati
   };
 }
 
-/** Follow an agent's conversation from `cursor` in the session `at` (none: it keeps no file yet):
- *  `send` is handed what is written to its file next, as it comes, and, once `now` says the agent
- *  keeps another session whose file there is, the last of that one, then what is written to it;
- *  each with its session. Stop it with what it returns. */
-function followAgent(now: () => Transcript | null, at: Transcript | null, cursor: number, send: (said: Said, session: string) => void): () => void {
-  let current = at;
-  const follow = (t: Transcript, from: number) => followConversation(t.file, t.format, from, (said) => send(said, t.session));
-  let stop = at ? follow(at, cursor) : () => {};
+/** Follow an agent's conversation from `cursor` in the session `at` (its file not written yet:
+ *  from when it is): `send` is handed what is written to its file next, as it comes, and, once
+ *  `now` says the agent keeps another session whose file there is, the last of that one, then what
+ *  is written to it; each with its session. Stop it with what it returns. */
+function followAgent(now: () => Transcript | null, at: Transcript, cursor: number, send: (said: Said, session: string) => void): () => void {
+  let current: Kept | null = at.file ? (at as Kept) : null;
+  const follow = (t: Kept, from: number) => followConversation(t.file, t.format, from, (said) => send(said, t.session));
+  let stop = current ? follow(current, cursor) : () => {};
   const check = setInterval(() => {
     const next = now();
-    if (!next || next.session === current?.session) return;
+    if (!next?.file || next.session === current?.session) return;
     stop();
-    current = next;
+    current = next as Kept;
     const first = readConversation(next.file, next.format);
     send(first, next.session);
-    stop = follow(next, first.cursor);
+    stop = follow(current, first.cursor);
   }, SESSION_CHECK_MS);
   return () => {
     clearInterval(check);

@@ -314,7 +314,8 @@ under the same certificate. That server already exists on every network a browse
 browser reaches the computer only through a relay, §2), so the page needs nothing more: HTTPS
 comes from `--domain` (Let's Encrypt) or `--cert`/`--key`, or from `tailscale serve` in front of a
 relay on a tailnet. There is no hosted page, as there is no hosted relay. The desktop's pairing
-offer asks the relay for `phone/manifest.webmanifest` (3 s at most); when it is there, the phone's
+offer asks the relay for `phone/manifest.webmanifest` (3 s at most); when it is there, Pair a phone
+offers "Open in the phone's browser", off by default and naming the server, and turned on, the
 QR code and Copy button carry `https://<relay>/phone/#pair=hivemind://pair/<…>`. A phone's camera
 opens it in the browser; hivemind's own phone app reads the same QR, as the link inside the
 address is now one of the link's forms (`spec/pairing.md`, held to `conformance/pairing.json` by
@@ -323,8 +324,9 @@ release does not ship the built page yet: build it with `crates/hive-web/build.s
 `www` folder (B4 puts it in the release and in `infra/compose.yml`).
 
 **Works**, end to end in `apps/desktop/tests/e2e/phone-browser.spec.ts`, in a 390×844 touch
-browser: the desktop's QR names the page on the network's own server; opened, the page pairs and
-is listed as the person's phone. **Needs you**: the agent waiting on a permission, as a card with
+browser: asked for the browser, the desktop's QR names the page on the network's own server;
+opened, the page names the computer and pairs on a tap, and is listed as the person's phone;
+opened again with another link, it says the pairing it would replace, and Keep leaves it. **Needs you**: the agent waiting on a permission, as a card with
 an amber rail, Deny and Allow; Allow from the browser, and the computer answers the agent as that
 device (`agent.answer` in its audit log, by the peer device) and it works. **Agents**: by machine
 and workspace, a state dot, status and how long. **One agent**: its chat; a message sent from the
@@ -356,11 +358,30 @@ browser) that opened a fresh agent's chat heard nothing of it. It now follows th
 session once its file is there (`packages/host/src/conversations.ts`, with a test). And the page
 gives up a dial after 10 s and says the computer is not reached; iroh's dial would wait on.
 
+**Security review** (of the B3 commit), each fixed:
+
+- *A link pairs on its own.* Opening `…/phone/#pair=<link>` paired at once, over any pairing the
+  page had: whoever got a person to open a link of theirs had that phone answering their
+  computer. The page now reads the link through the wasm (`readLink`, hive-phone's `parse_link`),
+  asks "Pair with <computer>?", pairs only on a tap, and says what it would replace (Keep leaves it).
+- *The page's server gets the pairing secret.* The page's JS comes from whoever runs the network's
+  server, and it is handed the link: its code and voucher, and the browser's key it keeps. A server
+  that is not the person's own could pair as them, with everything a phone may do. A member's
+  desktop cannot tell who runs the server (a visit voucher is signed by any member), so the
+  browser's link is never the default: Pair a phone shows the hivemind link, and "Open in the
+  phone's browser" names the server and says that whoever runs it could pair as the person. A bundle
+  hash cannot close this (nothing pins the top-level document a browser loads); a page served
+  from elsewhere would need a host the person trusts more than their own server.
+- *A tile with no agent is asked again and again.* The host's conversation follower polled the
+  transcript of a tile no agent keeps one for, every second, for as long as the phone listened. A
+  tile whose agent keeps no conversation now answers nothing once and is not looked at again; one
+  whose file is not written yet is followed from when it is (`packages/host/src/conversations.ts`).
+
 **Measured** (load 12–35 on 16 CPUs, headless Chromium, CPU throttled 4× as a mid phone):
 
 | What | Budget | Measured |
 |---|---|---|
-| First screen from what the page kept, offline, the files from the service worker | 500 ms | 291–445 ms in the spec over four runs (load 19–35); 255–344 ms over 5 reloads at load 14 (40–178 ms unthrottled). It was 366–655 ms until the first screen's modules were preloaded and the wasm's glue loaded after it |
+| First screen from what the page kept, offline, the files from the service worker | 500 ms | 291–445 ms in the spec over four runs (load 19–35); 255–344 ms over 5 reloads at load 14 (40–178 ms unthrottled). It was 366–655 ms until the first screen's modules were preloaded and the wasm's glue loaded after it. After the security fixes, at load 8–19: 387–896 ms over 8 runs, and the B3 commit's own page 475–758 ms in the same hour; the budget is not held on this machine at that load |
 | One update applied to the three screens (one wait answered), layout included, 40 agents | one frame, 16.7 ms | median 7.7 ms, p95 15.8 ms |
 | The same, 200 agents | | median 24 ms, p95 53 ms: over a frame |
 | wasm | 2 MB gzipped (§5) | 3,239,975 B raw, 1,166,205 B gzip, 895,743 B brotli; `hive-net serve --phone` serves the brotli copy build.sh makes |
@@ -370,7 +391,9 @@ gives up a dial after 10 s and says the computer is not reached; iroh's dial wou
 link; Allow sent as Deny (`reply_of` in the wasm); the message sent empty; the service worker never
 serving its cache; the kept overview not shown on open; no limit on a dial; the host not following
 a session begun after it was asked (its unit test); the conformance cases with either parser not
-reading the page's address; `pages.rs` serving a dotfile, a wasm without its type, or a stale
+reading the page's address; the page pairing on its own from a link; not saying the pairing a link
+would replace; the desktop offering the browser's link by default, or not naming its server;
+the host looking again at a tile no agent keeps a conversation for (its unit test); `pages.rs` serving a dotfile, a wasm without its type, or a stale
 compressed copy (its unit test).
 
 **Not done, for B4:**
@@ -381,7 +404,7 @@ compressed copy (its unit test).
 - Not run on a real iPhone or Android phone yet: only Chromium at a phone's size and touch. Safari's
   service worker, IndexedDB sealing (WebCrypto non-extractable keys) and Add to Home Screen need a
   real device, over HTTPS (`--domain` or `tailscale serve`).
-- The built page in the release and in `infra/compose.yml`; the bundle hash in the pairing dialog.
+- The built page in the release and in `infra/compose.yml`.
 - Close and start from the page (exported, no screen); Views; the person's other devices; unpairing
   that tells the computer (the page only forgets it); a refused page offering to pair again.
 - Lists of hundreds of agents take more than a frame to apply at 4× (above).
@@ -397,4 +420,4 @@ node crates/hive-web/measure-screens.mjs 40 200
 
 To open it from a phone: `hive-net serve --all --domain relay.example.com --phone
 crates/hive-web/www …`, the desktop on that network, Settings → Devices → Pair a phone, and scan
-the QR code with the phone's camera.
+turn on Open in the phone's browser, and scan the QR code with the phone's camera.

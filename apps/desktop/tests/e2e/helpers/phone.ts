@@ -5,14 +5,14 @@ import fs from "node:fs";
 import path from "node:path";
 
 /** Settings → Devices → Pair a phone on the person's computer `desktop`: a QR code of its link (read
- *  here off its Copy button, as the phone reads it off the code), inside the phone page's address
- *  when the network's server serves one. The link. */
+ *  here off its Copy button, as the phone reads it off the code), for hivemind on the phone even
+ *  when the network's server serves the phone page. The link. */
 export async function offerPhonePairing(desktop: Page): Promise<string> {
   await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "devices" } })));
   await desktop.locator("[data-pair-phone]").click();
   await expect(desktop.locator('[data-pair-offered="phone"] [data-pair-qr]')).toBeVisible();
   const link = (await desktop.locator("[data-pair-copy]").getAttribute("title"))!;
-  expect(link).toMatch(/^(https?:\/\/[^#]+\/phone\/#pair=)?hivemind:\/\/pair\//);
+  expect(link).toMatch(/^hivemind:\/\/pair\//);
   return link;
 }
 

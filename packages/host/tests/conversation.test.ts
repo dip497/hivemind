@@ -118,12 +118,20 @@ test("asked for an agent's conversation, the caller is answered what it says so 
   }
 });
 
-test("asked before the agent has said anything, its session file not yet there, the caller is answered nothing, then once its file is there sent the last of it and what is written to it", async () => {
-  let kept: Transcript | null = null;
-  const { server, client } = served(() => kept);
-  const phone = client();
+test("asked before the agent has said anything, its session file not yet there, the caller is answered nothing, then once its file is there sent the last of it and what is written to it; a tile where no agent keeps a conversation is not looked at again", async () => {
+  let kept: Transcript = { session: "s1", file: null, format: FORMAT };
+  let asked = 0;
+  const server = new WorkspaceServer([conversations({ transcriptOf: (tile) => (tile === "t1" ? kept : (asked++, null)) })], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
+  const closing = new AbortController();
+  const got: EventMessage[] = [];
+  const phone: Connection & { got: EventMessage[]; go(): void } = { actor: { kind: "person" }, got, send: (m) => got.push(m), closed: closing.signal, go: () => closing.abort() };
+  server.connect(phone);
   try {
     assert.deepEqual(await server.answer("agent.conversation", ["t1"], phone), { result: { entries: [], cursor: 0 } });
+    assert.deepEqual(await server.answer("agent.conversation", ["t7"], phone), { result: { entries: [], cursor: 0 } });
+    await wait(1500);
+    assert.equal(asked, 1, "t7, where no agent keeps a conversation, is not followed");
+    assert.deepEqual(phone.got, []);
     const at = sessionFile(said(0));
     kept = { session: "s1", file: at, format: FORMAT };
     for (let t = 0; t < 4000 && phone.got.length === 0; t += 20) await wait(20);
@@ -143,8 +151,8 @@ test("followed, an agent that begins another session (Claude Code's /clear) is f
   const phone = client();
   try {
     assert.deepEqual(ids(await server.answer("agent.conversation", ["t1"], phone)), ["u0"]);
-    // Begun, its file not yet written, there is none to find: still the one before.
-    kept = null;
+    // Begun, its file not yet written: still the one before.
+    kept = { session: "s2", file: null, format: FORMAT };
     await wait(1500);
     assert.deepEqual(phone.got, []);
     const after = sessionFile(said(5));
@@ -161,7 +169,7 @@ test("followed, an agent that begins another session (Claude Code's /clear) is f
   }
 });
 
-test("an agent's session is the one last recorded for its tile, else the one bound as it started, its file where its manifest says, read as its manifest maps it; none when the manifest maps no transcript, or the file is not there", () => {
+test("an agent's session is the one last recorded for its tile, else the one bound as it started, its file where its manifest says, read as its manifest maps it, its file none while it is not there; none at all when the manifest maps no transcript or no agent is there", () => {
   const home = fs.mkdtempSync(path.join(tmp, "home-"));
   const sessions = path.join(tmp, `tile-sessions-${made++}`);
   const project = path.join(home, ".claude", "projects", "-home-p-api");
@@ -185,6 +193,6 @@ test("an agent's session is the one last recorded for its tile, else the one bou
   assert.equal(transcriptOf(held, "t2", sessions, home), null);
   assert.equal(transcriptOf(held, "t9", sessions, home), null);
   writeTrackedSession(sessions, "hm:t1", "s-gone");
-  assert.equal(transcriptOf(held, "t1", sessions, home), null, "a session whose file is not there");
+  assert.deepEqual(transcriptOf(held, "t1", sessions, home), { session: "s-gone", file: null, format: FORMAT }, "a session whose file is not there yet");
   assert.equal(TILE_SESSIONS_DIR, "tile-sessions");
 });

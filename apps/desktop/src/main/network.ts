@@ -669,6 +669,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
   };
   handleEffect("net:pair-offer", () => ({}), async () => {
     const me = await pairingMe();
+    const page = phonePage(me.relay);
     const hn = await network();
     // Found from its words by the devices on this network, until it is used or expires.
     const withdraw = () => { if (offered !== offer) return; offered = null; hn.advertise(null); };
@@ -685,8 +686,8 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
       voucher: access.policy === "closed" ? await networkProfiles().voucher({ expiresIn: (offer.expires - Date.now()) / 1000, uses: 1 }) : null,
     };
     const link = formatPairLink({ device: me.device, addrs: me.addrs, relay: me.relay, code: offer.code, name: me.name, kind: "app", ...(admission ? { admission } : {}) });
-    const page = await phonePage(me.relay);
-    return { code: offer.code, link, ...(page ? { page: `${page}#pair=${link}` } : {}), expires: offer.expires };
+    const at = await page;
+    return { code: offer.code, link, ...(at ? { page: `${at}#pair=${link}` } : {}), expires: offer.expires };
   });
 
   // Enter the code or link another of the person's devices shows: a host (`hive host pair`) takes

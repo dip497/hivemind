@@ -78,6 +78,16 @@ pub fn device_id(seed: &[u8]) -> Result<String, JsError> {
     Ok(key_of(seed)?.public().to_string())
 }
 
+/// What the pairing link in `text` (as copied, or inside the phone page's address) names:
+/// `{device, name, kind}`, or null when it is not one.
+#[wasm_bindgen(js_name = readLink)]
+pub fn read_link(text: &str) -> Result<JsValue, JsError> {
+    match pairing::parse_link(text) {
+        Some(link) => to_js(&json!({ "device": link.device, "name": link.name, "kind": link.kind })),
+        None => Ok(JsValue::NULL),
+    }
+}
+
 /// Pair the device `seed`, called `name`, with the app whose pairing `link` the person copied, as
 /// the phone does (hive-phone's `Identity::pair_with`): onto the app's network as the link says,
 /// then to the app through its relay. What pairing gave, `{with, certificate, network,

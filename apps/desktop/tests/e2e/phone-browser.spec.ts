@@ -1,8 +1,8 @@
 // The phone in a browser (docs/design/phone-browser-2026-10-03.md, B1 to B3): the computer, on a
 // network of its own whose server also serves the phone page (`hive-net serve --phone`), offers its
 // pairing link inside the page's address (Settings → Devices → Pair a phone); a phone-sized browser
-// opens it, gets onto the network with the voucher the link carries, pairs with the computer
-// through the network's relay, and is listed there as the person's phone. It is the phone app: what
+// opens it, asks, and on a tap gets onto the network with the voucher the link carries, pairs with
+// the computer through the network's relay, and is listed there as the person's phone. It is the phone app: what
 // waits on the person, answered from there; every agent, live; one agent's chat, and a message
 // sent to it. The computer sees both, done by that device. Reopened with no network, it shows what
 // it last knew at once; unpaired on the computer, it is refused.
@@ -31,7 +31,7 @@ test.afterEach(async () => {
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 
-test("a phone's browser opens the page the computer's QR code names and pairs through the network's relay, as the person's phone; it answers what waits on the person and sends an agent a message, and the computer does both, as that device; reopened offline it shows what it last knew; unpaired on the computer, it is refused", async ({}, testInfo) => {
+test("a phone's browser opens the page the computer's QR code names and, asked and tapped, pairs through the network's relay, as the person's phone; it answers what waits on the person and sends an agent a message, and the computer does both, as that device; reopened offline it shows what it last knew; unpaired on the computer, it is refused", async ({}, testInfo) => {
   test.skip(!hiveNetBuilt() || !hiveWebBuilt(), "build hive-net (cargo build in crates/hive-net) and the page (crates/hive-web/build.sh) first");
   test.setTimeout(240_000);
   const net = await ownNetwork(root, procs, "closed", WWW);
@@ -45,17 +45,34 @@ test("a phone's browser opens the page the computer's QR code names and pairs th
   const me = await desktop.evaluate(() => window.hive.identity());
   const audit = () => fs.readFileSync(path.join(root, "desktop", "hivemind-dev", "audit.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>);
 
-  // The QR code is the page's address on the network's own server, the link in its fragment.
-  const link = await offerPhonePairing(desktop);
-  expect(link.startsWith(`${net.relay}/phone/#pair=hivemind://pair/`), link).toBe(true);
+  // The QR code is for hivemind on the phone, until asked for the browser: then it is the page's
+  // address on the network's server, named as the one who could pair as the person, the link in
+  // its fragment.
+  const app = await offerPhonePairing(desktop);
+  await expect(desktop.locator("[data-pair-server]")).toContainText(`The page comes from ${new URL(net.relay).host}`);
+  const inBrowser = async (app: string) => {
+    await desktop.locator('[data-pair-browser] [role="switch"]').click();
+    const link = (await desktop.locator("[data-pair-copy]").getAttribute("title"))!;
+    expect(link).toBe(`${net.relay}/phone/#pair=${app}`);
+    return link;
+  };
+  const link = await inBrowser(app);
 
-  // Opened on a phone: it pairs, let onto the network with the voucher the link carries.
+  // Opened on a phone: it asks first, naming the computer, as anyone can send a link; nothing is
+  // paired until the tap. Then it pairs, let onto the network with the voucher the link carries.
   browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: "dark" });
   const page = await context.newPage();
   await page.goto(`${link}&name=${encodeURIComponent("Priya's phone")}`);
-  await expect(page.locator("[data-paired]")).toHaveAttribute("data-paired", me.deviceId, { timeout: 30_000 });
+  await expect(page.locator('[data-screen="pair"] h1')).toHaveText(/^Pair with .+\?$/, { timeout: 30_000 });
+  await expect(page.locator("[data-pair-replaces]")).toBeHidden();
   const id = (await page.locator("[data-id]").getAttribute("data-id"))!;
+  // Nothing to wait on when nothing happens: as long as a pairing takes here, several times over.
+  await page.waitForTimeout(3_000);
+  expect(await (await fetch(`${net.access}/allowed/${id}`)).text()).toBe("false");
+  await expect(desktop.locator(`[data-device="${id}"]`)).toHaveCount(0);
+  await page.locator("[data-pair]").click();
+  await expect(page.locator("[data-paired]")).toHaveAttribute("data-paired", me.deviceId, { timeout: 30_000 });
   const kept = await page.evaluate(() => new Promise((resolve, reject) => {
     const open = indexedDB.open("hive-web");
     open.onsuccess = () => { const get = open.result.transaction("kept").objectStore("kept").get("paired"); get.onsuccess = () => resolve(get.result); get.onerror = reject; };
@@ -66,6 +83,17 @@ test("a phone's browser opens the page the computer's QR code names and pairs th
   // The code, a secret, is gone from the page's address once read.
   expect(page.url()).not.toContain("pair");
   await expect(desktop.locator(`[data-device="${id}"][data-device-kind="phone"]`)).toContainText("Priya's phone", { timeout: 10_000 });
+  await desktop.keyboard.press("Escape");
+
+  // Opened with another link, paired already: it says what pairing would replace, and Keep leaves
+  // it as it was.
+  await page.goto(await inBrowser(await offerPhonePairing(desktop)));
+  await page.reload();
+  await expect(page.locator("[data-pair-replaces]")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("[data-pair-replaces]")).toHaveText(/^This page is paired with .+; pairing replaces it\.$/);
+  await page.locator("[data-pair-keep]").click();
+  await expect(page.locator('[data-screen="needs"]')).toBeVisible();
+  await expect(page.locator("[data-paired]")).toHaveAttribute("data-paired", me.deviceId);
   await desktop.keyboard.press("Escape");
 
   // An agent on the computer begins waiting on the person: Needs you shows it, with its answers.

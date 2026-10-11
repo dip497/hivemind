@@ -21,6 +21,8 @@ let overview: Overview | null = null;
 let paired: Paired | null = null;
 /** An agent opened from a list, so Back goes back to it. */
 let opened = false;
+/** A pairing link the page was opened with, waiting on a tap. */
+let offered = false;
 
 const act = async (done: () => Promise<boolean>, notLanded: string): Promise<boolean> => {
   try {
@@ -53,7 +55,11 @@ const needs = new Needs(app);
 const agents = new Agents(app);
 const agent = new AgentScreen(app);
 const devices = new Devices(() => void forget());
-const pairing = new PairScreen((link, name) => pairWith(link, name));
+const pairing = new PairScreen((link, name) => pairWith(link, name), () => {
+  offered = false;
+  pairing.clear();
+  route();
+});
 const screens = { needs, agents, agent, devices, pair: pairing };
 
 const tabs = h("nav", { class: "tabs", "aria-label": "hivemind" });
@@ -79,12 +85,12 @@ function notify(text: string): void {
   noticeTimer = setTimeout(() => (notice.hidden = true), 4000);
 }
 
-/** The screen the address names: a tab, or `agent=<tile>`; pairing while paired with nothing. */
+/** The screen the address names: a tab, or `agent=<tile>`; pairing while paired with nothing or offered a link. */
 function route(): void {
   const asked = new URLSearchParams(location.hash.slice(1));
   const tile = asked.get("agent");
   const tab = (TABS.find(([t]) => asked.has(t))?.[0] ?? "needs") as Tab;
-  const shown = !paired ? "pair" : tile ? "agent" : tab;
+  const shown = !paired || offered ? "pair" : tile ? "agent" : tab;
   for (const [name, screen] of Object.entries(screens)) screen.el.hidden = name !== shown;
   tabs.hidden = shown === "pair" || shown === "agent";
   for (const button of tabs.querySelectorAll<HTMLElement>("[data-tab]")) {
@@ -109,7 +115,10 @@ function apply(o: Overview): void {
 
 async function pairWith(link: string, name: string): Promise<void> {
   if (!phone) throw new Error("Still starting");
+  const before = paired;
   paired = await phone.pair(link, name);
+  offered = false;
+  if (before) apply({ agents: [], needs: [], working: 0 });
   devices.show(phone.id, paired);
   location.hash = "needs";
   route();
@@ -159,8 +168,12 @@ async function start(): Promise<void> {
   devices.show(phone.id, paired);
   addEventListener("online", () => phone!.retry());
   document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && phone!.retry());
-  if (linked.has("pair")) await pairing.run(pairWith, address, linked.get("name") ?? guessName());
-  else phone.connect();
+  phone.connect();
+  if (linked.has("pair")) {
+    offered = true;
+    pairing.offer(address, linked.get("name") ?? guessName(), phone.read(address), paired?.with ?? null);
+    route();
+  }
 }
 
 start().catch((e: unknown) => {

@@ -2,7 +2,7 @@
 // (hive-phone's core) pairs, signs, reads and acts; this keeps one connection to the computer it
 // paired with, dialled again when it drops, and hands the screens what it is told.
 
-import init, { Device, type Host, deviceId, pair } from "../pkg/hive_web.js";
+import init, { Device, type Host, deviceId, pair, readLink } from "../pkg/hive_web.js";
 import { deviceKey, put, remove } from "./store.js";
 import type { Agent, Overview, Paired, Piece, Reply } from "./types.js";
 import { message } from "./words.js";
@@ -45,11 +45,23 @@ export class Phone {
     return new Phone(deviceId(seed), seed, paired, told);
   }
 
+  /** The computer the pairing link in `text` names, or null when it is not one. */
+  read(text: string): { device: string; name: string } | null {
+    return readLink(text) as { device: string; name: string } | null;
+  }
+
   /** Pair with the computer whose link `text` is, as the page's address carries it or as copied. */
   async pair(text: string, name: string): Promise<Paired> {
     const given = (await pair(this.seed, text, name)) as Paired;
+    const before = this.paired;
     await put("paired", given);
     this.paired = given;
+    // In place of another computer: what it said goes, and its connection with it.
+    if (before) {
+      await remove("overview");
+      this.host?.close();
+      this.wake?.();
+    }
     this.connect();
     return given;
   }
