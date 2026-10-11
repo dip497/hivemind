@@ -36,6 +36,9 @@ export class Agents {
     }
     this.rows.set(rows);
     this.none.hidden = o.agents.length > 0;
+    // Each breathing dot is a layer the browser recomposes on every change: past a few, still.
+    const still = o.working > STILL_PAST;
+    if (this.list.hasAttribute("data-still") !== still) this.list.toggleAttribute("data-still", still);
   }
 
   private row(r: Row): HTMLElement {
@@ -53,5 +56,8 @@ export class Agents {
     return row;
   }
 }
+
+/** Working agents past which their dots stop breathing. */
+const STILL_PAST = 40;
 
 const sigOf = (a: Agent) => JSON.stringify([a.agent, a.state, a.since, a.program?.label, a.waiting?.kind]);

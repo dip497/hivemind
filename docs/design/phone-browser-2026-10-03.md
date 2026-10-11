@@ -5,8 +5,8 @@ iroh compiled to wasm, relay only (a browser cannot send UDP), end-to-end encryp
 `hive/ws/1` streams as the native phone; the relay is the person's own `hive-net serve` (public
 with `--domain`, or on their Tailscale behind `tailscale serve` for HTTPS); there is no hosted
 relay. Later steps add ack-window flow control (as Orca does) and a needs-you-first PWA. B0's
-results are in §9; B1's and B2's (pairing, and the agents and needs live) and B3's (the phone app,
-and where its page is served from) in §10.
+results are in §9; B1's and B2's (pairing, and the agents and needs live), B3's (the phone app,
+and where its page is served from) and B4's in §10.
 
 It parks the native phone apps (`apps/ios`, `apps/android`,
 [`phone-app-2026-10-02.md`](phone-app-2026-10-02.md)) and puts the phone in the browser first. The
@@ -242,7 +242,7 @@ host with `--relay https://relay.example.com`, the page from any HTTPS host (Git
 it is static), and the same fragment with `relay=https://relay.example.com`. `--relay` alone admits
 every device; a lasting relay runs the access role beside it.
 
-## 10. B1, B2 and B3 results (2026-10-11)
+## 10. B1 to B4 results (2026-10-11)
 
 ### B1 and B2
 
@@ -415,9 +415,47 @@ compressed copy (its unit test).
 (cd crates/hive-net && cargo build --bin hive-net)
 crates/hive-web/build.sh                   # as above; it also compiles the app and lists the shell
 apps/desktop/scripts/e2e.sh phone-browser  # prints the first-screen time
-node crates/hive-web/measure-screens.mjs 40 200
+node crates/hive-web/measure-screens.mjs 200 200 agents   # and needs; JSON: apply, frame, styled, laidOut
 ```
 
 To open it from a phone: `hive-net serve --all --domain relay.example.com --phone
-crates/hive-web/www …`, the desktop on that network, Settings → Devices → Pair a phone, and scan
-turn on Open in the phone's browser, and scan the QR code with the phone's camera.
+crates/hive-web/www …`, the desktop on that network, Settings → Devices → Pair a phone, turn on
+Open in the phone's browser, and scan the QR code with the phone's camera.
+
+### B4: hundreds of agents, release, the rest of the screens, the terminal
+
+**1. 200 agents inside a frame.** Profiled first (`measure-screens.mjs`, a Chrome trace and a CPU
+profile at 4× throttle). The 16–24 ms was not script: it was style and layout of whole lists, and
+the cause was the keyed list itself. `Keyed.set` removed the rows that had gone only after its walk,
+so while it walked, a row about to go sat where the next row belonged, and every row after it was
+moved: answering one wait moved 49 of the 50 cards, and each move restyled and laid out the list.
+Rows gone are now removed first; an answer removes one card and remakes one agent row and moves
+nothing (`phone-page.spec.ts`). Then, for what the browser does after the script: rows and cards
+carry `content-visibility: auto`, so those away from the screen are not styled, laid out or painted
+until scrolled near (the card's rail, on its border, kept inside the clip: screenshots identical);
+and the working dots, which breathe as on Android (`Kit.kt`), go still past 40 working agents,
+each breathing dot being a layer the browser recomposes on every change (the person's choice,
+2026-10-12). No layout is read while writing.
+
+`measure-screens.mjs` now shows one screen at a time, as the app does, at a phone's size and touch,
+and reports, besides the update and its layout (`apply`), the main thread's own time for the
+whole frame (`frame`: styles, layout, paint, commit; thread time, so another process's load is
+counted less) and what the update touched (elements styled, objects laid out), which no load
+changes. B3's page and this one, run in turn, three times each, 200 agents, 4× throttle, on a
+shared machine at load 11–29 on 16 CPUs (medians of the runs):
+
+| Screen | | apply median | apply p95 | frame median | styled | laid out |
+|---|---|---|---|---|---|---|
+| Needs you | B3 | 56.2 ms | 119.9 ms | 81.4 ms | 343 | 565 |
+| | now | 9.9 ms | 14.7 ms | 27.2 ms | 17 | 33 |
+| Agents | B3 | 14.1 ms | 24.1 ms | 61.8 ms | 181 | 12 |
+| | now | 9.9 ms | 17.4 ms | 29.9 ms | 2 | 4 |
+
+At load 14, all three screens shown at once, the update was 4.5 ms median and 7.0 ms p95 (B3:
+16.3–17.5 and 35.6–41.1). The update is inside a frame; at load 20–29 the Agents p95 is at the
+frame's edge (14.9–33.2 ms over the runs) and the whole frame is over it. What is left of a frame,
+measured: `content-visibility`'s own check of which rows are near, pre-paint, and a hit test for a
+mouse a phone does not have (the harness's). Not measured on a phone yet.
+
+**Proved to fail** (`scripts/mutate.sh`, `phone-page.spec.ts`): B3's `Keyed.set` (rows gone
+removed after the walk); no `content-visibility`; dots that never go still.

@@ -138,6 +138,15 @@ button { cursor: pointer; }
 .dot[data-state="failed"], .dot[data-state="limited"] { background: var(--err); }
 @keyframes breathe { from { opacity: 0.35; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .dot[data-state="working"] { animation: none; } }
+[data-still] .dot[data-state="working"] { animation: none; }
+
+/* Rows and cards away from the screen are not styled, laid out, painted or animated until scrolled
+   near; each keeps the size it last had. The rail sits on the card's border, inside the clip. */
+.need, .machine, .workspace, .agent { content-visibility: auto; overflow-clip-margin: 1px; }
+.need { contain-intrinsic-size: auto 150px; }
+.machine { contain-intrinsic-size: auto 42px; }
+.workspace { contain-intrinsic-size: auto 22px; }
+.agent { contain-intrinsic-size: auto 60px; }
 
 /* One agent: a back bar, its chat, and what it waits on above the reply box. */
 .agent-screen { display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; height: var(--vh); }

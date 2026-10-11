@@ -77,12 +77,18 @@ export class Keyed<T> {
   ) {}
 
   set(items: readonly T[]): void {
-    const seen = new Set<string>();
+    const keys = items.map(this.key);
+    // Gone first: one left in place until after would put every row past it out of place.
+    const seen = new Set(keys);
+    for (const [key, row] of this.rows) {
+      if (seen.has(key)) continue;
+      row.el.remove();
+      this.rows.delete(key);
+    }
     let at = this.parent.firstChild;
-    for (const item of items) {
-      const key = this.key(item);
+    items.forEach((item, i) => {
+      const key = keys[i]!;
       const sig = this.sig(item);
-      seen.add(key);
       let row = this.rows.get(key);
       if (!row) {
         row = { el: this.make(item), sig };
@@ -96,12 +102,7 @@ export class Keyed<T> {
       }
       if (row.el === at) at = at.nextSibling;
       else this.parent.insertBefore(row.el, at);
-    }
-    for (const [key, row] of this.rows) {
-      if (seen.has(key)) continue;
-      row.el.remove();
-      this.rows.delete(key);
-    }
+    });
   }
 }
 
