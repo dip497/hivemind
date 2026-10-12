@@ -737,6 +737,30 @@ changes. The design:
 - **Memory.** One held hook per waiting tile: 26 MB PSS measured with the app running (67 to 71 MB
   standalone; the script is run by the app's binary as node). Three tiles waiting at once, about
   80 MB.
+- **Command or http (for the person to decide; not switched).** Claude Code has had `type: "http"`
+  hooks since 2.1.63: it POSTs the payload, takes a 2xx JSON body as the hook's output, and an
+  empty body as no decision. Measured on 2.1.296 (own HOME, a held local server):
+
+  | | command (built) | http |
+  |---|---|---|
+  | One held wait | a process: 26 MB PSS with the app running, 67 to 80 MB without; 3 waits 78 to 240 MB | an open connection: at most 73 KB on the host (200 held, both ends counted) |
+  | Wait known to the host | once the script runs: 0.26 to 0.56 s after the hook starts (load 14); the chooser is drawn at 0.2 s | at the POST |
+  | Timeout | default 600 s for both; no documented ceiling. 660 s held under `timeout: 3600` was answered (http) | |
+  | `1` at its own chooser first | hook not closed; the host lets go | request not closed; the host lets go |
+  | Esc at its own chooser | turn ends; the host lets go | request closed 0.08 s later (the host lets go at once, under node; a `hive host` daemon run by bun does not see it and lets go by the status) |
+  | Auth | `HCP_TOKEN` in the hook's env, on a 0600 unix socket | a loopback listener; `Authorization: Bearer ${HCP_TOKEN}` sent only with `allowedEnvVars: [HCP_TOKEN]`; the token names its tile; a request with an `Origin` or another `Host` refused (a page in a browser) |
+
+  Both stay declared in the manifest: http adds the agent's shape (`hooks.http`, with `{url}`) and
+  `via: http` on the entry, the pty daemon's door turning a request into the script's lines on the
+  same socket, the script where no door is open. `onFailure` stays at its default: `block` on
+  PermissionRequest denies the tool when the door is down. No Claude floor moves (the manifest
+  already reads 2.1.287 and later; `onFailure`, 2.1.295, is unused). Costs of http: a loopback port
+  per daemon; a managed `allowedHttpHookUrls` without loopback stops the hook and its status event
+  (the screen rules still read the chooser).
+  **Recommended: http.** Per wait it is a connection, not a process, and the phone learns of the
+  wait before the chooser is drawn instead of after. It is built and checked against the real
+  binary (allow ran, deny carried its reason, Esc let go) in 78d77e5 on fix/answer-late, reverted
+  by the next commit so the branch stays on command; reverting that revert switches.
 - **Not in it.** `always` (`updatedPermissions`): typed keys never had it either. A tool use
   matched to its `PostToolUse` by id (hapi keys by `tool_use_id` through `PreToolUse`): a parallel
   tool that finishes while another waits sets the status working and so lets go of the hook; the
