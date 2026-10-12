@@ -47,26 +47,31 @@ export function readConversation(file: string, format: AgentTranscript, cursor?:
   return { entries: cursor === undefined ? entries.slice(-TAIL_ENTRIES) : entries, cursor: through };
 }
 
-/** How much of the end of the file is read for the last thing said. */
+/** How much of the end of the file is read first for the last thing said; four times more each time
+ *  it says nothing, up to the most. */
 const LAST_BYTES = 64 * 1024;
+const LAST_BYTES_MAX = 4 * 1024 * 1024;
 /** The longest last thing said told. */
 const LAST_MAX = 160;
 
 /** The last thing said in the session file `file`, read as `format` maps it, in a line: the first
- *  line of what was last said, or the tool last used and what it is about; undefined when the end
- *  of the file says neither. */
+ *  line of what was last said, or the tool last used and what it is about; undefined when the last
+ *  4 MiB say neither. An agent may write records for itself after its last words (each resume
+ *  does), so the end is read wider until it says something. */
 export function lastSaid(file: string, format: AgentTranscript): string | undefined {
   let size: number;
   try { size = fs.statSync(file).size; } catch { return undefined; }
-  const from = Math.max(0, size - LAST_BYTES);
-  const { lines } = linesBetween(file, from, size);
-  const entries = transcriptEntries(format, from === 0 ? lines : lines.slice(1));
-  for (let i = entries.length - 1; i >= 0; i--) {
-    const e = entries[i]!;
-    const line = "text" in e ? e.text.split("\n").map((l) => l.trim()).find(Boolean) : "tool" in e ? [e.tool.name, e.tool.about].filter(Boolean).join(" · ") : undefined;
-    if (line) return [...line].slice(0, LAST_MAX).join("");
+  for (let bytes = LAST_BYTES; ; bytes *= 4) {
+    const from = Math.max(0, size - bytes);
+    const { lines } = linesBetween(file, from, size);
+    const entries = transcriptEntries(format, from === 0 ? lines : lines.slice(1));
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const e = entries[i]!;
+      const line = "text" in e ? e.text.split("\n").map((l) => l.trim()).find(Boolean) : "tool" in e ? [e.tool.name, e.tool.about].filter(Boolean).join(" · ") : undefined;
+      if (line) return [...line].slice(0, LAST_MAX).join("");
+    }
+    if (from === 0 || bytes >= LAST_BYTES_MAX) return undefined;
   }
-  return undefined;
 }
 
 /** How much of the end of the file is read for the tool use an agent waits on. */

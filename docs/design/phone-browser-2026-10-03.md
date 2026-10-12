@@ -1102,3 +1102,17 @@ Fixed in the owner of the held wait: the hook gives the tool's input (`tool_inpu
 for tool uses. A wait therefore says what the chat row will say once the use is recorded, whole.
 `Waits.hold` keeps it, and `waitOn` prefers it to the file's word. hapi also takes the tool and
 its input from the hook, not the file (`hapi/cli/src/claude/utils/localPermissionBridge.ts:92-99`).
+
+### 12.4 Home showed Claude's status bar instead of what it said
+
+Seen: rows under their names read "⏵⏵ auto mode on (shift+tab to cycle)", "⏸ plan mode on" and
+similar. A row's line is what the agent last said (`LastSaid`, from its session file); only when
+that is undefined does the screen's last line stand in, and Claude's last line is its status bar.
+The session files were fine, but their last 64 KiB, all `lastSaid` read, held only records Claude
+writes for itself: each of the rig's restores appends `cost-state`, `mode` and
+`permission-mode` lines (92 `cost-state` lines in the last 64 KiB of "Asks permission").
+
+Fixed in `conversation.ts` `lastSaid`: the end is read four times wider each time it says nothing,
+up to 4 MiB. It is read once per change of the file's size, as before; the rig's files take
+14–72 ms. And an agent that keeps a conversation has no screen line standing in for it:
+`LastSaid.line` is "" until it says something, so its row shows its state.

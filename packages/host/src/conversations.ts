@@ -62,8 +62,8 @@ export class LastSaid {
 
   constructor(private readonly o: { tileSessionsDir: string; home?: string; now?(): number }) {}
 
-  /** What the agent of `tile`, among `held`, last said; undefined when it keeps no conversation
-   *  or has said nothing yet. */
+  /** What the agent of `tile`, among `held`, last said; "" when it keeps a conversation but has
+   *  said nothing there yet, so nothing from its screen stands in; undefined when it keeps none. */
   line(held: HeldBoard[], tile: string): string | undefined {
     const now = this.o.now?.() ?? Date.now();
     let known = this.files.get(tile);
@@ -71,15 +71,16 @@ export class LastSaid {
       known = { t: transcriptOf(held, tile, this.o.tileSessionsDir, this.o.home), at: now };
       this.files.set(tile, known);
     }
-    const file = known.t?.file;
-    if (!file) return undefined;
+    if (!known.t) return undefined;
+    const file = known.t.file;
+    if (!file) return "";
     let size: number;
-    try { size = fs.statSync(file).size; } catch { return undefined; }
+    try { size = fs.statSync(file).size; } catch { return ""; }
     const was = this.said.get(tile);
-    if (was?.file === file && was.size === size) return was.line;
-    const line = lastSaid(file, known.t!.format);
+    if (was?.file === file && was.size === size) return was.line ?? "";
+    const line = lastSaid(file, known.t.format);
     this.said.set(tile, { file, size, line });
-    return line;
+    return line ?? "";
   }
 }
 
