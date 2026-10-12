@@ -44,7 +44,7 @@ const domain = {
     }),
     "agent.answer": (from: Connection, tile: unknown) => { ran.push({ what: "agent.answer", by: from.actor, args: [tile] }); return { answered: true }; },
     "agent.send": (from: Connection, tile: unknown) => { ran.push({ what: "agent.send", by: from.actor, args: [tile] }); return { sent: true }; },
-    ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.conversation",
+    ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.conversation", "agent.tool", "agent.places", "agent.folders",
       "agent.rename", "agent.keys", "agent.read", "agent.output", "agent.sessions", "tool.open", "link.connect", "link.disconnect", "plugin.call", "host.join", "tools.rescan", "tile.focus"].map((what) => [
       what, (from: Connection, at: unknown) => { ran.push({ what, by: from.actor, args: [at] }); return {}; },
     ])),
@@ -93,13 +93,15 @@ function connect(access: Access, allows?: (method: string, params: unknown[]) =>
 }
 const code = async (p: Promise<unknown>) => { try { await p; return "ok"; } catch (e) { return (e as ApiError).code; } };
 
-test("what may be started in its workspace and what an agent changed, anyone with access sees; starting, interrupting and closing an agent is driving agents: for its workspace and its tiles alone", async () => {
+test("what may be started in its workspace, what an agent changed and a tool it used, anyone with access sees; where agents may be started there is asked by those who drive them; starting, interrupting and closing an agent is driving agents: for its workspace and its tiles alone", async () => {
   const viewer = connect("view");
   await viewer.client.call("agent.startable", workspaceUrl(W));
   await viewer.client.call("agent.diff", "in-1");
   expect(await code(viewer.client.call("agent.diff", "out-1"))).toBe("FORBIDDEN");
   await viewer.client.call("agent.conversation", "in-1");
   expect(await code(viewer.client.call("agent.conversation", "out-1"))).toBe("FORBIDDEN");
+  await viewer.client.call("agent.tool", "in-1", "u1");
+  expect(await code(viewer.client.call("agent.tool", "out-1", "u1"))).toBe("FORBIDDEN");
   for (const [method, at] of [["agent.start", workspaceUrl(W)], ["agent.interrupt", "in-1"], ["agent.close", "in-1"]] as const) {
     expect(await code(viewer.client.call(method as "agent.close", at))).toBe("FORBIDDEN");
   }
@@ -107,6 +109,7 @@ test("what may be started in its workspace and what an agent changed, anyone wit
     { what: "agent.startable", by: viewer.actor, args: [REPO] },
     { what: "agent.diff", by: viewer.actor, args: ["in-1"] },
     { what: "agent.conversation", by: viewer.actor, args: ["in-1"] },
+    { what: "agent.tool", by: viewer.actor, args: ["in-1"] },
   ]);
 
   const driver = connect("agents");
@@ -115,12 +118,18 @@ test("what may be started in its workspace and what an agent changed, anyone wit
   await driver.client.call("agent.close", "in-1");
   expect(await code(driver.client.call("agent.start", "/work/other", { program: "claude" }))).toBe("FORBIDDEN");
   expect(await code(driver.client.call("agent.startable", "/work/other"))).toBe("FORBIDDEN");
+  await driver.client.call("agent.places", workspaceUrl(W));
+  await driver.client.call("agent.folders", workspaceUrl(W), `${REPO}/src`);
+  expect(await code(driver.client.call("agent.places", "/work/other"))).toBe("FORBIDDEN");
+  expect(await code(driver.client.call("agent.folders", "/work/other", "/work/other/src"))).toBe("FORBIDDEN");
   expect(await code(driver.client.call("agent.interrupt", "out-1"))).toBe("FORBIDDEN");
   expect(await code(driver.client.call("agent.close", "out-1"))).toBe("FORBIDDEN");
   expect(ran).toEqual([
     { what: "agent.start", by: driver.actor, args: [REPO] },
     { what: "agent.interrupt", by: driver.actor, args: ["in-1"] },
     { what: "agent.close", by: driver.actor, args: ["in-1"] },
+    { what: "agent.places", by: driver.actor, args: [REPO] },
+    { what: "agent.folders", by: driver.actor, args: [REPO] },
   ]);
 });
 
