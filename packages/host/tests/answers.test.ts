@@ -9,7 +9,7 @@
 // agent's status hears the answer and no longer waits; not while its screen shows its prompt or
 // another wait, nor while another answer is going into that terminal; and the audit records the
 // decision, never a reply's words.
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -219,6 +219,7 @@ function plane() {
     windowsUp: () => false,
   } as unknown as ControlPlaneOptions);
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "answers-")), "audit.jsonl");
+  after(() => fs.rmSync(path.dirname(file), { recursive: true, force: true }));
   let asking: ToolAsked | undefined;
   const server = new WorkspaceServer([answers({ plane: () => p, answerKeys: () => ({ allow: ["1"], deny: ["escape"] }), asking: () => asking, chooseKeys: () => ["{n}"], who: () => PRIYA })], new Intents(new AuditLog({ file })));
   const answer = async (since: number, a: unknown) => {
@@ -232,7 +233,7 @@ function plane() {
     return p.status.get("t1")!.since;
   };
   const audited = () => fs.readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => { const { verb, target, detail, outcome } = JSON.parse(l); return `${verb} ${target} ${detail} ${outcome}`; });
-  return { p, writes, answer, asks, audited, ask: (a: ToolAsked | undefined) => { asking = a; }, done: () => fs.rmSync(path.dirname(file), { recursive: true }) };
+  return { p, writes, answer, asks, audited, ask: (a: ToolAsked | undefined) => { asking = a; } };
 }
 
 test("allowed from a phone on a fresh chooser, its keys go in as the person's: the agent waits on them no more, and a second Allow naming that wait types nothing; denied, the same; the audit records each decision", async () => {
@@ -255,7 +256,6 @@ test("allowed from a phone on a fresh chooser, its keys go in as the person's: t
   assert.deepEqual(c.audited(), [
     "agent.answer t1 allow ok", "agent.answer t1 allow, not answered ok", "agent.answer t1 deny ok", "agent.answer t1 choice 2 ok", "agent.answer t1 reply ok",
   ]);
-  c.done();
 });
 
 test("an answer holds its terminal until its last key is in: another answer then types nothing, and a program's message goes in after it, never held as a draft of the person's", async () => {
@@ -270,7 +270,6 @@ test("an answer holds its terminal until its last key is in: another answer then
   c.p.mailbox.deliver("hm:t1", "next");
   assert.ok(c.writes.includes('hm:t1:"next"'), "an answer's key is no draft of the person's: a message after it goes in at once");
   assert.equal(c.p.answer("hm:t2", ["1"]), false, "no session there");
-  c.done();
 });
 
 test("an answer is not typed while the screen, read since the wait began, shows the agent's prompt or another screen; one its rules cannot place, or another chooser, does not stop it", () => {
