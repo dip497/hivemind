@@ -343,8 +343,8 @@ when out of place; the ages tick in place. The look is the Android app's (`Theme
 its palette dark and light, Geist and JetBrains Mono, pills, cards with an amber rail, the
 composer, the floating tab bar (Needs you, Agents, Devices; Views waits on views in the browser).
 Installable: `manifest.webmanifest`, icons from the launcher mark, the iOS meta tags, safe areas;
-`sw.js` keeps every file `build.sh` lists in `shell.json` and serves it at once, fetching it again
-behind (the same ETag is not written again).
+`sw.js` keeps every file `build.sh` lists in `shell.json`, one cache per page hash; each open asks
+the server for `page.sha256` first (§12.9).
 
 **The actions, one owner**: the wasm's `Host` now also has `answer(workspace, tile, since, reply)`
 (`{text}`, `{allow}` or `{approve, feedback?}` mapped onto hive-phone's `Reply`), `send`, `stop`
@@ -1238,3 +1238,28 @@ in web" show only once a folder inside a project is chosen, not the project's na
 browser (kept in its IndexedDB as `start-last`: workspace, machine, folder, agent) chooses them
 where they still are, a folder inside a project included. The agent is the one last started when
 it is there, else the first, so the screen never opens with nothing chosen.
+
+### 12.9 The page did not update itself
+
+Found on the rig: the server served the new page, and the open page kept running the old `main.js`
+from the service worker's cache through two reloads; only `registration.update()` and a reload
+brought it. The old `sw.js` served each file from its cache and fetched it again behind, so every
+release showed at least one open of the old page. Each file was replaced on its own, so a new
+`main.js` could run with an old wasm when a tab closed half way; the spec shows it (`B` with `A`).
+`sw.js` itself never changed between releases, since it reads `shell.json` at run time, so the
+browser never saw a new worker. Locally a second reload brought the new page; why the rig needed
+more was not found.
+
+Prior art: hapi uses Workbox, whose precache manifest is written into `sw.js`
+(`web/src/sw.ts:32`, `precacheAndRoute(self.__WB_MANIFEST)`), so each release is a new worker that
+fetches the page whole, then `SKIP_WAITING`, `clients.claim` and a reload on `controllerchange`
+(`web/src/hooks/usePwaUpdate.ts:38`). That shows the old page first and reloads under the person.
+
+Now each open asks the server for `page.sha256` (65 bytes, `no-store`, 3 s at most). A hash not
+had is fetched whole, as `shell.json` lists it, into the cache `hive-web-<hash>` (`no-cache`, so an
+unchanged file is a 304), and the open waits on it, up to 20 s; it is marked whole last. A page
+not had whole is never run. No answer, an error, or a page not had in time: the newest page had
+whole opens, and the fetch goes on for the next open. Each open page's cache is recorded in Cache
+Storage, not the worker's memory, since the browser stops an idle worker. A file the page asks
+for later is then of its own build, and its cache is kept while it is open. The first open after
+moving from the old worker still shows the old page, once.
