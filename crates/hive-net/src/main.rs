@@ -50,7 +50,8 @@
 //! <base>` is how devices reach this server, when it is not what `--domain` or `--bind` says;
 //! with it (or `--domain`), and the admin key kept here, the network's link is printed, its
 //! signed profile kept as `network.json` in `--data`; `--name` names the network. `--phone <dir>`
-//! serves the phone page (crates/hive-web/www, built) at `/phone/`.
+//! serves the phone page (crates/hive-web/www, built) at `/phone/`; `--views <port>` shows its
+//! views on that port, an origin of their own.
 
 use std::{
     net::SocketAddr, path::PathBuf, process::ExitCode, str::FromStr, sync::Arc, time::Duration,
@@ -127,6 +128,7 @@ struct Args {
     uses: Option<u32>,
     replacing: Option<String>,
     phone: Option<PathBuf>,
+    views: Option<u16>,
 }
 
 fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
@@ -148,6 +150,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
             "--admin" => args.admin = Some(value(&mut argv, &arg)?.into()),
             "--access" => args.access_role = true,
             "--phone" => args.phone = Some(value(&mut argv, &arg)?.into()),
+            "--views" => args.views = Some(value(&mut argv, &arg)?.parse()?),
             "--lookup" if args.command == "serve" => args.lookup_role = true,
             "--lookup" => args.lookup = Some(value(&mut argv, &arg)?.parse()?),
             "--push" => args.push_role = true,
@@ -453,10 +456,11 @@ async fn serve(args: &Args) -> Result<()> {
     // none).
     let any = hive_net::serve::any_address();
     let on = |port: u16| SocketAddr::new(any, port);
+    let bind = args
+        .bind
+        .unwrap_or_else(|| on(if https { 443 } else { 3340 }));
     let serving = Serving::spawn(Options {
-        bind: args
-            .bind
-            .unwrap_or_else(|| on(if https { 443 } else { 3340 })),
+        bind,
         certificate,
         relay,
         quic_bind: args.quic_bind.unwrap_or_else(|| on(7842)),
@@ -466,6 +470,7 @@ async fn serve(args: &Args) -> Result<()> {
         access: access.clone(),
         push: push.clone(),
         pages: args.phone.as_deref().map(Pages::open).transpose()?,
+        views: args.views.map(|port| SocketAddr::new(bind.ip(), port)),
     })
     .await?;
 
@@ -487,6 +492,15 @@ async fn serve(args: &Args) -> Result<()> {
     }
     if args.phone.is_some() {
         println!("phone page serving on {base}/phone/");
+    }
+    if let Some(views) = serving.views_addr() {
+        let base = url::Url::parse(&base).ok();
+        let host = base
+            .as_ref()
+            .and_then(|b| b.host_str())
+            .unwrap_or("localhost");
+        let scheme = base.as_ref().map_or("http", |b| b.scheme());
+        println!("views serving on {scheme}://{host}:{}", views.port());
     }
     if let Some(admin) = &admin_key {
         if args.url.is_some() || args.domain.is_some() {
