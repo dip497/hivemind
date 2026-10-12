@@ -15,7 +15,7 @@ import type { OutputRecorder } from "./output-recorder.js";
 import { mintId, toPtyId as ptyId, toBareId as bareOf } from "@hivemind/workspace-api/tile-id";
 import type { AgentRead, AgentSessions, TileOpened } from "@hivemind/workspace-api/agents";
 import { labelOf as labelIn } from "./names.js";
-import { agentById, agentLaunch, agentOption, cleanName, isSessionId, nextOrdinal, spawnableAgents, workerAgents, type AgentProviderDef, type SpawnOptions } from "@hivemind/agents";
+import { agentById, agentLaunch, agentOption, cleanName, isSessionId, nextOrdinal, spawnableAgents, workerAgents, type AgentProviderDef, type AgentStatus, type InputKind, type SpawnOptions } from "@hivemind/agents";
 import { hookAnswerOf, hookAsks, printedAnswer, type HookReply } from "@hivemind/agents/node";
 import { canListSessions, listSessions } from "@hivemind/agents/node";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
@@ -254,7 +254,19 @@ export interface Dispatcher {
   parentOf: (bare: string) => string | undefined;
   /** Close a tile, without recording it: the caller has (M5). */
   close: (tileId: string) => Promise<unknown>;
+  /** A tile's status changed. A spawned worker that starts waiting on input is reported
+   *  to the agent that spawned it, once per wait. */
+  onStatus: (tileId: string, status: Pick<AgentStatus, "state" | "kind">) => void;
 }
+
+/** What a worker is waiting for, as its parent is told. */
+const WAITING_FOR: Record<InputKind, string> = {
+  permission: "permission to go on",
+  question: "an answer to its question",
+  plan: "its plan to be reviewed",
+  approval: "your approval",
+  other: "input",
+};
 
 export function makeDispatch(deps: MethodDeps): Dispatcher {
   // Per-tile read epoch: set at spawn/send so agent.read waits for the turn that
@@ -406,6 +418,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     return res.tileId;
   };
 
+  // Workers whose current wait their parent has been told about.
+  const waitTold = new Set<string>();
+
   // Drop ALL per-tile HCP state (pid-keyed: turns/recorder/epochs; bare-keyed:
   // pipes/parent/depth/supervision/approvals). Runs on EVERY teardown path — the
   // close, and (via forgetTile below) every pty-exit/user-close. Wakes
@@ -427,6 +442,21 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     depthOf.delete(bare);
     deps.setSupervise(bare, null);
     deps.waits.forget(bare);
+    waitTold.delete(bare);
+  };
+
+  const onStatus: Dispatcher["onStatus"] = (tileId, status) => {
+    const bare = bareOf(tileId);
+    if (status.state !== "waiting") { waitTold.delete(bare); return; }
+    // An approval is the parent's own question: its banner already went out.
+    if (status.kind === "approval" || waitTold.has(bare)) return;
+    const parent = parentOf.get(bare);
+    // A program that started it reads its status itself.
+    if (!parent || isClient(parent)) return;
+    waitTold.add(bare);
+    deps.deliverToTile(ptyId(parent),
+      `\n[hive] ${label(bare)} is waiting for ${WAITING_FOR[status.kind ?? "other"]}. ` +
+      `See it: hive ctl stream ${bare} --lines 40 --snapshot · answer: hive ctl keys ${bare} Down,Enter or hive ctl send ${bare} "…"\n`);
   };
 
   // Close a tile, with no window needed: it leaves its workspace and the session it runs ends, but
@@ -802,6 +832,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   return {
     agentChannel, api, forgetTile: forgetTileState, labelOf: label, spawn: doSpawn, close: closeTile,
-    parentOf: (bare) => parentOf.get(bare),
+    parentOf: (bare) => parentOf.get(bare), onStatus,
   };
 }

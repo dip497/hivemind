@@ -106,6 +106,9 @@ function positionalPrompt() {
 }
 
 // ── one turn ──────────────────────────────────────────────────────────────────
+// A prompt "ASK:<question>" stops at a picker, as claude's AskUserQuestion does: the
+// PermissionRequest hook fires and the next stdin line is the answer.
+let picker = null;
 function turn(prompt) {
   // `TOOL <name> <input json>`: a tool use, asked of its PreToolUse hook as claude asks it; what the
   // hook answers is the reply, and is written to $FAKE_TOOL_LOG.
@@ -123,12 +126,25 @@ function turn(prompt) {
   // Like claude: the window title says what the turn is doing, behind a status glyph.
   process.stdout.write(`\x1b]0;✳ ${prompt}\x07`);
   fire("UserPromptSubmit", { session_id: sessionId, prompt });
+  if (prompt.startsWith("ASK:")) {
+    process.stdout.write(`${prompt.slice(4)}\n ❯ 1. yes\n   2. no\n Enter to select\n`);
+    picker = (answer) => {
+      fire("PostToolUse", { session_id: sessionId, tool_name: "AskUserQuestion" });
+      reply(`answered: ${answer}`);
+    };
+    fire("PermissionRequest", { session_id: sessionId, tool_name: "AskUserQuestion", tool_input: { questions: [{ question: prompt.slice(4) }] } });
+    return;
+  }
   const r = spawnSync("bash", ["-c", prompt], { encoding: "utf8", env: process.env, timeout: 60_000 });
-  const reply = ((r.stdout || "") + (r.status ? `\n[exit ${r.status}] ${r.stderr || ""}` : "")).trim() || "(no output)";
+  const text = ((r.stdout || "") + (r.status ? `\n[exit ${r.status}] ${r.stderr || ""}` : "")).trim() || "(no output)";
   record("user", prompt);
-  record("assistant", [{ type: "text", text: reply }]);
-  process.stdout.write(`${reply}\n`);
-  fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false, last_assistant_message: reply });
+  reply(text);
+}
+
+function reply(text) {
+  record("assistant", [{ type: "text", text }]);
+  process.stdout.write(`${text}\n`);
+  fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false, last_assistant_message: text });
   process.stdout.write(`${provider}> `);
 }
 
@@ -157,6 +173,7 @@ rl.on("line", (line) => {
     process.stdout.write(`${provider}> `);
     return;
   }
+  if (picker) { const answer = picker; picker = null; answer(text); return; }
   turn(text);
 });
 rl.on("close", () => process.exit(0));

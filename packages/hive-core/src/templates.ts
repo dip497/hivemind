@@ -414,6 +414,8 @@ hive ctl focus <tileId> · hive ctl close <tileId> · hive ctl rename <tileId> "
 
 With no \`--mode\`, a delegated worker runs autonomously (no human at its tile). Pass \`--mode yolo\` to ask nothing whatever the agent, or \`--mode plan|acceptEdits|default\` to keep a human in the loop, or \`--supervise\` to route its prompts to you. \`--no-report\` makes a fire-and-forget worker you'll poll with \`read\`. Keep \`read --timeout\` (e.g. \`90s\`) under your own tool's limit (Claude Code Bash: 120 s); the wait is short polls, so it is safe to call again.
 
+A worker that stops to wait for input (its question picker, a permission prompt) is reported to you: \`[hive] <name> (<tileId>) is waiting for …\`. Look with \`hive ctl stream <tileId> --lines 40 --snapshot\` and answer with \`hive ctl keys\` or \`hive ctl send\`.
+
 ## Supervising a fleet (unattended runs)
 
 Spawn (or \`workflow\`) with \`--supervise all\` and YOU are the gatekeeper for the workers' tool-permission prompts. A pending call shows up in your terminal:

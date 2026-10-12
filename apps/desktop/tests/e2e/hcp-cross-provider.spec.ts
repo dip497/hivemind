@@ -258,6 +258,22 @@ test("a worker spawned into a frame by its name opens there, and the window lays
   hive(["ctl", "close", tile]);
 });
 
+test("a worker that stops at a question is reported to its leader, who answers it with keys", async () => {
+  const spawn = hive(
+    ["ctl", "spawn", "--agent", "claude", "--name", "asker", "--prompt", "ASK:ship it?", "--json"],
+    { HIVEMIND_TILE: orchestrator },
+  );
+  expect(spawn.code, spawn.stderr).toBe(0);
+  const worker: string = spawn.json.tileId;
+  await expect
+    .poll(() => hive(["ctl", "stream", orchestrator, "--lines", "60", "--snapshot"]).stdout, { timeout: 30_000, intervals: [500] })
+    .toContain(`asker (${worker}) is waiting for`);
+  hive(["ctl", "keys", worker, "1,Enter"]);
+  const read = hive(["ctl", "read", worker, "--timeout", "40000", "--json"]);
+  expect(read.json).toMatchObject({ text: "answered: 1", finalStatus: "turn" });
+  hive(["ctl", "close", worker, "--json"]);
+});
+
 test("an agent's past sessions are listed for its folder, and one can be continued", async () => {
   const id = "0d3c2a10-1111-4222-8333-444455556666";
   const proj = path.join(home, ".claude", "projects", "-repo");
