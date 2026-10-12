@@ -2,6 +2,7 @@
 // did not land.
 
 import type { ViewSession } from "../pkg/hive_web.js";
+import type { TermSource } from "./terminal.js";
 import type { Agent, Folders, Held, Offered, Piece, Places, Reply, Screen, Start, Unfolded, ViewFile } from "./types.js";
 
 export interface App {
@@ -16,6 +17,11 @@ export interface App {
   conversation(agent: Agent, said: (p: Piece) => void, ended: (why: string) => void): () => void;
   /** The tool use `use` of `agent`, unfolded. */
   tool(agent: Agent, use: string): Promise<Unfolded>;
+  /** Watch the terminal of `tile` in `workspace`: `changed` when its screen may have changed,
+   *  `ended` why it is shown no more. Null before the phone has started. */
+  terminal(workspace: string, tile: string, changed: () => void, ended: (why: string) => void): { source: TermSource; stop: () => void } | null;
+  /** Show the terminal of the tile `tile` in `workspace`, called `name`, one that runs no agent. */
+  openTerminal(workspace: string, tile: string, name: string): void;
   /** The computer's name, as paired. */
   computer(): string;
   workspaces(): Promise<Held[]>;

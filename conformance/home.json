@@ -2,7 +2,7 @@
  "about": "Cases every implementation of Home must pass (spec/home.md). 'computer': what a computer holds (its boards, its agents as the agent list says them, the titles agents give their tiles, which agent started which, what the window's Layers panel shows of each workspace, and what each tile last said or showed), in; Home's rows by key, and each tile's last line by its row's key, out. 'phone': what the computer answers on the home stream, in order, in; the rows the phone holds after each, and how it groups and orders them, out.",
  "computer": [
   {
-   "about": "a workspace, its frames as structure gives them, in the board's order (a worktree under its frame, one on another machine), a top frame in another folder on this computer, or a worktree left with no frame above it, with that folder's project, and its tiles: named as the person named them, else as the agent's title says, else by label; listed where the Layers panel lists them, pinned ones marked, one the panel does not list after those in the board's order; under the agent that started it, when that is on this board; an agent's state, since, wait, program, machine, and whether it can be interrupted and read, as the agent list says; a tile in no frame; each tile's last line",
+   "about": "a workspace, its frames as structure gives them, in the board's order (a worktree under its frame, one on another machine), a top frame in another folder on this computer, or a worktree left with no frame above it, with that folder's project, and its tiles: named as the person named them, else as the agent's title says, else by label; listed where the Layers panel lists them, pinned ones marked, and those that run a terminal (an agent's or a shell), one the panel does not list after those in the board's order; under the agent that started it, when that is on this board; an agent's state, since, wait, program, machine, and whether it can be interrupted and read, as the agent list says; a tile in no frame; each tile's last line",
    "held": [
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -52,7 +52,7 @@
        },
        {
         "id": "t2",
-        "kind": "terminal",
+        "kind": "shell",
         "label": "Terminal"
        },
        {
@@ -213,6 +213,7 @@
      "frameId": "f1",
      "kind": "claude",
      "name": "Fix login",
+     "terminal": true,
      "order": 1,
      "state": "waiting",
      "since": 1790000001000,
@@ -238,8 +239,9 @@
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
      "id": "t2",
      "frameId": "f1",
-     "kind": "terminal",
+     "kind": "shell",
      "name": "server",
+     "terminal": true,
      "order": 3
     },
     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t3": {
@@ -249,6 +251,7 @@
      "frameId": "f2",
      "kind": "claude",
      "name": "Claude #2",
+     "terminal": true,
      "order": 2,
      "parent": "t1",
      "state": "working",
@@ -271,6 +274,7 @@
      "frameId": "f3",
      "kind": "claude",
      "name": "Claude #3",
+     "terminal": true,
      "order": 0,
      "pinned": true,
      "state": "idle",
@@ -2283,7 +2287,8 @@
          "state": "idle",
          "since": 1790000000000,
          "pinned": "yes",
-         "interrupt": 1
+         "interrupt": 1,
+         "terminal": 1
         }
        ],
        [
@@ -2293,9 +2298,10 @@
          "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
          "id": "t6",
          "frameId": null,
-         "kind": "terminal",
+         "kind": "shell",
          "name": "F",
-         "order": 5
+         "order": 5,
+         "terminal": true
         }
        ],
        [
@@ -2431,8 +2437,9 @@
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
      "id": "t6",
      "frameId": null,
-     "kind": "terminal",
+     "kind": "shell",
      "name": "F",
+     "terminal": true,
      "order": 5
     },
     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t7": {

@@ -10,6 +10,7 @@ import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
+import { PACED_WINDOW } from "@hivemind/agent-host/session-relay";
 import { PAUSE_MAX_MS, REPAINT_AFTER_MS, Terminals, type SessionOutput } from "../src/terminals.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-terminals-"));
@@ -171,6 +172,46 @@ test("while every window here is hidden a session's output waits longer, but not
   phone.close();
   await new Promise((r) => setTimeout(r, 20));
   assert.ok(await pushed("unseen again", window) >= 150, "held again once the phone went");
+});
+
+test("a phone fits a session to its screen until it lets go or goes, and the session takes back the size it had; once a window here sizes it, that size stays", async () => {
+  const h = host();
+  const window = h.client();
+  const phone = () => h.client({ kind: "peer", person: "p".repeat(64), device: "d".repeat(64), access: "owner" });
+  await h.open(window, "hm:t1");
+  h.notice(window, "terminal.resize", "hm:t1", 120, 40);
+  const [a, b, c] = [phone(), phone(), phone()];
+  for (const p of [a, b, c]) await h.open(p, "hm:t1", { attachOnly: true });
+  h.notice(a, "terminal.fit", "hm:t1", 48, 30);
+  a.close();
+  h.notice(b, "terminal.fit", "hm:t1", 50, 20);
+  const sizes = () => h.calls.filter((call) => call.startsWith("resize")).map((call) => call.split(" ")[2]);
+  h.notice(c, "terminal.fit", "hm:t1"); // not its fit
+  assert.equal(sizes().at(-1), "50x20");
+  h.notice(b, "terminal.fit", "hm:t1");
+  h.notice(c, "terminal.fit", "hm:t1", 40, 20);
+  h.notice(window, "terminal.resize", "hm:t1", 100, 30);
+  c.close();
+  assert.deepEqual(sizes(), ["120x40", "48x30", "120x40", "50x20", "120x40", "40x20", "100x30"]);
+});
+
+test("a client that acknowledges what it takes is paced by it: past its window it is sent nothing until it has taken all, then the host's screen", async () => {
+  const h = host({ screen: "SCREEN" });
+  await h.open(h.client(), "hm:t1");
+  const phone = h.client({ kind: "peer", person: "p".repeat(64), device: "d".repeat(64), access: "owner" });
+  await h.open(phone, "hm:t1", { attachOnly: true, acks: true });
+  const flushed = () => new Promise((r) => setTimeout(r, 50));
+  await flushed();
+  const sent = () => output(phone).map((m) => String(m.params[1]));
+  const taken = sent().join("").length;
+  for (const data of ["x".repeat(PACED_WINDOW), "late", "later"]) {
+    h.outputs.get("hm:t1")!.data(data);
+    await flushed();
+  }
+  assert.equal(sent().slice(1).join("").length, PACED_WINDOW, "the window, and nothing past it");
+  h.notice(phone, "terminal.ack", "hm:t1", taken + PACED_WINDOW);
+  await flushed();
+  assert.equal(sent().at(-1), "SCREEN");
 });
 
 // A program that repaints only what changed draws against the screen it thinks is there. Shown a

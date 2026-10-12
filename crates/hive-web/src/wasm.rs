@@ -9,15 +9,20 @@ use hive_phone::{
     failure::Failure,
     home,
     identity::DeviceCertificate,
-    markdown, network, pairing, person, views,
-    workspace::{self, Reply},
+    markdown, network, pairing, person,
+    screen::Screen,
+    views,
+    workspace::{self, Input, Reply, Sent, Watched},
 };
 use iroh::{
     endpoint::{Connection, ConnectionError, RecvStream, SendStream},
     Endpoint, RelayUrl, SecretKey,
 };
 use serde_json::{json, Value};
-use std::cell::RefCell;
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 use tokio::sync::{mpsc, watch, Mutex};
 use wasm_bindgen::prelude::*;
 
@@ -470,6 +475,56 @@ impl Host {
         })
     }
 
+    /// Watch the terminal of `tile` in `workspace` into `term` (hive-phone's `workspace::watch`):
+    /// `changed` is called when its screen may have changed; what is typed into `term` goes in.
+    /// Settles with how it ended, `{code}` or `{code: null}` when no session runs there; with
+    /// null when `until` settled or the device ended it first.
+    pub fn watch(
+        &self,
+        workspace: String,
+        tile: String,
+        term: &Term,
+        changed: js_sys::Function,
+        until: js_sys::Promise,
+    ) -> js_sys::Promise {
+        let connection = self.connection.clone();
+        let term = term.inner.clone();
+        wasm_bindgen_futures::future_to_promise(async move {
+            // A watch on the last connection lets go of what is typed once it ends.
+            let mut inputs = term.inputs.lock().await;
+            let (sent, sending) = mpsc::channel(64);
+            // A fit lasts as long as the connection it was sent on.
+            if let Some(size) = term.fitted.get() {
+                let _ = sent.try_send(Sent::Fit(Some(size)));
+            }
+            // Each connection is sent the screen whole first: after the first, in place of what
+            // was shown.
+            let mut anew = term.watched.replace(true);
+            let watched = workspace::watch(&connection, &workspace, &tile, Some(sending), |w| {
+                match w {
+                    Watched::Output(data) if std::mem::take(&mut anew) => {
+                        term.screen.borrow_mut().redraw(data.as_bytes())
+                    }
+                    Watched::Output(data) => term.screen.borrow_mut().feed(data.as_bytes()),
+                    Watched::Size(cols, rows) => term.screen.borrow_mut().resize(cols, rows),
+                    Watched::Keyboard(_) => return,
+                }
+                let _ = changed.call0(&JsValue::NULL);
+            });
+            let passed = async { match workspace::pass_on(&mut inputs, sent).await {} };
+            let stopped = async {
+                let _ = wasm_bindgen_futures::JsFuture::from(until).await;
+                Ok(None)
+            };
+            let ended =
+                n0_future::future::or(n0_future::future::or(watched, passed), stopped).await;
+            match ended.map_err(err)? {
+                Some(ended) => to_js(&json!({ "code": ended.code })).map_err(JsValue::from),
+                None => Ok(JsValue::NULL),
+            }
+        })
+    }
+
     pub fn close(&self) {
         self.connection.close(0u32.into(), b"closed");
     }
@@ -612,4 +667,119 @@ impl Stream {
     pub async fn recv(&self) -> Result<Option<Vec<u8>>, JsError> {
         read_frame(&mut *self.recv.lock().await).await.map_err(err)
     }
+}
+
+/// A watched terminal as this page draws it: hive-phone's screen of it, fed in the page's thread
+/// as its output comes, and what the person types into it.
+#[wasm_bindgen]
+pub struct Term {
+    inner: Rc<TermState>,
+}
+
+struct TermState {
+    screen: RefCell<Screen>,
+    /// What the person does, in order, kept while no connection takes it.
+    put: mpsc::UnboundedSender<Input>,
+    inputs: Mutex<mpsc::UnboundedReceiver<Input>>,
+    /// The size the person fitted it to, sent again on each connection.
+    fitted: Cell<Option<(u16, u16)>>,
+    /// Whether a connection has shown it before.
+    watched: Cell<bool>,
+}
+
+#[wasm_bindgen]
+impl Term {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Term {
+        let (put, inputs) = mpsc::unbounded_channel();
+        Term {
+            inner: Rc::new(TermState {
+                screen: RefCell::new(Screen::default()),
+                put,
+                inputs: Mutex::new(inputs),
+                fitted: Cell::new(None),
+                watched: Cell::new(false),
+            }),
+        }
+    }
+
+    /// Whether a synchronized update holds the screen back now: ask again next frame.
+    #[wasm_bindgen(getter)]
+    pub fn held(&self) -> bool {
+        let held = self.inner.screen.borrow().held();
+        held.is_some_and(|until| n0_future::time::Instant::now() < until)
+    }
+
+    /// What changed since the revision `since` last drawn (0: everything kept), as hive-phone's
+    /// `ScreenUpdate` (docs/design/phone-app-2026-10-02.md §5.3), its lines' runs as bytes; null
+    /// when nothing did, or while it is held.
+    pub fn update(&self, since: f64) -> Result<JsValue, JsValue> {
+        if self.held() {
+            return Ok(JsValue::NULL);
+        }
+        let Some(frame) = self.inner.screen.borrow_mut().frame() else {
+            return Ok(JsValue::NULL);
+        };
+        let lines = js_sys::Array::new();
+        for (index, line) in frame.changed(since as u64) {
+            let one = js_sys::Object::new();
+            set(&one, "index", &JsValue::from(index as f64))?;
+            set(&one, "text", &JsValue::from_str(&line.text))?;
+            set(&one, "runs", &js_sys::Uint8Array::from(&line.runs[..]))?;
+            lines.push(&one);
+        }
+        let update = js_sys::Object::new();
+        for (key, n) in [
+            ("revision", frame.revision as f64),
+            ("cols", frame.cols.into()),
+            ("rows", frame.rows.into()),
+            ("firstLine", frame.first_line as f64),
+            ("lineCount", frame.line_count() as f64),
+            ("cursorLine", frame.cursor_line as f64),
+            ("cursorCol", frame.cursor_col.into()),
+        ] {
+            set(&update, key, &JsValue::from(n))?;
+        }
+        set(
+            &update,
+            "cursorVisible",
+            &JsValue::from(frame.cursor_visible),
+        )?;
+        set(&update, "lines", &lines)?;
+        Ok(update.into())
+    }
+
+    /// Type `text` as it is, as the person.
+    #[wasm_bindgen(js_name = typeText)]
+    pub fn type_text(&self, text: String) {
+        let _ = self.inner.put.send(Input::Text(text));
+    }
+
+    /// Type `keys` by name (`enter`, `esc`, `tab`, `up`, …, `ctrl-c`), each a moment after the last.
+    #[wasm_bindgen(js_name = typeKeys)]
+    pub fn type_keys(&self, keys: Vec<String>) {
+        let _ = self.inner.put.send(Input::Keys(keys));
+    }
+
+    /// Size the terminal to `cols` × `rows` for this page, until it is watched no more.
+    pub fn fit(&self, cols: u16, rows: u16) {
+        self.inner.fitted.set(Some((cols, rows)));
+        let _ = self.inner.put.send(Input::Fit(Some((cols, rows))));
+    }
+
+    /// Back to the size it had before it was fitted.
+    pub fn unfit(&self) {
+        self.inner.fitted.set(None);
+        let _ = self.inner.put.send(Input::Fit(None));
+    }
+}
+
+impl Default for Term {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn set(on: &js_sys::Object, key: &str, value: &JsValue) -> Result<(), JsValue> {
+    js_sys::Reflect::set(on, &JsValue::from_str(key), value).map(|_| ())
 }

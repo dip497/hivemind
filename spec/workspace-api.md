@@ -1,4 +1,4 @@
-# Workspace API (0.23)
+# Workspace API (0.24)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
@@ -59,7 +59,7 @@ whichever starts first does, and the other says so. Lines of JSON both ways, 1 M
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.23", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.24", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -109,17 +109,18 @@ owner. It opens one for each thing it does at once (a terminal watched, a conver
 call), on that one connection: each is a connection of its own, for the workspace it names, its
 answers and events on it alone, until it ends (0.13). It may
 call nothing there but `terminal.open` with `attachOnly` (it watches a terminal, its screen and
-then its output), `terminal.write` and `terminal.keyboard.ask` (it types into one as the owner,
-and asks for its keyboard while someone else holds it, 0.10), `agent.answer` (it answers what an
+then its output, paced by its `terminal.ack`s, 0.24), `terminal.write` and `terminal.keyboard.ask` (it types into one as the owner,
+and asks for its keyboard while someone else holds it, 0.10), `terminal.fit` (it sizes one to its
+screen until it goes, 0.24), `agent.answer` (it answers what an
 agent waits on the person for), `agent.send` (it sends one a message, 0.10), and `agent.startable`,
 `agent.start`, `agent.interrupt`, `agent.close` and `agent.diff` (it starts an agent, interrupts its
 turn, closes it and reads what it changed, `agents.md`, 0.11), and the `view.*` calls (it shows the
 community views here that work on a phone, 0.12), and `people.answer` (it answers someone asking
 to join, from the notice that told it, `push.md` "Join", 0.16): it never starts a terminal but by
-starting an agent, never sizes one, nor gives or takes a keyboard (M5). Each call and notice is checked against the
+starting an agent, never sizes one but by fitting it, nor gives or takes a keyboard (M5). Each call and notice is checked against the
 peer's role on the workspace (design §6) before it runs, and one the role does not allow is
 `FORBIDDEN` (a notice is dropped): reads, watching terminals and showing a community view are anyone's with access; typing
-into and resizing a terminal, and asking for its keyboard or handing it on, *Can use terminals*;
+into, resizing and fitting a terminal, and asking for its keyboard or handing it on, *Can use terminals*;
 handing a branch of one's own to the host (`git.handOff`, M4), and opening a tool's tile (`tool.open`, 0.23), *Can edit board*;
 answering an agent's plan or what it waits on (`agent.answer`), sending one a message
 (`agent.send`), starting one, interrupting its turn and closing it (`agent.start`,
@@ -230,7 +231,7 @@ log.
 | `widget.packages` | `repo` | the widgets installed on the host, `[{id, name, version?, options, chrome, permissions, placement, size, assets, code, draw?, icon?}]`: what a window showing it offers, draws and runs; `code` is empty for anyone but the person (0.19) | read |
 | `widget.asset` | `repo`, `widget`, `name` | an image of an installed widget, as a data URL, or null (0.18) | read |
 | `appearance.get` | | the host's look as its guests show its workspaces (0.17): its settings' `appearance`, checked, with nothing that names a file on its disk (a picture or video wallpaper is the default one, no overlays) and the default fonts (a guest reads in its own). A `view` peer may ask | read |
-| `terminal.open` | `{tileId, tile?, cwd, cmd, args?, cols, rows, env?, initialPrompt?, attachOnly?, liveOnly?}` (`tile`: the tile it is the session of, when `tileId` is not `hm:<tile>`; `cwd` and `cmd` need not be said with `attachOnly`, 0.23) | `{pid, joined}`: the first client to open a session starts it; one that opens it after joins it (`joined`), sent the host's screen of it first | target the tile, detail the program, when it starts a session the host did not ask for itself and the client did not only attach to |
+| `terminal.open` | `{tileId, tile?, cwd, cmd, args?, cols, rows, env?, initialPrompt?, attachOnly?, liveOnly?, acks?}` (`tile`: the tile it is the session of, when `tileId` is not `hm:<tile>`; `cwd` and `cmd` need not be said with `attachOnly`, 0.23; `acks`: the client acknowledges what it takes, `terminal.ack`, 0.24) | `{pid, joined}`: the first client to open a session starts it; one that opens it after joins it (`joined`), sent the host's screen of it first | target the tile, detail the program, when it starts a session the host did not ask for itself and the client did not only attach to |
 | `agent.answer` | `tile`, `since`, `{text}` or `{decision, feedback?, always?}` | `{answered, by?}`: what the agent waits on the person for is answered, a plan decided, a permission allowed or denied with the agent's own keys, a supervised tool use allowed or denied (0.20), and with `always` every later use of that tool by that agent too, until it closes (0.23), or a line typed into its terminal, only while it still waits on that wait (`since`) and once (`needs.md`, "Answering"); a plan or supervised tool use answered already says who answered first (`by`: `{person, name}`, 0.21) | target the agent's tile |
 | `agent.send` | `tile`, `text` | `{sent}`: a message for the agent, whatever it is doing, a prompt of up to 32768 characters (0.23) typed in as its next prompt once it is at its prompt, Enter after it; the `agent.read` after it waits for the turn it starts; `sent` false: no agent runs there (`needs.md`, "Sending", 0.10) | target the agent's tile |
 | `agent.startable` | `repo` | `{programs, frames}`: the agents this device starts, with their model and mode choices, and the workspace's frames, each on the machine its folder is on (`agents.md`, "Starting", 0.11) | — |
@@ -315,6 +316,8 @@ layout the store cannot hold is `BAD_REQUEST`.
 | `terminal.show` | `tile`, `shown` | whether any of the client's views shows it: it is sent the output only while one does, and the screen again when one shows it after none did |
 | `terminal.resize` | `tile`, `cols`, `rows` | sizes it, when the client may: the keyboard's holder, while a guest holds it; otherwise, among the host's own clients showing it, the one that typed last |
 | `terminal.flow` | `tile`, `paused` | stops reading its output while the client catches up; a pause ends on its own after 120 ms unless asked for again |
+| `terminal.ack` | `tile`, `taken` | a client that opened it with `acks` has taken `taken` of its output (`terminal.data`'s text, in UTF-16 units, all it was sent on that connection told). It is sent at most 128 K units ahead of that, the screen sent in place of output not counted; past it, nothing, until it has taken all it was sent, and then the host's screen in place of what it missed. Nothing queues for it, and the session is not held back for it. A client acknowledges each frame of output it takes (0.24) |
+| `terminal.fit` | `tile`, `cols`?, `rows`? | sizes it to the client's screen until the client lets go (no size) or goes; it then takes back the size it had, unless a client here sized it meanwhile. Where a client may type into it; not a session sized on its machine (0.24) |
 | `terminal.close` | `tile` | ends the session for good; recorded (target the tile) unless it had already ended |
 | `terminal.detach` | `tile` | the client shows it no more; a session no client shows is let go of (a daemon keeps it running, one the host runs itself ends) |
 | `terminal.watchActivity` | `tiles` | the terminals whose activity the client is sent (`terminal.activity`), at most 1024 |

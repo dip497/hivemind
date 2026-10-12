@@ -41,6 +41,7 @@ const LEAST: Record<string, Role> = {
   // Watching terminals, and no longer watching one.
   "terminal.show": "view",
   "terminal.flow": "view",
+  "terminal.ack": "view",
   "terminal.detach": "view",
   "terminal.watchActivity": "view",
   // Editing the board is the document's own sync (`doc-sync.ts`), where the host takes only what
@@ -49,6 +50,7 @@ const LEAST: Record<string, Role> = {
   // keyboard, and handing on one held. Taking it back is the host's.
   "terminal.write": "terminals",
   "terminal.resize": "terminals",
+  "terminal.fit": "terminals",
   "terminal.keyboard.ask": "terminals",
   "terminal.keyboard.give": "terminals",
   // Answering what an agent waits on (a plan, a supervised tool use, its screen), and sending one

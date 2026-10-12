@@ -43,6 +43,8 @@ export interface HomeTile {
   kind: string;
   name: string;
   agent?: string;
+  /** It runs a terminal, which can be shown and typed into. */
+  terminal?: true;
   order: number;
   pinned?: true;
   /** The tile that started it, when it is listed under that one. */

@@ -4,7 +4,7 @@
 [workspace]
 resolver = "2"
 members = ["hive-web"]
-exclude = ["agent-host", "hive-net", "hive-phone", "hive-phone-ffi"]
+exclude = ["agent-host", "hive-net", "hive-phone", "hive-phone-ffi", "vendor"]
 
 [profile.release]
 opt-level = "z"
@@ -12,3 +12,7 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+# The screen's emulator, without the pty that keeps it off wasm (vendor/alacritty_terminal/README.md).
+[patch.crates-io]
+alacritty_terminal = { path = "vendor/alacritty_terminal" }

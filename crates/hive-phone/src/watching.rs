@@ -5,7 +5,7 @@
 //! foreground and the device's reconnects, the screen sent again each time; it ends only with the
 //! session.
 
-use std::{convert::Infallible, sync::Arc};
+use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
 use tokio::{sync::mpsc, task::JoinHandle};
@@ -13,9 +13,8 @@ use tokio::{sync::mpsc, task::JoinHandle};
 use crate::{
     connections::Connections,
     failure::Lost,
-    keys,
     screen::{Frame, LiveScreen},
-    workspace::{self, Watched},
+    workspace::{self, Input, Sent, Watched},
 };
 
 /// How a watch ended.
@@ -40,16 +39,12 @@ pub trait Watcher: Send + Sync {
     fn ended(&self, why: Ended);
 }
 
-/// What the person types: text as it is, or keys by name.
-enum Typed {
-    Text(String),
-    Keys(Vec<String>),
-}
-
 /// An agent's terminal, watched until stopped, or dropped.
 pub struct Watching {
     screen: Arc<LiveScreen>,
-    typed: mpsc::UnboundedSender<Typed>,
+    typed: mpsc::UnboundedSender<Input>,
+    /// The size the person fitted it to, sent again on each connection.
+    fitted: Arc<Mutex<Option<(u16, u16)>>>,
     watching: JoinHandle<()>,
 }
 
@@ -75,6 +70,8 @@ impl Watching {
             device.to_string(),
         );
         let (workspace, tile, fed) = (workspace.to_string(), tile.to_string(), screen.clone());
+        let fitted = Arc::new(Mutex::new(None));
+        let fit = fitted.clone();
         // Everything the watch does is one task: stopped, all of it goes, its streams with it.
         let watching = tokio::spawn(async move {
             let mut again = false;
@@ -88,6 +85,10 @@ impl Watching {
                 let mut anew = std::mem::replace(&mut again, true);
                 // What is typed while no connection takes it goes in on the next.
                 let (keyed, written) = mpsc::channel(64);
+                // A fit lasts as long as the connection it was sent on.
+                if let Some(size) = *fit.lock().expect("a fit") {
+                    let _ = keyed.try_send(Sent::Fit(Some(size)));
+                }
                 let watched =
                     workspace::watch(&connection, &workspace, &tile, Some(written), |w| match w {
                         Watched::Output(data) if std::mem::take(&mut anew) => {
@@ -99,7 +100,7 @@ impl Watching {
                     });
                 let watched = tokio::select! {
                     watched = watched => watched,
-                    never = type_in(&mut typing, keyed) => match never {},
+                    never = workspace::pass_on(&mut typing, keyed) => match never {},
                 };
                 match watched {
                     Ok(Some(ended)) => break ended.code.map_or(Ended::NoSession, Ended::Exited),
@@ -115,6 +116,7 @@ impl Watching {
         Self {
             screen,
             typed,
+            fitted,
             watching,
         }
     }
@@ -126,12 +128,19 @@ impl Watching {
 
     /// Type `text` as it is, as the person.
     pub fn type_text(&self, text: String) {
-        let _ = self.typed.send(Typed::Text(text));
+        let _ = self.typed.send(Input::Text(text));
     }
 
     /// Type `keys`, by name (`keys.rs`), as the person: each a moment after the last.
     pub fn type_keys(&self, keys: Vec<String>) {
-        let _ = self.typed.send(Typed::Keys(keys));
+        let _ = self.typed.send(Input::Keys(keys));
+    }
+
+    /// Size the terminal to `cols` × `rows` for this phone, until it is watched no more; none:
+    /// back to the size it had.
+    pub fn fit(&self, size: Option<(u16, u16)>) {
+        *self.fitted.lock().expect("a fit") = size;
+        let _ = self.typed.send(Input::Fit(size));
     }
 
     /// Watch no more: the device lets go of the terminal for this phone.
@@ -152,25 +161,4 @@ fn holder_of(holder: Option<&Value>, me: &str) -> Option<String> {
     let holder = holder.filter(|h| h["id"] != me)?;
     let name = holder["name"].as_str().filter(|n| !n.is_empty());
     Some(name.unwrap_or("someone").to_string())
-}
-
-/// What the person types, in order, for as long as a connection takes it: text as it is, keys as
-/// their bytes a moment apart.
-async fn type_in(
-    typed: &mut mpsc::UnboundedReceiver<Typed>,
-    written: mpsc::Sender<String>,
-) -> Infallible {
-    while let Some(typed) = typed.recv().await {
-        let writes = match typed {
-            Typed::Text(text) => vec![text],
-            Typed::Keys(keys) => keys.iter().map(|k| keys::bytes(k).to_string()).collect(),
-        };
-        for (i, write) in writes.into_iter().enumerate() {
-            if i > 0 {
-                tokio::time::sleep(keys::GAP).await;
-            }
-            let _ = written.send(write).await;
-        }
-    }
-    std::future::pending().await
 }

@@ -11,6 +11,7 @@ import { warm } from "./markdown.js";
 import { PairScreen, guessName } from "./pair.js";
 import type { Phone } from "./phone.js";
 import { StartScreen } from "./start.js";
+import { TermScreen } from "./term-screen.js";
 import { ViewScreen, Views } from "./views.js";
 import { get, put, remove } from "./store.js";
 import type { Overview, Paired, Shown } from "./types.js";
@@ -68,6 +69,15 @@ const app: App = {
   close: (agent) => act(() => phone!.close(agent), NOTICES.closed),
   conversation: (agent, said, ended) => phone?.conversation(agent, said, ended) ?? (() => {}),
   tool: (agent, use) => reached().tool(agent, use),
+  terminal(workspace, tile, changed, ended) {
+    if (!phone) return null;
+    const { term, stop } = phone.watch(workspace, tile, changed, ended);
+    return { source: term, stop };
+  },
+  openTerminal(workspace, tile, name) {
+    location.hash = new URLSearchParams({ terminal: tile, in: workspace, name }).toString();
+    opened = true;
+  },
   computer: () => paired?.with.name ?? "your computer",
   workspaces: () => reached().workspaces(),
   places: (workspace) => reached().places(workspace),
@@ -91,6 +101,7 @@ const app: App = {
 
 const home = new Home(app, () => render());
 const agent = new AgentScreen(app);
+const terminal = new TermScreen(app);
 const starting = new StartScreen(app);
 const devices = new Devices(() => void forget());
 const views = new Views(app);
@@ -108,7 +119,7 @@ function offer(link: string, name: string): void {
   pairing.offer(link, name, phone.read(link), paired?.with ?? null);
   route();
 }
-const screens = { home, agent, start: starting, views, view: viewing, devices, pair: pairing };
+const screens = { home, agent, terminal, start: starting, views, view: viewing, devices, pair: pairing };
 
 const tabs = h("nav", { class: "tabs", "aria-label": "hivemind" });
 const tabDot = h("span", { class: "tab-dot", hidden: true, "data-tab-dot": "" });
@@ -133,17 +144,18 @@ function notify(text: string): void {
   noticeTimer = setTimeout(() => (notice.hidden = true), 4000);
 }
 
-/** The screen the address names: a tab, `start`, or `agent=<tile>`; pairing while paired with
- *  nothing or offered a link. */
+/** The screen the address names: a tab, `start`, `agent=<tile>` or `terminal=<tile>&in=<workspace>`;
+ *  pairing while paired with nothing or offered a link. */
 let shownBefore = "";
 function route(): void {
   const asked = new URLSearchParams(location.hash.slice(1));
   const tile = asked.get("agent");
   const view = asked.get("view");
+  const term = asked.get("terminal");
   const tab: Tab = asked.has("start") ? "start" : (TABS.find(([t]) => asked.has(t))?.[0] ?? "home");
-  const shown = !paired || offered ? "pair" : tile ? "agent" : view ? "view" : tab;
+  const shown = !paired || offered ? "pair" : tile ? "agent" : term ? "terminal" : view ? "view" : tab;
   for (const [name, screen] of Object.entries(screens)) screen.el.hidden = name !== shown;
-  tabs.hidden = shown === "pair" || shown === "agent" || shown === "start" || shown === "view";
+  tabs.hidden = shown === "pair" || shown === "agent" || shown === "terminal" || shown === "start" || shown === "view";
   if (shown === "start" && shownBefore !== "start") void starting.open(asked.get("workspace"), asked.get("frame"));
   if (shown === "views" && shownBefore !== "views") void views.open();
   if (shown === "view") void viewing.open(asked.get("in") ?? "", view!);
@@ -156,6 +168,8 @@ function route(): void {
   }
   if (shown === "agent") agent.open(tile!, overview);
   else agent.close();
+  if (shown === "terminal") terminal.open(asked.get("in") ?? "", term!, asked.get("name") ?? "");
+  else terminal.close();
 }
 addEventListener("hashchange", route);
 
@@ -261,6 +275,7 @@ async function start(): Promise<void> {
   devices.show(phone.id, paired);
   render();
   warm();
+  route();
   addEventListener("online", () => phone!.retry());
   document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && phone!.retry());
   phone.connect();

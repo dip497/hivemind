@@ -161,6 +161,8 @@ export interface HomeTile {
   kind: string;
   name: string;
   agent?: string;
+  /** It runs a terminal: an agent's or a shell. */
+  terminal?: boolean;
   order: number;
   pinned?: boolean;
   parent?: string;

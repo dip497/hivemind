@@ -757,6 +757,60 @@ PTY and restores it when the phone leaves. A late join gets a snapshot of the re
 a byte tail; output is flow-controlled by acknowledgements, and on overflow a replacing snapshot is
 sent instead of queued bytes. Key bar: Esc, Tab, arrows, Ctrl-C.
 
+*Design (2026-10-12).* What was there: the host already sends a late joiner a snapshot, not a
+byte tail: the daemon's headless xterm, serialized (`SerializeAddon`), on an attach and on a join
+(`SessionRelay.join`). What was not: any limit on what a phone is sent ahead of what it took.
+- **The screen in the page.** `screen.rs` (alacritty) now builds for wasm: alacritty_terminal's
+  pty and event loop need `polling` and `home`, which have no wasm, so hive-web's workspace patches
+  in a copy with those two modules left out on wasm (`crates/vendor/alacritty_terminal`, its
+  README says the one change); the phone apps build the crate from crates.io. The emulator's own
+  synchronized-update clock is replaced by a flag (`Begun`), which `emulate` ends at once as before,
+  so nothing reads a clock a browser's wasm lacks. The thread and its 16 ms pacing
+  (`screen/live.rs`) stay native: the page takes a frame at most every 16 ms on
+  `requestAnimationFrame`, and none while a synchronized update holds it. wasm `Term` is the screen
+  and what is typed into it; `Host.watch` runs the core's `workspace::watch` into it, once per
+  connection, the screen sent whole again on each. The wasm is 3,749,637 bytes raw, 1,053,600
+  brotli'd (B4 measured 3,425,541 raw before Home; the emulator's own share not measured apart).
+- **Drawing** (`www/app/terminal.ts`). A canvas at the PTY's columns, fitted to the width, pinched
+  to 6×, dragged to pan, following the newest line until the person scrolls up, as Android's
+  `TerminalView.kt`; each run placed at its column, never measured; the Signal palette. The lines in
+  sight are also kept as text for a screen reader (Android's semantics text), which is what the
+  spec reads. A tap opens the keyboard (a hidden textarea, focused on the tap's click: focused on
+  its pointerup, the mousedown a touch makes next takes the focus back); composition is taken
+  whole. The key bar is Esc, Tab, arrows, ^C, the keyboard and Fit.
+- **Flow control** (`SessionRelay`, spec/workspace-api.md 0.24). A client that opens a terminal with
+  `acks` says what it took (`terminal.ack`, UTF-16 units, after each frame of output). It is sent
+  at most 128 K units ahead; past that, nothing, and once it has taken all it was sent, the host's
+  screen in place of what it missed. The screen is not counted against the window (else a large
+  screen would put the phone behind again at once), and a first batch always goes. Nothing queues
+  per phone, and the session is never paused for one (a window's `terminal.flow` still pauses it).
+- **Fit to phone** (`terminal.fit`). Android and iOS draw at the PTY's size and never size it; the
+  browser keeps that, and Fit is an explicit ask that sizes the real PTY to the view at 12 px, until
+  the phone lets go or its watch ends (Back, the page gone, the connection dropped); then the size
+  it had, unless a window here sized it meanwhile. A phone may now send `terminal.fit` (not
+  `terminal.resize`). The core has it for all three (`Watching::fit`, the FFI's `Watch.fit` and
+  `unfit`); the native apps' buttons are not built.
+- **Where.** An agent's screen has Chat ↔ Terminal in its bar, the chat first; an agent with no
+  conversation opens on its terminal. A shell's row on Home opens its terminal: the computer marks
+  each tile that runs one `terminal` (spec/home.md 0.3, from workspace-doc `isTerminalKind`), and
+  the page keeps no list of kinds.
+- **Prior art.** Taken: Orca's scale-never-resize view and its snapshot in place of dropped output,
+  not counted against the window; paseo's echo past the batching, which `SessionRelay.typed`
+  already did. Left out: a binary protocol (Orca) and deflate (agent-of-empires), as the text
+  frames are not where the time goes; epoch/seq resume with a warm cache (superset), as a reconnect
+  gets the screen, which is small; slowing frames when the link sheds them (cmux), as acks already
+  bound what is in flight; Orca's guard against a desktop resize that echoes the phone's size, as
+  the desktop draws a size it did not ask for without sending one (`drawnSize`); a connection-wide
+  window across tiles, and a key bar with ^D, ^L, ^R, Home/End and PgUp/PgDn.
+
+*Done (2026-10-12):* all of the above. Unit: `session-relay.test.ts` (the window, the screen once
+behind, the screen not counted), `terminals.test.ts` (fit until let go or gone, the earlier size
+back, a window's resize wins; an `acks` client paced), hive-phone `tests/watching.rs` (`acks` asked,
+the ack in UTF-16 units, fit and unfit sent in order with what is typed). e2e
+`apps/desktop/tests/e2e/phone-terminal.spec.ts` is written (late join of `less` row for row, echo,
+a flood at 4× CPU, a repaint under 8 ms, Fit and its undoing) and its late join passed once;
+the whole spec is not yet run green.
+
 **11.5 Reading.** Markdown tables, tappable https links (`javascript:` stays inert), `dir=auto`
 paragraphs, images in the conversation, tool calls that unfold to their full input and output.
 

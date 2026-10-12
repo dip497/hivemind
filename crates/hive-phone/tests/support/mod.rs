@@ -148,8 +148,9 @@ pub struct Desk {
     /// before then, so it attaches to none.
     pub screen: Arc<Mutex<String>>,
     pub ended: Arc<AtomicBool>,
-    /// How many times the phone opened its terminal.
+    /// How many times the phone opened its terminal, and what it asked each time.
     pub opened: Arc<AtomicUsize>,
+    pub opens: Arc<Mutex<Vec<Value>>>,
     /// The session of the agent of its tile now, and what was said in it.
     pub session: watch::Sender<Session>,
     /// Where in the conversation the phone asked from each time, as it asked: the session, and
@@ -171,6 +172,7 @@ struct Serving {
     screen: Arc<Mutex<String>>,
     ended: Arc<AtomicBool>,
     opened: Arc<AtomicUsize>,
+    opens: Arc<Mutex<Vec<Value>>>,
     session: watch::Sender<Session>,
     asked_from: Arc<Mutex<Vec<AskedFrom>>>,
     viewed: Arc<Mutex<Vec<Value>>>,
@@ -206,9 +208,10 @@ impl Desk {
             answered: Arc::default(),
             left: Arc::default(),
             agents: watch::Sender::new(None),
-            screen: Arc::new(Mutex::new("Hello from the agent".into())),
+            screen: Arc::new(Mutex::new("Hello from the agent — ready".into())),
             ended: Arc::default(),
             opened: Arc::default(),
+            opens: Arc::default(),
             session: watch::Sender::new(Session {
                 id: SESSION.into(),
                 said: vec![],
@@ -225,6 +228,7 @@ impl Desk {
             screen: desk.screen.clone(),
             ended: desk.ended.clone(),
             opened: desk.opened.clone(),
+            opens: desk.opens.clone(),
             session: desk.session.clone(),
             asked_from: desk.asked_from.clone(),
             viewed: desk.viewed.clone(),
@@ -410,6 +414,11 @@ async fn api(mut send: SendStream, mut recv: RecvStream, phone: &str, serving: &
             let mut pid = 1;
             if message["method"] == "terminal.open" {
                 serving.opened.fetch_add(1, Ordering::SeqCst);
+                serving
+                    .opens
+                    .lock()
+                    .unwrap()
+                    .push(message["params"][0].clone());
                 if serving.ended.load(Ordering::SeqCst) {
                     pid = -1;
                 } else {

@@ -590,7 +590,7 @@ test("the owner's devices follow Home: sent both sequences whole, then each chan
   phone.send("home", { t: "follow" });
   await until(() => heard().length === 1);
   const [t1, t2] = [`t:${c.workspace}/t1`, `t:${c.workspace}/t2`];
-  const row = (id: string, more: Record<string, unknown>) => ({ of: "tile", workspace: c.workspace, id, frameId: null, kind: "claude", ...more, machine: "desk" });
+  const row = (id: string, more: Record<string, unknown>) => ({ of: "tile", workspace: c.workspace, id, frameId: null, kind: "claude", terminal: true, ...more, machine: "desk" });
   assert.deepEqual(heard()[0], {
     t: "home",
     layout: { seq: 3, rows: [

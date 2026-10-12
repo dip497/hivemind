@@ -15,7 +15,9 @@
  * PAUSE_MAX_MS. Whoever types is named to the others showing the session (`terminal.typing`,
  * R4), and a guest's typing is marked in the audit log once a burst (never what was typed). A
  * session on a participant's machine (M4) is typed into and sized there, by its person
- * (`machineOf`): nobody here types into it, and its size is the one that machine says.
+ * (`machineOf`): nobody here types into it, and its size is the one that machine says. A client
+ * may fit a session to its screen (a phone): it takes that size until the client goes or lets go,
+ * and then the one it had, unless a window here sized it meanwhile.
  *
  * Starting a session is the intent of whoever opens it, unless the host asked for it itself (a
  * control-plane spawn) or the client only shows one the host holds; ending one is the intent of
@@ -104,7 +106,7 @@ export const TYPED_BURST_MS = 60_000;
 
 type TerminalMethod = "terminal.open";
 type TerminalNotice =
-  | "terminal.write" | "terminal.show" | "terminal.resize" | "terminal.flow"
+  | "terminal.write" | "terminal.show" | "terminal.resize" | "terminal.flow" | "terminal.ack" | "terminal.fit"
   | "terminal.close" | "terminal.detach" | "terminal.watchActivity"
   | "terminal.keyboard.ask" | "terminal.keyboard.give" | "terminal.keyboard.take";
 
@@ -126,6 +128,8 @@ export class Terminals {
   /** Each session's size, as last given: whoever opens it is told. */
   private readonly sizes = new Map<string, { cols: number; rows: number }>();
   private readonly repaints = new Map<string, ReturnType<typeof setTimeout>>();
+  /** The sessions a client fitted to its screen, and the size each had before. */
+  private readonly fits = new Map<string, { by: Connection; was: { cols: number; rows: number } | undefined }>();
   /** The sessions that run on a participant's machine (M4), and whose it is. */
   private readonly machines = new Map<string, TerminalMachine>();
   private readonly keyboards: Keyboards;
@@ -158,6 +162,8 @@ export class Terminals {
         },
         "terminal.resize": (from, tile, cols, rows) => this.resize(tileOf(tile), whole(cols, "cols", 1), whole(rows, "rows", 1), from),
         "terminal.flow": (_, tile, paused) => this.flow(tileOf(tile), flag(paused, "paused") === true),
+        "terminal.ack": (from, tile, taken) => this.relay.acked(tileOf(tile), this.viewerOf(from), whole(taken, "taken")),
+        "terminal.fit": (from, tile, cols, rows) => this.fit(tileOf(tile), cols == null ? null : { cols: whole(cols, "cols", 1), rows: whole(rows, "rows", 1) }, from),
         "terminal.close": (from, tile) => this.close(tileOf(tile), from),
         "terminal.detach": (from, tile) => {
           const t = tileOf(tile);
@@ -170,6 +176,7 @@ export class Terminals {
       },
       gone: (connection) => {
         this.keyboards.gone(connection);
+        for (const [tile, fit] of this.fits) if (fit.by === connection) this.unfit(tile);
         for (const opened of this.openers.values()) opened.delete(connection);
         const viewer = this.viewers.get(connection);
         if (!viewer) return;
@@ -243,7 +250,7 @@ export class Terminals {
     emit(from, "terminal.keyboard", tile, holder);
     const size = this.sizes.get(tile);
     if (size) emit(from, "terminal.size", tile, size.cols, size.rows);
-    const shown = this.relay.open(tile, this.viewerOf(from), start, () => this.opts.backend.screen(tile));
+    const shown = this.relay.open(tile, this.viewerOf(from), start, () => this.opts.backend.screen(tile), opts.acks === true);
     if (!machine) return shown;
     // Whether its machine lends its keyboard is known once it runs (one a window has just placed
     // is in its workspace here only then): told again, if that changes who holds it.
@@ -324,6 +331,31 @@ export class Terminals {
       const typer = this.typers.get(tile);
       if (typer !== undefined && typer !== from && this.relay.count(tile) > 1) return;
     }
+    // Sized here: what it had before a fit is not what to give back.
+    this.fits.delete(tile);
+    this.size(tile, cols, rows);
+  }
+
+  /** `from` fits `tile` to its screen; null: back to the size it had. A session sized on another
+   *  machine is sized there. */
+  private fit(tile: string, size: { cols: number; rows: number } | null, from: Connection): void {
+    if (!size) {
+      if (this.fits.get(tile)?.by === from) this.unfit(tile);
+      return;
+    }
+    if (this.machines.has(tile) || !this.keyboards.mayType(tile, from)) return;
+    const fit = this.fits.get(tile);
+    this.fits.set(tile, { by: from, was: fit ? fit.was : this.sizes.get(tile) });
+    this.size(tile, size.cols, size.rows);
+  }
+
+  private unfit(tile: string): void {
+    const was = this.fits.get(tile)?.was;
+    this.fits.delete(tile);
+    if (was) this.size(tile, was.cols, was.rows);
+  }
+
+  private size(tile: string, cols: number, rows: number): void {
     this.opts.backend.resize(tile, cols, rows);
     this.sizes.set(tile, { cols, rows });
     this.opts.publish?.("terminal.size", tile, cols, rows);
@@ -363,6 +395,7 @@ export class Terminals {
     this.sizes.delete(tile);
     this.keyboards.forget(tile);
     this.machines.delete(tile);
+    this.fits.delete(tile);
     const lease = this.pauses.get(tile);
     if (lease) { clearTimeout(lease); this.pauses.delete(tile); }
   }
@@ -401,5 +434,6 @@ function optsOf(value: unknown): TerminalOpts {
     ...(o.initialPrompt == null ? {} : { initialPrompt: written(o.initialPrompt, "opts.initialPrompt") }),
     ...(o.attachOnly == null ? {} : { attachOnly: flag(o.attachOnly, "opts.attachOnly") }),
     ...(o.liveOnly == null ? {} : { liveOnly: flag(o.liveOnly, "opts.liveOnly") }),
+    ...(o.acks == null ? {} : { acks: flag(o.acks, "opts.acks") }),
   };
 }

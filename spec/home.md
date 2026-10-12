@@ -1,4 +1,4 @@
-# Home (0.2)
+# Home (0.3)
 
 What the person's phone shows first (`docs/design/phone-browser-2026-10-03.md` §11.2): every
 workspace the computer holds, its frames and its tiles, as the desktop's Layers panel lists them,
@@ -17,7 +17,7 @@ Each row has a key and is one of three:
   "machine": { "name": "box", "state": "idle" }, "parentId": "f0", "branch": "fix",
   "folder": { "name": "api-fix", "kind": "worktree" }, "project": "web" }
 { "of": "tile", "workspace": "<id>", "id": "t1", "frameId": "f1", "kind": "claude", "name": "Fix login",
-  "agent": "claude", "order": 3, "pinned": true, "parent": "t0",
+  "agent": "claude", "terminal": true, "order": 3, "pinned": true, "parent": "t0",
   "state": "waiting", "since": 1790000000000, "waiting": { … },
   "program": { "id": "claude", "label": "Claude Code" }, "machine": "desk",
   "interrupt": true, "conversation": true }
@@ -31,8 +31,9 @@ Each row has a key and is one of three:
   Layers panel names the project. Left out for the workspace's own project.
 - A tile is its `structure` tile (`frameId`, null in no frame; `kind`; `name`; `agent`, the
   manifest it runs), with `order`, where the Layers panel lists it from 0 (one it does not list
-  after those, in the board's order), `pinned` when the person pinned it there, and `parent`, the
-  tile that started it when that is on the same board.
+  after those, in the board's order), `pinned` when the person pinned it there, `parent`, the
+  tile that started it when that is on the same board, and `terminal` (0.3) when it runs a terminal
+  (an agent's or a shell), which the phone may show and type into.
 - An agent's tile also carries what `agents.md` says of it: `state`, `since`, `waiting` (with
   `tool`, `asks`, `choose`), `program`, `machine`, `interrupt`, `conversation`.
 

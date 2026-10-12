@@ -9,7 +9,7 @@ import { isRemote } from "@hivemind/core/remote-uri";
 import type { Structure } from "@hivemind/view-host/structure";
 import type { AgentItem } from "@hivemind/workspace-api/agents";
 import type { HomeMessage, HomeRow, HomeTile } from "@hivemind/workspace-api/home";
-import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
+import { isTerminalKind, type CoreLayout } from "@hivemind/workspace-doc/shapes";
 import { KeyedFeed } from "./keyed-feed.js";
 import type { HeldBoard } from "./needs.js";
 
@@ -57,6 +57,7 @@ export function homeRows(s: HomeSource): Map<string, HomeRow> {
       const row: HomeTile = {
         of: "tile", workspace, id: t.id, frameId: t.frameId, kind: t.kind, name: t.name,
         ...(t.agent ? { agent: t.agent } : {}),
+        ...(isTerminalKind(t.kind) ? { terminal: true as const } : {}),
         order: listed.get(t.id) ?? listed.size + i,
         ...(pinned.has(t.id) ? { pinned: true as const } : {}),
         ...(parent ? { parent } : {}),

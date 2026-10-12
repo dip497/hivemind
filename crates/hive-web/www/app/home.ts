@@ -152,8 +152,15 @@ export class Home {
       ...(listed && agent ? { "data-agent": t.id } : {}), ...(listed ? {} : { "data-working-row": t.id }),
       ...(agent ? { "data-state": t.state } : {}),
     });
-    if (!agent) {
+    if (!agent && !t.terminal) {
       row.append(...shows.filter((n): n is HTMLElement => !!n));
+      return row;
+    }
+    // A shell's row opens its terminal.
+    if (!agent) {
+      const open = h("button", { type: "button", class: "open" }, ...shows);
+      open.addEventListener("click", () => this.app.openTerminal(t.workspace, t.id, t.name));
+      row.append(open);
       return row;
     }
     // Tapped, it opens; its ⋯, what can be done to it.

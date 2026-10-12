@@ -33,7 +33,8 @@ import init, { HomeView } from "./pkg/hive_web.js";
 import { Home } from "./js/home.js";
 await init();
 const view = new HomeView(null);
-const app = { open() {}, answer: async () => true };
+window.opened = [];
+const app = { open() {}, openTerminal: (...at) => window.opened.push(at), answer: async () => true };
 const screen = new Home(app, () => show());
 document.getElementById("app").append(screen.el);
 const show = () => screen.show(view.shown(screen.filter.query, screen.filter.machine ?? undefined, "desk"), view.overview("d", "desk"));
@@ -173,4 +174,19 @@ test("a project's + starts an agent in that project's first frame, on its machin
   expect(await page.evaluate(() => location.hash)).toBe("#start&workspace=w0&frame=f5");
   await plus.nth(0).click();
   expect(await page.evaluate(() => location.hash)).toBe("#start&workspace=w0&frame=f0");
+});
+
+test("a tile that runs a terminal opens it from its row, as the computer marks it; one that does not is no button", async () => {
+  test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
+  const page = await home();
+  await page.evaluate(() => {
+    const w = window as unknown as Driven;
+    w.load(2, 1);
+    const tile = (id: string, kind: string, more: object) => ({ seq: 2, key: `t:w0/${id}`, row: { of: "tile", workspace: "w0", id, frameId: "f0", kind, name: id, order: 9, ...more } });
+    w.change({ t: "changes", layout: { seq: 3, changes: [tile("s1", "shell", { terminal: true }), { ...tile("n1", "note", {}), seq: 3 }] } });
+  });
+  await expect(page.locator('[data-tree] [data-row="t:w0/n1"]')).toHaveCount(1);
+  await expect(page.locator('[data-tree] [data-row="t:w0/n1"] button')).toHaveCount(0);
+  await page.locator('[data-tree] [data-row="t:w0/s1"]').click();
+  expect(await page.evaluate(() => (window as unknown as { opened: unknown[] }).opened)).toEqual([["w0", "s1", "s1"]]);
 });

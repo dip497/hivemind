@@ -98,6 +98,13 @@ pub struct TileRow {
         skip_serializing_if = "Option::is_none"
     )]
     pub agent: Option<String>,
+    /// It runs a terminal, which can be shown and typed into.
+    #[serde(
+        default,
+        deserialize_with = "only_true",
+        skip_serializing_if = "Not::not"
+    )]
+    pub terminal: bool,
     #[serde(default)]
     pub order: u64,
     #[serde(
