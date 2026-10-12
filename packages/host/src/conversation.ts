@@ -47,6 +47,28 @@ export function readConversation(file: string, format: AgentTranscript, cursor?:
   return { entries: cursor === undefined ? entries.slice(-TAIL_ENTRIES) : entries, cursor: through };
 }
 
+/** How much of the end of the file is read for the last thing said. */
+const LAST_BYTES = 64 * 1024;
+/** The longest last thing said told. */
+const LAST_MAX = 160;
+
+/** The last thing said in the session file `file`, read as `format` maps it, in a line: the first
+ *  line of what was last said, or the tool last used and what it is about; undefined when the end
+ *  of the file says neither. */
+export function lastSaid(file: string, format: AgentTranscript): string | undefined {
+  let size: number;
+  try { size = fs.statSync(file).size; } catch { return undefined; }
+  const from = Math.max(0, size - LAST_BYTES);
+  const { lines } = linesBetween(file, from, size);
+  const entries = transcriptEntries(format, from === 0 ? lines : lines.slice(1));
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i]!;
+    const line = "text" in e ? e.text.split("\n").map((l) => l.trim()).find(Boolean) : "tool" in e ? [e.tool.name, e.tool.about].filter(Boolean).join(" · ") : undefined;
+    if (line) return [...line].slice(0, LAST_MAX).join("");
+  }
+  return undefined;
+}
+
 /** How much of the end of the file is read for the tool use an agent waits on. */
 const PENDING_BYTES = 256 * 1024;
 

@@ -67,7 +67,7 @@ import { answers } from "./answers.js";
 import { PeerLinks } from "./peer-links.js";
 import { answerKeys, heldBoards, manifestOf, participantNamed, runsIn } from "./needs.js";
 import { agentControl } from "./agent-control.js";
-import { askingOf, conversations, transcriptOf } from "./conversations.js";
+import { askingOf, conversations, LastSaid, transcriptOf } from "./conversations.js";
 import { views } from "./views.js";
 import { listInstalledViews } from "@hivemind/core/views";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
@@ -354,9 +354,13 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   const catalog = agentCatalog(settingsFile);
   appearanceNow = () => { try { return catalog.settings().appearance; } catch { return DEFAULT_APPEARANCE; } };
   await catalog.current();
+  // A tile's last line changed: the person's phone's Home is told, once it is served.
+  let homeChanged = (): void => {};
+  const said = new LastSaid({ tileSessionsDir: path.join(o.dir, TILE_SESSIONS_DIR) });
   const control: ControlPlane = new ControlPlane({
     dir: () => o.dir,
     waitsChanged: () => agentFeed?.changed(),
+    lineChanged: () => homeChanged(),
     publish: (event, ...params) => api.publish(event, ...params),
     write: writeTile,
     steers: (bare) => !!manifestOf(heldBoards(store), bare)?.steer,
@@ -472,6 +476,9 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     statuses: () => control.status.all(),
     facts: (held) => ({ ...manifestFacts(held, path.join(o.dir, TILE_SESSIONS_DIR)), parent: (bare) => control.parentOf(bare), wait: (bare) => control.waits.of(bare) }),
     machines,
+    // Home's rows: the links between agents, and what each tile last said or showed.
+    links: () => control.links(),
+    line: (held, tile) => said.line(held, tile) ?? control.lines.get(tile),
     // Where each of the person's phones is told what happens here.
     subscribe: (device, sub) => pushSubscriptions.set(device, sub),
     // The phones one of the person's computers paired with are the person's here too
@@ -484,6 +491,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     },
     onWarn: o.onWarn,
   });
+  homeChanged = () => peers.homeChanged();
   // The person's phones are told what happens here, encrypted to each (M5), and that this host is
   // back as its network starts.
   const pushSubscriptions = new PushSubscriptions(path.join(identity, "push.json"));

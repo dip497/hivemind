@@ -24,6 +24,8 @@ import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server
 import { workspaceDomains } from "../src/domains.ts";
 import { PeerLinks } from "../src/peer-links.ts";
 import type { WaitingStatus } from "../src/needs.ts";
+import type { LayersShown } from "../src/home.ts";
+import type { HomeMessage } from "@hivemind/workspace-api/home";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-peer-links-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -200,6 +202,9 @@ function computer() {
   };
   /** The connections made to this machine's terminal daemon: each echoes what it is sent. */
   const daemons: PassThrough[] = [];
+  /** What the window's Layers panel shows of each workspace, and what each tile last printed. */
+  const shown = new Map<string, LayersShown>();
+  const lines = new Map<string, string>();
   const links = new PeerLinks({
     store, changes: () => () => {}, lists, server,
     daemon: async () => { const d = new PassThrough(); daemons.push(d); return d; },
@@ -221,6 +226,8 @@ function computer() {
     forget: (by, device) => { forgot.push({ by, device }); return device === phone; },
     devices: () => [host],
     profile: async () => ({ name: "Priya", color: "#3b82f6" }),
+    shown: (at) => shown.get(at),
+    line: (_held, tile) => lines.get(tile),
   });
   /** `device` connects: what it hears on each stream, and its end of the link; and a stream of its
    *  own, opened beside them (`open`): what is sent on it, what it hears, and its end. */
@@ -228,7 +235,7 @@ function computer() {
     const [computerEnd, deviceEnd] = linkPair(device, self);
     links.serve(computerEnd);
     const heard = new Map<string, string[]>();
-    for (const stream of ["device", "pty", "sync", "api", "files", "hosting", "agents"]) {
+    for (const stream of ["device", "pty", "sync", "api", "files", "hosting", "agents", "home"]) {
       heard.set(stream, []);
       deviceEnd.on(stream, (t) => heard.get(stream)!.push(t));
     }
@@ -240,7 +247,7 @@ function computer() {
     };
     return { heard, send: (stream: string, m: unknown) => deviceEnd.send(stream, JSON.stringify(m)), open, closed: computerEnd.closed, hangUp: () => deviceEnd.close("done") };
   };
-  return { repo, workspace, phone, laptop, person: idOf(person), daemons, watched, typed, answered, sent, keyed, driven, viewed, subscribed, unpaired, introduced, forgot, host, connect, statusChanged, output, another };
+  return { repo, workspace, phone, laptop, person: idOf(person), daemons, links, shown, lines, watched, typed, answered, sent, keyed, driven, viewed, subscribed, unpaired, introduced, forgot, host, connect, statusChanged, output, another };
 }
 const until = async (done: () => boolean) => { for (let t = 0; t < 5_000 && !done(); t += 20) await wait(20); };
 
@@ -258,8 +265,8 @@ test("a phone is answered which workspaces its computer holds and what waits on 
   // The owner's laptop is served each.
   const laptop = c.connect(c.laptop);
   askEverything(laptop);
-  await until(() => [...laptop.heard].every(([s, h]) => s === "api" || s === "agents" || h.length > 0));
-  assert.deepEqual([...laptop.heard].filter(([s, h]) => s !== "api" && s !== "agents" && h.length === 0).map(([s]) => s), [], "the laptop hears on every stream");
+  await until(() => [...laptop.heard].every(([s, h]) => s === "api" || s === "agents" || s === "home" || h.length > 0));
+  assert.deepEqual([...laptop.heard].filter(([s, h]) => s !== "api" && s !== "agents" && s !== "home" && h.length === 0).map(([s]) => s), [], "the laptop hears on every stream");
   assert.equal(c.daemons.length, 1);
 
   const phone = c.connect(c.phone);
@@ -568,4 +575,60 @@ test("the owner's devices follow every agent here: sent the list at once, and ag
   stranger.send("agents", { t: "follow" });
   assert.equal(await Promise.race([stranger.closed, wait(2_000).then(() => "still open")]), "removed");
   assert.deepEqual(lists(stranger), []);
+});
+
+test("the owner's devices follow Home: sent both sequences whole, then each change as it comes, the board's and the last lines' apart; a device that comes back with its positions is sent only what it missed; anyone else is cut off", async () => {
+  const c = computer();
+  c.shown.set(c.repo, { order: ["t2", "t1"], pinned: ["t2"] });
+  c.lines.set("t1", "Allow edit to Nav.tsx?");
+  const phone = c.connect(c.phone);
+  const heard = () => phone.heard.get("home")!.map((m) => JSON.parse(m) as HomeMessage);
+  // Asked anything but to follow: nothing.
+  phone.send("home", { t: "home" });
+  await wait(100);
+  assert.deepEqual(heard(), []);
+  phone.send("home", { t: "follow" });
+  await until(() => heard().length === 1);
+  const [t1, t2] = [`t:${c.workspace}/t1`, `t:${c.workspace}/t2`];
+  const row = (id: string, more: Record<string, unknown>) => ({ of: "tile", workspace: c.workspace, id, frameId: null, kind: "claude", ...more, machine: "desk" });
+  assert.deepEqual(heard()[0], {
+    t: "home",
+    layout: { seq: 3, rows: [
+      [`w:${c.workspace}`, { of: "workspace", workspace: c.workspace, name: "api" }],
+      [t1, row("t1", { name: "Editing Nav.tsx", order: 1, state: "waiting", since: T, waiting: { kind: "permission", since: T, decide: true }, program: { id: "claude", label: "Claude Code" } })],
+      [t2, row("t2", { name: "Claude", order: 0, pinned: true, state: "working", since: T, interrupt: true })],
+    ] },
+    lines: { seq: 1, rows: [[t1, "Allow edit to Nav.tsx?"]] },
+  });
+
+  // Asked to follow again on the same stream: nothing more.
+  phone.send("home", { t: "follow" });
+  await wait(100);
+  assert.equal(heard().length, 1);
+
+  // t2 prints: only the lines move. t1 is answered: only its row is sent.
+  c.lines.set("t2", "Compiling…");
+  c.links.homeChanged();
+  await until(() => heard().length === 2);
+  assert.deepEqual(heard()[1], { t: "changes", lines: { seq: 2, changes: [{ seq: 2, key: t2, row: "Compiling…" }] } });
+  await wait(300);
+  c.statusChanged("t1", { state: "working", since: T + 1, title: "Editing Nav.tsx" });
+  await until(() => heard().length === 3);
+  assert.deepEqual(heard()[2], { t: "changes", layout: { seq: 4, changes: [{ seq: 4, key: t1, row: row("t1", { name: "Editing Nav.tsx", order: 1, state: "working", since: T + 1, program: { id: "claude", label: "Claude Code" } }) }] } });
+
+  // The phone goes and comes back from where it was: sent what it missed, nothing whole.
+  phone.hangUp();
+  await phone.closed;
+  c.lines.delete("t1");
+  c.links.homeChanged();
+  const again = c.connect(c.phone);
+  again.send("home", { t: "follow", layout: 4, lines: 2 });
+  await until(() => again.heard.get("home")!.length === 1);
+  assert.deepEqual(JSON.parse(again.heard.get("home")![0]!), { t: "changes", layout: { seq: 4, changes: [] }, lines: { seq: 3, changes: [{ seq: 3, key: t1, gone: true }] } });
+
+  // Someone else's device asking to follow is cut off, and told nothing.
+  const stranger = c.connect(idOf(newSeed()));
+  stranger.send("home", { t: "follow" });
+  assert.equal(await Promise.race([stranger.closed, wait(2_000).then(() => "still open")]), "removed");
+  assert.deepEqual(stranger.heard.get("home"), []);
 });

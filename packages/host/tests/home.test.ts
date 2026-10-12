@@ -1,0 +1,90 @@
+// Home, as the person's phone follows it (home.ts, keyed-feed.ts, spec/home.md): rows numbered as
+// they change, caught up after a position the host still keeps, else given whole; worked out at
+// most every 250 ms however often things change; and what each row says, held to
+// conformance/home.json's cases for a computer.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import type { HomeMessage } from "@hivemind/workspace-api/home";
+import { KeyedFeed } from "../src/keyed-feed.ts";
+import { HomeFeed, homeLines, homeRows, type LayersShown } from "../src/home.ts";
+import { boardStructure } from "../src/board-structure.ts";
+import type { HeldBoard } from "../src/needs.ts";
+import type { AgentItem } from "@hivemind/workspace-api/agents";
+import type { KnownMachines } from "@hivemind/core/remote-uri";
+
+const machines: KnownMachines = { self: () => ({ device: "d1", name: "desk" }), mine: () => undefined, whose: () => undefined, saved: (id) => (id === "m1" ? "build box" : undefined) };
+
+test("rows are numbered as they change or go, and a follower behind the last kept, by count or by size, is told to take them whole", () => {
+  const feed = new KeyedFeed<string>({ keep: 3, bytes: 1000 });
+  assert.deepEqual(feed.set(new Map([["a", "1"], ["b", "2"]])).map((c) => c.seq), [1, 2]);
+  assert.deepEqual(feed.set(new Map([["a", "1"], ["b", "2"]])), [], "the same rows say nothing");
+  assert.deepEqual(feed.set(new Map([["a", "3"]])), [{ seq: 3, key: "a", row: "3" }, { seq: 4, key: "b", gone: true }]);
+  assert.deepEqual(feed.snapshot(), { seq: 4, rows: [["a", "3"]] });
+  assert.deepEqual(feed.since(2)?.changes.map((c) => c.seq), [3, 4]);
+  assert.deepEqual(feed.since(4), { seq: 4, changes: [] }, "up to date: nothing");
+  assert.equal(feed.since(0), null, "change 1 is no longer kept: three are");
+  assert.deepEqual(feed.since(1)?.changes.map((c) => c.seq), [2, 3, 4]);
+  for (const seq of [5, -1, 1.5]) assert.equal(feed.since(seq), null, `${seq}: never given`);
+  const small = new KeyedFeed<string>({ keep: 100, bytes: 30 });
+  small.set(new Map([["a", "x".repeat(10)]]));
+  small.set(new Map([["a", "y".repeat(10)]]));
+  small.set(new Map([["a", "z".repeat(10)]]));
+  assert.equal(small.since(0), null, "past 30 bytes the oldest go");
+  assert.deepEqual(small.since(2)?.changes.map((c) => c.seq), [3]);
+});
+
+test("Home is worked out at most every `every` ms, the first change at once, and tells each follower what changed; a follower is answered what came after its positions, or both sequences whole", async () => {
+  let rows = new Map([["w:w1", { of: "workspace" as const, workspace: "w1", name: "api" }]]);
+  let lines = new Map<string, string>();
+  let worked = 0;
+  const feed = new HomeFeed({ rows: () => (worked++, rows), lines: () => lines, every: 50 });
+  const heard: HomeMessage[] = [];
+  const stop = feed.follow((m) => heard.push(m));
+  const first = feed.answer({});
+  assert.equal(first.t, "home");
+  assert.deepEqual(first.t === "home" && [first.layout.seq, first.lines.seq], [1, 0]);
+  rows = new Map([...rows, ["w:w2", { of: "workspace", workspace: "w2", name: "web" }]]);
+  lines = new Map([["t:w1/t1", "building"]]);
+  worked = 0;
+  feed.changed();
+  assert.equal(worked, 1, "the first change, at once");
+  feed.changed();
+  feed.changed();
+  assert.equal(worked, 1, "the next within 50 ms wait");
+  await new Promise((r) => setTimeout(r, 80));
+  assert.equal(worked, 2, "and are worked out together at its end");
+  assert.deepEqual(heard, [{
+    t: "changes",
+    layout: { seq: 2, changes: [{ seq: 2, key: "w:w2", row: { of: "workspace", workspace: "w2", name: "web" } }] },
+    lines: { seq: 1, changes: [{ seq: 1, key: "t:w1/t1", row: "building" }] },
+  }]);
+  assert.deepEqual(feed.answer({ layout: 1, lines: 0 }), heard[0], "caught up from where it was");
+  assert.equal(feed.answer({ layout: 1 }).t, "home", "a position for one sequence only: both whole");
+  assert.equal(feed.answer({ layout: 9, lines: 0 }).t, "home", "a position never given: both whole");
+  stop();
+  lines = new Map();
+  feed.refresh();
+  assert.equal(heard.length, 1, "stopped: told no more");
+  feed.close();
+});
+
+const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../conformance/home.json");
+const { computer: cases } = JSON.parse(fs.readFileSync(file, "utf8")) as {
+  computer: Array<{ about: string; held: HeldBoard[]; agents: AgentItem[]; titles?: Record<string, string>; spawns?: Array<{ parent: string; child: string }>; shown?: Record<string, LayersShown>; lines?: Record<string, string>; rows: Record<string, unknown>; said: Record<string, string> }>;
+};
+
+for (const c of cases) {
+  test(`a computer: ${c.about}`, () => {
+    const rows = homeRows({
+      held: c.held,
+      agents: c.agents,
+      structure: (core) => boardStructure(core, { title: (id) => c.titles?.[id], links: () => ({ pipes: [], spawns: c.spawns ?? [] }), machines }).structure,
+      shown: (repo) => c.shown?.[repo],
+    });
+    assert.deepEqual(Object.fromEntries(rows), c.rows);
+    assert.deepEqual(Object.fromEntries(homeLines(c.held, (t) => c.lines?.[t])), c.said);
+  });
+}

@@ -2,13 +2,15 @@
 // (hive-phone's core) pairs, signs, reads and acts; this keeps one connection to the computer it
 // paired with, dialled again when it drops, and hands the screens what it is told.
 
-import init, { Device, type Host, deviceId, pair, readLink, readQr } from "../pkg/hive_web.js";
-import { deviceKey, put, remove } from "./store.js";
-import type { Agent, Held, Others, Overview, Paired, Piece, Reply, Start, Startable } from "./types.js";
+import init, { Device, type Host, HomeView, deviceId, pair, readLink, readQr } from "../pkg/hive_web.js";
+import type { Filter } from "./home.js";
+import { deviceKey, get, put, remove } from "./store.js";
+import type { Agent, Held, Others, Overview, Paired, Piece, Reply, Shown, Start, Startable } from "./types.js";
 import { message } from "./words.js";
 
 export interface Told {
-  overview(o: Overview): void;
+  /** What the computer says of Home changed what this browser holds. */
+  home(): void;
   /** Whether the computer is reached; why not, when it is not. */
   status(live: boolean, error: string | null): void;
   /** The person's other devices, as the computer tells of them once reached. */
@@ -40,14 +42,30 @@ export class Phone {
     private readonly seed: Uint8Array,
     public paired: Paired | null,
     private readonly told: Told,
+    private view: HomeView,
   ) {}
 
   /** The wasm compiled as it downloads (`instantiateStreaming`, the module from the service
    *  worker's cache once kept), and this browser's key. */
   static async open(paired: Paired | null, told: Told): Promise<Phone> {
     await init();
-    const seed = await deviceKey();
-    return new Phone(deviceId(seed), seed, paired, told);
+    const [seed, kept] = await Promise.all([deviceKey(), get<unknown>("home")]);
+    return new Phone(deviceId(seed), seed, paired, told, new HomeView(paired ? kept ?? null : null));
+  }
+
+  /** Home as it shows, by `filter`. */
+  shown(filter: Filter): Shown {
+    return this.view.shown(filter.query, filter.machine ?? undefined, this.paired?.with.name ?? "your computer") as Shown;
+  }
+
+  /** The agents on the computer, as the agent screen and the needs show them. */
+  overview(): Overview {
+    return this.view.overview(this.paired?.with.device ?? "", this.paired?.with.name ?? "your computer") as Overview;
+  }
+
+  /** What this browser holds of Home, to keep. */
+  kept(): unknown {
+    return this.view.kept();
   }
 
   /** The computer the pairing link in `text` names, or null when it is not one. */
@@ -68,7 +86,8 @@ export class Phone {
     this.paired = given;
     // In place of another computer: what it said goes, and its connection with it.
     if (before) {
-      await remove("overview");
+      this.view = new HomeView(null);
+      await remove("home");
       this.host?.close();
       this.wake?.();
     }
@@ -88,8 +107,9 @@ export class Phone {
 
   private async forgetHere(): Promise<void> {
     this.paired = null;
+    this.view = new HomeView(null);
     await remove("paired");
-    await remove("overview");
+    await remove("home");
     this.host?.close();
     this.wake?.();
   }
@@ -120,7 +140,8 @@ export class Phone {
         this.told.status(true, null);
         for (const f of this.followed) f.start(host);
         host.devices(paired.certificate).then((o: Others) => this.paired === paired && this.told.others(o), () => {});
-        await host.follow((o: Overview) => this.told.overview(o));
+        const view = this.view;
+        await host.home(view.at(), (text: string) => view.apply(text) && this.told.home());
         throw new Error(`${name} stopped telling this browser of its agents`);
       } catch (e) {
         if (this.paired !== paired) continue;

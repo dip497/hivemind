@@ -59,6 +59,10 @@ import { MACHINE_OFFER, grantOf, type Grant } from "./machine-share.js";
 import { serveFiles } from "./device-files.js";
 import { heldBoards, needsOf, workingIn, type HeldBoard, type Need, type WaitingStatus } from "./needs.js";
 import { agentsOf, type AgentFacts, type AgentItem } from "./agent-list.js";
+import { boardStructure } from "./board-structure.js";
+import type { Links } from "@hivemind/workspace-api/agents";
+import type { ViewFrameMachine } from "@hivemind/view-sdk/protocol";
+import { HomeFeed, homeLines, homeRows, type LayersShown } from "./home.js";
 import type { KnownMachines } from "@hivemind/core/remote-uri";
 import type { PairedWith } from "@hivemind/workspace-host/pairing";
 import { subscriptionOf, type Subscription } from "./web-push.js";
@@ -153,6 +157,14 @@ export interface PeerLinksOptions {
    *  (spec/pairing.md 0.8). None: a phone is told none. */
   profile?(): Promise<{ name: string; color: string }>;
   onWarn?(message: string): void;
+  /** The links between agents on the boards here (`structure`'s). */
+  links?(): Links;
+  /** How the link to a remote frame's machine is. */
+  linkState?(workspacePath: string): ViewFrameMachine["state"];
+  /** What the window's Layers panel shows of the workspace in `repo` (Home's order and pins). */
+  shown?(repo: string): LayersShown | undefined;
+  /** What the tile `tile` of `held` last said, or its screen last showed (Home's last line). */
+  line?(held: HeldBoard[], tile: string): string | undefined;
 }
 
 interface Served { workspace: string; person: string; link: Link; stop(): void }
@@ -279,6 +291,8 @@ export class PeerLinks {
   private readonly following = new Map<Stream, string>();
   /** While the list went out within the last 100 ms: whether it changed since. */
   private held: { changed: boolean } | null = null;
+  /** Home, made once a device first follows it. */
+  private home: HomeFeed | null = null;
 
   constructor(private readonly o: PeerLinksOptions) {
     // The list changes with the boards here, and with each status and plan the workspace API
@@ -293,6 +307,7 @@ export class PeerLinks {
     const { store, lists, server, hosting } = this.o;
     // A phone runs nothing and holds nothing here: it is answered what it asks, and watches.
     link.streams("agents", (agents) => agents.on((text) => this.follow(link, agents, text)));
+    link.streams("home", (home) => home.on((text) => this.followHome(link, home, text)));
     if (this.o.phone?.(link.peer)) {
       link.streams("device", (device) => device.on((text) => this.answerDevice(link, device, text, true)));
       link.streams("api", (api) => {
@@ -394,9 +409,56 @@ export class PeerLinks {
     void on.closed.then(() => this.following.delete(on));
   }
 
+  /** Follow Home on `on` for the device on `link` (spec/home.md): answered what it has not
+   *  had, then each change as it comes, until the stream closes. */
+  private followHome(link: Link, on: Stream, text: string): void {
+    if (!this.o.lists.ownersDevice(link.peer)) return link.close("removed");
+    let asked: { t?: unknown; layout?: unknown; lines?: unknown } | null;
+    try { asked = JSON.parse(text) as typeof asked; } catch { return; }
+    if (asked?.t !== "follow" || this.homeFollowed.has(on)) return;
+    const at = (v: unknown) => (typeof v === "number" ? v : undefined);
+    const home = (this.home ??= new HomeFeed({ rows: () => this.homeRows(), lines: () => this.homeLines() }));
+    on.send(JSON.stringify(home.answer({ layout: at(asked.layout), lines: at(asked.lines) })));
+    this.homeFollowed.add(on);
+    const stop = home.follow((m) => on.send(JSON.stringify(m)));
+    void on.closed.then(() => {
+      stop();
+      this.homeFollowed.delete(on);
+    });
+  }
+
+  private readonly homeFollowed = new Set<Stream>();
+
+  private homeRows() {
+    const held = heldBoards(this.o.store);
+    const statuses = this.o.statuses?.() ?? [];
+    const titles = new Map(statuses.map((s) => [toBareId(s.tileId), s.status.title]));
+    return homeRows({
+      held,
+      agents: agentsOf(held, statuses, this.o.machines, this.o.facts?.(held) ?? NO_FACTS),
+      structure: (core) => boardStructure(core, {
+        title: (id) => titles.get(id), links: () => this.o.links?.() ?? { pipes: [], spawns: [] },
+        machines: this.o.machines, ...(this.o.linkState ? { linkState: this.o.linkState } : {}),
+      }).structure,
+      shown: (repo) => this.o.shown?.(repo),
+    });
+  }
+
+  private homeLines() {
+    const held = heldBoards(this.o.store);
+    return homeLines(held, (tile) => this.o.line?.(held, tile));
+  }
+
+  /** Something Home shows changed that the boards and statuses do not say: a tile's last line, or
+   *  what the window shows. */
+  homeChanged(): void {
+    this.home?.changed();
+  }
+
   /** The agents here changed: those following them are sent the list again, at once unless it went
    *  out within the last 100 ms, then at the end of that. */
   private agentsChanged(): void {
+    this.home?.changed();
     if (this.following.size === 0) return;
     if (this.held) {
       this.held.changed = true;

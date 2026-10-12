@@ -104,16 +104,19 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   await expect(page.locator("[data-pair-replaces]")).toBeVisible({ timeout: 30_000 });
   await expect(page.locator("[data-pair-replaces]")).toHaveText(/^This page is paired with .+; pairing replaces it\.$/);
   await page.locator("[data-pair-keep]").click();
-  await expect(page.locator('[data-screen="needs"]')).toBeVisible();
+  await expect(page.locator('[data-screen="home"]')).toBeVisible();
   await expect(page.locator("[data-paired]")).toHaveAttribute("data-paired", me.deviceId);
   await desktop.keyboard.press("Escape");
 
-  // An agent on the computer begins waiting on the person: Needs you shows it, with its answers.
+  // An agent on the computer begins waiting on the person: Home shows it on top, with its answers,
+  // and lists it under its project, saying what it waits on.
   const tile = await startProbe(desktop);
   const need = page.locator(`[data-need="${tile}"]`);
   await expect(need).toHaveAttribute("data-kind", "permission", { timeout: 30_000 });
   await expect(page.locator("[data-tab-dot]")).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath("needs.png") });
+  await expect(page.locator(`[data-tree] [data-agent="${tile}"]`)).toHaveAttribute("data-state", "waiting");
+  await expect(page.locator("[data-tree] [data-project]")).toHaveCount(1);
+  await page.screenshot({ path: testInfo.outputPath("home.png") });
 
   // Reopened with no network (offline, and the relay's WebSocket refused, which offline alone does
   // not stop): the same device, still paired, and what waited, shown from what the page kept.
@@ -158,16 +161,22 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   deaf = false;
   await expect(page.locator(`[data-agent="${tile}"]`)).toHaveAttribute("data-state", "working", { timeout: 60_000 });
   await expect(page.locator("[data-need]")).toHaveCount(0);
-  await expect(page.locator("[data-working]")).toHaveText("Nothing needs you. 1 agent working.");
+  await expect(page.locator("[data-clear]")).toHaveText("Nothing needs you. 1 agent working.");
+  await expect(page.locator(`[data-working] [data-working-row="${tile}"]`)).toBeVisible();
 
-  // Another agent, one that keeps a conversation: listed under the computer and its workspace.
+  // Another agent, one that keeps a conversation: listed in Home's tree.
   await desktop.evaluate(() => window.hive.settingsSet("agents.defaultAgent", "talker"));
   await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:shortcut", { detail: "agent" })));
   await expect(desktop.locator(".react-flow__node-terminal")).toHaveCount(2, { timeout: 20_000 });
   const talker = (await desktop.locator(".react-flow__node-terminal").evaluateAll((els) => els.map((e) => e.getAttribute("data-id")))).find((t) => t !== tile)!;
-  await page.locator('[data-tab="agents"]').click();
   await expect(page.locator(`[data-agent="${talker}"]`)).toBeVisible({ timeout: 30_000 });
-  await page.screenshot({ path: testInfo.outputPath("agents.png") });
+  // Pinned in the desktop's Layers panel: pinned on Home too, and listed there alone.
+  const layer = desktop.locator(`aside[aria-label="Layers"] [data-layer-tile="${talker}"]`);
+  await layer.hover();
+  await layer.locator("[data-layer-tile-menu]").click();
+  await desktop.keyboard.press("p");
+  await expect(page.locator(`[data-pinned] [data-agent="${talker}"]`)).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(`[data-agent="${talker}"]`)).toHaveCount(1);
 
   // Opened, and sent a message: the computer types it in as that device sent it, the agent hears
   // it, and the chat shows what each said.
@@ -181,6 +190,10 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   await expect(page.locator('[data-chat] [data-who="agent"]')).toHaveText(["You said fix the login redirect"]);
   await expect(page.locator("[data-message] textarea")).toHaveValue("");
   await page.screenshot({ path: testInfo.outputPath("agent.png") });
+  // Home's row says what it last said.
+  await page.locator('[data-screen="agent"] [data-back]').click();
+  await expect(page.locator(`[data-agent="${talker}"] [data-line]`)).toHaveText("You said fix the login redirect", { timeout: 30_000 });
+  await page.locator(`[data-agent="${talker}"]`).click();
 
   // Asked a question, with options to choose from: the browser shows the question and each option,
   // never Allow or Deny, and the agent is answered with the option tapped.
@@ -232,7 +245,7 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   await page.locator("[data-close-ask] [data-yes]").click();
   await expect(desktop.locator(".react-flow__node-terminal")).toHaveCount(2, { timeout: 30_000 });
   await expect.poll(audit, { timeout: 10_000 }).toContainEqual(expect.objectContaining({ verb: "agent.close", outcome: "ok", actor: expect.objectContaining({ kind: "peer", device: id }) }));
-  await expect(page.locator('[data-screen="agents"]')).toBeVisible();
+  await expect(page.locator('[data-screen="home"]')).toBeVisible();
   await expect(page.locator(`[data-agent="${started}"]`)).toHaveCount(0, { timeout: 30_000 });
 
   // Unpaired on the computer: turned away while open, and it offers to pair again, the pairing it

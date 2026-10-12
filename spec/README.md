@@ -21,6 +21,7 @@ these; the cases in `../conformance/` decide whether they do. Design:
 | `hosting.md` | Moving a workspace's hosting between the owner's devices, and who follows it | 0.4 |
 | `agents.md` | Every agent of the person's, live, as their phone follows it; starting one from the phone, interrupting its turn with its agent's keys, closing it, what it changed, and what it and the person said to each other; a supervised agent's wait on its starter, and who that is; the tool a wait is about, and a question's options | 0.7 |
 | `needs.md` | What waits on the person, on which machine, how their phone asks for it, answers it (a permission allowed or denied with the agent's own keys, below the tool and what it is about; a question's option chosen) and sends an agent a message; a supervised tool use answered by its starter; an answer typed as the person, never into another screen, and sent once | 0.7 |
+| `home.md` | What the person's phone shows first: every workspace's frames and tiles as the desktop's Layers panel lists them, followed as two numbered sequences of keyed rows and last lines, caught up from where a phone was; how the phone groups and orders them | 0.1 |
 | `push.md` | What a phone is told while the person is away, encrypted to it, a permission it may allow or deny said so; that a device it found away is back; and the network's push server, which passes on what the devices a phone named sign | 0.4 |
 
 Versions are `major.minor`: a minor adds optional fields or enum values a reader may ignore; a

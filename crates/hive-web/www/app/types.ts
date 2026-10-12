@@ -90,3 +90,54 @@ export interface Others {
   whose: string | null;
   devices: Array<{ device: string; name: string; kind: string }>;
 }
+
+/** A tile as Home holds it (spec/home.md): where the desktop lists it and, for an agent, what the
+ *  agent list says of it. */
+export interface HomeTile {
+  workspace: string;
+  id: string;
+  frameId: string | null;
+  kind: string;
+  name: string;
+  agent?: string;
+  order: number;
+  pinned?: boolean;
+  parent?: string;
+  state?: string;
+  since?: number;
+  waiting?: Waiting;
+  program?: { id: string; label: string };
+  machine?: string;
+  interrupt?: boolean;
+  conversation?: boolean;
+}
+
+export interface HomeFrame {
+  workspace: string;
+  id: string;
+  title: string;
+  color: string;
+  order: number;
+  machine?: { name: string; state?: string };
+  parentId?: string;
+  branch?: string;
+  folder?: { name: string; kind?: string };
+  project?: string;
+}
+
+/** One line of a list Home shows (hive-phone's `home::Entry`). */
+export type HomeEntry =
+  | { of: "machine"; key: string; name: string }
+  | { of: "project"; key: string; name: string; workspace: string }
+  | { of: "frame"; key: string; depth: number; frame: HomeFrame }
+  | { of: "tile"; key: string; depth: number; tile: HomeTile; line?: string };
+
+/** Home as it shows (hive-phone's `home::Shown`). */
+export interface Shown {
+  /** What waits on the person, by tile key: each an agent of the overview. */
+  needs: string[];
+  working: HomeEntry[];
+  pinned: HomeEntry[];
+  machines: string[];
+  tree: HomeEntry[];
+}

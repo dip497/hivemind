@@ -52,3 +52,39 @@ test("a wait the screen says it is reports again when it says another, and sayin
   expect(reports).toEqual([{ status: "permission", says: "trust" }, { status: "permission", says: "settings" }, { status: "permission" }]);
   expect(w.current()).toEqual([["a", { status: "permission" }]]);
 });
+
+test("each session's last line with text is reported as it changes, an agent's or any program's, cut to 160 characters", () => {
+  const screens = new Map<string, { cmd: string; screen: string }>();
+  const lines: string[] = [];
+  const w = new ScreenWatcher({
+    read: (id) => screens.get(id),
+    detect: (cmd) => (cmd === "agent" ? { status: "working" } : undefined),
+    report: () => {},
+    line: (id, line) => lines.push(`${id}: ${line}`),
+  });
+  screens.set("t1", { cmd: "bash", screen: "$ make\nbuilding   \n\n  \n" });
+  screens.set("t2", { cmd: "agent", screen: `● ${"x".repeat(200)}\n` });
+  screens.set("t3", { cmd: "bash", screen: "\n  \n" });
+  w.output("t1");
+  w.output("t2");
+  w.output("t3");
+  w.tick();
+  // A screen with no text yet says no line.
+  expect(lines).toEqual(["t1: building", `t2: ● ${"x".repeat(158)}`]);
+  screens.set("t1", { cmd: "bash", screen: "$ make\nbuilding\n" });
+  w.output("t1");
+  w.tick();
+  expect(lines).toHaveLength(2);
+  screens.set("t1", { cmd: "bash", screen: "$ make\nbuilding\ndone\n$ " });
+  w.output("t1");
+  w.tick();
+  expect(lines.at(-1)).toBe("t1: $");
+  w.forget("t1");
+  screens.set("t1", { cmd: "bash", screen: "$" });
+  w.output("t1");
+  w.tick();
+  // Forgotten, the same line is told again.
+  expect(lines.at(-1)).toBe("t1: $");
+  expect(lines).toHaveLength(4);
+  expect(w.currentLines()).toEqual([["t2", `● ${"x".repeat(158)}`], ["t1", "$"]]);
+});

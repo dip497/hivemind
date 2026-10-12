@@ -1,17 +1,18 @@
 // What the control plane hears of an agent is its status: a daemon's reading of its screen
 // (`agent.screen`) until its hooks speak, a wait and what screen it says it is; and the session its
-// hooks say it is in (`agent.event`).
+// hooks say it is in (`agent.event`); and what a tile's screen last showed (`tile.line`).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ControlPlane, type ControlPlaneOptions } from "../src/control/plane.ts";
 
-const plane = () => new ControlPlane({
+const plane = (o: Partial<ControlPlaneOptions> = {}) => new ControlPlane({
   dir: () => "/nowhere",
   publish: () => {},
   write: () => true,
   spawned: () => {},
   methods: () => { throw new Error("no methods here"); },
   windowsUp: () => false,
+  ...o,
 } as unknown as ControlPlaneOptions);
 
 test("a screen reading is the agent's status, with what screen it says; one that says it as anything but text says nothing", () => {
@@ -31,4 +32,18 @@ test("the session an agent's hooks say it is in is its status's; one that says n
   assert.equal(p.status.get("t1")?.session, "5f0c3a1e");
   p.event("agent.event", { tileId: "hm:t1", event: "turn.started" });
   assert.equal(p.status.get("t1")?.session, "5f0c3a1e");
+});
+
+test("what a tile's screen last showed is kept by its bare id, and told; anything but text is no line, and a tile forgotten keeps none", () => {
+  let told = 0;
+  const p = plane({ lineChanged: () => told++ });
+  p.event("tile.line", { tileId: "hm:t1", line: "building" });
+  assert.deepEqual([...p.lines], [["t1", "building"]]);
+  assert.equal(told, 1);
+  p.event("tile.line", { tileId: "hm:t1", line: 7 });
+  p.event("tile.line", { line: "nobody's" });
+  assert.deepEqual([...p.lines], [["t1", "building"]]);
+  assert.equal(told, 1);
+  p.forget("hm:t1");
+  assert.deepEqual([...p.lines], []);
 });

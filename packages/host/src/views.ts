@@ -17,25 +17,23 @@ import type { WidgetPress } from "@hivemind/workspace-api/methods";
 import type { ViewWidget } from "@hivemind/view-sdk/protocol";
 import { randomUUID } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
-import { cleanName, spawnableAgents, agentForCmd } from "@hivemind/agents";
+import { cleanName, spawnableAgents } from "@hivemind/agents";
 import type { SessionStatus } from "@hivemind/agent-host/status-store";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
-import { isRemote, machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
+import type { KnownMachines } from "@hivemind/core/remote-uri";
 import { pageOf, serveViewFile } from "@hivemind/core/view-files";
 import type { InstalledView } from "@hivemind/core/views";
 import type { ViewManifest } from "@hivemind/view-sdk/manifest";
 import { PROTOCOL_VERSION, STATUS_TONES, type SurfaceRect, type ViewFrameMachine, type ViewPermission, type ViewTheme } from "@hivemind/view-sdk/protocol";
 import { CommunityLink, type LinkCommands } from "@hivemind/view-host/link";
 import { viewAgentStatus } from "@hivemind/view-host/status";
-import { viewStructure } from "@hivemind/view-host/structure";
-import { AGENT_TILE_KIND, type TileRecord } from "@hivemind/workspace-doc/shapes";
-import { tileName } from "@hivemind/workspace-doc/tile-list";
 import type { Links, StatusChange } from "@hivemind/workspace-api/agents";
 import { ApiError, text } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain, WorkspaceServer } from "@hivemind/workspace-api/server";
 import type { ViewFile, ViewListing, ViewScreen } from "@hivemind/workspace-api/views";
 import type { Intent, Intents } from "@hivemind/workspace-host/intents";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
+import { boardStructure } from "./board-structure.js";
 
 /** The largest file of a view's a remote screen is sent. */
 const FILE_MAX = 4 * 1024 * 1024;
@@ -166,37 +164,6 @@ function screenOf(raw: unknown): ViewScreen {
   return { w: raw.w, h: raw.h, theme: themeOf(raw.theme), ...(device ? { device: { touch: (device as { touch: boolean }).touch, compact: (device as { compact: boolean }).compact } } : {}) };
 }
 
-/** A frame's colour as `#rrggbb`, from what a window saves (frame-color.ts): `oklch(L C H)`, or the
- *  hex the person picked. A device has no CSS engine: anything else is the window's own fallback. */
-function frameHex(css: unknown): string {
-  if (typeof css !== "string") return "#8899aa";
-  const hex = css.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)?.[1];
-  if (hex) return `#${(hex.length === 3 ? [...hex].map((c) => c + c).join("") : hex).toLowerCase()}`;
-  const ok = css.trim().match(/^oklch\(\s*([\d.]+)(%?)\s+([\d.]+)(%?)\s+([\d.]+)(?:deg)?\s*(?:\/\s*[\d.]+%?\s*)?\)$/i);
-  if (!ok) return "#8899aa";
-  // OKLCH → OKLab → linear sRGB (Björn Ottosson's matrices), each channel clipped to the gamut.
-  const L = Number(ok[1]) / (ok[2] ? 100 : 1);
-  const C = Number(ok[3]) * (ok[4] ? 0.4 / 100 : 1);
-  const h = (Number(ok[5]) * Math.PI) / 180;
-  const [a, b] = [C * Math.cos(h), C * Math.sin(h)];
-  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
-  const linear = [
-    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
-  ];
-  const channel = (x: number) => {
-    const v = x <= 0.0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - 0.055;
-    return Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, "0");
-  };
-  return `#${linear.map(channel).join("")}`;
-}
-
-/** The agent a tile runs, its catalog id, as the window reads it. */
-const agentOf = (t: TileRecord): string | undefined => (t.kind === AGENT_TILE_KIND ? agentForCmd(t.cmd)?.id : undefined);
-
 export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view.open" | "view.close", "view.post" | "view.screen"> {
   /** Each caller's sessions, by id; and every session open, for what this device hears. */
   const opened = new WeakMap<Connection, Map<string, Session>>();
@@ -271,21 +238,8 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
     s.tiles = tiles;
     s.frames = new Set(core.frames.map((f) => f.id));
     if (!s.link.stats.ready) return;
-    const titles: Record<string, string> = {};
-    for (const t of core.tiles) {
-      const title = o.status(t.id)?.title;
-      if (title) titles[t.id] = title;
-    }
+    const { structure, names, titles } = boardStructure(core, { title: (id) => o.status(id)?.title, links: o.links, machines: o.machines, linkState: o.linkState });
     s.titles = titles;
-    const names = Object.fromEntries(core.tiles.map((t) => [t.id, tileName(core.tileNames ?? {}, titles, t)]));
-    const structure = viewStructure({
-      frames: core.frames, tiles: core.tiles, frameOf: core.frameOf ?? {},
-      name: (t) => names[t.id], agent: agentOf, links: o.links(),
-      color: (f) => frameHex((f as { color?: unknown }).color),
-      machine: (f) => (f.workspacePath && isRemote(f.workspacePath)
-        ? { name: machineCalled(f.workspacePath, o.machines), state: o.linkState?.(f.workspacePath) ?? "idle" }
-        : undefined),
-    });
     const told = { structure: JSON.stringify(structure), names: JSON.stringify(names) };
     if (told.structure !== s.told.structure) s.link.send(structure);
     if (told.names !== s.told.names) s.link.send({ type: "names", names });

@@ -651,6 +651,59 @@ tab into Home. Pinned first; search; machine chips when there is more than one m
 state, name, last line (what it said, or the exact command or question it waits on). Budget: a
 200-tile canvas opens Home in under 500 ms at 4× CPU throttle, and one change redraws one row.
 
+*Design (2026-10-12).* Three facts the brief assumed otherwise: `structure` has no sequence (the
+device host re-sends it whole when it changes, `packages/host/src/views.ts`); the core's screen is
+the daemon's headless xterm (`viewport()`, read by `ScreenWatcher` for status), alacritty is the
+phone's own terminal; and pins are the person's, kept per workspace on the computer (the Layers
+panel's personal layout), not in the document.
+- **One feed, two sequences** (`packages/host/src/home.ts`, spec/home.md). Rows are workspaces,
+  frames and tiles, keyed by workspace and id. A frame and a tile row are what the one builder,
+  `boardStructure` (the one `views.ts` uses for `structure`), makes of them, plus each frame's
+  board order and project. A tile row adds what the agent list says of an agent (state, since,
+  its wait with `tool`, `asks`, `choose`, program, machine, interrupt, conversation), so the page
+  follows Home alone, and the desktop's `order` and `pinned`: the Layers panel sends what it lists
+  (`layers:shown`, pinned first, then each frame's tiles and what they started) for each
+  workspace it shows, as the person set it up. The *layout* sequence numbers each row that
+  changed or went; the *lines* sequence numbers each tile's last line. The feed works rows out
+  at most every 250 ms, the first change at once, and tells only rows that changed: a status
+  change is one row.
+- **Sync.** The phone follows the `home` stream on its device link: `{t:"follow", layout?, lines?}`.
+  Given positions the host still keeps, it answers the changes after them; else, or given none,
+  a snapshot with both positions. The host keeps 2000 changes and 256 KB per sequence; past that
+  a follower is too far behind and gets a snapshot. No polling: each change goes out as it is
+  worked out, at most ten answers a second, as the `agents` stream does.
+- **The last line.** An agent with a conversation: what it last said (`lastSaid`, the tail of its
+  transcript, re-read only when the file grew), or the tool it last used and what about. Real
+  Claude at rest shows a statusline, rules, its prompt and a footer below its reply, so its
+  screen says nothing useful. Anything else: the daemon's `ScreenWatcher`, which already reads a
+  session's screen after it prints, reports the last line with text (`tile.line`), at most 160
+  characters, as it changes. A row that waits shows its wait instead: the command or file, or the
+  question.
+- **The phone groups and draws** (`crates/hive-phone/src/home.rs`, wasm `Host.home`). Machines
+  (the frame's machine, else the computer), then projects (the frame's project, the workspace's
+  own first), then frames, then tiles, agents first, each list in the desktop's `order`, pinned
+  on top and only there. Above the tree: Needs you (the cards that answer, folding the Needs tab
+  in), then Working. A search box filters by name and agent; machine chips show when there is
+  more than one. The Agents tab goes: the tree is the list. The page keeps what it held and
+  follows on from its positions after a reload.
+
+*Done (2026-10-12):*
+- The computer: `home` stream on the device link (`PeerLinks.followHome`, owner's devices only),
+  `HomeFeed` over two `KeyedFeed`s, rows from `boardStructure` plus the agent list plus what the
+  Layers panel lists (`layers:shown`). Last lines: `LastSaid` (transcript) else the daemon's
+  `tile.line`. `spec/home.md` 0.1, `conformance/home.json` (computer and phone cases).
+- The phone: `crates/hive-phone/src/home.rs` holds and groups (wasm `HomeView`, `Host.home`); the
+  page's Home screen replaces the Needs you and Agents tabs and keeps what it held, to follow on
+  from its positions.
+- Budget, `phone-page.spec.ts`: 200 tiles taken in whole, grouped and drawn to the next frame in
+  374 ms at 4x CPU throttle (500 ms budget); a new last line redraws that tile's row in each list
+  it is in, an answered wait removes one card, redraws one row and adds one to Working, nothing
+  else moves.
+- Found on the way: Home asked for an agent's transcript before its session was tracked and kept
+  the miss for 5 s, and nothing asked again; a miss is no longer kept.
+- Not done: a Working list as long as the board when most agents work (it repeats the tree's rows);
+  folding a frame; tapping a terminal row (§11.4 gives it the terminal).
+
 **11.3 Start an agent.** New agent on Home and inside a project: machine, folder, the agents
 installed there, model and permission mode as the desktop offers them, a prompt (photos
 attachable). Folders: the machine's known projects and recent folders, plus a listing scoped inside

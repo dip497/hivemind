@@ -58,6 +58,8 @@ export interface ControlPlaneOptions {
   diag?(line: string): void;
   /** A wait began, ended, or its time to answer changed. */
   waitsChanged?(): void;
+  /** A tile's screen showed another last line (`lines`). */
+  lineChanged?(): void;
 }
 
 /** A lost SubagentStop (the subagent errored, the turn was interrupted, the session compacted)
@@ -85,6 +87,8 @@ export class ControlPlane {
   readonly supervise = new Map<string, string>();
   /** Messages to an agent, held until it is at its prompt (by pty id). */
   readonly mailbox: Mailbox;
+  /** What each tile's screen last showed with text, by bare tile id, as its daemon read it. */
+  readonly lines = new Map<string, string>();
   private readonly pipes = new PipeManager();
   /** Spawn wires drawn now (child → parent): what a client that opens late draws. */
   private readonly spawnWires = new Map<string, string>();
@@ -265,6 +269,7 @@ export class ControlPlane {
     this.unstarted.delete(bare);
     this.status.forget(bare);
     this.agentOf.delete(bare);
+    this.lines.delete(bare);
   }
 
   /** An event from a machine's daemon (here or another device's, R6): a session's status as it
@@ -282,6 +287,13 @@ export class ControlPlane {
       // A host read an agent's window title: what it says it is doing ("" = nothing).
       const r = (params ?? {}) as { tileId?: string; title?: unknown };
       if (r.tileId && typeof r.title === "string") this.status.title(toBareId(r.tileId), cleanName(r.title));
+      return;
+    }
+    if (method === "tile.line") {
+      const r = (params ?? {}) as { tileId?: unknown; line?: unknown };
+      if (typeof r.tileId !== "string" || typeof r.line !== "string") return;
+      this.lines.set(toBareId(r.tileId), r.line);
+      this.o.lineChanged?.();
       return;
     }
     if (method === "agent.screen") {

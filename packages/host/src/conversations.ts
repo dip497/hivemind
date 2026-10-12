@@ -9,7 +9,8 @@ import { ApiError, text } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import type { ToolAsked } from "@hivemind/workspace-api/agents";
-import { followConversation, pendingTool, readConversation, type Said } from "./conversation.js";
+import fs from "node:fs";
+import { followConversation, lastSaid, pendingTool, readConversation, type Said } from "./conversation.js";
 import { runsIn, type HeldBoard } from "./needs.js";
 
 /** A session an agent keeps its conversation in: its id (empty while none is known), its file
@@ -47,6 +48,39 @@ export function transcriptOf(held: HeldBoard[], tile: string, tileSessionsDir: s
 export function askingOf(held: HeldBoard[], tile: string, tileSessionsDir: string, home?: string): ToolAsked | undefined {
   const t = transcriptOf(held, tile, tileSessionsDir, home);
   return t?.file ? pendingTool(t.file, t.format) : undefined;
+}
+
+/** How long which session file an agent keeps is taken as known. */
+const SESSION_KNOWN_MS = 5000;
+
+/** What each agent here that keeps a conversation last said (`lastSaid`), for Home: which file it
+ *  keeps is looked for until found, then again after `SESSION_KNOWN_MS`, and the file read again
+ *  only when it grew or shrank, so a board of agents costs a stat each. */
+export class LastSaid {
+  private files = new Map<string, { t: Transcript | null; at: number }>();
+  private said = new Map<string, { file: string; size: number; line: string | undefined }>();
+
+  constructor(private readonly o: { tileSessionsDir: string; home?: string; now?(): number }) {}
+
+  /** What the agent of `tile`, among `held`, last said; undefined when it keeps no conversation
+   *  or has said nothing yet. */
+  line(held: HeldBoard[], tile: string): string | undefined {
+    const now = this.o.now?.() ?? Date.now();
+    let known = this.files.get(tile);
+    if (!known?.t?.file || now - known.at >= SESSION_KNOWN_MS) {
+      known = { t: transcriptOf(held, tile, this.o.tileSessionsDir, this.o.home), at: now };
+      this.files.set(tile, known);
+    }
+    const file = known.t?.file;
+    if (!file) return undefined;
+    let size: number;
+    try { size = fs.statSync(file).size; } catch { return undefined; }
+    const was = this.said.get(tile);
+    if (was?.file === file && was.size === size) return was.line;
+    const line = lastSaid(file, known.t!.format);
+    this.said.set(tile, { file, size, line });
+    return line;
+  }
 }
 
 export interface ConversationsOptions {

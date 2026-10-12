@@ -36,11 +36,26 @@ export function stabilizeScreenStatus(
 }
 
 
+/** The longest last line told. */
+const LINE_MAX = 160;
+
+/** The last line of `screen` with text, trimmed and cut to `LINE_MAX` characters. */
+export function lastLine(screen: string): string {
+  const lines = screen.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const l = lines[i]!.trim();
+    if (l) return [...l].slice(0, LINE_MAX).join("");
+  }
+  return "";
+}
+
 /** Reads the screens of sessions that produced output since the last tick, and reports each
- *  one's reading when it changes: its status, or for a wait, the screen it says it is. */
+ *  one's reading when it changes: its status, or for a wait, the screen it says it is; and its
+ *  last line with text. */
 export class ScreenWatcher {
   private dirty = new Set<string>();
   private seen = new Map<string, { reading: ScreenReading; lastWorkingAt: { t: number | null } }>();
+  private lines = new Map<string, string>();
 
   constructor(private readonly o: {
     /** The session's screen and what it runs, or undefined when it is gone. */
@@ -48,6 +63,8 @@ export class ScreenWatcher {
     /** The agent's own detector for what it runs; undefined for a program that is not an agent. */
     detect: (cmd: string, screen: string) => ScreenReading | undefined;
     report: (id: string, reading: ScreenReading) => void;
+    /** A session's last line with text, as it changes. */
+    line?: (id: string, line: string) => void;
     now?: () => number;
   }) {}
 
@@ -56,7 +73,10 @@ export class ScreenWatcher {
   /** Every session's last reported reading, for a viewer that just connected. */
   current(): Array<[string, ScreenReading]> { return [...this.seen].map(([id, s]) => [id, s.reading]); }
 
-  forget(id: string): void { this.dirty.delete(id); this.seen.delete(id); }
+  /** Every session's last line told, for a viewer that just connected. */
+  currentLines(): Array<[string, string]> { return [...this.lines]; }
+
+  forget(id: string): void { this.dirty.delete(id); this.seen.delete(id); this.lines.delete(id); }
 
   tick(): void {
     const ids = [...this.dirty];
@@ -64,6 +84,11 @@ export class ScreenWatcher {
     for (const id of ids) {
       const s = this.o.read(id);
       if (!s) { this.seen.delete(id); continue; }
+      const line = lastLine(s.screen);
+      if (line && this.o.line && this.lines.get(id) !== line) {
+        this.lines.set(id, line);
+        this.o.line(id, line);
+      }
       const raw = this.o.detect(s.cmd, s.screen);
       if (!raw) continue;
       const prev = this.seen.get(id) ?? { reading: { status: "idle" as TileStatus }, lastWorkingAt: { t: null } };

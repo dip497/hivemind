@@ -13,7 +13,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 
 /// The states an agent is in (spec/status.md).
-const STATES: [&str; 8] = [
+pub(crate) const STATES: [&str; 8] = [
     "idle",
     "working",
     "waiting",
@@ -24,7 +24,7 @@ const STATES: [&str; 8] = [
     "exited",
 ];
 /// What an agent waits for: on the person, or on the agent supervising it (`approval`).
-const KINDS: [&str; 5] = ["permission", "question", "plan", "other", "approval"];
+pub(crate) const KINDS: [&str; 5] = ["permission", "question", "plan", "other", "approval"];
 
 /// The agent a tile runs, by its manifest.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

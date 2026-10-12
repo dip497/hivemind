@@ -341,6 +341,7 @@ const screens = new ScreenWatcher({
     statuses?.screen(id, state, says);
     for (const push of eventViewers) push({ t: "event", topic: "agent.screen", data: { tileId: id, state, ...(says ? { says } : {}) } });
   },
+  line: (id, line) => { for (const push of eventViewers) push({ t: "event", topic: "tile.line", data: { tileId: id, line } }); },
 });
 setInterval(() => {
   screens.tick();
@@ -631,6 +632,7 @@ const server = net.createServer((sock) => {
           eventViewers.add(send);
           for (const { id, title } of titles.current()) send({ t: "event", topic: "agent.title", data: { tileId: id, title } });
           for (const [tileId, { status: state, says }] of screens.current()) send({ t: "event", topic: "agent.screen", data: { tileId, state, ...(says ? { says } : {}) } });
+          for (const [tileId, line] of screens.currentLines()) send({ t: "event", topic: "tile.line", data: { tileId, line } });
           for (const { tileId, status } of statuses?.all() ?? []) send({ t: "event", topic: "agent.status", data: { tileId, status } });
         }
         break;

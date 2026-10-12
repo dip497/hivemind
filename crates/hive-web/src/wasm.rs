@@ -5,8 +5,8 @@ use hive_net::{
     net::{addr_of, Reach},
 };
 use hive_phone::{
-    agents, control, conversation, devices, failure::Failure, identity::DeviceCertificate, network,
-    pairing, person,
+    agents, control, conversation, devices, failure::Failure, home, identity::DeviceCertificate,
+    network, pairing, person,
     workspace::{self, Reply},
 };
 use iroh::{
@@ -14,6 +14,7 @@ use iroh::{
     Endpoint, RelayUrl, SecretKey,
 };
 use serde_json::{json, Value};
+use std::cell::RefCell;
 use tokio::sync::Mutex;
 use wasm_bindgen::prelude::*;
 
@@ -234,6 +235,28 @@ impl Host {
         })
     }
 
+    /// Follow Home there (spec/home.md) from the positions `at` (`{layout, lines}`, or null for
+    /// none): `told` is called with each message the device sends, as its text, for a `HomeView`
+    /// to apply. Done when the device ends it; an `Unpaired` error when it turned this browser away.
+    pub async fn home(&self, at: JsValue, told: js_sys::Function) -> Result<(), JsValue> {
+        let at: Option<home::At> = if at.is_null() || at.is_undefined() {
+            None
+        } else {
+            serde_json::from_value(from_js(&at)?).ok()
+        };
+        home::follow(&self.connection, at, |text| {
+            let _ = told.call1(&JsValue::NULL, &JsValue::from_str(text));
+        })
+        .await
+        .map_err(|e| {
+            let closed = self.connection.close_reason();
+            let closed = closed
+                .as_ref()
+                .map(|c| c as &(dyn std::error::Error + 'static));
+            turned_away(closed).map_or_else(|| err(e).into(), unpaired)
+        })
+    }
+
     /// The workspaces the device holds: `[{workspace, name, repo?}]`.
     pub async fn workspaces(&self) -> Result<JsValue, JsError> {
         let held = workspace::held(&self.connection).await.map_err(err)?;
@@ -359,6 +382,63 @@ impl Host {
 
     pub fn close(&self) {
         self.connection.close(0u32.into(), b"closed");
+    }
+}
+
+/// What this browser holds of Home (hive-phone's `home::Home`), and how it shows it.
+#[wasm_bindgen]
+pub struct HomeView {
+    home: RefCell<home::Home>,
+}
+
+#[wasm_bindgen]
+impl HomeView {
+    /// What `kept` holds, as `kept()` gave it; nothing when it is not that.
+    #[wasm_bindgen(constructor)]
+    pub fn new(kept: JsValue) -> HomeView {
+        let home = from_js(&kept)
+            .ok()
+            .and_then(|v| serde_json::from_value(v).ok())
+            .unwrap_or_default();
+        HomeView {
+            home: RefCell::new(home),
+        }
+    }
+
+    /// Take in a message the device sent (its text): whether it changed what is held.
+    pub fn apply(&self, text: &str) -> bool {
+        serde_json::from_str::<Value>(text).is_ok_and(|m| self.home.borrow_mut().apply(&m))
+    }
+
+    /// How far each sequence is followed, `{layout, lines}`; null before anything is held.
+    pub fn at(&self) -> Result<JsValue, JsError> {
+        to_js(&serde_json::to_value(self.home.borrow().at).map_err(err)?)
+    }
+
+    /// What is held, to keep and give back to `new`.
+    pub fn kept(&self) -> Result<JsValue, JsError> {
+        to_js(&serde_json::to_value(&*self.home.borrow()).map_err(err)?)
+    }
+
+    /// Home as it shows (`home::Shown`): what holds `query`, on `machine` when one is chosen;
+    /// `computer` is what the computer is called.
+    pub fn shown(
+        &self,
+        query: &str,
+        machine: Option<String>,
+        computer: &str,
+    ) -> Result<JsValue, JsError> {
+        let shown = self
+            .home
+            .borrow()
+            .shown(query, machine.as_deref(), computer);
+        to_js(&serde_json::to_value(shown).map_err(err)?)
+    }
+
+    /// The agents among it, `{agents, needs, working}`, told of by `device`, the computer called
+    /// `computer`.
+    pub fn overview(&self, device: &str, computer: &str) -> Result<JsValue, JsError> {
+        to_js(&serde_json::to_value(self.home.borrow().overview(device, computer)).map_err(err)?)
     }
 }
 

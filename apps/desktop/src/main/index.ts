@@ -77,7 +77,7 @@ import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, onSe
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
-import { agentFeed, dialDevice, installNetworkIpc, isYourDevice, joinLink, knownMachines, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
+import { agentFeed, dialDevice, homeChanged, installNetworkIpc, isYourDevice, joinLink, knownMachines, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
 import { elsewhere, mayWriteShared, onceStarted, placedRun, refusedShared, startedByOthers, wroteShared } from "./shared-workspaces.js";
 import { broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
@@ -103,7 +103,7 @@ import { agentControl } from "@hivemind/host/agent-control";
 import { controlApi } from "@hivemind/host/control-api";
 import { views } from "@hivemind/host/views";
 import { listInstalledViews } from "@hivemind/core/views";
-import { askingOf, conversations, transcriptOf } from "@hivemind/host/conversations";
+import { askingOf, conversations, LastSaid, transcriptOf } from "@hivemind/host/conversations";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
@@ -1012,9 +1012,14 @@ function writeTile(tileId: string, data: string, paste?: boolean): boolean {
   return false; // dead/unknown tile → agent.send surfaces NOT_FOUND
 }
 
+/** What each agent here last said, for the rows of the person's phone's Home. */
+let said: LastSaid | null = null;
+const lastSaid = (): LastSaid => (said ??= new LastSaid({ tileSessionsDir: path.join(app.getPath("userData"), TILE_SESSIONS_DIR) }));
+
 const control: ControlPlane = new ControlPlane({
   dir: () => app.getPath("userData"),
   waitsChanged: () => agentFeed()?.changed(),
+  lineChanged: () => homeChanged(),
   publish: (event, ...params) => workspaceServer.publish(event, ...params),
   // Used by agent.send and pipe forwarding.
   write: writeTile,
@@ -1493,6 +1498,11 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       onStatus: (listener) => { control.status.subscribe(listener); },
       workers: { parent: (bare) => control.parentOf(bare) },
       waits: control.waits,
+      home: {
+        links: () => control.links(),
+        linkState,
+        line: (held, tile) => lastSaid().line(held, tile) ?? control.lines.get(tile),
+      },
     });
     installWorkspaceStoreIpc(layouts, workspaceIpc.connect, (change) =>
       workspaceServer.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part }));

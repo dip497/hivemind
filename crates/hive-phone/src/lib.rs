@@ -10,6 +10,7 @@ pub mod control;
 pub mod conversation;
 pub mod devices;
 pub mod failure;
+pub mod home;
 pub mod identity;
 pub mod keys;
 pub mod needs;

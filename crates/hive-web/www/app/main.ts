@@ -1,21 +1,23 @@
-// The phone app in a browser (docs/design/phone-browser-2026-10-03.md, B3 and B4): Needs you,
-// Agents, one agent, starting one, Devices. The last overview kept in IndexedDB is shown before the wasm is even compiled;
+// The phone app in a browser (docs/design/phone-browser-2026-10-03.md, B3 to B5): Home, one agent,
+// starting one, Devices. The last Home kept in IndexedDB is shown before the wasm is even compiled;
 // what the computer says replaces it, each list applied to what is on screen by key.
 
 import type { App } from "./app.js";
 import { AgentScreen } from "./agent.js";
-import { Agents } from "./agents.js";
 import { Devices } from "./devices.js";
 import { h, icon } from "./dom.js";
-import { Needs } from "./needs.js";
+import { Home } from "./home.js";
 import { PairScreen, guessName } from "./pair.js";
 import type { Phone } from "./phone.js";
 import { StartScreen } from "./start.js";
-import { get, put } from "./store.js";
-import type { Agent, Overview, Paired } from "./types.js";
+import { get, put, remove } from "./store.js";
+import type { Overview, Paired, Shown } from "./types.js";
 import { NOTICES, ago, message } from "./words.js";
 
-type Tab = "needs" | "agents" | "devices" | "start";
+type Tab = "home" | "devices" | "start";
+/** What Home showed last, kept to show before the wasm is compiled. */
+type First = { shown: Shown; overview: Overview };
+const NOTHING: First = { shown: { needs: [], working: [], pinned: [], machines: [], tree: [] }, overview: { agents: [], needs: [], working: 0 } };
 
 let phone: Phone | null = null;
 let overview: Overview | null = null;
@@ -53,7 +55,7 @@ const app: App = {
   },
   back() {
     if (opened) history.back();
-    else location.hash = "needs";
+    else location.hash = "home";
   },
   answer: (agent, reply) => act(() => phone!.answer(agent, reply), NOTICES.answered),
   send: (agent, text) => act(() => phone!.send(agent, text), NOTICES.notRunning),
@@ -73,8 +75,7 @@ const app: App = {
   },
 };
 
-const needs = new Needs(app);
-const agents = new Agents(app);
+const home = new Home(app, () => render());
 const agent = new AgentScreen(app);
 const starting = new StartScreen(app);
 const devices = new Devices(() => void forget());
@@ -91,13 +92,13 @@ function offer(link: string, name: string): void {
   pairing.offer(link, name, phone.read(link), paired?.with ?? null);
   route();
 }
-const screens = { needs, agents, agent, start: starting, devices, pair: pairing };
+const screens = { home, agent, start: starting, devices, pair: pairing };
 
 const tabs = h("nav", { class: "tabs", "aria-label": "hivemind" });
 const tabDot = h("span", { class: "tab-dot", hidden: true, "data-tab-dot": "" });
-const TABS: Array<[Exclude<Tab, "start">, string]> = [["needs", "Needs you"], ["agents", "Agents"], ["devices", "Devices"]];
+const TABS: Array<[Exclude<Tab, "start">, string]> = [["home", "Home"], ["devices", "Devices"]];
 for (const [tab, label] of TABS) {
-  const button = h("button", { type: "button", "data-tab": tab }, icon(tab), label, tab === "needs" && tabDot);
+  const button = h("button", { type: "button", "data-tab": tab }, icon(tab === "home" ? "needs" : tab), label, tab === "home" && tabDot);
   button.addEventListener("click", () => {
     opened = false;
     location.hash = tab;
@@ -122,7 +123,7 @@ let shownBefore = "";
 function route(): void {
   const asked = new URLSearchParams(location.hash.slice(1));
   const tile = asked.get("agent");
-  const tab: Tab = asked.has("start") ? "start" : (TABS.find(([t]) => asked.has(t))?.[0] ?? "needs");
+  const tab: Tab = asked.has("start") ? "start" : (TABS.find(([t]) => asked.has(t))?.[0] ?? "home");
   const shown = !paired || offered ? "pair" : tile ? "agent" : tab;
   for (const [name, screen] of Object.entries(screens)) screen.el.hidden = name !== shown;
   tabs.hidden = shown === "pair" || shown === "agent" || shown === "start";
@@ -139,14 +140,32 @@ function route(): void {
 addEventListener("hashchange", route);
 
 let saving = 0;
-function apply(o: Overview): void {
-  overview = o;
-  needs.show(o);
-  agents.show(o);
-  agent.show(o);
-  tabDot.hidden = o.needs.length === 0;
-  clearTimeout(saving);
-  saving = setTimeout(() => void put("overview", o), 500);
+let savedAt = 0;
+function apply(first: First): void {
+  overview = first.overview;
+  home.show(first.shown, first.overview);
+  agent.show(first.overview);
+  tabDot.hidden = first.overview.needs.length === 0;
+}
+
+/** Home again, from what this browser holds, by what the person searched for; kept a moment after. */
+function render(): void {
+  if (!phone || !paired) return;
+  const p = phone;
+  const first = { shown: p.shown(home.filter), overview: p.overview() };
+  apply(first);
+  // Kept at once, then at most every 500 ms, what is held then: a busy board changes faster.
+  if (saving) return;
+  const keep = () => {
+    saving = 0;
+    if (phone !== p || !paired) return;
+    savedAt = Date.now();
+    void put("home", p.kept());
+    void put("first", { shown: p.shown({ query: "", machine: null }), overview: p.overview() });
+  };
+  const wait = 500 - (Date.now() - savedAt);
+  if (wait <= 0) keep();
+  else saving = setTimeout(keep, wait);
 }
 
 async function pairWith(link: string, name: string): Promise<void> {
@@ -154,9 +173,12 @@ async function pairWith(link: string, name: string): Promise<void> {
   const before = paired;
   paired = await phone.pair(link, name);
   offered = false;
-  if (before) apply({ agents: [], needs: [], working: 0 });
+  if (before) {
+    void remove("first");
+    apply(NOTHING);
+  }
   devices.show(phone.id, paired);
-  location.hash = "needs";
+  location.hash = "home";
   route();
 }
 
@@ -171,7 +193,8 @@ async function forget(): Promise<void> {
 function unpaired(): void {
   paired = null;
   overview = null;
-  apply({ agents: [], needs: [], working: 0 });
+  void remove("first");
+  apply(NOTHING);
   if (phone) devices.show(phone.id, null);
   trouble.hidden = true;
   route();
@@ -193,7 +216,7 @@ async function start(): Promise<void> {
   const address = location.href;
   const linked = new URLSearchParams(location.hash.slice(1));
   if (linked.has("pair")) history.replaceState(null, "", location.pathname + location.search);
-  const [kept, last] = await Promise.all([get<Paired>("paired"), get<Overview>("overview")]);
+  const [kept, last] = await Promise.all([get<Paired>("paired"), get<First>("first")]);
   paired = kept ?? null;
   if (paired && last) apply(last);
   route();
@@ -202,7 +225,7 @@ async function start(): Promise<void> {
   // The wasm and its glue after the first screen, which needs neither.
   const { Phone } = await import("./phone.js");
   phone = await Phone.open(paired, {
-    overview: apply,
+    home: render,
     status(live, error) {
       devices.status(live, error);
       trouble.hidden = live || error === null;
@@ -215,6 +238,7 @@ async function start(): Promise<void> {
     },
   });
   devices.show(phone.id, paired);
+  render();
   addEventListener("online", () => phone!.retry());
   document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && phone!.retry());
   phone.connect();

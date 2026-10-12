@@ -676,6 +676,9 @@ export interface HiveIpc {
   /** Forward a notable agent-status transition to the main process, which fires
    *  a native OS notification IF the window is unfocused. Fire-and-forget. */
   notifyAgent(notice: AgentNotice): void;
+  /** What the Layers panel shows of the workspace in `repo`: its tiles in the order listed, and
+   *  the pinned ones (the person's phone's Home lists them so). */
+  layersShown(repo: string, shown: { order: string[]; pinned: string[] }): void;
   /** Read the persisted notification preferences (normalized onto defaults). */
   getNotificationSettings(): Promise<NotificationSettings>;
   /** Persist + apply notification preferences live (no relaunch needed). */

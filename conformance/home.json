@@ -1,0 +1,2494 @@
+{
+ "about": "Cases every implementation of Home must pass (spec/home.md). 'computer': what a computer holds (its boards, its agents as the agent list says them, the titles agents give their tiles, which agent started which, what the window's Layers panel shows of each workspace, and what each tile last said or showed), in; Home's rows by key, and each tile's last line by its row's key, out. 'phone': what the computer answers on the home stream, in order, in; the rows the phone holds after each, and how it groups and orders them, out.",
+ "computer": [
+  {
+   "about": "a workspace, its frames as structure gives them, in the board's order (a worktree under its frame, one on another machine), a top frame in another folder on this computer, or a worktree left with no frame above it, with that folder's project, and its tiles: named as the person named them, else as the agent's title says, else by label; listed where the Layers panel lists them, pinned ones marked, one the panel does not list after those in the board's order; under the agent that started it, when that is on this board; an agent's state, since, wait, program, machine, and whether it can be interrupted and read, as the agent list says; a tile in no frame; each tile's last line",
+   "held": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "repo": "/home/p/api",
+     "core": {
+      "frames": [
+       {
+        "id": "f1",
+        "title": "api",
+        "workspacePath": "/home/p/api",
+        "color": "#336699"
+       },
+       {
+        "id": "f2",
+        "title": "fix",
+        "parentFrameId": "f1",
+        "branch": "fix",
+        "worktreePath": "/home/p/api-fix",
+        "workspacePath": "/home/p/api"
+       },
+       {
+        "id": "f3",
+        "title": "box",
+        "workspacePath": "ssh://box/srv/api"
+       },
+       {
+        "id": "f4",
+        "title": "web",
+        "workspacePath": "/home/p/web",
+        "color": "#aa6633"
+       },
+       {
+        "id": "f5",
+        "title": "old",
+        "worktreePath": "/home/p/api-old",
+        "workspacePath": "/home/p/api",
+        "branch": "old",
+        "color": "#aa6633"
+       }
+      ],
+      "tiles": [
+       {
+        "id": "t1",
+        "kind": "claude",
+        "label": "Claude #1"
+       },
+       {
+        "id": "t2",
+        "kind": "terminal",
+        "label": "Terminal"
+       },
+       {
+        "id": "t3",
+        "kind": "claude",
+        "label": "Claude #2"
+       },
+       {
+        "id": "t4",
+        "kind": "note",
+        "label": "Notes"
+       },
+       {
+        "id": "t5",
+        "kind": "claude",
+        "label": "Claude #3"
+       }
+      ],
+      "frameOf": {
+       "t1": "f1",
+       "t2": "f1",
+       "t3": "f2",
+       "t5": "f3"
+      },
+      "tileNames": {
+       "t2": "server"
+      }
+     }
+    }
+   ],
+   "agents": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t1",
+     "agent": "Fix login",
+     "state": "waiting",
+     "since": 1790000001000,
+     "machine": "desk",
+     "waiting": {
+      "kind": "permission",
+      "since": 1790000001000,
+      "decide": true,
+      "tool": {
+       "name": "Bash",
+       "about": "npm test"
+      }
+     },
+     "program": {
+      "id": "claude",
+      "label": "Claude Code"
+     },
+     "interrupt": true,
+     "conversation": true
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t3",
+     "agent": "Claude #2",
+     "state": "working",
+     "since": 1790000002000,
+     "machine": "desk",
+     "parent": "t1"
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t5",
+     "agent": "Claude #3",
+     "state": "idle",
+     "since": 1790000003000,
+     "machine": "box"
+    }
+   ],
+   "titles": {
+    "t1": "Fix login"
+   },
+   "spawns": [
+    {
+     "parent": "t1",
+     "child": "t3"
+    },
+    {
+     "parent": "t9",
+     "child": "t2"
+    }
+   ],
+   "shown": {
+    "/home/p/api": {
+     "order": [
+      "t5",
+      "t1",
+      "t3",
+      "t2"
+     ],
+     "pinned": [
+      "t5"
+     ]
+    }
+   },
+   "lines": {
+    "t1": "Running npm test",
+    "t2": "listening on :3000"
+   },
+   "rows": {
+    "w:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1": {
+     "of": "workspace",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api"
+    },
+    "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f1": {
+     "of": "frame",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "f1",
+     "title": "api",
+     "color": "#336699",
+     "folder": {
+      "name": "api",
+      "kind": "folder"
+     },
+     "order": 0
+    },
+    "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f2": {
+     "of": "frame",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "f2",
+     "title": "fix",
+     "color": "#8899aa",
+     "parentId": "f1",
+     "branch": "fix",
+     "folder": {
+      "name": "api-fix",
+      "kind": "worktree"
+     },
+     "order": 1
+    },
+    "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f3": {
+     "of": "frame",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "f3",
+     "title": "box",
+     "color": "#8899aa",
+     "machine": {
+      "name": "box",
+      "state": "idle"
+     },
+     "folder": {
+      "name": "api",
+      "kind": "folder"
+     },
+     "order": 2
+    },
+    "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1": {
+     "of": "tile",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "t1",
+     "frameId": "f1",
+     "kind": "claude",
+     "name": "Fix login",
+     "order": 1,
+     "state": "waiting",
+     "since": 1790000001000,
+     "waiting": {
+      "kind": "permission",
+      "since": 1790000001000,
+      "decide": true,
+      "tool": {
+       "name": "Bash",
+       "about": "npm test"
+      }
+     },
+     "program": {
+      "id": "claude",
+      "label": "Claude Code"
+     },
+     "machine": "desk",
+     "interrupt": true,
+     "conversation": true
+    },
+    "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2": {
+     "of": "tile",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "t2",
+     "frameId": "f1",
+     "kind": "terminal",
+     "name": "server",
+     "order": 3
+    },
+    "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t3": {
+     "of": "tile",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "t3",
+     "frameId": "f2",
+     "kind": "claude",
+     "name": "Claude #2",
+     "order": 2,
+     "parent": "t1",
+     "state": "working",
+     "since": 1790000002000,
+     "machine": "desk"
+    },
+    "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t4": {
+     "of": "tile",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "t4",
+     "frameId": null,
+     "kind": "note",
+     "name": "Notes",
+     "order": 7
+    },
+    "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t5": {
+     "of": "tile",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "t5",
+     "frameId": "f3",
+     "kind": "claude",
+     "name": "Claude #3",
+     "order": 0,
+     "pinned": true,
+     "state": "idle",
+     "since": 1790000003000,
+     "machine": "box"
+    },
+    "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f4": {
+     "of": "frame",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "f4",
+     "title": "web",
+     "color": "#aa6633",
+     "folder": {
+      "name": "web",
+      "kind": "folder"
+     },
+     "project": "web",
+     "order": 3
+    },
+    "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f5": {
+     "of": "frame",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "f5",
+     "title": "old",
+     "color": "#aa6633",
+     "folder": {
+      "name": "api-old",
+      "kind": "worktree"
+     },
+     "project": "api-old",
+     "branch": "old",
+     "order": 4
+    }
+   },
+   "said": {
+    "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1": "Running npm test",
+    "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2": "listening on :3000"
+   }
+  },
+  {
+   "about": "a workspace the window shows nothing of: its tiles in the board's order, none pinned",
+   "held": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "repo": "/home/p/api",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "t1",
+        "kind": "terminal",
+        "label": "Terminal"
+       },
+       {
+        "id": "t2",
+        "kind": "terminal",
+        "label": "Terminal 2"
+       }
+      ]
+     }
+    }
+   ],
+   "agents": [],
+   "rows": {
+    "w:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1": {
+     "of": "workspace",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api"
+    },
+    "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1": {
+     "of": "tile",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "t1",
+     "frameId": null,
+     "kind": "terminal",
+     "name": "Terminal",
+     "order": 0
+    },
+    "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2": {
+     "of": "tile",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "t2",
+     "frameId": null,
+     "kind": "terminal",
+     "name": "Terminal 2",
+     "order": 1
+    }
+   },
+   "said": {}
+  }
+ ],
+ "phone": [
+  {
+   "about": "the whole: what waits on the person, the longest first; what is at work, the longest first; the pinned, in the desktop's order, and only there; then each machine (the computer first, then the others by name in any case, a heading each when there is more than one) and on it each workspace by name, its own project first, then each other in the order its first frame comes; in a project its frames in the board's order, a worktree under its frame, every frame though it has no tiles; in a frame its agents first (one the agent list tells of, though it names no agent), then its other tiles, each in the desktop's order, one an agent there started under it; tiles in no frame, or in one that is gone, after the workspace's own frames; each tile with its last line",
+   "computer": "desk",
+   "messages": [
+    {
+     "t": "home",
+     "layout": {
+      "seq": 40,
+      "rows": [
+       [
+        "w:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        {
+         "of": "workspace",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "name": "api"
+        }
+       ],
+       [
+        "w:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+        {
+         "of": "workspace",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "name": "Zeta"
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f0",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f0",
+         "title": "scratch",
+         "color": "#336699",
+         "order": 9
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f1",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f1",
+         "title": "api",
+         "color": "#336699",
+         "order": 0,
+         "folder": {
+          "name": "api",
+          "kind": "folder"
+         }
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f2",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f2",
+         "title": "fix",
+         "color": "#336699",
+         "order": 1,
+         "parentId": "f1",
+         "branch": "fix",
+         "folder": {
+          "name": "api-fix",
+          "kind": "worktree"
+         }
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f3",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f3",
+         "title": "box",
+         "color": "#336699",
+         "order": 2,
+         "machine": {
+          "name": "box",
+          "state": "idle"
+         }
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f4",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f4",
+         "title": "web",
+         "color": "#336699",
+         "order": 3,
+         "project": "web",
+         "folder": {
+          "name": "web",
+          "kind": "folder"
+         }
+        }
+       ],
+       [
+        "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g1",
+        {
+         "of": "frame",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "g1",
+         "title": "zeta",
+         "color": "#336699",
+         "order": 0
+        }
+       ],
+       [
+        "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g2",
+        {
+         "of": "frame",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "g2",
+         "title": "zeta on box",
+         "color": "#336699",
+         "order": 1,
+         "machine": {
+          "name": "box"
+         }
+        }
+       ],
+       [
+        "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g3",
+        {
+         "of": "frame",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "g3",
+         "title": "lab",
+         "color": "#336699",
+         "order": 2,
+         "machine": {
+          "name": "Zed"
+         }
+        }
+       ],
+       [
+        "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g4",
+        {
+         "of": "frame",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "g4",
+         "title": "bench",
+         "color": "#336699",
+         "order": 3,
+         "machine": {
+          "name": "alpha"
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t2",
+         "frameId": "f1",
+         "kind": "terminal",
+         "name": "server",
+         "order": 0
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t1",
+         "frameId": "f1",
+         "kind": "claude",
+         "name": "Fix login",
+         "order": 1,
+         "agent": "claude",
+         "state": "waiting",
+         "since": 1790000001000,
+         "machine": "desk",
+         "program": {
+          "id": "claude",
+          "label": "Claude Code"
+         },
+         "waiting": {
+          "kind": "permission",
+          "since": 1790000001000,
+          "decide": true,
+          "tool": {
+           "name": "Bash",
+           "about": "npm test"
+          }
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t3",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t3",
+         "frameId": "f2",
+         "kind": "claude",
+         "name": "Fix tests",
+         "order": 2,
+         "agent": "claude",
+         "state": "working",
+         "since": 1790000003000,
+         "machine": "desk",
+         "parent": "t1"
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t4",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t4",
+         "frameId": null,
+         "kind": "note",
+         "name": "Notes",
+         "order": 4
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t5",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t5",
+         "frameId": "f3",
+         "kind": "claude",
+         "name": "Box agent",
+         "order": 5,
+         "agent": "claude",
+         "state": "idle",
+         "since": 1790000000000,
+         "machine": "box",
+         "pinned": true
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t6",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t6",
+         "frameId": "f1",
+         "kind": "codex",
+         "name": "Review",
+         "order": 6,
+         "agent": "codex",
+         "state": "working",
+         "since": 1790000002000,
+         "machine": "desk",
+         "parent": "t1",
+         "program": {
+          "id": "codex",
+          "label": "OpenAI"
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t7",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t7",
+         "frameId": "f4",
+         "kind": "terminal",
+         "name": "web dev",
+         "order": 7
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t8",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t8",
+         "frameId": "f3",
+         "kind": "terminal",
+         "name": "box shell",
+         "order": 8
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t9",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t9",
+         "frameId": "f3",
+         "kind": "terminal",
+         "name": "box logs",
+         "order": 3,
+         "pinned": true
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t10",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t10",
+         "frameId": "f99",
+         "kind": "terminal",
+         "name": "stray",
+         "order": 10
+        }
+       ],
+       [
+        "t:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/u1",
+        {
+         "of": "tile",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "u1",
+         "frameId": "g1",
+         "kind": "claude",
+         "name": "Pick a db",
+         "order": 0,
+         "agent": "claude",
+         "state": "waiting",
+         "since": 1790000000500,
+         "machine": "desk",
+         "waiting": {
+          "kind": "question",
+          "since": 1790000000500,
+          "choose": true,
+          "asks": [
+           {
+            "question": "Which db?",
+            "options": [
+             "pg",
+             "sqlite"
+            ]
+           }
+          ]
+         }
+        }
+       ]
+      ]
+     },
+     "lines": {
+      "seq": 7,
+      "rows": [
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2",
+        "listening on :3000"
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1",
+        "Run npm test?"
+       ]
+      ]
+     }
+    }
+   ],
+   "at": {
+    "layout": 40,
+    "lines": 7
+   },
+   "shown": {
+    "needs": [
+     "t:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/u1",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1"
+    ],
+    "working": [
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t6",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t3"
+    ],
+    "pinned": [
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t9",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t5"
+    ],
+    "machines": [
+     "desk",
+     "alpha",
+     "box",
+     "Zed"
+    ],
+    "tree": [
+     "m:desk",
+     "p:desk/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/",
+     "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f1 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1 1",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t6 2",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2 1",
+     "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f2 1",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t3 2",
+     "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f0 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t4 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t10 0",
+     "p:desk/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/web",
+     "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f4 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t7 1",
+     "p:desk/z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/",
+     "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g1 0",
+     "t:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/u1 1",
+     "m:alpha",
+     "p:alpha/z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/",
+     "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g4 0",
+     "m:box",
+     "p:box/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/",
+     "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f3 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t8 1",
+     "p:box/z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/",
+     "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g2 0",
+     "m:Zed",
+     "p:Zed/z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/",
+     "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g3 0"
+    ],
+    "said": {
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2": "listening on :3000",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1": "Run npm test?"
+    }
+   }
+  },
+  {
+   "about": "searched: only the tiles whose name, agent or what runs it holds the words, in any case, and only the frames, projects and machines with one of them; one started by a tile left out is listed in its frame",
+   "computer": "desk",
+   "messages": [
+    {
+     "t": "home",
+     "layout": {
+      "seq": 40,
+      "rows": [
+       [
+        "w:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        {
+         "of": "workspace",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "name": "api"
+        }
+       ],
+       [
+        "w:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+        {
+         "of": "workspace",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "name": "Zeta"
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f0",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f0",
+         "title": "scratch",
+         "color": "#336699",
+         "order": 9
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f1",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f1",
+         "title": "api",
+         "color": "#336699",
+         "order": 0,
+         "folder": {
+          "name": "api",
+          "kind": "folder"
+         }
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f2",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f2",
+         "title": "fix",
+         "color": "#336699",
+         "order": 1,
+         "parentId": "f1",
+         "branch": "fix",
+         "folder": {
+          "name": "api-fix",
+          "kind": "worktree"
+         }
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f3",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f3",
+         "title": "box",
+         "color": "#336699",
+         "order": 2,
+         "machine": {
+          "name": "box",
+          "state": "idle"
+         }
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f4",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f4",
+         "title": "web",
+         "color": "#336699",
+         "order": 3,
+         "project": "web",
+         "folder": {
+          "name": "web",
+          "kind": "folder"
+         }
+        }
+       ],
+       [
+        "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g1",
+        {
+         "of": "frame",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "g1",
+         "title": "zeta",
+         "color": "#336699",
+         "order": 0
+        }
+       ],
+       [
+        "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g2",
+        {
+         "of": "frame",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "g2",
+         "title": "zeta on box",
+         "color": "#336699",
+         "order": 1,
+         "machine": {
+          "name": "box"
+         }
+        }
+       ],
+       [
+        "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g3",
+        {
+         "of": "frame",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "g3",
+         "title": "lab",
+         "color": "#336699",
+         "order": 2,
+         "machine": {
+          "name": "Zed"
+         }
+        }
+       ],
+       [
+        "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g4",
+        {
+         "of": "frame",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "g4",
+         "title": "bench",
+         "color": "#336699",
+         "order": 3,
+         "machine": {
+          "name": "alpha"
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t2",
+         "frameId": "f1",
+         "kind": "terminal",
+         "name": "server",
+         "order": 0
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t1",
+         "frameId": "f1",
+         "kind": "claude",
+         "name": "Fix login",
+         "order": 1,
+         "agent": "claude",
+         "state": "waiting",
+         "since": 1790000001000,
+         "machine": "desk",
+         "program": {
+          "id": "claude",
+          "label": "Claude Code"
+         },
+         "waiting": {
+          "kind": "permission",
+          "since": 1790000001000,
+          "decide": true,
+          "tool": {
+           "name": "Bash",
+           "about": "npm test"
+          }
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t3",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t3",
+         "frameId": "f2",
+         "kind": "claude",
+         "name": "Fix tests",
+         "order": 2,
+         "agent": "claude",
+         "state": "working",
+         "since": 1790000003000,
+         "machine": "desk",
+         "parent": "t1"
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t4",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t4",
+         "frameId": null,
+         "kind": "note",
+         "name": "Notes",
+         "order": 4
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t5",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t5",
+         "frameId": "f3",
+         "kind": "claude",
+         "name": "Box agent",
+         "order": 5,
+         "agent": "claude",
+         "state": "idle",
+         "since": 1790000000000,
+         "machine": "box",
+         "pinned": true
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t6",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t6",
+         "frameId": "f1",
+         "kind": "codex",
+         "name": "Review",
+         "order": 6,
+         "agent": "codex",
+         "state": "working",
+         "since": 1790000002000,
+         "machine": "desk",
+         "parent": "t1",
+         "program": {
+          "id": "codex",
+          "label": "OpenAI"
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t7",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t7",
+         "frameId": "f4",
+         "kind": "terminal",
+         "name": "web dev",
+         "order": 7
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t8",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t8",
+         "frameId": "f3",
+         "kind": "terminal",
+         "name": "box shell",
+         "order": 8
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t9",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t9",
+         "frameId": "f3",
+         "kind": "terminal",
+         "name": "box logs",
+         "order": 3,
+         "pinned": true
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t10",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t10",
+         "frameId": "f99",
+         "kind": "terminal",
+         "name": "stray",
+         "order": 10
+        }
+       ],
+       [
+        "t:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/u1",
+        {
+         "of": "tile",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "u1",
+         "frameId": "g1",
+         "kind": "claude",
+         "name": "Pick a db",
+         "order": 0,
+         "agent": "claude",
+         "state": "waiting",
+         "since": 1790000000500,
+         "machine": "desk",
+         "waiting": {
+          "kind": "question",
+          "since": 1790000000500,
+          "choose": true,
+          "asks": [
+           {
+            "question": "Which db?",
+            "options": [
+             "pg",
+             "sqlite"
+            ]
+           }
+          ]
+         }
+        }
+       ]
+      ]
+     },
+     "lines": {
+      "seq": 7,
+      "rows": [
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2",
+        "listening on :3000"
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1",
+        "Run npm test?"
+       ]
+      ]
+     }
+    }
+   ],
+   "queries": [
+    "  REVIEW ",
+    "codex",
+    "openai"
+   ],
+   "at": {
+    "layout": 40,
+    "lines": 7
+   },
+   "shown": {
+    "needs": [],
+    "working": [
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t6"
+    ],
+    "pinned": [],
+    "machines": [
+     "desk",
+     "alpha",
+     "box",
+     "Zed"
+    ],
+    "tree": [
+     "p:desk/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/",
+     "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f1 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t6 1"
+    ],
+    "said": {}
+   }
+  },
+  {
+   "about": "one machine chosen: only what is on it, the pinned among it, a frame with none of its tiles left out, and no heading to say which",
+   "computer": "desk",
+   "messages": [
+    {
+     "t": "home",
+     "layout": {
+      "seq": 40,
+      "rows": [
+       [
+        "w:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        {
+         "of": "workspace",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "name": "api"
+        }
+       ],
+       [
+        "w:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+        {
+         "of": "workspace",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "name": "Zeta"
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f0",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f0",
+         "title": "scratch",
+         "color": "#336699",
+         "order": 9
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f1",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f1",
+         "title": "api",
+         "color": "#336699",
+         "order": 0,
+         "folder": {
+          "name": "api",
+          "kind": "folder"
+         }
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f2",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f2",
+         "title": "fix",
+         "color": "#336699",
+         "order": 1,
+         "parentId": "f1",
+         "branch": "fix",
+         "folder": {
+          "name": "api-fix",
+          "kind": "worktree"
+         }
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f3",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f3",
+         "title": "box",
+         "color": "#336699",
+         "order": 2,
+         "machine": {
+          "name": "box",
+          "state": "idle"
+         }
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f4",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f4",
+         "title": "web",
+         "color": "#336699",
+         "order": 3,
+         "project": "web",
+         "folder": {
+          "name": "web",
+          "kind": "folder"
+         }
+        }
+       ],
+       [
+        "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g1",
+        {
+         "of": "frame",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "g1",
+         "title": "zeta",
+         "color": "#336699",
+         "order": 0
+        }
+       ],
+       [
+        "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g2",
+        {
+         "of": "frame",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "g2",
+         "title": "zeta on box",
+         "color": "#336699",
+         "order": 1,
+         "machine": {
+          "name": "box"
+         }
+        }
+       ],
+       [
+        "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g3",
+        {
+         "of": "frame",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "g3",
+         "title": "lab",
+         "color": "#336699",
+         "order": 2,
+         "machine": {
+          "name": "Zed"
+         }
+        }
+       ],
+       [
+        "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g4",
+        {
+         "of": "frame",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "g4",
+         "title": "bench",
+         "color": "#336699",
+         "order": 3,
+         "machine": {
+          "name": "alpha"
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t2",
+         "frameId": "f1",
+         "kind": "terminal",
+         "name": "server",
+         "order": 0
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t1",
+         "frameId": "f1",
+         "kind": "claude",
+         "name": "Fix login",
+         "order": 1,
+         "agent": "claude",
+         "state": "waiting",
+         "since": 1790000001000,
+         "machine": "desk",
+         "program": {
+          "id": "claude",
+          "label": "Claude Code"
+         },
+         "waiting": {
+          "kind": "permission",
+          "since": 1790000001000,
+          "decide": true,
+          "tool": {
+           "name": "Bash",
+           "about": "npm test"
+          }
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t3",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t3",
+         "frameId": "f2",
+         "kind": "claude",
+         "name": "Fix tests",
+         "order": 2,
+         "agent": "claude",
+         "state": "working",
+         "since": 1790000003000,
+         "machine": "desk",
+         "parent": "t1"
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t4",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t4",
+         "frameId": null,
+         "kind": "note",
+         "name": "Notes",
+         "order": 4
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t5",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t5",
+         "frameId": "f3",
+         "kind": "claude",
+         "name": "Box agent",
+         "order": 5,
+         "agent": "claude",
+         "state": "idle",
+         "since": 1790000000000,
+         "machine": "box",
+         "pinned": true
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t6",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t6",
+         "frameId": "f1",
+         "kind": "codex",
+         "name": "Review",
+         "order": 6,
+         "agent": "codex",
+         "state": "working",
+         "since": 1790000002000,
+         "machine": "desk",
+         "parent": "t1",
+         "program": {
+          "id": "codex",
+          "label": "OpenAI"
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t7",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t7",
+         "frameId": "f4",
+         "kind": "terminal",
+         "name": "web dev",
+         "order": 7
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t8",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t8",
+         "frameId": "f3",
+         "kind": "terminal",
+         "name": "box shell",
+         "order": 8
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t9",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t9",
+         "frameId": "f3",
+         "kind": "terminal",
+         "name": "box logs",
+         "order": 3,
+         "pinned": true
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t10",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t10",
+         "frameId": "f99",
+         "kind": "terminal",
+         "name": "stray",
+         "order": 10
+        }
+       ],
+       [
+        "t:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/u1",
+        {
+         "of": "tile",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "u1",
+         "frameId": "g1",
+         "kind": "claude",
+         "name": "Pick a db",
+         "order": 0,
+         "agent": "claude",
+         "state": "waiting",
+         "since": 1790000000500,
+         "machine": "desk",
+         "waiting": {
+          "kind": "question",
+          "since": 1790000000500,
+          "choose": true,
+          "asks": [
+           {
+            "question": "Which db?",
+            "options": [
+             "pg",
+             "sqlite"
+            ]
+           }
+          ]
+         }
+        }
+       ]
+      ]
+     },
+     "lines": {
+      "seq": 7,
+      "rows": [
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2",
+        "listening on :3000"
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1",
+        "Run npm test?"
+       ]
+      ]
+     }
+    }
+   ],
+   "machine": "box",
+   "at": {
+    "layout": 40,
+    "lines": 7
+   },
+   "shown": {
+    "needs": [],
+    "working": [],
+    "pinned": [
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t9",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t5"
+    ],
+    "machines": [
+     "desk",
+     "alpha",
+     "box",
+     "Zed"
+    ],
+    "tree": [
+     "p:box/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/",
+     "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f3 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t8 1"
+    ],
+    "said": {}
+   }
+  },
+  {
+   "about": "changes: none before the whole; then each after the position held, one at or before it ignored, a row said gone taken away though it is given, one that cannot be read taken away as one that went; each sequence's position its own, never moved back",
+   "computer": "desk",
+   "messages": [
+    {
+     "t": "changes",
+     "layout": {
+      "seq": 3,
+      "changes": [
+       {
+        "seq": 3,
+        "key": "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t4",
+        "gone": true
+       }
+      ]
+     }
+    },
+    {
+     "t": "home",
+     "layout": {
+      "seq": 40,
+      "rows": [
+       [
+        "w:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        {
+         "of": "workspace",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "name": "api"
+        }
+       ],
+       [
+        "w:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+        {
+         "of": "workspace",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "name": "Zeta"
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f0",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f0",
+         "title": "scratch",
+         "color": "#336699",
+         "order": 9
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f1",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f1",
+         "title": "api",
+         "color": "#336699",
+         "order": 0,
+         "folder": {
+          "name": "api",
+          "kind": "folder"
+         }
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f2",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f2",
+         "title": "fix",
+         "color": "#336699",
+         "order": 1,
+         "parentId": "f1",
+         "branch": "fix",
+         "folder": {
+          "name": "api-fix",
+          "kind": "worktree"
+         }
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f3",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f3",
+         "title": "box",
+         "color": "#336699",
+         "order": 2,
+         "machine": {
+          "name": "box",
+          "state": "idle"
+         }
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f4",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f4",
+         "title": "web",
+         "color": "#336699",
+         "order": 3,
+         "project": "web",
+         "folder": {
+          "name": "web",
+          "kind": "folder"
+         }
+        }
+       ],
+       [
+        "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g1",
+        {
+         "of": "frame",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "g1",
+         "title": "zeta",
+         "color": "#336699",
+         "order": 0
+        }
+       ],
+       [
+        "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g2",
+        {
+         "of": "frame",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "g2",
+         "title": "zeta on box",
+         "color": "#336699",
+         "order": 1,
+         "machine": {
+          "name": "box"
+         }
+        }
+       ],
+       [
+        "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g3",
+        {
+         "of": "frame",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "g3",
+         "title": "lab",
+         "color": "#336699",
+         "order": 2,
+         "machine": {
+          "name": "Zed"
+         }
+        }
+       ],
+       [
+        "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g4",
+        {
+         "of": "frame",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "g4",
+         "title": "bench",
+         "color": "#336699",
+         "order": 3,
+         "machine": {
+          "name": "alpha"
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t2",
+         "frameId": "f1",
+         "kind": "terminal",
+         "name": "server",
+         "order": 0
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t1",
+         "frameId": "f1",
+         "kind": "claude",
+         "name": "Fix login",
+         "order": 1,
+         "agent": "claude",
+         "state": "waiting",
+         "since": 1790000001000,
+         "machine": "desk",
+         "program": {
+          "id": "claude",
+          "label": "Claude Code"
+         },
+         "waiting": {
+          "kind": "permission",
+          "since": 1790000001000,
+          "decide": true,
+          "tool": {
+           "name": "Bash",
+           "about": "npm test"
+          }
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t3",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t3",
+         "frameId": "f2",
+         "kind": "claude",
+         "name": "Fix tests",
+         "order": 2,
+         "agent": "claude",
+         "state": "working",
+         "since": 1790000003000,
+         "machine": "desk",
+         "parent": "t1"
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t4",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t4",
+         "frameId": null,
+         "kind": "note",
+         "name": "Notes",
+         "order": 4
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t5",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t5",
+         "frameId": "f3",
+         "kind": "claude",
+         "name": "Box agent",
+         "order": 5,
+         "agent": "claude",
+         "state": "idle",
+         "since": 1790000000000,
+         "machine": "box",
+         "pinned": true
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t6",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t6",
+         "frameId": "f1",
+         "kind": "codex",
+         "name": "Review",
+         "order": 6,
+         "agent": "codex",
+         "state": "working",
+         "since": 1790000002000,
+         "machine": "desk",
+         "parent": "t1",
+         "program": {
+          "id": "codex",
+          "label": "OpenAI"
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t7",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t7",
+         "frameId": "f4",
+         "kind": "terminal",
+         "name": "web dev",
+         "order": 7
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t8",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t8",
+         "frameId": "f3",
+         "kind": "terminal",
+         "name": "box shell",
+         "order": 8
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t9",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t9",
+         "frameId": "f3",
+         "kind": "terminal",
+         "name": "box logs",
+         "order": 3,
+         "pinned": true
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t10",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t10",
+         "frameId": "f99",
+         "kind": "terminal",
+         "name": "stray",
+         "order": 10
+        }
+       ],
+       [
+        "t:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/u1",
+        {
+         "of": "tile",
+         "workspace": "z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9",
+         "id": "u1",
+         "frameId": "g1",
+         "kind": "claude",
+         "name": "Pick a db",
+         "order": 0,
+         "agent": "claude",
+         "state": "waiting",
+         "since": 1790000000500,
+         "machine": "desk",
+         "waiting": {
+          "kind": "question",
+          "since": 1790000000500,
+          "choose": true,
+          "asks": [
+           {
+            "question": "Which db?",
+            "options": [
+             "pg",
+             "sqlite"
+            ]
+           }
+          ]
+         }
+        }
+       ]
+      ]
+     },
+     "lines": {
+      "seq": 7,
+      "rows": [
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2",
+        "listening on :3000"
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1",
+        "Run npm test?"
+       ]
+      ]
+     }
+    },
+    {
+     "t": "changes",
+     "layout": {
+      "seq": 42,
+      "changes": [
+       {
+        "seq": 39,
+        "key": "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2",
+        "gone": true
+       },
+       {
+        "seq": 41,
+        "key": "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1",
+        "row": {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t1",
+         "frameId": "f1",
+         "kind": "claude",
+         "name": "Fix login",
+         "order": 1,
+         "agent": "claude",
+         "state": "working",
+         "since": 1790000009000,
+         "machine": "desk",
+         "program": {
+          "id": "claude",
+          "label": "Claude Code"
+         }
+        }
+       },
+       {
+        "seq": 42,
+        "key": "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t4",
+        "gone": true,
+        "row": {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t4",
+         "frameId": null,
+         "kind": "note",
+         "name": "Notes",
+         "order": 4
+        }
+       }
+      ]
+     },
+     "lines": {
+      "seq": 8,
+      "changes": [
+       {
+        "seq": 8,
+        "key": "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1",
+        "gone": true
+       }
+      ]
+     }
+    },
+    {
+     "t": "changes",
+     "lines": {
+      "seq": 9,
+      "changes": [
+       {
+        "seq": 9,
+        "key": "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2",
+        "row": "GET / 200"
+       }
+      ]
+     }
+    },
+    {
+     "t": "changes",
+     "layout": {
+      "seq": 43,
+      "changes": [
+       {
+        "seq": 43,
+        "key": "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t7",
+        "row": {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t7"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "t": "changes",
+     "layout": {
+      "seq": 41,
+      "changes": []
+     }
+    }
+   ],
+   "at": {
+    "layout": 43,
+    "lines": 9
+   },
+   "shown": {
+    "needs": [
+     "t:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/u1"
+    ],
+    "working": [
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t6",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t3",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1"
+    ],
+    "pinned": [
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t9",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t5"
+    ],
+    "machines": [
+     "desk",
+     "alpha",
+     "box",
+     "Zed"
+    ],
+    "tree": [
+     "m:desk",
+     "p:desk/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/",
+     "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f1 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1 1",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t6 2",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2 1",
+     "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f2 1",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t3 2",
+     "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f0 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t10 0",
+     "p:desk/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/web",
+     "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f4 0",
+     "p:desk/z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/",
+     "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g1 0",
+     "t:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/u1 1",
+     "m:alpha",
+     "p:alpha/z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/",
+     "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g4 0",
+     "m:box",
+     "p:box/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/",
+     "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f3 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t8 1",
+     "p:box/z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/",
+     "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g2 0",
+     "m:Zed",
+     "p:Zed/z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/",
+     "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g3 0"
+    ],
+    "said": {
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2": "GET / 200"
+    }
+   }
+  },
+  {
+   "about": "changes before any whole: none held, nothing followed",
+   "computer": "desk",
+   "messages": [
+    {
+     "t": "changes",
+     "layout": {
+      "seq": 42,
+      "changes": [
+       {
+        "seq": 39,
+        "key": "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2",
+        "gone": true
+       },
+       {
+        "seq": 41,
+        "key": "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1",
+        "row": {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t1",
+         "frameId": "f1",
+         "kind": "claude",
+         "name": "Fix login",
+         "order": 1,
+         "agent": "claude",
+         "state": "working",
+         "since": 1790000009000,
+         "machine": "desk",
+         "program": {
+          "id": "claude",
+          "label": "Claude Code"
+         }
+        }
+       },
+       {
+        "seq": 42,
+        "key": "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t4",
+        "gone": true,
+        "row": {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t4",
+         "frameId": null,
+         "kind": "note",
+         "name": "Notes",
+         "order": 4
+        }
+       }
+      ]
+     },
+     "lines": {
+      "seq": 8,
+      "changes": [
+       {
+        "seq": 8,
+        "key": "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1",
+        "gone": true
+       }
+      ]
+     }
+    },
+    {
+     "t": "changes",
+     "lines": {
+      "seq": 9,
+      "changes": [
+       {
+        "seq": 9,
+        "key": "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2",
+        "row": "GET / 200"
+       }
+      ]
+     }
+    }
+   ],
+   "at": null,
+   "held": {},
+   "shown": {
+    "needs": [],
+    "working": [],
+    "pinned": [],
+    "machines": [],
+    "tree": [],
+    "said": {}
+   }
+  },
+  {
+   "about": "read as the agent list is read: a row of a kind it does not know left out; a state it does not know, or one with no time, no state and no wait; a wait of a kind it does not know, or on a tile not waiting, none; what only a permission says not said of a question, what only a question says not said of a permission, and only true taken as true; a frame on a machine called as the computer is, on the computer",
+   "computer": "desk",
+   "messages": [
+    {
+     "t": "home",
+     "layout": {
+      "seq": 5,
+      "rows": [
+       [
+        "w:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        {
+         "of": "workspace",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "name": "api"
+        }
+       ],
+       [
+        "x:1",
+        {
+         "of": "widget",
+         "id": "x"
+        }
+       ],
+       [
+        "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f1",
+        {
+         "of": "frame",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "f1",
+         "title": "here",
+         "color": "#336699",
+         "order": 0,
+         "machine": {
+          "name": "desk"
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t1",
+         "frameId": null,
+         "kind": "claude",
+         "name": "A",
+         "order": 0,
+         "agent": "claude",
+         "state": "dancing",
+         "since": 1790000000000,
+         "waiting": {
+          "kind": "permission",
+          "since": 1790000000000
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t2",
+         "frameId": null,
+         "kind": "claude",
+         "name": "B",
+         "order": 1,
+         "agent": "claude",
+         "state": "waiting",
+         "since": 1790000000000,
+         "waiting": {
+          "kind": "nope",
+          "since": 1790000000000
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t3",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t3",
+         "frameId": null,
+         "kind": "claude",
+         "name": "C",
+         "order": 2,
+         "agent": "claude",
+         "state": "waiting",
+         "since": 1790000000000,
+         "waiting": {
+          "kind": "question",
+          "since": 1790000000000,
+          "decide": true,
+          "choose": "yes"
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t4",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t4",
+         "frameId": null,
+         "kind": "claude",
+         "name": "D",
+         "order": 3,
+         "agent": "claude",
+         "state": "working",
+         "waiting": {
+          "kind": "question",
+          "since": 1790000000000
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t5",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t5",
+         "frameId": null,
+         "kind": "claude",
+         "name": "E",
+         "order": 9,
+         "state": "idle",
+         "since": 1790000000000,
+         "pinned": "yes",
+         "interrupt": 1
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t6",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t6",
+         "frameId": null,
+         "kind": "terminal",
+         "name": "F",
+         "order": 5
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t7",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t7",
+         "frameId": null,
+         "kind": "claude",
+         "name": "G",
+         "order": 6,
+         "agent": "claude",
+         "state": "working",
+         "since": 1790000000000,
+         "waiting": {
+          "kind": "permission",
+          "since": 1790000000000
+         }
+        }
+       ],
+       [
+        "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t8",
+        {
+         "of": "tile",
+         "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "id": "t8",
+         "frameId": null,
+         "kind": "claude",
+         "name": "H",
+         "order": 7,
+         "agent": "claude",
+         "state": "waiting",
+         "since": 1790000000000,
+         "waiting": {
+          "kind": "permission",
+          "since": 1790000000000,
+          "decide": true,
+          "choose": true
+         }
+        }
+       ]
+      ]
+     },
+     "lines": {
+      "seq": 0,
+      "rows": []
+     }
+    }
+   ],
+   "at": {
+    "layout": 5,
+    "lines": 0
+   },
+   "held": {
+    "w:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1": {
+     "of": "workspace",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api"
+    },
+    "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f1": {
+     "of": "frame",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "f1",
+     "title": "here",
+     "color": "#336699",
+     "order": 0,
+     "machine": {
+      "name": "desk"
+     }
+    },
+    "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1": {
+     "of": "tile",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "t1",
+     "frameId": null,
+     "kind": "claude",
+     "name": "A",
+     "agent": "claude",
+     "order": 0
+    },
+    "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2": {
+     "of": "tile",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "t2",
+     "frameId": null,
+     "kind": "claude",
+     "name": "B",
+     "agent": "claude",
+     "order": 1,
+     "state": "waiting",
+     "since": 1790000000000
+    },
+    "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t3": {
+     "of": "tile",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "t3",
+     "frameId": null,
+     "kind": "claude",
+     "name": "C",
+     "agent": "claude",
+     "order": 2,
+     "state": "waiting",
+     "since": 1790000000000,
+     "waiting": {
+      "kind": "question",
+      "since": 1790000000000
+     }
+    },
+    "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t4": {
+     "of": "tile",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "t4",
+     "frameId": null,
+     "kind": "claude",
+     "name": "D",
+     "agent": "claude",
+     "order": 3
+    },
+    "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t5": {
+     "of": "tile",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "t5",
+     "frameId": null,
+     "kind": "claude",
+     "name": "E",
+     "order": 9,
+     "state": "idle",
+     "since": 1790000000000
+    },
+    "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t6": {
+     "of": "tile",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "t6",
+     "frameId": null,
+     "kind": "terminal",
+     "name": "F",
+     "order": 5
+    },
+    "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t7": {
+     "of": "tile",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "t7",
+     "frameId": null,
+     "kind": "claude",
+     "name": "G",
+     "agent": "claude",
+     "order": 6,
+     "state": "working",
+     "since": 1790000000000
+    },
+    "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t8": {
+     "of": "tile",
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "id": "t8",
+     "frameId": null,
+     "kind": "claude",
+     "name": "H",
+     "agent": "claude",
+     "order": 7,
+     "state": "waiting",
+     "since": 1790000000000,
+     "waiting": {
+      "kind": "permission",
+      "since": 1790000000000,
+      "decide": true
+     }
+    }
+   },
+   "shown": {
+    "needs": [
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t3",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t8"
+    ],
+    "working": [
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t7"
+    ],
+    "pinned": [],
+    "machines": [],
+    "tree": [
+     "p:desk/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/",
+     "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f1 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t1 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t3 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t4 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t7 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t8 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t5 0",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t6 0"
+    ],
+    "said": {}
+   }
+  }
+ ]
+}

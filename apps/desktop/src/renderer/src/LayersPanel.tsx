@@ -475,6 +475,23 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   }, [modelTiles, selectedTileId, mine.seen, mine.snoozed, setMine]);
   const agentLabel = (t: ModelTile) => (t.kind === AGENT_TILE_KIND ? agentById(t.agent)?.label ?? t.agent ?? "Agent" : tileKind(t.kind).title ?? "Other");
   const view = layersView({ tiles: modelTiles, pinned: mine.pinned, prefs, now, agentLabel, query });
+  // What the panel lists, in its order whatever is searched for, told to main: the person's phone
+  // lists Home so (spec/home.md).
+  const listed = useMemo(() => {
+    const all = query ? layersView({ tiles: modelTiles, pinned: mine.pinned, prefs, now, agentLabel }) : view;
+    const order: string[] = [];
+    const put = (t: ModelTile) => { order.push(t.id); for (const k of all.kids.get(t.id) ?? []) put(k); };
+    all.pinned.forEach(put);
+    for (const list of all.byFrame.values()) list.forEach(put);
+    for (const b of all.buckets) b.tiles.forEach(put);
+    all.snoozed.forEach(put);
+    return JSON.stringify({ order, pinned: mine.pinned });
+  // agentLabel and view are made from these each render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelTiles, mine.pinned, prefs, now, query]);
+  useEffect(() => {
+    if (layoutKey) window.hive.layersShown?.(layoutKey, JSON.parse(listed) as { order: string[]; pinned: string[] });
+  }, [layoutKey, listed]);
   const recentList = recentGroups(recents, {
     by: prefs.recentsBy, now, query, limit: (key) => recentLimits[key] ?? 5,
     agentLabel: (a) => agentById(a)?.label ?? a,

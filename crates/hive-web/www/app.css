@@ -266,3 +266,22 @@ button { cursor: pointer; }
   border: 1px solid var(--line2);
 }
 .scan { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 14px; background: var(--panel); }
+
+/* Home: a search and machine chips; then headed lists; the tree indents by depth. */
+.find { display: flex; flex-direction: column; gap: 10px; padding: 0 16px 8px; }
+.search {
+  min-height: 40px; border: 1px solid var(--line2); border-radius: 12px; padding: 0 14px;
+  background: var(--card); font-size: 16px; outline: 0;
+}
+.section { margin: 0; padding: 20px 20px 2px; font: 500 13px/18px var(--sans); color: var(--text3); text-transform: uppercase; letter-spacing: 0.04em; }
+.project { margin: 0; padding: 14px 20px 2px; font: 500 15px/20px var(--sans); }
+.frame {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 20px 4px calc(20px + var(--depth, 0) * 16px); color: var(--text2);
+}
+.frame .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frame .swatch { flex: none; width: 8px; height: 8px; border-radius: 2px; }
+[data-tree] .agent, [data-pinned] .agent { padding-left: calc(20px + var(--depth, 0) * 16px); }
+.frame, .project { content-visibility: auto; }
+.frame { contain-intrinsic-size: auto 32px; }
+.project { contain-intrinsic-size: auto 36px; }

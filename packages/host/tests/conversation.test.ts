@@ -14,8 +14,8 @@ import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
-import { followConversation, pendingTool, readConversation, TAIL_BYTES, TAIL_ENTRIES } from "../src/conversation.ts";
-import { conversations, transcriptOf, type Transcript } from "../src/conversations.ts";
+import { followConversation, lastSaid, pendingTool, readConversation, TAIL_BYTES, TAIL_ENTRIES } from "../src/conversation.ts";
+import { conversations, LastSaid, transcriptOf, type Transcript } from "../src/conversations.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-conversation-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -229,4 +229,61 @@ test("an agent's session is the one last recorded for its tile, else the one bou
   writeTrackedSession(sessions, "hm:t1", "s-gone");
   assert.deepEqual(transcriptOf(held, "t1", sessions, home), { session: "s-gone", file: null, format: FORMAT }, "a session whose file is not there yet");
   assert.equal(TILE_SESSIONS_DIR, "tile-sessions");
+});
+
+test("what an agent last said, in a line: the first line of its last words, or the tool it last used and what about, what tools gave back passed over; at most 160 characters", () => {
+  const TOOLS: AgentTranscript = {
+    id: "uuid", at: "timestamp",
+    said: [
+      { require: { type: "assistant" }, each: "message.content", item: { type: "text" }, text: "text", who: "agent" },
+      { require: { type: "assistant" }, each: "message.content", item: { type: "tool_use" }, tool: { id: "id", name: "name", about: ["input.command"] } },
+      { require: { type: "user" }, each: "message.content", item: { type: "tool_result" }, result: { of: "tool_use_id", text: "content" } },
+    ],
+  };
+  let n = 0;
+  const record = (type: string, ...content: object[]) =>
+    `${JSON.stringify({ type, uuid: `l${n}`, timestamp: new Date(1_790_000_000_000 + n++).toISOString(), message: { content } })}\n`;
+  const at = sessionFile(record("assistant", { type: "text", text: "\n  The build is green.  \n42 tests pass." }));
+  assert.equal(lastSaid(at, TOOLS), "The build is green.");
+  fs.appendFileSync(at, record("assistant", { type: "tool_use", id: "u1", name: "Bash", input: { command: "npm test" } }));
+  fs.appendFileSync(at, record("user", { type: "tool_result", tool_use_id: "u1", content: "ok" }));
+  assert.equal(lastSaid(at, TOOLS), "Bash · npm test");
+  fs.appendFileSync(at, record("assistant", { type: "text", text: "x".repeat(200) }));
+  assert.equal(lastSaid(at, TOOLS), "x".repeat(160));
+  assert.equal(lastSaid(sessionFile(""), TOOLS), undefined);
+  assert.equal(lastSaid(path.join(tmp, "none.jsonl"), TOOLS), undefined);
+});
+
+test("for Home, what each agent last said is read again only when its file grows or shrinks; which file it keeps is looked for each time until found, then again after 5 s", () => {
+  const home = fs.mkdtempSync(path.join(tmp, "home-"));
+  const sessions = path.join(tmp, `tile-sessions-${made++}`);
+  const project = path.join(home, ".claude", "projects", "-home-p-api");
+  fs.mkdirSync(project, { recursive: true });
+  const AGENT: AgentTranscript = { id: "uuid", at: "timestamp", said: [{ require: { type: "assistant" }, text: "message.content", who: "agent" }] };
+  const words = (n: number, text: string) => `${JSON.stringify({ type: "assistant", uuid: `a${n}`, timestamp: new Date(1_790_000_000_000 + n).toISOString(), message: { content: text } })}\n`;
+  const claude = {
+    id: "claude", label: "Claude Code", bin: "claude", enabled: true,
+    session: { transcript: AGENT, resume: { args: ["--resume", "{id}"], from: { bound: "--session-id" }, exists: "{home}/.claude/projects/*/{id}.jsonl" } },
+  } as unknown as AgentProviderDef;
+  setCatalog([claude]);
+  const held = [{ workspace: "w", name: "api", repo: "/home/p/api", core: { frames: [], tiles: [
+    { id: "t1", kind: "claude", label: "Claude", cmd: "claude", args: ["--session-id", "s1"] },
+    { id: "t2", kind: "terminal", label: "Terminal" },
+  ] } }] as never;
+  let now = 0;
+  const last = new LastSaid({ tileSessionsDir: sessions, home, now: () => now });
+  assert.equal(last.line(held, "t1"), undefined, "nothing written yet");
+  fs.writeFileSync(path.join(project, "s1.jsonl"), words(1, "Reading the code"));
+  assert.equal(last.line(held, "t1"), "Reading the code", "a file not found yet is looked for again at once");
+  now = 5000;
+  fs.writeFileSync(path.join(project, "s1.jsonl"), words(1, "Reading the dode"));
+  assert.equal(last.line(held, "t1"), "Reading the code", "the same size: not read again");
+  fs.appendFileSync(path.join(project, "s1.jsonl"), words(2, "Done"));
+  assert.equal(last.line(held, "t1"), "Done");
+  fs.writeFileSync(path.join(project, "s2.jsonl"), words(3, "A new session"));
+  writeTrackedSession(sessions, "hm:t1", "s2");
+  assert.equal(last.line(held, "t1"), "Done", "the session it began since is looked for after 5 s");
+  now = 10_000;
+  assert.equal(last.line(held, "t1"), "A new session");
+  assert.equal(last.line(held, "t2"), undefined, "a terminal keeps no conversation");
 });

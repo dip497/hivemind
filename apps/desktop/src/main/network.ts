@@ -27,8 +27,9 @@ import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, Pairing
 import { askToForget, heldWorkspaces, tellPhones } from "@hivemind/host/peer-links";
 import { HostRecords, type Hosted } from "@hivemind/workspace-host/host-records";
 import { Hosting } from "@hivemind/host/hosting";
+import type { LayersShown } from "@hivemind/host/home";
 import { People } from "@hivemind/host/people";
-import { handle, handleEffect } from "./app-ipc.js";
+import { handle, handleEffect, on } from "./app-ipc.js";
 import { pageHash, pageLink, phonePageAt, SHIPPED_PAGE } from "./phone-page.js";
 import { hostIntents } from "./audit.js";
 import { displayName, machineIdentity, takePerson } from "./identity.js";
@@ -36,7 +37,7 @@ import { idOf, workspaceSeed, type Seed } from "@hivemind/workspace-host/identit
 import { getSettings } from "./settings-store.js";
 import { broadcast, userWindow } from "./windows.js";
 import { onWorkspaceChange, sharedStore, workspaceStore } from "./workspace-store-ipc.js";
-import { PeerLinks, type ShownMachine } from "@hivemind/host/peer-links";
+import { PeerLinks, type PeerLinksOptions, type ShownMachine } from "@hivemind/host/peer-links";
 import { answerKeys, heldBoards, participantNamed, type Decides, type WaitingStatus } from "@hivemind/host/needs";
 import { manifestFacts, type AgentFacts } from "@hivemind/host/agent-list";
 import type { Waits } from "@hivemind/host/waits";
@@ -515,6 +516,18 @@ export interface NetworkSources {
   workers?: Pick<AgentFacts, "parent">;
   /** The plans and supervised tool uses agents wait on, and how each was answered. */
   waits?: Pick<Waits, "of" | "answerOf">;
+  /** For Home (spec/home.md): the links between agents, how a remote frame's machine is linked,
+   *  what the window's Layers panel shows of a workspace, and what a tile last said or showed. */
+  home?: Pick<PeerLinksOptions, "links" | "linkState" | "line">;
+}
+
+/** What each workspace's Layers panel shows, as the window last said, by folder: Home's order. */
+const layersShown = new Map<string, LayersShown>();
+const ids = (v: unknown): v is string[] => Array.isArray(v) && v.length <= 10_000 && v.every((x) => typeof x === "string");
+
+/** Something Home shows changed that the boards and statuses do not say. */
+export function homeChanged(): void {
+  peers?.homeChanged();
 }
 
 // The same invite can be submitted from two windows, or after the join dialog is reopened
@@ -549,7 +562,7 @@ export async function joinLink(text: unknown): Promise<JoinReply> {
   finally { if (joining.get(key) === attempt) joining.delete(key); }
 }
 
-export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, statuses, onStatus, workers, waits }: NetworkSources): void {
+export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, statuses, onStatus, workers, waits, home }: NetworkSources): void {
   apiServer = server;
   daemonHere = daemon;
   // What an agent here waits on that the person's phone may allow or deny: its agent says which
@@ -585,6 +598,15 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     devices: () => placesToRun().map(pairedWith),
     profile: shownProfile,
     onWarn: (m) => console.warn(`[peers] ${m}`),
+    ...home,
+    shown: (repo) => layersShown.get(repo),
+  });
+  // The window's Layers panel shows another order, or other pins.
+  on("layers:shown", (_e, repo: unknown, shown: unknown) => {
+    const s = shown as Partial<LayersShown> | null;
+    if (typeof repo !== "string" || !s || !ids(s.order) || !ids(s.pinned)) return;
+    layersShown.set(repo, { order: s.order, pinned: s.pinned });
+    homeChanged();
   });
   // The person's phones are told what happens here, encrypted to each (M5).
   const notices = (pushNotices = new PushNotices({
