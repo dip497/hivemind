@@ -1116,3 +1116,27 @@ Fixed in `conversation.ts` `lastSaid`: the end is read four times wider each tim
 up to 4 MiB. It is read once per change of the file's size, as before; the rig's files take
 14–72 ms. And an agent that keeps a conversation has no screen line standing in for it:
 `LastSaid.line` is "" until it says something, so its row shows its state.
+
+### 12.5 The terminal takes the size of whoever typed last
+
+Asked for: auto-fit on by default; the terminal's size follows whoever typed last, like tmux's
+`window-size latest`. Typing on the phone fits it to the phone; the desktop's first key gives the
+desktop its size back. Allow, Deny and an option are not typing. Fit stays as the manual override.
+
+Before: among the host's windows the last to type sized a session, but only at its next resize,
+never at the key. A phone never said a size, so it could only Fit, which held until it let go.
+
+Now, in `terminals.ts`, the one owner of a session's size:
+- every client's `terminal.resize` is kept as its own size;
+- one of the host's own clients that types sizes the session at once to its own size;
+- a phone's own size counts only once it types, so opening a terminal on the phone changes
+  nothing on the desktop;
+- when the one that typed last goes, the one that typed before it takes the size back, as tmux
+  recalculates on detach (cmux relies on the same mode,
+  `cmux/Sources/RemoteTmuxControlConnection+Sizing.swift:349`).
+
+The page tells the core the columns and rows it reads at (12 px, as Fit uses) when it shows a
+terminal and whenever its view changes size, the keyboard coming up among them. The core sends
+that as `terminal.resize` (`Sent::Size`), again on each connection. Answers go through
+`agent.answer`, not `terminal.write`, so they never size it. A Fit now lasts until another client
+types.

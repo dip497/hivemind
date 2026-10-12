@@ -9,10 +9,11 @@
  *
  * A keystroke, a resize, flow control and whether a client shows a session are notices. Who may
  * type is the terminal's keyboard's (`keyboard.ts`, M2): the host's windows until it is given to
- * a guest, and then the guest's alone. Among the host's windows the one that typed last sizes a
- * session; a guest holding its keyboard sizes it. Every client is told a session's size when it
- * changes, so one whose own differs draws it at that size. A pause is a short lease: see
- * PAUSE_MAX_MS. Whoever types is named to the others showing the session (`terminal.typing`,
+ * a guest, and then the guest's alone. Among the host's windows and the person's devices the one
+ * that typed last sizes a session, at its first key, to the size it last said (tmux's window-size
+ * latest); a phone sizes it only so. A guest holding its keyboard sizes it. Every client is told
+ * a session's size when it changes, so one whose own differs draws it at that size. A pause is a
+ * short lease: see PAUSE_MAX_MS. Whoever types is named to the others showing the session (`terminal.typing`,
  * R4), and a guest's typing is marked in the audit log once a burst (never what was typed). A
  * session on a participant's machine (M4) is typed into and sized there, by its person
  * (`machineOf`): nobody here types into it, and its size is the one that machine says. A client
@@ -114,8 +115,10 @@ export class Terminals {
   readonly domain: Domain<TerminalMethod, TerminalNotice>;
   private readonly relay: SessionRelay;
   private readonly viewers = new WeakMap<Connection, Viewer>();
-  /** The client that last typed into each session. */
-  private readonly typers = new Map<string, Connection>();
+  /** The clients that typed into each session, the last to type last. */
+  private readonly typers = new Map<string, Connection[]>();
+  /** The size each client showing a session says it is: the session's while it typed last. */
+  private readonly said = new Map<string, Map<Connection, { cols: number; rows: number }>>();
   /** Who the others were last told types into each session, and when. */
   private readonly typing = new Map<string, { by: Connection; at: number }>();
   /** When each guest last typed into each session, for the audit log's marks. */
@@ -181,7 +184,14 @@ export class Terminals {
         const viewer = this.viewers.get(connection);
         if (!viewer) return;
         for (const tile of this.relay.leaveAll(viewer)) this.letGo(tile);
-        for (const [tile, typer] of this.typers) if (typer === connection) this.typers.delete(tile);
+        for (const mine of this.said.values()) mine.delete(connection);
+        for (const [tile, typers] of this.typers) {
+          const at = typers.indexOf(connection);
+          if (at < 0) continue;
+          typers.splice(at, 1);
+          // Like tmux's window-size latest: the one who typed before it takes the size back.
+          if (at === typers.length && at > 0) this.takeSize(tile, typers[at - 1]!);
+        }
         for (const [tile, told] of this.typing) if (told.by === connection) this.typing.delete(tile);
       },
     };
@@ -295,9 +305,13 @@ export class Terminals {
   private write(tile: string, data: string, paste: boolean | undefined, from: Connection): void {
     if (!this.keyboards.mayType(tile, from)) return;
     this.keyboards.typed(tile, from);
-    // Among the host's windows, the last to type sizes the session; a guest does while they hold
-    // its keyboard.
-    if (isHost(from)) this.typers.set(tile, from);
+    // Among the host's windows and the person's devices, the last to type sizes the session, at
+    // its first key; a guest does while they hold its keyboard.
+    if (isHost(from)) {
+      const typers = this.typers.get(tile) ?? [];
+      if (typers.at(-1) !== from) this.typers.set(tile, [...typers.filter((c) => c !== from), from]);
+      this.takeSize(tile, from);
+    }
     this.attribute(tile, from);
     if (this.opts.backend.echoes(tile)) this.relay.markInput(tile);
     this.opts.backend.write(tile, data, paste);
@@ -328,8 +342,12 @@ export class Terminals {
     const sizes = this.keyboards.sizes(tile, from);
     if (sizes === false) return;
     if (sizes === "host") {
-      const typer = this.typers.get(tile);
-      if (typer !== undefined && typer !== from && this.relay.count(tile) > 1) return;
+      let mine = this.said.get(tile);
+      if (!mine) this.said.set(tile, (mine = new Map()));
+      mine.set(from, { cols, rows });
+      const typer = this.typers.get(tile)?.at(-1);
+      // A device of the person's sizes it by typing; a window here, also before anyone typed.
+      if (typer !== from && (from.actor.kind === "peer" || (typer !== undefined && this.relay.count(tile) > 1))) return;
     }
     // Sized here: what it had before a fit is not what to give back.
     this.fits.delete(tile);
@@ -355,7 +373,18 @@ export class Terminals {
     if (was) this.size(tile, was.cols, was.rows);
   }
 
+  /** `from` typed into `tile`: it takes the size `from` says it is, if it said one. */
+  private takeSize(tile: string, from: Connection): void {
+    const mine = this.said.get(tile)?.get(from);
+    if (!mine) return;
+    // Sized by typing: what it had before a fit is not what to give back.
+    this.fits.delete(tile);
+    this.size(tile, mine.cols, mine.rows);
+  }
+
   private size(tile: string, cols: number, rows: number): void {
+    const was = this.sizes.get(tile);
+    if (was?.cols === cols && was.rows === rows) return;
     this.opts.backend.resize(tile, cols, rows);
     this.sizes.set(tile, { cols, rows });
     this.opts.publish?.("terminal.size", tile, cols, rows);
@@ -390,6 +419,7 @@ export class Terminals {
   private drop(tile: string): void {
     this.relay.forget(tile);
     this.typers.delete(tile);
+    this.said.delete(tile);
     this.typing.delete(tile);
     this.openers.delete(tile);
     this.sizes.delete(tile);

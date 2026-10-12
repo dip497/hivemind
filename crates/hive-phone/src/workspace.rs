@@ -156,12 +156,14 @@ pub enum Watched<'a> {
     Keyboard(Option<&'a Value>),
 }
 
-/// What the phone sends a watched terminal: what the person types, or the size the person fits it
-/// to on the phone (none: the size it had before).
+/// What the phone sends a watched terminal: what the person types, the size the person fits it
+/// to on the phone (none: the size it had before), or the phone's own size, which the terminal
+/// takes once the person types on the phone.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Sent {
     Typed(String),
     Fit(Option<(u16, u16)>),
+    Size(u16, u16),
 }
 
 /// What the person does to a watched terminal, as an app says it: text typed as it is, keys by
@@ -171,6 +173,7 @@ pub enum Input {
     Text(String),
     Keys(Vec<String>),
     Fit(Option<(u16, u16)>),
+    Size(u16, u16),
 }
 
 /// What the person does, in order, for as long as `sent` takes it: keys as their bytes, a moment
@@ -184,6 +187,7 @@ pub async fn pass_on(inputs: &mut UnboundedReceiver<Input>, sent: Sender<Sent>) 
                 .map(|k| Sent::Typed(keys::bytes(k).to_string()))
                 .collect(),
             Input::Fit(size) => vec![Sent::Fit(size)],
+            Input::Size(cols, rows) => vec![Sent::Size(cols, rows)],
         };
         for (i, one) in sends.into_iter().enumerate() {
             if i > 0 {
@@ -250,6 +254,9 @@ pub async fn watch(
                         notify("terminal.fit", json!([session, cols, rows])).await
                     }
                     Sent::Fit(None) => notify("terminal.fit", json!([session])).await,
+                    Sent::Size(cols, rows) => {
+                        notify("terminal.resize", json!([session, cols, rows])).await
+                    }
                 };
                 if written.is_err() {
                     break;

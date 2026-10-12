@@ -28,6 +28,8 @@ export interface TermSource {
   typeKeys(keys: string[]): void;
   fit(cols: number, rows: number): void;
   unfit(): void;
+  /** The size this view reads it at: the terminal takes it once the person types here. */
+  size(cols: number, rows: number): void;
 }
 
 interface Line {
@@ -118,6 +120,8 @@ export class TerminalView {
   private across = 0;
   private following = true;
   private fitted = false;
+  /** The size last said to the source (`readSize`). */
+  private said = "";
 
   /** The canvas's size, in device pixels, and the pixel ratio. */
   private width = 0;
@@ -190,6 +194,8 @@ export class TerminalView {
     this.fitted = false;
     this.fitButton.setAttribute("aria-pressed", "false");
     this.drawn = "";
+    this.said = "";
+    this.sayReadSize();
     this.draw();
     this.changed();
   }
@@ -344,7 +350,26 @@ export class TerminalView {
     this.canvas.height = this.height;
     this.ctx.font = `400 100px ${FONT}`;
     this.advance = this.ctx.measureText("M").width / 100 || 0.6;
+    this.sayReadSize();
     this.draw();
+  }
+
+  /** The columns and rows this view shows at a readable size; null while it has none. */
+  private readSize(): { cols: number; rows: number } | null {
+    const box = this.view.getBoundingClientRect();
+    if (!box.width || !box.height) return null;
+    return {
+      cols: Math.max(20, Math.floor(box.width / (READABLE * this.advance))),
+      rows: Math.max(5, Math.floor(box.height / Math.ceil(READABLE * LINE))),
+    };
+  }
+
+  /** Tell the source the size this view reads it at, when it changed. */
+  private sayReadSize(): void {
+    const size = this.readSize();
+    if (!this.source || !size || `${size.cols}x${size.rows}` === this.said) return;
+    this.said = `${size.cols}x${size.rows}`;
+    this.source.size(size.cols, size.rows);
   }
 
   /** Size the terminal to this view at a readable size, or give it back the one it had. */
@@ -354,13 +379,12 @@ export class TerminalView {
     this.fitted = !this.fitted;
     this.fitButton.setAttribute("aria-pressed", String(this.fitted));
     if (!this.fitted) return source.unfit();
-    const box = this.view.getBoundingClientRect();
-    const cols = Math.max(20, Math.floor(box.width / (READABLE * this.advance)));
-    const rows = Math.max(5, Math.floor(box.height / Math.ceil(READABLE * LINE)));
+    const size = this.readSize();
+    if (!size) return;
     this.zoom = 1;
     this.across = 0;
     this.following = true;
-    source.fit(cols, rows);
+    source.fit(size.cols, size.rows);
   }
 
   private key(label: string, name: string, press: () => void, props: Record<string, string>): HTMLButtonElement {

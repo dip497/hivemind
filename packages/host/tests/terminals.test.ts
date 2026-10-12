@@ -195,6 +195,27 @@ test("a phone fits a session to its screen until it lets go or goes, and the ses
   assert.deepEqual(sizes(), ["120x40", "48x30", "120x40", "50x20", "120x40", "40x20", "100x30"]);
 });
 
+test("a session takes the size of whoever types, at their first key: a phone's size counts only once it types; when they go, the one who typed before them sizes it again", async () => {
+  const h = host();
+  const window = h.client();
+  const phone = h.client({ kind: "peer", person: "p".repeat(64), device: "d".repeat(64), access: "owner" });
+  const sizes = () => h.calls.filter((call) => call.startsWith("resize")).map((call) => call.split(" ")[2]);
+  await h.open(window, "hm:t1");
+  h.notice(window, "terminal.resize", "hm:t1", 120, 40);
+  await h.open(phone, "hm:t1", { attachOnly: true });
+  h.notice(phone, "terminal.resize", "hm:t1", 48, 30); // shown on the phone: nothing changes yet
+  assert.deepEqual(sizes(), ["120x40"]);
+  h.notice(window, "terminal.write", "hm:t1", "ls\r");
+  h.notice(phone, "terminal.write", "hm:t1", "y");
+  assert.deepEqual(sizes(), ["120x40", "48x30"], "the phone typed");
+  h.notice(phone, "terminal.write", "hm:t1", "\r");
+  h.notice(window, "terminal.write", "hm:t1", "q");
+  assert.deepEqual(sizes(), ["120x40", "48x30", "120x40"], "the window's first key gives its size back");
+  h.notice(phone, "terminal.write", "hm:t1", "z");
+  phone.close();
+  assert.deepEqual(sizes(), ["120x40", "48x30", "120x40", "48x30", "120x40"], "the phone went");
+});
+
 test("a client that acknowledges what it takes is paced by it: past its window it is sent nothing until it has taken all, then the host's screen", async () => {
   const h = host({ screen: "SCREEN" });
   await h.open(h.client(), "hm:t1");

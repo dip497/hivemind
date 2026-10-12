@@ -309,15 +309,15 @@ layout the store cannot hold is `BAD_REQUEST`.
 
 | Notice | Params | What it does |
 |---|---|---|
-| `terminal.write` | `tile`, `data`, `paste`? | types `data` (`paste`: hands it over as one block), when the client has the terminal's keyboard: the host's own clients until it is given away, and then its holder alone |
+| `terminal.write` | `tile`, `data`, `paste`? | types `data` (`paste`: hands it over as one block), when the client has the terminal's keyboard: the host's own clients until it is given away, and then its holder alone. One of the host's own clients that types sizes it at once to the size it last said (`terminal.resize`); an answer (`agent.answer`) is no typing |
 | `terminal.keyboard.ask` | `tile` | asks for the terminal's keyboard: its holder is sent `terminal.keyboard.asked` (the host's clients showing it, while the host holds it) |
 | `terminal.keyboard.give` | `tile`, `to` | hands the keyboard the client holds (or the host's, from a host's client) to `to`, the id of one who asked; everyone is told (`terminal.keyboard`). It comes back to the host when the host takes it, when its holder goes, and after five minutes without their typing |
 | `terminal.keyboard.take` | `tile` | the host takes the keyboard back |
 | `terminal.show` | `tile`, `shown` | whether any of the client's views shows it: it is sent the output only while one does, and the screen again when one shows it after none did |
-| `terminal.resize` | `tile`, `cols`, `rows` | sizes it, when the client may: the keyboard's holder, while a guest holds it; otherwise, among the host's own clients showing it, the one that typed last |
+| `terminal.resize` | `tile`, `cols`, `rows` | the client's own size of it, kept; it sizes it when the client may: the keyboard's holder, while a guest holds it; otherwise, among the host's own clients showing it, the one that typed last, and a window here also before anyone typed. A device of the person's (a phone) sizes it only by typing. When the one that typed last goes, it takes the size of the one that typed before it, as tmux's `window-size latest` does |
 | `terminal.flow` | `tile`, `paused` | stops reading its output while the client catches up; a pause ends on its own after 120 ms unless asked for again |
 | `terminal.ack` | `tile`, `taken` | a client that opened it with `acks` has taken `taken` of its output (`terminal.data`'s text, in UTF-16 units, all it was sent on that connection told). It is sent at most 128 K units ahead of that, the screen sent in place of output not counted; past it, nothing, until it has taken all it was sent, and then the host's screen in place of what it missed. Nothing queues for it, and the session is not held back for it. A client acknowledges each frame of output it takes (0.24) |
-| `terminal.fit` | `tile`, `cols`?, `rows`? | sizes it to the client's screen until the client lets go (no size) or goes; it then takes back the size it had, unless a client here sized it meanwhile. Where a client may type into it; not a session sized on its machine (0.24) |
+| `terminal.fit` | `tile`, `cols`?, `rows`? | sizes it to the client's screen until the client lets go (no size), goes, or another client types; it then takes back the size it had, unless a client here sized it meanwhile. Where a client may type into it; not a session sized on its machine (0.24) |
 | `terminal.close` | `tile` | ends the session for good; recorded (target the tile) unless it had already ended |
 | `terminal.detach` | `tile` | the client shows it no more; a session no client shows is let go of (a daemon keeps it running, one the host runs itself ends) |
 | `terminal.watchActivity` | `tiles` | the terminals whose activity the client is sent (`terminal.activity`), at most 1024 |

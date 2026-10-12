@@ -76,6 +76,7 @@ async fn a_watched_terminal_is_drawn_at_its_size_and_typed_into_as_the_person_in
         [Some("Sam".to_string())]
     );
 
+    watching.size(48, 30);
     watching.type_text("ls -la".into());
     watching.fit(Some((48, 30)));
     watching.fit(None);
@@ -104,6 +105,7 @@ async fn a_watched_terminal_is_drawn_at_its_size_and_typed_into_as_the_person_in
     assert_eq!(
         typed.iter().map(|(_, n)| n.clone()).collect::<Vec<_>>(),
         [
+            json!({ "method": "terminal.resize", "params": [session, 48, 30] }),
             json!({ "method": "terminal.keyboard.ask", "params": [session] }),
             write("ls -la"),
             json!({ "method": "terminal.fit", "params": [session, 48, 30] }),
@@ -115,7 +117,7 @@ async fn a_watched_terminal_is_drawn_at_its_size_and_typed_into_as_the_person_in
         ]
     );
     // Three gaps of 40 ms between the four keys, give or take how late each one came.
-    assert!(typed[7].0 - typed[4].0 >= Duration::from_millis(60));
+    assert!(typed[8].0 - typed[5].0 >= Duration::from_millis(60));
     // Given to this phone, its keyboard is the person's own.
     assert_eq!(told.keyboards.lock().unwrap().last(), Some(&None));
 }
