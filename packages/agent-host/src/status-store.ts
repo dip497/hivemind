@@ -77,6 +77,7 @@ export class StatusStore {
   private readings = new Map<string, ScreenReading>();
   private seq = 0;
   private listeners = new Set<(c: StatusChange) => void>();
+  private screenListeners = new Set<(tileId: string, reading: ScreenReading) => void>();
 
   constructor(private readonly opts: { now?: () => number } = {}) {}
 
@@ -96,6 +97,12 @@ export class StatusStore {
     return () => { this.listeners.delete(fn); };
   }
 
+  /** Each screen read, as it is read: what it was read as. */
+  onScreen(fn: (tileId: string, reading: ScreenReading) => void): () => void {
+    this.screenListeners.add(fn);
+    return () => { this.screenListeners.delete(fn); };
+  }
+
   /** A hook reported for this session: the hooks are its authority from now on. They report
    *  from the session's start, so what the screen read before they spoke is not carried over. */
   event(tileId: string, input: StatusInput): void {
@@ -110,8 +117,19 @@ export class StatusStore {
   /** The screen, read by whoever renders it, and for a wait what screen it says it is: kept as
    *  its last reading; as its status, ignored once the session's hooks have spoken. */
   screen(tileId: string, state: ScreenState, says?: string): void {
-    this.readings.set(tileId, { state, ...(says ? { says } : {}), at: this.now() });
-    if (this.mirrored.has(tileId)) return;
+    const reading: ScreenReading = { state, ...(says ? { says } : {}), at: this.now() };
+    this.readings.set(tileId, reading);
+    if (!this.mirrored.has(tileId)) this.fold(tileId, state, says);
+    for (const fn of this.screenListeners) fn(tileId, reading);
+  }
+
+  /** Keys typed there did not move its screen: what it was last read as stands again. */
+  reread(tileId: string): void {
+    const read = this.readings.get(tileId);
+    if (read && !this.mirrored.has(tileId)) this.fold(tileId, read.state, read.says);
+  }
+
+  private fold(tileId: string, state: ScreenState, says?: string): void {
     const cur = this.sessions.get(tileId);
     if (cur?.state === "exited") return;
     if (cur?.source === "hooks") {

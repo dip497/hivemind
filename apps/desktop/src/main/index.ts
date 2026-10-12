@@ -1269,6 +1269,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     answerKeys: (bare, status) => answerKeys(heldBoards(workspaceStore()), bare, status),
     asking: (bare) => askingOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)),
     chooseKeys: (bare) => manifestOf(heldBoards(workspaceStore()), bare)?.choose,
+    watched: (bare) => manifestOf(heldBoards(workspaceStore()), bare)?.caps.blockedDetection === true,
     who: whoIs,
   }),
   // Agents started, interrupted and closed from another of the person's devices, and what they

@@ -305,6 +305,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       answerKeys: (bare, status) => answerKeys(heldBoards(store), bare, status),
       asking: (bare) => askingOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR)),
       chooseKeys: (bare) => manifestOf(heldBoards(store), bare)?.choose,
+      watched: (bare) => manifestOf(heldBoards(store), bare)?.caps.blockedDetection === true,
       who,
     }),
     // Agents started, interrupted and closed from another of the person's devices, and what they

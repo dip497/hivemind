@@ -597,6 +597,16 @@ as Allow/Deny (§11.1), and the reading list, tables, links, `dir=auto`, the com
   on. First, probe the real binary: does `1` still allow in 2.1.296's chooser?
 - Regression tests that fail on today's code: Allow on a fresh chooser lands; a second Allow with
   the old id is refused; the wait clears after the answer.
+- Done (2026-10-12): the lost Allow was a race. Claude Code's `PermissionRequest` hook reports the
+  wait before its chooser takes keys, and a fast tap's `1` arrived first, was lost, and was audited
+  ok. A stand-in agent that draws its chooser 2 s after its hook shows it
+  (`apps/desktop/tests/e2e/answer-lands.spec.ts`): before the fix `{answered: true}` with the
+  chooser still asking. Now, for an agent whose screen rules read its waits, the keys go in once
+  the screen shows the chooser (4 s at most, else `TIMEOUT`, nothing typed), and it is answered
+  once the screen moves on (3 s, else `FAILED`; the wait stands again and may be answered again);
+  spec/needs.md 0.8. Open: the wait still listed after "Interrupted" is not reproduced by the
+  stand-in (an early key, then Esc on the chooser, clears it); it needs that tile's status and
+  screen.
 
 *Done (2026-10-12):*
 - The probe. `1` allows on Claude 2.1.296's chooser, with its kitty keyboard on and off (a pty

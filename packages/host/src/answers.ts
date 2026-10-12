@@ -37,6 +37,28 @@ export interface AnswersOptions {
   chooseKeys(tile: string): readonly string[] | undefined;
   /** Who is at a connection. */
   who(connection: Connection): Answerer;
+  /** Whether the screen rules of the agent of `tile` read what it waits on: its answer is then
+   *  typed once its screen shows the wait, and has landed once its screen moves on from it. */
+  watched?(tile: string): boolean;
+}
+
+/** How long an answer waits for the agent's screen to show what it asks, and then to move on from
+ *  it once the keys are in. */
+export const DRAWN_MS = 4_000;
+export const TAKEN_MS = 3_000;
+
+/** Whether `read` shows a wait of `kind`: as itself, or as one its rules do not tell apart. */
+const shows = (read: ScreenReading | undefined, kind: InputKind | undefined): boolean =>
+  !!read && (read.state === "blocked" || (kind === "permission" || kind === "question" ? read.state === kind : read.state !== "idle" && read.state !== "working"));
+
+/** Whether `ok` holds now, or once a screen of `tile` read within `ms` makes it. */
+function until(plane: AnswerPlane, tile: string, ok: () => boolean, ms: number): Promise<boolean> {
+  if (ok()) return Promise.resolve(true);
+  return new Promise((done) => {
+    const finish = (v: boolean) => { stop(); clearTimeout(timer); done(v); };
+    const stop = plane.status.onScreen((t) => { if (t === tile && ok()) finish(true); });
+    const timer = setTimeout(() => finish(false), ms);
+  });
 }
 
 /** Whether the screen, read since the wait began, may still show it: not when it shows the
@@ -111,14 +133,40 @@ export function answers(o: AnswersOptions): Domain<"agent.answer"> {
         } else {
           parts = [`${line(a.text, "answer.text")}\r`];
         }
-        // Its screen shows something else now: typed there, the keys would answer that.
-        if (!mayShow(plane.status.reading(bare), status)) return { answered: false };
-        const done = plane.answer(toPtyId(bare), parts);
-        if (done) {
-          answered.add(`${bare}@${since}`);
-          if (answered.size > ANSWERED_KEPT) answered.delete(answered.values().next().value!);
-        }
-        return { answered: done };
+        const key = `${bare}@${since}`;
+        const type = (): boolean => {
+          // Its screen shows something else now: typed there, the keys would answer that.
+          if (!mayShow(plane.status.reading(bare), status)) return false;
+          const done = plane.answer(toPtyId(bare), parts);
+          if (done) {
+            answered.add(key);
+            if (answered.size > ANSWERED_KEPT) answered.delete(answered.values().next().value!);
+          }
+          return done;
+        };
+        if (!o.watched?.(bare)) return { answered: type() };
+        // Keys typed before its chooser is drawn never reach it: typed once its screen shows the
+        // wait, and landed once its screen moves on, or a new wait begins.
+        const waits = () => { const now = plane.status.get(bare); return !!now && now.state === "waiting" && now.since === since; };
+        return (async () => {
+          if (!(await until(plane, bare, () => !waits() || shows(plane.status.reading(bare), status.kind), DRAWN_MS)) || !waits()) {
+            if (!waits()) return { answered: false };
+            throw new ApiError("TIMEOUT", "its screen has not shown what it asks: nothing was typed; answer it there");
+          }
+          const before = plane.status.reading(bare);
+          if (!type()) return { answered: false };
+          const moved = () => {
+            const read = plane.status.reading(bare);
+            const now = plane.status.get(bare);
+            // Its screen moved on, or it waits anew, on what came after.
+            return (read !== before && !shows(read, status.kind)) || (now?.state === "waiting" && now.since > since);
+          };
+          if (await until(plane, bare, moved, TAKEN_MS)) return { answered: true };
+          answered.delete(key);
+          // Its status took the keys for an answer: the screen says otherwise.
+          plane.status.reread(bare);
+          throw new ApiError("FAILED", "the keys went in, but its screen still asks: it may wait on you there");
+        })();
       },
     },
     effects: {
