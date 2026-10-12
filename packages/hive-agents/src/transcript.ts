@@ -4,16 +4,29 @@
  * whichever agent keeps it. Nothing here knows one agent's format; the manifest does.
  */
 import { valueAt } from "./field-path.js";
-import type { AgentTranscript, TranscriptRule } from "./types.js";
+import type { AgentTranscript, TranscriptAsks, TranscriptRule } from "./types.js";
+
+/** A question a tool use asks the person, and the options to choose from; `many`: several may be. */
+export interface Asked {
+  question: string;
+  options: string[];
+  many?: true;
+}
 
 /** One thing said, as spec/agents.md sends it. */
 export type TranscriptEntry =
   | { id: string; at: number; who: "person" | "agent"; text: string }
-  | { id: string; at: number; who: "agent"; tool: { id: string; name: string; about?: string } }
+  | { id: string; at: number; who: "agent"; tool: { id: string; name: string; about?: string; asks?: Asked[] } }
   | { id: string; at: number; who: "tool"; result: { of: string; text: string; error?: true } };
 
 const ABOUT_MAX = 120;
+/** A tool's `about` read whole: what a wait on it shows. */
+const WHOLE_ABOUT_MAX = 4000;
 const RESULT_MAX = 2000;
+/** The most questions, options and characters an ask keeps. */
+const ASKED_MAX = 4;
+const OPTIONS_MAX = 9;
+const ASKED_TEXT_MAX = 300;
 
 const isText = (v: unknown): v is string => typeof v === "string";
 
@@ -29,9 +42,24 @@ function textOf(given: unknown): string {
   return given.map((item) => valueAt(item, "text")).filter(isText).join("\n");
 }
 
+/** The questions `from`, a tool use, asks as `asks` maps them; undefined when it asks none. */
+function askedIn(from: unknown, asks: TranscriptAsks): Asked[] | undefined {
+  const list = valueAt(from, asks.list);
+  if (!Array.isArray(list)) return undefined;
+  const asked = list.slice(0, ASKED_MAX).flatMap((q): Asked[] => {
+    const question = valueAt(q, asks.question);
+    const options = valueAt(q, asks.options);
+    if (!isText(question) || !Array.isArray(options)) return [];
+    const labels = options.slice(0, OPTIONS_MAX).map((o) => valueAt(o, asks.label)).filter(isText).map((l) => l.slice(0, ASKED_TEXT_MAX));
+    const many = asks.many !== undefined && valueAt(q, asks.many) === true;
+    return [{ question: question.slice(0, ASKED_TEXT_MAX), options: labels, ...(many ? { many: true as const } : {}) }];
+  });
+  return asked.length ? asked : undefined;
+}
+
 /** What `rule` reads in `from`, the record or an item of a list in it, as the entry `id`, said at
  *  `at`; null when what it names is not there. */
-function entryOf(rule: TranscriptRule, from: unknown, id: string, at: number): TranscriptEntry | null {
+function entryOf(rule: TranscriptRule, from: unknown, id: string, at: number, whole: boolean): TranscriptEntry | null {
   if (rule.text !== undefined) {
     const text = valueAt(from, rule.text);
     return isText(text) ? { id, at, who: rule.who!, text } : null;
@@ -40,7 +68,9 @@ function entryOf(rule: TranscriptRule, from: unknown, id: string, at: number): T
     const [use, name] = [valueAt(from, rule.tool.id), valueAt(from, rule.tool.name)];
     if (!isText(use) || !isText(name)) return null;
     const about = rule.tool.about?.map((path) => valueAt(from, path)).find(isText);
-    return { id, at, who: "agent", tool: { id: use, name, ...(about === undefined ? {} : { about: about.split("\n")[0]!.slice(0, ABOUT_MAX) }) } };
+    const asks = rule.tool.asks && askedIn(from, rule.tool.asks);
+    const cut = about === undefined ? undefined : whole ? about.slice(0, WHOLE_ABOUT_MAX) : about.split("\n")[0]!.slice(0, ABOUT_MAX);
+    return { id, at, who: "agent", tool: { id: use, name, ...(cut === undefined ? {} : { about: cut }), ...(asks ? { asks } : {}) } };
   }
   if (rule.result) {
     const of = valueAt(from, rule.result.of);
@@ -52,8 +82,9 @@ function entryOf(rule: TranscriptRule, from: unknown, id: string, at: number): T
 }
 
 /** What the records in `lines` say, read as `transcript` maps them, in order. An entry read from
- *  one item of a list of several is its record's id, `/`, and the item's index. */
-export function transcriptEntries(transcript: AgentTranscript, lines: readonly string[]): TranscriptEntry[] {
+ *  one item of a list of several is its record's id, `/`, and the item's index. A tool's `about`
+ *  is its first line, cut short; `whole`, all of it, as a wait on it shows it. */
+export function transcriptEntries(transcript: AgentTranscript, lines: readonly string[], { whole = false }: { whole?: boolean } = {}): TranscriptEntry[] {
   const entries: TranscriptEntry[] = [];
   for (const line of lines) {
     let record: unknown;
@@ -68,7 +99,7 @@ export function transcriptEntries(transcript: AgentTranscript, lines: readonly s
     const walked = new Set<string>();
     for (const rule of rules) {
       if (rule.each === undefined) {
-        const entry = entryOf(rule, record, id, at);
+        const entry = entryOf(rule, record, id, at, whole);
         if (entry) entries.push(entry);
         continue;
       }
@@ -79,7 +110,7 @@ export function transcriptEntries(transcript: AgentTranscript, lines: readonly s
       const readers = rules.filter((r) => r.each === rule.each);
       items.forEach((item, i) => {
         const reader = readers.find((r) => fits(item, r.item));
-        const entry = reader && entryOf(reader, item, items.length > 1 ? `${id}/${i}` : id, at);
+        const entry = reader && entryOf(reader, item, items.length > 1 ? `${id}/${i}` : id, at, whole);
         if (entry) entries.push(entry);
       });
     }

@@ -196,6 +196,26 @@ Claude Code, for example, takes a digit as that option of its chooser, and its f
 is always "Yes"; Esc is "No, and tell Claude what to do differently". An agent whose file
 says nothing here is answered on your phone as on its screen, with a line of text.
 
+When the agent keeps a conversation your phone can read ("The conversation on your phone"),
+the prompt shows the tool it waits to use and what that is about, whole: the exact command, the
+file, the address.
+
+### Questions with options
+
+When the agent asks you a question with options to choose from (Claude Code's AskUserQuestion),
+your phone shows the question and each option, never Allow and Deny, if the agent's
+conversation maps the tool's questions (`asks`, below). Tapping an option types the keys that
+choose it, if the agent's file says which keys those are:
+
+```yaml
+choose: ['{n}']         # {n} is the option's number, counting from 1
+```
+
+One to four keys, written as for `answer`, one of them with `{n}` in it. Claude Code 2.1.296
+takes a digit as that option and sends it, for one question with one answer. A question that
+allows several answers, several questions, or an agent whose file says nothing here, is
+answered with a line of text, the options listed above it.
+
 ### Screens that ask something else
 
 Some screens ask permission for something other than a tool: Claude Code's "Is this a project
@@ -245,7 +265,10 @@ item of a list in it (`each`, the items `item` requires), and what it reads ther
 
 - `text` and `who` (`person` or `agent`): what was said, in markdown;
 - `tool`: a tool the agent used, its `id` and `name`, and `about`, the first of these fields
-  that is text (its first line, at most 120 characters);
+  that is text (its first line, at most 120 characters; whole, up to 4,000, on a prompt waiting on
+  you), and `asks`, the questions it asks you: `list`, where they are, and in each its
+  `question`, its `options` and each option's `label`, and `many`, whether several may be
+  chosen;
 - `result`: what a tool gave back, `of` the use it answers, its `text` (text, or a list whose
   items' `text` are joined a line each, cut to 2,000 characters), and `error` when that field is
   `true`.
@@ -273,7 +296,11 @@ session:
     - require: { type: assistant }
       each: message.content
       item: { type: tool_use }
-      tool: { id: id, name: name, about: [input.file_path, input.path, input.command, input.pattern, input.url, input.query, input.description] }
+      tool:
+        id: id
+        name: name
+        about: [input.file_path, input.path, input.command, input.pattern, input.url, input.query, input.description]
+        asks: { list: input.questions, question: question, options: options, label: label, many: multiSelect }
 ```
 
 Hivemind finds the file for the session the agent's tile is in, reads its end, and sends your

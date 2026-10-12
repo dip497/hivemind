@@ -14,7 +14,7 @@ import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
-import { followConversation, readConversation, TAIL_BYTES, TAIL_ENTRIES } from "../src/conversation.ts";
+import { followConversation, pendingTool, readConversation, TAIL_BYTES, TAIL_ENTRIES } from "../src/conversation.ts";
 import { conversations, transcriptOf, type Transcript } from "../src/conversations.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-conversation-"));
@@ -51,6 +51,40 @@ test("from its end the file is read whole lines only, the last 200 entries of it
   assert.equal(fs.statSync(big).size - TAIL_BYTES, Buffer.byteLength("not a record "), "the read begins where the fake record does");
   assert.deepEqual(readConversation(big, FORMAT).entries.map((e) => e.id), ["u1"]);
   assert.deepEqual(readConversation(path.join(tmp, "none.jsonl"), FORMAT), { entries: [], cursor: 0 });
+});
+
+test("the tool use an agent waits on is the first since it last said anything that nothing was given back for: what it is about whole (to 4000 characters), the questions it asks; none once it says something after it", () => {
+  const TOOLS: AgentTranscript = {
+    id: "uuid", at: "timestamp",
+    said: [
+      { require: { type: "assistant" }, each: "message.content", item: { type: "text" }, text: "text", who: "agent" },
+      { require: { type: "assistant" }, each: "message.content", item: { type: "tool_use" }, tool: { id: "id", name: "name", about: ["input.command"], asks: { list: "input.questions", question: "question", options: "options", label: "label" } } },
+      { require: { type: "user" }, each: "message.content", item: { type: "tool_result" }, result: { of: "tool_use_id", text: "content" } },
+    ],
+  };
+  let n = 0;
+  const record = (type: string, ...content: object[]) =>
+    `${JSON.stringify({ type, uuid: `r${n}`, timestamp: new Date(1_790_000_000_000 + n++).toISOString(), message: { content } })}\n`;
+  const command = `cat <<EOF > notes.md\n${"a long line ".repeat(20)}\nEOF`;
+  const at = sessionFile([
+    record("assistant", { type: "tool_use", id: "old", name: "Bash", input: { command: "ls" } }),
+    record("assistant", { type: "text", text: "Listing done; now writing." }),
+    record("assistant", { type: "tool_use", id: "t1", name: "Read", input: {} }),
+    record("user", { type: "tool_result", tool_use_id: "t1", content: "read" }),
+    record("assistant", { type: "tool_use", id: "t2", name: "Bash", input: { command } }, { type: "tool_use", id: "t3", name: "Bash", input: { command: "make" } }),
+  ].join(""));
+  assert.deepEqual(pendingTool(at, TOOLS), { name: "Bash", about: command });
+  fs.appendFileSync(at, record("user", { type: "tool_result", tool_use_id: "t2", content: "" }));
+  assert.deepEqual(pendingTool(at, TOOLS), { name: "Bash", about: "make" });
+  fs.appendFileSync(at, record("assistant", { type: "tool_use", id: "q", name: "AskUserQuestion", input: { questions: [{ question: "Which color?", options: [{ label: "Red" }, { label: "Blue" }] }] } }));
+  fs.appendFileSync(at, record("user", { type: "tool_result", tool_use_id: "t3", content: "" }));
+  assert.deepEqual(pendingTool(at, TOOLS), { name: "AskUserQuestion", asks: [{ question: "Which color?", options: ["Red", "Blue"] }] });
+  fs.appendFileSync(at, record("assistant", { type: "text", text: "Blue it is." }));
+  assert.equal(pendingTool(at, TOOLS), undefined);
+  const huge = "x".repeat(4001);
+  fs.appendFileSync(at, record("assistant", { type: "tool_use", id: "big", name: "Bash", input: { command: huge } }));
+  assert.deepEqual(pendingTool(at, TOOLS), { name: "Bash", about: huge.slice(0, 4000) }, "whole, to 4000 characters");
+  assert.equal(pendingTool(path.join(tmp, "none.jsonl"), TOOLS), undefined);
 });
 
 test("followed, what is written next is handed on as it comes, a line once it ends, until it is stopped", async () => {

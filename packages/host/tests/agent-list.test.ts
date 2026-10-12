@@ -12,6 +12,7 @@ import { agentsOf } from "../src/agent-list.ts";
 import { workingIn, type HeldBoard, type WaitingStatus } from "../src/needs.ts";
 import type { Wait } from "../src/waits.ts";
 import type { KnownMachines } from "@hivemind/core/remote-uri";
+import type { ToolAsked } from "@hivemind/workspace-api/agents";
 
 const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../conformance/agents.json");
 const { known, computer: cases } = JSON.parse(fs.readFileSync(file, "utf8")) as {
@@ -19,6 +20,7 @@ const { known, computer: cases } = JSON.parse(fs.readFileSync(file, "utf8")) as 
   computer: Array<{
     about: string; held: HeldBoard[]; statuses: WaitingStatus[]; waits: Record<string, Wait>;
     programs: Record<string, { id: string; label: string }>; keys?: Record<string, string[]>; interrupts: string[]; conversations?: string[];
+    asking?: Record<string, ToolAsked>; choose?: string[];
     agents: unknown[]; working: number;
   }>;
 };
@@ -39,6 +41,8 @@ test("every agent here is the spec's: its state and since when, what it waits on
       converses: (tile: string) => (c.conversations ?? []).includes(tile),
       parent: (tile: string) => c.parents?.[tile],
       wait: (tile: string) => c.waits[tile],
+      asking: (tile: string) => c.asking?.[tile],
+      chooses: (tile: string) => !!c.choose?.includes(tile),
     };
     assert.deepEqual(agentsOf(c.held, c.statuses, machines, facts), c.agents, c.about);
     assert.equal(workingIn(c.held, c.statuses), c.working, c.about);

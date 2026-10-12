@@ -182,6 +182,33 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   await expect(page.locator("[data-message] textarea")).toHaveValue("");
   await page.screenshot({ path: testInfo.outputPath("agent.png") });
 
+  // Asked a question, with options to choose from: the browser shows the question and each option,
+  // never Allow or Deny, and the agent is answered with the option tapped.
+  const say = async (line: string) => {
+    await page.locator("[data-message] textarea").fill(line);
+    await page.locator("[data-message] button[type=submit]").click();
+  };
+  const waiting = page.locator('[data-screen="agent"] [data-waiting-card]');
+  await say("ask");
+  await expect(waiting).toHaveAttribute("data-waiting-card", "question", { timeout: 30_000 });
+  await expect(waiting.locator("[data-question]")).toHaveText("Which color?");
+  await expect(waiting.locator("[data-choice]")).toHaveText(["Red", "Blue"]);
+  await expect(waiting.locator("[data-answer]")).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("question.png") });
+  await waiting.locator('[data-choice="1"]').click();
+  await expect(page.locator("[data-chat]")).toContainText("ask answered 2", { timeout: 30_000 });
+  await expect.poll(audit, { timeout: 10_000 }).toContainEqual(expect.objectContaining({ verb: "agent.answer", detail: "choice 2", outcome: "ok", actor: expect.objectContaining({ kind: "peer", device: id }) }));
+  await expect(waiting).toHaveCount(0, { timeout: 30_000 });
+
+  // Asked to run a command: the tool, and the command whole, above Allow and Deny.
+  await say("run");
+  await expect(waiting).toHaveAttribute("data-waiting-card", "permission", { timeout: 30_000 });
+  await expect(waiting.locator('[data-tool="Bash"] pre')).toHaveText("rm -rf build\nmake all");
+  await page.screenshot({ path: testInfo.outputPath("permission.png") });
+  await waiting.locator('[data-answer="allow"]').click();
+  await expect(page.locator("[data-chat]")).toContainText("run answered y", { timeout: 30_000 });
+  await expect(waiting).toHaveCount(0, { timeout: 30_000 });
+
   // Started from the browser, with a prompt: the computer starts it as that device asked, and its
   // screen opens in place of the one that started it.
   await page.locator('[data-screen="agent"] [data-back]').click();

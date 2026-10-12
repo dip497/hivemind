@@ -42,7 +42,8 @@ export async function offerPhonePairing(desktop: Page): Promise<string> {
  *  writes each line it is given, and its reply, as Claude Code's records to `<home>/talk/<id>.jsonl`,
  *  which its manifest names as its session file, and says `heard: <line>` on its screen. Given
  *  `/clear`, it begins another session, recorded for its tile in `$TALKER_TRACKS` as Claude Code's
- *  tracker hook records one, its file written from the next line on. What the desktop's environment
+ *  tracker hook records one, its file written from the next line on. Given `ask`, it asks which
+ *  color, Red or Blue, a key choosing; given `run`, to run a command, `y` or `n`. What the desktop's environment
  *  needs to run it. */
 export function talkerAgent(root: string): Record<string, string> {
   const bin = path.join(root, "bin");
@@ -61,6 +62,23 @@ export function talkerAgent(root: string): Record<string, string> {
     "    t=$(printf '%s' \"$HIVEMIND_TILE\" | base64 | tr '+/' '-_' | tr -d '=')",
     "    mkdir -p \"$TALKER_TRACKS\" && printf '{\"session_id\":\"%s\"}' \"$id\" > \"$TALKER_TRACKS/$t.json\"",
     "    printf 'cleared\\n'; continue",
+    "  fi",
+    // Told `ask` or `run`, it records the tool it asks to use as Claude Code does, asks on its
+    // screen, and takes one key as the answer.
+    "  if [ \"$line\" = ask ] || [ \"$line\" = run ]; then",
+    "    n=$((n+1)); at=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)",
+    "    if [ \"$line\" = ask ]; then",
+    "      use='\"name\":\"AskUserQuestion\",\"input\":{\"questions\":[{\"question\":\"Which color?\",\"options\":[{\"label\":\"Red\"},{\"label\":\"Blue\"}],\"multiSelect\":false}]}'",
+    "      screen='Which color?\\n 1. Red\\n 2. Blue\\n'",
+    "    else",
+    "      use='\"name\":\"Bash\",\"input\":{\"command\":\"rm -rf build\\nmake all\"}'",
+    "      screen='Run this command? (y/n)\\n'",
+    "    fi",
+    "    printf '{\"type\":\"assistant\",\"uuid\":\"t%s\",\"timestamp\":\"%s\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"tu%s\",%s}]}}\\n' \"$n\" \"$at\" \"$n\" \"$use\" >> \"$f\"",
+    "    printf \"\\033[2J\\033[H$screen\"",
+    "    read -rsn1 key",
+    "    printf '{\"type\":\"assistant\",\"uuid\":\"k%s\",\"timestamp\":\"%s\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"%s answered %s\"}]}}\\n' \"$n\" \"$at\" \"$line\" \"$key\" >> \"$f\"",
+    "    printf '\\033[2J\\033[H%s answered %s\\n' \"$line\" \"$key\"; continue",
     "  fi",
     "  n=$((n+1)); at=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)",
     "  printf '{\"type\":\"user\",\"uuid\":\"p%s\",\"timestamp\":\"%s\",\"message\":{\"role\":\"user\",\"content\":\"%s\"}}\\n' \"$n\" \"$at\" \"$line\" >> \"$f\"",
@@ -85,7 +103,13 @@ export function talkerAgent(root: string): Record<string, string> {
     "    said:",
     "    - { require: { type: user }, text: message.content, who: person }",
     "    - { require: { type: assistant }, each: message.content, item: { type: text }, text: text, who: agent }",
-    "detect: { default: idle, rules: [] }", "",
+    "    - require: { type: assistant }", "      each: message.content", "      item: { type: tool_use }",
+    "      tool: { id: id, name: name, about: [input.command], asks: { list: input.questions, question: question, options: options, label: label, many: multiSelect } }",
+    "answer: { permission: { allow: ['y'], deny: ['n'] } }",
+    "choose: ['{n}']",
+    "detect:", "  default: idle", "  rules:",
+    "  - when: { contains: 'Which color?' }", "    then: question",
+    "  - when: { contains: 'Run this command?' }", "    then: permission", "",
   ].join("\n"));
   return { PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` };
 }

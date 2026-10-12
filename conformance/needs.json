@@ -1,5 +1,5 @@
 {
- "about": "Cases every implementation of needs-you must pass (spec/needs.md): what a device answers waits on the person ('computer': its boards, its agents' statuses and what they wait on an answer for ('waits'), in, with the machines it knows ('known': itself, the person's other devices, participants' computers by whose they are, and saved machines) and, by tile, the waits whose keys its agent says, allowing and denying them, each by its name: what its screen says it is, else its kind ('keys', none when not given); the list, each item with the machine its agent runs on, and how many agents are at work, out), and what a phone shows of the answers it is given ('phone': each from the device named in 'from'). Written by hand from the spec.",
+ "about": "Cases every implementation of needs-you must pass (spec/needs.md): what a device answers waits on the person ('computer': its boards, its agents' statuses and what they wait on an answer for ('waits'), in, with the machines it knows ('known': itself, the person's other devices, participants' computers by whose they are, and saved machines) and, by tile, the waits whose keys its agent says, allowing and denying them, each by its name: what its screen says it is, else its kind ('keys', none when not given), by tile the tool use its session file says its agent waits on ('asking') and the tiles whose agent says the keys that choose an option ('choose'); the list, each item with the machine its agent runs on, and how many agents are at work, out), and what a phone shows of the answers it is given ('phone': each from the device named in 'from'). Written by hand from the spec.",
  "known": {
   "self": {
    "device": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
@@ -1283,6 +1283,304 @@
      "permission"
     ]
    }
+  },
+  {
+   "about": "what an agent waits on, by the tool use its session file says it waits on (0.7): a permission says the tool and what it is about, whole; a tool that asks questions makes it a question, whatever its hooks call it, never allowed or denied, an option chosen from the device only when it asks one question with one answer, and options to choose from, and its agent says the keys that choose; a question is of no tool; a screen it says it waits on is that screen, of no tool",
+   "held": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "repo": "/home/p/api",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "t1",
+        "kind": "claude",
+        "label": "Claude #1"
+       },
+       {
+        "id": "t2",
+        "kind": "claude",
+        "label": "Claude #2"
+       },
+       {
+        "id": "t3",
+        "kind": "claude",
+        "label": "Claude #3"
+       },
+       {
+        "id": "t4",
+        "kind": "claude",
+        "label": "Claude #4"
+       },
+       {
+        "id": "t5",
+        "kind": "claude",
+        "label": "Claude #5"
+       },
+       {
+        "id": "t6",
+        "kind": "claude",
+        "label": "Claude #6"
+       }
+      ]
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "hm:t1",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000001000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "hm:t2",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000002000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "hm:t3",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000003000,
+      "kind": "question"
+     }
+    },
+    {
+     "tileId": "hm:t4",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "screen",
+      "since": 1790000004000,
+      "kind": "permission",
+      "says": "trust"
+     }
+    },
+    {
+     "tileId": "hm:t5",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000005000,
+      "kind": "question"
+     }
+    },
+    {
+     "tileId": "hm:t6",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000006000,
+      "kind": "permission"
+     }
+    }
+   ],
+   "waits": {},
+   "keys": {
+    "t1": [
+     "permission"
+    ],
+    "t2": [
+     "permission"
+    ],
+    "t3": [
+     "permission"
+    ],
+    "t4": [
+     "trust"
+    ],
+    "t6": [
+     "permission"
+    ]
+   },
+   "asking": {
+    "t1": {
+     "name": "Bash",
+     "about": "python3 -c \"print(41+1)\"\necho done"
+    },
+    "t2": {
+     "name": "AskUserQuestion",
+     "asks": [
+      {
+       "question": "Which color?",
+       "options": [
+        "Red",
+        "Blue"
+       ]
+      }
+     ]
+    },
+    "t3": {
+     "name": "AskUserQuestion",
+     "asks": [
+      {
+       "question": "Which test runner?",
+       "options": [
+        "Vitest",
+        "Jest"
+       ]
+      },
+      {
+       "question": "Which browsers?",
+       "options": [
+        "Chrome",
+        "Safari",
+        "Firefox"
+       ],
+       "many": true
+      }
+     ]
+    },
+    "t4": {
+     "name": "Bash",
+     "about": "rm -rf build"
+    },
+    "t5": {
+     "name": "Bash",
+     "about": "ls"
+    },
+    "t6": {
+     "name": "AskUserQuestion",
+     "asks": [
+      {
+       "question": "Anything else?",
+       "options": []
+      }
+     ]
+    }
+   },
+   "choose": [
+    "t2",
+    "t3",
+    "t5",
+    "t6"
+   ],
+   "needs": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t1",
+     "agent": "Claude #1",
+     "kind": "permission",
+     "since": 1790000001000,
+     "machine": "desk",
+     "tool": {
+      "name": "Bash",
+      "about": "python3 -c \"print(41+1)\"\necho done"
+     },
+     "decide": true
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t2",
+     "agent": "Claude #2",
+     "kind": "question",
+     "since": 1790000002000,
+     "machine": "desk",
+     "asks": [
+      {
+       "question": "Which color?",
+       "options": [
+        "Red",
+        "Blue"
+       ]
+      }
+     ],
+     "choose": true
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t3",
+     "agent": "Claude #3",
+     "kind": "question",
+     "since": 1790000003000,
+     "machine": "desk",
+     "asks": [
+      {
+       "question": "Which test runner?",
+       "options": [
+        "Vitest",
+        "Jest"
+       ]
+      },
+      {
+       "question": "Which browsers?",
+       "options": [
+        "Chrome",
+        "Safari",
+        "Firefox"
+       ],
+       "many": true
+      }
+     ]
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t4",
+     "agent": "Claude #4",
+     "kind": "permission",
+     "says": "trust",
+     "since": 1790000004000,
+     "machine": "desk",
+     "decide": true
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t5",
+     "agent": "Claude #5",
+     "kind": "question",
+     "since": 1790000005000,
+     "machine": "desk"
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t6",
+     "agent": "Claude #6",
+     "kind": "question",
+     "since": 1790000006000,
+     "machine": "desk",
+     "asks": [
+      {
+       "question": "Anything else?",
+       "options": []
+      }
+     ]
+    }
+   ],
+   "working": 0
   }
  ],
  "phone": [
@@ -1713,6 +2011,153 @@
      "agent": "Build",
      "kind": "permission",
      "since": 1790000002000,
+     "machine": "desk"
+    }
+   ],
+   "working": 0
+  },
+  {
+   "about": "the tool a permission waits to use, and a question's questions and whether one of its options is chosen from the phone, are shown as said (0.7); a choose on anything but a question, or as anything but true, is not, and a tool or questions not shaped as the list says are left out of the item, not the item from the list",
+   "answers": [
+    {
+     "t": "needs",
+     "needs": [
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t1",
+       "agent": "Build",
+       "kind": "permission",
+       "since": 1790000000000,
+       "machine": "desk",
+       "tool": {
+        "name": "Bash",
+        "about": "rm -rf build\nmake all"
+       },
+       "decide": true
+      },
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t2",
+       "agent": "Theme",
+       "kind": "question",
+       "since": 1790000001000,
+       "machine": "desk",
+       "asks": [
+        {
+         "question": "Which color?",
+         "options": [
+          "Red",
+          "Blue"
+         ]
+        }
+       ],
+       "choose": true
+      },
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t3",
+       "agent": "Docs",
+       "kind": "permission",
+       "since": 1790000002000,
+       "machine": "desk",
+       "choose": true
+      },
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t4",
+       "agent": "Tests",
+       "kind": "permission",
+       "since": 1790000003000,
+       "machine": "desk",
+       "tool": {
+        "about": "no name"
+       }
+      },
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "tile": "t5",
+       "agent": "Lint",
+       "kind": "question",
+       "since": 1790000004000,
+       "machine": "desk",
+       "asks": [
+        {
+         "question": "Which?"
+        }
+       ],
+       "choose": "yes"
+      }
+     ],
+     "working": 0
+    }
+   ],
+   "from": [
+    "desk"
+   ],
+   "needs": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t1",
+     "agent": "Build",
+     "kind": "permission",
+     "since": 1790000000000,
+     "machine": "desk",
+     "tool": {
+      "name": "Bash",
+      "about": "rm -rf build\nmake all"
+     },
+     "decide": true
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t2",
+     "agent": "Theme",
+     "kind": "question",
+     "since": 1790000001000,
+     "machine": "desk",
+     "asks": [
+      {
+       "question": "Which color?",
+       "options": [
+        "Red",
+        "Blue"
+       ]
+      }
+     ],
+     "choose": true
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t3",
+     "agent": "Docs",
+     "kind": "permission",
+     "since": 1790000002000,
+     "machine": "desk"
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t4",
+     "agent": "Tests",
+     "kind": "permission",
+     "since": 1790000003000,
+     "machine": "desk"
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t5",
+     "agent": "Lint",
+     "kind": "question",
+     "since": 1790000004000,
      "machine": "desk"
     }
    ],

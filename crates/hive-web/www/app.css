@@ -95,6 +95,14 @@ button { cursor: pointer; }
 .answers { display: flex; flex-direction: column; gap: 8px; }
 .answers .row { display: flex; gap: 8px; }
 .answers .row > .pill { flex: 1; }
+.asked { display: flex; flex-direction: column; gap: 6px; }
+.asked p, .asked ul { margin: 0; }
+.asked ul { padding-left: 18px; color: var(--text2); }
+.asked pre {
+  margin: 0; background: var(--panel); border-radius: 10px; padding: 10px 12px;
+  max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text2);
+}
+.choices { display: flex; flex-direction: column; gap: 8px; }
 .plan {
   background: var(--panel); border-radius: 10px; padding: 12px;
   max-height: 320px; overflow-y: auto; color: var(--text2);

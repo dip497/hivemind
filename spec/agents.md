@@ -1,4 +1,4 @@
-# Agents (0.6)
+# Agents (0.7)
 
 The person's agents, as their phone sees and drives them (M5, `docs/design/phone-app-2026-10-02.md`
 §4): every agent in the workspaces one of their devices holds, live; and starting one, stopping
@@ -49,7 +49,8 @@ item who started it:
 - `state` is its status's state, `since` when it last changed.
 - `waiting` is there while it waits with a kind: `kind` (`permission`, `question`, `plan`, `other`,
   or `approval`, on the agent supervising it), `since` the same as the state's, and `says` (0.5),
-  `plan` and `decide` as `needs.md` gives them for a wait on the person.
+  `plan`, `decide`, and `tool`, `asks` and `choose` (0.7) as `needs.md` gives them for a wait on the
+  person.
 - `approval` (0.5) is there on an `approval` wait: the `tool` it would use, a `summary` of what it
   would do with it (a command, a file, a URL), and `expiresAt`, when it stops waiting and the agent
   asks at its own prompt instead.
@@ -73,8 +74,9 @@ nothing; a `working` that is not a whole number of none or more counts none. An 
 is left out: one that is not an object, has a field it must have (`program`, `waiting`,
 `interrupt` and `conversation` may be missing) missing or of another type, a `state` not listed
 above, or a `waiting` that is no object, has a kind not listed or no `since`. A `program` that is
-not an `id` and a `label`, a `decide`, `interrupt` or `conversation` that is not `true`, and a
-`decide` on anything but a permission, are taken as not there.
+not an `id` and a `label`, a `decide`, `interrupt`, `conversation` or `choose` that is not `true`,
+a `decide` on anything but a permission, a `choose` on anything but a question, and a `waiting`'s
+`tool` or `asks` not shaped as `needs.md` gives them, are taken as not there.
 
 ## Starting
 
@@ -150,6 +152,7 @@ before the answer. Each entry is one of
 { "id": "<its id>", "at": 1790000000000, "who": "person", "text": "<what they asked>" }
 { "id": "<its id>", "at": 1790000000000, "who": "agent", "text": "<what it said, in markdown>" }
 { "id": "<its id>", "at": 1790000000000, "who": "agent", "tool": { "id": "<the use>", "name": "Edit", "about": "src/nav.ts" } }
+{ "id": "<its id>", "at": 1790000000000, "who": "agent", "tool": { "id": "<the use>", "name": "AskUserQuestion", "asks": [{ "question": "Which color?", "options": ["Red", "Blue"] }] } }
 { "id": "<its id>", "at": 1790000000000, "who": "tool", "result": { "of": "<the use>", "text": "<what it gave back>", "error": true } }
 ```
 
@@ -157,7 +160,8 @@ before the answer. Each entry is one of
   (`session.transcript`: which records say what, and in which fields; the agent providers guide
   has the rules). It knows no agent's format of its own. `id` is the record's, with `/` and the
   item's index after it for one read from a list of several items; `at` its time, in ms since the
-  epoch; a tool's `about` at most 120 characters, its first line; what a tool gave back cut to
+  epoch; a tool's `about` at most 120 characters, its first line; a tool's `asks` (0.7) the
+  questions it asks the person, as `needs.md` gives them; what a tool gave back cut to
   2,000 characters, `error` only when true (left out otherwise). A line that is not a record, and
   a record or item no rule reads, say nothing.
 - `cursor` is how far into the file the entries go (in bytes, at the end of a line), and `session`

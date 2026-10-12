@@ -17,7 +17,8 @@ holds is one item:
 { "workspace": "<the workspace's id>", "name": "<the workspace's name>", "tile": "<the agent's tile>",
   "agent": "<what the agent is called>", "kind": "permission", "says": "trust", "since": 1790000000000,
   "plan": "<the plan, in markdown>", "machine": "<what the machine it runs on is called>",
-  "decide": true }
+  "decide": true, "tool": { "name": "Bash", "about": "<the command, whole>" },
+  "asks": [{ "question": "Which color?", "options": ["Red", "Blue"], "many": true }], "choose": true }
 ```
 
 - `says` (0.6) is what screen it waits on, when the agent's manifest names it: a detect rule that
@@ -41,6 +42,17 @@ holds is one item:
   the screen it `says` it is (`answer.trust`), else for a permission (`answer.permission`). It is
   left out otherwise: for any other kind, and for an agent that says no keys for it, whose
   permission is answered with a line, as the person would answer it on its screen.
+- `tool` (0.7) is there on a `permission` whose agent's session file (`agents.md`, "Conversation")
+  says which tool it waits to use: the first tool use since it last said anything that nothing was
+  given back for. It names the tool (`name`) and says what it is about, whole (`about`: the exact
+  command, file or address, at most 4000 characters). It is left out for a wait whose screen `says`
+  it is something else, and when the agent keeps no session file or waits on no tool there.
+- `asks` (0.7) is there when that tool asks the person questions (Claude Code's AskUserQuestion):
+  the wait is then a `question`, whatever kind its status says, with each question and the options
+  to choose from (`many`: several may be chosen); at most 4 questions of 9 options, each at most
+  300 characters.
+- `choose` (0.7) is `true` on a `question` that asks one question, with options, of which one is
+  chosen, when the agent's manifest says the keys that choose an option (`choose`, "Answering").
 
 A session is named `hm:<tile>` or by its tile; both are the tile. An agent in no workspace the
 device holds is not listed, nor is one doing anything else (working, done, failed, …).
@@ -48,11 +60,12 @@ device holds is not listed, nor is one doing anything else (working, done, faile
 Items are in order of how long they have waited, the longest first; of two waiting since the same
 moment, the one whose tile comes first (by its characters' codes). A phone that has the lists of
 several devices shows them as one, in the same order. An item is left out when it lacks a field
-above (`says`, `plan`, `machine` and `decide` may be missing), has one that is not text (`since`: not a
-number), or has a `kind` not listed here. An item with no `machine` (from a device of 0.2) runs on
+above (`says`, `plan`, `machine`, `decide`, `tool`, `asks` and `choose` may be missing), has one that
+is not text (`since`: not a number), or has a `kind` not listed here. A `tool` or `asks` not shaped as
+above is left out of the item, not the item from the list. An item with no `machine` (from a device of 0.2) runs on
 the device that answered, and the phone shows it with that device's name. A `decide` that is not
-`true`, or is on anything but a `permission`, is taken as not there: the item is shown as it would
-be without it.
+`true`, or is on anything but a `permission`, is taken as not there, as is a `choose` that is not
+`true` or is on anything but a `question`: the item is shown as it would be without it.
 
 ## Answering
 
@@ -70,6 +83,9 @@ and once: an answer for a wait that is over, or one answered already, does nothi
   the screen it `says` it is (0.6), are
   typed into its terminal, the first at once and each next one a moment (40 ms) after the last, so
   its screen takes each one;
+- for a `question` the list says can be chosen from (`choose`), also `{ "choice": <n> }`: option
+  `n` of its question, counting from 0, chosen with the keys its manifest's `choose` gives, `{n}` in
+  them typed as the option's number counting from 1 (Claude Code's: the digit);
 - for anything else, `{ "text": "<one line>" }`: typed into the agent's terminal, Enter after it.
   It is one line of at most 1000 characters, with no control characters.
 
@@ -78,13 +94,15 @@ and once: an answer for a wait that is over, or one answered already, does nothi
   the program on the drive socket that started the agent; anyone else is `FORBIDDEN`.
 
 Anything else is `BAD_REQUEST`: a decision for an agent that says no keys, or for a wait that is
-neither a plan, a permission nor an approval, among it. One may answer who may drive the workspace's agents, and the
+neither a plan, a permission nor an approval (a `question` among them), and a choice for a wait not
+chosen from or an option it does not list, among it. One may answer who may drive the workspace's agents, and the
 person's own devices, a phone among them.
 
 What is typed is typed as the person types it at the agent's tile (0.7), so the agent's status
 hears it: a key that answers its permission sets it working, and Esc or Ctrl+C on its own ends
 its turn, at once, not when the agent next reports. An answer that lands is recorded with what was
-decided (`allow`, `deny`, or `reply` for a line, never its words), one that does not as
+decided (`allow`, `deny`, `choice <n>` with the option's number counting from 1, or `reply` for a
+line, never its words), one that does not as
 `<decision>, not answered`. Nothing is typed, and it answers `{ "answered": false }`, while
 
 - the agent's screen, read since the wait began, shows its prompt, or a wait its manifest's rules

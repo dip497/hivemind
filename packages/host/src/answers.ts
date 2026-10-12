@@ -4,20 +4,21 @@
  * `agent.list` gives it): an answer lands only while the agent still waits on that wait, and once,
  * so one that comes late, or again, does nothing and says so. A plan or a supervised tool use is
  * decided (`waits.ts`); a permission on the agent's screen is allowed or denied with the keys its
- * agent says do that (0.5); anything else is one line typed into the agent's terminal, Enter after
- * it. Typed as the person types, through the control plane, so the agent's status hears it; not
+ * agent says do that (0.5); an option of the one question its tool asks is chosen with the keys its
+ * agent says choose (0.7), never allowed or denied; anything else is one line typed into the
+ * agent's terminal, Enter after it. Typed as the person types, through the control plane, so the agent's status hears it; not
  * while the screen shows the agent's prompt or another wait, nor while another answer is going
  * into that terminal (0.7). Electron-free.
  */
 import type { AnswerKeys, InputKind } from "@hivemind/agents";
 import { keyBytes } from "@hivemind/agent-host/keys";
 import type { ScreenReading, SessionStatus } from "@hivemind/agent-host/status-store";
-import type { Answerer } from "@hivemind/workspace-api/agents";
+import type { Answerer, ToolAsked } from "@hivemind/workspace-api/agents";
 import { ApiError, oneOf, text, written } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
 import type { ControlPlane } from "./control/plane.js";
-import { waitsOnThePerson } from "./needs.js";
+import { waitOn, waitsOnThePerson } from "./needs.js";
 
 /** What answering needs of the control plane: the agents' statuses and waits, and typing as the
  *  person. */
@@ -29,6 +30,11 @@ export interface AnswersOptions {
   /** The keys that allow and deny a permission the agent of `tile` asks, by its status, as it
    *  says; undefined for another wait, and when it says none. */
   answerKeys(tile: string, status: { kind?: InputKind; says?: string }): AnswerKeys | undefined;
+  /** The tool use the agent of `tile` waits on, as its session file says. */
+  asking(tile: string): ToolAsked | undefined;
+  /** The keys that choose an option of a question the agent of `tile` asks, `{n}` its number from
+   *  1; undefined when it says none. */
+  chooseKeys(tile: string): readonly string[] | undefined;
   /** Who is at a connection. */
   who(connection: Connection): Answerer;
 }
@@ -60,10 +66,11 @@ function line(value: unknown, name: string): string {
   return t;
 }
 
-/** How an answer is recorded: its decision, else that it was a reply. */
+/** How an answer is recorded: its decision, the option chosen (from 1), else that it was a reply. */
 const decidedOf = (answer: unknown): string => {
-  const d = (answer as { decision?: unknown } | null)?.decision;
-  return d === "allow" || d === "deny" ? d : "reply";
+  const { decision, choice } = (answer ?? {}) as { decision?: unknown; choice?: unknown };
+  if (decision === "allow" || decision === "deny") return decision;
+  return typeof choice === "number" ? `choice ${choice + 1}` : "reply";
 };
 
 export function answers(o: AnswersOptions): Domain<"agent.answer"> {
@@ -73,7 +80,7 @@ export function answers(o: AnswersOptions): Domain<"agent.answer"> {
       "agent.answer": (from, tile, since, answer) => {
         const bare = toBareId(text(tile, "tile"));
         if (typeof since !== "number") throw new ApiError("BAD_REQUEST", "since must be a number");
-        const a = (answer ?? {}) as { text?: unknown; decision?: unknown; feedback?: unknown; always?: unknown };
+        const a = (answer ?? {}) as { text?: unknown; decision?: unknown; choice?: unknown; feedback?: unknown; always?: unknown };
         const plane = o.plane();
         const held = plane.waits.of(bare);
         if (held?.since === since) {
@@ -88,8 +95,15 @@ export function answers(o: AnswersOptions): Domain<"agent.answer"> {
         const status = plane.status.get(bare);
         // Waits on the person no more, or on another wait, or answered already: nothing.
         if (!status || !waitsOnThePerson(status) || status.since !== since || answered.has(`${bare}@${since}`)) return { answered: false };
+        const on = waitOn(bare, { kind: status.kind!, says: status.says }, { decides: () => false, asking: o.asking, chooses: (t) => !!o.chooseKeys(t) });
         let parts: string[];
-        if (a.decision !== undefined) {
+        if (a.choice !== undefined) {
+          const options = on.choose ? on.asks![0]!.options.length : 0;
+          const n = a.choice;
+          if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0 || n >= options) throw new ApiError("BAD_REQUEST", "answer.choice is an option, from 0, of the one question it asks, when its keys choose one");
+          parts = o.chooseKeys(bare)!.map((k) => keyBytes(k.replaceAll("{n}", String(n + 1))));
+        } else if (a.decision !== undefined) {
+          if (on.kind === "question") throw new ApiError("BAD_REQUEST", "it asks a question: an option of it is chosen, or a line is typed, never allowed or denied");
           const decision = oneOf(a.decision, "answer.decision", ["allow", "deny"] as const);
           const keys = o.answerKeys(bare, status)?.[decision];
           if (!keys) throw new ApiError("BAD_REQUEST", "this agent is answered on its screen: it says no keys that allow or deny what it asks");

@@ -1,6 +1,7 @@
 // The answers to what an agent waits on (spec/needs.md "Answering"), as the Android app's
-// Answering.kt has them: Allow and Deny for a permission its device can decide, Approve or Ask for
-// changes for a plan, and a line of reply for anything else. One place for the Needs you list and
+// Answering.kt has them: Allow and Deny for a permission its device can decide, below the tool and
+// what it is about; a question's options to choose from; Approve or Ask for changes for a plan; and
+// a line of reply for anything else. One place for the Needs you list and
 // the agent's own screen. An answer the computer did not confirm is not offered again: it may have
 // landed, and a second would answer whatever the agent asks next.
 
@@ -36,7 +37,20 @@ export function answers(tile: string, w: Waiting, answer: (reply: Reply) => Prom
       box.inert = false;
     }
   };
-  if (w.kind === "permission" && w.decide) {
+  if (w.tool) {
+    box.append(h("div", { class: "asked", "data-tool": w.tool.name },
+      h("span", { class: "label-small" }, w.tool.name),
+      ...(w.tool.about ? [h("pre", { class: "mono" }, w.tool.about)] : [])));
+  }
+  for (const q of w.asks ?? []) {
+    box.append(h("div", { class: "asked", "data-question": "" },
+      h("p", {}, q.question),
+      ...(w.choose ? [] : [h("ul", {}, ...q.options.map((o) => h("li", {}, o)))])));
+  }
+  if (w.kind === "question" && w.choose && w.asks?.length === 1) {
+    box.append(h("div", { class: "choices" }, ...w.asks[0]!.options.map((o, n) =>
+      pill(o, () => void hold({ choice: n }), "", { "data-choice": String(n) }))));
+  } else if (w.kind === "permission" && w.decide) {
     box.append(h("div", { class: "row" },
       pill("Deny", () => void hold({ allow: false }), "", { "data-answer": "deny" }),
       pill("Allow", () => void hold({ allow: true }), "primary", { "data-answer": "allow" })));

@@ -55,19 +55,24 @@ fn from_js(v: &JsValue) -> Result<Value, JsError> {
     serde_json::from_str(&String::from(text)).map_err(err)
 }
 
-/// The person's answer as the page gives it: `{text}`, `{allow}`, or `{approve, feedback?}`.
+/// The person's answer as the page gives it: `{text}`, `{allow}`, `{approve, feedback?}` or `{choice}`.
 fn reply_of(said: &JsValue) -> Result<Reply, JsError> {
     let said = from_js(said)?;
     let text = |k: &str| said.get(k).and_then(Value::as_str).map(str::to_string);
     let yes = |k: &str| said.get(k).and_then(Value::as_bool);
-    match (text("text"), yes("allow"), yes("approve")) {
-        (Some(text), None, None) => Ok(Reply::Text(text)),
-        (None, Some(allow), None) => Ok(Reply::Decide { allow }),
-        (None, None, Some(approve)) => Ok(Reply::Plan {
+    let choice = said
+        .get("choice")
+        .and_then(Value::as_u64)
+        .and_then(|n| u32::try_from(n).ok());
+    match (text("text"), yes("allow"), yes("approve"), choice) {
+        (Some(text), None, None, None) => Ok(Reply::Text(text)),
+        (None, Some(allow), None, None) => Ok(Reply::Decide { allow }),
+        (None, None, Some(approve), None) => Ok(Reply::Plan {
             approve,
             feedback: text("feedback"),
         }),
-        _ => Err(err("an answer is {text}, {allow} or {approve, feedback?}")),
+        (None, None, None, Some(n)) => Ok(Reply::Choose { n }),
+        _ => Err(err("an answer is {text}, {allow}, {approve, feedback?} or {choice}")),
     }
 }
 

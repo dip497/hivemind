@@ -107,9 +107,11 @@ export class Mailbox {
    * around until they send or clear it. Keys typed mid-turn answer the agent's own
    * prompts (a permission's "1"), and escape sequences are the terminal's reports.
    * ponytail: a draft backspaced to nothing still counts, until Enter, Ctrl-C or Ctrl-U.
+   * `answers`: the keys answer the agent's own prompt (`agent.answer`), never a draft.
    */
-  typed(ptyId: string, data: string, paste = false): void {
+  typed(ptyId: string, data: string, paste = false, answers = false): void {
     this.typedAt.set(ptyId, Date.now());
+    if (answers) return;
     if (!paste && CLEARS_DRAFT.has(data)) {
       if (this.draft.delete(ptyId)) this.scheduleRelease(ptyId, SUBMIT_SETTLE_MS);
       return;

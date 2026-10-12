@@ -9,6 +9,7 @@ import { machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
 import type { AccessLists } from "@hivemind/workspace-host/access";
 import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
+import type { Asked, ToolAsked } from "@hivemind/workspace-api/agents";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import type { Wait } from "./waits.js";
 
@@ -40,6 +41,39 @@ export interface Need {
   /** What it asks can be allowed or denied from the device (0.5), its agent saying which of its
    *  keys do. */
   decide?: true;
+  /** A permission's tool, and what it is about, whole (0.7). */
+  tool?: { name: string; about?: string };
+  /** A question's questions, each with its options (0.7). */
+  asks?: Asked[];
+  /** An option of its one question is chosen from the device (0.7), its agent saying the keys. */
+  choose?: true;
+}
+
+/** What the device knows of what each tile's agent waits on: whether its keys allow or deny it
+ *  (`decides`), the plan or supervised tool use it waits on, the tool use its session file says it
+ *  waits on, and whether its agent says the keys that choose an option. */
+export interface WaitFacts {
+  decides: Decides;
+  wait?(tile: string): Wait | undefined;
+  asking?(tile: string): ToolAsked | undefined;
+  chooses?(tile: string): boolean;
+}
+
+/** What an agent waiting on the person waits on, as their devices are told it (0.7). A tool use
+ *  that asks questions makes it a question, whatever its hooks call it, an option chosen from the
+ *  device when it asks one question with one answer and its agent says the keys that choose; a
+ *  permission says the tool it is for and what that is about, and is allowed or denied from the
+ *  device when its agent says the keys. A screen it says it waits on (`says`) is that screen, of
+ *  no tool. */
+export function waitOn(tile: string, status: { kind: InputKind; says?: string }, facts: WaitFacts): Pick<Need, "kind" | "decide" | "tool" | "asks" | "choose"> {
+  const asking = status.says || (status.kind !== "permission" && status.kind !== "question") ? undefined : facts.asking?.(tile);
+  if (asking?.asks) {
+    const [only, ...more] = asking.asks;
+    const one = !!only && more.length === 0 && !only.many && only.options.length > 0;
+    return { kind: "question", asks: asking.asks, ...(one && facts.chooses?.(tile) ? { choose: true as const } : {}) };
+  }
+  const tool = asking && status.kind === "permission" ? { tool: { name: asking.name, ...(asking.about ? { about: asking.about } : {}) } } : {};
+  return { kind: status.kind, ...tool, ...(facts.decides(tile, status) ? { decide: true as const } : {}) };
 }
 
 /** A workspace this device holds: its id, its name, its folder (here, or on the device it was
@@ -129,19 +163,19 @@ export function workingIn(held: HeldBoard[], statuses: WaitingStatus[]): number 
 /** The agents of `held` waiting on the person, the one waiting longest first (and of two waiting
  *  since the same moment, the one whose tile comes first). An agent is called what the person
  *  named its tile, else what it says it is doing, else what it was started to do, else its tile's
- *  label; and the machine it runs on, as this device knows it (`machines`). What it waits on is
- *  decided from here when `decides` says so of the agent's tile and status. */
-export function needsOf(held: HeldBoard[], statuses: WaitingStatus[], waitOf: (tile: string) => Wait | undefined, machines: KnownMachines, decides: Decides): Need[] {
+ *  label; and the machine it runs on, as this device knows it (`machines`). What it waits on is as
+ *  `waitOn` says. */
+export function needsOf(held: HeldBoard[], statuses: WaitingStatus[], machines: KnownMachines, facts: WaitFacts): Need[] {
   const needs: Need[] = [];
   for (const { tileId, status } of statuses) {
     if (!waitsOnThePerson(status) || !status.kind) continue;
     const at = agentOf(held, tileId, status.title);
     if (!at) continue;
-    const plan = status.kind === "plan" ? waitOf(at.tile)?.plan : undefined;
+    const plan = status.kind === "plan" ? facts.wait?.(at.tile)?.plan : undefined;
     const board = held.find((h) => h.workspace === at.workspace)!;
     const machine = machineCalled(folderOf(board, at.tile), machines);
-    const decide = decides(at.tile, status);
-    needs.push({ ...at, kind: status.kind, ...(status.says ? { says: status.says } : {}), since: status.since, ...(plan === undefined ? {} : { plan }), machine, ...(decide ? { decide } : {}) });
+    const { kind, ...on } = waitOn(at.tile, { kind: status.kind, says: status.says }, facts);
+    needs.push({ ...at, kind, ...(status.says ? { says: status.says } : {}), since: status.since, ...(plan === undefined ? {} : { plan }), machine, ...on });
   }
   return needs.sort((a, b) => a.since - b.since || (a.tile < b.tile ? -1 : a.tile > b.tile ? 1 : 0));
 }

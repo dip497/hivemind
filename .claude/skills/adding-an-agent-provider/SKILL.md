@@ -77,6 +77,7 @@ Answer all eleven with a source. Each answer decides a field of the manifest.
 | 9 | `--model` flag? claude-style permission modes? | the `options` block (`model`, `mode`) |
 | 10 | What the TUI prints while **working**, and while **waiting for approval** | the `detect` rules and `caps.blockedDetection` — capture real output, do not guess |
 | 11 | Which keys **allow** and which **deny** its own permission prompt | the `answer.permission` block (the phone's Allow / Deny types them) — read them from the binary's chooser, or leave the block out |
+| 11b | Which keys **choose an option** of a question it asks (AskUserQuestion's chooser) | `choose` with `{n}` (the phone's option buttons type it) and `asks` under the transcript's `tool` — read them from the binary's chooser, or leave them out |
 | 12 | Which key **interrupts its turn** (the "esc to interrupt" hint) | `interrupt` (the phone's Stop types it) — read it from the binary's own hint, or leave it out |
 | 13 | Does its **session file** keep what was said, a JSON record a line? Which records and fields? | `session.transcript` (the phone's conversation) — map a real session file's records, check the mapping against `conformance/conversation.json`'s rules, or leave it out |
 

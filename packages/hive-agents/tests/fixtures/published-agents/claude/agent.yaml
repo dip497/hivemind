@@ -63,6 +63,10 @@ answer:
     - '3'
     deny:
     - escape
+# An option of its AskUserQuestion chooser, read from claude 2.1.296: a digit chooses that option
+# and sends it, for one question with one choice.
+choose:
+- '{n}'
 # The key that interrupts its turn, typed from your phone's Stop: claude 2.1.287 says "esc to
 # interrupt" while it works.
 interrupt:
@@ -301,6 +305,8 @@ session:
         id: id
         name: name
         about: [input.file_path, input.path, input.command, input.pattern, input.url, input.query, input.description]
+        # AskUserQuestion's: its questions, each with the options to choose from.
+        asks: { list: input.questions, question: question, options: options, label: label, many: multiSelect }
 hooks:
   arg: --settings
   template: '{"hooks":{events}}'

@@ -438,7 +438,7 @@ export class PeerLinks {
     if (asked?.t === "needs") {
       const [held, statuses] = [heldBoards(store), this.o.statuses?.() ?? []];
       const facts = this.o.facts?.(held) ?? NO_FACTS;
-      const needs = needsOf(held, statuses, (tile) => facts.wait?.(tile), this.o.machines, facts.decides);
+      const needs = needsOf(held, statuses, this.o.machines, facts);
       return on.send(JSON.stringify({ t: "needs", needs, working: workingIn(held, statuses) } satisfies DeviceMessage));
     }
     // Only a phone is told what happens here: a computer of the person's shows it.

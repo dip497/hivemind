@@ -70,6 +70,9 @@ export interface AgentManifest {
    *  (`permission`), the keys that allow what it asks and the keys that deny it on its screen (a
    *  phone's Allow / Deny). Claim them only from the real binary: a wrong key answers the wrong way. */
   answer?: Record<string, { allow: string[]; deny: string[] }>;
+  /** The keys that choose an option of a question its tool asks (`session.transcript`'s `asks`),
+   *  `{n}` the option's number from 1. Claim them only from the real binary, as `answer`. */
+  choose?: string[];
   /** The keys that interrupt its turn, as the person stops it from another of their devices (a
    *  phone's Stop). Claim them only from the real binary, as `answer`. */
   interrupt?: string[];
@@ -388,6 +391,12 @@ function validateTranscript(raw: unknown): AgentTranscript {
         req(strArray(x.about) && x.about.length >= 1 && x.about.length <= 8 && x.about.every((p) => DOT_PATH_RE.test(p)), `${at}.tool.about must be 1-8 field paths`);
         rule.tool.about = x.about;
       }
+      if (x.asks !== undefined) {
+        req(isObj(x.asks), `${at}.tool.asks must be a map`);
+        const k = x.asks as Record<string, unknown>;
+        rule.tool.asks = { list: path(k.list, `${at}.tool.asks.list`), question: path(k.question, `${at}.tool.asks.question`), options: path(k.options, `${at}.tool.asks.options`), label: path(k.label, `${at}.tool.asks.label`) };
+        if (k.many !== undefined) rule.tool.asks.many = path(k.many, `${at}.tool.asks.many`);
+      }
     }
     if (r.result !== undefined) {
       req(isObj(r.result), `${at}.result must be a map`);
@@ -624,6 +633,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     }
   }
   req(m.interrupt === undefined || keyTokens(m.interrupt), "interrupt must be 1-4 key tokens");
+  req(m.choose === undefined || (keyTokens(m.choose) && m.choose.some((k) => k.includes("{n}"))), "choose must be 1-4 key tokens, one naming the option, {n}");
   req(m.steer === undefined || typeof m.steer === "boolean", "steer must be true or false");
 
   const aliases = m.aliases;
@@ -675,6 +685,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     ...(dismiss.length ? { dismiss } : {}),
     ...(m.answer ? { answer: Object.fromEntries(Object.entries(m.answer).map(([name, k]) => [name, { allow: k.allow, deny: k.deny }])) } : {}),
     ...(m.interrupt ? { interrupt: m.interrupt } : {}),
+    ...(m.choose ? { choose: m.choose } : {}),
     ...(m.steer ? { steer: true } : {}),
     enabled: m.enabled ?? false,
     caps: m.caps,

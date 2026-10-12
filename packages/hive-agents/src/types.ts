@@ -200,10 +200,22 @@ export interface TranscriptRule {
   item?: Record<string, string | number | boolean>;
   text?: string;
   who?: "person" | "agent";
-  /** `about`: what the use is about, the first of these that is text. */
-  tool?: { id: string; name: string; about?: string[] };
+  /** `about`: what the use is about, the first of these that is text. `asks`: where its input
+   *  asks the person questions to choose an answer to. */
+  tool?: { id: string; name: string; about?: string[]; asks?: TranscriptAsks };
   /** `text`: text, or a list whose items' `text` are joined a line each. `error`: when true. */
   result?: { of: string; text: string; error?: string };
+}
+
+/** Where a tool use's input asks the person questions, each with options to choose from: the list
+ *  of questions (a path into the item), and in each question its text, its options' list, each
+ *  option's label, and whether several may be chosen. */
+export interface TranscriptAsks {
+  list: string;
+  question: string;
+  options: string;
+  label: string;
+  many?: string;
 }
 
 /** A file inside the overlay that Hivemind writes rather than links. */
@@ -374,6 +386,9 @@ export interface AgentProviderDef {
    *  kind), the keys that allow what it asks and the keys that deny it. Tokens as `hive ctl keys`
    *  takes them. */
   answer?: Readonly<Record<string, AnswerKeys>>;
+  /** The keys that choose an option of the question its tool asks (`session.transcript`'s
+   *  `asks`), `{n}` the option's number from 1. */
+  choose?: readonly string[];
   /** The keys that interrupt its turn, typed from another of the person's devices (a phone's
    *  Stop). Tokens as `hive ctl keys` takes them. */
   interrupt?: readonly string[];

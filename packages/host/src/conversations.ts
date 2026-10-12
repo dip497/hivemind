@@ -8,7 +8,8 @@ import { agentForCmd, readTrackedSession, sessionFile, sessionFor, type AgentTra
 import { ApiError, text } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
-import { followConversation, readConversation, type Said } from "./conversation.js";
+import type { ToolAsked } from "@hivemind/workspace-api/agents";
+import { followConversation, pendingTool, readConversation, type Said } from "./conversation.js";
 import { runsIn, type HeldBoard } from "./needs.js";
 
 /** A session an agent keeps its conversation in: its id (empty while none is known), its file
@@ -39,6 +40,13 @@ export function transcriptOf(held: HeldBoard[], tile: string, tileSessionsDir: s
   const spec = { cwd: runsIn(held, bare) ?? "", args: record.args ?? [] };
   const session = readTrackedSession(tileSessionsDir, `hm:${bare}`) ?? readTrackedSession(tileSessionsDir, bare) ?? sessionFor(def, spec);
   return { session: session ?? "", file: session ? sessionFile(exists, session, home) : null, format };
+}
+
+/** The tool use the agent of `tile`, among the boards `held`, waits on, as its session file says
+ *  (`pendingTool`); undefined when it keeps none, or waits on no tool. */
+export function askingOf(held: HeldBoard[], tile: string, tileSessionsDir: string, home?: string): ToolAsked | undefined {
+  const t = transcriptOf(held, tile, tileSessionsDir, home);
+  return t?.file ? pendingTool(t.file, t.format) : undefined;
 }
 
 export interface ConversationsOptions {

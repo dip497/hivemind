@@ -87,9 +87,25 @@ export interface ApprovalWait {
 
 /** One thing said in an agent's conversation (spec/agents.md "Conversation"): by the person, by
  *  the agent (its text, in markdown, or a tool it used), or by a tool (what it gave back). */
+/** A question an agent's tool asks the person, and the options to choose from; `many`: several may
+ *  be chosen (spec/agents.md "Conversation", spec/needs.md 0.7). */
+export interface Asked {
+  question: string;
+  options: string[];
+  many?: true;
+}
+
+/** The tool use an agent waits on the person for (spec/needs.md 0.7): its name, what it is about
+ *  (the exact command, file or address, whole), and the questions it asks. */
+export interface ToolAsked {
+  name: string;
+  about?: string;
+  asks?: Asked[];
+}
+
 export type ConversationEntry =
   | { id: string; at: number; who: "person" | "agent"; text: string }
-  | { id: string; at: number; who: "agent"; tool: { id: string; name: string; about?: string } }
+  | { id: string; at: number; who: "agent"; tool: { id: string; name: string; about?: string; asks?: Asked[] } }
   | { id: string; at: number; who: "tool"; result: { of: string; text: string; error?: true } };
 
 /** What an agent changed in the folder it runs in, against its last commit (spec/agents.md
@@ -141,7 +157,7 @@ export interface AgentItem {
   /** What it waits for, while it waits: on the person, or on the agent supervising it. `says`: what
    *  screen, when its agent's manifest names it (`trust`); `decide`: it is allowed or denied with
    *  `agent.answer`'s decision, its agent saying the keys that do. */
-  waiting?: { kind: InputKind; says?: string; since: number; plan?: string; decide?: true; approval?: ApprovalWait };
+  waiting?: { kind: InputKind; says?: string; since: number; plan?: string; decide?: true; approval?: ApprovalWait; tool?: { name: string; about?: string }; asks?: Asked[]; choose?: true };
   /** Who started it, when it reports to them (0.20): an agent's tile, or `client:<grant id>`, a
    *  program on the drive socket. */
   parent?: string;

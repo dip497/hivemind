@@ -598,7 +598,7 @@ as Allow/Deny (§11.1), and the reading list, tables, links, `dir=auto`, the com
 - Regression tests that fail on today's code: Allow on a fresh chooser lands; a second Allow with
   the old id is refused; the wait clears after the answer.
 
-*Done (2026-10-12), all but the question and permission detail, which follow:*
+*Done (2026-10-12):*
 - The probe. `1` allows on Claude 2.1.296's chooser, with its kitty keyboard on and off (a pty
   driven by hand), and from the paired page on the real binary three times: default mode with an
   ask rule, started from the page, and acceptEdits through `hive ctl spawn`. Each time the command
@@ -621,8 +621,24 @@ as Allow/Deny (§11.1), and the reading list, tables, links, `dir=auto`, the com
   an answer of several keys holds the terminal until its last key is in, another answer refused
   and a program's write queued behind it; the page sends an answer once, waits 10 s for the
   computer to say, and else says "Not confirmed: check the chat." with no buttons for that wait.
-- The audit: `detail` is `allow`, `deny` or `reply` (never a reply's words), `, not answered` when
-  it did not land.
+- The audit: `detail` is `allow`, `deny`, `choice <n>` or `reply` (never a reply's words), `, not
+  answered` when it did not land.
+- The question and the permission detail. Hook events carry none of the agent's words, so what a
+  wait is about comes from its session file: the tool use it waits on is the first since it last
+  said anything that nothing was given back for, read from the last 256 KB, its `about` whole (to
+  4000 characters). The manifest's transcript maps a tool's questions (`asks`), so nothing about
+  AskUserQuestion is in the host. Claude 2.1.296's chooser for AskUserQuestion also fires the
+  PermissionRequest hook ("Waiting for permission…"), so a wait whose tool asks questions is a
+  `question` whatever its hooks say, and Allow (`1`) would have chosen the first option. A
+  question is never decided; for one question with one answer, and a manifest that says the keys
+  that choose (`choose: ['{n}']`, read from 2.1.296: a digit chooses and sends), `{choice: n}`
+  types them. Several questions, or several answers, take a reply, the options listed above it.
+  The page: question text and one button per option; a permission's tool and its command, whole,
+  in mono above Deny/Allow. Proven in `phone-browser.spec.ts` with the talker stand-in, which
+  writes Claude's records for `ask` and `run`. Found on the way: an answer's single key (`2`) was
+  taken by the mailbox for the person's unsent draft on an agent that reports no turns, holding
+  the next message; an answer's keys are now never a draft. Claude's catalog manifest needs the
+  same `asks` and `choose` (hivemind-plugins, `agents/claude/agent.yaml`).
 - Proved to fail: the status not told (answers test 11), the screen check dropped or loosened (13,
   twice), the hold dropped or not queueing (12, twice), the audit detail dropped (11), `since` not
   strictly increasing (status-store), and the page retrying an unconfirmed answer (phone-browser

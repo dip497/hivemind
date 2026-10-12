@@ -6,7 +6,7 @@
  */
 import fs from "node:fs";
 import { transcriptEntries, type AgentTranscript } from "@hivemind/agents/node";
-import type { ConversationEntry as Entry } from "@hivemind/workspace-api/agents";
+import type { ConversationEntry as Entry, ToolAsked } from "@hivemind/workspace-api/agents";
 
 /** The entries said, and how far into the file they go (bytes, at the end of a line). */
 export interface Said {
@@ -45,6 +45,27 @@ export function readConversation(file: string, format: AgentTranscript, cursor?:
   const whole = from === cursor || from === 0 ? lines : lines.slice(1);
   const entries = transcriptEntries(format, whole);
   return { entries: cursor === undefined ? entries.slice(-TAIL_ENTRIES) : entries, cursor: through };
+}
+
+/** How much of the end of the file is read for the tool use an agent waits on. */
+const PENDING_BYTES = 256 * 1024;
+
+/** The tool use the session file `file`, read as `format` maps it, says the agent waits on: of the
+ *  tool uses since the last thing said, the first that nothing was given back for yet, what it is
+ *  about whole; undefined when there is none. */
+export function pendingTool(file: string, format: AgentTranscript): ToolAsked | undefined {
+  let size: number;
+  try { size = fs.statSync(file).size; } catch { return undefined; }
+  const from = Math.max(0, size - PENDING_BYTES);
+  const { lines } = linesBetween(file, from, size);
+  const entries = transcriptEntries(format, from === 0 ? lines : lines.slice(1), { whole: true });
+  const said = entries.findLastIndex((e) => "text" in e);
+  const since = entries.slice(said + 1);
+  const answered = new Set(since.flatMap((e) => ("result" in e ? [e.result.of] : [])));
+  const use = since.find((e): e is Extract<Entry, { tool: unknown }> => "tool" in e && !answered.has(e.tool.id));
+  if (!use) return undefined;
+  const { id: _id, ...tool } = use.tool;
+  return tool;
 }
 
 /** Follow the session file `file`, read as `format` maps it, from `cursor`: `said` is handed what is

@@ -17,6 +17,7 @@ import path from "node:path";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
+import type { ToolAsked } from "@hivemind/workspace-api/agents";
 import { ApiError } from "@hivemind/workspace-api/protocol";
 import type { AnswerKeys, InputKind } from "@hivemind/agents";
 import { StatusStore } from "@hivemind/agent-host/status-store";
@@ -30,7 +31,7 @@ const phone: Connection = { actor: { kind: "peer", person: PRIYA.person, device:
 
 /** A computer whose agent is in `t1`, and says `keys` allow and deny what it waits on, by the
  *  wait's name: what is typed into each terminal, and its `agent.answer`. */
-function computer(keys?: Record<string, AnswerKeys>) {
+function computer(keys?: Record<string, AnswerKeys>, { asking, choose }: { asking?: ToolAsked; choose?: string[] } = {}) {
   let now = 1_790_000_000_000;
   const status = new StatusStore({ now: () => (now += 1_000) });
   const waits = new Waits({ status });
@@ -44,6 +45,8 @@ function computer(keys?: Record<string, AnswerKeys>) {
   const domain = answers({
     plane: () => ({ status, waits, answer: typeIn }) as never,
     answerKeys: (tile, status) => (tile === "t1" ? keys?.[(status.says ?? status.kind)!] : undefined),
+    asking: (tile) => (tile === "t1" ? asking : undefined),
+    chooseKeys: (tile) => (tile === "t1" ? choose : undefined),
     who: () => PRIYA,
   });
   /** The agent in t1 waits anew on `kind`, on its screen: when the wait began. */
@@ -216,7 +219,8 @@ function plane() {
     windowsUp: () => false,
   } as unknown as ControlPlaneOptions);
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "answers-")), "audit.jsonl");
-  const server = new WorkspaceServer([answers({ plane: () => p, answerKeys: () => ({ allow: ["1"], deny: ["escape"] }), who: () => PRIYA })], new Intents(new AuditLog({ file })));
+  let asking: ToolAsked | undefined;
+  const server = new WorkspaceServer([answers({ plane: () => p, answerKeys: () => ({ allow: ["1"], deny: ["escape"] }), asking: () => asking, chooseKeys: () => ["{n}"], who: () => PRIYA })], new Intents(new AuditLog({ file })));
   const answer = async (since: number, a: unknown) => {
     const r = await server.answer("agent.answer", ["hm:t1", since, a], phone);
     if ("error" in r) throw new Error(r.error.message);
@@ -228,7 +232,7 @@ function plane() {
     return p.status.get("t1")!.since;
   };
   const audited = () => fs.readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => { const { verb, target, detail, outcome } = JSON.parse(l); return `${verb} ${target} ${detail} ${outcome}`; });
-  return { p, writes, answer, asks, audited, done: () => fs.rmSync(path.dirname(file), { recursive: true }) };
+  return { p, writes, answer, asks, audited, ask: (a: ToolAsked | undefined) => { asking = a; }, done: () => fs.rmSync(path.dirname(file), { recursive: true }) };
 }
 
 test("allowed from a phone on a fresh chooser, its keys go in as the person's: the agent waits on them no more, and a second Allow naming that wait types nothing; denied, the same; the audit records each decision", async () => {
@@ -243,14 +247,18 @@ test("allowed from a phone on a fresh chooser, its keys go in as the person's: t
   assert.deepEqual(await c.answer(again, { decision: "deny" }), { answered: true });
   assert.deepEqual(c.writes, ['hm:t1:"1"', 'hm:t1:"\\u001b"']);
   assert.notEqual(c.p.status.get("t1")!.state, "waiting", "denied, it waits no more");
+  c.ask({ name: "AskUserQuestion", asks: [{ question: "Which color?", options: ["Red", "Blue"] }] });
+  assert.deepEqual(await c.answer(c.asks(), { choice: 1 }), { answered: true });
+  assert.notEqual(c.p.status.get("t1")!.state, "waiting", "chosen, it waits no more");
+  c.ask(undefined);
   assert.deepEqual(await c.answer(c.asks(), { text: "use the staging database" }), { answered: true });
   assert.deepEqual(c.audited(), [
-    "agent.answer t1 allow ok", "agent.answer t1 allow, not answered ok", "agent.answer t1 deny ok", "agent.answer t1 reply ok",
+    "agent.answer t1 allow ok", "agent.answer t1 allow, not answered ok", "agent.answer t1 deny ok", "agent.answer t1 choice 2 ok", "agent.answer t1 reply ok",
   ]);
   c.done();
 });
 
-test("an answer holds its terminal until its last key is in: another answer then types nothing, and a program's message goes in after it", async () => {
+test("an answer holds its terminal until its last key is in: another answer then types nothing, and a program's message goes in after it, never held as a draft of the person's", async () => {
   const c = plane();
   assert.equal(c.p.answer("hm:t1", ["\x1b[B", "\r"]), true);
   assert.equal(c.p.answer("hm:t1", ["1"]), false, "while the first is going in");
@@ -259,6 +267,8 @@ test("an answer holds its terminal until its last key is in: another answer then
   await new Promise((resolve) => setTimeout(resolve, KEY_GAP_MS * 3));
   assert.deepEqual(c.writes.slice(0, 3), ['hm:t1:"\\u001b[B"', 'hm:t1:"\\r"', 'hm:t1:"hello"']);
   assert.equal(c.p.answer("hm:t1", ["1"]), true, "free again");
+  c.p.mailbox.deliver("hm:t1", "next");
+  assert.ok(c.writes.includes('hm:t1:"next"'), "an answer's key is no draft of the person's: a message after it goes in at once");
   assert.equal(c.p.answer("hm:t2", ["1"]), false, "no session there");
   c.done();
 });
@@ -277,4 +287,29 @@ test("an answer is not typed while the screen, read since the wait began, shows 
   assert.equal(at("question"), true, "a chooser its rules read as a question");
   c.status.screen("t1", "idle");
   assert.equal(c.answer("t1", c.waitOn("permission"), { text: "1" }).answered, true, "its prompt, read before it asked");
+});
+
+test("a question its tool asks is answered by choosing an option, with the keys its agent says choose, never allowed or denied; one it cannot choose from here takes a line", () => {
+  const color = { name: "AskUserQuestion", asks: [{ question: "Which color?", options: ["Red", "Blue"] }] };
+  const keys = { permission: { allow: ["1"], deny: ["escape"] } };
+  // Its hooks call it a permission; its tool asks a question.
+  const c = computer(keys, { asking: color, choose: ["{n}"] });
+  const asked = c.waitOn("permission");
+  assert.equal(code(() => c.answer("t1", asked, { decision: "allow" })), "BAD_REQUEST", "allowed, it would choose the first");
+  for (const choice of [2, -1, 0.5, "1"]) assert.equal(code(() => c.answer("t1", asked, { choice })), "BAD_REQUEST", JSON.stringify(choice));
+  assert.deepEqual(c.typed, []);
+  assert.deepEqual(c.answer("t1", asked, { choice: 1 }), { answered: true });
+  assert.deepEqual(c.typed, ['t1:"2"']);
+  const cannot: Array<[string, ToolAsked | undefined, string[] | undefined]> = [
+    ["two questions", { name: "AskUserQuestion", asks: [color.asks[0]!, { question: "Which size?", options: ["S", "M"] }] }, ["{n}"]],
+    ["several answers", { name: "AskUserQuestion", asks: [{ ...color.asks[0]!, many: true }] }, ["{n}"]],
+    ["no keys that choose", color, undefined],
+    ["no question", { name: "Bash", about: "npm test" }, ["{n}"]],
+  ];
+  for (const [why, asking, choose] of cannot) {
+    const d = computer(keys, { asking, choose });
+    const since = d.waitOn("permission");
+    assert.equal(code(() => d.answer("t1", since, { choice: 0 })), "BAD_REQUEST", why);
+    assert.deepEqual(d.answer("t1", since, { text: "Red" }), { answered: true }, why);
+  }
 });

@@ -128,17 +128,24 @@ export class ControlPlane {
     return this.o.write(ptyId, data, paste);
   }
 
+  /** A key of an answer, typed as the person types, but no draft of theirs. */
+  private key(ptyId: string, data: string): boolean {
+    this.status.input(toBareId(ptyId), data);
+    this.mailbox.typed(ptyId, data, false, true);
+    return this.o.write(ptyId, data);
+  }
+
   /** Answer as the person: type `parts`, the first now and each next one a moment after the
    *  last, so a screen takes each, holding the terminal until the last is in. False, typing
    *  nothing, while another answer is going in there, or when no session is held for it. */
   answer(ptyId: string, parts: readonly string[]): boolean {
     const [first, ...rest] = parts;
-    if (first === undefined || this.typing.has(ptyId) || !this.typed(ptyId, first)) return false;
+    if (first === undefined || this.typing.has(ptyId) || !this.key(ptyId, first)) return false;
     if (!rest.length) return true;
     const after: Array<() => void> = [];
     this.typing.set(ptyId, after);
     rest.forEach((bytes, i) => setTimeout(() => {
-      this.typed(ptyId, bytes);
+      this.key(ptyId, bytes);
       if (i < rest.length - 1) return;
       this.typing.delete(ptyId);
       for (const write of after) write();

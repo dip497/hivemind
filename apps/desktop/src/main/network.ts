@@ -12,6 +12,7 @@ import { app, net, powerMonitor } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 import { createHash } from "node:crypto";
 import type { Duplex } from "node:stream";
 import { HiveNet, type Link } from "@hivemind/workspace-host/hive-net";
@@ -557,7 +558,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
   peers = new PeerLinks({
     store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), granted,
     phone: (device) => pairedDevices().list().some((d) => d.device === device && d.kind === "phone"),
-    statuses, facts: (held) => ({ ...manifestFacts(held), ...workers, wait: (tile) => waits?.of(tile) }),
+    statuses, facts: (held) => ({ ...manifestFacts(held, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)), ...workers, wait: (tile) => waits?.of(tile) }),
     machines: knownMachines,
     subscribe: (device, sub) => pushSubscriptions().set(device, sub),
     // A phone unpairing itself, recorded as that phone.

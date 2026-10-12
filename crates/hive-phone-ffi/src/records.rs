@@ -359,6 +359,9 @@ mod tests {
                 since,
                 plan: None,
                 decide: false,
+                tool: None,
+                asks: None,
+                choose: false,
             }),
             ..agent(workspace, tile, "waiting", since)
         }
@@ -390,6 +393,9 @@ mod tests {
                     since: 30,
                     plan: None,
                     decide: true,
+                    tool: None,
+                    asks: None,
+                    choose: false,
                 }),
                 ..waiting("w1", "t2", "permission", 30)
             },
@@ -406,6 +412,9 @@ mod tests {
             plan: Some("do it".into()),
             machine: None,
             decide: false,
+            tool: None,
+            asks: None,
+            choose: false,
         };
         let seen = [
             Seen {

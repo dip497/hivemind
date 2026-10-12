@@ -1,5 +1,5 @@
 {
- "about": "Cases every reader of an agent's session file must pass (spec/agents.md \"Conversation\"): the file's lines (a record as JSON, or a line as it is), in; the entries the person's devices are sent, out. 'claude': Claude Code's file, read as its manifest maps it (session.transcript), the records shaped as Claude Code 2.1.287 writes them. 'mapped': the mapping rules themselves, a mapping and records shaped as another agent might keep them. 'phone': what a phone reads of the entries a device sends it (an answer's entries, in; those it reads, out). Written by hand from the spec.",
+ "about": "Cases every reader of an agent's session file must pass (spec/agents.md \"Conversation\"): the file's lines (a record as JSON, or a line as it is), in; the entries the person's devices are sent, out. 'claude': Claude Code's file, read as its manifest maps it (session.transcript), the records shaped as Claude Code 2.1.287 writes them (2.1.296 for a tool that asks the person questions). 'mapped': the mapping rules themselves, a mapping and records shaped as another agent might keep them. 'phone': what a phone reads of the entries a device sends it (an answer's entries, in; those it reads, out). Written by hand from the spec.",
  "claude": [
   {
    "about": "the person's prompt, as text or a text block, is theirs; the agent's text block is its, in markdown; a meta record and a sidechain's say nothing",
@@ -153,6 +153,118 @@
     "{\"type\": \"assistant\", \"uuid\": \"a9\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"message\": {\"role\": \"assistant\", \"content\": \"an assistant's text not in a block\"}}"
    ],
    "entries": []
+  },
+  {
+   "about": "a tool that asks the person questions (AskUserQuestion, as claude 2.1.296 writes it): each question with the labels of its options to choose from, and several may be chosen when it says so",
+   "lines": [
+    "{\"parentUuid\": \"c1\", \"isSidechain\": false, \"type\": \"assistant\", \"uuid\": \"a20\", \"timestamp\": \"2026-10-12T05:19:05.000Z\", \"sessionId\": \"s1\", \"version\": \"2.1.296\", \"message\": {\"model\": \"claude-opus-5-5\", \"id\": \"msg_1\", \"type\": \"message\", \"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"toolu_q1\", \"name\": \"AskUserQuestion\", \"input\": {\"questions\": [{\"question\": \"Which color?\", \"header\": \"Color\", \"options\": [{\"label\": \"Red\", \"description\": \"Red\"}, {\"label\": \"Blue\", \"description\": \"Blue\"}], \"multiSelect\": false}]}, \"caller\": {\"type\": \"direct\"}}], \"stop_reason\": \"tool_use\"}}",
+    "{\"parentUuid\": \"a20\", \"isSidechain\": false, \"type\": \"assistant\", \"uuid\": \"a21\", \"timestamp\": \"2026-10-12T05:19:06.000Z\", \"sessionId\": \"s1\", \"version\": \"2.1.296\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"toolu_q2\", \"name\": \"AskUserQuestion\", \"input\": {\"questions\": [{\"question\": \"Which test runner?\", \"header\": \"Runner\", \"options\": [{\"label\": \"Vitest\", \"description\": \"fast\"}, {\"label\": \"Jest\"}], \"multiSelect\": false}, {\"question\": \"Which browsers?\", \"header\": \"Browsers\", \"options\": [{\"label\": \"Chrome\"}, {\"label\": \"Safari\"}, {\"label\": \"Firefox\"}], \"multiSelect\": true}]}}]}}"
+   ],
+   "entries": [
+    {
+     "id": "a20",
+     "at": 1791782345000,
+     "who": "agent",
+     "tool": {
+      "id": "toolu_q1",
+      "name": "AskUserQuestion",
+      "asks": [
+       {
+        "question": "Which color?",
+        "options": [
+         "Red",
+         "Blue"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "id": "a21",
+     "at": 1791782346000,
+     "who": "agent",
+     "tool": {
+      "id": "toolu_q2",
+      "name": "AskUserQuestion",
+      "asks": [
+       {
+        "question": "Which test runner?",
+        "options": [
+         "Vitest",
+         "Jest"
+        ]
+       },
+       {
+        "question": "Which browsers?",
+        "options": [
+         "Chrome",
+         "Safari",
+         "Firefox"
+        ],
+        "many": true
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "about": "the questions a tool asks, read within bounds: the first 4, the first 9 options of each, each cut to 300 characters; a question that is not text, or whose options are not a list, an option with no label, and a many that is not true, say nothing; none left, or no list of them, the tool asks nothing",
+   "lines": [
+    "{\"type\": \"assistant\", \"uuid\": \"a30\", \"timestamp\": \"2026-10-12T05:20:00.000Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"toolu_q3\", \"name\": \"AskUserQuestion\", \"input\": {\"questions\": [{\"question\": \"Which of these colors should the header use? Which of these colors should the header use? Which of these colors should the header use? Which of these colors should the header use? Which of these colors should the header use? Which of these colors should the header use? Which of these colors should th\", \"options\": [{\"label\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"}, {\"label\": \"o2\"}, {\"description\": \"no label\"}, {\"label\": \"o4\"}, {\"label\": \"o5\"}, {\"label\": \"o6\"}, {\"label\": \"o7\"}, {\"label\": \"o8\"}, {\"label\": \"o9\"}, {\"label\": \"o10\"}], \"multiSelect\": \"yes\"}, {\"question\": 5, \"options\": [{\"label\": \"A\"}]}, {\"question\": \"No list?\", \"options\": \"A or B\"}, {\"question\": \"Fourth?\", \"options\": [{\"label\": \"A\"}]}, {\"question\": \"Fifth?\", \"options\": [{\"label\": \"B\"}]}]}}]}}",
+    "{\"type\": \"assistant\", \"uuid\": \"a31\", \"timestamp\": \"2026-10-12T05:20:01.000Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"toolu_q4\", \"name\": \"AskUserQuestion\", \"input\": {\"questions\": [{\"question\": 5, \"options\": []}]}}]}}",
+    "{\"type\": \"assistant\", \"uuid\": \"a32\", \"timestamp\": \"2026-10-12T05:20:02.000Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"toolu_q5\", \"name\": \"AskUserQuestion\", \"input\": {\"questions\": \"Which color?\"}}]}}"
+   ],
+   "entries": [
+    {
+     "id": "a30",
+     "at": 1791782400000,
+     "who": "agent",
+     "tool": {
+      "id": "toolu_q3",
+      "name": "AskUserQuestion",
+      "asks": [
+       {
+        "question": "Which of these colors should the header use? Which of these colors should the header use? Which of these colors should the header use? Which of these colors should the header use? Which of these colors should the header use? Which of these colors should the header use? Which of these colors should t",
+        "options": [
+         "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+         "o2",
+         "o4",
+         "o5",
+         "o6",
+         "o7",
+         "o8",
+         "o9"
+        ]
+       },
+       {
+        "question": "Fourth?",
+        "options": [
+         "A"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "id": "a31",
+     "at": 1791782401000,
+     "who": "agent",
+     "tool": {
+      "id": "toolu_q4",
+      "name": "AskUserQuestion"
+     }
+    },
+    {
+     "id": "a32",
+     "at": 1791782402000,
+     "who": "agent",
+     "tool": {
+      "id": "toolu_q5",
+      "name": "AskUserQuestion"
+     }
+    }
+   ]
   }
  ],
  "mapped": {

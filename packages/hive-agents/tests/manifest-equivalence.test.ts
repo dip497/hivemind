@@ -246,6 +246,16 @@ describe("manifest validation refuses what it cannot back", () => {
     bad({ interrupt: [27] }, /interrupt must be 1-4 key tokens/);
   });
 
+  test("the keys that choose an option of a question are carried as written, and a list that cannot be typed, or does not say where the option goes, is refused at load", () => {
+    expect(defFromManifest({ ...base, choose: ["{n}"] }).choose).toEqual(["{n}"]);
+    expect(defFromManifest({ ...base, choose: ["{n}", "enter"] }).choose).toEqual(["{n}", "enter"]);
+    expect(defFromManifest(base).choose).toBeUndefined();
+    bad({ choose: ["enter"] }, /choose must be 1-4 key tokens, one naming the option/);
+    bad({ choose: "{n}" }, /choose must be 1-4 key tokens/);
+    bad({ choose: [] }, /choose must be 1-4 key tokens/);
+    bad({ choose: ["{n}", "a", "b", "c", "d"] }, /choose must be 1-4 key tokens/);
+  });
+
   test("an agent id is one name — an agent stands for one CLI, so there is no scope", () => {
     expect(defFromManifest({ ...base, id: "acme-two" }).id).toBe("acme-two");
     for (const id of ["@dip497/aider", "dip497/aider", "../aider", "Aider"]) bad({ id }, /id must be lowercase/);

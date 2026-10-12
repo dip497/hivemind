@@ -18,7 +18,7 @@ use std::{fs, path::PathBuf};
 
 use hive_net::net::Reach;
 use hive_phone::{
-    agents::{Agent, Listed, Waiting},
+    agents::{Agent, Asked, Listed, ToolAsked, Waiting},
     devices::PairedDevice,
     identity::{DeviceCertificate, Identity},
     needs::{Answer, Heard, Need},
@@ -212,6 +212,9 @@ fn what_each_device_last_answered_is_kept_until_it_is_forgotten_and_another_pers
         plan: None,
         machine: Some("app 10".into()),
         decide: true,
+        tool: None,
+        asks: None,
+        choose: false,
     };
     let said = |needs: Vec<Need>, working| Answer { needs, working };
     let (from_a, from_b) = (a.with.device.clone(), b.with.device.clone());
@@ -299,6 +302,9 @@ fn what_a_device_lists_is_kept_whole_with_what_waits_on_the_person_among_it_and_
             since: 4,
             plan: None,
             decide: kind == "permission",
+            tool: None,
+            asks: None,
+            choose: false,
         })
     };
     let listed = Listed {
@@ -332,6 +338,9 @@ fn what_a_device_lists_is_kept_whole_with_what_waits_on_the_person_among_it_and_
         plan: None,
         machine: Some("app 10".into()),
         decide: true,
+        tool: None,
+        asks: None,
+        choose: false,
     };
     assert_eq!(
         heard.answer,
@@ -350,10 +359,33 @@ fn what_a_device_lists_is_kept_whole_with_what_waits_on_the_person_among_it_and_
         kind: "plan".into(),
         plan: Some("do it".into()),
         decide: false,
-        ..permission
+        ..permission.clone()
+    };
+    let run = Need {
+        tile: "t5".into(),
+        agent: "agent of t5".into(),
+        tool: Some(ToolAsked {
+            name: "Bash".into(),
+            about: Some("make all".into()),
+        }),
+        ..permission.clone()
+    };
+    let asks = vec![Asked {
+        question: "Which color?".into(),
+        options: vec!["Red".into(), "Blue".into()],
+        many: false,
+    }];
+    let question = Need {
+        tile: "t6".into(),
+        agent: "agent of t6".into(),
+        kind: "question".into(),
+        decide: false,
+        asks: Some(asks.clone()),
+        choose: true,
+        ..permission.clone()
     };
     let answer = Answer {
-        needs: vec![plan],
+        needs: vec![plan, run.clone(), question.clone()],
         working: 0,
     };
     phone.hear(&[(device.clone(), answer)], 5).unwrap();
@@ -368,12 +400,41 @@ fn what_a_device_lists_is_kept_whole_with_what_waits_on_the_person_among_it_and_
             since: 4,
             plan: Some("do it".into()),
             decide: false,
+            tool: None,
+            asks: None,
+            choose: false,
+        }),
+    );
+    let run = agent(
+        "t5",
+        "waiting",
+        Some(Waiting {
+            kind: "permission".into(),
+            since: 4,
+            plan: None,
+            decide: true,
+            tool: run.tool,
+            asks: None,
+            choose: false,
+        }),
+    );
+    let question = agent(
+        "t6",
+        "waiting",
+        Some(Waiting {
+            kind: "question".into(),
+            since: 4,
+            plan: None,
+            decide: false,
+            tool: None,
+            asks: Some(asks),
+            choose: true,
         }),
     );
     assert_eq!(
         heard.listed(&device),
         Some(Listed {
-            agents: vec![plan],
+            agents: vec![plan, run, question],
             working: 0
         })
     );

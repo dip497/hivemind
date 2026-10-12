@@ -16,11 +16,12 @@ import { AGENT_MANIFEST_VERSION, defFromManifest, setCatalog } from "@hivemind/a
 import { answerKeys, needsOf, participantNamed, workingIn, type HeldBoard, type WaitingStatus } from "../src/needs.ts";
 import type { Wait } from "../src/waits.ts";
 import type { KnownMachines } from "@hivemind/core/remote-uri";
+import type { ToolAsked } from "@hivemind/workspace-api/agents";
 
 const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../conformance/needs.json");
 const { known, computer: cases } = JSON.parse(fs.readFileSync(file, "utf8")) as {
   known: { self: { device: string; name: string }; mine: Record<string, string>; whose: Record<string, string>; saved: Record<string, string> };
-  computer: Array<{ about: string; held: HeldBoard[]; statuses: WaitingStatus[]; waits: Record<string, Wait>; keys?: Record<string, string[]>; needs: unknown[]; working: number }>;
+  computer: Array<{ about: string; held: HeldBoard[]; statuses: WaitingStatus[]; waits: Record<string, Wait>; keys?: Record<string, string[]>; asking?: Record<string, ToolAsked>; choose?: string[]; needs: unknown[]; working: number }>;
 };
 /** Whether the agent of a tile says the keys for what it waits on, by the wait's name, as the case
  *  lists them. */
@@ -37,7 +38,8 @@ const machines: KnownMachines = {
 test("what waits on the person is the spec's: each agent waiting on them, called as the spec says, on the machine it runs on, a permission it can allow or deny said so, the one waiting longest first; and how many are at work", () => {
   assert.ok(cases.length > 0);
   for (const c of cases) {
-    assert.deepEqual(needsOf(c.held, c.statuses, (tile) => c.waits[tile], machines, answeredBy(c.keys)), c.needs, c.about);
+    const facts = { decides: answeredBy(c.keys), wait: (tile: string) => c.waits[tile], asking: (tile: string) => c.asking?.[tile], chooses: (tile: string) => !!c.choose?.includes(tile) };
+    assert.deepEqual(needsOf(c.held, c.statuses, machines, facts), c.needs, c.about);
     assert.equal(workingIn(c.held, c.statuses), c.working, c.about);
   }
 });

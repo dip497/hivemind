@@ -289,6 +289,9 @@ fn doing(a: &Agent) -> String {
             plan: w.plan.clone(),
             machine: Some(a.machine.clone()),
             decide: w.decide,
+            tool: w.tool.clone(),
+            asks: w.asks.clone(),
+            choose: w.choose,
         })
         .into(),
         None => a.state.clone(),

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::{
-    agents::{Agent, Listed, Waiting},
+    agents::{only_true, or_none, Agent, Asked, Listed, ToolAsked, Waiting},
     devices::{self, ANSWER_WITHIN},
     identity::{write_private, Identity},
     pairing::PairedWith,
@@ -49,11 +49,28 @@ pub struct Need {
         skip_serializing_if = "std::ops::Not::not"
     )]
     pub decide: bool,
-}
-
-/// `true` as itself; anything else as not said.
-fn only_true<'de, D: serde::Deserializer<'de>>(said: D) -> Result<bool, D::Error> {
-    Ok(Value::deserialize(said)? == Value::Bool(true))
+    /// A permission's tool (0.7).
+    #[serde(
+        default,
+        deserialize_with = "or_none",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub tool: Option<ToolAsked>,
+    /// A question's questions, each with its options (0.7).
+    #[serde(
+        default,
+        deserialize_with = "or_none",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub asks: Option<Vec<Asked>>,
+    /// An option of its one question can be chosen from the device (0.7). Said only as `true`, and
+    /// only of a question.
+    #[serde(
+        default,
+        deserialize_with = "only_true",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub choose: bool,
 }
 
 /// What a device answers: what waits on the person there, and how many agents are at work there.
@@ -83,6 +100,7 @@ pub fn read_answer(answer: &Value, from: &str) -> Answer {
             .map(|need| Need {
                 machine: need.machine.or_else(|| Some(from.to_string())),
                 decide: need.decide && need.kind == "permission",
+                choose: need.choose && need.kind == "question",
                 ..need
             })
             .collect(),
@@ -183,6 +201,9 @@ fn agent_of(need: &Need, device: &str) -> Agent {
             since: need.since,
             plan: need.plan.clone(),
             decide: need.decide,
+            tool: need.tool.clone(),
+            asks: need.asks.clone(),
+            choose: need.choose,
         }),
         interrupt: false,
         conversation: false,
@@ -206,6 +227,9 @@ fn need_of(agent: &Agent) -> Option<Need> {
         plan: waiting.plan.clone(),
         machine: Some(agent.machine.clone()),
         decide: waiting.decide,
+        tool: waiting.tool.clone(),
+        asks: waiting.asks.clone(),
+        choose: waiting.choose,
     })
 }
 

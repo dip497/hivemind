@@ -33,6 +33,28 @@ pub struct Program {
     pub label: String,
 }
 
+/// The tool use a permission is for (spec/needs.md 0.7): its name, and what it is about, whole.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolAsked {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub about: Option<String>,
+}
+
+/// A question an agent's tool asks the person, and the options to choose from; `many`: several
+/// may be chosen (spec/needs.md 0.7).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Asked {
+    pub question: String,
+    pub options: Vec<String>,
+    #[serde(
+        default,
+        deserialize_with = "only_true",
+        skip_serializing_if = "Not::not"
+    )]
+    pub many: bool,
+}
+
 /// What an agent waits for, while it waits.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Waiting {
@@ -49,6 +71,28 @@ pub struct Waiting {
         skip_serializing_if = "Not::not"
     )]
     pub decide: bool,
+    /// A permission's tool (0.7).
+    #[serde(
+        default,
+        deserialize_with = "or_none",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub tool: Option<ToolAsked>,
+    /// A question's questions, each with its options (0.7).
+    #[serde(
+        default,
+        deserialize_with = "or_none",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub asks: Option<Vec<Asked>>,
+    /// An option of its one question can be chosen from the device (0.7). Said only as `true`, and
+    /// only of a question.
+    #[serde(
+        default,
+        deserialize_with = "only_true",
+        skip_serializing_if = "Not::not"
+    )]
+    pub choose: bool,
 }
 
 /// An agent of the person's, as the device that runs it says.
@@ -100,8 +144,15 @@ impl Agent {
 }
 
 /// `true` as itself; anything else as not said.
-fn only_true<'de, D: Deserializer<'de>>(said: D) -> Result<bool, D::Error> {
+pub(crate) fn only_true<'de, D: Deserializer<'de>>(said: D) -> Result<bool, D::Error> {
     Ok(Value::deserialize(said)? == Value::Bool(true))
+}
+
+/// What it says, when it is what is meant; anything else as not said.
+pub(crate) fn or_none<'de, D: Deserializer<'de>, T: serde::de::DeserializeOwned>(
+    said: D,
+) -> Result<Option<T>, D::Error> {
+    Ok(serde_json::from_value(Value::deserialize(said)?).ok())
 }
 
 /// A program, when it is an id and a label; anything else as not said.
@@ -136,6 +187,7 @@ pub fn read_answer(answer: &Value, from: &str) -> Option<Listed> {
         .map(|mut a| {
             if let Some(w) = a.waiting.as_mut() {
                 w.decide &= w.kind == "permission";
+                w.choose &= w.kind == "question";
             }
             a.device = from.to_string();
             a

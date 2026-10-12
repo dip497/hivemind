@@ -67,7 +67,7 @@ import { answers } from "./answers.js";
 import { PeerLinks } from "./peer-links.js";
 import { answerKeys, heldBoards, manifestOf, participantNamed, runsIn } from "./needs.js";
 import { agentControl } from "./agent-control.js";
-import { conversations, transcriptOf } from "./conversations.js";
+import { askingOf, conversations, transcriptOf } from "./conversations.js";
 import { views } from "./views.js";
 import { listInstalledViews } from "@hivemind/core/views";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
@@ -303,6 +303,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     answers({
       plane: () => control,
       answerKeys: (bare, status) => answerKeys(heldBoards(store), bare, status),
+      asking: (bare) => askingOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR)),
+      chooseKeys: (bare) => manifestOf(heldBoards(store), bare)?.choose,
       who,
     }),
     // Agents started, interrupted and closed from another of the person's devices, and what they
@@ -468,7 +470,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     // What waits on the person here, for their devices to ask (M5), on which machine, and which
     // permissions their phone may allow or deny.
     statuses: () => control.status.all(),
-    facts: (held) => ({ ...manifestFacts(held), parent: (bare) => control.parentOf(bare), wait: (bare) => control.waits.of(bare) }),
+    facts: (held) => ({ ...manifestFacts(held, path.join(o.dir, TILE_SESSIONS_DIR)), parent: (bare) => control.parentOf(bare), wait: (bare) => control.waits.of(bare) }),
     machines,
     // Where each of the person's phones is told what happens here.
     subscribe: (device, sub) => pushSubscriptions.set(device, sub),

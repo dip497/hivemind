@@ -275,10 +275,12 @@ pub enum Reply {
         approve: bool,
         feedback: Option<String>,
     },
+    /// A question, answered with its option `n`, counting from 0.
+    Choose { n: u32 },
 }
 
 impl Reply {
-    /// As `agent.answer` takes it: `{text}`, or `{decision, feedback?}`.
+    /// As `agent.answer` takes it: `{text}`, `{decision, feedback?}` or `{choice}`.
     fn said(&self) -> Value {
         let decision = |yes: bool| if yes { "allow" } else { "deny" };
         match self {
@@ -289,6 +291,7 @@ impl Reply {
                 feedback: Some(feedback),
             } => json!({ "decision": decision(*approve), "feedback": feedback }),
             Reply::Plan { approve, .. } => json!({ "decision": decision(*approve) }),
+            Reply::Choose { n } => json!({ "choice": n }),
         }
     }
 }
@@ -341,4 +344,31 @@ pub async fn send(
     let mut w = Workspace::open(connection, workspace).await?;
     let result = w.call("agent.send", json!([tile, text])).await?;
     Ok(result.get("sent").and_then(Value::as_bool) == Some(true))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_reply_is_said_as_agent_answer_takes_it() {
+        let said = [
+            (Reply::Text("y".into()), json!({ "text": "y" })),
+            (
+                Reply::Decide { allow: false },
+                json!({ "decision": "deny" }),
+            ),
+            (
+                Reply::Plan {
+                    approve: false,
+                    feedback: Some("split it".into()),
+                },
+                json!({ "decision": "deny", "feedback": "split it" }),
+            ),
+            (Reply::Choose { n: 1 }, json!({ "choice": 1 })),
+        ];
+        for (reply, wire) in said {
+            assert_eq!(reply.said(), wire, "{reply:?}");
+        }
+    }
 }

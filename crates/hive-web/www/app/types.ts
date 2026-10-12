@@ -5,6 +5,12 @@ export interface Waiting {
   since: number;
   plan?: string;
   decide?: boolean;
+  /** A permission's tool, and the exact command, file or address it is about. */
+  tool?: { name: string; about?: string };
+  /** A question's questions, each with its options. */
+  asks?: Array<{ question: string; options: string[]; many?: boolean }>;
+  /** An option of its one question is answered by choosing it. */
+  choose?: boolean;
 }
 
 export interface Agent {
@@ -55,7 +61,7 @@ export interface Piece {
 }
 
 /** The person's answer to a wait. */
-export type Reply = { text: string } | { allow: boolean } | { approve: boolean; feedback?: string };
+export type Reply = { text: string } | { allow: boolean } | { approve: boolean; feedback?: string } | { choice: number };
 
 /** A workspace the computer holds. */
 export interface Held {

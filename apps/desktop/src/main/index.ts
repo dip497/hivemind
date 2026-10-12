@@ -103,7 +103,7 @@ import { agentControl } from "@hivemind/host/agent-control";
 import { controlApi } from "@hivemind/host/control-api";
 import { views } from "@hivemind/host/views";
 import { listInstalledViews } from "@hivemind/core/views";
-import { conversations, transcriptOf } from "@hivemind/host/conversations";
+import { askingOf, conversations, transcriptOf } from "@hivemind/host/conversations";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
@@ -1262,6 +1262,8 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   answers({
     plane: () => control,
     answerKeys: (bare, status) => answerKeys(heldBoards(workspaceStore()), bare, status),
+    asking: (bare) => askingOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)),
+    chooseKeys: (bare) => manifestOf(heldBoards(workspaceStore()), bare)?.choose,
     who: whoIs,
   }),
   // Agents started, interrupted and closed from another of the person's devices, and what they
