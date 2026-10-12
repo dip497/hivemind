@@ -692,6 +692,7 @@ changes. The design:
     emit: input.requested
     kind: permission
     timeout: 3600
+    via: http          # see "Sent as Claude's http hook" below
     answer:
       allow: {hookSpecificOutput: {hookEventName: PermissionRequest, decision: {behavior: allow}}}
       deny: {hookSpecificOutput: {hookEventName: PermissionRequest, decision: {behavior: deny, message: '{message}'}}}
@@ -734,9 +735,35 @@ changes. The design:
   let `agent.answer` take it; not built.
 - **Where no desktop answers** (a machine with a daemon and no control plane): `agent.await_answer`
   is refused at once, the hook prints nothing, and the agent's own prompt decides.
-- **Memory.** One held hook per waiting tile: 26 MB PSS measured with the app running (67 to 71 MB
-  standalone; the script is run by the app's binary as node). Three tiles waiting at once, about
-  80 MB.
+- **Sent as Claude's http hook, not a command (decided 2026-10-12).** Claude Code has had http
+  hooks since 2.1.63: it POSTs the payload and prints a 2xx JSON body; an empty body is no
+  decision. Measured on 2.1.296 (own HOME, a held local server, `timeout: 3600`):
+
+  | | command hook (the event script) | http hook |
+  |---|---|---|
+  | Cost of one held wait | a process: 26 MB PSS with the app running, 67 to 80 MB without; 3 waits, 78 to 240 MB | an open connection: at most 73 KB on the daemon (200 held, client side included) |
+  | Wait known to the host | after the script starts: 0.26 to 0.56 s (Electron as node, load 14); the chooser is drawn 0.2 s after the hook starts | at the POST, before the chooser |
+  | Allow after 5 s / after 660 s (past the 600 s default) | ran (after 30 s and 200 s) | ran 0.6 s / 1.7 s later |
+  | Empty answer | its own chooser decides | its own chooser decides; `1` then allowed |
+  | `1` at its own chooser first | the hook is not closed | the request is not closed (30 s on), a later deny ignored |
+  | Esc at its own chooser | turn ends | the request is closed 0.08 s later |
+  | Token | `HCP_TOKEN` in its env | `Authorization: Bearer ${HCP_TOKEN}`, sent only with `allowedEnvVars: [HCP_TOKEN]` |
+
+  So the entry says `via: http` and the manifest gives Claude's http shape (`hooks.http`, with
+  `{url}` and `{timeout}`); nothing about Claude is in the host. The door is the pty daemon's
+  (`hook-http.ts`), on every machine that runs agents: a loopback port picked at start, the
+  request turned into the same lines the script sends (`hook-lines.ts`, which the script carries)
+  on the same socket, so both go one way to the control plane. The tile's own token names its
+  tile; a request with an `Origin`, or for another host name, is refused (a page in a browser).
+  Where the daemon has no door the entry is rendered as the script, as before.
+  `onFailure` stays at its default (`continue`): `block` on PermissionRequest denies the tool
+  when our door is down. No Claude floor to raise: the manifest already reads behaviour from
+  2.1.287 and later, and `onFailure` (2.1.295) is not used. The documented timeout has a default
+  (600 s) and no stated ceiling; 660 s held under `timeout: 3600` was answered.
+  What it costs: a loopback listener, which the token, the origin and host checks guard; a
+  managed `allowedHttpHookUrls` that leaves out loopback stops the hook, and with it the status
+  event (the screen rules still see the chooser); a daemon run by `hive host` under bun does not
+  see Claude close the request, so there Esc releases the wait through the status instead.
 - **Not in it.** `always` (`updatedPermissions`): typed keys never had it either. A tool use
   matched to its `PostToolUse` by id (hapi keys by `tool_use_id` through `PreToolUse`): a parallel
   tool that finishes while another waits sets the status working and so lets go of the hook; the

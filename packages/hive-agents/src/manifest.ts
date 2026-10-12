@@ -335,6 +335,7 @@ function validateHooks(raw: unknown): AgentHooks {
         req(entry.emit === "input.requested", `${at}.answer is for emit: input.requested`);
         validateHookAnswer(entry.answer, `${at}.answer`);
       }
+      if (entry.via !== undefined) req(entry.via === "http" && entry.emit !== undefined && m.http !== undefined, `${at}.via: only "http", on an emit entry, with hooks.http`);
       return entry as unknown as AgentHookEntry;
     });
     events[event] = Array.isArray(spec) ? list : list[0]!;
@@ -347,6 +348,10 @@ function validateHooks(raw: unknown): AgentHooks {
   if (m.entry !== undefined) {
     req(isObj(m.entry) && Object.keys(m.entry).length <= 8, "hooks.entry must be a small map");
     out.entry = m.entry as Record<string, unknown>;
+  }
+  if (m.http !== undefined) {
+    req(isObj(m.http) && Object.keys(m.http).length <= 8 && Object.values(m.http).includes("{url}"), "hooks.http must be a small map with {url}");
+    out.http = m.http as Record<string, unknown>;
   }
   if (m.group !== undefined) {
     req(m.group === false || (isObj(m.group) && Object.keys(m.group).length <= 8), "hooks.group must be a small map or false");

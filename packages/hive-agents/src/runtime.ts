@@ -34,6 +34,8 @@ export interface RuntimePaths {
   execPath: string;
   /** Control plane, when the daemon has one. */
   hcpSock?: string;
+  /** Its http door, for hooks `via: http`. */
+  hcpUrl?: string;
   /** The drive socket, where the agent drives its workspace. */
   driveSock?: string;
   /** The token a tile's agent is given: its own, which names the tile. */

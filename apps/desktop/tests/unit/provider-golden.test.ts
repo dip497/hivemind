@@ -46,6 +46,7 @@ const CTX = {
   eventHookPath: "/x/ud/hcp-event-hook.cjs",
   sdkPath: "/x/ud/hive-sdk.cjs",
   hcpSock: "/x/ud/hcp.sock",
+  hcpUrl: "http://127.0.0.1:4711",
   hcpToken: (tile: string) => `golden-token:${tile}`,
   // Provider-private paths, as each provider's prepare() would return them.
   // What the daemon hands each agent after it has prepared: its own directory, and for an

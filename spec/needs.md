@@ -123,7 +123,8 @@ confirmed, never failed, and answering that wait again types nothing.
 
 An agent whose manifest says its hook can carry the answer (an `emit: input.requested` entry with
 `answer:`, 0.9; Claude Code's `PermissionRequest`) is answered there instead, and nothing is typed:
-its hook holds until the answer, which it prints, filled from the entry. `{ "decision" }` on a
+its hook holds until the answer, which it prints, filled from the entry (sent `via: http`, the
+agent's own http hook holds instead, with no process of ours: `hook-protocol.md` "Over http"). `{ "decision" }` on a
 permission prints its `allow` or `deny`, and `{ "text" }` on a permission denies it with the line as
 the reason (`{message}`). On a question `{ "choice": <n> }` prints its `choose` with option `n`'s
 label, and `{ "text" }` prints it with the line, set in the tool's input (`{input}`) at `chosen`,
