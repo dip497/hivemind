@@ -18,6 +18,7 @@ import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { readAgentManifest } from "@hivemind/agents/load";
 import { followConversation, lastSaid, pendingTool, readConversation, TAIL_BYTES, TAIL_ENTRIES, TOOL_MAX, toolUse } from "../src/conversation.ts";
 import { conversations, LastSaid, transcriptOf, type Transcript } from "../src/conversations.ts";
+import { manifestFacts } from "../src/agent-list.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-conversation-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -246,7 +247,7 @@ test("followed, an agent that begins another session (Claude Code's /clear) is f
   }
 });
 
-test("an agent's session is the one last recorded for its tile, else the one bound as it started, its file where its manifest says, read as its manifest maps it, its file none while it is not there; none at all when the manifest maps no transcript or no agent is there", () => {
+test("an agent's session is the one last recorded for its tile, else the one bound as it started, its file where its manifest says, read as its manifest maps it, its file none while it is not there; none at all when the manifest maps no transcript, says not where its file is, or no agent is there; and the agents listed keep a conversation exactly when they have one", () => {
   const home = fs.mkdtempSync(path.join(tmp, "home-"));
   const sessions = path.join(tmp, `tile-sessions-${made++}`);
   const project = path.join(home, ".claude", "projects", "-home-p-api");
@@ -259,16 +260,22 @@ test("an agent's session is the one last recorded for its tile, else the one bou
     session: { transcript: FORMAT, resume: { args: ["--resume", "{id}"], from: { bound: "--session-id" }, exists: "{home}/.claude/projects/*/{id}.jsonl" } },
   } as unknown as AgentProviderDef;
   const plain = { ...claude, id: "plain", bin: "plain", session: { ...claude.session, transcript: undefined } } as unknown as AgentProviderDef;
-  setCatalog([claude, plain]);
+  const unfound = { ...claude, id: "unfound", bin: "unfound", session: { transcript: FORMAT, resume: { args: ["--resume", "{id}"] } } } as unknown as AgentProviderDef;
+  setCatalog([claude, plain, unfound]);
   const held = [{ workspace: "w", name: "api", repo: "/home/p/api", core: { frames: [], tiles: [
     { id: "t1", kind: "claude", label: "Claude", cmd: "claude", args: ["--session-id", "s-bound"] },
     { id: "t2", kind: "plain", label: "Plain", cmd: "plain", args: ["--session-id", "s-bound"] },
+    { id: "t3", kind: "unfound", label: "Unfound", cmd: "unfound", args: ["--session-id", "s-bound"] },
   ] } }] as never;
   assert.deepEqual(transcriptOf(held, "hm:t1", sessions, home), { session: "s-bound", file: path.join(project, "s-bound.jsonl"), format: FORMAT });
   writeTrackedSession(sessions, "hm:t1", "s-tracked");
   assert.deepEqual(transcriptOf(held, "t1", sessions, home), { session: "s-tracked", file: path.join(project, "s-tracked.jsonl"), format: FORMAT });
   assert.equal(transcriptOf(held, "t2", sessions, home), null);
+  assert.equal(transcriptOf(held, "t3", sessions, home), null);
   assert.equal(transcriptOf(held, "t9", sessions, home), null);
+  // What the phone is told decides between its chat and its terminal.
+  const facts = manifestFacts(held);
+  assert.deepEqual(["t1", "t2", "t3", "t9"].map((t) => facts.converses(t)), [true, false, false, false]);
   writeTrackedSession(sessions, "hm:t1", "s-gone");
   assert.deepEqual(transcriptOf(held, "t1", sessions, home), { session: "s-gone", file: null, format: FORMAT }, "a session whose file is not there yet");
   assert.equal(TILE_SESSIONS_DIR, "tile-sessions");

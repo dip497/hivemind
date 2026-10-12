@@ -1191,3 +1191,15 @@ them by their place. Orca caps the screen sent on
 joining at 1,000 lines and 512 KiB (`orca/src/main/runtime/scrollback-limits.ts:7-8`). cmux sends
 240 lines on a cold attach and fetches more as the phone scrolls, 600 at a time
 (`TerminalController+MobileScrollPrefetch.swift:10-14`).
+
+### 12.7 An agent with no conversation to read opens in its terminal
+
+Asked for: an agent whose manifest has no readable transcript opens in its Terminal, not an empty
+chat; chat stays the default where there is one.
+
+The page already opened the terminal when the agent list said `conversation` was not set, and among
+the bundled agents only Claude Code maps a transcript. The gap was two rules for one fact. The list
+said `conversation` whenever a manifest mapped a transcript (`session.transcript`). The reader
+(`transcriptOf`) also needs to know where the file is (`session.resume.exists`) and reads nothing
+without it. A manifest with the first and not the second, say a HiveHub plugin, opened in a chat
+that stayed empty for good. Both now ask `keepsConversation(def)` in `conversations.ts`.

@@ -84,3 +84,17 @@ test("an agent just started shows as starting until the computer lists it, never
   await expect(notice).toHaveText("No agent runs there now.");
   await expect(notice).toBeVisible();
 });
+
+test("an agent that keeps no conversation the phone can read opens in its terminal; one that does opens in its chat", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await screen();
+  const flip = page.locator("[data-view-toggle]");
+  const { conversation: _, ...unread } = agent("t2", "Gemini", { program: { id: "gemini", label: "Gemini" } }) as { conversation?: boolean };
+  await show(page, overview(agent("t1", "Claude"), unread));
+  await open(page, "t2");
+  await expect(page.locator("[data-screen=agent] [data-terminal]")).toBeVisible();
+  await expect(flip).toHaveText("Chat");
+  await open(page, "t1");
+  await expect(page.locator("[data-screen=agent] [data-terminal]")).toBeHidden();
+  await expect(flip).toHaveText("Terminal");
+});

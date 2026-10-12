@@ -58,9 +58,10 @@ item who started it:
   `client:<grant id>` for a program on the drive socket (`workspace-api.md`, "Drive socket").
 - `interrupt` is `true` when its manifest says which keys interrupt its turn (`interrupt`), so
   `agent.interrupt` stops it; left out otherwise.
-- `conversation` is `true` when its manifest maps its session file's records (`session.transcript`),
-  so `agent.conversation` can say what it and the person said to each other ("Conversation"); left
-  out otherwise (0.4).
+- `conversation` is `true` when its manifest maps its session file's records (`session.transcript`)
+  and says where that file is (`session.resume.exists`), so `agent.conversation` can say what it and
+  the person said to each other ("Conversation"); left out otherwise (0.4). The phone opens an agent
+  without one in its terminal.
 - `session` (0.6) is the session it is in, as its agent last said: `agent.start`'s `resume` goes on
   with it. A new one (the person cleared it, or resumed another) changes the item, so a reader
   following `agent.changed` hears it. Left out until the agent says, and kept once it exits.

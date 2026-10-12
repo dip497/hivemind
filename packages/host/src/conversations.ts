@@ -4,7 +4,7 @@
  * sent to that caller as it comes, and the next session's from its start once the agent begins
  * another (as Claude Code's `/clear` does), until the caller goes.
  */
-import { agentForCmd, readTrackedSession, sessionFile, sessionFor, type AgentTranscript } from "@hivemind/agents/node";
+import { agentForCmd, readTrackedSession, sessionFile, sessionFor, type AgentProviderDef, type AgentTranscript } from "@hivemind/agents/node";
 import { ApiError, text } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
@@ -23,6 +23,12 @@ export interface Transcript {
 }
 type Kept = Transcript & { file: string };
 
+/** Whether an agent run as `def` keeps a conversation the phone can read: its manifest maps its
+ *  transcript and says where its file is. */
+export function keepsConversation(def: AgentProviderDef | undefined): boolean {
+  return !!def?.session?.transcript && !!def.session.resume?.exists;
+}
+
 /** How often a followed agent is looked at for a session it began since. */
 const SESSION_CHECK_MS = 1000;
 
@@ -35,9 +41,9 @@ export function transcriptOf(held: HeldBoard[], tile: string, tileSessionsDir: s
   const bare = toBareId(tile);
   const record = held.flatMap((h) => h.core?.tiles ?? []).find((t) => t.id === bare) as { cmd?: string; args?: string[] } | undefined;
   const def = agentForCmd(record?.cmd);
-  const exists = def?.session?.resume?.exists;
-  const format = def?.session?.transcript;
-  if (!record || !format || !exists) return null;
+  if (!record || !def || !keepsConversation(def)) return null;
+  const exists = def.session!.resume!.exists!;
+  const format = def.session!.transcript!;
   const spec = { cwd: runsIn(held, bare) ?? "", args: record.args ?? [] };
   const session = readTrackedSession(tileSessionsDir, `hm:${bare}`) ?? readTrackedSession(tileSessionsDir, bare) ?? sessionFor(def, spec);
   return { session: session ?? "", file: session ? sessionFile(exists, session, home) : null, format };
