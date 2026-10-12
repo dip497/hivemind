@@ -16,6 +16,7 @@ window.addEventListener("message", (e) => {
     const d = m.data || {};
     if (d.type === "hello") {
       document.body.dataset.features = (d.features || []).join(",");
+      document.body.dataset.capabilities = (d.capabilities || []).join(",");
       if ((d.features || []).includes("widgets")) port.postMessage({ type: "subscribeWidgets" });
     }
     if (d.type === "widgets") {

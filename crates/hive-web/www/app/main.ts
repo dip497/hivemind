@@ -11,11 +11,12 @@ import { warm } from "./markdown.js";
 import { PairScreen, guessName } from "./pair.js";
 import type { Phone } from "./phone.js";
 import { StartScreen } from "./start.js";
+import { ViewScreen, Views } from "./views.js";
 import { get, put, remove } from "./store.js";
 import type { Overview, Paired, Shown } from "./types.js";
 import { NOTICES, ago, message } from "./words.js";
 
-type Tab = "home" | "devices" | "start";
+type Tab = "home" | "views" | "devices" | "start";
 /** What Home showed last, kept to show before the wasm is compiled. */
 type First = { shown: Shown; overview: Overview };
 const NOTHING: First = { shown: { needs: [], working: [], pinned: [], machines: [], tree: [] }, overview: { agents: [], needs: [], working: 0 } };
@@ -39,6 +40,9 @@ const act = async <T extends boolean | null>(done: () => Promise<T>, notLanded: 
     return false;
   }
 };
+
+/** Called each time the computer is reached. */
+const reaching = new Set<() => void>();
 
 /** The phone, once its wasm is compiled. */
 const reached = (): Phone => {
@@ -76,12 +80,21 @@ const app: App = {
       return null;
     }
   },
+  views: (workspace) => reached().views(workspace),
+  viewFile: (workspace, view, path) => reached().viewFile(workspace, view, path),
+  openView: (workspace, view, screen) => reached().openView(workspace, view, screen),
+  onReach(cb) {
+    reaching.add(cb);
+    return () => reaching.delete(cb);
+  },
 };
 
 const home = new Home(app, () => render());
 const agent = new AgentScreen(app);
 const starting = new StartScreen(app);
 const devices = new Devices(() => void forget());
+const views = new Views(app);
+const viewing = new ViewScreen(app, views);
 const pairing = new PairScreen((link, name) => pairWith(link, name), () => {
   offered = false;
   pairing.clear();
@@ -95,11 +108,11 @@ function offer(link: string, name: string): void {
   pairing.offer(link, name, phone.read(link), paired?.with ?? null);
   route();
 }
-const screens = { home, agent, start: starting, devices, pair: pairing };
+const screens = { home, agent, start: starting, views, view: viewing, devices, pair: pairing };
 
 const tabs = h("nav", { class: "tabs", "aria-label": "hivemind" });
 const tabDot = h("span", { class: "tab-dot", hidden: true, "data-tab-dot": "" });
-const TABS: Array<[Exclude<Tab, "start">, string]> = [["home", "Home"], ["devices", "Devices"]];
+const TABS: Array<[Exclude<Tab, "start">, string]> = [["home", "Home"], ["views", "Views"], ["devices", "Devices"]];
 for (const [tab, label] of TABS) {
   const button = h("button", { type: "button", "data-tab": tab }, icon(tab === "home" ? "needs" : tab), label, tab === "home" && tabDot);
   button.addEventListener("click", () => {
@@ -126,11 +139,15 @@ let shownBefore = "";
 function route(): void {
   const asked = new URLSearchParams(location.hash.slice(1));
   const tile = asked.get("agent");
+  const view = asked.get("view");
   const tab: Tab = asked.has("start") ? "start" : (TABS.find(([t]) => asked.has(t))?.[0] ?? "home");
-  const shown = !paired || offered ? "pair" : tile ? "agent" : tab;
+  const shown = !paired || offered ? "pair" : tile ? "agent" : view ? "view" : tab;
   for (const [name, screen] of Object.entries(screens)) screen.el.hidden = name !== shown;
-  tabs.hidden = shown === "pair" || shown === "agent" || shown === "start";
+  tabs.hidden = shown === "pair" || shown === "agent" || shown === "start" || shown === "view";
   if (shown === "start" && shownBefore !== "start") void starting.open(asked.get("workspace"), asked.get("frame"));
+  if (shown === "views" && shownBefore !== "views") void views.open();
+  if (shown === "view") void viewing.open(asked.get("in") ?? "", view!);
+  else viewing.close();
   if (shown !== "pair") pairing.stopScan();
   shownBefore = shown;
   for (const button of tabs.querySelectorAll<HTMLElement>("[data-tab]")) {
@@ -233,6 +250,7 @@ async function start(): Promise<void> {
       devices.status(live, error);
       trouble.hidden = live || error === null;
       trouble.textContent = error ? `${paired?.with.name ?? "Your computer"} is not reached: ${error}` : "";
+      if (live) for (const r of reaching) r();
     },
     others: (o) => devices.showOthers(o),
     refused(computer) {

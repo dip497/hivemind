@@ -788,6 +788,37 @@ phone support (P8: the view protocol's `surfaces`, the workspace API's `view.*`)
 view host is a sandboxed iframe on its own origin under the view's CSP. Widgets through the same
 plugin contract (`widget.drawn`, `widget.press`); no widget gets a code path of its own.
 
+*Built (feat/hive-web-views), option 1 of B4's Views decision.* `hive-net serve --views <port>`
+serves `view/` (a shell page, its service worker) on the same host at a second port: an origin of
+its own, the page's `frame-src` naming exactly that host and port, and the shell framable by the
+page's host alone. The page frames `<views>/?s=<token>` and hands it a `MessageChannel` port; the
+shell's service worker (scope `/v/`) asks the shell for each file, the shell asks the page, the
+page asks the computer (`view.file`) and the file is served under the CSP the computer gives it.
+The view's own `view.*` messages go through a second port to a `view.open` session. A widget is
+drawn by a view holding `workspace:widgets`, through `widget.all` / `widget.drawn` /
+`widget.press`; the phone may now send `widget.press`.
+
+Prior art and the threat models checked (2026-10-12):
+
+| Model | Isolation | Ours |
+|---|---|---|
+| VS Code webviews | an origin per webview, a service worker turning resource loads into `postMessage`, CSP; escapes were resource-path parsing (CVE-2022-41042) and a `postMessage` origin taken from the URL (CVE-2021-43908) | **matches**, but one origin for all views |
+| Figma plugins | UI in a null-origin iframe; logic in a separate realm (Realms, then QuickJS) | not taken: a null-origin frame gets no service worker, so no files from the computer |
+| Obsidian, Raycast | none: the extension runs with the app's rights, trust by review | not taken |
+| Chrome sandboxed pages, googleusercontent | a unique or per-user origin for untrusted content | the per-origin idea; per view needs wildcard DNS and a certificate |
+
+Known escapes, each tried by the hostile view in `phone-views.spec.ts`: `allow-scripts` with
+`allow-same-origin` unsandboxes a frame of the parent's own origin (the view and the shell share
+origin B, so the shell is not a boundary; the page treats all it hears from B as untrusted); a
+service worker registered over another scope (`sw.js` acts only under `/v/`, the server refuses
+any other worker script); `postMessage` without an origin check (the shell takes `start` only
+from its parent on the page's host, the port goes to `location.origin` only); same-site storage
+and cookies, which hold no port (the shell clears B's storage before each view; the server reads
+1 MiB of headers so a view filling the cookie jar does not lock the page out); navigating away
+with a secret (the page's `frame-src` and B's `frame-ancestors`). Not covered: all views share
+origin B, so two views open in two tabs see each other; WebRTC and DNS prefetch can leave CSP's
+reach; the shell files are not in the page's published hash.
+
 **11.7 Speed** (the person's brief, 2026-10-12). The page's modules in one request; the first
 screen under 500 ms at 4× CPU throttle; no task over 50 ms when a chat opens; measured before and
 after at the same throttle.

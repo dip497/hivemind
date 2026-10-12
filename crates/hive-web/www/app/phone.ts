@@ -2,10 +2,10 @@
 // (hive-phone's core) pairs, signs, reads and acts; this keeps one connection to the computer it
 // paired with, dialled again when it drops, and hands the screens what it is told.
 
-import init, { Device, type Host, HomeView, deviceId, pair, readLink, readQr } from "../pkg/hive_web.js";
+import init, { Device, type Host, HomeView, type ViewSession, deviceId, pair, readLink, readQr } from "../pkg/hive_web.js";
 import type { Filter } from "./home.js";
 import { deviceKey, get, put, remove } from "./store.js";
-import type { Agent, Held, Others, Overview, Paired, Piece, Reply, Shown, Start, Places, Folders, Unfolded } from "./types.js";
+import type { Agent, Folders, Held, Offered, Others, Overview, Paired, Piece, Places, Reply, Screen, Shown, Start, Unfolded, ViewFile } from "./types.js";
 import { message } from "./words.js";
 
 export interface Told {
@@ -218,6 +218,21 @@ export class Phone {
   /** The tool use `use` of `agent`, unfolded. */
   async tool(agent: Agent, use: string): Promise<Unfolded> {
     return (await this.reached().tool(agent.workspace, agent.tile, use)) as Unfolded;
+  }
+
+  /** The views the computer offers in `workspace`. */
+  async views(workspace: string): Promise<Offered[]> {
+    return (await this.reached().views(workspace)) as Offered[];
+  }
+
+  /** The file `path` of the view `view` in `workspace`. */
+  async viewFile(workspace: string, view: string, path: string): Promise<ViewFile> {
+    return (await this.reached().viewFile(workspace, view, path)) as ViewFile;
+  }
+
+  /** Open the view `view` on `workspace`, shown on `screen`. */
+  async openView(workspace: string, view: string, screen: Screen): Promise<ViewSession> {
+    return this.reached().openView(workspace, view, screen);
   }
 
   /** Follow what `agent` and the person said, from the last of its session, again after each

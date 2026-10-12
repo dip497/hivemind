@@ -4,7 +4,7 @@
 # `infra/compose.yml` runs it; on its own:
 #
 #   docker build -f infra/Dockerfile -t hivemind/hive-net .
-#   docker run -v hive-net:/data -p 3340:3340 hivemind/hive-net serve --all --data /data --phone /phone --url http://<address>:3340
+#   docker run -v hive-net:/data -p 3340:3340 -p 3341:3341 hivemind/hive-net serve --all --data /data --phone /phone --views 3341 --url http://<address>:3340
 FROM rust:1-bookworm AS build
 WORKDIR /src
 COPY crates/hive-net/ .
@@ -32,4 +32,4 @@ COPY --from=build /hive-net /usr/local/bin/hive-net
 COPY --from=page /src/crates/hive-web/www /phone
 VOLUME /data
 ENTRYPOINT ["/usr/local/bin/hive-net"]
-CMD ["serve", "--all", "--data", "/data", "--phone", "/phone"]
+CMD ["serve", "--all", "--data", "/data", "--phone", "/phone", "--views", "3341"]

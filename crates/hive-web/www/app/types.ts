@@ -73,6 +73,29 @@ export interface Piece {
 /** The person's answer to a wait. */
 export type Reply = { text: string } | { allow: boolean } | { approve: boolean; feedback?: string } | { choice: number };
 
+/** A view the computer offers this browser (`view.list`): `page` is the file that shows it. */
+export interface Offered {
+  id: string;
+  name: string;
+  version: string;
+  entry: string;
+  page: string;
+}
+
+/** One of a view's files, as the computer serves it (`view.file`), under `csp`. */
+export interface ViewFile {
+  data: Uint8Array;
+  type: string;
+  csp: string;
+}
+
+/** The screen a view is shown on: its size in CSS pixels, and the look it is given. */
+export interface Screen {
+  w: number;
+  h: number;
+  theme: Record<string, unknown>;
+}
+
 /** A workspace the computer holds. */
 export interface Held {
   workspace: string;

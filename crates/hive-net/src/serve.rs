@@ -5,10 +5,10 @@
 //! who may use the relay; and the push role (`push.rs`), which tells phones what happens on the
 //! person's devices. Requests go by path: `/pkarr/…` and `/dns-query` to the lookup server,
 //! `/access/…` to the access role, `/push/…` to the push role, `/phone/…` to the phone page
-//! (`pages.rs`), the rest to the relay. Plain HTTP (a network inside a building,
-//! or behind a proxy that ends TLS), or HTTPS with a certificate from Let's Encrypt or one kept in
-//! files; then the relay also answers QUIC address discovery and the captive-portal check, as
-//! iroh's own relay server does.
+//! (`pages.rs`), the rest to the relay; the page's views on a second port, their own origin. Plain
+//! HTTP (a network inside a building, or behind a proxy that ends TLS), or HTTPS with a certificate
+//! from Let's Encrypt or one kept in files; then the relay also answers QUIC address discovery and
+//! the captive-portal check, as iroh's own relay server does.
 
 use std::{
     convert::Infallible,
@@ -52,6 +52,9 @@ use crate::{
 const PATIENCE: Duration = Duration::from_secs(30);
 /// How often certificate files are read again, so a renewed one is used.
 const RELOAD: Duration = Duration::from_secs(60 * 60);
+/// Room for every cookie a browser keeps for a host (180 of 4 KiB): a view on the phone page's host
+/// can set them, at any port, and none may stop the page reaching this server.
+const HEADERS_MAX: usize = 1 << 20;
 /// The largest request passed on to the lookup server: a record is at most 1104 bytes.
 const MAX_LOOKUP_BODY: usize = 64 * 1024;
 
@@ -95,11 +98,14 @@ pub struct Options {
     pub push: Option<push::Service>,
     /// The phone page.
     pub pages: Option<Pages>,
+    /// Where the page's views are shown, an origin of their own (`pages.rs`), with it.
+    pub views: Option<SocketAddr>,
 }
 
 /// The roles, serving.
 pub struct Serving {
     addr: SocketAddr,
+    views: Option<SocketAddr>,
     https: bool,
     relay: Option<RelayServer>,
     lookup: Option<Lookup>,
@@ -224,12 +230,55 @@ impl Serving {
             .await
             .with_context(|| format!("cannot listen on {}", opts.bind))?;
         let addr = listener.local_addr()?;
+        let mut pages = opts.pages.clone();
+        let views = match (&pages, opts.views) {
+            (Some(page), Some(bind)) => {
+                let shell = Arc::new(page.view_shell()?);
+                let listener = TcpListener::bind(bind)
+                    .await
+                    .with_context(|| format!("cannot listen on {bind}"))?;
+                let at = listener.local_addr()?;
+                pages = pages.map(|p| p.with_views(at.port()));
+                let accept = accept.clone();
+                tokio::spawn(async move {
+                    loop {
+                        let Ok((tcp, _)) = listener.accept().await else {
+                            tokio::time::sleep(Duration::from_millis(50)).await;
+                            continue;
+                        };
+                        let (shell, accept) = (shell.clone(), accept.clone());
+                        tokio::spawn(async move {
+                            let Some(io) = accepted(tcp, accept).await else {
+                                return;
+                            };
+                            let _ = http1::Builder::new()
+                                .timer(TokioTimer::new())
+                                .header_read_timeout(PATIENCE)
+                                .max_buf_size(HEADERS_MAX)
+                                .serve_connection(
+                                    TokioIo::new(io),
+                                    service_fn(move |req| {
+                                        let shell = shell.clone();
+                                        async move {
+                                            Ok::<_, Infallible>(shell.handle(&req).await.map(boxed))
+                                        }
+                                    }),
+                                )
+                                .await;
+                        });
+                    }
+                });
+                Some(at)
+            }
+            (None, Some(_)) => anyhow::bail!("views are shown from the phone page: serve it too"),
+            _ => None,
+        };
         let front = Arc::new(Front {
             relay: relay.as_ref().and_then(|r| r.relay_service().cloned()),
             lookup: lookup.as_ref().map(|l| (l.http_addr(), l.limit())),
             access: opts.access.clone(),
             push: opts.push.clone(),
-            pages: opts.pages.clone(),
+            pages,
             local: reqwest::Client::builder().no_proxy().build()?,
         });
         let front = tokio::spawn(async move {
@@ -245,6 +294,7 @@ impl Serving {
         });
         Ok(Self {
             addr,
+            views,
             https: tls.is_some(),
             relay,
             lookup,
@@ -255,6 +305,11 @@ impl Serving {
     /// Where the front listens.
     pub fn addr(&self) -> SocketAddr {
         self.addr
+    }
+
+    /// Where the page's views are shown, when they are.
+    pub fn views_addr(&self) -> Option<SocketAddr> {
+        self.views
     }
 
     /// Whether it serves HTTPS.
@@ -288,6 +343,29 @@ impl Serving {
             _ = tokio::signal::ctrl_c() => Ok(()),
         }
     }
+}
+
+/// `tcp`, its TLS handshake done when it has one.
+async fn accepted(tcp: TcpStream, accept: Accept) -> Option<MaybeTlsStream> {
+    let _ = tcp.set_nodelay(true);
+    Some(match accept {
+        Accept::Plain => MaybeTlsStream::Plain(tcp),
+        Accept::Tls(acceptor) => match timeout(PATIENCE, acceptor.accept(tcp)).await {
+            Ok(Ok(tls)) => MaybeTlsStream::Tls(tls),
+            _ => return None,
+        },
+        Accept::Acme(acceptor, config) => {
+            match timeout(PATIENCE, acceptor.accept(tcp)).await {
+                // Let's Encrypt checking this server holds the name: answered.
+                Ok(Ok(None)) => return None,
+                Ok(Ok(Some(start))) => match timeout(PATIENCE, start.into_stream(config)).await {
+                    Ok(Ok(tls)) => MaybeTlsStream::Tls(tls),
+                    _ => return None,
+                },
+                _ => return None,
+            }
+        }
+    })
 }
 
 fn answer(status: u16, text: &'static str) -> Response<Body> {
@@ -325,26 +403,8 @@ fn under(req: Request<Incoming>, prefix: &str) -> Request<Incoming> {
 
 impl Front {
     async fn connection(self: Arc<Self>, tcp: TcpStream, peer: SocketAddr, accept: Accept) {
-        let _ = tcp.set_nodelay(true);
-        let io = match accept {
-            Accept::Plain => MaybeTlsStream::Plain(tcp),
-            Accept::Tls(acceptor) => match timeout(PATIENCE, acceptor.accept(tcp)).await {
-                Ok(Ok(tls)) => MaybeTlsStream::Tls(tls),
-                _ => return,
-            },
-            Accept::Acme(acceptor, config) => {
-                match timeout(PATIENCE, acceptor.accept(tcp)).await {
-                    // Let's Encrypt checking this server holds the name: answered.
-                    Ok(Ok(None)) => return,
-                    Ok(Ok(Some(start))) => {
-                        match timeout(PATIENCE, start.into_stream(config)).await {
-                            Ok(Ok(tls)) => MaybeTlsStream::Tls(tls),
-                            _ => return,
-                        }
-                    }
-                    _ => return,
-                }
-            }
+        let Some(io) = accepted(tcp, accept).await else {
+            return;
         };
         let relay = self
             .relay
@@ -354,6 +414,7 @@ impl Front {
         let _ = http1::Builder::new()
             .timer(TokioTimer::new())
             .header_read_timeout(PATIENCE)
+            .max_buf_size(HEADERS_MAX)
             .serve_connection(
                 TokioIo::new(io),
                 service_fn(move |req| {
