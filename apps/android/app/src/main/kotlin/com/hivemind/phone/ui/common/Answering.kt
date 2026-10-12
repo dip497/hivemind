@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.hivemind.phone.R
 import com.hivemind.phone.core.Answer
@@ -115,7 +116,7 @@ fun ReplyBox(hint: String, busy: Boolean, onSend: (String) -> Unit, modifier: Mo
         OutlinedTextField(
             value = text,
             onValueChange = { text = it },
-            placeholder = { Text(hint) },
+            placeholder = { Text(hint, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             singleLine = true,
             enabled = !busy,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),

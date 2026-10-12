@@ -665,6 +665,11 @@ RustBuffer uniffi_hive_phone_ffi_fn_func_core_version(RustCallStatus *_Nonnull o
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_MARKDOWN
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_MARKDOWN
+RustBuffer uniffi_hive_phone_ffi_fn_func_markdown(RustBuffer text, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_PAIRS_WITH
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_PAIRS_WITH
 RustBuffer uniffi_hive_phone_ffi_fn_func_pairs_with(RustBuffer link, RustCallStatus *_Nonnull out_status
@@ -949,6 +954,12 @@ void ffi_hive_phone_ffi_rust_future_complete_void(uint64_t handle, RustCallStatu
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_CORE_VERSION
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_CORE_VERSION
 uint16_t uniffi_hive_phone_ffi_checksum_func_core_version(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_MARKDOWN
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_MARKDOWN
+uint16_t uniffi_hive_phone_ffi_checksum_func_markdown(void
     
 );
 #endif

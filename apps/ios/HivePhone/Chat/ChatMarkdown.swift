@@ -1,112 +1,61 @@
 import Foundation
 
-/// What the agent said, in markdown, cut into the parts the chat draws (design §5.4): text, with its
-/// inline styles as Foundation reads them (SwiftUI's Text draws emphasis, code and links itself),
-/// and code blocks apart, drawn monospace. Read once, when the entry comes.
+/// What the agent said, which is markdown, as the core reads it (spec/markdown.md), made ready to
+/// draw: read once, when the entry comes. A link is one only where the core found an https address.
 enum ChatMarkdown {
-    static func parts(_ markdown: String) -> [MessagePart] {
-        let options = AttributedString.MarkdownParsingOptions(
-            interpretedSyntax: .full, failurePolicy: .returnPartiallyParsedIfPossible)
-        guard let parsed = try? AttributedString(markdown: markdown, options: options) else {
-            return [.text(AttributedString(markdown))]
-        }
-        var parts: [MessagePart] = []
-        var text = AttributedString()
-        var code = ""
-        // Where the last run was: Foundation keeps blocks as intents, not as line breaks, so a new
-        // block is told by its intent's identity.
-        var block: Int? = nil
-        var item: Int? = nil
-        var row: Int? = nil
+    /// Blocks as drawn: one, or the blocks of a quote, set in after a bar.
+    indirect enum Piece: Equatable {
+        case block(TextBlock)
+        case quote([Piece])
+    }
 
-        func endText() {
-            if !text.characters.isEmpty { parts.append(.text(text)) }
-            text = AttributedString()
-        }
-        func endCode() {
-            while code.hasSuffix("\n") { code.removeLast() }
-            if !code.isEmpty { parts.append(.code(code)) }
-            code = ""
-        }
+    static func pieces(_ said: String) -> [Piece] {
+        pieces(markdown(text: said), quote: 0)
+    }
 
-        for run in parsed.runs {
-            let kinds = run.presentationIntent?.components ?? []
-            let leaf = kinds.first { isLeaf($0.kind) }
-            let listItem = kinds.first { isListItem($0.kind) }
-            let tableRow = kinds.first { isTableRow($0.kind) }
-            let piece = AttributedString(parsed[run.range])
-            if let leaf, case .codeBlock = leaf.kind {
-                if leaf.identity != block {
-                    endText()
-                    endCode()
-                }
-                code += String(piece.characters)
+    /// `blocks`, those in a quote deeper than `quote` gathered into it.
+    static func pieces(_ blocks: [TextBlock], quote: UInt32) -> [Piece] {
+        var pieces: [Piece] = []
+        var at = 0
+        while at < blocks.count {
+            if blocks[at].quote > quote {
+                var end = at
+                while end < blocks.count && blocks[end].quote > quote { end += 1 }
+                pieces.append(.quote(Self.pieces(Array(blocks[at..<end]), quote: quote + 1)))
+                at = end
             } else {
-                // A list item is a block of its own, whether or not its text is a paragraph.
-                if leaf?.identity != block || listItem?.identity != item {
-                    endCode()
-                    if !text.characters.isEmpty {
-                        text.append(AttributedString(separator(
-                            sameRow: tableRow != nil && tableRow?.identity == row,
-                            listGoesOn: listItem != nil && item != nil,
-                            tableGoesOn: tableRow != nil && row != nil)))
-                    }
-                    if let listItem, listItem.identity != item {
-                        text.append(AttributedString(marker(listItem, in: kinds)))
-                    }
-                }
-                var styled = piece
-                if let leaf, case .header = leaf.kind {
-                    styled.inlinePresentationIntent = .stronglyEmphasized
-                }
-                text.append(styled)
+                pieces.append(.block(blocks[at]))
+                at += 1
             }
-            block = leaf?.identity
-            item = listItem?.identity
-            row = tableRow?.identity
         }
-        endCode()
-        endText()
-        return parts
+        return pieces
     }
 
-    /// Cells of one table row a bar apart; items of one list, and rows of one table, a line apart;
-    /// any other block a blank line apart.
-    private static func separator(sameRow: Bool, listGoesOn: Bool, tableGoesOn: Bool) -> String {
-        if sameRow { return " | " }
-        if listGoesOn || tableGoesOn { return "\n" }
-        return "\n\n"
-    }
-
-    /// "1. " in an ordered list, "• " in any other.
-    private static func marker(_ item: PresentationIntent.IntentType, in kinds: [PresentationIntent.IntentType]) -> String {
-        let ordered = kinds.contains { component in
-            if case .orderedList = component.kind { return true }
-            return false
+    /// Runs as SwiftUI's Text draws them: their styles as inline intents, a link as one it opens.
+    static func text(_ runs: [TextRun]) -> AttributedString {
+        var text = AttributedString()
+        for run in runs {
+            // An image by its words: nothing is fetched to draw it.
+            var piece = AttributedString(run.image ? "🖼 \(run.text)" : run.text)
+            var intent: InlinePresentationIntent = []
+            if run.strong { intent.insert(.stronglyEmphasized) }
+            if run.emphasis { intent.insert(.emphasized) }
+            if run.strike { intent.insert(.strikethrough) }
+            if run.code { intent.insert(.code) }
+            if !intent.isEmpty { piece.inlinePresentationIntent = intent }
+            if let link = run.link { piece.link = URL(string: link) }
+            text.append(piece)
         }
-        if ordered, case .listItem(let ordinal) = item.kind {
-            return "\(ordinal). "
-        }
-        return "• "
+        return text
     }
 
-    /// The blocks text is in: each starts apart from the one before.
-    private static func isLeaf(_ kind: PresentationIntent.Kind) -> Bool {
-        switch kind {
-        case .paragraph, .header, .codeBlock, .tableCell: return true
-        default: return false
-        }
-    }
-
-    private static func isListItem(_ kind: PresentationIntent.Kind) -> Bool {
-        if case .listItem = kind { return true }
-        return false
-    }
-
-    private static func isTableRow(_ kind: PresentationIntent.Kind) -> Bool {
-        switch kind {
-        case .tableRow, .tableHeaderRow: return true
-        default: return false
+    /// What starts a list's item: a bullet, its number, or whether it is done.
+    static func marker(_ marker: ListMarker?) -> String {
+        switch marker {
+        case nil: return ""
+        case .bullet: return "•"
+        case .number(let n): return "\(n)."
+        case .task(let done): return done ? "☑" : "☐"
         }
     }
 }

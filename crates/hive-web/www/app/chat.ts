@@ -64,7 +64,7 @@ function rowOf(e: Entry): HTMLElement {
     return row;
   }
   if (e.who === "person") return h("div", { class: "said-person", ...props }, e.text ?? "");
-  return h("div", { class: "said-agent", ...props }, ...markdown(e.text ?? ""));
+  return h("div", { class: "said-agent md", ...props }, ...markdown(e.text ?? ""));
 }
 
 /** A tool used: a mark for how it went, `name · about` in mono; tapped, what it gave back. */

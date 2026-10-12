@@ -13,6 +13,7 @@ pub mod failure;
 pub mod home;
 pub mod identity;
 pub mod keys;
+pub mod markdown;
 pub mod needs;
 pub mod network;
 #[cfg(not(target_family = "wasm"))]

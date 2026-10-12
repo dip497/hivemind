@@ -10,6 +10,7 @@ use tokio::runtime::{Builder, Runtime};
 mod control;
 mod conversation;
 mod error;
+mod markdown;
 mod overview;
 mod pairing;
 mod phone;
@@ -23,6 +24,7 @@ pub use conversation::{
     Conversation, ConversationEnded, ConversationListener, Entry, Said, Tool, ToolResult,
 };
 pub use error::PhoneError;
+pub use markdown::{markdown, BlockKind, ColumnAlign, ListMarker, TextBlock, TextRun};
 pub use overview::{Following, OverviewListener};
 pub use pairing::{pairs_with, PairsWith};
 pub use phone::Phone;

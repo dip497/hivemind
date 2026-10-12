@@ -471,6 +471,22 @@ private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt8: FfiConverterPrimitive {
+    typealias FfiType = UInt8
+    typealias SwiftType = UInt8
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt8 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: UInt8, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt16: FfiConverterPrimitive {
     typealias FfiType = UInt16
     typealias SwiftType = UInt16
@@ -4453,6 +4469,165 @@ public func FfiConverterTypeStartable_lower(_ value: Startable) -> RustBuffer {
 
 
 /**
+ * One block: what it is, inside how many lists (`depth`) and quotes (`quote`), the marker of the
+ * list item it starts, and whether it runs right to left.
+ */
+public struct TextBlock: Equatable, Hashable {
+    public var kind: BlockKind
+    public var depth: UInt32
+    public var quote: UInt32
+    public var marker: ListMarker?
+    /**
+     * A paragraph or heading whose first letter is written right to left.
+     */
+    public var rtl: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: BlockKind, depth: UInt32, quote: UInt32, marker: ListMarker?, 
+        /**
+         * A paragraph or heading whose first letter is written right to left.
+         */rtl: Bool) {
+        self.kind = kind
+        self.depth = depth
+        self.quote = quote
+        self.marker = marker
+        self.rtl = rtl
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TextBlock: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTextBlock: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TextBlock {
+        return
+            try TextBlock(
+                kind: FfiConverterTypeBlockKind.read(from: &buf), 
+                depth: FfiConverterUInt32.read(from: &buf), 
+                quote: FfiConverterUInt32.read(from: &buf), 
+                marker: FfiConverterOptionTypeListMarker.read(from: &buf), 
+                rtl: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TextBlock, into buf: inout [UInt8]) {
+        FfiConverterTypeBlockKind.write(value.kind, into: &buf)
+        FfiConverterUInt32.write(value.depth, into: &buf)
+        FfiConverterUInt32.write(value.quote, into: &buf)
+        FfiConverterOptionTypeListMarker.write(value.marker, into: &buf)
+        FfiConverterBool.write(value.rtl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTextBlock_lift(_ buf: RustBuffer) throws -> TextBlock {
+    return try FfiConverterTypeTextBlock.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTextBlock_lower(_ value: TextBlock) -> RustBuffer {
+    return FfiConverterTypeTextBlock.lower(value)
+}
+
+
+/**
+ * Text of one style; `link` an https address, the only kind opened.
+ */
+public struct TextRun: Equatable, Hashable {
+    public var text: String
+    public var strong: Bool
+    public var emphasis: Bool
+    public var strike: Bool
+    public var code: Bool
+    /**
+     * An image, shown by its words.
+     */
+    public var image: Bool
+    public var link: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(text: String, strong: Bool, emphasis: Bool, strike: Bool, code: Bool, 
+        /**
+         * An image, shown by its words.
+         */image: Bool, link: String?) {
+        self.text = text
+        self.strong = strong
+        self.emphasis = emphasis
+        self.strike = strike
+        self.code = code
+        self.image = image
+        self.link = link
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TextRun: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTextRun: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TextRun {
+        return
+            try TextRun(
+                text: FfiConverterString.read(from: &buf), 
+                strong: FfiConverterBool.read(from: &buf), 
+                emphasis: FfiConverterBool.read(from: &buf), 
+                strike: FfiConverterBool.read(from: &buf), 
+                code: FfiConverterBool.read(from: &buf), 
+                image: FfiConverterBool.read(from: &buf), 
+                link: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TextRun, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.text, into: &buf)
+        FfiConverterBool.write(value.strong, into: &buf)
+        FfiConverterBool.write(value.emphasis, into: &buf)
+        FfiConverterBool.write(value.strike, into: &buf)
+        FfiConverterBool.write(value.code, into: &buf)
+        FfiConverterBool.write(value.image, into: &buf)
+        FfiConverterOptionString.write(value.link, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTextRun_lift(_ buf: RustBuffer) throws -> TextRun {
+    return try FfiConverterTypeTextRun.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTextRun_lower(_ value: TextRun) -> RustBuffer {
+    return FfiConverterTypeTextRun.lower(value)
+}
+
+
+/**
  * A tool the agent used: the use, by its id; the tool, by its name; and what the use is about (a
  * file, a command, …) when it says.
  */
@@ -5262,6 +5437,189 @@ public func FfiConverterTypeAnswer_lower(_ value: Answer) -> RustBuffer {
 
 
 
+
+public enum BlockKind: Equatable, Hashable {
+    
+    case paragraph(runs: [TextRun]
+    )
+    case heading(level: UInt8, runs: [TextRun]
+    )
+    case code(language: String?, text: String
+    )
+    case rule
+    case table(align: [ColumnAlign], head: [[TextRun]], rows: [[[TextRun]]]
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension BlockKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBlockKind: FfiConverterRustBuffer {
+    typealias SwiftType = BlockKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlockKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .paragraph(runs: try FfiConverterSequenceTypeTextRun.read(from: &buf)
+        )
+        
+        case 2: return .heading(level: try FfiConverterUInt8.read(from: &buf), runs: try FfiConverterSequenceTypeTextRun.read(from: &buf)
+        )
+        
+        case 3: return .code(language: try FfiConverterOptionString.read(from: &buf), text: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 4: return .rule
+        
+        case 5: return .table(align: try FfiConverterSequenceTypeColumnAlign.read(from: &buf), head: try FfiConverterSequenceSequenceTypeTextRun.read(from: &buf), rows: try FfiConverterSequenceSequenceSequenceTypeTextRun.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BlockKind, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .paragraph(runs):
+            writeInt(&buf, Int32(1))
+            FfiConverterSequenceTypeTextRun.write(runs, into: &buf)
+            
+        
+        case let .heading(level,runs):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt8.write(level, into: &buf)
+            FfiConverterSequenceTypeTextRun.write(runs, into: &buf)
+            
+        
+        case let .code(language,text):
+            writeInt(&buf, Int32(3))
+            FfiConverterOptionString.write(language, into: &buf)
+            FfiConverterString.write(text, into: &buf)
+            
+        
+        case .rule:
+            writeInt(&buf, Int32(4))
+        
+        
+        case let .table(align,head,rows):
+            writeInt(&buf, Int32(5))
+            FfiConverterSequenceTypeColumnAlign.write(align, into: &buf)
+            FfiConverterSequenceSequenceTypeTextRun.write(head, into: &buf)
+            FfiConverterSequenceSequenceSequenceTypeTextRun.write(rows, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlockKind_lift(_ buf: RustBuffer) throws -> BlockKind {
+    return try FfiConverterTypeBlockKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlockKind_lower(_ value: BlockKind) -> RustBuffer {
+    return FfiConverterTypeBlockKind.lower(value)
+}
+
+
+
+
+public enum ColumnAlign: Equatable, Hashable {
+    
+    case none
+    case left
+    case center
+    case right
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ColumnAlign: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeColumnAlign: FfiConverterRustBuffer {
+    typealias SwiftType = ColumnAlign
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ColumnAlign {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .none
+        
+        case 2: return .left
+        
+        case 3: return .center
+        
+        case 4: return .right
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ColumnAlign, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .none:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .left:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .center:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .right:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeColumnAlign_lift(_ buf: RustBuffer) throws -> ColumnAlign {
+    return try FfiConverterTypeColumnAlign.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeColumnAlign_lower(_ value: ColumnAlign) -> RustBuffer {
+    return FfiConverterTypeColumnAlign.lower(value)
+}
+
+
+
 /**
  * Why a conversation followed is told no more, as the app tells the person.
  */
@@ -5478,6 +5836,88 @@ public func FfiConverterTypeDeviceKind_lift(_ buf: RustBuffer) throws -> DeviceK
 #endif
 public func FfiConverterTypeDeviceKind_lower(_ value: DeviceKind) -> RustBuffer {
     return FfiConverterTypeDeviceKind.lower(value)
+}
+
+
+
+/**
+ * What starts a list's item.
+ */
+
+public enum ListMarker: Equatable, Hashable {
+    
+    case bullet
+    case number(n: UInt64
+    )
+    case task(done: Bool
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ListMarker: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeListMarker: FfiConverterRustBuffer {
+    typealias SwiftType = ListMarker
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ListMarker {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .bullet
+        
+        case 2: return .number(n: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 3: return .task(done: try FfiConverterBool.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ListMarker, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .bullet:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .number(n):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt64.write(n, into: &buf)
+            
+        
+        case let .task(done):
+            writeInt(&buf, Int32(3))
+            FfiConverterBool.write(done, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeListMarker_lift(_ buf: RustBuffer) throws -> ListMarker {
+    return try FfiConverterTypeListMarker.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeListMarker_lower(_ value: ListMarker) -> RustBuffer {
+    return FfiConverterTypeListMarker.lower(value)
 }
 
 
@@ -6518,6 +6958,30 @@ fileprivate struct FfiConverterOptionTypeWaiting: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeListMarker: FfiConverterRustBuffer {
+    typealias SwiftType = ListMarker?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeListMarker.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeListMarker.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeNotice: FfiConverterRustBuffer {
     typealias SwiftType = Notice?
 
@@ -6816,6 +7280,56 @@ fileprivate struct FfiConverterSequenceTypeStartProgram: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeTextBlock: FfiConverterRustBuffer {
+    typealias SwiftType = [TextBlock]
+
+    public static func write(_ value: [TextBlock], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeTextBlock.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [TextBlock] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [TextBlock]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeTextBlock.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeTextRun: FfiConverterRustBuffer {
+    typealias SwiftType = [TextRun]
+
+    public static func write(_ value: [TextRun], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeTextRun.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [TextRun] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [TextRun]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeTextRun.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeViewInfo: FfiConverterRustBuffer {
     typealias SwiftType = [ViewInfo]
 
@@ -6883,6 +7397,81 @@ fileprivate struct FfiConverterSequenceTypeWorkspace: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeWorkspace.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeColumnAlign: FfiConverterRustBuffer {
+    typealias SwiftType = [ColumnAlign]
+
+    public static func write(_ value: [ColumnAlign], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeColumnAlign.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ColumnAlign] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ColumnAlign]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeColumnAlign.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceSequenceTypeTextRun: FfiConverterRustBuffer {
+    typealias SwiftType = [[TextRun]]
+
+    public static func write(_ value: [[TextRun]], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterSequenceTypeTextRun.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [[TextRun]] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [[TextRun]]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterSequenceTypeTextRun.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceSequenceSequenceTypeTextRun: FfiConverterRustBuffer {
+    typealias SwiftType = [[[TextRun]]]
+
+    public static func write(_ value: [[[TextRun]]], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterSequenceSequenceTypeTextRun.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [[[TextRun]]] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [[[TextRun]]]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterSequenceSequenceTypeTextRun.read(from: &buf))
         }
         return seq
     }
@@ -6972,6 +7561,17 @@ public func coreVersion() -> String  {
 })
 }
 /**
+ * `text`'s blocks, in order.
+ */
+public func markdown(text: String) -> [TextBlock]  {
+    return try!  FfiConverterSequenceTypeTextBlock.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_func_markdown(
+        FfiConverterString.lower(text),uniffiCallStatus
+    )
+})
+}
+/**
  * The device `link`, a scanned QR code's text, pairs with; none when it is no pairing link.
  */
 public func pairsWith(link: String) -> PairsWith?  {
@@ -7039,6 +7639,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.contractVersionMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_func_core_version() != 43642) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_func_markdown() != 608) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_func_pairs_with() != 42769) {

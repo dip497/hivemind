@@ -118,7 +118,7 @@ button { cursor: pointer; }
   flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; resize: none;
   padding: 6px 0; max-height: 132px; font-size: 16px; line-height: 24px;
 }
-.composer textarea::placeholder { color: var(--text3); }
+.composer textarea::placeholder { color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .send {
   flex: none; width: 36px; height: 36px; border-radius: 50%; border: 0;
   display: grid; place-items: center; background: var(--raised); color: var(--text3);
@@ -175,15 +175,29 @@ button { cursor: pointer; }
   font-size: 15px; line-height: 22px; white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .said-agent { display: flex; flex-direction: column; gap: 8px; font-size: 15px; line-height: 22px; overflow-wrap: anywhere; }
-.said-agent p, .said-agent h4 { margin: 0; white-space: pre-wrap; }
-.said-agent h4 { font: 500 15px/20px var(--sans); }
-.said-agent .item { display: flex; }
-.said-agent .item > :first-child { min-width: 20px; padding-right: 6px; }
-.said-agent code { font: 400 13px var(--mono); background: var(--raised); border-radius: 4px; padding: 0 3px; }
-.said-agent pre {
-  margin: 0; padding: 12px; overflow-x: auto; background: var(--panel);
-  border: 1px solid var(--line); border-radius: 10px; font: 400 12px/16px var(--mono);
-}
+/* What an agent says, drawn from its markdown (markdown.ts). */
+.plan.md { display: flex; flex-direction: column; gap: 8px; }
+.md p, .md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { margin: 0; white-space: pre-wrap; }
+.md h1 { font: 600 20px/26px var(--sans); }
+.md h2 { font: 600 18px/24px var(--sans); }
+.md h3 { font: 600 16px/22px var(--sans); }
+.md h4, .md h5, .md h6 { font: 600 15px/20px var(--sans); }
+.md a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.md .image::before { content: "🖼 "; }
+.md hr { width: 100%; border: 0; border-top: 1px solid var(--line2); margin: 4px 0; }
+.md blockquote { display: flex; flex-direction: column; gap: 8px; margin: 0; padding-left: 12px; border-left: 3px solid var(--line2); color: var(--text2); }
+.md .item { display: flex; padding-left: calc(var(--depth, 0) * 20px); }
+.md .item > :first-child { flex: none; min-width: 22px; padding-right: 6px; }
+.md .item input { margin: 0; vertical-align: -2px; }
+.md code { font: 400 13px var(--mono); background: var(--raised); border-radius: 4px; padding: 0 3px; }
+.md .code { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.md .language { padding: 6px 12px 0; font: 500 11px/14px var(--mono); color: var(--text3); }
+.md pre { margin: 0; padding: 12px; overflow-x: auto; font: 400 12px/16px var(--mono); }
+.md pre code { background: none; padding: 0; font: inherit; }
+.md .table { overflow-x: auto; }
+.md table { border-collapse: collapse; font-size: 14px; line-height: 20px; }
+.md th, .md td { border: 1px solid var(--line); padding: 4px 8px; text-align: start; vertical-align: top; }
+.md th { background: var(--panel); font-weight: 600; }
 .tool { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
 .tool > button {
   display: flex; align-items: center; width: 100%; gap: 0; padding: 9px 12px;

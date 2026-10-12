@@ -1,0 +1,666 @@
+{
+ "about": "Cases every reader of what an agent says must pass (spec/markdown.md): its markdown, in; the blocks the apps draw, out. Written by hand from the spec.",
+ "cases": [
+  {
+   "about": "emphasis, strong, strikethrough and code, inline",
+   "markdown": "a *b* **c** ~~d~~ `e`",
+   "blocks": [
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "a "
+      },
+      {
+       "text": "b",
+       "emphasis": true
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "c",
+       "strong": true
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "d",
+       "strike": true
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "e",
+       "code": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "about": "styles nest: a run carries every style it is inside",
+   "markdown": "**bold *both***",
+   "blocks": [
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "bold ",
+       "strong": true
+      },
+      {
+       "text": "both",
+       "strong": true,
+       "emphasis": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "about": "a line break inside a paragraph is kept",
+   "markdown": "one\ntwo",
+   "blocks": [
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "one\ntwo"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "about": "headings keep their level",
+   "markdown": "# One\n\n### Three\n\n###### Six",
+   "blocks": [
+    {
+     "is": "heading",
+     "level": 1,
+     "runs": [
+      {
+       "text": "One"
+      }
+     ]
+    },
+    {
+     "is": "heading",
+     "level": 3,
+     "runs": [
+      {
+       "text": "Three"
+      }
+     ]
+    },
+    {
+     "is": "heading",
+     "level": 6,
+     "runs": [
+      {
+       "text": "Six"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "about": "fenced code keeps what is in it as written, and the first word of its fence as its language",
+   "markdown": "```rust title\nlet x = **1**;\n  y\n```",
+   "blocks": [
+    {
+     "is": "code",
+     "language": "rust",
+     "text": "let x = **1**;\n  y"
+    }
+   ]
+  },
+  {
+   "about": "a fence not closed yet is code to the end: the agent is still saying it",
+   "markdown": "Run:\n\n```\nmake",
+   "blocks": [
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "Run:"
+      }
+     ]
+    },
+    {
+     "is": "code",
+     "text": "make"
+    }
+   ]
+  },
+  {
+   "about": "lists nest: each item's depth is how many lists it is in; a bullet, or its number from where the list starts",
+   "markdown": "- a\n  - b\n- c\n\n3. x\n4. y",
+   "blocks": [
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "a"
+      }
+     ],
+     "depth": 1,
+     "marker": {
+      "is": "bullet"
+     }
+    },
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "b"
+      }
+     ],
+     "depth": 2,
+     "marker": {
+      "is": "bullet"
+     }
+    },
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "c"
+      }
+     ],
+     "depth": 1,
+     "marker": {
+      "is": "bullet"
+     }
+    },
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "x"
+      }
+     ],
+     "depth": 1,
+     "marker": {
+      "is": "number",
+      "n": 3
+     }
+    },
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "y"
+      }
+     ],
+     "depth": 1,
+     "marker": {
+      "is": "number",
+      "n": 4
+     }
+    }
+   ]
+  },
+  {
+   "about": "an item's second block is in it, with no marker",
+   "markdown": "1. first\n\n   more\n2. second",
+   "blocks": [
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "first"
+      }
+     ],
+     "depth": 1,
+     "marker": {
+      "is": "number",
+      "n": 1
+     }
+    },
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "more"
+      }
+     ],
+     "depth": 1
+    },
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "second"
+      }
+     ],
+     "depth": 1,
+     "marker": {
+      "is": "number",
+      "n": 2
+     }
+    }
+   ]
+  },
+  {
+   "about": "task list items say whether they are done",
+   "markdown": "- [ ] todo\n- [x] done",
+   "blocks": [
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "todo"
+      }
+     ],
+     "depth": 1,
+     "marker": {
+      "is": "task",
+      "done": false
+     }
+    },
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "done"
+      }
+     ],
+     "depth": 1,
+     "marker": {
+      "is": "task",
+      "done": true
+     }
+    }
+   ]
+  },
+  {
+   "about": "a quote's blocks say how many quotes they are in",
+   "markdown": "> said\n>\n> - in it\n>\n> > deeper\n\nout",
+   "blocks": [
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "said"
+      }
+     ],
+     "quote": 1
+    },
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "in it"
+      }
+     ],
+     "quote": 1,
+     "depth": 1,
+     "marker": {
+      "is": "bullet"
+     }
+    },
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "deeper"
+      }
+     ],
+     "quote": 2
+    },
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "out"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "about": "a rule is a block of its own",
+   "markdown": "a\n\n---\n\nb",
+   "blocks": [
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "a"
+      }
+     ]
+    },
+    {
+     "is": "rule"
+    },
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "about": "a table: its columns' alignment, its head's cells, each row's cells, styled",
+   "markdown": "| a | b | c |\n|:--|--:|:-:|\n| 1 | **2** | |\n| x |",
+   "blocks": [
+    {
+     "is": "table",
+     "align": [
+      "left",
+      "right",
+      "center"
+     ],
+     "head": [
+      [
+       {
+        "text": "a"
+       }
+      ],
+      [
+       {
+        "text": "b"
+       }
+      ],
+      [
+       {
+        "text": "c"
+       }
+      ]
+     ],
+     "rows": [
+      [
+       [
+        {
+         "text": "1"
+        }
+       ],
+       [
+        {
+         "text": "2",
+         "strong": true
+        }
+       ],
+       []
+      ],
+      [
+       [
+        {
+         "text": "x"
+        }
+       ],
+       [],
+       []
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "about": "a link to an https address, written or in angle brackets, is one",
+   "markdown": "[the *site*](https://example.com/x?a=1) or <https://a.io>",
+   "blocks": [
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "the ",
+       "link": "https://example.com/x?a=1"
+      },
+      {
+       "text": "site",
+       "emphasis": true,
+       "link": "https://example.com/x?a=1"
+      },
+      {
+       "text": " or "
+      },
+      {
+       "text": "https://a.io",
+       "link": "https://a.io"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "about": "a link to anything but https stays text: its words, and nothing to tap",
+   "markdown": "[x](javascript:alert(1)) [y](http://a.io) [z](/here) [w](HTTPS:evil) <mailto:a@b.c>",
+   "blocks": [
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "x y z w mailto:a@b.c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "about": "an https address written bare is a link, the punctuation that ends the sentence and a bracket it did not open left out",
+   "markdown": "see https://example.com/a_(b). or (https://b.io/c), not http://plain.io nor xhttps://no.io",
+   "blocks": [
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "see "
+      },
+      {
+       "text": "https://example.com/a_(b)",
+       "link": "https://example.com/a_(b)"
+      },
+      {
+       "text": ". or ("
+      },
+      {
+       "text": "https://b.io/c",
+       "link": "https://b.io/c"
+      },
+      {
+       "text": "), not http://plain.io nor xhttps://no.io"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "about": "an address in code is not a link",
+   "markdown": "`https://a.io`\n\n```\nhttps://b.io\n```",
+   "blocks": [
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "https://a.io",
+       "code": true
+      }
+     ]
+    },
+    {
+     "is": "code",
+     "text": "https://b.io"
+    }
+   ]
+  },
+  {
+   "about": "raw HTML stays text, as written",
+   "markdown": "<b>hi</b> there\n\n<script>alert(1)</script>",
+   "blocks": [
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "<b>hi</b> there"
+      }
+     ]
+    },
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "<script>alert(1)</script>"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "about": "a block of raw HTML over several lines is its text, as written, its lines kept",
+   "markdown": "<div>\n*x*\n</div>\n\nafter",
+   "blocks": [
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "<div>\n*x*\n</div>"
+      }
+     ]
+    },
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "after"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "about": "an image is its words, tappable when its address is https; with none, its address",
+   "markdown": "![a cat](https://e.com/c.png) ![x](data:abc) ![](https://e.com/d.png)",
+   "blocks": [
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "a cat",
+       "image": true,
+       "link": "https://e.com/c.png"
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "x",
+       "image": true
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "https://e.com/d.png",
+       "image": true,
+       "link": "https://e.com/d.png"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "about": "a paragraph or heading whose first letter is right-to-left is marked so; digits and punctuation before it decide nothing, nor do letters after it; code is as written",
+   "markdown": "## مرحبا\n\n(1) «שלום» world\n\nHello عربي\n\n- نعم\n\n| a | ب |\n|--|--|\n\n```\nمرحبا\n```",
+   "blocks": [
+    {
+     "is": "heading",
+     "level": 2,
+     "runs": [
+      {
+       "text": "مرحبا"
+      }
+     ],
+     "rtl": true
+    },
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "(1) «שלום» world"
+      }
+     ],
+     "rtl": true
+    },
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "Hello عربي"
+      }
+     ]
+    },
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "نعم"
+      }
+     ],
+     "depth": 1,
+     "marker": {
+      "is": "bullet"
+     },
+     "rtl": true
+    },
+    {
+     "is": "table",
+     "align": [
+      "none",
+      "none"
+     ],
+     "head": [
+      [
+       {
+        "text": "a"
+       }
+      ],
+      [
+       {
+        "text": "ب"
+       }
+      ]
+     ],
+     "rows": []
+    },
+    {
+     "is": "code",
+     "text": "مرحبا"
+    }
+   ]
+  },
+  {
+   "about": "an item with nothing in it is still one",
+   "markdown": "- \n- b",
+   "blocks": [
+    {
+     "is": "paragraph",
+     "runs": [],
+     "depth": 1,
+     "marker": {
+      "is": "bullet"
+     }
+    },
+    {
+     "is": "paragraph",
+     "runs": [
+      {
+       "text": "b"
+      }
+     ],
+     "depth": 1,
+     "marker": {
+      "is": "bullet"
+     }
+    }
+   ]
+  }
+ ]
+}

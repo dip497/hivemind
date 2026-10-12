@@ -55,7 +55,7 @@ export function answers(tile: string, w: Waiting, answer: (reply: Reply) => Prom
       pill("Deny", () => void hold({ allow: false }), "", { "data-answer": "deny" }),
       pill("Allow", () => void hold({ allow: true }), "primary", { "data-answer": "allow" })));
   } else if (w.kind === "plan") {
-    const plan = w.plan ? h("div", { class: "plan", hidden: true, "data-plan": "" }, ...markdown(w.plan)) : null;
+    const plan = w.plan ? h("div", { class: "plan md", hidden: true, "data-plan": "" }, ...markdown(w.plan)) : null;
     const read = plan && pill("Read the plan", () => {
       plan.hidden = false;
       read!.hidden = true;

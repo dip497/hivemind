@@ -6,7 +6,7 @@ use hive_net::{
 };
 use hive_phone::{
     agents, control, conversation, devices, failure::Failure, home, identity::DeviceCertificate,
-    network, pairing, person,
+    markdown, network, pairing, person,
     workspace::{self, Reply},
 };
 use iroh::{
@@ -103,6 +103,12 @@ fn through(relays: &[String]) -> Result<Reach, JsError> {
 #[wasm_bindgen(js_name = deviceId)]
 pub fn device_id(seed: &[u8]) -> Result<String, JsError> {
     Ok(key_of(seed)?.public().to_string())
+}
+
+/// What an agent says, `text` in markdown, as its blocks (spec/markdown.md).
+#[wasm_bindgen(js_name = readMarkdown)]
+pub fn read_markdown(text: &str) -> Result<JsValue, JsError> {
+    to_js(&serde_json::to_value(markdown::read(text)).map_err(err)?)
 }
 
 /// What the pairing link in `text` (as copied, or inside the phone page's address) names:

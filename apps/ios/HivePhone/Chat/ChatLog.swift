@@ -1,18 +1,11 @@
 import Foundation
 
-/// A piece of what the agent said, as the chat draws it: its markdown text, or a code block, drawn
-/// monospace.
-enum MessagePart: Equatable {
-    case text(AttributedString)
-    case code(String)
-}
-
 /// One row of the chat: what one entry said, or a tool the agent used with what it gave back folded
 /// under it.
 struct ChatRow: Equatable {
     enum Said: Equatable {
         case person(String)
-        case agent([MessagePart])
+        case agent([ChatMarkdown.Piece])
         case tool(Tool, result: ToolResult?)
         /// What a tool gave back, of a use told before what the chat shows.
         case result(ToolResult)
@@ -74,7 +67,7 @@ struct ChatLog {
             case .person(let text):
                 said = .person(text)
             case .agent(let text):
-                said = .agent(ChatMarkdown.parts(text))
+                said = .agent(ChatMarkdown.pieces(text))
             case .toolUse(let tool):
                 uses[tool.id] = rows.count
                 said = .tool(tool, result: nil)

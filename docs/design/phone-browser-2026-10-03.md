@@ -730,6 +730,23 @@ sent instead of queued bytes. Key bar: Esc, Tab, arrows, Ctrl-C.
 **11.5 Reading.** Markdown tables, tappable https links (`javascript:` stays inert), `dir=auto`
 paragraphs, images in the conversation, tool calls that unfold to their full input and output.
 
+- Done (2026-10-12), before B4 item 1: markdown is read once, in the core (`hive_phone::markdown`,
+  pulldown-cmark with tables, strikethrough and task lists; raw HTML kept as text), and handed to
+  the page (wasm `readMarkdown`) and the apps (UniFFI `markdown`) as blocks with their list and
+  quote depth and styled runs; spec/markdown.md, conformance/markdown.json. A link is one only to
+  https, bare addresses too; an image is its words, fetched only when tapped. The page's, Android's
+  and iOS's own parsers are gone. A test per construct failed on the old drawing first
+  (`apps/desktop/tests/e2e/phone-reading.spec.ts`, all but raw HTML as text, which held already
+  and guards the new drawing). The iPhone's reading findings are in it too: each
+  paragraph, heading and cell is `dir=auto` on the page, and the core marks a paragraph or heading
+  whose first letter is right to left (`rtl`) for the apps, which have no such rule of their own
+  (Compose read an Arabic paragraph left to right); and the message box's hint stays on one line,
+  where after a message was sent it had grown to two (its height follows `scrollHeight`, which
+  counted the wrapped hint; Chromium clips the hint rather than drawing an ellipsis), as it had on
+  Android from the start (Compose wrapped the hint; Robolectric's legacy text layout hid it). The reader
+  costs the wasm 179,382 B raw, 72,970 B gzip, 55,701 B brotli (now 3,785,584 B, 1,381,821 B gzip,
+  1,067,713 B brotli; §5's budget is 2 MB gzipped). Still open here: tool calls unfolded whole.
+
 **11.6 Views and widgets.** A view switcher as on the desktop: the installed views that declare
 phone support (P8: the view protocol's `surfaces`, the workspace API's `view.*`). The browser's
 view host is a sandboxed iframe on its own origin under the view's CSP. Widgets through the same
