@@ -233,7 +233,8 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   // one that started it.
   await page.locator('[data-screen="agent"] [data-back]').click();
   await page.locator("[data-tree] [data-start-in]").first().click();
-  await expect(page.locator("[data-start-folder]")).toHaveAttribute("data-start-folder", repo, { timeout: 30_000 });
+  await expect(page.locator("[data-start-summary]")).toContainText(` · ${path.basename(repo)} · `, { timeout: 30_000 });
+  await page.locator("[data-start-summary]").click();
   await page.locator("[data-start-look]").click();
   await expect(page.locator("[data-start-inside] .chip")).toHaveText(["web"]);
   await page.locator("[data-start-inside] .chip", { hasText: "web" }).click();

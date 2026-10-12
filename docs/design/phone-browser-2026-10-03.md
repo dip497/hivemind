@@ -1217,3 +1217,24 @@ plan), and the frame menu's New agent lists the manifest's alone. Now `StartPlac
 an agent the way the settings do, for `agent.places` and `agent.startable` alike. It waits 1.5 s at
 most on a command, so a slow CLI never holds the screen. Claude's help lists no models, so the model
 stays typed, as in the settings, with "As set in Settings" in place of an empty box.
+
+**Prior art.** happy's new session keeps the composer above the keyboard
+(`happy-app/sources/app/(app)/new/index.tsx:2342`, `KeyboardAvoidingView`) and keeps a draft of
+what was chosen (`sync/persistence.ts:10`, `new-session-draft-v1`). hapi remembers the last
+machine, recent paths and agent (`web/src/hooks/useRecentPaths.ts:3,51`, `hapi:newSession:agent`)
+and labels a recent path by its last two segments with the full path as its title
+(`NewSession/DirectorySection.tsx:129`).
+
+**The screen.** The prompt first, focused, and "What should it do?" in place of "optional"; then
+one line, "Claude Code · api · this computer", that opens the choices (agent, workspace, machine,
+folder); then mode and model as the desktop offers them: a select whose first entry is "As set in
+Settings", or for an option the command lists no values for, a field with that placeholder. Start
+sits in a bar under the scrolling part, so it stays above the keyboard. The choices open by
+themselves when nothing could start as chosen (a machine that could not be asked). Two workspaces
+or folders of one name each add the last two parts of their path. The folder trail and "Folders
+in web" show only once a folder inside a project is chosen, not the project's name twice.
+
+**Defaults.** A project's heading names the machine and folder. Otherwise the last start from this
+browser (kept in its IndexedDB as `start-last`: workspace, machine, folder, agent) chooses them
+where they still are, a folder inside a project included. The agent is the one last started when
+it is there, else the first, so the screen never opens with nothing chosen.

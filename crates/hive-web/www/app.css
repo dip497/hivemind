@@ -288,9 +288,21 @@ button { cursor: pointer; }
 .chip[aria-pressed="true"] { background: var(--text); color: var(--canvas); border-color: var(--text); }
 
 /* Starting an agent. */
-.start { display: flex; flex-direction: column; gap: 10px; padding: 12px 20px 24px; max-width: 560px; }
+/* The prompt and choices scroll; Start stays above the keyboard. */
+.start-screen { display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; height: var(--vh); }
+.start { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px 20px 16px; max-width: 560px; }
 .start h2 { margin: 10px 0 0; }
-.start .problem, .start .quiet { margin: 0; padding: 0; }
+.start .problem, .start .quiet, .start-screen .notes p { margin: 0; padding: 0; }
+.start .summary {
+  display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; text-align: left;
+  border: 1px solid var(--line2); border-radius: 12px; background: transparent; font: 500 14px/20px var(--sans);
+}
+.start .summary .said { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.start .summary .chev { color: var(--text3); }
+.start .choices { display: flex; flex-direction: column; gap: 10px; }
+.start .options { display: flex; gap: 10px; }
+.start .option { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.start-screen .dock > .pill { width: 100%; }
 
 /* The floating tab bar. */
 .tabs {
