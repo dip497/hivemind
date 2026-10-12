@@ -1,9 +1,9 @@
 // A live terminal (docs/design/phone-browser-2026-10-03.md §11.4): the screen hive-phone's core
 // keeps of it, its emulator in this page's wasm, drawn on a canvas at the session's own columns,
 // as the Android app draws it (TerminalView.kt): fitted to the width at first, pinched to zoom,
-// dragged to pan, following the newest line until the person scrolls up, and again on new output or
-// a tap. A program that takes scrolls (the mouse, or the alternate screen) is sent them instead, as
-// a desktop terminal sends them. What is typed goes to the terminal; a bar under it has the keys a
+// dragged to pan, following the newest line until the person scrolls up, and again once they type,
+// tap or ask for it; new output meanwhile leaves the view where it is. A program that takes scrolls
+// (the mouse, or the alternate screen) is sent them instead, as a desktop terminal sends them. What is typed goes to the terminal; a bar under it has the keys a
 // phone's keyboard lacks, and Fit to phone.
 
 import type { App } from "./app.js";
@@ -107,6 +107,8 @@ export class TerminalView {
   });
   private readonly fitButton: HTMLButtonElement;
   private readonly ended = h("p", { class: "term-ended", role: "status", hidden: true, "data-term-ended": "" });
+  /** While the view is scrolled back and new output came: back to the newest. */
+  private readonly jump = h("button", { type: "button", class: "term-live", hidden: true, "data-term-live": "" }, "New output ↓");
   /** What is watched, until `unwatch`; `stop` once it is. */
   private wanted: { app: App; workspace: string; tile: string } | null = null;
   private stop: (() => void) | null = null;
@@ -127,6 +129,8 @@ export class TerminalView {
   private top = 0;
   private across = 0;
   private following = true;
+  /** New output came while the view did not follow. */
+  private unseen = false;
   /** A scroll sent to the program, less than a line of it yet. */
   private owed = 0;
   private fitted = false;
@@ -149,10 +153,13 @@ export class TerminalView {
 
   constructor() {
     this.ctx = this.canvas.getContext("2d", { alpha: false })!;
-    this.view.append(this.canvas, this.text, this.input, this.ended);
+    this.view.append(this.canvas, this.text, this.input, this.ended, this.jump);
+    // Its own press: not a drag of the view.
+    this.jump.addEventListener("pointerdown", (e) => e.stopPropagation());
+    this.jump.addEventListener("click", () => this.live());
     const bar = h("div", { class: "term-keys", role: "toolbar", "aria-label": "Keys" });
-    for (const [label, key, name] of BAR) bar.append(this.key(label, name, () => this.source?.typeKeys([key]), { "data-key": key }));
-    bar.append(this.key("⌨", "Keyboard", () => this.input.focus(), { "data-keyboard": "" }));
+    for (const [label, key, name] of BAR) bar.append(this.key(label, name, () => this.typeKeys([key]), { "data-key": key }));
+    bar.append(this.key("⌨", "Keyboard", () => { this.live(); this.input.focus(); }, { "data-keyboard": "" }));
     this.fitButton = this.key("Fit", "Fit to phone", () => this.toggleFit(), { "data-fit": "", "aria-pressed": "false" });
     bar.append(this.fitButton);
     this.el.append(this.view, bar);
@@ -227,8 +234,8 @@ export class TerminalView {
   }
 
   /** What changed since the revision drawn: lines the scrollback let go leave from the front, and
-   *  every other line keeps its place. New output brings the view back to the newest; anything else
-   *  (more history, the screen drawn again) keeps the same lines in sight, counted from the newest. */
+   *  every other line keeps its place. Anything but new output (more history, the screen drawn
+   *  again) keeps the same lines in sight, counted from the newest. */
   private apply(u: Update): void {
     const was = { newest: this.lines[this.newest]?.text, below: this.lines.length - this.newest, length: this.lines.length };
     this.revision = u.revision;
@@ -253,8 +260,11 @@ export class TerminalView {
     let written = count - 1;
     while (written >= 0 && this.lines[written]!.text === "") written--;
     this.newest = this.cursor.visible ? Math.max(cursorAt, written) : written;
-    if (this.lines[this.newest]?.text !== was.newest || this.lines.length - this.newest !== was.below) this.following = true;
-    else if (!this.following) this.top += this.lines.length - was.length;
+    if (this.following) return;
+    if (this.lines[this.newest]?.text !== was.newest || this.lines.length - this.newest !== was.below) {
+      this.top = Math.max(0, this.top - Math.max(0, gone));
+      this.unseen = true;
+    } else this.top += this.lines.length - was.length;
   }
 
   /** A cell's width and a line's height, in device pixels. */
@@ -283,6 +293,8 @@ export class TerminalView {
   }
 
   private draw(): void {
+    if (this.following) this.unseen = false;
+    this.jump.hidden = !this.unseen;
     if (!this.width || !this.height) return;
     this.bounds();
     const ctx = this.ctx;
@@ -443,8 +455,7 @@ export class TerminalView {
     // A tap: the keyboard. On its click, as the mousedown a touch makes first would take the focus.
     v.addEventListener("click", () => {
       if (this.tapped) {
-        this.following = true;
-        this.draw();
+        this.live();
         this.input.focus();
       }
       this.tapped = false;
@@ -461,23 +472,23 @@ export class TerminalView {
       if (!source || e.isComposing || e.metaKey || e.altKey) return;
       if (e.ctrlKey && e.key.length === 1 && /[a-z@[\\\]^_]/i.test(e.key)) {
         e.preventDefault();
-        source.typeText(String.fromCharCode(e.key.toUpperCase().charCodeAt(0) & 31));
+        this.typeText(String.fromCharCode(e.key.toUpperCase().charCodeAt(0) & 31));
         return;
       }
       const key = KEYS[e.key];
       if (!key || e.ctrlKey) return;
       e.preventDefault();
-      source.typeKeys([key]);
+      this.typeKeys([key]);
     });
     input.addEventListener("beforeinput", (e) => {
       const source = this.source;
       if (!source || e.isComposing) return;
       if (e.inputType === "insertLineBreak" || e.inputType === "insertParagraph") {
         e.preventDefault();
-        source.typeKeys(["enter"]);
+        this.typeKeys(["enter"]);
       } else if (e.inputType === "deleteContentBackward" && input.value === "") {
         e.preventDefault();
-        source.typeKeys(["backspace"]);
+        this.typeKeys(["backspace"]);
       }
     });
     input.addEventListener("input", (e) => {
@@ -490,7 +501,24 @@ export class TerminalView {
   private typeWhatIsIn(): void {
     const text = this.input.value;
     this.input.value = "";
-    if (text) this.source?.typeText(text);
+    if (text) this.typeText(text);
+  }
+
+  /** What the person types: the view goes back to the newest. */
+  private typeText(text: string): void {
+    this.live();
+    this.source?.typeText(text);
+  }
+
+  private typeKeys(keys: string[]): void {
+    this.live();
+    this.source?.typeKeys(keys);
+  }
+
+  /** Back to the newest, following it. */
+  private live(): void {
+    this.following = true;
+    this.draw();
   }
 
   /** Move the view by `dx`, `dy` device pixels, the pointer `at`: up from the newest stops following

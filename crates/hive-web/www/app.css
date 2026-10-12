@@ -242,6 +242,10 @@ button { cursor: pointer; }
   position: absolute; left: 12px; right: 12px; bottom: 12px; margin: 0; padding: 8px 12px; border-radius: 10px;
   background: var(--raised); color: var(--text2); font-size: 13px; text-align: center;
 }
+.term-live {
+  position: absolute; right: 12px; bottom: 12px; padding: 8px 14px; border: 0; border-radius: 999px;
+  background: var(--text); color: var(--canvas); font: 500 13px var(--sans); touch-action: manipulation;
+}
 .term-keys {
   flex: none; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
   padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--line);

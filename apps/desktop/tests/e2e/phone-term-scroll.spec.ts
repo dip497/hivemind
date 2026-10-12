@@ -77,19 +77,35 @@ async function swipeDown(page: Page, by: number): Promise<void> {
   await page.mouse.up();
 }
 
-test("a swipe shows earlier lines and the view comes back to the newest on new output or a tap", async () => {
+test("scrolled back, new output leaves the view where it is and offers a way back; the person's own tap, key or that button brings back the newest", async () => {
   test.skip(!built(), "no page build: run crates/hive-web/build.sh");
   const page = await terminal();
+  const jump = page.locator("[data-term-live]");
+  const last = async () => (await inSight(page)).at(-1);
   await feed(page, 200);
-  await expect.poll(async () => (await inSight(page)).at(-1)).toBe("line 199");
+  await expect.poll(last).toBe("line 199");
+  await expect(jump).toBeHidden();
   await swipeDown(page, 400);
-  await expect.poll(async () => (await inSight(page)).at(-1)).not.toBe("line 199");
+  await expect.poll(last).not.toBe("line 199");
+  const earlier = await inSight(page);
   await feed(page, 201);
-  await expect.poll(async () => (await inSight(page)).at(-1)).toBe("line 200");
+  await expect(jump).toBeVisible();
+  expect(await inSight(page)).toEqual(earlier);
+  await jump.click();
+  await expect.poll(last).toBe("line 200");
+  await expect(jump).toBeHidden();
+  // A key from the bar is the person's input.
   await swipeDown(page, 400);
-  await expect.poll(async () => (await inSight(page)).at(-1)).not.toBe("line 200");
+  await feed(page, 202);
+  await expect(jump).toBeVisible();
+  await page.locator("[data-key]").first().click();
+  await expect.poll(last).toBe("line 201");
+  await expect(jump).toBeHidden();
+  // So is a tap, with or without new output.
+  await swipeDown(page, 400);
+  await expect.poll(last).not.toBe("line 201");
   await page.locator(".term-view").click();
-  await expect.poll(async () => (await inSight(page)).at(-1)).toBe("line 200");
+  await expect.poll(last).toBe("line 201");
 });
 
 test("a program that takes scrolls is sent a swipe a line at a time, up for earlier, and the view stays", async () => {

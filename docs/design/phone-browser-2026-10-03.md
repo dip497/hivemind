@@ -1167,8 +1167,11 @@ cmux scrolls on the Mac surface (`TerminalSurface+Mobile.swift:45-54`). Both sen
 line-height of travel, and the page does the same, carrying the remainder. A scroll is input, as
 in tmux, so it sizes the terminal like a key does.
 
-The view follows again on new output or a tap. cmux snaps on the person's input only
-(`GhosttySurfaceView.swift:4625-4646`); we snap on output as well, as asked.
+The view follows again only on the person's own input: a key, the key bar, a tap. New output never
+moves a view scrolled back; a "New output ↓" button shows instead and jumps to the newest. cmux
+does the same (`GhosttySurfaceView.swift:4625-4646`: "Passive output never forces this jump"), and
+vibetunnel shows a similar button. A first cut snapped on new output, which left nothing to read
+back while an agent printed.
 
 History comes on demand. The host's daemon keeps 5,000 lines and sent all of them with every
 screen: on joining, and again each time a paced phone fell behind. The core keeps only 2,000. Now:
@@ -1183,7 +1186,8 @@ screen: on joining, and again each time a paced phone fell behind. The core keep
 
 A screen sent again is drawn from a reset, so its lines get new numbers. The page tells it from new
 output by the newest line: the same text at the same distance from the end means nothing new came.
-Then the view keeps the same lines in sight, counted from the end. Orca caps the screen sent on
+Then the view keeps the same lines in sight, counted from the end. After new output the view keeps
+them by their place. Orca caps the screen sent on
 joining at 1,000 lines and 512 KiB (`orca/src/main/runtime/scrollback-limits.ts:7-8`). cmux sends
 240 lines on a cold attach and fetches more as the phone scrolls, 600 at a time
 (`TerminalController+MobileScrollPrefetch.swift:10-14`).
