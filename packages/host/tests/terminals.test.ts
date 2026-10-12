@@ -34,7 +34,7 @@ function host(opts: { askedByHost?: (bare: string) => boolean; hidden?: () => bo
       resume: (t) => calls.push(`resume ${t}`),
       kill: (t) => calls.push(`kill ${t}`),
       detach: (t) => calls.push(`detach ${t}`),
-      screen: () => (opts.screen === undefined ? null : (cb) => { cb(opts.screen!); return true; }),
+      screen: (_, lines) => (opts.screen === undefined ? null : (cb) => { cb(lines === undefined ? opts.screen! : `${opts.screen} with ${lines} lines`); return true; }),
     },
   });
   const server = new WorkspaceServer([terminals.domain], new Intents(new AuditLog({ file })));
@@ -264,4 +264,29 @@ test("a client that joins a running session is shown the host's screen, and the 
   assert.ok(output(b).some((m) => JSON.stringify(m.params).includes("the host's screen")));
   t.mock.timers.tick(REPAINT_AFTER_MS);
   assert.deepEqual(h.calls.filter((c) => c.startsWith("resize")), ["resize hm:t1 80x23", "resize hm:t1 80x24"]);
+});
+
+test("a phone that asks for some of a session's history is sent the screen with that much of it on joining, and with more as it asks, alone", async () => {
+  const h = host({ screen: "SCREEN" });
+  const window = h.client();
+  await h.open(window, "hm:t1");
+  const phone = h.client({ kind: "peer", person: "p".repeat(64), device: "d".repeat(64), access: "owner" });
+  await h.open(phone, "hm:t1", { attachOnly: true, acks: true, history: 200 });
+  const sent = (c: { received: EventMessage[] }) => output(c).map((m) => String(m.params[1]));
+  assert.deepEqual(sent(phone), ["SCREEN with 200 lines"]);
+  h.notice(phone, "terminal.history", "hm:t1", 2000);
+  assert.deepEqual(sent(phone), ["SCREEN with 200 lines", "SCREEN with 2000 lines"]);
+  assert.deepEqual(sent(window), []);
+  // Fallen behind its window, it is sent the screen with what it last asked for.
+  for (const data of ["x".repeat(PACED_WINDOW), "late"]) {
+    h.outputs.get("hm:t1")!.data(data);
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  h.notice(phone, "terminal.ack", "hm:t1", sent(phone).join("").length);
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(sent(phone).at(-1), "SCREEN with 2000 lines");
+  // A window that joins asks for none: all the host keeps.
+  const other = h.client();
+  await h.open(other, "hm:t1");
+  assert.deepEqual(sent(other), ["SCREEN"]);
 });

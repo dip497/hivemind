@@ -46,6 +46,6 @@ export function daemonSessions({ endpoint, pace }: DaemonSessionsOptions): Sessi
     kill: (tile) => endpoint.kill(tile),
     detach: (tile) => endpoint.detach(tile),
     // Asked for when read: false once the daemon no longer holds the session.
-    screen: (tile) => (endpoint.has(tile) ? (cb) => { if (!endpoint.has(tile)) return false; endpoint.screen(tile, cb); return true; } : null),
+    screen: (tile, lines) => (endpoint.has(tile) ? (cb) => { if (!endpoint.has(tile)) return false; endpoint.screen(tile, cb, lines); return true; } : null),
   };
 }

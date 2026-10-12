@@ -97,6 +97,7 @@ use hive_phone::{
     now_ms,
     pairing::{self, Pairing},
     push::{self, PushKeys},
+    screen::SCROLLBACK,
     views,
     workspace::{self, Reply, Sent, Watched},
 };
@@ -666,17 +667,18 @@ async fn run(args: Args) -> Result<()> {
                 // conversation and each message go on it at once, each on a stream of its own.
                 let connection = workspace::holder(&endpoint, &devices, ws).await?;
                 let mut stdout = std::io::stdout();
-                let watched = workspace::watch(&connection, ws, tile, None, |watched| {
-                    let Watched::Output(data) = watched else {
-                        return;
-                    };
-                    if json {
-                        println!("{}", json!({ "terminal": data }));
-                    } else {
-                        let _ = std::io::Write::write_all(&mut stdout, data.as_bytes());
-                        let _ = std::io::Write::flush(&mut stdout);
-                    }
-                });
+                let watched =
+                    workspace::watch(&connection, ws, tile, SCROLLBACK, None, |watched| {
+                        let Watched::Output(data) = watched else {
+                            return;
+                        };
+                        if json {
+                            println!("{}", json!({ "terminal": data }));
+                        } else {
+                            let _ = std::io::Write::write_all(&mut stdout, data.as_bytes());
+                            let _ = std::io::Write::flush(&mut stdout);
+                        }
+                    });
                 let talked = conversation::follow(&connection, ws, tile, None, |piece| {
                     if json {
                         let Piece {
@@ -877,7 +879,7 @@ async fn run(args: Args) -> Result<()> {
             let watched = async {
                 let connection = workspace::holder(&endpoint, &devices, ws).await?;
                 let mut stdout = std::io::stdout();
-                workspace::watch(&connection, ws, tile, typed, |watched| match watched {
+                workspace::watch(&connection, ws, tile, SCROLLBACK, typed, |watched| match watched {
                     Watched::Output(data) => {
                         let _ = std::io::Write::write_all(&mut stdout, data.as_bytes());
                         let _ = std::io::Write::flush(&mut stdout);

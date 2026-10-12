@@ -461,16 +461,16 @@ export class SessionManager {
 
   /** Wait for the xterm.js write queue to drain, then serialize. xterm batches
    *  writes via setTimeout(0); calling serialize() before drain returns "". */
-  private serializeDrained(s: Session, tries = 3): Promise<{ replay: string; seq: number }> {
+  private serializeDrained(s: Session, tries = 3, lines = this.scrollback): Promise<{ replay: string; seq: number }> {
     return new Promise((resolve) => {
       // The screen covers output up to `at`; output that arrived while it drained follows it raw.
       const at = s.seq;
       s.term.write("", () => {
-        const screen = s.serializer.serialize({ scrollback: this.scrollback });
+        const screen = s.serializer.serialize({ scrollback: Math.min(lines, this.scrollback) });
         const tail = this.ringSince(s, at);
         if (tail !== null) resolve({ replay: screen + tail, seq: s.seq });
         // ponytail: a flood that outruns the ring between drains ends with a gap after three tries.
-        else if (tries > 1) void this.serializeDrained(s, tries - 1).then(resolve);
+        else if (tries > 1) void this.serializeDrained(s, tries - 1, lines).then(resolve);
         else resolve({ replay: screen, seq: s.seq });
       });
     });
@@ -530,11 +530,12 @@ export class SessionManager {
     this.applySize(s, cols, rows);
   }
 
-  /** The current screen, for a viewer that fell too far behind to be sent every byte. */
-  async snapshot(id: string): Promise<{ replay: string; seq: number; epoch: string } | null> {
+  /** The current screen, for a viewer that fell too far behind to be sent every byte, with at most
+   *  `lines` of its scrollback. */
+  async snapshot(id: string, lines?: number): Promise<{ replay: string; seq: number; epoch: string } | null> {
     const s = this.sessions.get(id);
     if (!s || s.exited) return null;
-    const snap = await this.serializeDrained(s);
+    const snap = await this.serializeDrained(s, 3, lines);
     return { replay: this.withTitle(s, snap.replay), seq: snap.seq, epoch: s.epoch };
   }
 

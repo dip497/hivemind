@@ -627,10 +627,11 @@ const server = net.createServer((sock) => {
         break;
       case "screen": {
         const { reqId, id } = msg;
+        const lines = Number.isSafeInteger(msg.lines) && msg.lines! >= 0 ? msg.lines : undefined;
         // What is buffered for this viewer is older than the screen: send it first, so the
         // screen is the line between bytes it already covers and bytes that follow it.
         outBuf.flush(id);
-        void manager.snapshot(id).then((snap) => send({ t: "screen", reqId, id, replay: snap?.replay ?? null }));
+        void manager.snapshot(id, lines).then((snap) => send({ t: "screen", reqId, id, replay: snap?.replay ?? null }));
         break;
       }
       case "resume":

@@ -35,6 +35,8 @@ export interface TermSource {
   /** The person scrolls `lines` (up below 0) at a cell (from 1): sent to the program when it takes
    *  scrolls; false: the view scrolls itself. 0 lines asks whose a scroll is. */
   scroll(lines: number, col: number, row: number): boolean;
+  /** The person scrolled to the oldest line kept: more history is asked of the host, if it has it. */
+  earlier(): void;
 }
 
 interface Line {
@@ -225,11 +227,12 @@ export class TerminalView {
   }
 
   /** What changed since the revision drawn: lines the scrollback let go leave from the front, and
-   *  every other line keeps its place. */
+   *  every other line keeps its place. New output brings the view back to the newest; anything else
+   *  (more history, the screen drawn again) keeps the same lines in sight, counted from the newest. */
   private apply(u: Update): void {
+    const was = { newest: this.lines[this.newest]?.text, below: this.lines.length - this.newest, length: this.lines.length };
     this.revision = u.revision;
     this.rows = u.rows;
-    if (u.lines.length > 0) this.following = true;
     if (u.cols !== this.cols) {
       this.cols = u.cols;
       this.across = 0;
@@ -237,10 +240,7 @@ export class TerminalView {
     const count = Math.max(0, u.lineCount - u.firstLine);
     const gone = u.firstLine - this.firstLine;
     if (gone < 0 || gone >= this.lines.length) this.lines = [];
-    else if (gone > 0) {
-      this.lines.splice(0, gone);
-      if (!this.following) this.top = Math.max(0, this.top - gone);
-    }
+    else if (gone > 0) this.lines.splice(0, gone);
     this.firstLine = u.firstLine;
     this.lines.length = Math.min(this.lines.length, count);
     while (this.lines.length < count) this.lines.push(BLANK);
@@ -253,6 +253,8 @@ export class TerminalView {
     let written = count - 1;
     while (written >= 0 && this.lines[written]!.text === "") written--;
     this.newest = this.cursor.visible ? Math.max(cursorAt, written) : written;
+    if (this.lines[this.newest]?.text !== was.newest || this.lines.length - this.newest !== was.below) this.following = true;
+    else if (!this.following) this.top += this.lines.length - was.length;
   }
 
   /** A cell's width and a line's height, in device pixels. */
@@ -502,6 +504,7 @@ export class TerminalView {
       if (dy > 0) this.following = false;
       this.bounds();
       if (!this.following && this.top >= this.rest()) this.following = true;
+      if (!this.following && this.top < this.inView()) this.source?.earlier();
     }
     this.draw();
   }

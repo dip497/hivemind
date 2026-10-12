@@ -40,6 +40,7 @@ const LEAST: Record<string, Role> = {
   "widget.press": "edit",
   // Watching terminals, and no longer watching one.
   "terminal.show": "view",
+  "terminal.history": "view",
   "terminal.flow": "view",
   "terminal.ack": "view",
   "terminal.detach": "view",

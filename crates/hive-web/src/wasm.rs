@@ -10,7 +10,7 @@ use hive_phone::{
     home,
     identity::DeviceCertificate,
     markdown, network, pairing, person,
-    screen::Screen,
+    screen::{Screen, FIRST_HISTORY},
     views,
     workspace::{self, Input, Reply, Sent, Watched},
 };
@@ -503,17 +503,24 @@ impl Host {
             // Each connection is sent the screen whole first: after the first, in place of what
             // was shown.
             let mut anew = term.watched.replace(true);
-            let watched = workspace::watch(&connection, &workspace, &tile, Some(sending), |w| {
-                match w {
-                    Watched::Output(data) if std::mem::take(&mut anew) => {
-                        term.screen.borrow_mut().redraw(data.as_bytes())
+            let watched = workspace::watch(
+                &connection,
+                &workspace,
+                &tile,
+                FIRST_HISTORY,
+                Some(sending),
+                |w| {
+                    match w {
+                        Watched::Output(data) if std::mem::take(&mut anew) => {
+                            term.screen.borrow_mut().redraw(data.as_bytes())
+                        }
+                        Watched::Output(data) => term.screen.borrow_mut().feed(data.as_bytes()),
+                        Watched::Size(cols, rows) => term.screen.borrow_mut().resize(cols, rows),
+                        Watched::Keyboard(_) => return,
                     }
-                    Watched::Output(data) => term.screen.borrow_mut().feed(data.as_bytes()),
-                    Watched::Size(cols, rows) => term.screen.borrow_mut().resize(cols, rows),
-                    Watched::Keyboard(_) => return,
-                }
-                let _ = changed.call0(&JsValue::NULL);
-            });
+                    let _ = changed.call0(&JsValue::NULL);
+                },
+            );
             let passed = async { match workspace::pass_on(&mut inputs, sent).await {} };
             let stopped = async {
                 let _ = wasm_bindgen_futures::JsFuture::from(until).await;
@@ -777,6 +784,14 @@ impl Term {
             let _ = self.inner.put.send(Input::Text(sent));
         }
         true
+    }
+
+    /// The person scrolled to the oldest line kept: more of the session's scrollback is asked for,
+    /// when the host may have more.
+    pub fn earlier(&self) {
+        if let Some(lines) = self.inner.screen.borrow_mut().earlier() {
+            let _ = self.inner.put.send(Input::History(lines));
+        }
     }
 
     /// Size the terminal to `cols` × `rows` for this page, until it is watched no more.

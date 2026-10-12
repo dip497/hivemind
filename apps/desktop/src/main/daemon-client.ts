@@ -124,9 +124,9 @@ export function hasSession(tileId: string): boolean {
   return local.has(tileId);
 }
 /** Ask for the session's screen now; false when this client does not hold the session. */
-export function screenPty(tileId: string, cb: (replay: string | null) => void): boolean {
+export function screenPty(tileId: string, cb: (replay: string | null) => void, lines?: number): boolean {
   if (!local.has(tileId)) return false;
-  local.screen(tileId, cb);
+  local.screen(tileId, cb, lines);
   return true;
 }
 export function writePty(tileId: string, data: string, paste?: boolean): void {

@@ -166,6 +166,15 @@ export class SessionRelay {
     this.showScreen(tileId, viewer, watch, screen);
   }
 
+  /** `viewer` asks for the screen again (with more of its history): sent in place of what it
+   *  shows, then live bytes. */
+  again(tileId: string, viewer: Viewer, screen: ReadScreen | null): void {
+    const watch = this.viewers.get(tileId)?.get(viewer);
+    if (!watch || watch.unseen || watch.awaiting || !screen) return;
+    watch.awaiting = true;
+    this.showScreen(tileId, viewer, watch, screen);
+  }
+
   /** A paced `viewer` has taken `taken` of what it was sent, all told. Behind, and now taken all of
    *  it: the screen, in place of what it missed. */
   acked(tileId: string, viewer: Viewer, taken: number): void {

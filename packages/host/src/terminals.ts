@@ -62,8 +62,9 @@ export interface SessionBackend {
   kill(tile: string): void;
   /** Nobody shows it any more: a daemon keeps it; a session in this process ends. */
   detach(tile: string): void;
-  /** The host's screen of it, read in order with its output; null when it keeps none. */
-  screen(tile: string): ReadScreen | null;
+  /** The host's screen of it, with at most `lines` of its scrollback (none: all it keeps), read in
+   *  order with its output; null when it keeps none. */
+  screen(tile: string, lines?: number): ReadScreen | null;
 }
 
 export interface TerminalsOptions {
@@ -107,7 +108,7 @@ export const TYPED_BURST_MS = 60_000;
 
 type TerminalMethod = "terminal.open";
 type TerminalNotice =
-  | "terminal.write" | "terminal.show" | "terminal.resize" | "terminal.flow" | "terminal.ack" | "terminal.fit"
+  | "terminal.write" | "terminal.show" | "terminal.resize" | "terminal.flow" | "terminal.ack" | "terminal.fit" | "terminal.history"
   | "terminal.close" | "terminal.detach" | "terminal.watchActivity"
   | "terminal.keyboard.ask" | "terminal.keyboard.give" | "terminal.keyboard.take";
 
@@ -117,6 +118,8 @@ export class Terminals {
   private readonly viewers = new WeakMap<Connection, Viewer>();
   /** The clients that typed into each session, the last to type last. */
   private readonly typers = new Map<string, Connection[]>();
+  /** The lines of each session's scrollback a client asked to be sent with its screen. */
+  private readonly histories = new Map<string, Map<Connection, number>>();
   /** The size each client showing a session says it is: the session's while it typed last. */
   private readonly said = new Map<string, Map<Connection, { cols: number; rows: number }>>();
   /** Who the others were last told types into each session, and when. */
@@ -161,11 +164,16 @@ export class Terminals {
         "terminal.write": (from, tile, data, paste) => this.write(tileOf(tile), written(data, "data"), flag(paste, "paste"), from),
         "terminal.show": (from, tile, shown) => {
           const t = tileOf(tile);
-          this.relay.show(t, this.viewerOf(from), flag(shown, "shown") === true, opts.backend.screen(t));
+          this.relay.show(t, this.viewerOf(from), flag(shown, "shown") === true, this.screenFor(t, from));
         },
         "terminal.resize": (from, tile, cols, rows) => this.resize(tileOf(tile), whole(cols, "cols", 1), whole(rows, "rows", 1), from),
         "terminal.flow": (_, tile, paused) => this.flow(tileOf(tile), flag(paused, "paused") === true),
         "terminal.ack": (from, tile, taken) => this.relay.acked(tileOf(tile), this.viewerOf(from), whole(taken, "taken")),
+        "terminal.history": (from, tile, lines) => {
+          const t = tileOf(tile);
+          this.histories.get(t)?.set(from, whole(lines, "lines"));
+          this.relay.again(t, this.viewerOf(from), this.screenFor(t, from));
+        },
         "terminal.fit": (from, tile, cols, rows) => this.fit(tileOf(tile), cols == null ? null : { cols: whole(cols, "cols", 1), rows: whole(rows, "rows", 1) }, from),
         "terminal.close": (from, tile) => this.close(tileOf(tile), from),
         "terminal.detach": (from, tile) => {
@@ -185,6 +193,7 @@ export class Terminals {
         if (!viewer) return;
         for (const tile of this.relay.leaveAll(viewer)) this.letGo(tile);
         for (const mine of this.said.values()) mine.delete(connection);
+        for (const mine of this.histories.values()) mine.delete(connection);
         for (const [tile, typers] of this.typers) {
           const at = typers.indexOf(connection);
           if (at < 0) continue;
@@ -260,7 +269,11 @@ export class Terminals {
     emit(from, "terminal.keyboard", tile, holder);
     const size = this.sizes.get(tile);
     if (size) emit(from, "terminal.size", tile, size.cols, size.rows);
-    const shown = this.relay.open(tile, this.viewerOf(from), start, () => this.opts.backend.screen(tile), opts.acks === true);
+    let histories = this.histories.get(tile);
+    if (!histories) this.histories.set(tile, (histories = new Map()));
+    if (opts.history === undefined) histories.delete(from);
+    else histories.set(from, opts.history);
+    const shown = this.relay.open(tile, this.viewerOf(from), start, () => this.screenFor(tile, from), opts.acks === true);
     if (!machine) return shown;
     // Whether its machine lends its keyboard is known once it runs (one a window has just placed
     // is in its workspace here only then): told again, if that changes who holds it.
@@ -286,6 +299,11 @@ export class Terminals {
       this.opts.backend.resize(tile, size.cols, size.rows - 1);
       this.opts.backend.resize(tile, size.cols, size.rows);
     }, REPAINT_AFTER_MS));
+  }
+
+  /** The host's screen of `tile` for `from`, with the scrollback it asked for. */
+  private screenFor(tile: string, from: Connection): ReadScreen | null {
+    return this.opts.backend.screen(tile, this.histories.get(tile)?.get(from));
   }
 
   /** Where a session's output, exit and size go: to every client that shows it. */
@@ -420,6 +438,7 @@ export class Terminals {
     this.relay.forget(tile);
     this.typers.delete(tile);
     this.said.delete(tile);
+    this.histories.delete(tile);
     this.typing.delete(tile);
     this.openers.delete(tile);
     this.sizes.delete(tile);
@@ -465,5 +484,6 @@ function optsOf(value: unknown): TerminalOpts {
     ...(o.attachOnly == null ? {} : { attachOnly: flag(o.attachOnly, "opts.attachOnly") }),
     ...(o.liveOnly == null ? {} : { liveOnly: flag(o.liveOnly, "opts.liveOnly") }),
     ...(o.acks == null ? {} : { acks: flag(o.acks, "opts.acks") }),
+    ...(o.history == null ? {} : { history: whole(o.history, "opts.history") }),
   };
 }

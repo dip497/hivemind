@@ -13,7 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use hive_phone::screen::{Frame, LiveScreen, Screen, SCROLLBACK};
+use hive_phone::screen::{Frame, LiveScreen, Screen, FIRST_HISTORY, SCROLLBACK};
 
 /// A run as §5.3 packs it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -503,4 +503,33 @@ fn a_scroll_goes_to_a_program_that_takes_the_mouse_or_shows_the_alternate_screen
     // Nothing scrolled yet: whose it is, and nothing sent.
     assert_eq!(at(claude, 0, 1, 1).as_deref(), Some(""));
     assert_eq!(at(b"$ ls\r\n", 0, 1, 1), None);
+}
+
+#[test]
+fn scrolled_to_the_oldest_line_a_page_asks_for_more_history_until_the_host_has_no_more_or_it_holds_all_it_keeps(
+) {
+    // The screen with `n` lines of scrollback above its 24 rows, as the host sends it.
+    let with = |n: usize| [b"\x1bc".as_slice(), &numbered("line", 0..(n + 23))].concat();
+    let mut screen = Screen::default();
+    // Nothing from the host yet: nothing to ask.
+    assert_eq!(screen.earlier(), None);
+    // Joined with as much as it asked for: four times that, then nothing until it comes.
+    screen.redraw(&with(FIRST_HISTORY));
+    assert_eq!(screen.earlier(), Some(FIRST_HISTORY * 4));
+    assert_eq!(screen.earlier(), None);
+    screen.feed(&with(FIRST_HISTORY * 4));
+    assert_eq!(screen.earlier(), Some(SCROLLBACK));
+    // Fewer than it asked for: the host had no more.
+    screen.feed(&with(1_000));
+    assert_eq!(screen.earlier(), None);
+    // Joined again, with less than it asks for on joining: the host has no more.
+    screen.redraw(&with(50));
+    assert_eq!(screen.earlier(), None);
+    // Grown past what it asked for as output came: it asks for more than it holds.
+    screen.redraw(&with(FIRST_HISTORY));
+    screen.feed(&numbered("more", 0..300));
+    assert_eq!(screen.earlier(), Some(SCROLLBACK));
+    // All it keeps: nothing more to ask.
+    screen.feed(&with(SCROLLBACK + 100));
+    assert_eq!(screen.earlier(), None);
 }

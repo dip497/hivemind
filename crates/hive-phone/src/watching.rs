@@ -13,7 +13,7 @@ use tokio::{sync::mpsc, task::JoinHandle};
 use crate::{
     connections::Connections,
     failure::Lost,
-    screen::{Frame, LiveScreen},
+    screen::{Frame, LiveScreen, SCROLLBACK},
     workspace::{self, Input, Sent, Watched},
 };
 
@@ -96,15 +96,21 @@ impl Watching {
                 if let Some(size) = *fit.lock().expect("a fit") {
                     let _ = keyed.try_send(Sent::Fit(Some(size)));
                 }
-                let watched =
-                    workspace::watch(&connection, &workspace, &tile, Some(written), |w| match w {
+                let watched = workspace::watch(
+                    &connection,
+                    &workspace,
+                    &tile,
+                    SCROLLBACK,
+                    Some(written),
+                    |w| match w {
                         Watched::Output(data) if std::mem::take(&mut anew) => {
                             fed.redraw(data.as_bytes())
                         }
                         Watched::Output(data) => fed.output(data.as_bytes()),
                         Watched::Size(cols, rows) => fed.size(cols, rows),
                         Watched::Keyboard(holder) => watcher.keyboard(holder_of(holder, &me)),
-                    });
+                    },
+                );
                 let watched = tokio::select! {
                     watched = watched => watched,
                     never = workspace::pass_on(&mut typing, keyed) => match never {},

@@ -208,9 +208,9 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
     resume: (tile) => on(tile)?.resume(tile),
     kill: (tile) => { on(tile)?.kill(tile); tiles.delete(tile); },
     detach: (tile) => { on(tile)?.detach(tile); tiles.delete(tile); },
-    screen: (tile) => {
+    screen: (tile, lines) => {
       const ep = on(tile);
-      return ep?.has(tile) ? (cb) => { if (!ep.has(tile)) return false; ep.screen(tile, cb); return true; } : null;
+      return ep?.has(tile) ? (cb) => { if (!ep.has(tile)) return false; ep.screen(tile, cb, lines); return true; } : null;
     },
     close: () => {
       for (const key of [...endpoints.keys()]) letGo(key);
@@ -258,6 +258,6 @@ export function onDevices(self: string, here: SessionBackend, devices: DeviceSes
     resume: (tile) => by(tile).resume(tile),
     kill: (tile) => by(tile).kill(tile),
     detach: (tile) => by(tile).detach(tile),
-    screen: (tile) => by(tile).screen(tile),
+    screen: (tile, lines) => by(tile).screen(tile, lines),
   };
 }

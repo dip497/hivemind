@@ -1169,3 +1169,21 @@ in tmux, so it sizes the terminal like a key does.
 
 The view follows again on new output or a tap. cmux snaps on the person's input only
 (`GhosttySurfaceView.swift:4625-4646`); we snap on output as well, as asked.
+
+History comes on demand. The host's daemon keeps 5,000 lines and sent all of them with every
+screen: on joining, and again each time a paced phone fell behind. The core keeps only 2,000. Now:
+- the page opens a terminal with `history: 200` (`FIRST_HISTORY`);
+- scrolled within a screenful of the oldest line it holds, it sends `terminal.history` with four
+  times what it holds, at most 2,000;
+- the host sends that client alone the screen again with that much scrollback (`SessionRelay.again`,
+  the daemon's `screen` request with `lines`), and remembers the cap for the screens it sends later;
+- the core stops asking once an answer brings fewer lines than it asked for, which means the host
+  has no more, or once it holds 2,000;
+- the native apps ask for 2,000 at once, because they have no way to ask for more yet.
+
+A screen sent again is drawn from a reset, so its lines get new numbers. The page tells it from new
+output by the newest line: the same text at the same distance from the end means nothing new came.
+Then the view keeps the same lines in sight, counted from the end. Orca caps the screen sent on
+joining at 1,000 lines and 512 KiB (`orca/src/main/runtime/scrollback-limits.ts:7-8`). cmux sends
+240 lines on a cold attach and fetches more as the phone scrolls, 600 at a time
+(`TerminalController+MobileScrollPrefetch.swift:10-14`).

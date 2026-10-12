@@ -52,8 +52,9 @@ export type ClientMsg =
   | { t: "resume"; id: string }
   | { t: "list"; reqId: string; detail?: boolean }
   | { t: "ping"; reqId: string }
-  /** The session's screen now, for a viewer about to show it again. */
-  | { t: "screen"; reqId: string; id: string }
+  /** The session's screen now, for a viewer about to show it again: `lines`, at most that much of
+   *  its scrollback. */
+  | { t: "screen"; reqId: string; id: string; lines?: number }
   /** The session's screen as text, line by line, as the daemon reads it: for a starter that skips
    *  a startup screen (agent-start.ts) with no terminal of its own. */
   | { t: "viewport"; reqId: string; id: string }

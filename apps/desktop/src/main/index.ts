@@ -1097,11 +1097,12 @@ const onYourDevices = deviceSessions({
   onStatus: (device, state, detail) => deviceStatus(device, state, detail),
 });
 
-/** The host's screen for a session, read in order with its output; null when it keeps none. */
-function screenOf(tileId: string): ReadScreen | null {
-  if (onYourDevices.holds(tileId)) return onYourDevices.screen(tileId);
-  if (hasRemotePty(tileId)) return remoteKeepsScreen(tileId) ? (cb) => screenRemotePty(tileId, cb) : null;
-  return hasSession(tileId) ? (cb) => ptyDaemon.screenPty(tileId, cb) : null;
+/** The host's screen for a session, with at most `lines` of its scrollback, read in order with its
+ *  output; null when it keeps none. */
+function screenOf(tileId: string, lines?: number): ReadScreen | null {
+  if (onYourDevices.holds(tileId)) return onYourDevices.screen(tileId, lines);
+  if (hasRemotePty(tileId)) return remoteKeepsScreen(tileId) ? (cb) => screenRemotePty(tileId, cb, lines) : null;
+  return hasSession(tileId) ? (cb) => ptyDaemon.screenPty(tileId, cb, lines) : null;
 }
 function setPtyPaused(tileId: string, paused: boolean): void {
   if (onYourDevices.holds(tileId)) { if (paused) onYourDevices.pause(tileId); else onYourDevices.resume(tileId); }
