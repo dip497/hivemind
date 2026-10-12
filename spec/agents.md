@@ -91,7 +91,11 @@ may be started in the workspace, which a peer names as `hive://<its id>`:
 ```
 
 `programs` are the agents this device starts (switched on, their command found here); `options`
-are their `model` and `mode` choices, `values` empty for one taken as typed. `frames` are the
+are their `model` and `mode` choices, as the desktop's settings offer them: those the agent's
+command lists (its `--help`, or its listing command), then those its manifest names; `values` empty
+for one taken as typed. A command that has not answered within 1.5 s adds its own next time.
+`agent.places` lists each machine's agents the same way; a saved machine's command is not asked.
+`frames` are the
 workspace's frames, as the board orders them.
 
 `agent.start(workspace, start)` starts one there, as `hive ctl spawn` does: `start` is `{ program,

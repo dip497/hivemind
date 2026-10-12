@@ -1203,3 +1203,17 @@ said `conversation` whenever a manifest mapped a transcript (`session.transcript
 (`transcriptOf`) also needs to know where the file is (`session.resume.exists`) and reads nothing
 without it. A manifest with the first and not the second, say a HiveHub plugin, opened in a chat
 that stayed empty for good. Both now ask `keepsConversation(def)` in `conversations.ts`.
+
+### 12.8 The Start screen
+
+Asked for: prompt first and focused; one summary line ("Claude · project · this computer") that
+defaults to the last used and opens the choices; mode and model as the desktop offers them,
+collapsed; workspaces told apart; no FOLDER chip; Start always in sight.
+
+**Choices.** The phone listed only what the manifest names: Claude's mode as `bypassPermissions` and
+`yolo`, and its model as an empty text box. The desktop's settings ask the CLI itself
+(`discoverOptions`: `claude --help` lists acceptEdits, auto, bypassPermissions, manual, dontAsk,
+plan), and the frame menu's New agent lists the manifest's alone. Now `StartPlaces.startable` lists
+an agent the way the settings do, for `agent.places` and `agent.startable` alike. It waits 1.5 s at
+most on a command, so a slow CLI never holds the screen. Claude's help lists no models, so the model
+stays typed, as in the settings, with "As set in Settings" in place of an empty box.
