@@ -310,7 +310,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     const offStatus = agent ? subscribeTileStatus(tileId, (e) => paint(e.status, e.status === "exited" ? e : undefined)) : undefined;
     /** What the tile itself knows: a shell's activity, and how any process exited — the code
      *  and detail let the awareness layer tell a crash from a clean close. */
-    const setStatus = (s: "working" | "idle" | "exited", extra?: { exitCode?: number; detail?: string }) => {
+    const setStatus = (s: "working" | "idle" | "exited", extra?: { exitCode?: number; signal?: number; detail?: string }) => {
       paint(s, extra);
       if (s === "exited") publishStatus({ tileId, label: chipLabelRef.current, status: s, ...extra });
     };
@@ -744,7 +744,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       // close, and show the code in the body. (signal here is the numeric value
       // sent by node-pty; name it generically — a non-null signal implies kill.)
       const detail = signal !== undefined && signal !== null ? `killed by signal ${signal}` : undefined;
-      setStatus("exited", { exitCode: code, detail });
+      setStatus("exited", { exitCode: code, ...(signal != null ? { signal } : {}), detail });
     });
     term.onData((d) => {
       // Someone else has the keyboard: this window's keys (and its terminal's replies) are not the

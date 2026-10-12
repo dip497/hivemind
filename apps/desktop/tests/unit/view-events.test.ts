@@ -114,6 +114,21 @@ test("custom events report delivery; the ring replays at most REPLAY_MAX, none o
   assert.equal(h.hub.replay(0).length, 0);
 });
 
+test("ledger: an exit records how the process ended, its code and its signal", () => {
+  const h = harness();
+  h.hub.setWorkspace("ws", [h.tile("a"), h.tile("b"), h.tile("c")]);
+  h.hub.onStatus({ tileId: "a", label: "", status: "exited", exitCode: 0, signal: 1 });
+  h.hub.onStatus({ tileId: "b", label: "", status: "exited", exitCode: 3 });
+  // The host's bare "exited" can come before the tile's own, which knows how.
+  h.hub.onStatus({ tileId: "c", label: "", status: "exited" });
+  h.tick(5);
+  h.hub.onStatus({ tileId: "c", label: "", status: "exited", exitCode: 0, signal: 9 });
+  h.runTimers();
+  const exits = h.lines.filter((l) => l.e === "s").map((l) => ({ id: l.id, t: l.t, c: (l as { c?: number }).c, g: (l as { g?: number }).g }));
+  const t = exits[0]!.t;
+  assert.deepEqual(exits, [{ id: "a", t, c: 0, g: 1 }, { id: "b", t, c: 3, g: undefined }, { id: "c", t, c: undefined, g: undefined }, { id: "c", t, c: 0, g: 9 }]);
+});
+
 test("ledger: lines are batched with the workspace key; a transient workspace records nothing", () => {
   const h = harness();
   h.hub.setWorkspace(null, [h.tile("a")]);

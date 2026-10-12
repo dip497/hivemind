@@ -740,13 +740,13 @@ export class SessionManager {
   }
 
   // ── snapshot scheduling ────────────────────────────────────────────────────
-  /** Debounced disk write. Called on every PTY data event; the actual write
-   *  happens snapshotDebounceMs after the LAST event so a chatty session
-   *  doesn't hammer the disk. flushSnapshot bypasses the debounce. */
+  /** Throttled disk write. Called on every PTY data event; the write happens
+   *  snapshotDebounceMs after the FIRST unwritten event, so a chatty session
+   *  neither hammers the disk nor goes unwritten while it keeps printing (a
+   *  daemon killed then would have nothing to restore). flushSnapshot bypasses it. */
   private scheduleSnapshot(s: Session): void {
     if (!this.onSnapshot) return;
-    if (!s.dirty) return;
-    this.cancelSnapshotTimer(s.id);
+    if (!s.dirty || this.snapshotTimers.has(s.id)) return;
     const t = setTimeout(() => {
       this.snapshotTimers.delete(s.id);
       // Fire-and-forget: the debounced path doesn't need an await chain — the

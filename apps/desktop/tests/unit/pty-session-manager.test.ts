@@ -292,6 +292,24 @@ test("flushAll resolves AFTER every snapshot is written (SIGTERM safety)", async
   assert.deepEqual(writes.sort(), ["repo:a", "repo:b"]);
 });
 
+test("a session that never goes quiet is still written: a daemon killed mid-turn can restore it", async () => {
+  const writes: number[] = [];
+  const made: FakePty[] = [];
+  const mgr = new SessionManager(
+    (spec) => { const p = new FakePty(spec); made.push(p); return p; },
+    { onSnapshot: () => { writes.push(Date.now()); }, snapshotDebounceMs: 40 },
+  );
+  const spec: SpawnSpec = { cwd: "/r", cmd: "claude", args: [], cols: 80, rows: 24 };
+  await mgr.createOrAttach("repo:busy", spec, { onData: () => {}, onExit: () => {} });
+  // A spinner: output every 10 ms, for ten times the debounce.
+  const until = Date.now() + 400;
+  while (Date.now() < until) {
+    made[0]!.emit("⠋\r");
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  assert.ok(writes.length > 0 && writes[0]! < until, "written while it was still printing");
+});
+
 test("two independent sessions track state separately", async () => {
   const { mgr, created, spec } = makeManager();
   mgr.createOrAttach("repo:t1", spec, { onData: () => {}, onExit: () => {} });

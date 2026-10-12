@@ -31,6 +31,8 @@ export class AgentScreen {
   private waitSig = "";
   private chat: Chat | null = null;
   private unfollow: (() => void) | null = null;
+  /** Agents started from here that the computer has not listed yet. */
+  private readonly fresh = new Set<string>();
 
   constructor(private readonly app: App) {
     const back = h("button", { type: "button", class: "back", "aria-label": "Back", "data-back": "" }, icon("back"));
@@ -47,12 +49,22 @@ export class AgentScreen {
     this.dock.append(this.closing.el, this.waits, message);
   }
 
+  /** `tile` was just started from here: until the computer lists it, it is starting, not gone. */
+  starting(tile: string): void {
+    this.fresh.add(tile);
+  }
+
   /** Show the agent of `tile`, as `o` tells of it, its chat afresh. */
   open(tile: string, o: Overview | null): void {
     if (this.tile === tile) return;
     this.close();
     this.tile = tile;
     this.agent = null;
+    // Nothing of the agent shown before stays while this one is not listed yet.
+    say(this.title, "");
+    say(this.sub, "");
+    delete this.dot.dataset.state;
+    this.stop.hidden = true;
     this.waitSig = "";
     this.waits.replaceChildren();
     this.chat = new Chat((use) => (this.agent ? this.app.tool(this.agent, use) : Promise.reject(new Error("it is no longer there"))));
@@ -75,6 +87,8 @@ export class AgentScreen {
   show(o: Overview): void {
     if (!this.tile) return;
     const a = o.agents.find((x) => x.tile === this.tile) ?? null;
+    if (a) this.fresh.delete(a.tile);
+    say(this.gone, this.fresh.has(this.tile) ? NOTICES.starting : NOTICES.notRunning);
     this.gone.hidden = a !== null;
     this.dock.inert = a === null;
     if (!a) return;

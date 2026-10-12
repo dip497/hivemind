@@ -11,6 +11,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- An agent busy with its first turn when the terminal service restarts is restored with the rest instead of ending: its screen is saved within 2 seconds even while it keeps printing. The status history keeps each exit's code and signal. Started from the phone, the new agent's screen says "Starting…" until it appears, not the name of the agent shown before.
 - A worker spawned with `hive ctl spawn` that stops to wait for input (a question picker, a permission prompt) now tells the agent that spawned it, with the commands to see and answer it. Before, an unsupervised worker sat at its picker and its leader never heard about it.
 - Changed: an agent's hooks (Claude Code, Codex, Droid, Kiro, Hermes) run through `hive-net hook`, a small native program, instead of the app's runtime: each one takes about 7 MB and 4 ms instead of about 64 MB and 70 ms (more on a busy machine), and that is all a permission waiting for your phone holds. Windows keeps the script.
 - Changed: Allow, Deny and a question's option from your phone reach Claude Code through its own permission hook instead of typed keys, so an answer never lands before its chooser is drawn, and Deny can say why. Answering at the desktop still works as before; the first answer wins. An agent declares this in its manifest (`answer:` on its `input.requested` hook); others are answered with keys as before.

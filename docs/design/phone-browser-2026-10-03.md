@@ -1036,3 +1036,30 @@ after at the same throttle.
 
 Out of scope, a separate B6 design: answering from the notification itself (end-to-end encrypted
 Web Push with Allow and Deny actions; on an iPhone only once the page is on the Home Screen).
+
+## 12. Phone fixes from the test rig (2026-10-13)
+
+### 12.1 An agent started from the phone ended at once
+
+Seen: Start, Claude, a prompt; the tile went "exited" in 4 s, with no transcript. Its terminal
+said `exited code=0 signal=1`. The rig's terminal daemon was replaced at that second (systemd
+scope at 01:05:34; Start was 01:05:30). It was replaced every 2–3 minutes, at the second each e2e
+run on the machine ended: the suite's global teardown SIGKILLed every daemon whose socket was
+under the temp dir (`stopDaemons(os.tmpdir())`), and the rig's profile is in `/tmp/hmp`. The
+desktop restarted the daemon and restored each session from its snapshot, so older agents came
+back with `--resume`; the new one had no snapshot, because a snapshot was written only 2 s after
+the last output and a working Claude never stops printing.
+
+Fixed in their owners:
+- the teardown stops only the daemons its own run started, by the run's mark in their
+  environment (`HIVEMIND_E2E_XDG`), wherever their sockets are (`tests/e2e/helpers/daemons.ts`);
+- a session's snapshot is written at most 2 s after its first unsaved output, however busy it
+  stays (`pty-session-manager.ts` `scheduleSnapshot`); Orca checkpoints on a fixed interval too
+  (`orca/src/main/daemon/daemon-pty-runtime-state.ts:149`, 5 s);
+- the status ledger keeps how each process ended: `c` (exit code) and `g` (signal) on an `exited`
+  line, as Orca's daemon keeps both (`orca/src/main/daemon/pty-subprocess/subprocess-handle.ts:54`);
+- the phone's agent screen clears the agent shown before it, and one just started reads
+  "Starting…" until the computer lists it.
+
+Seen, not yet traced: on the rig, an agent started in the second workspace (one the window did
+not show) never ran (`hive ctl agents` listed nothing there); the phone shows "Starting…" for it.

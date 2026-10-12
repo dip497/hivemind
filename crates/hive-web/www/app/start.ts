@@ -234,7 +234,7 @@ export class StartScreen {
     this.go.disabled = false;
     if (tile) {
       this.dropPhotos();
-      this.app.open(tile);
+      this.app.open(tile, true);
     }
   }
 }

@@ -22,7 +22,7 @@ interface Info { f: string | null; ft?: string; tk: string; a?: string; n: strin
 type Line =
   | { t: number; e: "b" | "h" | "x" }
   | { t: number; e: "S"; k: string; tiles: Array<{ id: string; s?: ViewStatus; u?: boolean } & Info> }
-  | { t: number; k: string; e: "s"; id: string; s: ViewStatus; x?: boolean }
+  | { t: number; k: string; e: "s"; id: string; s: ViewStatus; x?: boolean; c?: number; g?: number }
   | ({ t: number; k: string; e: "o" | "i"; id: string } & Info)
   | { t: number; k: string; e: "c"; id: string; n: string }
   | { t: number; k: string; e: "t"; id: string }
@@ -32,6 +32,11 @@ interface Live { s?: ViewStatus; since?: number; exact?: boolean; info?: Info; u
 
 const str = (v: unknown, max = 256): v is string => typeof v === "string" && v.length > 0 && v.length <= max;
 const optStr = (v: unknown, max = 256) => v === undefined || (typeof v === "string" && v.length <= max);
+/** An exit's code (`c`) and signal (`g`), whole numbers, kept on an `exited` line only. */
+const exitOf = (l: Record<string, unknown>) => l.s !== "exited" ? {} : {
+  ...(Number.isInteger(l.c) ? { c: l.c as number } : {}),
+  ...(Number.isInteger(l.g) ? { g: l.g as number } : {}),
+};
 
 /** A line from the renderer, or null. Main's own lines never pass through here. */
 export function parseRendererLine(raw: unknown): Line | null {
@@ -39,7 +44,7 @@ export function parseRendererLine(raw: unknown): Line | null {
   const l = raw as Record<string, unknown>;
   if (typeof l.t !== "number" || !Number.isFinite(l.t) || !str(l.k, 1024) || !str(l.id)) return null;
   switch (l.e) {
-    case "s": return STATUSES.includes(l.s as ViewStatus) ? { t: l.t, k: l.k, e: "s", id: l.id, s: l.s as ViewStatus, x: l.x === true } : null;
+    case "s": return STATUSES.includes(l.s as ViewStatus) ? { t: l.t, k: l.k, e: "s", id: l.id, s: l.s as ViewStatus, x: l.x === true, ...exitOf(l) } : null;
     case "o": case "i":
       if (!(l.f === null || str(l.f)) || !str(l.tk, 64) || typeof l.n !== "string" || !optStr(l.ft) || !optStr(l.a, 64)) return null;
       return { t: l.t, k: l.k, e: l.e, id: l.id, f: l.f as string | null, tk: l.tk, n: (l.n as string).slice(0, 256), ...(l.ft ? { ft: l.ft as string } : {}), ...(l.a ? { a: l.a as string } : {}) };

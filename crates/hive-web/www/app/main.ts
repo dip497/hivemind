@@ -52,7 +52,8 @@ const reached = (): Phone => {
 };
 
 const app: App = {
-  open(tile) {
+  open(tile, started) {
+    if (started) agent.starting(tile);
     const at = `#agent=${encodeURIComponent(tile)}`;
     // An agent just started takes the place of the screen that started it.
     if (new URLSearchParams(location.hash.slice(1)).has("start")) location.replace(at);
