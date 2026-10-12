@@ -10,8 +10,9 @@ import path from "node:path";
  *  `held`: its PermissionRequest hook carries the answer, and runs while its chooser is up, as
  *  Claude Code's does; the first to answer wins. It writes `drawn` once its chooser is up, then
  *  what the hook printed (`hook said`), or that the hook ended with nothing (`hook let go`).
- *  What the desktop's environment needs to run it. */
-export function chooserAgent(root: string, { held = false } = {}): Record<string, string> {
+ *  `hookFor`: it ends that hook after so many seconds, its chooser still up, as Claude Code ends
+ *  one that runs out of time. What the desktop's environment needs to run it. */
+export function chooserAgent(root: string, { held = false, hookFor }: { held?: boolean; hookFor?: number } = {}): Record<string, string> {
   const bin = path.join(root, "bin");
   fs.mkdirSync(bin, { recursive: true });
   fs.writeFileSync(path.join(bin, "chooser-agent"), [
@@ -27,7 +28,7 @@ export function chooserAgent(root: string, { held = false } = {}): Record<string
     // Its PermissionRequest hook, its output kept: the answer, when it carries one.
     "ask() {",
     "  node -e 'for (const g of JSON.parse(process.env.SETTINGS || \"{}\").hooks?.PermissionRequest ?? []) for (const h of g.hooks ?? []) console.log(h.command)' |",
-    "  while IFS= read -r c; do printf '{\"session_id\":\"s1\",\"hook_event_name\":\"PermissionRequest\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm -rf build\"}}' | sh -c \"$c\" 2>>\"${CHOOSER_TRACE:-/dev/null}\"; done",
+    "  while IFS= read -r c; do printf '{\"session_id\":\"s1\",\"hook_event_name\":\"PermissionRequest\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm -rf build\"}}' | ${CHOOSER_HOOK_FOR:+timeout \"$CHOOSER_HOOK_FOR\"} sh -c \"$c\" 2>>\"${CHOOSER_TRACE:-/dev/null}\"; done",
     "}",
     "hook SessionStart",
     "printf 'chooser> '",
@@ -88,5 +89,5 @@ export function chooserAgent(root: string, { held = false } = {}): Record<string
     "    PermissionDenied: { emit: input.resolved, timeout: 10 }",
     "",
   ].join("\n"));
-  return { PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`, CHOOSER_LOG: path.join(root, "chooser.log"), ...(held ? { CHOOSER_HELD: "1" } : {}) };
+  return { PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`, CHOOSER_LOG: path.join(root, "chooser.log"), ...(held ? { CHOOSER_HELD: "1" } : {}), ...(hookFor ? { CHOOSER_HOOK_FOR: String(hookFor) } : {}) };
 }
