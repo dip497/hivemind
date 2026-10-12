@@ -18,7 +18,8 @@ test.afterEach(async () => {
 /** A terminal view watching a stand-in source: `window.feed(n, from, first)` shows `n` lines, "line
  *  <from>" on, numbered from `first` as the core numbers them, 24 rows of them the screen;
  *  `window.takes` is whether the program takes scrolls; `window.scrolls` what it was sent;
- *  `window.earlier` how often it asked for more history. */
+ *  `window.earlier` how often it asked for more history; `window.taken()` whether the view has
+ *  taken, and so drawn, the last screen fed. */
 async function terminal(): Promise<Page> {
   browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
@@ -32,6 +33,7 @@ import { TerminalView } from "./js/terminal.js";
 window.scrolls = [];
 window.takes = false;
 window.earlier = 0;
+window.taken = () => next === null;
 let next = null, revision = 0, changed = () => {};
 window.feed = (n, from = 0, first = 0) => {
   revision++;
@@ -63,7 +65,7 @@ window.ready = true;
   return page;
 }
 
-type Window_ = { feed(n: number, from?: number, first?: number): void; takes: boolean; scrolls: Array<[number, number, number]>; earlier: number };
+type Window_ = { feed(n: number, from?: number, first?: number): void; takes: boolean; scrolls: Array<[number, number, number]>; earlier: number; taken(): boolean };
 const feed = (page: Page, n: number, from = 0, first = 0) => page.evaluate(([a, b, c]) => (window as unknown as Window_).feed(a!, b, c), [n, from, first]);
 const inSight = async (page: Page) => (await page.locator("[data-term-text]").innerText()).split("\n").filter((l) => l.trim());
 
@@ -141,7 +143,9 @@ test("scrolled to the oldest line it holds, the page asks for earlier history, a
   // The screen again with 600 more lines above: drawn anew, the core numbering on from the 200 it let go.
   const shown = await inSight(page);
   await feed(page, 824, -600, 200);
-  await expect.poll(() => inSight(page)).toEqual(shown);
+  // Drawn as it was until the view takes it: looked at once it has.
+  await expect.poll(() => page.evaluate(() => (window as unknown as Window_).taken())).toBe(true);
+  expect(await inSight(page)).toEqual(shown);
   // Not new output: it stays there, and up from it are the earlier lines.
   await swipeDown(page, 200);
   await expect.poll(async () => (await inSight(page))[0]).toMatch(/^line -/);
