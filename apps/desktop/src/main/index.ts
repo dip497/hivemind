@@ -100,6 +100,7 @@ import { worktreeCreate, worktreeList, worktreeRemove } from "@hivemind/host/git
 import { answers } from "@hivemind/host/answers";
 import { answerKeys, heldBoards, manifestOf, runsIn } from "@hivemind/host/needs";
 import { agentControl } from "@hivemind/host/agent-control";
+import { StartPlaces } from "@hivemind/host/start-places";
 import { controlApi } from "@hivemind/host/control-api";
 import { views } from "@hivemind/host/views";
 import { listInstalledViews } from "@hivemind/core/views";
@@ -1044,10 +1045,10 @@ const control: ControlPlane = new ControlPlane({
       await shellEnvReady;
       return preferredAgent((getAppSettings() as { agents?: { defaultAgent?: string } }).agents?.defaultAgent, (d) => !!findBin(d.bin))?.id;
     },
-    agentInstalled: async (def, callerTile) => {
+    agentInstalled: async (def, { callerTile, folder }) => {
       if (callerTile && hasRemotePty(callerTile)) return true;
       await shellEnvReady;
-      return !!findBin(def.bin);
+      return placesHere.installedAt(def, folder);
     },
     workspaces: workspaceStore(),
     shownWorkspace,
@@ -1257,6 +1258,21 @@ const layouts = new Layouts(storeFor, {
 let grantsKept: Grants | null = null;
 const grants = (): Grants => (grantsKept ??= new Grants(path.join(app.getPath("userData"), "grants.json")));
 // Shown on this machine's windows, run in one of the person's, and served to a phone's views.
+// Where the person may start an agent from their phone: the folders the windows opened lately,
+// as they tell (`recent:folders`), among them.
+let recentFolders: string[] = [];
+const placesHere = new StartPlaces({
+  core: (repo) => workspaceStore().getCore(repo),
+  repos: () => workspaceStore().repos(),
+  machines: knownMachines,
+  agents: () => spawnableAgents(),
+  programs: async () => {
+    await shellEnvReady;
+    return spawnableAgents().filter((d) => !!findBin(d.bin));
+  },
+  recent: () => recentFolders,
+  photos: () => path.join(app.getPath("userData"), "photos"),
+});
 const widgetDomain = widgets(() => workspaceServer, widgetAsset, listWidgets, (repo) => workspaceStore().getObjects(repo));
 const workspaceServer: WorkspaceServer = new WorkspaceServer([
   ...workspaceDomains,
@@ -1274,6 +1290,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   }),
   // Agents started, interrupted and closed from another of the person's devices, and what they
   // changed (M5, spec/agents.md).
+  placesHere.domain(),
   agentControl({
     programs: async () => {
       await shellEnvReady;
@@ -1282,6 +1299,8 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     core: (repo) => workspaceStore().getCore(repo),
     repos: () => workspaceStore().repos(),
     machines: knownMachines,
+    places: placesHere,
+    openFrame: (repo, frame) => { workspaceStore().addFrame(repo, frame, { writer: "frames" }); },
     start: (repo, start) => control.start(repo, start),
     status: (bare) => control.status.get(bare),
     interruptKeys: (bare) => manifestOf(heldBoards(workspaceStore()), bare)?.interrupt,
@@ -1854,6 +1873,10 @@ function startViewHost(): void {
   app.on("browser-window-blur", () => presence.evaluate());
   app.on("before-quit", () => { presence.evaluate(); persistTotals(); ledger?.stop(); });
 
+  // The folders the person opened lately, as the windows keep them: the phone starts agents there.
+  on("recent:folders", (_e, folders: unknown) => {
+    if (Array.isArray(folders)) recentFolders = folders.filter((f): f is string => typeof f === "string").slice(0, 100);
+  });
   on("viewLedger:append", (_e, lines: unknown) => { if (Array.isArray(lines)) ledger?.append(lines.slice(0, 10_000)); });
   handle("viewLedger:snapshot", () => ledger?.snapshot() ?? []);
   handle("viewLedger:history", (_e, layoutKey: unknown, day: unknown) => {

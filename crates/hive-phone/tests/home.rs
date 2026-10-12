@@ -14,7 +14,11 @@ fn said(entries: &[Entry]) -> Vec<String> {
     entries
         .iter()
         .map(|e| match e {
-            Entry::Machine { key, .. } | Entry::Project { key, .. } => key.clone(),
+            Entry::Machine { key, .. } => key.clone(),
+            Entry::Project { key, frame, .. } => match frame {
+                Some(f) => format!("{key} {f}"),
+                None => key.clone(),
+            },
             Entry::Frame { key, depth, .. } | Entry::Tile { key, depth, .. } => {
                 format!("{key} {depth}")
             }

@@ -5,7 +5,7 @@
 
 import type { App } from "./app.js";
 import { answers } from "./answers.js";
-import { Keyed, chips, h, pill, say } from "./dom.js";
+import { Ask, Keyed, chips, h, pill, say } from "./dom.js";
 import type { Agent, HomeEntry, HomeTile, Overview, Shown } from "./types.js";
 import { ago, kindLabel, noneWaiting, stateLabel, where } from "./words.js";
 
@@ -33,6 +33,13 @@ export class Home {
   private readonly pinned: Keyed<HomeEntry>;
   private readonly tree: Keyed<HomeEntry>;
   private machinesSig = "";
+  private overview: Overview = { agents: [], needs: [], working: 0 };
+  /** What can be done to the agent of a row: shown for one at a time, over the list. */
+  private readonly sheetName = h("h3", { class: "name" });
+  private readonly sheetStop = pill("Stop", () => void this.act((a) => this.app.stop(a)), "danger", { "data-row-stop": "" });
+  private readonly sheet = h("div", { class: "card sheet", hidden: true, role: "dialog", "data-row-actions": "" });
+  private readonly closing = new Ask("Close", () => void this.act((a) => this.app.close(a)), { "data-row-close-ask": "" });
+  private acting: string | null = null;
   readonly filter: Filter = { query: "", machine: null };
 
   /** `changed` is called when the person searches or chooses a machine: show again. */
@@ -44,8 +51,15 @@ export class Home {
       this.needsList, this.clear,
       this.workingHead, this.workingList,
       this.pinnedHead, this.pinnedList,
-      this.treeList, this.none,
+      this.treeList, this.none, this.sheet,
     );
+    this.sheet.append(this.sheetName, h("div", { class: "row" },
+      this.sheetStop,
+      pill("Close", () => {
+        const a = this.acted();
+        if (a) this.closing.ask(`Close ${a.agent}? It stops, and its tile closes on ${this.app.computer()}.`);
+      }, "", { "data-row-close": "" }),
+      pill("Cancel", () => this.putAway(), "", { "data-row-cancel": "" })), this.closing.el);
     this.search.addEventListener("input", () => {
       this.filter.query = this.search.value;
       this.changed();
@@ -58,6 +72,8 @@ export class Home {
   }
 
   show(shown: Shown, o: Overview): void {
+    this.overview = o;
+    if (this.acting) this.showSheet();
     const waiting = new Map(o.needs.map((a) => [`t:${a.workspace}/${a.tile}`, a]));
     const needs = shown.needs.flatMap((key) => waiting.get(key) ?? []);
     this.cards.set(needs);
@@ -106,7 +122,13 @@ export class Home {
   /** A line of a list; `listed`: in the tree or the pinned, where each tile is listed once. */
   private row(e: HomeEntry, listed: boolean): HTMLElement {
     if (e.of === "machine") return h("h2", { class: "machine", "data-machine": e.name }, e.name);
-    if (e.of === "project") return h("h3", { class: "project", "data-project": e.key }, e.name);
+    if (e.of === "project") {
+      // Its +: start an agent there.
+      const start = h("button", { type: "button", class: "more", "aria-label": `Start an agent in ${e.name}`, "data-start-in": e.key }, "+");
+      const at = new URLSearchParams({ workspace: e.workspace, ...(e.frame ? { frame: e.frame } : {}) });
+      start.addEventListener("click", () => (location.hash = `start&${at}`));
+      return h("h3", { class: "project", "data-project": e.key }, h("span", { class: "name" }, e.name), start);
+    }
     const pad = `--depth:${e.depth}`;
     if (e.of === "frame") {
       const f = e.frame;
@@ -118,18 +140,57 @@ export class Home {
     }
     const t = e.tile;
     const agent = t.state !== undefined;
-    const row = h(agent ? "button" : "div", {
-      class: "agent", style: pad, "data-row": e.key, "data-kind": t.kind,
-      ...(listed && agent ? { "data-agent": t.id } : {}), ...(listed ? {} : { "data-working-row": t.id }),
-      ...(agent ? { type: "button", "data-state": t.state } : {}),
-    },
+    const shows = [
       h("span", { class: "dot", "data-state": t.state ?? "none" }),
       h("span", { class: "col" },
         h("span", { class: "name" }, t.name),
         h("span", { class: `status mono${t.waiting ? " waits" : ""}`, "data-line": "" }, lineOf(t, e.line))),
-      t.since !== undefined && h("span", { class: "age mono", "data-since": t.since }, ago(t.since)));
-    if (agent) row.addEventListener("click", () => this.app.open(t.id));
+      t.since !== undefined && h("span", { class: "age mono", "data-since": t.since }, ago(t.since)),
+    ];
+    const row = h("div", {
+      class: "agent", style: pad, "data-row": e.key, "data-kind": t.kind,
+      ...(listed && agent ? { "data-agent": t.id } : {}), ...(listed ? {} : { "data-working-row": t.id }),
+      ...(agent ? { "data-state": t.state } : {}),
+    });
+    if (!agent) {
+      row.append(...shows.filter((n): n is HTMLElement => !!n));
+      return row;
+    }
+    // Tapped, it opens; its ⋯, what can be done to it.
+    const open = h("button", { type: "button", class: "open" }, ...shows);
+    open.addEventListener("click", () => this.app.open(t.id));
+    const more = h("button", { type: "button", class: "more", "aria-label": `What to do with ${t.name}`, "data-row-more": t.id }, "⋯");
+    more.addEventListener("click", () => {
+      this.acting = e.key;
+      this.closing.el.hidden = true;
+      this.showSheet();
+    });
+    row.append(open, more);
     return row;
+  }
+
+  /** The agent the sheet is for, as the computer last said; null once it is gone. */
+  private acted(): Agent | null {
+    return this.overview.agents.find((a) => `t:${a.workspace}/${a.tile}` === this.acting) ?? null;
+  }
+
+  private showSheet(): void {
+    const a = this.acted();
+    if (!a) return this.putAway();
+    say(this.sheetName, a.agent);
+    this.sheetStop.hidden = !(a.interrupt && (a.state === "working" || a.state === "waiting"));
+    this.sheet.hidden = false;
+  }
+
+  private putAway(): void {
+    this.acting = null;
+    this.sheet.hidden = true;
+  }
+
+  private async act(done: (a: Agent) => Promise<unknown>): Promise<void> {
+    const a = this.acted();
+    this.putAway();
+    if (a) await done(a);
   }
 }
 

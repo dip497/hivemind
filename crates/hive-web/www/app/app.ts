@@ -1,7 +1,7 @@
 // What the screens ask of the app: to open an agent, and to act for the person, told when it
 // did not land.
 
-import type { Agent, Held, Piece, Reply, Start, Startable } from "./types.js";
+import type { Agent, Folders, Held, Piece, Places, Reply, Start } from "./types.js";
 
 export interface App {
   /** Show the agent of `tile`; Back comes back here. */
@@ -16,7 +16,8 @@ export interface App {
   /** The computer's name, as paired. */
   computer(): string;
   workspaces(): Promise<Held[]>;
-  startable(workspace: string): Promise<Startable>;
+  places(workspace: string): Promise<Places>;
+  folders(workspace: string, folder: string): Promise<Folders>;
   /** Start an agent: its tile, or null when it did not start (the person is told why). */
   start(workspace: string, start: Start): Promise<string | null>;
 }

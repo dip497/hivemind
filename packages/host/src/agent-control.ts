@@ -5,20 +5,24 @@
  * folder it runs in. Electron-free: starting and closing are the control plane's, which the device
  * hands in.
  */
-import { optionChoices, type AgentProviderDef } from "@hivemind/agents";
+import type { AgentProviderDef } from "@hivemind/agents";
 import { typeKeys } from "@hivemind/agent-host/keys";
 import { machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
-import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
+import type { StartImage } from "@hivemind/workspace-api/agents";
+import type { CoreLayout, FrameRecord } from "@hivemind/workspace-doc/shapes";
 import { ApiError, fields, flag, text, written } from "@hivemind/workspace-api/protocol";
 import type { Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { changesIn, type Changes } from "./agent-diff.js";
+import { imagesOf, programOf, type StartPlaces } from "./start-places.js";
 
 /** What starting an agent asks for. `supervise`: the tools it asks its starter before using
  *  (`true`: the usual ones). `parent`: the program that starts it, which it reports and asks to. */
 export interface Start {
   program: string;
   frame?: string;
+  folder?: string;
+  images?: StartImage[];
   prompt?: string;
   model?: string;
   mode?: string;
@@ -38,6 +42,10 @@ export interface AgentControlOptions {
   repos(): string[];
   /** The machines this device knows, by what each is called. */
   machines: KnownMachines;
+  /** Where agents may be started, and the agents found there (spec/agents.md 0.8). */
+  places: StartPlaces;
+  /** Add `frame` to the board of the workspace at `repo`. */
+  openFrame(repo: string, frame: FrameRecord): void;
   /** Start `start.program` in the workspace at `repo`, in `start.frame` (none: its first frame), as
    *  the person launches it at their desktop: their saved options for it, with `model` and `mode`
    *  on top, never its unattended mode unless `mode` says so or an agent starts it. Its tile. */
@@ -80,6 +88,9 @@ function startOf(value: unknown, programs: readonly AgentProviderDef[], core: Co
   if (!programs.some((p) => p.id === program)) throw new ApiError("BAD_REQUEST", `${program} is not an agent this device starts`);
   const frame = s.frame == null ? undefined : text(s.frame, "start.frame");
   if (frame !== undefined && !core.frames.some((f) => f.id === frame)) throw new ApiError("NOT_FOUND", `no frame ${frame} in this workspace`);
+  const folder = s.folder == null ? undefined : text(s.folder, "start.folder");
+  if (folder !== undefined && frame !== undefined) throw new ApiError("BAD_REQUEST", "start names a frame or a folder, not both");
+  const images = imagesOf(s.images);
   let prompt: string | undefined;
   if (s.prompt != null) {
     prompt = written(s.prompt, "start.prompt");
@@ -92,7 +103,7 @@ function startOf(value: unknown, programs: readonly AgentProviderDef[], core: Co
   const supervise = superviseOf(s.supervise);
   const report = flag(s.report, "start.report");
   return {
-    program, ...(frame ? { frame } : {}), ...(prompt ? { prompt } : {}), ...(model ? { model } : {}), ...(mode ? { mode } : {}),
+    program, ...(frame ? { frame } : {}), ...(folder ? { folder } : {}), ...(images?.length ? { images } : {}), ...(prompt ? { prompt } : {}), ...(model ? { model } : {}), ...(mode ? { mode } : {}),
     ...(name ? { name } : {}), ...(resume ? { resume } : {}), ...(supervise ? { supervise } : {}), ...(report === false ? { report } : {}),
   };
 }
@@ -118,19 +129,27 @@ export function agentControl(o: AgentControlOptions): Domain<"agent.startable" |
     answers: {
       "agent.startable": async (_from, repo) => {
         const core = board(text(repo, "workspace"));
-        const programs = (await o.programs()).map((p) => ({
-          id: p.id,
-          label: p.label,
-          options: (p.options ?? []).filter((x) => x.id === "model" || x.id === "mode").map((x) => ({ id: x.id, label: x.label, values: optionChoices(x, []) })),
-        }));
+        const programs = (await o.programs()).map(programOf);
         const frames = core.frames.map((f) => ({ id: f.id, name: f.title, machine: machineCalled(f.worktreePath ?? f.workspacePath ?? text(repo, "workspace"), o.machines) }));
         return { programs, frames };
       },
       "agent.start": async (from, repo, start) => {
         const at = text(repo, "workspace");
+        const core = board(at);
         // A program or an agent on the drive socket is the parent of what it starts.
         const parent = from.actor.kind === "peer" && from.actor.client ? from.actor.person : undefined;
-        return { tile: await o.start(at, { ...startOf(start, await o.programs(), board(at)), ...(parent ? { parent } : {}) }) };
+        // The agents found where it is to run.
+        const named = (start as { folder?: unknown } | null)?.folder;
+        const programs = typeof named === "string" ? await o.places.programsAt(named) : await o.programs();
+        const { folder, images, ...s } = startOf(start, programs, core);
+        const frame = folder ? await o.places.frameFor(at, folder, (f) => o.openFrame(at, f)) : s.frame;
+        let prompt = s.prompt;
+        if (images) {
+          const there = core.frames.find((f) => f.id === frame);
+          const kept = await o.places.keep(folder ?? there?.worktreePath ?? there?.workspacePath ?? at, images);
+          prompt = [prompt, kept.join("\n")].filter(Boolean).join("\n\n");
+        }
+        return { tile: await o.start(at, { ...s, ...(frame ? { frame } : {}), ...(prompt ? { prompt } : {}), ...(parent ? { parent } : {}) }) };
       },
       "agent.interrupt": (_from, tile) => {
         const bare = toBareId(text(tile, "tile"));

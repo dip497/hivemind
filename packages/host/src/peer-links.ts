@@ -78,13 +78,14 @@ const NO_FACTS: AgentFacts = { program: () => undefined, decides: () => false, i
 /** What a phone may ask of a workspace it opens (M5): to watch a terminal that runs there (its
  *  screen, then its output as it comes) and type into it, asking for its keyboard while someone
  *  else holds it; to answer what an agent there waits on the person for (`agent.answer`), and to
- *  send one a message (`agent.send`); to start an agent, interrupt its turn, close it, see what it
- *  changed and follow what it says (spec/agents.md); and to show the community views here that work
+ *  send one a message (`agent.send`); to start an agent where it may be started (its places and the
+ *  folders in a project), interrupt its turn, close it, see what it changed and follow what it says
+ *  (spec/agents.md); and to show the community views here that work
  *  on a phone, which may do there what the phone may (P8, `views.ts`). Never to size a terminal, or
  *  to give or take a keyboard. */
 const PHONE_MAY = new Set([
   "agent.answer", "agent.send", "terminal.write", "terminal.keyboard.ask",
-  "agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.conversation",
+  "agent.startable", "agent.places", "agent.folders", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.conversation",
   "view.list", "view.file", "view.open", "view.post", "view.screen", "view.close",
   // Someone asking to join, answered from the notice that told it (spec/push.md "Join").
   "people.answer",

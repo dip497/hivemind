@@ -12,7 +12,7 @@ import { OutputRecorder } from "@hivemind/host/control/output-recorder";
 import { REPO, workspaceDeps } from "./hcp-workspace.ts";
 
 /** The control plane over a real workspace store, and that store. */
-function dispatcher(agentInstalled?: () => boolean) {
+function dispatcher(agentInstalled?: (def: unknown, where: { callerTile?: string; folder?: string }) => boolean) {
   const ws = workspaceDeps();
   return {
     ws,
@@ -69,4 +69,18 @@ test("an agent the person, or a program, starts opens in the workspace they name
   assert.deepEqual((ws.workspaces.getCore(other)?.tiles.find((t) => t.id === planned) as { args?: string[] }).args, ["--permission-mode", "plan"]);
   const programs = await spawn({ agent: "claude", repo: other, parent: "client:g1" });
   assert.deepEqual((ws.workspaces.getCore(other)?.tiles.find((t) => t.id === programs) as { args?: string[] }).args, [], "a program's worker keeps its prompts too");
+});
+
+test("whether an agent is installed is asked of where it would run: the folder of the frame it opens in, or the agent that starts it", async () => {
+  const asked: Array<{ callerTile?: string; folder?: string }> = [];
+  const { ws, spawn } = dispatcher((_def, where) => { asked.push(where); return true; });
+  const other = "/work/remote";
+  ws.workspaces.setCore(other, { frames: [
+    { id: "f-box", title: "box", workspacePath: "machine://box1/srv/api" },
+    { id: "f-wt", title: "fix", worktreePath: "/work/remote-fix", workspacePath: "/work/remote" },
+  ], tiles: [] });
+  await spawn({ agent: "claude", repo: other, frame: "f-box" });
+  await spawn({ agent: "claude", repo: other, frame: "f-wt" });
+  await spawn({ agent: "claude", parent: "tile-p", repo: REPO });
+  assert.deepEqual(asked, [{ folder: "machine://box1/srv/api" }, { folder: "/work/remote-fix" }, { callerTile: "hm:tile-p", folder: REPO }]);
 });

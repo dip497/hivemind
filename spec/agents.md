@@ -1,4 +1,4 @@
-# Agents (0.7)
+# Agents (0.8)
 
 The person's agents, as their phone sees and drives them (M5, `docs/design/phone-app-2026-10-02.md`
 §4): every agent in the workspaces one of their devices holds, live; and starting one, stopping
@@ -94,8 +94,12 @@ are their `model` and `mode` choices, `values` empty for one taken as typed. `fr
 workspace's frames, as the board orders them.
 
 `agent.start(workspace, start)` starts one there, as `hive ctl spawn` does: `start` is `{ program,
-frame?, prompt?, model?, mode?, name?, resume?, supervise?, report? }`, `program` one `agent.startable` lists, `frame` one of its frames (none: the
-workspace's first frame, or none when it has none), `prompt` at most 10,000 characters with no
+frame?, folder?, images?, prompt?, model?, mode?, name?, resume?, supervise?, report? }`, `program` one `agent.startable` lists, `frame` one of its frames (none: the
+workspace's first frame, or none when it has none), `folder` (0.8) one of "Places" below, not with
+`frame`, and `program` then one found on its machine, `images` (0.8) at most 4 photos `{ "type":
+"image/png" | "image/jpeg" | "image/webp" | "image/gif", "data": "<base64>" }` of at most 5 MB
+each, kept on the machine it runs on and their paths put after the prompt, a blank line between,
+`prompt` at most 10,000 characters with no
 control characters but newlines and tabs, and `model`, `mode`, `name` (its tile's) and `resume` (a session of its to go on with) lines of at
 most 200 characters. `supervise` (0.5) is `true` (the tools its manifest says are supervised),
 `"all"`, or a list of tool names: before using one it waits on its starter (an `approval` wait),
@@ -106,6 +110,35 @@ It starts as the person launches it at their desktop, with the options they save
 and these on top: never in its unattended mode unless `mode` says so, or an agent on the drive
 socket starts it (`hive ctl spawn`) unsupervised, where no one is at its tile. It answers `{ "tile":
 "<the new tile>" }`. Anything else is `BAD_REQUEST`.
+
+## Places
+
+(0.8) `agent.places(workspace)` answers where an agent may be started in the workspace: each
+machine its folders are on, this computer first (`id` `""`), then the saved machines by name, with
+the agents found there (as `programs` above) and its folders:
+
+```json
+{ "machines": [ { "id": "", "name": "<this computer>", "programs": [ … ],
+                  "folders": [ { "path": "/home/p/api", "name": "api", "kind": "project", "frame": "<frame>" },
+                               { "path": "/home/p/notes", "name": "notes", "kind": "recent" } ] },
+                { "id": "<saved machine>", "name": "build-box", "programs": [], "folders": [ … ],
+                  "unreached": "<why it could not be asked>" } ] }
+```
+
+`project` folders are the workspace's own folder then each frame's, as the board orders them, with
+the frame there; `recent` ones the folders the person opened lately, newest first, those that are a
+project's left out. A folder is a path here, or `machine://<saved machine>/<path>`; one on a
+machine not saved, or on a paired device, is not listed. A machine that could not be asked has
+no `programs` and says why in `unreached`.
+
+`agent.folders(workspace, folder)` answers the folders in `folder`, one of the workspace's projects
+or inside one, links followed: `{ "path": "<folder>", "folders": [ { "name", "path" } ], "more"?:
+true }`, by name, at most 200, those whose name starts with a dot left out, `more` when there are
+more. A folder in none of its projects is `FORBIDDEN`; one not there is `NOT_FOUND`.
+
+An agent started in a `folder` runs in the frame there; when there is none, in one opened for it
+inside the innermost project it is in, or at the top for a recent folder. A folder that is neither
+is `FORBIDDEN`, and nothing is started.
 
 ## Stopping
 
@@ -179,7 +212,7 @@ before the answer. Each entry is one of
 ## Who may
 
 `agent.startable`, `agent.diff` and `agent.conversation` may be called by who may view the
-workspace; `agent.start`,
+workspace; `agent.places` and `agent.folders` (0.8), which name the person's folders, and `agent.start`,
 `agent.interrupt` and `agent.close` by who may drive its agents (role `agents`); all of them by the
 person's own devices, a phone among them. Each of the last three is recorded in the device's audit
 log against its tile, as the device that called it.

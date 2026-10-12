@@ -43,7 +43,7 @@ export async function offerPhonePairing(desktop: Page): Promise<string> {
  *  which its manifest names as its session file, and says `heard: <line>` on its screen. Given
  *  `/clear`, it begins another session, recorded for its tile in `$TALKER_TRACKS` as Claude Code's
  *  tracker hook records one, its file written from the next line on. Given `ask`, it asks which
- *  color, Red or Blue, a key choosing; given `run`, to run a command, `y` or `n`. What the desktop's environment
+ *  color, Red or Blue, a key choosing (Esc, its interrupt key, too); given `run`, to run a command, `y` or `n`. What the desktop's environment
  *  needs to run it. */
 export function talkerAgent(root: string): Record<string, string> {
   const bin = path.join(root, "bin");
@@ -76,7 +76,7 @@ export function talkerAgent(root: string): Record<string, string> {
     "    fi",
     "    printf '{\"type\":\"assistant\",\"uuid\":\"t%s\",\"timestamp\":\"%s\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"tu%s\",%s}]}}\\n' \"$n\" \"$at\" \"$n\" \"$use\" >> \"$f\"",
     "    printf \"\\033[2J\\033[H$screen\"",
-    "    read -rsn1 key",
+    "    read -rsn1 key; [ \"$key\" = $'\\e' ] && key=esc",
     "    printf '{\"type\":\"assistant\",\"uuid\":\"k%s\",\"timestamp\":\"%s\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"%s answered %s\"}]}}\\n' \"$n\" \"$at\" \"$line\" \"$key\" >> \"$f\"",
     "    printf '\\033[2J\\033[H%s answered %s\\n' \"$line\" \"$key\"; continue",
     "  fi",
@@ -107,6 +107,7 @@ export function talkerAgent(root: string): Record<string, string> {
     "      tool: { id: id, name: name, about: [input.command], asks: { list: input.questions, question: question, options: options, label: label, many: multiSelect } }",
     "answer: { permission: { allow: ['y'], deny: ['n'] } }",
     "choose: ['{n}']",
+    "interrupt: [escape]",
     "detect:", "  default: idle", "  rules:",
     "  - when: { contains: 'Which color?' }", "    then: question",
     "  - when: { contains: 'Run this command?' }", "    then: permission", "",

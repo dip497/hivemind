@@ -557,6 +557,7 @@ impl Home {
                     let tops = own
                         .iter()
                         .filter(|f| f.parent_id.is_none() && f.project.as_deref() == project);
+                    let first = tops.clone().next().map(|f| f.id.clone());
                     fn frame_entries<'a>(
                         f: &'a FrameRow,
                         depth: u32,
@@ -633,6 +634,7 @@ impl Home {
                         key: format!("p:{m}/{}/{}", w.workspace, project.unwrap_or("")),
                         name,
                         workspace: w.workspace.clone(),
+                        frame: first,
                     });
                     under_machine.extend(entries);
                 }
@@ -680,10 +682,13 @@ pub enum Entry {
         key: String,
         name: String,
     },
+    /// `frame`: its first frame, where an agent started from its heading runs.
     Project {
         key: String,
         name: String,
         workspace: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        frame: Option<String>,
     },
     Frame {
         key: String,

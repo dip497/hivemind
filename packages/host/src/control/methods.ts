@@ -141,8 +141,9 @@ export interface MethodDeps {
    *  Undefined when no agent is installed. May wait: at boot the PATH the answer
    *  depends on is still being read. */
   defaultAgentId?: () => string | undefined | Promise<string | undefined>;
-  /** The agent's CLI is where it would run (this machine, or the caller's remote host). Absent = assume it is. */
-  agentInstalled?: (def: AgentProviderDef, callerTile?: string) => boolean | Promise<boolean>;
+  /** The agent's CLI is where it would run: the caller's remote host, else the machine of the
+   *  folder it runs in (a path here, or a remote uri; none: here). Absent = assume it is. */
+  agentInstalled?: (def: AgentProviderDef, where: { callerTile?: string; folder?: string }) => boolean | Promise<boolean>;
   /** Pipe src's finished-turn replies into dst's input. Returns false on a bad
    *  pair (e.g. src === dst). */
   connect: (srcTileId: string, dstTileId: string) => boolean;
@@ -336,7 +337,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     if (!def || !def.enabled) {
       throw new ApiError("BAD_REQUEST", `unknown agent '${agent}' — spawnable: ${spawnableAgents().map((d) => d.id).join(", ")}`);
     }
-    if (deps.agentInstalled && !(await deps.agentInstalled(def, tile ? ptyId(tile) : undefined))) {
+    const place = placeTile(tile, opts.frame, opts.repo);
+    const folder = place.frame?.worktreePath ?? place.frame?.workspacePath ?? undefined;
+    if (deps.agentInstalled && !(await deps.agentInstalled(def, { ...(tile ? { callerTile: ptyId(tile) } : {}), ...(folder ? { folder } : {}) }))) {
       throw new ApiError("UNSUPPORTED", `${def.label} is not installed on this machine (no ${def.bin} on PATH)${def.install ? ` — get it at ${def.install.url}` : ""}`);
     }
     const sup = normalizeSupervise(opts.supervise);
@@ -379,10 +382,10 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     if (opts.model) options.model = String(opts.model);
     // `background` = a silent worker (report:false → gathered in bulk, e.g. a workflow worker):
     // its window does not bring it forward, and does not announce each one finishing.
-    const tileId = openTile(tile, opts.frame, (ws) => ({
+    const tileId = openTile(place, (ws) => ({
       id: mintId(`tile-${def.id}`), kind: AGENT_TILE_KIND,
       ...agentLaunch(def, { options, labels: ws.tiles.map((t) => t.label), prompt, resume }),
-    }), { name, prompt, background: opts.report === false, repo: opts.repo });
+    }), { name, prompt, background: opts.report === false });
     const res = { tileId };
     depthOf.set(res.tileId, childDepth);
     agentOfTile.set(res.tileId, agent);
@@ -448,15 +451,13 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // A workspace the store holds whose window has not laid it out yet is open, with nothing in it.
   const coreOf = (repo: string): CoreLayout => deps.workspaces.getCore(repo) ?? { frames: [], tiles: [] };
 
-  // Where the control plane opens a tile, and tells the windows so: the workspace and frame (the
-  // one named, else beside the caller, else the one the user is in, else the first; none in a
-  // workspace with no frames, where the window that lays it out makes one).
-  const openTile = (
-    callerTile: unknown, named: unknown,
-    make: (ws: CoreLayout) => TileRecord, at: { name?: string; prompt?: string; background: boolean; repo?: string },
-  ): string => {
-    const ws = at.repo === undefined ? workspaceFor(callerTile)
-      : deps.workspaces.repos().includes(at.repo) ? { repo: at.repo, core: coreOf(at.repo), frame: null } : null;
+  // Where the control plane opens a tile: the workspace and frame (the one named, else beside the
+  // caller, else the one the user is in, else the first; none in a workspace with no frames, where
+  // the window that lays it out makes one).
+  type Place = { ws: { repo: string; core: CoreLayout; frame: string | null }; frame: FrameRecord | undefined; caller: string | undefined };
+  const placeTile = (callerTile: unknown, named: unknown, repo: string | undefined): Place => {
+    const ws = repo === undefined ? workspaceFor(callerTile)
+      : deps.workspaces.repos().includes(repo) ? { repo, core: coreOf(repo), frame: null } : null;
     if (!ws) throw new ApiError("NOT_FOUND", "no workspace is open: open one in the app first");
     let frame: FrameRecord | undefined;
     const caller = typeof callerTile === "string" && callerTile ? bareOf(callerTile) : undefined;
@@ -466,6 +467,12 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     } else {
       frame = defaultFrame(ws.core.frames, { caller: caller && ws.core.frameOf?.[caller], selected: ws.frame });
     }
+    return { ws, frame, caller };
+  };
+  // Open the tile there, and tell the windows so.
+  const openTile = (
+    { ws, frame, caller }: Place, make: (ws: CoreLayout) => TileRecord, at: { name?: string; prompt?: string; background: boolean },
+  ): string => {
     const tile = make(ws.core);
     const near = caller && frame && ws.core.frameOf?.[caller] === frame.id ? caller : undefined;
     deps.announceSpawn({ tileId: tile.id, repo: ws.repo, prompt: at.prompt, background: at.background, ...(near ? { near } : {}) });
@@ -493,11 +500,11 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     }
     if (!deps.spawnAllowed()) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
     const url = typeof at.url === "string" ? at.url : undefined;
-    return openTile(at.caller, at.frame, (ws) => ({
+    return openTile(placeTile(at.caller, at.frame, at.repo), (ws) => ({
       id: mintId(`tile-${kind.replace(/[^A-Za-z0-9-]/g, "")}`), kind,
       label: `${tool.label} #${nextOrdinal(ws.tiles.map((t) => t.label), (n) => `${tool.label} #${n}`)}`,
       ...(url ? { url } : {}),
-    }), { background: false, ...(at.repo !== undefined ? { repo: at.repo } : {}) });
+    }), { background: false });
   }
 
   const label = (tileId: string): string => labelIn(tileId, deps.workspaces, deps.status);

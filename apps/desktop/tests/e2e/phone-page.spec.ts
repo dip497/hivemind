@@ -162,3 +162,15 @@ test("searched, Home keeps the tiles whose name holds the words; a machine chose
   await page.locator("[data-machines] .chip", { hasText: "box" }).click();
   await expect(page.locator("[data-tree] [data-agent]")).toHaveCount(20);
 });
+
+test("a project's + starts an agent in that project's first frame, on its machine", async () => {
+  test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
+  const page = await home();
+  await page.evaluate(() => (window as unknown as Driven).load(20, 0));
+  const plus = page.locator("[data-tree] [data-start-in]");
+  await expect(plus).toHaveCount(2);
+  await plus.nth(1).click();
+  expect(await page.evaluate(() => location.hash)).toBe("#start&workspace=w0&frame=f5");
+  await plus.nth(0).click();
+  expect(await page.evaluate(() => location.hash)).toBe("#start&workspace=w0&frame=f0");
+});

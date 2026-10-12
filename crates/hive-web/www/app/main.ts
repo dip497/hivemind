@@ -50,7 +50,7 @@ const app: App = {
   open(tile) {
     const at = `#agent=${encodeURIComponent(tile)}`;
     // An agent just started takes the place of the screen that started it.
-    if (location.hash === "#start") location.replace(at);
+    if (new URLSearchParams(location.hash.slice(1)).has("start")) location.replace(at);
     else location.hash = at;
     opened = true;
   },
@@ -65,7 +65,8 @@ const app: App = {
   conversation: (agent, said, ended) => phone?.conversation(agent, said, ended) ?? (() => {}),
   computer: () => paired?.with.name ?? "your computer",
   workspaces: () => reached().workspaces(),
-  startable: (workspace) => reached().startable(workspace),
+  places: (workspace) => reached().places(workspace),
+  folders: (workspace, folder) => reached().folders(workspace, folder),
   async start(workspace, start) {
     try {
       return await reached().start(workspace, start);
@@ -128,7 +129,7 @@ function route(): void {
   const shown = !paired || offered ? "pair" : tile ? "agent" : tab;
   for (const [name, screen] of Object.entries(screens)) screen.el.hidden = name !== shown;
   tabs.hidden = shown === "pair" || shown === "agent" || shown === "start";
-  if (shown === "start" && shownBefore !== "start") void starting.open();
+  if (shown === "start" && shownBefore !== "start") void starting.open(asked.get("workspace"), asked.get("frame"));
   if (shown !== "pair") pairing.stopScan();
   shownBefore = shown;
   for (const button of tabs.querySelectorAll<HTMLElement>("[data-tab]")) {

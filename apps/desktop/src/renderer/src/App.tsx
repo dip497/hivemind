@@ -33,6 +33,7 @@ import { flushSettings, patchSettings, saveSettingsNow } from "./settings-store"
 import { useSettingsNav } from "./settings-nav";
 import { getNotificationSettings, setNotificationSettingsCache, subscribeNotificationSettings, saveNotificationSettings } from "./notification-settings";
 import type { NotificationSettings } from "../../shared/ipc";
+import { tellRecentFolders } from "./recent-folders";
 const SettingsPages = preloadable(() => import("./settings-panels").then((m) => m.default));
 // Sharing's dialogs load when opened: they are nothing the first frame draws.
 const MakePluginDialog = lazy(() => import("./plugins/MakePlugin").then((m) => ({ default: m.MakePluginDialog })));
@@ -57,6 +58,7 @@ function pushRecent(path: string): string[] {
   const cur = loadRecents().filter((p) => p !== path);
   const next = [path, ...cur].slice(0, RECENT_MAX);
   window.localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  tellRecentFolders();
   return next;
 }
 

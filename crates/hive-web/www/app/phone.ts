@@ -5,7 +5,7 @@
 import init, { Device, type Host, HomeView, deviceId, pair, readLink, readQr } from "../pkg/hive_web.js";
 import type { Filter } from "./home.js";
 import { deviceKey, get, put, remove } from "./store.js";
-import type { Agent, Held, Others, Overview, Paired, Piece, Reply, Shown, Start, Startable } from "./types.js";
+import type { Agent, Held, Others, Overview, Paired, Piece, Reply, Shown, Start, Places, Folders } from "./types.js";
 import { message } from "./words.js";
 
 export interface Told {
@@ -200,9 +200,14 @@ export class Phone {
     return (await this.reached().workspaces()) as Held[];
   }
 
-  /** What may be started in `workspace`. */
-  async startable(workspace: string): Promise<Startable> {
-    return (await this.reached().startable(workspace)) as Startable;
+  /** Where an agent may be started in `workspace`. */
+  async places(workspace: string): Promise<Places> {
+    return (await this.reached().places(workspace)) as Places;
+  }
+
+  /** The folders in `folder`, inside one of `workspace`'s projects. */
+  async folders(workspace: string, folder: string): Promise<Folders> {
+    return (await this.reached().folders(workspace, folder)) as Folders;
   }
 
   /** Start an agent in `workspace`: its tile. */

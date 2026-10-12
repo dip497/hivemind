@@ -55,8 +55,44 @@ export type AgentAnswer = { text: string } | { decision: "allow" | "deny"; feedb
  *  with their model and mode choices (`values` empty: one taken as typed), and the workspace's
  *  frames, with the machine each one's folder is on. */
 export interface Startable {
-  programs: Array<{ id: string; label: string; options: Array<{ id: string; label: string; values: string[] }> }>;
+  programs: StartableProgram[];
   frames: Array<{ id: string; name: string; machine: string }>;
+}
+
+export interface StartableProgram {
+  id: string;
+  label: string;
+  options: Array<{ id: string; label: string; values: string[] }>;
+}
+
+/** Where an agent may be started in a workspace (spec/agents.md 0.8 "Places"): each machine its
+ *  projects are on, this computer first (`id` ""), with the agents found there; `unreached`, why
+ *  none could be asked. A folder is a path here, or a `machine://` uri. */
+export interface Places {
+  machines: Array<{ id: string; name: string; programs: StartableProgram[]; folders: PlaceFolder[]; unreached?: string }>;
+}
+
+/** A project of the workspace (its own folder, or a frame's, `frame`), or a folder the person
+ *  opened lately. */
+export interface PlaceFolder {
+  path: string;
+  name: string;
+  kind: "project" | "recent";
+  frame?: string;
+}
+
+/** The folders in a project's folder `path`, by name, at most `FOLDERS_MAX`; `more` when there are
+ *  more. */
+export interface Folders {
+  path: string;
+  folders: Array<{ name: string; path: string }>;
+  more?: true;
+}
+
+/** A photo given with a prompt: its type and its bytes in base64. */
+export interface StartImage {
+  type: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+  data: string;
 }
 
 /** An agent to start, as the person launches one at their desktop. `name`: its tile's. `resume`: a
@@ -67,6 +103,11 @@ export interface Startable {
 export interface StartAgent {
   program: string;
   frame?: string;
+  /** (0.8) A folder of `agent.places`, or one `agent.folders` lists: it runs in the frame there,
+   *  one opened for it when there is none. Not with `frame`. */
+  folder?: string;
+  /** (0.8) Photos for it to look at: kept on its machine, their paths after the prompt. */
+  images?: StartImage[];
   prompt?: string;
   model?: string;
   mode?: string;

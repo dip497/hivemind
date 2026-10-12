@@ -605,7 +605,8 @@ as Allow/Deny (§11.1), and the reading list, tables, links, `dir=auto`, the com
   the screen shows the chooser (4 s at most, else `TIMEOUT`, nothing typed), and it is answered
   once the screen moves on (3 s, else `FAILED`; the wait stands again and may be answered again);
   spec/needs.md 0.8.
-- The Allows on "perm probe" were not that race, and their cause is not found. They came 3 min
+- The Allows on "perm probe" were not that race, and their cause is not found (the `web: allow`
+  tile has it). They came 3 min
   (18:52:51) and 15 min (19:04:10) after the chooser was drawn (18:49:37); Claude's transcript has
   the tool use and nothing after it, no result and no interrupt, so neither they nor any Esc reached
   it, and the "Interrupted" reported after was the same answer, not a screen of Claude's. Ruled out
@@ -732,6 +733,20 @@ installed there, model and permission mode as the desktop offers them, a prompt 
 attachable). Folders: the machine's known projects and recent folders, plus a listing scoped inside
 a known project (directories only, capped); no browsing the whole disk. Close and stop from the
 row.
+
+- Done (2026-10-12): `agent.places` and `agent.folders` (spec/agents.md 0.8 "Places",
+  `packages/host/src/start-places.ts`, one owner for the desktop and the headless host): each
+  machine, this computer first then the saved machines, with the agents whose command is found
+  there (a saved machine asked over ssh by the login shell its sessions run in, one that cannot be
+  reached says why), the workspace's projects with their frames and the folders the windows opened
+  lately; inside a project its folders, by name, hidden ones left out, at most 200, links followed
+  and kept inside the project. `agent.start` takes `folder` (the frame there, else one opened under
+  the innermost project) and up to 4 photos, kept on the machine it runs on, their paths after the
+  prompt. On the page: New agent from Home or from a project's heading (`frame` on the project's
+  row, spec/home.md 0.2), the machine, folder and agent as chips, a photo picker; stop and close
+  from a row's menu, close asked first. Peers get both methods only with the role `agents`.
+- Not done: recent folders reach the host only while a window is open (they live in its storage);
+  a headless host lists none.
 
 **11.4 The terminal, one tap from the chat.** The chat stays the default. Draw the core's screen
 (`crates/hive-phone/src/screen.rs`) in the browser. Never resize the phone's emulator locally:

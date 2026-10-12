@@ -11,7 +11,7 @@ const unix = process.platform !== "win32";
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hrfs-"));
 after(() => fs.rmSync(root, { recursive: true, force: true }));
 const run: RunRemote = async (cmd, input) => {
-  const r = spawnSync("/bin/sh", ["-c", cmd], { input: input ?? "", env: { ...process.env, HOME: root } });
+  const r = spawnSync("/bin/sh", ["-c", cmd], { input: input ?? "", cwd: root, env: { ...process.env, HOME: root } });
   return { stdout: r.stdout, stderr: r.stderr.toString("utf8"), code: r.status };
 };
 const rfs = new RemoteFs(run);
@@ -60,4 +60,24 @@ test("writeFile keeps the file's mode (an edited script stays executable)", { sk
   await rfs.writeFile(f, "#!/bin/sh\necho new 'quoted' $HOME\n");
   assert.equal(fs.readFileSync(f, "utf8"), "#!/bin/sh\necho new 'quoted' $HOME\n");
   assert.equal(fs.statSync(f).mode & 0o777, 0o755);
+});
+
+test("found: the commands found by its login shell, its profile's PATH too, odd names only as themselves", { skip: !unix }, async () => {
+  const bin = path.join(root, "bin");
+  fs.mkdirSync(bin, { recursive: true });
+  fs.writeFileSync(path.join(bin, "talker-agent"), "#!/bin/sh\n", { mode: 0o755 });
+  fs.writeFileSync(path.join(root, ".profile"), 'PATH="$HOME/bin:$PATH"\n');
+  try {
+    assert.deepEqual(await rfs.found(["talker-agent", "no-such-agent", "$(touch pwned)", "sh"]), ["talker-agent", "sh"]);
+    assert.equal(fs.existsSync(path.join(root, "pwned")), false);
+  } finally {
+    fs.rmSync(path.join(root, ".profile"));
+  }
+});
+
+test("keep: a photo kept in its person's photos folder, bytes intact, where it is said", { skip: !unix }, async () => {
+  const data = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x0a, 0xff]);
+  const at = await rfs.keep("a1.png", data);
+  assert.equal(at, path.join(root, ".hivemind", "photos", "a1.png"));
+  assert.deepEqual(fs.readFileSync(at), data);
 });

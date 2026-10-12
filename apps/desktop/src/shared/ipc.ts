@@ -679,6 +679,9 @@ export interface HiveIpc {
   /** What the Layers panel shows of the workspace in `repo`: its tiles in the order listed, and
    *  the pinned ones (the person's phone's Home lists them so). */
   layersShown(repo: string, shown: { order: string[]; pinned: string[] }): void;
+  /** The folders the person opened lately, here and on saved machines (`machine://`), newest
+   *  first: their phone starts agents there. */
+  recentFolders(folders: string[]): void;
   /** Read the persisted notification preferences (normalized onto defaults). */
   getNotificationSettings(): Promise<NotificationSettings>;
   /** Persist + apply notification preferences live (no relaunch needed). */

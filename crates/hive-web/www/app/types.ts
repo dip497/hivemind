@@ -70,19 +70,47 @@ export interface Held {
   repo?: string;
 }
 
-/** What may be started in a workspace (hive-phone's `control::Startable`). */
-export interface Startable {
-  programs: Array<{ id: string; label: string; options: Array<{ id: string; label: string; values: string[] }> }>;
-  frames: Array<{ id: string; name: string; machine: string }>;
+/** An agent the computer can start (hive-phone's `control::StartProgram`). */
+export interface Program {
+  id: string;
+  label: string;
+  options: Array<{ id: string; label: string; values: string[] }>;
+}
+
+/** A folder an agent may be started in: a project of the workspace, or one opened lately. */
+export interface PlaceFolder {
+  path: string;
+  name: string;
+  kind: "project" | "recent";
+  frame?: string;
+}
+
+/** Where an agent may be started in a workspace (hive-phone's `control::Places`). */
+export interface Places {
+  machines: Array<{ id: string; name: string; programs: Program[]; folders: PlaceFolder[]; unreached?: string }>;
+}
+
+/** The folders inside a project's folder (hive-phone's `control::Folders`). */
+export interface Folders {
+  path: string;
+  folders: Array<{ name: string; path: string }>;
+  more: boolean;
+}
+
+/** A photo for an agent to look at: its type and its bytes in base64. */
+export interface Photo {
+  type: string;
+  data: string;
 }
 
 /** An agent to start: which, where, and with what. */
 export interface Start {
   program: string;
-  frame?: string;
+  folder?: string;
   prompt?: string;
   model?: string;
   mode?: string;
+  images?: Photo[];
 }
 
 /** The person's other computers and hosts, as the computer tells of them, and whose they are. */
@@ -128,7 +156,7 @@ export interface HomeFrame {
 /** One line of a list Home shows (hive-phone's `home::Entry`). */
 export type HomeEntry =
   | { of: "machine"; key: string; name: string }
-  | { of: "project"; key: string; name: string; workspace: string }
+  | { of: "project"; key: string; name: string; workspace: string; frame?: string }
   | { of: "frame"; key: string; depth: number; frame: HomeFrame }
   | { of: "tile"; key: string; depth: number; tile: HomeTile; line?: string };
 

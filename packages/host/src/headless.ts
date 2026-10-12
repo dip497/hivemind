@@ -67,6 +67,7 @@ import { answers } from "./answers.js";
 import { PeerLinks } from "./peer-links.js";
 import { answerKeys, heldBoards, manifestOf, participantNamed, runsIn } from "./needs.js";
 import { agentControl } from "./agent-control.js";
+import { StartPlaces } from "./start-places.js";
 import { askingOf, conversations, LastSaid, transcriptOf } from "./conversations.js";
 import { views } from "./views.js";
 import { listInstalledViews } from "@hivemind/core/views";
@@ -277,6 +278,13 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     whose: (device) => participantNamed(lists, device),
     saved: (id) => savedMachines.list.find((m) => m.id === id)?.label,
   };
+  // Where the person may start an agent from their phone: no window opens folders here, so none
+  // were opened lately.
+  const places = new StartPlaces({
+    core: (repo) => store.getCore(repo), repos: () => store.repos(), machines,
+    agents: () => spawnableAgents(), programs: () => spawnableAgents().filter((d) => !!findBin(d.bin)),
+    recent: () => [], photos: () => path.join(o.dir, "photos"),
+  });
   // How this host looks to its guests: its settings' theme, once they are read.
   let appearanceNow = (): Appearance => DEFAULT_APPEARANCE;
   // Its widgets run on the person's own devices that have a workspace open: it has no window.
@@ -310,11 +318,14 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     }),
     // Agents started, interrupted and closed from another of the person's devices, and what they
     // changed (M5, spec/agents.md).
+    places.domain(),
     agentControl({
       programs: () => spawnableAgents().filter((d) => !!findBin(d.bin)),
       core: (repo) => store.getCore(repo),
       repos: () => store.repos(),
       machines,
+      places,
+      openFrame: (repo, frame) => { store.addFrame(repo, frame, { writer: "frames" }); },
       start: (repo, start) => control.start(repo, start),
       status: (bare) => control.status.get(bare),
       interruptKeys: (bare) => manifestOf(heldBoards(store), bare)?.interrupt,
@@ -383,7 +394,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       callRenderer: () => Promise.reject(new ApiError("UNAVAILABLE", "there is no window here: hive host runs none")),
       reloadSettings: () => catalog.current().then(() => { syncServices(); return { ok: true }; }),
       defaultAgentId: () => preferredAgent(catalog.settings().agents.defaultAgent, (d) => !!findBin(d.bin))?.id,
-      agentInstalled: (def) => !!findBin(def.bin),
+      agentInstalled: (def, { folder }) => places.installedAt(def, folder),
       workspaces: store,
       // A caller in no tile acts on the one workspace this host serves, when it serves one.
       shownWorkspace: () => { const repos = store.repos(); return repos.length === 1 ? { repo: repos[0]!, frame: null } : null; },

@@ -35,7 +35,10 @@ const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../ou
 // Re-baselined for widgets: notes, checklists and text are widgets now, so the canvas's first frame
 // draws through the widget body, its editable fields, the widget runtime and the agent kit (~44 kB;
 // the floating layer and the confirm dialog load later; 1 058 031 before).
-const ENTRY_BASELINE = 1_101_956;
+// Re-baselined for the phone: pairing a browser, the page's hash and the folders an agent may be
+// started in from the phone sit on the window's first path (~2 kB over four commits; 1 145 977
+// before, 57 bytes under the ceiling).
+const ENTRY_BASELINE = 1_148_092;
 const ENTRY_MARGIN = 0.04;
 
 test("the default renderer path stays small, and three.js is gone from the build", (t) => {

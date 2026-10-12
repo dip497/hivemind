@@ -64,6 +64,7 @@ const api: HiveApi = {
 
   notifyAgent: (notice) => ipcRenderer.send("notify:agent", notice),
   layersShown: (repo, shown) => ipcRenderer.send("layers:shown", repo, shown),
+  recentFolders: (folders) => ipcRenderer.send("recent:folders", folders),
 
   getNotificationSettings: () => ipcRenderer.invoke("getNotificationSettings"),
   setNotificationSettings: (s) => ipcRenderer.invoke("setNotificationSettings", s),

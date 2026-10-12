@@ -16,6 +16,7 @@ import { machineUri, posixJoin } from "@hivemind/core/remote-uri";
 import { errText, machineForRequest, statusOf, useMachines, type MachinesRequest } from "./store";
 import { joinedId, useShown } from "../multiplayer/shown";
 import { AttentionNote, MachineDot, statusWords } from "./status";
+import { tellRecentFolders } from "../recent-folders";
 
 type View = { kind: "list" } | { kind: "add" } | { kind: "edit"; machine: MachineInfo } | { kind: "browse"; machine: MachineInfo } | { kind: "device"; device: PairedDeviceSummary };
 
@@ -429,6 +430,7 @@ function readRecent(m: MachineInfo): string[] {
 }
 function pushRecent(m: MachineInfo, dir: string): void {
   try { localStorage.setItem(recentKey(m), JSON.stringify([dir, ...readRecent(m).filter((d) => d !== dir)].slice(0, RECENT_MAX))); } catch { /* private mode */ }
+  tellRecentFolders();
 }
 const parentOf = (d: string) => (d === "/" ? "/" : d.replace(/\/[^/]+\/?$/, "") || "/");
 

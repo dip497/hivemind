@@ -343,15 +343,25 @@ impl Host {
             .map_err(err)
     }
 
-    /// The agents `workspace` can start, and its frames: `{programs, frames}`.
-    pub async fn startable(&self, workspace: String) -> Result<JsValue, JsError> {
-        let startable = control::startable(&self.connection, &workspace)
+    /// Where an agent may be started in `workspace`: `{machines: [{id, name, programs, folders,
+    /// unreached?}]}`.
+    pub async fn places(&self, workspace: String) -> Result<JsValue, JsError> {
+        let places = control::places(&self.connection, &workspace)
             .await
             .map_err(err)?;
-        to_js(&serde_json::to_value(startable).map_err(err)?)
+        to_js(&serde_json::to_value(places).map_err(err)?)
     }
 
-    /// Start an agent in `workspace`, `{program, frame?, prompt?, model?, mode?}`: its tile.
+    /// The folders in `folder`, inside one of `workspace`'s projects: `{path, folders, more}`.
+    pub async fn folders(&self, workspace: String, folder: String) -> Result<JsValue, JsError> {
+        let folders = control::folders(&self.connection, &workspace, &folder)
+            .await
+            .map_err(err)?;
+        to_js(&serde_json::to_value(folders).map_err(err)?)
+    }
+
+    /// Start an agent in `workspace`, `{program, frame? | folder?, prompt?, model?, mode?,
+    /// images?}`: its tile.
     pub async fn start(&self, workspace: String, start: JsValue) -> Result<String, JsError> {
         let start: control::Start = serde_json::from_value(from_js(&start)?).map_err(err)?;
         control::start(&self.connection, &workspace, &start)

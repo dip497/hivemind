@@ -40,7 +40,8 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   test.setTimeout(300_000);
   const net = await ownNetwork(root, procs, "closed", WWW);
   const repo = path.join(root, "api");
-  fs.mkdirSync(repo);
+  fs.mkdirSync(path.join(repo, "web", "app"), { recursive: true });
+  fs.mkdirSync(path.join(repo, ".cache"));
   execSync("git init -q", { cwd: repo });
   const home = path.join(root, "home");
   fs.mkdirSync(home);
@@ -222,21 +223,43 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   await expect(page.locator("[data-chat]")).toContainText("run answered y", { timeout: 30_000 });
   await expect(waiting).toHaveCount(0, { timeout: 30_000 });
 
-  // Started from the browser, with a prompt: the computer starts it as that device asked, and its
-  // screen opens in place of the one that started it.
+  // Started from the browser in a folder inside the project, chosen from its heading, the folders
+  // in it listed (never a hidden one), with a prompt and a photo: the computer opens a frame there
+  // and starts it as that device asked, the photo kept on it, and its screen opens in place of the
+  // one that started it.
   await page.locator('[data-screen="agent"] [data-back]').click();
-  await page.locator("[data-start]").click();
-  await page.locator("[data-start-programs] .chip", { hasText: "Talker" }).click({ timeout: 30_000 });
+  await page.locator("[data-tree] [data-start-in]").first().click();
+  await expect(page.locator("[data-start-folder]")).toHaveAttribute("data-start-folder", repo, { timeout: 30_000 });
+  await page.locator("[data-start-look]").click();
+  await expect(page.locator("[data-start-inside] .chip")).toHaveText(["web"]);
+  await page.locator("[data-start-inside] .chip", { hasText: "web" }).click();
+  await expect(page.locator("[data-start-folder]")).toHaveAttribute("data-start-folder", path.join(repo, "web"));
+  await expect(page.locator("[data-start-inside] .chip")).toHaveText(["app"]);
+  await page.locator("[data-start-programs] .chip", { hasText: "Talker" }).click();
   await page.locator("[data-start-prompt]").fill("write the tests");
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+  await page.locator("[data-start-photo-input]").setInputFiles({ name: "screen.png", mimeType: "image/png", buffer: png });
+  await expect(page.locator("[data-start-photo]")).toHaveCount(1);
+  await page.screenshot({ path: testInfo.outputPath("start.png") });
   await page.locator("[data-start-go]").click();
   await expect(desktop.locator(".react-flow__node-terminal")).toHaveCount(3, { timeout: 30_000 });
   await expect.poll(audit, { timeout: 10_000 }).toContainEqual(expect.objectContaining({ verb: "agent.start", outcome: "ok", actor: expect.objectContaining({ kind: "peer", device: id }) }));
   const started = (await desktop.locator(".react-flow__node-terminal").evaluateAll((els) => els.map((e) => e.getAttribute("data-id")))).find((t) => t !== tile && t !== talker)!;
   await expect(page.locator('[data-screen="agent"]')).toBeVisible();
   expect(new URLSearchParams(new URL(page.url()).hash.slice(1)).get("agent")).toBe(started);
-  // The prompt, typed in as it starts: the first thing the person said to it.
-  await expect(page.locator('[data-chat] [data-who="person"]')).toHaveText(["write the tests"], { timeout: 30_000 });
+  // The prompt, typed in as it starts: the first thing the person said to it, the photo's path after,
+  // in the same message, which the agent reads.
+  const first = page.locator('[data-chat] [data-who="person"]').first();
+  await expect(first).toHaveText(/^write the tests\s+\S+\/photos\/[0-9a-f]{16}\.png$/, { timeout: 30_000 });
+  const photo = (await first.innerText()).match(/\S+\/photos\/[0-9a-f]{16}\.png/)![0];
+  expect(fs.readFileSync(photo)).toEqual(png);
   await page.screenshot({ path: testInfo.outputPath("started.png") });
+  // It runs in a frame opened there, under the project's.
+  await page.locator('[data-screen="agent"] [data-back]').click();
+  const opened = page.locator("[data-tree] [data-frame]", { hasText: "web" });
+  await expect(opened).toHaveAttribute("style", /--depth:\s*1/, { timeout: 30_000 });
+  await expect(opened.locator("xpath=following-sibling::*[1]")).toHaveAttribute("data-agent", started);
+  await page.locator(`[data-agent="${started}"]`).click();
 
   // Closed from the browser, once asked and confirmed: the computer closes it, as that device, and
   // Back leads to the list it was started from.
@@ -247,6 +270,25 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   await expect.poll(audit, { timeout: 10_000 }).toContainEqual(expect.objectContaining({ verb: "agent.close", outcome: "ok", actor: expect.objectContaining({ kind: "peer", device: id }) }));
   await expect(page.locator('[data-screen="home"]')).toBeVisible();
   await expect(page.locator(`[data-agent="${started}"]`)).toHaveCount(0, { timeout: 30_000 });
+
+  // Stopped from its row on Home while it asks: the computer presses its interrupt key, as that
+  // device asked, and it waits no more. Then closed from its row, once confirmed.
+  await page.locator(`[data-agent="${talker}"]`).click();
+  await say("ask");
+  await expect(waiting).toHaveAttribute("data-waiting-card", "question", { timeout: 30_000 });
+  await page.locator('[data-screen="agent"] [data-back]').click();
+  await page.locator(`[data-row-more="${talker}"]`).click();
+  await page.locator("[data-row-actions] [data-row-stop]").click();
+  await expect.poll(audit, { timeout: 10_000 }).toContainEqual(expect.objectContaining({ verb: "agent.interrupt", outcome: "ok", actor: expect.objectContaining({ kind: "peer", device: id }) }));
+  await expect(page.locator(`[data-agent="${talker}"]`)).not.toHaveAttribute("data-state", "waiting", { timeout: 30_000 });
+  await expect(page.locator("[data-row-actions]")).toBeHidden();
+  await page.locator(`[data-row-more="${talker}"]`).click();
+  await expect(page.locator("[data-row-actions] [data-row-stop]")).toBeHidden();
+  await page.locator("[data-row-actions] [data-row-close]").click();
+  await expect(page.locator("[data-row-close-ask]")).toHaveText(/^Close .+\? It stops, and its tile closes on .+\./);
+  await page.locator("[data-row-close-ask] [data-yes]").click();
+  await expect(desktop.locator(".react-flow__node-terminal")).toHaveCount(1, { timeout: 30_000 });
+  await expect(page.locator(`[data-agent="${talker}"]`)).toHaveCount(0, { timeout: 30_000 });
 
   // Unpaired on the computer: turned away while open, and it offers to pair again, the pairing it
   // kept forgotten.

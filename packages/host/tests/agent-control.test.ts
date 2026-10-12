@@ -10,8 +10,9 @@ import os from "node:os";
 import path from "node:path";
 import type { AgentProviderDef } from "@hivemind/agents";
 import { KEY_GAP_MS } from "@hivemind/agent-host/keys";
-import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
+import type { CoreLayout, FrameRecord } from "@hivemind/workspace-doc/shapes";
 import { agentControl, PROMPT_MAX, type Start } from "../src/agent-control.ts";
+import { StartPlaces, localFs, type MachineFs } from "../src/start-places.ts";
 import { PATCH_MAX } from "../src/agent-diff.ts";
 import { WorkspaceServer } from "@hivemind/workspace-api/server";
 import { Intents } from "@hivemind/workspace-host/intents";
@@ -43,11 +44,23 @@ function device(repo = "/home/p/api") {
   const started: Array<{ repo: string; start: Start }> = [];
   const typed: Array<{ tile: string; data: string; at: number }> = [];
   const state = { now: "working" as string, terminal: true, keys: ["escape"] as string[] | undefined, folder: repo as string | null };
+  const opened: FrameRecord[] = [];
+  const machines = { self: () => ({ device: "d1".repeat(32), name: "desk" }), mine: (d: string) => (d === BOX ? "build-box" : undefined), whose: () => undefined, saved: () => undefined };
+  // The photos kept on the saved machine "box1", by the path it gave each.
+  const onBox = new Map<string, Buffer>();
+  const photos = () => path.join(tmp, "photos");
+  const places = new StartPlaces({
+    core: (r) => (r === repo ? core : null), repos: () => [repo, "/home/p/fresh"], machines,
+    agents: () => [claude], programs: () => [claude], recent: () => [], photos,
+    files: async (m) => (m === "box1" ? ({ keep: async (name, data) => { onBox.set(`/srv/photos/${name}`, data); return `/srv/photos/${name}`; } } as MachineFs) : localFs(photos)),
+  });
   const domain = agentControl({
     programs: async () => [claude],
     core: (r) => (r === repo ? core : null),
     repos: () => [repo, "/home/p/fresh"],
-    machines: { self: () => ({ device: "d1".repeat(32), name: "desk" }), mine: (d) => (d === BOX ? "build-box" : undefined), whose: () => undefined, saved: () => undefined },
+    machines,
+    places,
+    openFrame: (r, f) => { if (r === repo) { opened.push(f); core.frames.push(f); } },
     start: async (r, start) => { started.push({ repo: r, start }); return "t9"; },
     status: (tile) => (tile === "t1" ? { state: state.now } : undefined),
     interruptKeys: () => state.keys,
@@ -58,7 +71,7 @@ function device(repo = "/home/p/api") {
   const person = { actor: { kind: "person" } } as never;
   const as = (from: never) => (method: keyof typeof domain.answers, ...params: unknown[]) => (domain.answers[method] as (f: never, ...p: unknown[]) => unknown)(from, ...params);
   const call = as(person);
-  return { repo, started, typed, state, call, as, domain };
+  return { repo, core, started, typed, state, opened, onBox, call, as, domain };
 }
 
 /** `asked` is refused as a bad request saying `pattern`. */
@@ -94,6 +107,39 @@ test("starting asks for what was given, checked: an agent this device starts, on
   await refused(() => d.call("agent.start", d.repo, "claude"), /start must be an object/);
   await refused(() => d.call("agent.start", "/home/p/elsewhere", { program: "claude" }), /no such workspace/, "NOT_FOUND");
   assert.equal(d.started.length, 2, "nothing refused was started");
+});
+
+test("started in a folder: in the frame there, else one opened for it; photos kept on its machine, their paths after the prompt; a folder with a frame, one in no project, or one on no machine asked is refused, and nothing started", async () => {
+  const repo = fs.realpathSync(fs.mkdtempSync(path.join(tmp, "api-")));
+  fs.mkdirSync(path.join(repo, "src"));
+  const d = device(repo);
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+  await d.call("agent.start", repo, { program: "claude", folder: repo });
+  await d.call("agent.start", repo, { program: "claude", folder: path.join(repo, "src"), prompt: "what is wrong here?", images: [{ type: "image/png", data: png.toString("base64") }] });
+  await d.call("agent.start", repo, { program: "claude", folder: path.join(repo, "src"), images: [{ type: "image/png", data: png.toString("base64") }] });
+  const src = d.opened[0];
+  assert.deepEqual(d.opened, [{ id: src.id, title: "src", workspacePath: path.join(repo, "src"), parentFrameId: "f-api" }]);
+  const [first, second, third] = d.started.map((s) => s.start);
+  assert.deepEqual(first, { program: "claude", frame: "f-api" });
+  const [said, kept] = second.prompt!.split("\n\n");
+  assert.deepEqual({ ...second, prompt: said }, { program: "claude", frame: src.id, prompt: "what is wrong here?" });
+  assert.match(kept, new RegExp(`^${path.join(tmp, "photos")}/[0-9a-f]{16}\\.png$`));
+  assert.deepEqual(fs.readFileSync(kept), png);
+  assert.equal(third.frame, src.id);
+  assert.match(third.prompt!, /^\/.+\.png$/);
+  assert.notEqual(third.prompt, kept);
+  // Started in a frame on a saved machine, its photo is kept there, by the path the machine gave it.
+  d.core.frames.push({ id: "f-saved", title: "saved", workspacePath: "machine://box1/srv/api" } as FrameRecord);
+  await d.call("agent.start", repo, { program: "claude", frame: "f-saved", prompt: "and here?", images: [{ type: "image/png", data: png.toString("base64") }] });
+  const onBox = d.started[3].start;
+  assert.match(onBox.prompt!, /^and here\?\n\n\/srv\/photos\/[0-9a-f]{16}\.png$/);
+  assert.deepEqual([...d.onBox], [[onBox.prompt!.split("\n\n")[1], png]]);
+  await refused(() => d.call("agent.start", repo, { program: "claude", folder: repo, frame: "f-api" }), /a frame or a folder, not both/);
+  await refused(() => d.call("agent.start", repo, { program: "claude", folder: path.dirname(repo) }), /none of this workspace's projects/, "FORBIDDEN");
+  await refused(() => d.call("agent.start", repo, { program: "claude", folder: `machine://${BOX}/srv/api` }), /a folder here or on a saved machine/);
+  await refused(() => d.call("agent.start", repo, { program: "claude", folder: repo, images: [{ type: "image/svg+xml", data: "" }] }), /png, jpeg, webp or gif/);
+  assert.equal(d.started.length, 4, "nothing refused was started");
+  assert.equal(d.opened.length, 1, "nor a frame opened for it");
 });
 
 test("an agent's turn is interrupted with its manifest's keys, a moment apart, only while it works or waits; one whose manifest says none is refused, and one with no terminal was not interrupted", async () => {

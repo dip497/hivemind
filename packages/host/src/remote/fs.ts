@@ -61,6 +61,17 @@ export class RemoteFs {
     return (await this.ok(shScript(READ, path))).toString("utf8");
   }
 
+  /** Which of the commands `bins` are found by the login shell its sessions run in (ssh.ts). */
+  async found(bins: string[]): Promise<string[]> {
+    const out = (await this.ok(shScript(`bash -lc 'for b; do command -v "$b" >/dev/null 2>&1 && printf "HIVEFOUND %s\\n" "$b"; done' bash "$@"`, ...bins))).toString("utf8");
+    return out.split("\n").flatMap((l) => (l.startsWith("HIVEFOUND ") ? [l.slice(10)] : []));
+  }
+
+  /** Keep `data` as `name` in its person's photos folder: where it is. */
+  async keep(name: string, data: Buffer): Promise<string> {
+    return (await this.ok(shScript('d="$HOME/.hivemind/photos" && mkdir -p "$d" && cat > "$d/$1" && printf %s "$d/$1"', name), data)).toString("utf8");
+  }
+
   /** Truncates in place (not replace-by-rename) so the file keeps its mode and owner. */
   async writeFile(path: string, data: string): Promise<void> {
     await this.ok(shScript('cat > "$1"', path), data);

@@ -6,7 +6,7 @@ import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } 
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
-import type { AgentAnswer, AgentChange, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, Links, PipeChange, SpawnChange, StartAgent, Startable, StatusChange, TileOpened } from "./agents.js";
+import type { AgentAnswer, AgentChange, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, Startable, StatusChange, TileOpened } from "./agents.js";
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
 import type { JoinQuestion, JoinRequests, PersonHere } from "./people.js";
 import type { ClientGrant, NewGrant } from "./grants.js";
@@ -112,6 +112,11 @@ export interface WorkspaceMethods {
   /** What may be started in the workspace at `repo` (M5, spec/agents.md "Starting"): the agents
    *  this device starts, with their model and mode choices, and the workspace's frames. */
   "agent.startable": (repo: string) => Startable;
+  /** Where an agent may be started in the workspace at `repo` (spec/agents.md 0.8): each machine,
+   *  the agents found there, and its projects and recent folders. */
+  "agent.places": (repo: string) => Places;
+  /** The folders in `folder`, one of the workspace's projects or inside one. */
+  "agent.folders": (repo: string, folder: string) => Folders;
   /** Start an agent in the workspace at `repo`, as the person launches one at their desktop. */
   "agent.start": (repo: string, start: StartAgent) => { tile: string };
   /** Interrupt the turn of the agent in `tile` with the keys its manifest says do. `interrupted`

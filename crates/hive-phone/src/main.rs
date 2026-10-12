@@ -540,6 +540,7 @@ async fn run(args: Args) -> Result<()> {
                             prompt: args.prompt.clone(),
                             model: args.model.clone(),
                             mode: args.mode.clone(),
+                            ..Start::default()
                         };
                         let tile = control::start(&connection, ws, &start).await?;
                         if args.json {

@@ -100,6 +100,7 @@ impl From<Start> for control::Start {
             prompt: s.prompt,
             model: s.model,
             mode: s.mode,
+            ..Self::default()
         }
     }
 }
@@ -286,6 +287,7 @@ mod tests {
                 prompt: Some("buy milk".into()),
                 model: Some("opus".into()),
                 mode: Some("plan".into()),
+                ..Default::default()
             }
         );
     }

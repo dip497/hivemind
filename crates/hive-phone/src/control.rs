@@ -42,12 +42,72 @@ pub struct Startable {
     pub frames: Vec<Frame>,
 }
 
-/// An agent to start: which, where, and with what.
+/// A folder an agent may be started in: one of the workspace's projects, or one the person opened
+/// lately (`kind` `project` or `recent`). `path` is a path on the computer, or a `machine://` uri.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlaceFolder {
+    pub path: String,
+    pub name: String,
+    pub kind: String,
+    /// The frame there, for a project that has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame: Option<String>,
+}
+
+/// A machine a workspace's projects are on (`id` empty: the computer), the agents found there, and
+/// its folders; `unreached`, why it could not be asked.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlaceMachine {
+    pub id: String,
+    pub name: String,
+    pub programs: Vec<StartProgram>,
+    pub folders: Vec<PlaceFolder>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unreached: Option<String>,
+}
+
+/// Where an agent may be started in a workspace.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Places {
+    pub machines: Vec<PlaceMachine>,
+}
+
+/// A folder inside a project.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Folder {
+    pub name: String,
+    pub path: String,
+}
+
+/// The folders in a project's folder, by name; `more` when the device listed only some.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Folders {
+    pub path: String,
+    pub folders: Vec<Folder>,
+    #[serde(default)]
+    pub more: bool,
+}
+
+/// A photo given with a prompt: its type (`image/png`, `image/jpeg`, `image/webp`, `image/gif`)
+/// and its bytes in base64.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Image {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub data: String,
+}
+
+/// An agent to start: which, where, and with what. `folder`, one of `places`' or `folders`', not
+/// with `frame`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Start {
     pub program: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frame: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<Image>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -86,6 +146,23 @@ pub async fn startable(connection: &Connection, workspace: &str) -> Result<Start
         .context("the device said what may be started in a way not understood")
 }
 
+/// Where an agent may be started in `workspace`: each machine, the agents found there, its folders.
+pub async fn places(connection: &Connection, workspace: &str) -> Result<Places> {
+    let mut w = Workspace::open(connection, workspace).await?;
+    let answer = w.call("agent.places", json!([named(workspace)])).await?;
+    serde_json::from_value(answer)
+        .context("the device said where agents may be started in a way not understood")
+}
+
+/// The folders in `folder`, one of `workspace`'s projects or inside one.
+pub async fn folders(connection: &Connection, workspace: &str, folder: &str) -> Result<Folders> {
+    let mut w = Workspace::open(connection, workspace).await?;
+    let answer = w
+        .call("agent.folders", json!([named(workspace), folder]))
+        .await?;
+    serde_json::from_value(answer).context("the device listed the folders in a way not understood")
+}
+
 /// Start an agent in `workspace` as `start` says: its tile.
 pub async fn start(connection: &Connection, workspace: &str, start: &Start) -> Result<String> {
     let mut w = Workspace::open(connection, workspace).await?;
@@ -119,4 +196,59 @@ pub async fn diff(connection: &Connection, workspace: &str, tile: &str) -> Resul
     let mut w = Workspace::open(connection, workspace).await?;
     let answer = w.call("agent.diff", json!([tile])).await?;
     serde_json::from_value(answer).context("the device said what changed in a way not understood")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_start_in_a_folder_with_photos_is_asked_as_the_computer_reads_it() {
+        let start = Start {
+            program: "claude".into(),
+            folder: Some("machine://box1/srv/api".into()),
+            images: vec![Image {
+                kind: "image/jpeg".into(),
+                data: "/9j/".into(),
+            }],
+            prompt: Some("what is wrong here?".into()),
+            ..Start::default()
+        };
+        assert_eq!(
+            serde_json::to_value(&start).unwrap(),
+            json!({ "program": "claude", "folder": "machine://box1/srv/api",
+                    "images": [{ "type": "image/jpeg", "data": "/9j/" }], "prompt": "what is wrong here?" })
+        );
+        let plain = Start {
+            program: "claude".into(),
+            ..Start::default()
+        };
+        assert_eq!(
+            serde_json::to_value(&plain).unwrap(),
+            json!({ "program": "claude" })
+        );
+    }
+
+    #[test]
+    fn places_and_folders_read_as_the_computer_says_them() {
+        let places: Places = serde_json::from_value(json!({ "machines": [
+            { "id": "", "name": "desk", "folders": [{ "path": "/home/p/api", "name": "api", "kind": "project" }],
+              "programs": [{ "id": "claude", "label": "Claude Code", "options": [] }] },
+            { "id": "box1", "name": "build-box", "programs": [], "folders": [], "unreached": "ssh: Connection refused" } ] }))
+        .unwrap();
+        assert_eq!(places.machines[0].folders[0].kind, "project");
+        assert_eq!(places.machines[0].unreached, None);
+        assert_eq!(
+            places.machines[1].unreached.as_deref(),
+            Some("ssh: Connection refused")
+        );
+        let some: Folders = serde_json::from_value(
+            json!({ "path": "/a", "folders": [{ "name": "b", "path": "/a/b" }] }),
+        )
+        .unwrap();
+        assert!(!some.more);
+        let more: Folders =
+            serde_json::from_value(json!({ "path": "/a", "folders": [], "more": true })).unwrap();
+        assert!(more.more);
+    }
 }
