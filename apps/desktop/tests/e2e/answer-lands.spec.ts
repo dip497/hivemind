@@ -85,19 +85,20 @@ test("an Allow for a chooser not drawn in time types nothing and says so", async
   expect((await asking()).state).toBe("waiting");
 });
 
-test("an Allow its chooser does not take says it failed, and the person may answer again", async () => {
+test("an Allow its chooser does not take is not confirmed, and is never typed again", async () => {
   test.setTimeout(120_000);
   const { desktop, tile, log, asking, deaf } = await started();
   fs.writeFileSync(deaf, "");
   await desktop.evaluate((t) => window.hive.ptyWrite(`hm:${t}`, "perm\r"), tile);
   let since = 0;
   await expect.poll(async () => { const a = await asking(); since = a.since; return a.state; }, { timeout: 20_000, intervals: [20] }).toBe("waiting");
-  expect(await refusal(desktop, tile, since)).toMatch(/the keys went in, but its screen still asks/);
+  expect(await refusal(desktop, tile, since)).toMatch(/the keys went in, but its screen has not moved on yet: not confirmed/);
   expect(log()).toBe("ignored 1\n");
-  fs.rmSync(deaf);
-  // Still asking, and said so: answered again, it lands.
-  const again = await asking();
-  expect(again).toMatchObject({ state: "waiting", waiting: { kind: "permission" } });
-  expect(await refusal(desktop, tile, again.since)).toBe("");
-  expect(log()).toBe("ignored 1\ntook 1\n");
+  // The keys went in: answered again, as the wait it named or as what it shows now, nothing is typed.
+  const now = await asking();
+  for (const s of new Set([since, now.since])) {
+    expect(await desktop.evaluate(([t, at]) => window.hive.agentAnswer(t, at, { decision: "allow" }), [tile, s] as const)).toEqual({ answered: false });
+  }
+  await desktop.waitForTimeout(3_000);
+  expect(log()).toBe("ignored 1\n");
 });

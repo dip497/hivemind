@@ -38,7 +38,7 @@ export interface AnswersOptions {
   /** Who is at a connection. */
   who(connection: Connection): Answerer;
   /** Whether the screen rules of the agent of `tile` read what it waits on: its answer is then
-   *  typed once its screen shows the wait, and has landed once its screen moves on from it. */
+   *  typed once its screen shows the wait, and is confirmed once its screen moves on from it. */
   watched?(tile: string): boolean;
 }
 
@@ -146,7 +146,7 @@ export function answers(o: AnswersOptions): Domain<"agent.answer"> {
         };
         if (!o.watched?.(bare)) return { answered: type() };
         // Keys typed before its chooser is drawn never reach it: typed once its screen shows the
-        // wait, and landed once its screen moves on, or a new wait begins.
+        // wait, and confirmed once its screen moves on, or a new wait begins.
         const waits = () => { const now = plane.status.get(bare); return !!now && now.state === "waiting" && now.since === since; };
         return (async () => {
           if (!(await until(plane, bare, () => !waits() || shows(plane.status.reading(bare), status.kind), DRAWN_MS)) || !waits()) {
@@ -162,10 +162,8 @@ export function answers(o: AnswersOptions): Domain<"agent.answer"> {
             return (read !== before && !shows(read, status.kind)) || (now?.state === "waiting" && now.since > since);
           };
           if (await until(plane, bare, moved, TAKEN_MS)) return { answered: true };
-          answered.delete(key);
-          // Its status took the keys for an answer: the screen says otherwise.
-          plane.status.reread(bare);
-          throw new ApiError("FAILED", "the keys went in, but its screen still asks: it may wait on you there");
+          // Its screen is read on a change only, and late: the keys went in, so they are never typed again.
+          throw new ApiError("TIMEOUT", "the keys went in, but its screen has not moved on yet: not confirmed; check it there");
         })();
       },
     },

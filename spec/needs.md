@@ -114,11 +114,12 @@ line, never its words), one that does not as
 An agent may say it waits before its chooser takes keys (Claude Code's `PermissionRequest` hook
 runs before its chooser is drawn), and keys typed sooner never reach the chooser. So for an agent
 whose screen rules read what it waits on (its manifest's `caps.blockedDetection`, 0.8), the keys go
-in only once its screen shows the wait, and the answer has landed only once its screen moves on
+in only once its screen shows the wait, and the answer is confirmed only once its screen moves on
 from it, or the agent waits anew. When its screen has not shown the wait within 4 s, nothing is
-typed and the call fails `TIMEOUT`; when the keys are in and its screen still shows the wait 3 s
-later, it fails `FAILED`, the agent waits on the person again as its screen shows, and it may be
-answered again. Neither is recorded as answered.
+typed, the call fails `TIMEOUT` and the wait is not recorded as answered. When the keys are in and
+its screen has not moved on 3 s later, the call fails `TIMEOUT` too, but the wait is recorded as
+answered: a screen is read on a change only and may report seconds late, so the answer is not
+confirmed, never failed, and answering that wait again types nothing.
 
 The device that runs the agent is the one asked, and a phone sends an answer once, never again
 after a reconnect. When the device does not say within 10 s whether it landed (it may have), the

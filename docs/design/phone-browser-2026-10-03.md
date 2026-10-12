@@ -603,7 +603,8 @@ as Allow/Deny (§11.1), and the reading list, tables, links, `dir=auto`, the com
   (`apps/desktop/tests/e2e/answer-lands.spec.ts`): before the fix `{answered: true}` with the
   chooser still asking. Now, for an agent whose screen rules read its waits, the keys go in once
   the screen shows the chooser (4 s at most, else `TIMEOUT`, nothing typed), and it is answered
-  once the screen moves on (3 s, else `FAILED`; the wait stands again and may be answered again);
+  once the screen moves on (3 s, else `TIMEOUT`, not confirmed: the keys went in, so that wait is
+  never typed again);
   spec/needs.md 0.8. Open: the wait still listed after "Interrupted" is not reproduced by the
   stand-in (an early key, then Esc on the chooser, clears it); it needs that tile's status and
   screen.

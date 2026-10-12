@@ -22,7 +22,7 @@ import { ApiError } from "@hivemind/workspace-api/protocol";
 import type { AnswerKeys, InputKind } from "@hivemind/agents";
 import { StatusStore } from "@hivemind/agent-host/status-store";
 import { KEY_GAP_MS } from "@hivemind/agent-host/keys";
-import { answers, ANSWER_MAX } from "../src/answers.ts";
+import { answers, ANSWER_MAX, TAKEN_MS } from "../src/answers.ts";
 import { ControlPlane, type ControlPlaneOptions } from "../src/control/plane.ts";
 import { Waits } from "../src/waits.ts";
 
@@ -207,8 +207,9 @@ test("a supervised tool use answered always is decided so for every later use of
 });
 
 /** A real control plane, its agent in t1 says `1` allows and Esc denies what it asks, answered
- *  through the workspace API, which records each answer: what goes into each terminal, at once. */
-function plane() {
+ *  through the workspace API, which records each answer: what goes into each terminal, at once.
+ *  Watched, its answers wait on what its screen reads. */
+function plane(watched = false) {
   const writes: string[] = [];
   const p = new ControlPlane({
     dir: () => "/nowhere",
@@ -221,10 +222,10 @@ function plane() {
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "answers-")), "audit.jsonl");
   after(() => fs.rmSync(path.dirname(file), { recursive: true, force: true }));
   let asking: ToolAsked | undefined;
-  const server = new WorkspaceServer([answers({ plane: () => p, answerKeys: () => ({ allow: ["1"], deny: ["escape"] }), asking: () => asking, chooseKeys: () => ["{n}"], who: () => PRIYA })], new Intents(new AuditLog({ file })));
+  const server = new WorkspaceServer([answers({ plane: () => p, answerKeys: () => ({ allow: ["1"], deny: ["escape"] }), asking: () => asking, chooseKeys: () => ["{n}"], who: () => PRIYA, watched: () => watched })], new Intents(new AuditLog({ file })));
   const answer = async (since: number, a: unknown) => {
     const r = await server.answer("agent.answer", ["hm:t1", since, a], phone);
-    if ("error" in r) throw new Error(r.error.message);
+    if ("error" in r) throw new ApiError(r.error.code, r.error.message);
     return r.result;
   };
   /** Its hooks say it waits on a permission: when the wait began. */
@@ -256,6 +257,40 @@ test("allowed from a phone on a fresh chooser, its keys go in as the person's: t
   assert.deepEqual(c.audited(), [
     "agent.answer t1 allow ok", "agent.answer t1 allow, not answered ok", "agent.answer t1 deny ok", "agent.answer t1 choice 2 ok", "agent.answer t1 reply ok",
   ]);
+});
+
+test("an Allow whose keys went in is not confirmed while its screen has not moved on, and is never typed again: the screen is read every 1.2 s and reports a change only, so the reading that it moved on may come seconds late", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: Date.now() });
+  const c = plane(true);
+  const since = c.asks();
+  c.p.event("agent.screen", { tileId: "hm:t1", state: "permission" });
+  const allowed = c.answer(since, { decision: "allow" }).catch((e: ApiError) => e);
+  await new Promise(setImmediate);
+  assert.deepEqual(c.writes, ['hm:t1:"1"']);
+  t.mock.timers.tick(TAKEN_MS);
+  const late = await allowed;
+  assert.ok(late instanceof ApiError);
+  assert.equal(late.code, "TIMEOUT", "not confirmed, never failed: the keys went in");
+  const now = c.p.status.get("t1")!;
+  assert.notEqual(now.state, "waiting", "it waits on the person no more");
+  for (const at of [since, now.since]) assert.deepEqual(await c.answer(at, { decision: "allow" }), { answered: false });
+  t.mock.timers.tick(1_200);
+  c.p.event("agent.screen", { tileId: "hm:t1", state: "working" });
+  assert.deepEqual(c.writes, ['hm:t1:"1"'], "typed once");
+  assert.equal(c.p.status.get("t1")!.state, "working");
+  // A line typed leaves its status on the wait: that wait is still answered already.
+  const asked = c.asks();
+  c.p.event("agent.screen", { tileId: "hm:t1", state: "permission" });
+  const replied = c.answer(asked, { text: "use the staging database" }).catch((e: ApiError) => e);
+  await new Promise(setImmediate);
+  t.mock.timers.tick(TAKEN_MS);
+  assert.equal(((await replied) as ApiError).code, "TIMEOUT");
+  assert.equal(c.p.status.get("t1")!.since, asked, "still that wait");
+  const again = c.answer(asked, { text: "use the staging database" }).catch((e: ApiError) => e);
+  await new Promise(setImmediate);
+  assert.equal(c.writes.length, 2, "typed once");
+  t.mock.timers.tick(TAKEN_MS);
+  assert.deepEqual(await again, { answered: false });
 });
 
 test("an answer holds its terminal until its last key is in: another answer then types nothing, and a program's message goes in after it, never held as a draft of the person's", async () => {
