@@ -608,6 +608,11 @@ as Allow/Deny (§11.1), and the reading list, tables, links, `dir=auto`, the com
   spec/needs.md 0.8. Open: the wait still listed after "Interrupted" is not reproduced by the
   stand-in (an early key, then Esc on the chooser, clears it); it needs that tile's status and
   screen.
+- Probable cause of the lost Allows on the 11 Oct build (before 8934cdc), from the web tile's
+  reading of it: it typed `1` only when the answer's `since` matched the agent's current status
+  exactly, and otherwise returned `{answered: false}`, typed nothing, showed nothing, and audited
+  it ok. That build had no Notification hook. Which branch returned without typing is unproven,
+  but a `since` mismatch is the likeliest cause. How the hook path stands with it: §11.1b.
 
 *Done (2026-10-12):*
 - The probe. `1` allows on Claude 2.1.296's chooser, with its kitty keyboard on and off (a pty
@@ -718,6 +723,15 @@ changes. The design:
   working, Esc or Ctrl+C ends the turn, `PostToolUse` or `PermissionDenied` resolves it), or the
   hook's connection closes, or the tile goes. An answer after that is `{answered: false}`. Holding
   the hook changes nothing on the screen: its chooser is drawn and answered as before.
+- **The `since` mismatch (§11.1's probable cause).** The held wait is still named by tile and
+  `since`, not by a request id. What the hook path changes is that the `since` holds still while
+  the hook is held: a status the hooks report is not moved by a screen reading, and anything that
+  would move it (working, another kind) lets the hook go. Checked on 09cec1e with the status store:
+  the hook landing after the screen read Claude's chooser keeps the `since` (1003, then 1003). Only a
+  waiting rule that `says` (Claude's trust and settings screens, not its permission chooser) moves
+  it (1003, then 1004). A phone answering with an older `since` still gets `{answered: false}`,
+  audited `, not answered`. To name the wait by its `request` instead, list it with the need and
+  let `agent.answer` take it; not built.
 - **Where no desktop answers** (a machine with a daemon and no control plane): `agent.await_answer`
   is refused at once, the hook prints nothing, and the agent's own prompt decides.
 - **Memory.** One held hook per waiting tile: 26 MB PSS measured with the app running (67 to 71 MB
