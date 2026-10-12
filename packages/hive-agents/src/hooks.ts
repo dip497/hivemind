@@ -25,6 +25,7 @@ function emitEnv(entry: AgentHookEntry | undefined): Record<string, string> {
     [EVENT_ENV.event]: entry.emit,
     ...(entry.outcome ? { [EVENT_ENV.outcome]: entry.outcome } : {}),
     ...(entry.kind ? { [EVENT_ENV.kind]: entry.kind } : {}),
+    ...(entry.answer ? { [EVENT_ENV.answer]: "1" } : {}),
   };
 }
 

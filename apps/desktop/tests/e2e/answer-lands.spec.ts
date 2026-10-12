@@ -21,13 +21,13 @@ test.afterEach(async () => {
 });
 
 /** The desktop, with the stand-in as its agent, and the one it started. */
-async function started(late = 2): Promise<{ desktop: Page; repo: string; tile: string; log: () => string; deaf: string; asking: () => Promise<{ state: string; since: number; waiting?: unknown }> }> {
+async function started(late = 2, held = false): Promise<{ desktop: Page; repo: string; tile: string; log: () => string; deaf: string; asking: () => Promise<{ state: string; since: number; waiting?: unknown }> }> {
   const repo = path.join(root, "api");
   fs.mkdirSync(repo);
   execSync("git init -q", { cwd: repo });
   const home = path.join(root, "home");
   fs.mkdirSync(home);
-  const env = chooserAgent(root);
+  const env = chooserAgent(root, { held });
   const desktop = await person(root, "desktop", repo, apps, { ...env, CHOOSER_LATE: String(late), HIVEMIND_SHELL_ENV: "0", HOME: home, ...(process.env.CHOOSER_TRACE ? { CHOOSER_TRACE: process.env.CHOOSER_TRACE } : {}) });
   await desktop.evaluate(() => window.hive.settingsSet("agents.defaultAgent", "chooser"));
   await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:shortcut", { detail: "agent" })));
@@ -101,4 +101,37 @@ test("an Allow its chooser does not take is not confirmed, and is never typed ag
   }
   await desktop.waitForTimeout(3_000);
   expect(log()).toBe("ignored 1\n");
+});
+
+/** The stand-in asked, as one whose hook carries the answer: it and the wait it waits on. */
+async function heldAsk(): Promise<Awaited<ReturnType<typeof started>> & { since: number }> {
+  const at = await started(2, true);
+  await at.desktop.evaluate((t) => window.hive.ptyWrite(`hm:${t}`, "perm\r"), at.tile);
+  let since = 0;
+  await expect.poll(async () => { const a = await at.asking(); since = a.since; return a.state; }, { timeout: 20_000, intervals: [20] }).toBe("waiting");
+  return { ...at, since };
+}
+
+test("an Allow for an agent whose hook carries the answer, given the moment it asks, is printed by its hook and nothing is typed", async () => {
+  test.setTimeout(120_000);
+  const { desktop, tile, log, asking, since } = await heldAsk();
+  expect(await desktop.evaluate(([t, s]) => window.hive.agentAnswer(t, s, { decision: "allow" }), [tile, since] as const)).toEqual({ answered: true });
+  await expect.poll(log, { timeout: 15_000 }).toBe('drawn\nhook said {"decision":{"behavior":"allow"}}\n');
+  await expect.poll(async () => (await asking()).state, { timeout: 20_000 }).not.toBe("waiting");
+});
+
+test("a line for an agent whose hook carries the answer denies through its hook, the line its reason", async () => {
+  test.setTimeout(120_000);
+  const { desktop, tile, log, since } = await heldAsk();
+  expect(await desktop.evaluate(([t, s]) => window.hive.agentAnswer(t, s, { text: "use the staging database" }), [tile, since] as const)).toEqual({ answered: true });
+  await expect.poll(log, { timeout: 15_000 }).toBe('drawn\nhook said {"decision":{"behavior":"deny","message":"use the staging database"}}\n');
+});
+
+test("answered at its own chooser first, the hook that carries the answer is let go, and an answer after does nothing", async () => {
+  test.setTimeout(120_000);
+  const { desktop, tile, log, since } = await heldAsk();
+  await expect.poll(log, { timeout: 15_000 }).toBe("drawn\n");
+  await desktop.evaluate((t) => window.hive.ptyWrite(`hm:${t}`, "1"), tile);
+  await expect.poll(log, { timeout: 15_000 }).toBe("drawn\ntook 1\nhook let go\n");
+  expect(await desktop.evaluate(([t, s]) => window.hive.agentAnswer(t, s, { decision: "allow" }), [tile, since] as const)).toMatchObject({ answered: false });
 });

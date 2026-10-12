@@ -38,7 +38,7 @@ export const AGENT_EVENT_METHOD = "agent.event";
 
 /** The script an `emit` entry runs, and the environment that tells it what to report. */
 export const EVENT_HOOK = "event";
-export const EVENT_ENV = { event: "HIVE_EVENT", outcome: "HIVE_EVENT_OUTCOME", kind: "HIVE_EVENT_KIND" } as const;
+export const EVENT_ENV = { event: "HIVE_EVENT", outcome: "HIVE_EVENT_OUTCOME", kind: "HIVE_EVENT_KIND", answer: "HIVE_EVENT_ANSWER" } as const;
 
 /** Every canonical event an agent's hooks can produce: its `emit` entries, and what the
  *  scripts it ships declare they report. */

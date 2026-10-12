@@ -105,8 +105,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
-                  "timeout": 10
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 3600
                 }
               ]
             }
@@ -315,8 +315,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
-                  "timeout": 10
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 3600
                 }
               ]
             }
@@ -544,8 +544,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
-                  "timeout": 10
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 3600
                 }
               ]
             }
@@ -753,8 +753,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
-                  "timeout": 10
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 3600
                 }
               ]
             }
@@ -962,8 +962,8 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
-                  "timeout": 10
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "timeout": 3600
                 }
               ]
             }

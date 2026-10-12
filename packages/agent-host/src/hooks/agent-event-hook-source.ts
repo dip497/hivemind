@@ -6,6 +6,8 @@
  * Self-contained CommonJS with no dependencies, run as `<exec> hook.cjs <socket>`. It sends
  * one `agent.event` notification (spec/hook-protocol.md) and always exits 0: a missing socket,
  * tile or event, or an unreadable payload, sends nothing (or what it can) and the agent goes on.
+ * An entry that answers (`answer:`) then asks the host for the answer and prints it; nothing when
+ * there is none.
  */
 import { EVENT_ENV } from "@hivemind/agents";
 
@@ -37,11 +39,39 @@ process.stdin.on("end", () => {
   }
   let settled = false;
   const fin = () => { if (settled) return; settled = true; done(); };
-  const t = setTimeout(fin, 1500); if (t.unref) t.unref();
+  const lines = [{ jsonrpc: "2.0", method: "agent.event", params: out }];
+  // An entry that answers waits for the answer, however long: the agent's own prompt runs meanwhile.
+  const answers = ${env("answer")} === "1";
+  if (answers) {
+    const ask = { callerTile: tileId, hook: e.hook_event_name, tool: e.tool_name, input: e.tool_input };
+    if (out.agentId) ask.agentId = out.agentId;
+    lines.push({ jsonrpc: "2.0", id: "init", method: "initialize", params: { token: env.HCP_TOKEN || "" } });
+    lines.push({ jsonrpc: "2.0", id: "answer", method: "agent.await_answer", params: ask });
+  } else {
+    const t = setTimeout(fin, 1500); if (t.unref) t.unref();
+  }
   try {
     const c = net.connect(sock, () => {
-      try { c.write(JSON.stringify({ jsonrpc: "2.0", method: "agent.event", params: out }) + "\\n"); } catch (x) {}
-      try { c.end(); } catch (x) {}
+      try { c.write(lines.map((l) => JSON.stringify(l) + "\\n").join("")); } catch (x) {}
+      if (!answers) try { c.end(); } catch (x) {}
+    });
+    let buf = "";
+    c.setEncoding("utf8");
+    c.on("data", (d) => {
+      buf += d;
+      let nl;
+      while ((nl = buf.indexOf("\\n")) >= 0) {
+        let m = null;
+        try { m = JSON.parse(buf.slice(0, nl)); } catch (x) {}
+        buf = buf.slice(nl + 1);
+        if (!m || m.id !== "answer") continue;
+        const said = m.result && m.result.stdout;
+        if (settled) return;
+        settled = true;
+        if (typeof said === "string" && said) process.stdout.write(said, () => done());
+        else done();
+        return;
+      }
     });
     c.on("error", fin);
     c.on("close", fin);

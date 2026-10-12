@@ -1,4 +1,4 @@
-# Needs you (0.8)
+# Needs you (0.9)
 
 What waits on the person (M5, design §9.2 "Home: Needs you"): each agent waiting on them, in the
 workspaces one of their devices holds, as their phone lists it. The device that runs the agents
@@ -120,6 +120,19 @@ typed, the call fails `TIMEOUT` and the wait is not recorded as answered. When t
 its screen has not moved on 3 s later, the call fails `TIMEOUT` too, but the wait is recorded as
 answered: a screen is read on a change only and may report seconds late, so the answer is not
 confirmed, never failed, and answering that wait again types nothing.
+
+An agent whose manifest says its hook can carry the answer (an `emit: input.requested` entry with
+`answer:`, 0.9; Claude Code's `PermissionRequest`) is answered there instead, and nothing is typed:
+its hook holds until the answer, which it prints, filled from the entry. `{ "decision" }` on a
+permission prints its `allow` or `deny`, and `{ "text" }` on a permission denies it with the line as
+the reason (`{message}`). On a question `{ "choice": <n> }` prints its `choose` with option `n`'s
+label, and `{ "text" }` prints it with the line, set in the tool's input (`{input}`) at `chosen`,
+keyed by the question's text. A question with several questions or answers still takes a line.
+It answers `{ "answered": true }` once the hook has the answer. The hook holds while the agent's
+status waits with that `since`: answered at the agent's own prompt (a key there, Esc, its tool run
+or refused), or its turn ended, it prints nothing and the answer after is `{ "answered": false }`.
+A subagent's request, a tool the entry `leave`s to the agent's own prompt, and a machine where no
+desktop answers are not held: the agent's own prompt decides, and answers are typed as above.
 
 The device that runs the agent is the one asked, and a phone sends an answer once, never again
 after a reconnect. When the device does not say within 10 s whether it landed (it may have), the

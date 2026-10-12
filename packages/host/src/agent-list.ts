@@ -66,7 +66,7 @@ export function agentsOf(held: HeldBoard[], statuses: WaitingStatus[], machines:
     if (status.state === "waiting" && status.kind) {
       const held = facts.wait?.(at.tile);
       const wait = held?.kind === status.kind ? held : undefined;
-      const { kind, ...on } = waitOn(at.tile, { kind: status.kind, says: status.says }, facts);
+      const { kind, ...on } = waitOn(at.tile, { kind: status.kind, says: status.says, since: status.since }, facts);
       waiting = {
         kind, ...(status.says ? { says: status.says } : {}), since: status.since, ...(wait?.plan === undefined ? {} : { plan: wait.plan }), ...on,
         ...(wait?.kind === "approval" ? { approval: { request: wait.request, tool: wait.tool!, summary: wait.summary!, expiresAt: wait.expiresAt! } } : {}),

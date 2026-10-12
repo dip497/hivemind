@@ -293,6 +293,25 @@ function validateHome(raw: unknown): AgentHome {
  *  it never writes the command line, and a name that is not one of ours is dropped when the
  *  document is rendered — so the worst a hostile manifest can do is ask for a script we
  *  wrote. What it does buy is the control plane, which the review says out loud. */
+const HOOK_ANSWER_KEYS = new Set(["allow", "deny", "choose", "asks", "chosen", "leave"]);
+const ASKS_KEYS = ["list", "question", "options", "label"] as const;
+
+function validateHookAnswer(raw: unknown, at: string): void {
+  req(isObj(raw), `${at} must be a map`);
+  const a = raw as Record<string, unknown>;
+  for (const k of Object.keys(a)) req(HOOK_ANSWER_KEYS.has(k), `${at}: unknown key "${k}"`);
+  const printed = (k: string) => req(isObj(a[k]) && JSON.stringify(a[k]).length <= 2000, `${at}.${k} must be a small map: what the hook prints`);
+  printed("allow");
+  printed("deny");
+  const chooses = a.choose !== undefined || a.asks !== undefined || a.chosen !== undefined;
+  if (chooses) {
+    printed("choose");
+    req(isObj(a.asks) && ASKS_KEYS.every((k) => typeof (a.asks as Record<string, unknown>)[k] === "string"), `${at}.asks must name ${ASKS_KEYS.join(", ")} in the tool's input`);
+    req(typeof a.chosen === "string" && a.chosen.length > 0 && a.chosen.length <= 100, `${at}.chosen must name where the answers go in the tool's input`);
+  }
+  if (a.leave !== undefined) req(Array.isArray(a.leave) && a.leave.length <= 20 && a.leave.every((t) => typeof t === "string" && t.length > 0 && t.length <= 100), `${at}.leave must be a list of tool names`);
+}
+
 function validateHooks(raw: unknown): AgentHooks {
   req(isObj(raw), "hooks must be a map");
   const m = raw as Record<string, unknown>;
@@ -312,6 +331,10 @@ function validateHooks(raw: unknown): AgentHooks {
       if (entry.timeout !== undefined) req(typeof entry.timeout === "number" && entry.timeout > 0 && entry.timeout <= 604800, `hooks.events.${event}[${i}].timeout must be seconds`);
       if (entry.matcher !== undefined) req(typeof entry.matcher === "string" && entry.matcher.length <= 200, `hooks.events.${event}[${i}].matcher must be a string`);
       if (entry.when !== undefined) req(entry.when === "supervised", `hooks.events.${event}[${i}].when: only "supervised"`);
+      if (entry.answer !== undefined) {
+        req(entry.emit === "input.requested", `${at}.answer is for emit: input.requested`);
+        validateHookAnswer(entry.answer, `${at}.answer`);
+      }
       return entry as unknown as AgentHookEntry;
     });
     events[event] = Array.isArray(spec) ? list : list[0]!;
@@ -729,6 +752,8 @@ export function agentDisclosures(def: AgentProviderDef): string[] {
   if (def.launch?.hcp && (def.hooks || def.assets?.length)) {
     out.push("reports its status and approval prompts to Hivemind through its own hooks, which can also read and type into your other tiles");
   }
+  const answers = Object.values(def.hooks?.events ?? {}).flat().some((e) => e.answer);
+  if (answers) out.push("lets you allow or deny what it asks from your other devices, through its own hooks");
   // A CLI that gates its hooks behind a per-hook review, handed its trust for ours alone.
   if (def.hooks?.trust) {
     out.push(`tells ${def.bin} its hooks for Hivemind are trusted, so it does not ask about them; it still asks about any other hook`);

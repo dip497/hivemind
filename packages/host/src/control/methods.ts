@@ -16,6 +16,7 @@ import { mintId, toPtyId as ptyId, toBareId as bareOf } from "@hivemind/workspac
 import type { AgentRead, AgentSessions, TileOpened } from "@hivemind/workspace-api/agents";
 import { labelOf as labelIn } from "./names.js";
 import { agentById, agentLaunch, agentOption, cleanName, isSessionId, nextOrdinal, spawnableAgents, workerAgents, type AgentProviderDef, type SpawnOptions } from "@hivemind/agents";
+import { hookAnswerOf, hookAsks, printedAnswer, type HookReply } from "@hivemind/agents/node";
 import { canListSessions, listSessions } from "@hivemind/agents/node";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
 import { createToolRegistry, type ToolPluginContribution } from "@hivemind/core/tool-registry";
@@ -611,6 +612,27 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         });
       }
 
+      case "agent.await_answer": {
+        // The agent's own hook holds what it asks for the answer (`agent.answer`) while the agent
+        // waits on it; printing nothing leaves it to the agent's own prompt. A subagent's is its own.
+        const tile = tileOf(p.callerTile);
+        const answer = tile ? hookAnswerOf(agentById(providerOf(tile)), String(p.hook ?? "")) : undefined;
+        const tool = typeof p.tool === "string" ? p.tool : "";
+        if (!tile || !answer || p.agentId != null || answer.leave?.includes(tool)) return {};
+        const asks = hookAsks(answer, p.input);
+        return await new Promise((resolve) => {
+          const wait = deps.waits.hold(tile, { tool, ...(asks ? { asks } : {}), chooses: !!answer.choose }, (decision, feedback, choice) => {
+            if (!decision) return resolve({});
+            const reply: HookReply = asks ? (choice === undefined ? { line: feedback ?? "" } : { choice }) : { decision, ...(feedback ? { message: feedback } : {}) };
+            const stdout = printedAnswer(answer, p.input, reply);
+            resolve(stdout ? { stdout } : {});
+          });
+          if (!wait) return resolve({});
+          if (call.signal?.aborted) return deps.waits.drop(wait.request);
+          call.signal?.addEventListener("abort", () => deps.waits.drop(wait.request), { once: true });
+        });
+      }
+
       case "review.open": {
         // The calling agent waits on a person's review of its plan: a plan wait, answered where
         // every plan is (beside the agent in each window, `agent.answer`). The decision it comes
@@ -639,7 +661,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       }
 
       default:
-        throw new ApiError("UNKNOWN_METHOD", `unknown method: ${method} (the agent channel carries agent.reply, agent.report, agent.await_approval and review.open; drive the rest with \`hive ctl\`)`);
+        throw new ApiError("UNKNOWN_METHOD", `unknown method: ${method} (the agent channel carries agent.reply, agent.report, agent.await_approval, agent.await_answer and review.open; drive the rest with \`hive ctl\`)`);
     }
   };
 

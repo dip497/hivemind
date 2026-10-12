@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { hookSignals, parseAgentEvent } from "../src/events.js";
 import { renderHookEvents } from "../src/hooks.js";
-import { defFromManifest } from "../src/manifest.js";
+import { agentDisclosures, defFromManifest } from "../src/manifest.js";
 import type { LaunchRequest } from "../src/runtime.js";
 import type { AgentHooks } from "../src/types.js";
 import YAML from "yaml";
@@ -46,6 +46,53 @@ describe("manifest emit entries", () => {
       { Stop: { hook: "event" } },
     ];
     for (const events of bad) expect(() => defFromManifest(manifest(events)), JSON.stringify(events)).toThrow();
+  });
+});
+
+/** What Claude Code's PermissionRequest hook prints to answer, as its entry declares it. */
+const ANSWER = {
+  allow: { hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "allow" } } },
+  deny: { hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "deny", message: "{message}" } } },
+  choose: { hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "allow", updatedInput: "{input}" } } },
+  asks: { list: "questions", question: "question", options: "options", label: "label" },
+  chosen: "answers",
+  leave: ["ExitPlanMode"],
+};
+
+describe("an entry that answers what it reports", () => {
+  test("is declared on the event that asks, and kept whole", () => {
+    const def = defFromManifest(manifest({ PermissionRequest: { emit: "input.requested", kind: "permission", timeout: 3600, answer: ANSWER } }));
+    expect(def.hooks!.events.PermissionRequest).toEqual({ emit: "input.requested", kind: "permission", timeout: 3600, answer: ANSWER });
+    const { choose: _c, asks: _a, chosen: _ch, leave: _l, ...decides } = ANSWER;
+    expect(() => defFromManifest(manifest({ PermissionRequest: { emit: "input.requested", answer: decides } })), "allow and deny alone").not.toThrow();
+  });
+
+  test("refused: on another event or a script, without allow or deny, a print that is no map, choosing without reading the questions, a tool list that is not names, a key it does not know", () => {
+    const { choose: _c, ...noChoose } = ANSWER;
+    const bad: Array<[string, Record<string, unknown>]> = [
+      ["another event", { Stop: { emit: "turn.ended", answer: ANSWER } }],
+      ["a script", { PermissionRequest: { hook: "approve", answer: ANSWER } }],
+      ["no deny", { PermissionRequest: { emit: "input.requested", answer: { allow: ANSWER.allow } } }],
+      ["a string", { PermissionRequest: { emit: "input.requested", answer: { ...ANSWER, allow: "{\"behavior\":\"allow\"}" } } }],
+      ["choose, no asks", { PermissionRequest: { emit: "input.requested", answer: { ...ANSWER, asks: undefined } } }],
+      ["choose, nowhere to set it", { PermissionRequest: { emit: "input.requested", answer: { ...ANSWER, chosen: "" } } }],
+      ["asks without choose", { PermissionRequest: { emit: "input.requested", answer: noChoose } }],
+      ["leave", { PermissionRequest: { emit: "input.requested", answer: { ...ANSWER, leave: "ExitPlanMode" } } }],
+      ["unknown", { PermissionRequest: { emit: "input.requested", answer: { ...ANSWER, always: ANSWER.allow } } }],
+    ];
+    for (const [why, events] of bad) expect(() => defFromManifest(manifest(events)), why).toThrow();
+  });
+
+  test("is disclosed: an answer from another device allows or denies what it asks", () => {
+    const says = (events: Record<string, unknown>) => agentDisclosures(defFromManifest(manifest(events))).filter((l) => /allow or deny/.test(l));
+    expect(says({ PermissionRequest: { emit: "input.requested", kind: "permission", answer: ANSWER } })).toHaveLength(1);
+    expect(says({ PermissionRequest: { emit: "input.requested", kind: "permission" } })).toHaveLength(0);
+  });
+
+  test("runs the generic script told to wait for the answer", () => {
+    const hooks: AgentHooks = { arg: "--settings", events: { PermissionRequest: { emit: "input.requested", kind: "permission", timeout: 3600, answer: ANSWER } } };
+    const cmd = ((renderHookEvents(hooks, req())!.PermissionRequest![0] as { hooks: Array<{ command: string }> }).hooks[0]!).command;
+    expect(cmd).toBe("env HIVEMIND_TILE='tile-1' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' ELECTRON_RUN_AS_NODE=1 '/app/hive' '/ud/hcp-event-hook.cjs' '/ud/hcp.sock'");
   });
 });
 
