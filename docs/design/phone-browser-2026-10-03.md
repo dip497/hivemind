@@ -729,9 +729,9 @@ changes. The design:
   would move it (working, another kind) lets the hook go. Checked on 09cec1e with the status store:
   the hook landing after the screen read Claude's chooser keeps the `since` (1003, then 1003). Only a
   waiting rule that `says` (Claude's trust and settings screens, not its permission chooser) moves
-  it (1003, then 1004). A phone answering with an older `since` still gets `{answered: false}`,
-  audited `, not answered`. To name the wait by its `request` instead, list it with the need and
-  let `agent.answer` take it; not built.
+  it (1003, then 1004). So `since` is the held wait's revision: a phone answering with an older
+  one gets `{answered: false}`, audited `, not answered`, which is §11.1's first guard. No request
+  id is needed (decided 2026-10-12).
 - **Where no desktop answers** (a machine with a daemon and no control plane): `agent.await_answer`
   is refused at once, the hook prints nothing, and the agent's own prompt decides.
 - **Memory.** One held hook per waiting tile: 26 MB PSS measured with the app running (67 to 71 MB
