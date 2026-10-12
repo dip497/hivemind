@@ -1,7 +1,8 @@
 //! An agent's terminal, watched from the phone (watching.rs, workspace.rs; docs/design/phone-app-
 //! 2026-10-02.md §5.3): its screen drawn by the core at the size the session took; who holds its
-//! keyboard told by name, and none once this phone holds it; what the person types goes in as it
-//! is, in order, the keyboard asked for first and keys a moment apart; its end told with its code.
+//! keyboard told by name, and none once this phone holds it; what it takes of the output is
+//! acknowledged; what the person types goes in as it is, in order, the keyboard asked for first and
+//! keys a moment apart; a fit asked for, until it is let go; its end told with its code.
 //! The watch goes on across a dropped connection and the background, its screen drawn anew on each
 //! connection, and ends only with the session; at once, told which, when there is none to watch,
 //! the device refuses it, or does not hold its workspace. A watch stopped lets go of the terminal.
@@ -63,7 +64,7 @@ async fn a_watched_terminal_is_drawn_at_its_size_and_typed_into_as_the_person_in
         let first = frame.changed(0).next().map(|(_, line)| line.text.clone());
         (frame.cols, frame.rows, first)
     };
-    let screen = (100, 30, Some("Hello from the agent".to_string()));
+    let screen = (100, 30, Some("Hello from the agent — ready".to_string()));
     assert!(
         until(Duration::from_secs(10), || drawn() == screen).await,
         "{:?}",
@@ -76,6 +77,8 @@ async fn a_watched_terminal_is_drawn_at_its_size_and_typed_into_as_the_person_in
     );
 
     watching.type_text("ls -la".into());
+    watching.fit(Some((48, 30)));
+    watching.fit(None);
     let keys = ["Enter", "down", "down", "ctrl-c"];
     watching.type_keys(keys.map(String::from).to_vec());
     let ended = || !told.ended.lock().unwrap().is_empty();
@@ -83,11 +86,28 @@ async fn a_watched_terminal_is_drawn_at_its_size_and_typed_into_as_the_person_in
     assert_eq!(*told.ended.lock().unwrap(), [Ended::Exited(3)]);
     let session = format!("hm:{TILE}");
     let write = |data: &str| json!({ "method": "terminal.write", "params": [session, data] });
+    // Paced: it acknowledges the screen it took, in UTF-16 units as the device counts them. Its
+    // acknowledgements go out as frames come in, whatever is typed meanwhile.
+    assert_eq!(desk.opens.lock().unwrap()[0]["acks"], true);
+    let (acks, typed): (Vec<_>, Vec<_>) = desk
+        .told
+        .lock()
+        .unwrap()
+        .iter()
+        .cloned()
+        .partition(|(_, notice)| notice["method"] == "terminal.ack");
+    let screen = "Hello from the agent — ready".encode_utf16().count();
     assert_eq!(
-        desk.notices(),
+        acks.into_iter().map(|(_, n)| n).collect::<Vec<_>>(),
+        [json!({ "method": "terminal.ack", "params": [session, screen] })]
+    );
+    assert_eq!(
+        typed.iter().map(|(_, n)| n.clone()).collect::<Vec<_>>(),
         [
             json!({ "method": "terminal.keyboard.ask", "params": [session] }),
             write("ls -la"),
+            json!({ "method": "terminal.fit", "params": [session, 48, 30] }),
+            json!({ "method": "terminal.fit", "params": [session] }),
             write("\r"),
             write("\x1b[B"),
             write("\x1b[B"),
@@ -95,14 +115,7 @@ async fn a_watched_terminal_is_drawn_at_its_size_and_typed_into_as_the_person_in
         ]
     );
     // Three gaps of 40 ms between the four keys, give or take how late each one came.
-    let told_at: Vec<_> = desk
-        .told
-        .lock()
-        .unwrap()
-        .iter()
-        .map(|(at, _)| *at)
-        .collect();
-    assert!(told_at[5] - told_at[2] >= Duration::from_millis(60));
+    assert!(typed[7].0 - typed[4].0 >= Duration::from_millis(60));
     // Given to this phone, its keyboard is the person's own.
     assert_eq!(told.keyboards.lock().unwrap().last(), Some(&None));
 }
@@ -123,7 +136,12 @@ async fn a_watch_stopped_lets_go_of_the_terminal_even_once_the_person_typed() {
         told.clone(),
     );
     watching.type_text("y".into());
-    assert!(until(Duration::from_secs(10), || desk.notices().len() == 2).await);
+    let typed = || {
+        desk.notices()
+            .iter()
+            .any(|n| n["method"] == "terminal.write")
+    };
+    assert!(until(Duration::from_secs(10), typed).await);
     watching.stop();
     assert!(until(Duration::from_secs(5), || desk.left.load(SeqCst) == 1).await);
     // Its connection is the phone's still, for all else.

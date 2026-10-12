@@ -1,10 +1,11 @@
-// One agent (the Android app's AgentScreen): its chat; what it waits on as a card above the reply
-// box, where the thumb is; Stop while it is in a turn. Its terminal is B4's.
+// One agent (the Android app's AgentScreen): its chat, or its terminal a tap away; what it waits on
+// as a card above the reply box, where the thumb is; Stop while it is in a turn.
 
 import type { App } from "./app.js";
 import { answers } from "./answers.js";
 import { Chat } from "./chat.js";
 import { Ask, composer, h, icon, pill, say } from "./dom.js";
+import { TerminalView } from "./terminal.js";
 import type { Agent, Overview } from "./types.js";
 import { NOTICES, ago, kindLabel, stateLabel, where } from "./words.js";
 
@@ -20,6 +21,11 @@ export class AgentScreen {
   private readonly waits = h("div", { "data-waits": "" });
   private readonly gone = h("p", { class: "quiet", hidden: true }, NOTICES.notRunning);
   private readonly message: HTMLTextAreaElement;
+  private readonly composing: HTMLFormElement;
+  private readonly term = new TerminalView();
+  private readonly flip = pill("Terminal", () => this.showTerminal(!this.terminal), "compact", { "data-view-toggle": "" });
+  /** Whether its terminal shows, rather than its chat. */
+  private terminal = false;
   private tile: string | null = null;
   private agent: Agent | null = null;
   private waitSig = "";
@@ -30,13 +36,14 @@ export class AgentScreen {
     const back = h("button", { type: "button", class: "back", "aria-label": "Back", "data-back": "" }, icon("back"));
     back.addEventListener("click", () => app.back());
     this.el.append(
-      h("header", { class: "backbar" }, back, h("div", { class: "what" }, this.title, h("p", { class: "sub" }, this.dot, this.sub)), this.stop,
+      h("header", { class: "backbar" }, back, h("div", { class: "what" }, this.title, h("p", { class: "sub" }, this.dot, this.sub)), this.flip, this.stop,
         pill("Close", () => this.agent && this.closing.ask(`Close ${this.agent.agent}? It stops, and its tile closes on ${app.computer()}.`), "compact", { "data-close": "" })),
       this.gone,
       this.body,
       this.dock);
     const message = composer("Message", (text) => (this.agent ? app.send(this.agent, text) : Promise.resolve(false)), { "data-message": "" });
     this.message = message.querySelector("textarea")!;
+    this.composing = message;
     this.dock.append(this.closing.el, this.waits, message);
   }
 
@@ -49,8 +56,10 @@ export class AgentScreen {
     this.waitSig = "";
     this.waits.replaceChildren();
     this.chat = new Chat();
-    this.body.replaceWith(this.chat.el);
-    this.body = this.chat.el;
+    this.terminal = false;
+    this.place(this.chat.el);
+    this.composing.hidden = false;
+    say(this.flip, "Terminal");
     if (o) this.show(o);
   }
 
@@ -59,6 +68,7 @@ export class AgentScreen {
     this.closing.el.hidden = true;
     this.unfollow?.();
     this.unfollow = null;
+    this.term.unwatch();
     this.tile = null;
   }
 
@@ -87,8 +97,29 @@ export class AgentScreen {
       else {
         chat.ended("It keeps no conversation the phone can read.");
         this.unfollow = () => {};
+        // Nothing to read: its terminal is what there is.
+        this.showTerminal(true);
       }
     }
+    this.term.retry();
+  }
+
+  /** Its terminal, or its chat: the terminal is watched only while it shows. */
+  private showTerminal(on: boolean): void {
+    const a = this.agent;
+    if (on === this.terminal || !a || !this.chat) return;
+    this.terminal = on;
+    say(this.flip, on ? "Chat" : "Terminal");
+    this.composing.hidden = on;
+    this.place(on ? this.term.el : this.chat.el);
+    if (on) this.term.watch(this.app, a.workspace, a.tile);
+    else this.term.unwatch();
+  }
+
+  private place(el: HTMLElement): void {
+    if (this.body === el) return;
+    this.body.replaceWith(el);
+    this.body = el;
   }
 
   /** What it waits on, as a card above the reply box: made again only for another wait. */

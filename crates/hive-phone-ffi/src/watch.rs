@@ -129,6 +129,16 @@ impl Watch {
         self.0.type_keys(keys)
     }
 
+    /// Size the terminal to `cols` × `rows` for this phone, until it is watched no more.
+    pub fn fit(&self, cols: u16, rows: u16) {
+        self.0.fit(Some((cols, rows)))
+    }
+
+    /// Back to the size it had before it was fitted.
+    pub fn unfit(&self) {
+        self.0.fit(None)
+    }
+
     pub fn stop(&self) {
         self.0.stop()
     }

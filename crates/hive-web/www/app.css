@@ -206,7 +206,36 @@ button { cursor: pointer; }
   flex: none; display: flex; flex-direction: column; gap: 8px;
   padding: 8px 12px calc(10px + env(safe-area-inset-bottom));
 }
+/* Under a terminal, with nothing waiting: the key bar is the bottom. */
+.dock:not(:has(> :not([hidden]):not(:empty))) { display: none; }
 .waiting { padding: 12px 12px 12px 18px; display: flex; flex-direction: column; gap: 10px; }
+
+/* A terminal: the core's screen on a canvas, drawn as the desktop's terminal looks, and its keys. */
+.term { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #1a1c1f; }
+.term-view { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; }
+.term-view canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* Its lines in sight as text, for a screen reader: the canvas draws them. */
+.term-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: pre; }
+/* Where the keyboard types: in place, unseen; 16px, so a phone does not zoom to it. */
+.term-input {
+  position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0;
+  resize: none; font-size: 16px; caret-color: transparent;
+}
+.term-ended {
+  position: absolute; left: 12px; right: 12px; bottom: 12px; margin: 0; padding: 8px 12px; border-radius: 10px;
+  background: var(--raised); color: var(--text2); font-size: 13px; text-align: center;
+}
+.term-keys {
+  flex: none; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--line);
+}
+.term-key {
+  flex: none; min-width: 44px; height: 40px; padding: 0 10px; border: 0; border-radius: 10px;
+  background: var(--raised); font: 500 14px var(--mono); touch-action: manipulation;
+}
+.term-key:active { background: var(--line2); }
+.term-key[aria-pressed="true"] { background: var(--text); color: var(--canvas); }
+.term-key[data-fit] { margin-left: auto; font-family: var(--sans); }
 .waiting .kind { margin: 0; }
 
 /* Pairing and devices. */

@@ -238,6 +238,11 @@ export interface WorkspaceNotices {
   /** Stop reading the session's output while the client catches up; a pause lasts a moment
    *  unless it is asked for again. */
   "terminal.flow": (tile: string, paused: boolean) => void;
+  /** A client that opened it with `acks` has taken `taken` of its output, in UTF-16 units, all
+   *  told: it is sent no more than a window ahead of that. */
+  "terminal.ack": (tile: string, taken: number) => void;
+  /** Size it to the client's screen until the client goes; no size: back to the one it had. */
+  "terminal.fit": (tile: string, cols?: number, rows?: number) => void;
   /** End the session for good. */
   "terminal.close": (tile: string) => void;
   /** The client shows the terminal no more; a session nobody shows is let go of (a daemon keeps

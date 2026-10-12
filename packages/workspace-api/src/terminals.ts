@@ -21,6 +21,8 @@ export interface TerminalOpts {
   attachOnly?: boolean;
   /** With `attachOnly`: a running session only, not one saved before a restart. */
   liveOnly?: boolean;
+  /** The client acknowledges the output it takes (`terminal.ack`), and is paced by it. */
+  acks?: boolean;
 }
 
 /** How a session ended. */

@@ -13,9 +13,11 @@ use iroh::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use tokio::sync::mpsc::Receiver;
+use std::convert::Infallible;
 
-use crate::{devices, failure::Failure, pairing::PairedWith};
+use tokio::sync::mpsc::{Receiver, Sender, UnboundedReceiver};
+
+use crate::{devices, failure::Failure, keys, pairing::PairedWith};
 
 /// The size a phone watches at: a viewer's never changes the session's.
 const COLS: u32 = 80;
@@ -154,17 +156,58 @@ pub enum Watched<'a> {
     Keyboard(Option<&'a Value>),
 }
 
+/// What the phone sends a watched terminal: what the person types, or the size the person fits it
+/// to on the phone (none: the size it had before).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Sent {
+    Typed(String),
+    Fit(Option<(u16, u16)>),
+}
+
+/// What the person does to a watched terminal, as an app says it: text typed as it is, keys by
+/// name (`keys.rs`), or a fit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Input {
+    Text(String),
+    Keys(Vec<String>),
+    Fit(Option<(u16, u16)>),
+}
+
+/// What the person does, in order, for as long as `sent` takes it: keys as their bytes, a moment
+/// apart.
+pub async fn pass_on(inputs: &mut UnboundedReceiver<Input>, sent: Sender<Sent>) -> Infallible {
+    while let Some(input) = inputs.recv().await {
+        let sends = match input {
+            Input::Text(text) => vec![Sent::Typed(text)],
+            Input::Keys(keys) => keys
+                .iter()
+                .map(|k| Sent::Typed(keys::bytes(k).to_string()))
+                .collect(),
+            Input::Fit(size) => vec![Sent::Fit(size)],
+        };
+        for (i, one) in sends.into_iter().enumerate() {
+            if i > 0 {
+                n0_future::time::sleep(keys::GAP).await;
+            }
+            let _ = sent.send(one).await;
+        }
+    }
+    std::future::pending().await
+}
+
 /// Watch the terminal of `tile` in `workspace`, on `connection` to the device that holds it: `out`
 /// is handed its size and its screen, then each piece of its output, and its size and who holds
-/// its keyboard as they change. With `typed`, what the person types goes into it as it is, once
-/// its keyboard is asked for, as they first type: one someone else holds is asked of them, and
-/// keys wait on nobody (spec/workspace-api.md, "Peers"). How it ended; none when the connection
-/// went first.
+/// its keyboard as they change. Each frame of output taken is acknowledged, so the device sends
+/// no more than its window ahead and, when this falls behind, the screen in place of what it
+/// missed (spec/workspace-api.md, `terminal.ack`). With `sent`, what the person types goes into
+/// it as it is, once its keyboard is asked for, as they first type: one someone else holds is
+/// asked of them, and keys wait on nobody (spec/workspace-api.md, "Peers"); and a fit sizes it,
+/// until the watch ends. How it ended; none when the connection went first.
 pub async fn watch(
     connection: &Connection,
     workspace: &str,
     tile: &str,
-    mut typed: Option<Receiver<String>>,
+    mut sent: Option<Receiver<Sent>>,
     mut out: impl FnMut(Watched<'_>),
 ) -> Result<Option<Ended>> {
     let session = format!("hm:{tile}");
@@ -174,37 +217,50 @@ pub async fn watch(
             "terminal.open",
             json!([{
                 "tileId": session, "tile": tile, "cwd": format!("hive://{workspace}"), "cmd": "",
-                "cols": COLS, "rows": ROWS, "attachOnly": true, "liveOnly": true,
+                "cols": COLS, "rows": ROWS, "attachOnly": true, "liveOnly": true, "acks": true,
             }]),
         )
         .await?;
-    // What is typed goes out while the output comes in. The stream stays open until the watching
-    // ends, and goes with it: the device takes its end as the phone gone.
-    let Workspace {
-        mut send, mut recv, ..
-    } = w;
-    let typing = async {
-        if let Some(typed) = typed.as_mut() {
+    // What is typed and the acknowledgements go out while the output comes in. The stream stays
+    // open until the watching ends, and goes with it: the device takes its end as the phone gone.
+    let Workspace { send, mut recv, .. } = w;
+    let send = tokio::sync::Mutex::new(send);
+    let notify = |method: &str, params: Value| {
+        let notice = json!({ "method": method, "params": params }).to_string();
+        let send = &send;
+        async move { write_frame(&mut *send.lock().await, notice.as_bytes()).await }
+    };
+    let sending = async {
+        if let Some(sent) = sent.as_mut() {
             let mut asked = false;
-            'typing: while let Some(data) = typed.recv().await {
-                let mut notices = vec![];
-                if !std::mem::replace(&mut asked, true) {
-                    notices.push(json!({ "method": "terminal.keyboard.ask", "params": [session] }));
-                }
-                notices.push(json!({ "method": "terminal.write", "params": [session, data] }));
-                for notice in notices {
-                    if write_frame(&mut send, notice.to_string().as_bytes())
-                        .await
-                        .is_err()
-                    {
-                        break 'typing;
+            while let Some(one) = sent.recv().await {
+                let written = match one {
+                    Sent::Typed(data) => {
+                        if !std::mem::replace(&mut asked, true) {
+                            if notify("terminal.keyboard.ask", json!([session]))
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
+                        notify("terminal.write", json!([session, data])).await
                     }
+                    Sent::Fit(Some((cols, rows))) => {
+                        notify("terminal.fit", json!([session, cols, rows])).await
+                    }
+                    Sent::Fit(None) => notify("terminal.fit", json!([session])).await,
+                };
+                if written.is_err() {
+                    break;
                 }
             }
         }
         std::future::pending::<Result<Option<Ended>>>().await
     };
     let watched = async {
+        // The output taken, in UTF-16 units as the device counts it, and how much was told.
+        let (mut taken, mut told) = (0u64, 0u64);
         while let Some(frame) = read_frame(&mut recv).await? {
             // A moment's events come as one frame.
             let events = match serde_json::from_slice::<Value>(&frame)? {
@@ -227,6 +283,7 @@ pub async fn watch(
                 match e.get("event").and_then(Value::as_str) {
                     Some("terminal.data") => {
                         if let Some(data) = params.and_then(|p| p.get(1)).and_then(Value::as_str) {
+                            taken += data.encode_utf16().count() as u64;
                             out(Watched::Output(data));
                         }
                     }
@@ -254,12 +311,16 @@ pub async fn watch(
                     _ => {}
                 }
             }
+            if taken > told {
+                told = taken;
+                notify("terminal.ack", json!([session, taken])).await?;
+            }
         }
         Ok(None)
     };
     tokio::select! {
         watched = watched => watched,
-        never = typing => never,
+        never = sending => never,
     }
 }
 

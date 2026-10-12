@@ -98,7 +98,7 @@ use hive_phone::{
     pairing::{self, Pairing},
     push::{self, PushKeys},
     views,
-    workspace::{self, Reply, Watched},
+    workspace::{self, Reply, Sent, Watched},
 };
 use serde_json::{json, Value};
 
@@ -865,7 +865,7 @@ async fn run(args: Args) -> Result<()> {
                     use tokio::io::AsyncBufReadExt;
                     let mut stdin = tokio::io::BufReader::new(tokio::io::stdin()).lines();
                     while let Ok(Some(line)) = stdin.next_line().await {
-                        if lines.send(format!("{line}\r")).await.is_err() {
+                        if lines.send(Sent::Typed(format!("{line}\r"))).await.is_err() {
                             return;
                         }
                     }

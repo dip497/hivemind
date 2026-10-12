@@ -5,11 +5,12 @@
 //! last changed at, so the app asks only for what changed since the frame it last drew: its text,
 //! with its style runs packed as bytes, never a call per cell.
 
-use std::{
-    collections::VecDeque,
-    sync::{mpsc::Sender, Arc, Mutex},
-    time::{Duration, Instant},
-};
+use std::{collections::VecDeque, sync::Arc, time::Duration};
+
+#[cfg(target_family = "wasm")]
+use n0_future::time::Instant;
+#[cfg(not(target_family = "wasm"))]
+use std::time::Instant;
 
 use alacritty_terminal::{
     event::VoidListener,
@@ -19,10 +20,13 @@ use alacritty_terminal::{
         cell::{Cell, Flags},
         Config, Term, TermMode,
     },
-    vte::ansi::{Color, Processor},
+    vte::ansi::{Color, Processor, Timeout},
 };
 
-use crate::pacing::{self, Paced};
+#[cfg(not(target_family = "wasm"))]
+mod live;
+#[cfg(not(target_family = "wasm"))]
+pub use live::LiveScreen;
 
 /// Lines of scrollback kept.
 pub const SCROLLBACK: usize = 2_000;
@@ -146,7 +150,7 @@ impl Lines {
 /// A terminal's screen, fed its session's output as it comes.
 pub struct Screen {
     term: Term<VoidListener>,
-    parser: Processor,
+    parser: Processor<Begun>,
     /// The start of a sequence told apart, cut off at the end of what came: the rest comes next.
     carry: Vec<u8>,
     /// Since a synchronized update began, when it lapses.
@@ -214,6 +218,13 @@ impl Screen {
             }
         }
         self.emulate(&input[from..]);
+    }
+
+    /// The session's screen sent again whole, as each connection that shows it is sent it: drawn
+    /// in place of what was shown, from a reset.
+    pub fn redraw(&mut self, bytes: &[u8]) {
+        self.feed(RESET);
+        self.feed(bytes);
     }
 
     /// The session took a size (`terminal.size`): every line is new to the app.
@@ -290,7 +301,7 @@ impl Screen {
             self.parser.advance(&mut self.term, piece);
             // A synchronized update begun some other way than told apart: what it holds goes
             // through at once, so nothing waits on a lapse no one keeps.
-            if self.parser.sync_timeout().sync_timeout().is_some() {
+            if self.parser.sync_timeout().pending_timeout() {
                 self.parser.stop_sync(&mut self.term);
             }
             self.account();
@@ -371,88 +382,22 @@ impl Screen {
     }
 }
 
-/// A screen on a thread of its own (§3.5): fed the session's output and size as they come, a frame
-/// published at most every 16 ms, and never half a synchronized update.
-pub struct LiveScreen {
-    fed: Sender<Fed>,
-    newest: Arc<Mutex<Arc<Frame>>>,
-}
+/// A synchronized update the emulator began itself, which `emulate` ends at once: no clock, which
+/// a browser's wasm has none of where the emulator would read it.
+#[derive(Default)]
+struct Begun(bool);
 
-/// What a live screen is fed.
-enum Fed {
-    Output(Vec<u8>),
-    Size(u16, u16),
-}
-
-/// The screen as its thread keeps it.
-struct Painting<F> {
-    screen: Screen,
-    newest: Arc<Mutex<Arc<Frame>>>,
-    drawn: F,
-}
-
-impl<F: Fn(u64)> Paced for Painting<F> {
-    type Input = Fed;
-
-    fn take(&mut self, fed: Fed) {
-        match fed {
-            Fed::Output(bytes) => self.screen.feed(&bytes),
-            Fed::Size(cols, rows) => self.screen.resize(cols, rows),
-        }
+impl Timeout for Begun {
+    fn set_timeout(&mut self, _: Duration) {
+        self.0 = true;
     }
 
-    fn held(&self) -> Option<Instant> {
-        self.screen.held()
+    fn clear_timeout(&mut self) {
+        self.0 = false;
     }
 
-    fn publish(&mut self) {
-        if let Some(frame) = self.screen.frame() {
-            let revision = frame.revision;
-            *self.newest.lock().expect("a frame") = Arc::new(frame);
-            (self.drawn)(revision);
-        }
-    }
-}
-
-impl LiveScreen {
-    /// A blank screen at the size a watch starts at; `drawn` is told each frame's revision, on the
-    /// screen's thread, as the frame is published. The thread ends with the live screen.
-    pub fn start(drawn: impl Fn(u64) + Send + 'static) -> Self {
-        let mut screen = Screen::default();
-        let newest = Arc::new(Mutex::new(Arc::new(
-            screen.frame().expect("a new screen's first frame"),
-        )));
-        let painting = Painting {
-            screen,
-            newest: newest.clone(),
-            drawn,
-        };
-        Self {
-            fed: pacing::spawn("hive-phone screen", painting),
-            newest,
-        }
-    }
-
-    /// More of the session's output.
-    pub fn output(&self, bytes: &[u8]) {
-        let _ = self.fed.send(Fed::Output(bytes.to_vec()));
-    }
-
-    /// The session's screen sent again whole, as it is sent on each connection that shows it:
-    /// drawn in place of what was shown, from a reset, as the desktop draws a session it attaches
-    /// to again.
-    pub fn redraw(&self, bytes: &[u8]) {
-        let _ = self.fed.send(Fed::Output([RESET, bytes].concat()));
-    }
-
-    /// The size the session took.
-    pub fn size(&self, cols: u16, rows: u16) {
-        let _ = self.fed.send(Fed::Size(cols, rows));
-    }
-
-    /// The newest frame published.
-    pub fn newest(&self) -> Arc<Frame> {
-        self.newest.lock().expect("a frame").clone()
+    fn pending_timeout(&self) -> bool {
+        self.0
     }
 }
 

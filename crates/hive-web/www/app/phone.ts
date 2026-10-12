@@ -2,7 +2,7 @@
 // (hive-phone's core) pairs, signs, reads and acts; this keeps one connection to the computer it
 // paired with, dialled again when it drops, and hands the screens what it is told.
 
-import init, { Device, type Host, HomeView, deviceId, pair, readLink, readQr } from "../pkg/hive_web.js";
+import init, { Device, type Host, HomeView, Term, deviceId, pair, readLink, readQr } from "../pkg/hive_web.js";
 import type { Filter } from "./home.js";
 import { deviceKey, get, put, remove } from "./store.js";
 import type { Agent, Held, Others, Overview, Paired, Piece, Reply, Shown, Start, Startable } from "./types.js";
@@ -35,7 +35,8 @@ export class Phone {
   private host: Host | null = null;
   private running = false;
   private wake: (() => void) | null = null;
-  private readonly followed = new Set<Followed>();
+  /** What is followed on the connection, started again on each. */
+  private readonly followed = new Set<Followed | Watched>();
 
   private constructor(
     readonly id: string,
@@ -211,6 +212,22 @@ export class Phone {
 
   /** Follow what `agent` and the person said, from the last of its session, again after each
    *  reconnection: `said` gets each piece, `ended` why it stopped. What it returns stops it. */
+  /** Watch the terminal of `tile` in `workspace`, again after each reconnection: its screen is
+   *  `term`'s, `changed` when it may have changed, `ended` how it ended. `stop` stops it. */
+  watch(workspace: string, tile: string, changed: () => void, ended: (why: string) => void): { term: Term; stop: () => void } {
+    const w = new Watched(new Term(), workspace, tile, changed, ended);
+    this.followed.add(w);
+    if (this.host) w.start(this.host);
+    return {
+      term: w.term,
+      stop: () => {
+        this.followed.delete(w);
+        w.stop();
+        w.term.free();
+      },
+    };
+  }
+
   conversation(agent: Agent, said: (p: Piece) => void, ended: (why: string) => void): () => void {
     const f = new Followed(agent, said, ended);
     this.followed.add(f);
@@ -219,6 +236,32 @@ export class Phone {
       this.followed.delete(f);
       f.stop();
     };
+  }
+}
+
+class Watched {
+  private end: (() => void) | null = null;
+
+  constructor(
+    readonly term: Term,
+    private readonly workspace: string,
+    private readonly tile: string,
+    private readonly changed: () => void,
+    private readonly ended: (why: string) => void,
+  ) {}
+
+  start(host: Host): void {
+    this.stop();
+    const until = new Promise<void>((resolve) => (this.end = resolve));
+    host.watch(this.workspace, this.tile, this.term, this.changed, until).then(
+      (how: { code: number | null } | null) => how && this.ended(how.code === null ? "No session runs there." : `The session ended (${how.code}).`),
+      (e: unknown) => this.ended(message(e)),
+    );
+  }
+
+  stop(): void {
+    this.end?.();
+    this.end = null;
   }
 }
 

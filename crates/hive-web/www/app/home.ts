@@ -15,6 +15,9 @@ export interface Filter {
   machine: string | null;
 }
 
+/** The tiles that run a terminal (workspace-doc `isTerminalKind`). */
+const TERMINAL_KINDS = new Set(["claude", "shell"]);
+
 export class Home {
   readonly el = h("section", { class: "screen", "data-screen": "home" });
   private readonly count = h("span", { class: "count", hidden: true, "data-count": "" });
@@ -118,10 +121,11 @@ export class Home {
     }
     const t = e.tile;
     const agent = t.state !== undefined;
-    const row = h(agent ? "button" : "div", {
+    const opens = agent || TERMINAL_KINDS.has(t.kind);
+    const row = h(opens ? "button" : "div", {
       class: "agent", style: pad, "data-row": e.key, "data-kind": t.kind,
       ...(listed && agent ? { "data-agent": t.id } : {}), ...(listed ? {} : { "data-working-row": t.id }),
-      ...(agent ? { type: "button", "data-state": t.state } : {}),
+      ...(agent ? { "data-state": t.state } : {}), ...(opens ? { type: "button" } : {}),
     },
       h("span", { class: "dot", "data-state": t.state ?? "none" }),
       h("span", { class: "col" },
@@ -129,6 +133,7 @@ export class Home {
         h("span", { class: `status mono${t.waiting ? " waits" : ""}`, "data-line": "" }, lineOf(t, e.line))),
       t.since !== undefined && h("span", { class: "age mono", "data-since": t.since }, ago(t.since)));
     if (agent) row.addEventListener("click", () => this.app.open(t.id));
+    else if (opens) row.addEventListener("click", () => this.app.openTerminal(t.workspace, t.id, t.name));
     return row;
   }
 }

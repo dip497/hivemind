@@ -21,7 +21,6 @@ pub mod pairing;
 pub mod person;
 #[cfg(not(target_family = "wasm"))]
 pub mod push;
-#[cfg(not(target_family = "wasm"))]
 pub mod screen;
 #[cfg(not(target_family = "wasm"))]
 pub mod talking;

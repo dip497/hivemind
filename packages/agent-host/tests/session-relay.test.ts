@@ -1,6 +1,6 @@
 // A session's output to every viewer that shows it (src/session-relay.ts): two windows, one terminal.
 import { expect, test } from "bun:test";
-import { SessionRelay, type ReadScreen, type Viewer } from "../src/session-relay.js";
+import { PACED_WINDOW, SessionRelay, type ReadScreen, type Viewer } from "../src/session-relay.js";
 
 const RESET = "<reset>";
 const tick = () => new Promise((r) => setTimeout(r, 40));
@@ -116,6 +116,30 @@ test("a viewer that goes leaves every session it watched; those nobody watches n
   expect(r.leaveAll(a)).toEqual(["mine"]);
   expect(r.count("shared")).toBe(1);
   expect(r.count("mine")).toBe(0);
+});
+
+test("a paced viewer is sent no more than its window ahead of what it took; behind, nothing until it took all it was sent, then the screen in place of what it missed, which the window does not count", async () => {
+  const { relay: r } = relay();
+  const near = viewer(), far = viewer();
+  const half = "x".repeat(PACED_WINDOW / 2);
+  const screen = laterScreen();
+  r.add("t", near);
+  r.add("t", far, () => screen.read);
+  const batch = async (data: string) => { r.push("t", data); await tick(); };
+  await batch(`1${half.slice(1)}`); // the first goes, whatever its size
+  await batch(half); // the window's worth
+  await batch("3"); // past it
+  await batch("4");
+  r.acked("t", far, half.length); // not all of it: still behind
+  await batch("5");
+  expect(far.got.map((d) => d.slice(0, 1))).toEqual(["1", "x"]);
+  r.acked("t", far, PACED_WINDOW);
+  const big = "S".repeat(PACED_WINDOW * 2);
+  screen.answer(big);
+  await batch("6"); // live again at once: the screen is not what it has to take
+  await batch("7");
+  expect(far.got.slice(2)).toEqual([`${RESET}${big}`, "6", "7"]);
+  expect(near.got).toEqual([`1${half.slice(1)}`, half, "3", "4", "5", "6", "7"]);
 });
 
 /** A start the test finishes when it likes, counting how often it was asked for. */
