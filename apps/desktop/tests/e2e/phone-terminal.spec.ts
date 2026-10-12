@@ -55,6 +55,9 @@ test("a shell tile opened on the paired page draws the computer's screen on a la
   browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: "dark" });
   const page = await context.newPage();
+  // What the computer sends the page, over every socket it opens.
+  let received = 0;
+  page.on("websocket", (ws) => ws.on("framereceived", ({ payload }) => { received += typeof payload === "string" ? Buffer.byteLength(payload) : payload.length; }));
   await page.goto(link);
   await page.locator("[data-pair]").click({ timeout: 30_000 });
   await expect(page.locator("[data-paired]")).toHaveAttribute("data-paired", me.deviceId, { timeout: 30_000 });
@@ -114,8 +117,13 @@ test("a shell tile opened on the paired page draws the computer's screen on a la
   // ends it, whatever it was sent meanwhile.
   const cdp = await context.newCDPSession(page);
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+  const atFlood = received;
   await page.keyboard.type("seq 1 200000; echo flood-$((2*2))\n");
   await expect.poll(async () => (await phoneLines(page)).map((l) => l.trimEnd()).join("\n"), { timeout: 60_000 }).toMatch(/\n199999\n200000\nflood-4\n\$$/);
+  console.log(`flood: ${received - atFlood} bytes received`);
+  // Paced: what it fell behind on is sent as one screen, so it is sent less than the flood's own
+  // 1,288,895 bytes of output (seq's).
+  expect(received - atFlood).toBeLessThan(1_288_895);
 
   // A full repaint, as a scroll makes one, at that CPU.
   const repaints = await page.evaluate(() => {
