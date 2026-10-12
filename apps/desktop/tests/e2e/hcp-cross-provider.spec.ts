@@ -261,10 +261,10 @@ test("a worker spawned into a frame by its name opens there, and the window lays
 test("a worker that stops at a question is reported to its leader, who answers it with keys", async () => {
   const spawn = hive(
     ["ctl", "spawn", "--agent", "claude", "--name", "asker", "--prompt", "ASK:ship it?", "--json"],
-    { HIVEMIND_TILE: orchestrator },
+    asAgent(orchestrator),
   );
   expect(spawn.code, spawn.stderr).toBe(0);
-  const worker: string = spawn.json.tileId;
+  const worker: string = spawn.json.tile;
   await expect
     .poll(() => hive(["ctl", "stream", orchestrator, "--lines", "60", "--snapshot"]).stdout, { timeout: 30_000, intervals: [500] })
     .toContain(`asker (${worker}) is waiting for`);
