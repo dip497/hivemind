@@ -1063,3 +1063,26 @@ Fixed in their owners:
 
 Seen, not yet traced: on the rig, an agent started in the second workspace (one the window did
 not show) never ran (`hive ctl agents` listed nothing there); the phone shows "Starting…" for it.
+
+### 12.2 "Waiting on you · permission" while the agent sat at its prompt
+
+Seen: "Phone test" showed "permission · 2 min" with Allow and Deny while its terminal showed
+Claude at its prompt. The rig keeps no record of status changes, so the step that left the chooser
+is not known. What is known: the wait was one the hooks reported. A wait the screen held would
+have ended when the screen read the prompt. And Claude draws its chooser while its
+`PermissionRequest` hook holds (claude 2.1.296 in a pty, the hook sleeping 40 s: the
+AskUserQuestion chooser drawn and still up at 25 s and 45 s).
+
+Cause: once an agent's hooks have spoken, `StatusStore` ignored every screen reading except a
+chooser during a working turn. A wait the hooks reported ended only when a hook spoke again or a
+key it reads was typed (a digit, Enter, Esc, Ctrl+C). Anything else that took the chooser away
+(keys it does not read, a click, the agent itself) left the status waiting while the agent sat
+at its prompt. `answers.ts` already treated "the screen moved on to the prompt" as the end of the
+wait (spec/needs.md "Answering"); the status did not.
+
+Fixed in the owner: a wait ends when the screen moves from a chooser to the agent's prompt
+(`status-store.ts` `fold`). The prompt alone ends nothing, because it is what the screen shows in
+the 0.2 s before the chooser is drawn. During a working turn the prompt ends nothing either, since
+it shows between a key answer and the tool running. Orca does the same: its permission status
+stands only while the terminal's tail still shows the prompt
+(`orca/src/main/runtime/orca-runtime-resolve-authoritative-terminal-wait-permission.ts:49`).

@@ -81,6 +81,33 @@ test("answering the permission an agent waits on sets it working at once, not wh
   expect(s.get("a")).toMatchObject({ state: "waiting", kind: "question" });
 });
 
+test("a wait the hooks reported ends when the screen moves from the chooser to the agent's prompt, however it was left", () => {
+  const s = store();
+  s.event("a", { event: "turn.started" });
+  s.screen("a", "working");
+  s.event("a", { event: "input.requested", kind: "permission" });
+  s.screen("a", "idle"); // its prompt, before its chooser is drawn, ends nothing
+  expect(s.get("a")).toMatchObject({ state: "waiting", kind: "permission" });
+  s.screen("a", "question"); // a question tool: its hook says permission, its screen a question
+  expect(s.get("a")).toMatchObject({ state: "waiting", kind: "permission" });
+  s.screen("a", "idle"); // left by keys no rule reads, or anything else no hook reports
+  expect(s.get("a")).toMatchObject({ state: "idle", source: "hooks" });
+  expect(s.get("a")!.kind).toBeUndefined();
+  // Its chooser read before its hook spoke is the wait it shows.
+  s.event("a", { event: "turn.started" });
+  s.screen("a", "permission");
+  s.event("a", { event: "input.requested", kind: "permission" });
+  s.screen("a", "idle");
+  expect(s.get("a")).toMatchObject({ state: "idle", source: "hooks" });
+  // Answered with a key it reads, it works: the prompt before the tool runs is no end of the turn.
+  s.event("a", { event: "turn.started" });
+  s.event("a", { event: "input.requested", kind: "permission" });
+  s.screen("a", "permission");
+  s.input("a", "1");
+  s.screen("a", "idle");
+  expect(s.get("a")!.state).toBe("working");
+});
+
 test("exit is final whatever the source says next", () => {
   const s = store();
   s.screen("a", "working");

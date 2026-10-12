@@ -6,9 +6,11 @@
  * One authority per session. Until an agent's hooks have spoken, the screen stands in; from
  * the first hook event on, the hooks decide. An agent whose hooks never fire (not installed,
  * or it has none) therefore stays on the screen, and every status says which source it came
- * from. One exception: a turn the hooks call working while the screen shows the agent's own
+ * from. Two exceptions. A turn the hooks call working while the screen shows the agent's own
  * chooser (a model switch, a limit notice) is waiting on the user — no hook reports that —
- * so the screen's reading stands until the screen moves on or a hook speaks again.
+ * so the screen's reading stands until the screen moves on or a hook speaks again. And a wait
+ * ends when the screen moves from a chooser to the agent's prompt: however it was left, the
+ * agent waits on nothing (spec/needs.md "Answering").
  *
  * The machine that runs a session is the one that derives its status (docs/design/
  * multiplayer-2026-09-28.md, R6). A session another machine hosts is mirrored: the status is
@@ -47,6 +49,7 @@ export interface ScreenReading {
   at: number;
 }
 const SCREEN_KIND = { permission: "permission", question: "question", blocked: "other" } as const;
+const isWait = (s: ScreenState): s is keyof typeof SCREEN_KIND => s !== "idle" && s !== "working";
 
 /** Bytes that interrupt an agent's turn when typed on their own: Esc, Ctrl+C. */
 const INTERRUPT_KEYS = new Set(["\x1b", "\x03"]);
@@ -118,19 +121,22 @@ export class StatusStore {
    *  its last reading; as its status, ignored once the session's hooks have spoken. */
   screen(tileId: string, state: ScreenState, says?: string): void {
     const reading: ScreenReading = { state, ...(says ? { says } : {}), at: this.now() };
+    const before = this.readings.get(tileId);
     this.readings.set(tileId, reading);
-    if (!this.mirrored.has(tileId)) this.fold(tileId, state, says);
+    if (!this.mirrored.has(tileId)) this.fold(tileId, state, says, before);
     for (const fn of this.screenListeners) fn(tileId, reading);
   }
 
-  private fold(tileId: string, state: ScreenState, says?: string): void {
+  private fold(tileId: string, state: ScreenState, says?: string, before?: ScreenReading): void {
     const cur = this.sessions.get(tileId);
     if (cur?.state === "exited") return;
     if (cur?.source === "hooks") {
-      const waiting = state !== "idle" && state !== "working";
+      const waiting = isWait(state);
       if (this.screenHeld.has(tileId)) {
         // The chooser closed: what the screen shows now is the truth until a hook speaks.
         if (!waiting) this.screenHeld.delete(tileId);
+      } else if (cur.state === "waiting" && state === "idle" && before && isWait(before.state)) {
+        // Its chooser gave way to its prompt; the prompt alone may be the moment before it is drawn.
       } else if (!(waiting && cur.state === "working")) return;
       else this.screenHeld.add(tileId);
       this.apply(tileId, "hooks", (s) => (waiting ? { ...s, state: "waiting", kind: SCREEN_KIND[state] } : { ...s, state, kind: undefined }), says);
