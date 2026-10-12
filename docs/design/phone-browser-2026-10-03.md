@@ -1140,3 +1140,32 @@ terminal and whenever its view changes size, the keyboard coming up among them. 
 that as `terminal.resize` (`Sent::Size`), again on each connection. Answers go through
 `agent.answer`, not `terminal.write`, so they never size it. A Fit now lasts until another client
 types.
+
+### 12.6 Scrolling the phone's terminal
+
+Asked for: a swipe up shows earlier lines and the view goes back to live output on new output or a
+tap; in a full-screen program a swipe goes to the program, as a desktop terminal sends it.
+
+Found: the core already kept 2,000 lines of scrollback and the page panned through them. The
+terminal that showed nothing was Claude's: Claude Code 2.1.296 draws on the alternate screen
+(`\x1b[?1049h`) with mouse modes 1000/1002/1003/1006 on, and the alternate screen keeps no
+scrollback in any terminal. Its history is Claude's own, scrolled by the wheel reports the desktop's
+xterm sends it.
+
+Now `Screen::scroll` in the core decides what a scroll is, from the emulator's modes, the way xterm
+and alacritty do:
+- a program that takes the mouse (1000/1002/1003) gets wheel reports, buttons 64 and 65, in SGR
+  (1006), UTF-8 (1005) or the old encoding. The old encoding's coordinate is clamped to what fits
+  in one ASCII character, because `terminal.write` carries text;
+- on the alternate screen without the mouse (less, vim), unless the program turned alternate
+  scroll (1007) off, it gets arrows: `ESC O A` / `ESC O B` under application cursor keys (DECCKM),
+  else `ESC [ A` / `ESC [ B`;
+- otherwise the view scrolls its own scrollback.
+
+Orca makes the same split (`orca/mobile/src/terminal/document/mouse-input-encoding.ts:226-268`).
+cmux scrolls on the Mac surface (`TerminalSurface+Mobile.swift:45-54`). Both send a line for each
+line-height of travel, and the page does the same, carrying the remainder. A scroll is input, as
+in tmux, so it sizes the terminal like a key does.
+
+The view follows again on new output or a tap. cmux snaps on the person's input only
+(`GhosttySurfaceView.swift:4625-4646`); we snap on output as well, as asked.

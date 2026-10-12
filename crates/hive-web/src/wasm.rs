@@ -767,6 +767,18 @@ impl Term {
         let _ = self.inner.put.send(Input::Keys(keys));
     }
 
+    /// The person scrolls `lines` (up below 0) at the cell `col`, `row`: sent to the program when
+    /// it takes scrolls, as a desktop terminal sends them; false: the view scrolls itself.
+    pub fn scroll(&self, lines: i32, col: u16, row: u16) -> bool {
+        let Some(sent) = self.inner.screen.borrow().scroll(lines, col, row) else {
+            return false;
+        };
+        if !sent.is_empty() {
+            let _ = self.inner.put.send(Input::Text(sent));
+        }
+        true
+    }
+
     /// Size the terminal to `cols` × `rows` for this page, until it is watched no more.
     pub fn fit(&self, cols: u16, rows: u16) {
         self.inner.fitted.set(Some((cols, rows)));
