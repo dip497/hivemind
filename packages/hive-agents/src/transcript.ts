@@ -43,7 +43,7 @@ function textOf(given: unknown): string {
 }
 
 /** The questions `from`, a tool use, asks as `asks` maps them; undefined when it asks none. */
-function askedIn(from: unknown, asks: TranscriptAsks): Asked[] | undefined {
+export function askedIn(from: unknown, asks: TranscriptAsks): Asked[] | undefined {
   const list = valueAt(from, asks.list);
   if (!Array.isArray(list)) return undefined;
   const asked = list.slice(0, ASKED_MAX).flatMap((q): Asked[] => {

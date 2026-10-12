@@ -38,7 +38,7 @@ export interface AnswersOptions {
   /** Who is at a connection. */
   who(connection: Connection): Answerer;
   /** Whether the screen rules of the agent of `tile` read what it waits on: its answer is then
-   *  typed once its screen shows the wait, and has landed once its screen moves on from it. */
+   *  typed once its screen shows the wait, and is confirmed once its screen moves on from it. */
   watched?(tile: string): boolean;
 }
 
@@ -88,6 +88,15 @@ function line(value: unknown, name: string): string {
   return t;
 }
 
+/** Option `n` of the one question `on` is chosen from: else `BAD_REQUEST`. */
+function optionOf(on: ReturnType<typeof waitOn>, n: unknown): number {
+  const options = on.choose ? on.asks![0]!.options.length : 0;
+  if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0 || n >= options) throw new ApiError("BAD_REQUEST", "answer.choice is an option, from 0, of the one question it asks, when its keys choose one");
+  return n;
+}
+
+const NOT_DECIDED = "it asks a question: an option of it is chosen, or a line is typed, never allowed or denied";
+
 /** How an answer is recorded: its decision, the option chosen (from 1), else that it was a reply. */
 const decidedOf = (answer: unknown): string => {
   const { decision, choice } = (answer ?? {}) as { decision?: unknown; choice?: unknown };
@@ -105,6 +114,21 @@ export function answers(o: AnswersOptions): Domain<"agent.answer"> {
         const a = (answer ?? {}) as { text?: unknown; decision?: unknown; choice?: unknown; feedback?: unknown; always?: unknown };
         const plane = o.plane();
         const held = plane.waits.of(bare);
+        if (held?.since === since && held.prompt) {
+          // Its own hook holds for the answer, and prints it.
+          if (a.always !== undefined) throw new ApiError("BAD_REQUEST", "answer.always is true, and answers a supervised tool use alone");
+          const on = waitOn(bare, { kind: held.kind, since }, { decides: () => true, wait: () => held });
+          const by = o.who(from);
+          if (a.choice !== undefined) return plane.waits.answer(bare, since, "allow", { by, choice: optionOf(on, a.choice) });
+          if (a.decision !== undefined) {
+            if (on.kind === "question") throw new ApiError("BAD_REQUEST", NOT_DECIDED);
+            const decision = oneOf(a.decision, "answer.decision", ["allow", "deny"] as const);
+            const feedback = a.feedback == null ? undefined : written(a.feedback, "answer.feedback");
+            return plane.waits.answer(bare, since, decision, { feedback, by });
+          }
+          // A line answers its questions, or tells it what to do instead.
+          return plane.waits.answer(bare, since, on.kind === "question" ? "allow" : "deny", { feedback: line(a.text, "answer.text"), by });
+        }
         if (held?.since === since) {
           if (held.answerer && !mayAnswerFor(from, held.answerer)) throw new ApiError("FORBIDDEN", "only the person, or the program that started it, answers what this agent asks");
           const decision = oneOf(a.decision, "answer.decision", ["allow", "deny"] as const);
@@ -117,15 +141,13 @@ export function answers(o: AnswersOptions): Domain<"agent.answer"> {
         const status = plane.status.get(bare);
         // Waits on the person no more, or on another wait, or answered already: nothing.
         if (!status || !waitsOnThePerson(status) || status.since !== since || answered.has(`${bare}@${since}`)) return { answered: false };
-        const on = waitOn(bare, { kind: status.kind!, says: status.says }, { decides: () => false, asking: o.asking, chooses: (t) => !!o.chooseKeys(t) });
+        const on = waitOn(bare, { kind: status.kind!, says: status.says, since }, { decides: () => false, asking: o.asking, chooses: (t) => !!o.chooseKeys(t) });
         let parts: string[];
         if (a.choice !== undefined) {
-          const options = on.choose ? on.asks![0]!.options.length : 0;
-          const n = a.choice;
-          if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0 || n >= options) throw new ApiError("BAD_REQUEST", "answer.choice is an option, from 0, of the one question it asks, when its keys choose one");
+          const n = optionOf(on, a.choice);
           parts = o.chooseKeys(bare)!.map((k) => keyBytes(k.replaceAll("{n}", String(n + 1))));
         } else if (a.decision !== undefined) {
-          if (on.kind === "question") throw new ApiError("BAD_REQUEST", "it asks a question: an option of it is chosen, or a line is typed, never allowed or denied");
+          if (on.kind === "question") throw new ApiError("BAD_REQUEST", NOT_DECIDED);
           const decision = oneOf(a.decision, "answer.decision", ["allow", "deny"] as const);
           const keys = o.answerKeys(bare, status)?.[decision];
           if (!keys) throw new ApiError("BAD_REQUEST", "this agent is answered on its screen: it says no keys that allow or deny what it asks");
@@ -146,7 +168,7 @@ export function answers(o: AnswersOptions): Domain<"agent.answer"> {
         };
         if (!o.watched?.(bare)) return { answered: type() };
         // Keys typed before its chooser is drawn never reach it: typed once its screen shows the
-        // wait, and landed once its screen moves on, or a new wait begins.
+        // wait, and confirmed once its screen moves on, or a new wait begins.
         const waits = () => { const now = plane.status.get(bare); return !!now && now.state === "waiting" && now.since === since; };
         return (async () => {
           if (!(await until(plane, bare, () => !waits() || shows(plane.status.reading(bare), status.kind), DRAWN_MS)) || !waits()) {
@@ -162,10 +184,8 @@ export function answers(o: AnswersOptions): Domain<"agent.answer"> {
             return (read !== before && !shows(read, status.kind)) || (now?.state === "waiting" && now.since > since);
           };
           if (await until(plane, bare, moved, TAKEN_MS)) return { answered: true };
-          answered.delete(key);
-          // Its status took the keys for an answer: the screen says otherwise.
-          plane.status.reread(bare);
-          throw new ApiError("FAILED", "the keys went in, but its screen still asks: it may wait on you there");
+          // Its screen is read on a change only, and late: the keys went in, so they are never typed again.
+          throw new ApiError("TIMEOUT", "the keys went in, but its screen has not moved on yet: not confirmed; check it there");
         })();
       },
     },

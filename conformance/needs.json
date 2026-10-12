@@ -1581,6 +1581,71 @@
     }
    ],
    "working": 0
+  },
+  {
+   "about": "a permission the agent's own hook holds for the answer since it began (0.9) is allowed or denied from the device though its agent says no keys, and says the tool its hook asks about",
+   "held": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "repo": "/home/p/api",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "t1",
+        "kind": "claude",
+        "label": "Claude",
+        "task": "fix the nav"
+       }
+      ],
+      "tileNames": {
+       "t1": "Nav fix"
+      }
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "hm:t1",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000000000,
+      "kind": "permission",
+      "title": "Editing Nav.tsx"
+     }
+    }
+   ],
+   "waits": {
+    "t1": {
+     "request": "r1",
+     "tile": "t1",
+     "since": 1790000000000,
+     "kind": "permission",
+     "prompt": true,
+     "tool": "Bash"
+    }
+   },
+   "needs": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t1",
+     "agent": "Nav fix",
+     "kind": "permission",
+     "since": 1790000000000,
+     "machine": "desk",
+     "tool": {
+      "name": "Bash"
+     },
+     "decide": true
+    }
+   ],
+   "working": 0
   }
  ],
  "phone": [

@@ -12,6 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { homedir, hostname } from "node:os";
 import { createRequire } from "node:module";
+import { execFile } from "node:child_process";
 import type * as NodePty from "@lydell/node-pty";
 import * as bunPty from "./bun-pty.js";
 import { listenExclusive } from "./socket-claim.js";
@@ -31,6 +32,7 @@ import { titleBook } from "./title-book.js";
 import { AGENT_EVENT_METHOD, agentForCmd, composeResume, envToUnset, evictTrackedSession, parseAgentEvent, prepareProviders, TILE_SESSIONS_DIR, trackerSource, writeTrackedSession, setCatalog, TILE_ENV, type AgentEvent } from "@hivemind/agents/node";
 import { resolveWindowsSpawn } from "@hivemind/agents/discover";
 import { agentEventHookSource } from "./hooks/agent-event-hook-source.js";
+import { startHookDoor } from "./hooks/hook-door.js";
 import { SDK_FILE, sdkSource } from "@hivemind/agent-sdk";
 import { ScreenWatcher } from "./screen-status.js";
 import { StatusStore } from "./status-store.js";
@@ -134,6 +136,22 @@ const sdkPath = path.join(userDataDir, SDK_FILE);
 try { fs.writeFileSync(sdkPath, sdkSource()); } catch { /* best-effort */ }
 const hcpSock = hcpSockPath(userDataDir);
 const installToken = readOrCreateToken(userDataDir);
+// `emit` entries run hive-net's `hook`, a few MB instead of a runtime, when the starter named a
+// hive-net (HIVEMIND_HIVE_NET) that has it; else the script above. Windows keeps the script.
+const nativeHook = await (async (): Promise<{ hookBin?: string; hookDoor?: string }> => {
+  const bin = process.env.HIVEMIND_HIVE_NET;
+  if (!bin || process.platform === "win32" || !fs.existsSync(bin)) return {};
+  try {
+    const door = await startHookDoor({ path: ipcPath(userDataDir, "hook-door.sock"), sock: hcpSock });
+    // One from an older release has no `hook` and would drop every event.
+    const ok = await new Promise<boolean>((r) => execFile(bin, ["hook", door.path], { timeout: 10_000 }, (e) => r(!e)).stdin?.end());
+    if (ok) return { hookBin: bin, hookDoor: door.path };
+    door.close();
+  } catch (e) {
+    console.error("[pty-daemon] native hook unavailable:", (e as Error).message);
+  }
+  return {};
+})();
 
 // Provider-owned assets + config-home overlays (an extension, a private config home,
 // a hook script of its own, …): every catalogued provider's `prepare()` runs here and
@@ -156,6 +174,7 @@ const providerCtx = {
   tileSessionsDir,
   planBridgeSock,
   eventHookPath,
+  ...nativeHook,
   sdkPath,
   hcpSock,
   driveSock: driveSockPath(userDataDir),

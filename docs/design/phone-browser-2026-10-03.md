@@ -603,8 +603,11 @@ as Allow/Deny (§11.1), and the reading list, tables, links, `dir=auto`, the com
   (`apps/desktop/tests/e2e/answer-lands.spec.ts`): before the fix `{answered: true}` with the
   chooser still asking. Now, for an agent whose screen rules read its waits, the keys go in once
   the screen shows the chooser (4 s at most, else `TIMEOUT`, nothing typed), and it is answered
-  once the screen moves on (3 s, else `FAILED`; the wait stands again and may be answered again);
-  spec/needs.md 0.8.
+  once the screen moves on (3 s, else `TIMEOUT`, not confirmed: the keys went in, so that wait is
+  never typed again);
+  spec/needs.md 0.8. Open: the wait still listed after "Interrupted" is not reproduced by the
+  stand-in (an early key, then Esc on the chooser, clears it); it needs that tile's status and
+  screen.
 - The Allows on "perm probe" were not that race, and their cause is not found (the `web: allow`
   tile has it). They came 3 min
   (18:52:51) and 15 min (19:04:10) after the chooser was drawn (18:49:37); Claude's transcript has
@@ -620,7 +623,7 @@ as Allow/Deny (§11.1), and the reading list, tables, links, `dir=auto`, the com
   neither; or the keys were typed and lost on the way to the terminal. The audit now says "not
   answered" (8934cdc), so the next one says which. answer-lands has the late case: an Allow 20 s
   after the chooser is drawn, its screen quiet since, lands; it fails when the answer waits for a
-  screen change that does not come.
+  screen change that does not come. How the hook path stands with it: §11.1b.
 
 *Done (2026-10-12):*
 - The probe. `1` allows on Claude 2.1.296's chooser, with its kitty keyboard on and off (a pty
@@ -667,6 +670,117 @@ as Allow/Deny (§11.1), and the reading list, tables, links, `dir=auto`, the com
   twice), the hold dropped or not queueing (12, twice), the audit detail dropped (11), `since` not
   strictly increasing (status-store), and the page retrying an unconfirmed answer (phone-browser
   spec:154).
+
+**11.1b Answering through the agent's own hook (designed 2026-10-12).** The person chose it after
+the late-reading fix: an agent whose `PermissionRequest` hook can carry the decision is answered
+there, as hapi does (`localPermissionProtocol.ts`, `startHookServer.ts`), and typed keys stay the
+way for every other agent. Nothing waits on a screen reading, and nothing is typed into a chooser
+that may not be drawn yet.
+
+What the real binaries do (probed 2026-10-12, a pty driven by hand, own HOME):
+
+| | Claude Code 2.1.296 | Codex 0.160.1 and 0.162.1 |
+|---|---|---|
+| Hook vs. its own prompt | chooser drawn 0.2 s after the hook starts; they race | prompt drawn only after the hook returns; held, the screen says "Running hook" |
+| `allow` printed | tool ran 0.9 to 1.3 s later (after 30 s and 200 s held) | ran |
+| `deny` + `message` | 0.8 s, the message reaches the model | "Blocked by hook", the message reaches the model |
+| AskUserQuestion | `allow` + `updatedInput.answers` (by question text) answered it in 0.5 s | — |
+| Nothing printed | its own chooser decides | its own prompt is drawn then, `y` allows |
+| Answered at its own prompt first | the tool ran; the hook is not closed (alive 60 s later), a later decision is ignored | Esc ends the turn; the hook is not closed, a later decision is ignored |
+| Payload | `tool_name`, `tool_input`, `agent_id` for a subagent; no `tool_use_id` | `tool_name`, `tool_input`, `turn_id`; no `tool_use_id` |
+
+Codex's wire (`PermissionRequestDecisionWire`: `behavior`, `message`, `updatedInput`,
+`updatedPermissions`, `interrupt`) is Claude's. But a held Codex hook hides its own prompt, so the
+person at the desktop could only press Esc, and updating Codex does not change it (0.162.1, the
+latest release, the same). So Codex stays on typed keys; the manifest can turn it on when that
+changes. The design:
+
+- **Declared by the manifest, no agent in the host.** The `emit: input.requested` entry of the
+  event that asks gains `answer:` (manifest 2 stays: an app before this ignores the key and only
+  reports the event, so it answers with keys as before):
+  ```yaml
+  PermissionRequest:
+    emit: input.requested
+    kind: permission
+    timeout: 3600
+    answer:
+      allow: {hookSpecificOutput: {hookEventName: PermissionRequest, decision: {behavior: allow}}}
+      deny: {hookSpecificOutput: {hookEventName: PermissionRequest, decision: {behavior: deny, message: '{message}'}}}
+      choose: {hookSpecificOutput: {hookEventName: PermissionRequest, decision: {behavior: allow, updatedInput: '{input}'}}}
+      asks: {list: questions, question: question, options: options, label: label}
+      chosen: answers
+      leave: [ExitPlanMode]
+  ```
+  What the hook prints is one of these, filled: `{message}` is the reason the person gave (the key
+  goes when they gave none), `{input}` the tool's input with the chosen option's label, or the
+  line typed, set at `chosen`, keyed by its question's text as `asks` reads it from the input.
+  `leave` are tools left to the agent's own prompt (a plan is reviewed by its own hook). A subagent's
+  request (`agent_id`) is always left to it: the wait on the person is the main agent's.
+- **Held until an answer, or until the agent stops waiting.** The generic event script, told by
+  its entry (`HIVE_EVENT_ANSWER=1`), sends the `agent.event` as always, then
+  `agent.await_answer` on the same connection, and prints what comes back. The host holds it as a
+  wait (`waits.ts`, beside the plan and the supervised tool use) named by the status the event just
+  set: same tile, same `since`. The phone lists it as it lists that status today.
+- **The host resolves it.** `agent.answer` finds the held wait first. `{decision}` on a permission
+  prints `allow` or `deny`; `{text}` on a permission denies with the line as `message` (Claude's
+  "tell Claude what to do differently"); `{choice: n}` on a question prints `choose` with option
+  `n`; `{text}` on a question prints `choose` with the line. A question is never allowed or denied,
+  and one with several questions or several answers is still answered by a line. It answers
+  `{answered: true}` once the hook has it: the agent's own prompt may still have won (Claude settles
+  the race), and the status says which.
+- **The desktop's own prompt wins the race.** Claude does not close the hook when its chooser is
+  answered, so the host lets go of it: the wait lasts while the agent's status waits with that
+  `since`, and ends, the hook printing nothing, when it does not (a key typed at its chooser sets it
+  working, Esc or Ctrl+C ends the turn, `PostToolUse` or `PermissionDenied` resolves it), or the
+  hook's connection closes, or the tile goes. An answer after that is `{answered: false}`. Holding
+  the hook changes nothing on the screen: its chooser is drawn and answered as before.
+- **The `since` mismatch (§11.1's probable cause).** The held wait is still named by tile and
+  `since`, not by a request id. What the hook path changes is that the `since` holds still while
+  the hook is held: a status the hooks report is not moved by a screen reading, and anything that
+  would move it (working, another kind) lets the hook go. Checked on 09cec1e with the status store:
+  the hook landing after the screen read Claude's chooser keeps the `since` (1003, then 1003). Only a
+  waiting rule that `says` (Claude's trust and settings screens, not its permission chooser) moves
+  it (1003, then 1004). So `since` is the held wait's revision: a phone answering with an older
+  one gets `{answered: false}`, audited `, not answered`, which is §11.1's first guard. No request
+  id is needed (decided 2026-10-12).
+- **Where no desktop answers** (a machine with a daemon and no control plane): `agent.await_answer`
+  is refused at once, the hook prints nothing, and the agent's own prompt decides.
+- **Memory.** One held hook per waiting tile: 26 MB PSS measured with the app running (67 to 71 MB
+  standalone; the script is run by the app's binary as node). Three tiles waiting at once, about
+  80 MB.
+- **Command or http (for the person to decide; not switched).** Claude Code has had `type: "http"`
+  hooks since 2.1.63: it POSTs the payload, takes a 2xx JSON body as the hook's output, and an
+  empty body as no decision. Measured on 2.1.296 (own HOME, a held local server):
+
+  | | command (built) | http |
+  |---|---|---|
+  | One held wait | a process: 26 MB PSS with the app running, 67 to 80 MB without; 3 waits 78 to 240 MB | an open connection: at most 73 KB on the host (200 held, both ends counted) |
+  | Wait known to the host | once the script runs: 0.26 to 0.56 s after the hook starts (load 14); the chooser is drawn at 0.2 s | at the POST |
+  | Timeout | default 600 s for both; no documented ceiling. 660 s held under `timeout: 3600` was answered (http) | |
+  | `1` at its own chooser first | hook not closed; the host lets go | request not closed; the host lets go |
+  | Esc at its own chooser | turn ends; the host lets go | request closed 0.08 s later (the host lets go at once, under node; a `hive host` daemon run by bun does not see it and lets go by the status) |
+  | Auth | `HCP_TOKEN` in the hook's env, on a 0600 unix socket | a loopback listener; `Authorization: Bearer ${HCP_TOKEN}` sent only with `allowedEnvVars: [HCP_TOKEN]`; the token names its tile; a request with an `Origin` or another `Host` refused (a page in a browser) |
+
+  Both stay declared in the manifest: http adds the agent's shape (`hooks.http`, with `{url}`) and
+  `via: http` on the entry, the pty daemon's door turning a request into the script's lines on the
+  same socket, the script where no door is open. `onFailure` stays at its default: `block` on
+  PermissionRequest denies the tool when the door is down. No Claude floor moves (the manifest
+  already reads 2.1.287 and later; `onFailure`, 2.1.295, is unused). Costs of http: a loopback port
+  per daemon; a managed `allowedHttpHookUrls` without loopback stops the hook and its status event
+  (the screen rules still read the chooser).
+  **Recommended: http.** Per wait it is a connection, not a process, and the phone learns of the
+  wait before the chooser is drawn instead of after. It is built and checked against the real
+  binary (allow ran, deny carried its reason, Esc let go) in 78d77e5 on fix/answer-late, reverted
+  by the next commit so the branch stays on command; reverting that revert switches.
+  *Decided (2026-10-12): command, run by hive-net's `hook`* (spec/hook-protocol.md "The native
+  hook"): a pipe to the pty daemon's door, which says what the script says. Release build, load 11:
+  a held wait 6.5 MB RSS (4.6 MB PSS), an event 3 to 4 ms; Electron-as-node 64 MB (53 MB) and 64
+  to 77 ms. On Claude 2.1.296, held 6.9 MB: allow ran, deny carried its reason, Esc let go 0.12 s
+  later. http stays reverted.
+- **Not in it.** `always` (`updatedPermissions`): typed keys never had it either. A tool use
+  matched to its `PostToolUse` by id (hapi keys by `tool_use_id` through `PreToolUse`): a parallel
+  tool that finishes while another waits sets the status working and so lets go of the hook; the
+  person then answers at the desktop, as with typed keys today.
 
 **11.2 Home mirrors the Layers panel.** The same tree, names and order as the desktop: machines,
 then projects (the panel's groupings), then tiles, agents first; frames as the desktop names them.

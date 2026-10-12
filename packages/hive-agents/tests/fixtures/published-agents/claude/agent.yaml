@@ -334,10 +334,21 @@ hooks:
       outcome: failed
       matcher: overloaded|authentication_failed|oauth_org_not_allowed|account_on_hold|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|cloud_credential_error|unknown
       timeout: 10
+    # Its hook carries the answer from your other devices, read from claude 2.1.296: it races the
+    # chooser, which is drawn 0.2 s after the hook starts; the first to answer wins. Held up to an hour.
     PermissionRequest:
       emit: input.requested
       kind: permission
-      timeout: 10
+      timeout: 3600
+      answer:
+        allow: {hookSpecificOutput: {hookEventName: PermissionRequest, decision: {behavior: allow}}}
+        deny: {hookSpecificOutput: {hookEventName: PermissionRequest, decision: {behavior: deny, message: '{message}'}}}
+        # AskUserQuestion's chooser fires it too: the answers go in its input, by question text.
+        choose: {hookSpecificOutput: {hookEventName: PermissionRequest, decision: {behavior: allow, updatedInput: '{input}'}}}
+        asks: {list: questions, question: question, options: options, label: label}
+        chosen: answers
+        # A plan is reviewed by its own hook.
+        leave: [ExitPlanMode]
     Elicitation:
       emit: input.requested
       kind: question

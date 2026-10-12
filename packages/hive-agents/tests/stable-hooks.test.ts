@@ -16,8 +16,8 @@ import { AUTHORED, authoredYaml } from "./authored.js";
 const codex = defFromManifest(YAML.parse(authoredYaml(AUTHORED.find((a) => a.id === "codex")!)));
 
 /** One app's paths: its own binary, config folder and sockets. */
-function paths(root: string, execPath: string): RuntimePaths {
-  const ctx = { tileSessionsDir: `${root}/tile-sessions`, trackerPath: `${root}/t.cjs`, hcpSock: `${root}/hcp.sock`, execPath, eventHookPath: `${root}/e.cjs` } as Parameters<typeof hookPathsFor>[1];
+function paths(root: string, execPath: string, hookBin?: string): RuntimePaths {
+  const ctx = { tileSessionsDir: `${root}/tile-sessions`, trackerPath: `${root}/t.cjs`, hcpSock: `${root}/hcp.sock`, execPath, eventHookPath: `${root}/e.cjs`, ...(hookBin ? { hookBin, hookDoor: `${root}/door.sock` } : {}) } as Parameters<typeof hookPathsFor>[1];
   return { private: `${root}/agents/codex`, execPath, tileSessionsDir: ctx.tileSessionsDir, home: "/home/u", hooks: hookPathsFor(codex, ctx), hcpSock: ctx.hcpSock, hcpToken: () => "t" };
 }
 const launch = (p: RuntimePaths, tileId: string) =>
@@ -26,13 +26,16 @@ const launch = (p: RuntimePaths, tileId: string) =>
 test("codex's hooks read the same from every install and build, and name none of their paths", () => {
   const installed = launch(paths("/home/u/.config/hivemind", "/home/u/.hivemind-app/hivemind"), "hm:a");
   const dev = launch(paths("/home/u/.config/hivemind-dev", "/src/node_modules/electron/dist/electron"), "hm:b");
+  const native = launch(paths("/home/u/.config/hivemind", "/home/u/.hivemind-app/hivemind", "/home/u/.hivemind-app/hive-net"), "hm:c");
   const doc = (plan: typeof installed) => plan.argsBefore![plan.argsBefore!.indexOf("-c") + 1]!;
   expect(doc(installed)).toBe(doc(dev));
+  expect(doc(native)).toBe(doc(installed));
   expect(doc(installed)).not.toContain("/home/u");
   expect(doc(installed)).toContain("$HIVEMIND_HOOK_EVENT");
   // Each app says where its own are, at launch.
-  expect(installed.env).toMatchObject({ HIVEMIND_HOOK_EXEC: "/home/u/.hivemind-app/hivemind", HIVEMIND_HOOK_EVENT: "/home/u/.config/hivemind/e.cjs", HIVEMIND_HOOK_EVENT_ARG: "/home/u/.config/hivemind/hcp.sock" });
-  expect(dev.env).toMatchObject({ HIVEMIND_HOOK_EXEC: "/src/node_modules/electron/dist/electron", HIVEMIND_HOOK_EVENT: "/home/u/.config/hivemind-dev/e.cjs" });
+  expect(installed.env).toMatchObject({ HIVEMIND_HOOK_EVENT_EXEC: "/home/u/.hivemind-app/hivemind", HIVEMIND_HOOK_EVENT: "/home/u/.config/hivemind/e.cjs", HIVEMIND_HOOK_EVENT_ARG: "/home/u/.config/hivemind/hcp.sock" });
+  expect(dev.env).toMatchObject({ HIVEMIND_HOOK_EVENT_EXEC: "/src/node_modules/electron/dist/electron", HIVEMIND_HOOK_EVENT: "/home/u/.config/hivemind-dev/e.cjs" });
+  expect(native.env).toMatchObject({ HIVEMIND_HOOK_EVENT_EXEC: "/home/u/.hivemind-app/hive-net", HIVEMIND_HOOK_EVENT: "hook", HIVEMIND_HOOK_EVENT_ARG: "/home/u/.config/hivemind/door.sock" });
 });
 
 test("run through a shell with the environment its launch gave it, a hook command runs that app's script with its argument", () => {

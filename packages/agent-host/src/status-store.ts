@@ -123,12 +123,6 @@ export class StatusStore {
     for (const fn of this.screenListeners) fn(tileId, reading);
   }
 
-  /** Keys typed there did not move its screen: what it was last read as stands again. */
-  reread(tileId: string): void {
-    const read = this.readings.get(tileId);
-    if (read && !this.mirrored.has(tileId)) this.fold(tileId, read.state, read.says);
-  }
-
   private fold(tileId: string, state: ScreenState, says?: string): void {
     const cur = this.sessions.get(tileId);
     if (cur?.state === "exited") return;

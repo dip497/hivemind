@@ -19,6 +19,7 @@ export { shq } from "./shq.js";
 export * from "./tile-session-store.js";
 export * from "./session.js";
 export * from "./transcript.js";
+export * from "./hook-answer.js";
 export * from "./runtime.js";
 export * from "./runtime-manifest.js";
 export * from "./hooks.js";
@@ -49,12 +50,15 @@ interface ScriptPaths {
   trackerPath?: string;
   tileSessionsDir: string;
   eventHookPath?: string;
+  hookBin?: string;
+  hookDoor?: string;
   sdkPath?: string;
   planBridgeSock?: string;
   hcpSock?: string;
 }
 
-/** Our two scripts — the session tracker and the generic event reporter — and the ones the agent
+/** Our two scripts — the session tracker and the generic event reporter (hive-net's `hook` where
+ *  the daemon has it) — and the ones the agent
  *  ships as assets, which run with the SDK. An entry missing here is an event the manifest asked
  *  for that this daemon cannot wire — the renderer drops it. */
 function hookScripts(def: AgentProviderDef, dir: string, p: ScriptPaths): Record<string, HookScript> {
@@ -66,6 +70,7 @@ function hookScripts(def: AgentProviderDef, dir: string, p: ScriptPaths): Record
   return {
     ...(p.trackerPath ? { tracker: { path: p.trackerPath, arg: p.tileSessionsDir } } : {}),
     ...(p.eventHookPath && p.hcpSock ? { event: { path: p.eventHookPath, arg: p.hcpSock } } : {}),
+    ...(p.hookBin && p.hookDoor ? { event: { exec: p.hookBin, path: "hook", arg: p.hookDoor } } : {}),
     ...Object.fromEntries((def.assets ?? []).filter((a) => a.hook && p.sdkPath && p.hcpSock)
       .map((a) => [a.hook!, { path: nodePath.join(dir, a.name), env: sdkEnv }])),
   };

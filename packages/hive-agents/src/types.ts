@@ -263,6 +263,22 @@ export interface AgentHookEntry {
   matcher?: string;
   /** `supervised` includes this entry only for a tile that runs under supervision. */
   when?: "supervised";
+  /** `input.requested` only: the hook can carry the answer, and holds until it has one. */
+  answer?: HookAnswer;
+}
+
+/** What a hook prints to answer what its agent asks: a map each, filled. `{message}` is the
+ *  reason a person gave for a denial; `{input}` the tool's input with the chosen answer set. */
+export interface HookAnswer {
+  allow: Record<string, unknown>;
+  deny: Record<string, unknown>;
+  /** Answers the questions its tool asks: `{input}` with each answer at `chosen`, keyed by its
+   *  question's text as `asks` reads the tool's input. */
+  choose?: Record<string, unknown>;
+  asks?: TranscriptAsks;
+  chosen?: string;
+  /** Tools left to the agent's own prompt. */
+  leave?: string[];
 }
 
 /** How an agent is told to call our hooks: which events, and where the config goes. */
@@ -441,6 +457,10 @@ export interface ProviderSpawnContext {
   planBridgeSock?: string;
   /** The generic script every `emit` entry runs. */
   eventHookPath?: string;
+  /** The native hook (`hive-net hook`) and the door it reaches: with both, `emit` entries run it
+   *  instead of the generic script. */
+  hookBin?: string;
+  hookDoor?: string;
   /** The SDK a plugin's own hook scripts load (`HIVE_SDK`). */
   sdkPath?: string;
   hcpSock?: string;
@@ -465,6 +485,10 @@ export interface DaemonPaths {
   trackerPath: string;
   tileSessionsDir: string;
   eventHookPath?: string;
+  /** The native hook (`hive-net hook`) and the door it reaches: with both, `emit` entries run it
+   *  instead of the generic script. */
+  hookBin?: string;
+  hookDoor?: string;
   sdkPath?: string;
   planBridgeSock?: string;
   hcpSock: string;

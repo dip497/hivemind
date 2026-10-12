@@ -178,3 +178,66 @@ fn a_device_elsewhere_is_reached_through_a_relay_hive_net_serves_and_not_once_it
     );
     fs::remove_dir_all(root).unwrap();
 }
+
+/// An agent's hook through `hive-net hook`: what the agent gave it reaches the door as one line,
+/// with the tile's variables and no others, and what the door says back is what it prints.
+#[cfg(unix)]
+#[test]
+fn a_hook_passes_its_payload_and_its_tile_to_the_door_and_prints_the_answer() {
+    use std::{io::Write, os::unix::net::UnixListener};
+    let sock = temp().join("door.sock");
+    let listener = UnixListener::bind(&sock).unwrap();
+    let door = thread::spawn(move || {
+        let (mut c, _) = listener.accept().unwrap();
+        let mut line = String::new();
+        BufReader::new(&c).read_line(&mut line).unwrap();
+        // Past the wait of a hook that asks for nothing: one that answers is held for as long.
+        thread::sleep(Duration::from_secs(2));
+        c.write_all(b"{\"decision\":\"allow\"}").unwrap();
+        line
+    });
+    let mut hook = Command::new(BIN)
+        .args(["hook", sock.to_str().unwrap()])
+        .env_clear()
+        .envs([
+            ("HIVEMIND_TILE", "hm:t1"),
+            ("HCP_TOKEN", "tok"),
+            ("HIVE_EVENT", "input.requested"),
+            ("HIVE_EVENT_ANSWER", "1"),
+            ("ANTHROPIC_API_KEY", "not-for-the-host"),
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    hook.stdin
+        .take()
+        .unwrap()
+        .write_all(b"{\"tool_name\":\"Bash\"}")
+        .unwrap();
+    let out = hook.wait_with_output().unwrap();
+    // Before the door's line: a hook that never reached the door leaves it waiting.
+    assert_eq!(text(&out), "{\"decision\":\"allow\"}");
+    assert!(out.status.success());
+    let said: serde_json::Value = serde_json::from_str(&door.join().unwrap()).unwrap();
+    assert_eq!(
+        said,
+        serde_json::json!({
+            "env": { "HIVEMIND_TILE": "hm:t1", "HCP_TOKEN": "tok", "HIVE_EVENT": "input.requested", "HIVE_EVENT_ANSWER": "1" },
+            "stdin": "{\"tool_name\":\"Bash\"}",
+        })
+    );
+}
+
+/// With no host to reach, a hook prints nothing and succeeds, so the agent goes on.
+#[cfg(unix)]
+#[test]
+fn a_hook_with_no_door_prints_nothing_and_succeeds() {
+    let out = Command::new(BIN)
+        .args(["hook", temp().join("none.sock").to_str().unwrap()])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stdout.is_empty());
+}

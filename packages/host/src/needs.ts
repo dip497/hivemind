@@ -64,16 +64,23 @@ export interface WaitFacts {
  *  device when it asks one question with one answer and its agent says the keys that choose; a
  *  permission says the tool it is for and what that is about, and is allowed or denied from the
  *  device when its agent says the keys. A screen it says it waits on (`says`) is that screen, of
- *  no tool. */
-export function waitOn(tile: string, status: { kind: InputKind; says?: string }, facts: WaitFacts): Pick<Need, "kind" | "decide" | "tool" | "asks" | "choose"> {
-  const asking = status.says || (status.kind !== "permission" && status.kind !== "question") ? undefined : facts.asking?.(tile);
+ *  no tool. One its own hook holds for the answer (a `prompt` wait begun `since`) is what its hook
+ *  says it asks, decided from the device, and chosen from when its hook can set the option. */
+export function waitOn(tile: string, status: { kind: InputKind; says?: string; since: number }, facts: WaitFacts): Pick<Need, "kind" | "decide" | "tool" | "asks" | "choose"> {
+  const held = facts.wait?.(tile);
+  const hooked = held?.prompt && held.since === status.since ? held : undefined;
+  const read = status.says || (status.kind !== "permission" && status.kind !== "question") ? undefined : facts.asking?.(tile);
+  const asking: ToolAsked | undefined = hooked
+    ? { name: hooked.tool ?? "", ...(read?.name === hooked.tool && read?.about ? { about: read.about } : {}), ...(hooked.asks ? { asks: hooked.asks } : {}) }
+    : read;
+  const chooses = hooked ? !!hooked.chooses : !!facts.chooses?.(tile);
   if (asking?.asks) {
     const [only, ...more] = asking.asks;
     const one = !!only && more.length === 0 && !only.many && only.options.length > 0;
-    return { kind: "question", asks: asking.asks, ...(one && facts.chooses?.(tile) ? { choose: true as const } : {}) };
+    return { kind: "question", asks: asking.asks, ...(one && chooses ? { choose: true as const } : {}) };
   }
-  const tool = asking && status.kind === "permission" ? { tool: { name: asking.name, ...(asking.about ? { about: asking.about } : {}) } } : {};
-  return { kind: status.kind, ...tool, ...(facts.decides(tile, status) ? { decide: true as const } : {}) };
+  const tool = asking?.name && status.kind === "permission" ? { tool: { name: asking.name, ...(asking.about ? { about: asking.about } : {}) } } : {};
+  return { kind: status.kind, ...tool, ...(hooked || facts.decides(tile, status) ? { decide: true as const } : {}) };
 }
 
 /** A workspace this device holds: its id, its name, its folder (here, or on the device it was
@@ -174,7 +181,7 @@ export function needsOf(held: HeldBoard[], statuses: WaitingStatus[], machines: 
     const plan = status.kind === "plan" ? facts.wait?.(at.tile)?.plan : undefined;
     const board = held.find((h) => h.workspace === at.workspace)!;
     const machine = machineCalled(folderOf(board, at.tile), machines);
-    const { kind, ...on } = waitOn(at.tile, { kind: status.kind, says: status.says }, facts);
+    const { kind, ...on } = waitOn(at.tile, { kind: status.kind, says: status.says, since: status.since }, facts);
     needs.push({ ...at, kind, ...(status.says ? { says: status.says } : {}), since: status.since, ...(plan === undefined ? {} : { plan }), machine, ...on });
   }
   return needs.sort((a, b) => a.since - b.since || (a.tile < b.tile ? -1 : a.tile > b.tile ? 1 : 0));

@@ -19,10 +19,10 @@ import { Intents } from "@hivemind/workspace-host/intents";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import type { ToolAsked } from "@hivemind/workspace-api/agents";
 import { ApiError } from "@hivemind/workspace-api/protocol";
-import type { AnswerKeys, InputKind } from "@hivemind/agents";
+import { AGENT_MANIFEST_VERSION, defFromManifest, setCatalog, type AnswerKeys, type InputKind } from "@hivemind/agents";
 import { StatusStore } from "@hivemind/agent-host/status-store";
 import { KEY_GAP_MS } from "@hivemind/agent-host/keys";
-import { answers, ANSWER_MAX } from "../src/answers.ts";
+import { answers, ANSWER_MAX, TAKEN_MS } from "../src/answers.ts";
 import { ControlPlane, type ControlPlaneOptions } from "../src/control/plane.ts";
 import { Waits } from "../src/waits.ts";
 
@@ -207,24 +207,25 @@ test("a supervised tool use answered always is decided so for every later use of
 });
 
 /** A real control plane, its agent in t1 says `1` allows and Esc denies what it asks, answered
- *  through the workspace API, which records each answer: what goes into each terminal, at once. */
-function plane() {
+ *  through the workspace API, which records each answer: what goes into each terminal, at once.
+ *  Watched, its answers wait on what its screen reads. */
+function plane(watched = false, methods?: () => unknown) {
   const writes: string[] = [];
   const p = new ControlPlane({
     dir: () => "/nowhere",
     publish: () => {},
     write: (ptyId, data) => { writes.push(`${ptyId}:${JSON.stringify(data)}`); return ptyId === "hm:t1"; },
     spawned: () => {},
-    methods: () => { throw new Error("no methods here"); },
+    methods: methods ?? (() => { throw new Error("no methods here"); }),
     windowsUp: () => false,
   } as unknown as ControlPlaneOptions);
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "answers-")), "audit.jsonl");
   after(() => fs.rmSync(path.dirname(file), { recursive: true, force: true }));
   let asking: ToolAsked | undefined;
-  const server = new WorkspaceServer([answers({ plane: () => p, answerKeys: () => ({ allow: ["1"], deny: ["escape"] }), asking: () => asking, chooseKeys: () => ["{n}"], who: () => PRIYA })], new Intents(new AuditLog({ file })));
+  const server = new WorkspaceServer([answers({ plane: () => p, answerKeys: () => ({ allow: ["1"], deny: ["escape"] }), asking: () => asking, chooseKeys: () => ["{n}"], who: () => PRIYA, watched: () => watched })], new Intents(new AuditLog({ file })));
   const answer = async (since: number, a: unknown) => {
     const r = await server.answer("agent.answer", ["hm:t1", since, a], phone);
-    if ("error" in r) throw new Error(r.error.message);
+    if ("error" in r) throw new ApiError(r.error.code, r.error.message);
     return r.result;
   };
   /** Its hooks say it waits on a permission: when the wait began. */
@@ -256,6 +257,40 @@ test("allowed from a phone on a fresh chooser, its keys go in as the person's: t
   assert.deepEqual(c.audited(), [
     "agent.answer t1 allow ok", "agent.answer t1 allow, not answered ok", "agent.answer t1 deny ok", "agent.answer t1 choice 2 ok", "agent.answer t1 reply ok",
   ]);
+});
+
+test("an Allow whose keys went in is not confirmed while its screen has not moved on, and is never typed again: the screen is read every 1.2 s and reports a change only, so the reading that it moved on may come seconds late", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: Date.now() });
+  const c = plane(true);
+  const since = c.asks();
+  c.p.event("agent.screen", { tileId: "hm:t1", state: "permission" });
+  const allowed = c.answer(since, { decision: "allow" }).catch((e: ApiError) => e);
+  await new Promise(setImmediate);
+  assert.deepEqual(c.writes, ['hm:t1:"1"']);
+  t.mock.timers.tick(TAKEN_MS);
+  const late = await allowed;
+  assert.ok(late instanceof ApiError);
+  assert.equal(late.code, "TIMEOUT", "not confirmed, never failed: the keys went in");
+  const now = c.p.status.get("t1")!;
+  assert.notEqual(now.state, "waiting", "it waits on the person no more");
+  for (const at of [since, now.since]) assert.deepEqual(await c.answer(at, { decision: "allow" }), { answered: false });
+  t.mock.timers.tick(1_200);
+  c.p.event("agent.screen", { tileId: "hm:t1", state: "working" });
+  assert.deepEqual(c.writes, ['hm:t1:"1"'], "typed once");
+  assert.equal(c.p.status.get("t1")!.state, "working");
+  // A line typed leaves its status on the wait: that wait is still answered already.
+  const asked = c.asks();
+  c.p.event("agent.screen", { tileId: "hm:t1", state: "permission" });
+  const replied = c.answer(asked, { text: "use the staging database" }).catch((e: ApiError) => e);
+  await new Promise(setImmediate);
+  t.mock.timers.tick(TAKEN_MS);
+  assert.equal(((await replied) as ApiError).code, "TIMEOUT");
+  assert.equal(c.p.status.get("t1")!.since, asked, "still that wait");
+  const again = c.answer(asked, { text: "use the staging database" }).catch((e: ApiError) => e);
+  await new Promise(setImmediate);
+  assert.equal(c.writes.length, 2, "typed once");
+  t.mock.timers.tick(TAKEN_MS);
+  assert.deepEqual(await again, { answered: false });
 });
 
 test("an answer holds its terminal until its last key is in: another answer then types nothing, and a program's message goes in after it, never held as a draft of the person's", async () => {
@@ -310,5 +345,110 @@ test("a question its tool asks is answered by choosing an option, with the keys 
     const since = d.waitOn("permission");
     assert.equal(code(() => d.answer("t1", since, { choice: 0 })), "BAD_REQUEST", why);
     assert.deepEqual(d.answer("t1", since, { text: "Red" }), { answered: true }, why);
+  }
+});
+
+/** Claude Code's PermissionRequest entry, as its manifest declares that its hook carries the answer. */
+const ANSWER = {
+  allow: { hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "allow" } } },
+  deny: { hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "deny", message: "{message}" } } },
+  choose: { hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "allow", updatedInput: "{input}" } } },
+  asks: { list: "questions", question: "question", options: "options", label: "label" },
+  chosen: "answers",
+  leave: ["ExitPlanMode"],
+};
+const COLOR = { questions: [{ question: "Which color?", header: "Color", options: [{ label: "Red", description: "warm" }, { label: "Blue", description: "cool" }], multiSelect: false }] };
+
+/** `plane()`, its agent in t1 one whose PermissionRequest hook carries the answer (`answers`: the
+ *  entry's, none for an agent whose hook does not), and that hook as the generic script runs it:
+ *  it reports the wait, then asks for the answer, as its tile. What the hook prints, once it
+ *  stops holding. */
+function hooked(answer: Record<string, unknown> | null = ANSWER) {
+  setCatalog([defFromManifest({
+    manifestVersion: AGENT_MANIFEST_VERSION, id: "acme", label: "Acme", bin: "acme",
+    caps: { promptDelivery: "typed", turnSignal: false, resume: "none", supervise: "human", blockedDetection: false },
+    answer: { permission: { allow: ["1"], deny: ["escape"] } },
+    launch: { hcp: true },
+    hooks: { arg: "--settings", events: { PermissionRequest: { emit: "input.requested", kind: "permission", timeout: 3600, ...(answer ? { answer } : {}) } } },
+  })]);
+  after(() => setCatalog([]));
+  // The agent channel needs nothing of a window here.
+  const c = plane(false, () => ({}));
+  c.p.agentOf.set("t1", "acme");
+  const hook = async (tool: string, input: unknown, more: Record<string, unknown> = {}, signal?: AbortSignal) => {
+    c.p.event("agent.event", { tileId: "hm:t1", event: "input.requested", kind: "permission", ...more });
+    const printed = c.p.agentChannel("agent.await_answer", { callerTile: "hm:t1", hook: "PermissionRequest", tool, input, ...more }, { actor: { kind: "tile", tile: "t1" }, signal })
+      .then((r) => (r as { stdout?: string }).stdout);
+    await new Promise(setImmediate);
+    return { since: c.p.status.get("t1")!.since, printed };
+  };
+  return { ...c, hook };
+}
+const out = (o: unknown) => JSON.stringify(o);
+
+test("an Allow for an agent whose hook carries the answer is printed by that hook, held since it asked, and nothing is typed; a Deny prints its deny, with the line typed as its reason; that wait answered again does nothing", async () => {
+  const c = hooked();
+  const asked = await c.hook("Bash", { command: "npm test" });
+  assert.deepEqual(await c.answer(asked.since, { decision: "allow" }), { answered: true });
+  assert.equal(await asked.printed, out(ANSWER.allow));
+  assert.equal(c.p.status.get("t1")!.state, "working", "it runs what was allowed");
+  assert.equal((await c.answer(asked.since, { decision: "allow" }) as { answered: boolean }).answered, false);
+  const denied = await c.hook("Bash", { command: "rm -rf build" });
+  assert.deepEqual(await c.answer(denied.since, { text: "use the staging database" }), { answered: true });
+  assert.equal(await denied.printed, out({ hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "deny", message: "use the staging database" } } }));
+  const plain = await c.hook("Bash", { command: "rm -rf dist" });
+  assert.deepEqual(await c.answer(plain.since, { decision: "deny" }), { answered: true });
+  assert.equal(await plain.printed, out({ hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "deny" } } }), "no reason given: no message");
+  assert.deepEqual(c.writes, [], "nothing typed");
+  assert.deepEqual(c.audited(), ["agent.answer t1 allow ok", "agent.answer t1 allow, not answered ok", "agent.answer t1 reply ok", "agent.answer t1 deny ok"]);
+});
+
+test("a question its tool asks, held by its hook, is answered by the option's label set in the tool's input under its question's text, or by the line typed; never allowed", async () => {
+  const c = hooked();
+  const color = await c.hook("AskUserQuestion", COLOR);
+  await assert.rejects(c.answer(color.since, { decision: "allow" }), (e: ApiError) => e.code === "BAD_REQUEST");
+  await assert.rejects(c.answer(color.since, { choice: 2 }), (e: ApiError) => e.code === "BAD_REQUEST", "no third option");
+  assert.deepEqual(await c.answer(color.since, { choice: 1 }), { answered: true });
+  const chosen = (answers: Record<string, string>) => out({ hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "allow", updatedInput: { ...COLOR, answers } } } });
+  assert.equal(await color.printed, chosen({ "Which color?": "Blue" }));
+  const again = await c.hook("AskUserQuestion", COLOR);
+  assert.deepEqual(await c.answer(again.since, { text: "Green" }), { answered: true });
+  assert.equal(await again.printed, chosen({ "Which color?": "Green" }));
+  assert.deepEqual(c.writes, []);
+});
+
+test("the agent's own prompt answered first, its hook is let go, printing nothing, and an answer after does nothing: a key typed there, Esc, its tool run, its hook gone", async () => {
+  const c = hooked();
+  const ends: Array<[string, (since: number) => void]> = [
+    ["a key at its chooser", () => c.p.typed("hm:t1", "1")],
+    ["Esc", () => c.p.typed("hm:t1", "\x1b")],
+    ["its tool ran", () => c.p.event("agent.event", { tileId: "hm:t1", event: "input.resolved" })],
+  ];
+  for (const [why, end] of ends) {
+    const asked = await c.hook("Bash", { command: "npm test" });
+    end(asked.since);
+    assert.equal(await asked.printed, undefined, why);
+    assert.deepEqual(await c.answer(asked.since, { decision: "allow" }), { answered: false }, why);
+  }
+  const gone = new AbortController();
+  const asked = await c.hook("Bash", { command: "npm test" }, {}, gone.signal);
+  gone.abort();
+  assert.equal(await asked.printed, undefined);
+  assert.equal(c.p.status.get("t1")!.state, "waiting", "its own prompt still asks");
+  assert.equal(c.p.waits.of("t1"), undefined);
+  assert.deepEqual(c.writes, ['hm:t1:"1"', 'hm:t1:"\\u001b"'], "only the person's keys");
+});
+
+test("not held, the agent's own prompt deciding: a subagent's, a tool its entry leaves to it, and any for an agent whose hook does not carry the answer", async () => {
+  for (const [why, answer, tool, more] of [
+    ["a subagent's", ANSWER, "Bash", { agentId: "a1" }],
+    ["a tool it leaves", ANSWER, "ExitPlanMode", {}],
+    ["no answer declared", null, "Bash", {}],
+  ] as const) {
+    const c = hooked(answer);
+    const asked = await c.hook(tool, { command: "npm test" }, more);
+    assert.equal(await asked.printed, undefined, why);
+    assert.equal(c.p.waits.of("t1"), undefined, why);
+    assert.equal(c.p.status.get("t1")!.state, "waiting", why);
   }
 });

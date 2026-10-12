@@ -16,6 +16,8 @@
 
 /** A hook script and the single argument it takes. Both are the daemon's to decide. */
 export interface HookScript {
+  /** A program that runs the hook itself; none: `execPath` runs the script at `path`. */
+  exec?: string;
   path: string;
   arg?: string;
   /** Put in front of the command: a plugin script is told where the SDK and sockets are. */

@@ -919,6 +919,190 @@
     }
    ],
    "working": 0
+  },
+  {
+   "about": "a wait the agent's own hook holds for the answer (spec/needs.md 0.9) is what its hook says it asks: decided from the device though its agent says no keys, an option chosen when its hook can set one, and its session file's word on the tool kept only when it names the same tool; one held since another time is not it",
+   "held": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "repo": "/home/p/api",
+     "core": {
+      "frames": [],
+      "tiles": [
+       {
+        "id": "t1",
+        "kind": "claude",
+        "label": "Claude #1"
+       },
+       {
+        "id": "t2",
+        "kind": "claude",
+        "label": "Claude #2"
+       },
+       {
+        "id": "t3",
+        "kind": "claude",
+        "label": "Claude #3"
+       }
+      ]
+     }
+    }
+   ],
+   "statuses": [
+    {
+     "tileId": "hm:t1",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000001000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "hm:t2",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000002000,
+      "kind": "permission"
+     }
+    },
+    {
+     "tileId": "hm:t3",
+     "status": {
+      "state": "waiting",
+      "subagents": [],
+      "background": 0,
+      "compacting": false,
+      "source": "hooks",
+      "since": 1790000003000,
+      "kind": "permission"
+     }
+    }
+   ],
+   "waits": {
+    "t1": {
+     "request": "r1",
+     "tile": "t1",
+     "since": 1790000001000,
+     "kind": "permission",
+     "prompt": true,
+     "tool": "Bash",
+     "chooses": true
+    },
+    "t2": {
+     "request": "r2",
+     "tile": "t2",
+     "since": 1790000002000,
+     "kind": "permission",
+     "prompt": true,
+     "tool": "AskUserQuestion",
+     "asks": [
+      {
+       "question": "Which color?",
+       "options": [
+        "Red",
+        "Blue"
+       ]
+      }
+     ],
+     "chooses": true
+    },
+    "t3": {
+     "request": "r3",
+     "tile": "t3",
+     "since": 1790000002999,
+     "kind": "permission",
+     "prompt": true,
+     "tool": "Bash"
+    }
+   },
+   "programs": {},
+   "keys": {},
+   "interrupts": [],
+   "asking": {
+    "t1": {
+     "name": "Bash",
+     "about": "npm test"
+    },
+    "t2": {
+     "name": "Read",
+     "about": "notes.md"
+    },
+    "t3": {
+     "name": "Bash",
+     "about": "ls"
+    }
+   },
+   "choose": [],
+   "agents": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t1",
+     "agent": "Claude #1",
+     "state": "waiting",
+     "since": 1790000001000,
+     "machine": "desk",
+     "waiting": {
+      "kind": "permission",
+      "since": 1790000001000,
+      "tool": {
+       "name": "Bash",
+       "about": "npm test"
+      },
+      "decide": true
+     }
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t2",
+     "agent": "Claude #2",
+     "state": "waiting",
+     "since": 1790000002000,
+     "machine": "desk",
+     "waiting": {
+      "kind": "question",
+      "since": 1790000002000,
+      "asks": [
+       {
+        "question": "Which color?",
+        "options": [
+         "Red",
+         "Blue"
+        ]
+       }
+      ],
+      "choose": true
+     }
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "tile": "t3",
+     "agent": "Claude #3",
+     "state": "waiting",
+     "since": 1790000003000,
+     "machine": "desk",
+     "waiting": {
+      "kind": "permission",
+      "since": 1790000003000,
+      "tool": {
+       "name": "Bash",
+       "about": "ls"
+      }
+     }
+    }
+   ],
+   "working": 0
   }
  ],
  "phone": [

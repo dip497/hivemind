@@ -7,23 +7,31 @@
  * so for every later use of that tool by that agent, until it goes. A wait that ends before an answer (the agent stopped
  * waiting, or waits on something else now) tells its owner so, with no decision.
  * What waits on the agent's own screen (a permission, a question) is answered there, with keys,
- * and is no wait of these. Electron-free.
+ * and is no wait of these, unless the agent's own hook holds for the answer (`hold`): that wait
+ * is the agent's status, and lasts while its status waits on it. Electron-free.
  */
 import { randomUUID } from "node:crypto";
-import type { StatusInput } from "@hivemind/agents";
+import type { InputKind, StatusInput } from "@hivemind/agents";
+import type { Asked } from "@hivemind/agents/node";
 import type { Answerer } from "@hivemind/workspace-api/agents";
 
 export type Decision = "allow" | "deny";
 
-/** Gives the agent its answer: `null` when the wait ended without one. */
-export type Reply = (decision: Decision | null, feedback?: string) => void;
+/** Gives the agent its answer: `null` when the wait ended without one. `choice`: the option of
+ *  the one question it asks. */
+export type Reply = (decision: Decision | null, feedback?: string, choice?: number) => void;
 
 export interface Wait {
   request: string;
   /** The waiting agent's tile, bare. */
   tile: string;
   since: number;
-  kind: "plan" | "approval";
+  kind: InputKind;
+  /** Its own prompt asks it too, and its hook holds for the answer: its status is the agent's. */
+  prompt?: true;
+  /** prompt: the questions its tool asks, and whether an option of one may be chosen. */
+  asks?: Asked[];
+  chooses?: boolean;
   /** plan: the plan, in markdown, and where the agent was working. */
   plan?: string;
   cwd?: string;
@@ -38,7 +46,11 @@ export interface Wait {
 
 export interface WaitsOptions {
   /** The agents' statuses: a wait is the agent's status while it lasts. */
-  status: { event(tile: string, input: StatusInput): void; get(tile: string): { since: number } | undefined };
+  status: {
+    event(tile: string, input: StatusInput): void;
+    get(tile: string): { state: string; since: number; kind?: InputKind } | undefined;
+    subscribe?(fn: (c: { tileId: string; status: { state: string; since: number } }) => void): () => void;
+  };
   /** A wait began or ended. */
   changed?(): void;
 }
@@ -52,7 +64,37 @@ export class Waits {
   /** What an agent's every use of a tool is decided, by `tile:tool`. */
   private readonly rules = new Map<string, Decision>();
 
-  constructor(private readonly o: WaitsOptions) {}
+  constructor(private readonly o: WaitsOptions) {
+    // Its own prompt answered, or its turn over: a hook that holds for the answer is let go.
+    o.status.subscribe?.(({ tileId, status }) => {
+      const held = this.held.get(tileId)?.wait;
+      if (held?.prompt && !(status.state === "waiting" && status.since === held.since)) this.end(tileId, null);
+    });
+  }
+
+  /** The agent `tile`'s own hook holds for the answer to what its status says it waits on now:
+   *  `reply` gives it the first. Undefined when its status waits on nothing. */
+  hold(tile: string, wait: Pick<Wait, "tool" | "asks" | "chooses">, reply: Reply): Wait | undefined {
+    const status = this.o.status.get(tile);
+    const before = this.held.get(tile)?.wait;
+    // A plan or a supervised tool use it waits on is answered by its own hook.
+    if (status?.state !== "waiting" || (before && !before.prompt)) return undefined;
+    this.end(tile, null);
+    const made: Wait = { ...wait, request: randomUUID(), tile, since: status.since, kind: status.kind ?? "other", prompt: true };
+    this.held.set(tile, { wait: made, reply });
+    this.o.changed?.();
+    return made;
+  }
+
+  /** What `tile` waited on ends: a wait on its own prompt says nothing of its status. */
+  private end(tile: string, decision: Decision | null, feedback?: string): void {
+    const held = this.held.get(tile);
+    if (!held) return;
+    this.held.delete(tile);
+    if (!held.wait.prompt) this.o.status.event(tile, { event: "input.resolved" });
+    held.reply(held.wait.prompt ? null : decision, feedback);
+    this.o.changed?.();
+  }
 
   /** The agent `tile` waits on `wait`: `reply` gives it the first answer. A wait it was on before
    *  ends unanswered. */
@@ -93,7 +135,7 @@ export class Waits {
   /** Answer the wait of `tile` that began at `since`, as `by`, and for a supervised tool use
    *  `always` its every later use: whether this answer was the one it got, and when it was not,
    *  who answered first. */
-  answer(tile: string, since: number, decision: Decision, o: { feedback?: string; by?: Answerer | null; always?: boolean } = {}): { answered: boolean; by?: Answerer } {
+  answer(tile: string, since: number, decision: Decision, o: { feedback?: string; by?: Answerer | null; always?: boolean; choice?: number } = {}): { answered: boolean; by?: Answerer } {
     const { feedback, by = null } = o;
     const held = this.held.get(tile);
     if (!held || held.wait.since !== since) {
@@ -105,7 +147,7 @@ export class Waits {
     this.answered.set(`${tile}@${since}`, { decision, by });
     if (this.answered.size > ANSWERED_KEPT) this.answered.delete(this.answered.keys().next().value!);
     this.o.status.event(tile, { event: "input.resolved" });
-    held.reply(decision, feedback);
+    held.reply(decision, feedback, o.choice);
     this.o.changed?.();
     return { answered: true };
   }
@@ -118,12 +160,7 @@ export class Waits {
   /** The agent stopped waiting on `request` before an answer: it ends unanswered. */
   drop(request: string): void {
     const wait = this.named(request);
-    if (!wait) return;
-    const { reply } = this.held.get(wait.tile)!;
-    this.held.delete(wait.tile);
-    this.o.status.event(wait.tile, { event: "input.resolved" });
-    reply(null);
-    this.o.changed?.();
+    if (wait) this.end(wait.tile, null);
   }
 
   /** How every use of `tool` by `tile` is decided, if it was answered `always`. */
@@ -137,7 +174,7 @@ export class Waits {
     const held = this.held.get(tile);
     if (!held) return;
     this.held.delete(tile);
-    held.reply("deny", "the agent closed");
+    held.reply(held.wait.prompt ? null : "deny", "the agent closed");
     this.o.changed?.();
   }
 }

@@ -1,0 +1,60 @@
+// The hook door under bun, as `hive host` runs it: hive-net's `hook` holding an answer through it,
+// and the agent ending that hook letting go of the wait on the host.
+import { expect, test } from "bun:test";
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import net from "node:net";
+import os from "node:os";
+import path from "node:path";
+import { startHookDoor } from "../src/hooks/hook-door.js";
+
+const HIVE_NET = path.resolve(import.meta.dir, "../../../crates/hive-net/target/debug/hive-net");
+const until = async (ok: () => boolean) => { for (let i = 0; i < 500 && !ok(); i++) await new Promise((r) => setTimeout(r, 10)); };
+
+test.skipIf(!fs.existsSync(HIVE_NET))("a held hook is answered through the door, and one the agent ends lets go of the wait", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "door-"));
+  const got: string[] = [];
+  let closed = 0;
+  let answer = true;
+  const host = net.createServer((c) => {
+    c.setEncoding("utf8");
+    c.on("data", (d: string) => {
+      for (const l of d.split("\n").filter(Boolean)) {
+        const m = JSON.parse(l) as { id?: string; method: string };
+        got.push(m.method);
+        if (m.method === "agent.await_answer" && answer) c.write(`${JSON.stringify({ jsonrpc: "2.0", id: m.id, result: { stdout: "allow" } })}\n`);
+      }
+    });
+    c.on("close", () => { closed++; });
+  });
+  await new Promise<void>((r) => host.listen(path.join(dir, "hcp.sock"), r));
+  const door = await startHookDoor({ path: path.join(dir, "door.sock"), sock: path.join(dir, "hcp.sock") });
+  const run = () => {
+    const child = spawn(HIVE_NET, ["hook", door.path], {
+      env: { HIVEMIND_TILE: "hm:t1", HCP_TOKEN: "tok", HIVE_EVENT: "input.requested", HIVE_EVENT_ANSWER: "1" },
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+    let printed = "";
+    child.stdout.on("data", (d) => { printed += d; });
+    child.stdin.end(JSON.stringify({ tool_name: "Bash" }));
+    return { child, printed: () => printed, exited: new Promise((r) => child.on("exit", r)) };
+  };
+
+  const answered = run();
+  await answered.exited;
+  expect(answered.printed()).toBe("allow");
+
+  answer = false;
+  got.length = 0;
+  const before = closed;
+  const held = run();
+  await until(() => got.length >= 3);
+  await new Promise((r) => setTimeout(r, 100));
+  expect(closed).toBe(before);
+  held.child.kill("SIGTERM");
+  await until(() => closed > before);
+  expect(closed).toBe(before + 1);
+  door.close();
+  host.close();
+  fs.rmSync(dir, { recursive: true, force: true });
+});
