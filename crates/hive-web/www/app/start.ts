@@ -30,6 +30,8 @@ export class StartScreen {
   private problem: string | null = null;
   /** Each question asked, so an answer to one superseded is dropped. */
   private asked = 0;
+  /** Where it was last opened for. */
+  private at: { workspace?: string | null; frame?: string | null } = {};
 
   constructor(private readonly app: App) {
     const back = h("button", { type: "button", class: "back", "aria-label": "Back", "data-back": "" }, icon("back"));
@@ -37,11 +39,15 @@ export class StartScreen {
     this.go = pill("Start", () => void this.run(), "primary", { "data-start-go": "" });
     this.picker.addEventListener("change", () => void this.addPhotos());
     this.el.append(h("header", { class: "backbar" }, back, h("div", { class: "what" }, h("h1", {}, "Start an agent"))), this.body, this.picker);
+    // Opened before the computer was reached (the page reloaded on it): asked again once it is.
+    // Once it answered, what the person chose stays.
+    app.onReach(() => !this.el.hidden && this.held === null && void this.open(this.at.workspace, this.at.frame));
   }
 
   /** Shown afresh: what the computer holds, asked again; in `workspace`'s frame `frame` when given. */
   async open(workspace?: string | null, frame?: string | null): Promise<void> {
     const n = ++this.asked;
+    this.at = { workspace, frame };
     this.held = null;
     this.prompt.value = "";
     this.dropPhotos();

@@ -1,8 +1,8 @@
 // Starting an agent on the phone page (docs/design/phone-browser-2026-10-03.md §11.3), in a
 // phone-sized Chromium with no computer: the page's built modules (crates/hive-web/build.sh) served
 // from www by route, the computer's answers given by the test. Opened from a project's heading it
-// chooses that project's machine and folder; a machine that could not be asked says why; a photo
-// too large to send as it is goes as a smaller jpeg.
+// chooses that project's machine and folder, after a reload once the computer is reached; a machine
+// that could not be asked says why; a photo too large to send as it is goes as a smaller jpeg.
 import { test, expect, chromium, type Browser, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
@@ -52,9 +52,14 @@ import { photoOf } from "./js/photos.js";
 const PLACES = ${JSON.stringify(PLACES)};
 const FOLDERS = ${JSON.stringify(FOLDERS)};
 window.calls = [];
+// Reached at once, unless the test says the page reloaded before it was (\`window.unreached\`); then
+// \`window.reach()\` reaches it, as the page tells each screen.
+const reaching = new Set();
+window.reach = () => { window.unreached = false; for (const r of reaching) r(); };
 const app = {
   back() {}, computer: () => "desk",
-  workspaces: async () => [{ workspace: "w0", name: "api" }],
+  onReach: (r) => (reaching.add(r), () => reaching.delete(r)),
+  workspaces: async () => { if (window.unreached) throw new Error("Still starting"); return [{ workspace: "w0", name: "api" }]; },
   places: async (w) => (window.calls.push(["places", w]), PLACES),
   folders: async (w, f) => (window.calls.push(["folders", w, f]), FOLDERS[f]),
   start: async (w, s) => (window.calls.push(["start", w, s]), "t9"),
@@ -108,6 +113,23 @@ test("opened from a project's heading on a saved machine: that machine, that fol
     ["start", "w0", { program: "claude", folder: "machine://box1/srv/web/app", prompt: "fix the nav", model: "opus", mode: "plan", images: [{ type: "image/png", data: png.toString("base64") }] }],
     ["open", "t9"],
   ]);
+});
+
+test("opened by a reload before the computer is reached, it asks again once it is, for that project; reached again later, what the person chose stays", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await start();
+  type Reaching = { unreached: boolean; reach(): void; show(w: string, f: string): Promise<void> };
+  await page.evaluate(() => { (window as unknown as Reaching).unreached = true; });
+  await page.evaluate(() => (window as unknown as Reaching).show("w0", "f-web"));
+  await expect(page.locator("[data-start-error]")).toHaveText("Still starting");
+  await page.evaluate(() => (window as unknown as Reaching).reach());
+  await expect(page.locator("[data-start-error]")).toHaveCount(0);
+  await expect(chosen(page, "data-start-machines")).toHaveText(["build-box"]);
+  await expect(chosen(page, "data-start-folders")).toHaveText(["web"]);
+  await page.locator("[data-start-prompt]").fill("fix the nav");
+  await page.evaluate(() => (window as unknown as Reaching).reach());
+  await expect(page.locator("[data-start-prompt]")).toHaveValue("fix the nav");
+  expect(await calls(page)).toEqual([["places", "w0"]]);
 });
 
 test("a machine that could not be asked says why and offers no agent; a folder opened lately is started in as it is, with nothing inside it offered", async () => {

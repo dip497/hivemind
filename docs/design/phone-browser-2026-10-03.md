@@ -744,7 +744,9 @@ row.
   the innermost project) and up to 4 photos, kept on the machine it runs on, their paths after the
   prompt. On the page: New agent from Home or from a project's heading (`frame` on the project's
   row, spec/home.md 0.2), the machine, folder and agent as chips, a photo picker; stop and close
-  from a row's menu, close asked first. Peers get both methods only with the role `agents`.
+  from a row's menu, close asked first. Peers get both methods only with the role `agents`. Opened
+  by a reload before the computer is reached, the start screen asks again once it is (the page's
+  one `onReach`), and keeps what the person chose when it is reached again later.
 - Not done: recent folders reach the host only while a window is open (they live in its storage);
   a headless host lists none.
 
