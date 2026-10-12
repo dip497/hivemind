@@ -40,7 +40,7 @@ pub struct ViewFile {
 }
 
 /// Dark or light.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
     Dark,
@@ -48,7 +48,7 @@ pub enum Mode {
 }
 
 /// A view's fonts, by their families: for its words, and for code.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Fonts {
     pub ui: String,
     pub mono: String,
@@ -58,8 +58,8 @@ pub struct Fonts {
 /// (`bg`, `fg`, …, each `#rrggbb`), and, as the app says them, dark or light, its accent, corner
 /// radius in pixels, fonts, panel surface and terminal background, glass, and a colour for each
 /// status tone.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct Theme {
     pub colors: BTreeMap<String, String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -81,7 +81,8 @@ pub struct Theme {
 }
 
 /// The screen a view is shown on: its size in CSS pixels, and its look (0.14).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Screen {
     pub w: u32,
     pub h: u32,

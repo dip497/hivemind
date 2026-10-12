@@ -1,0 +1,8 @@
+{
+  "id": "phone-hostile",
+  "name": "Free themes",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "protocol": 1,
+  "phone": true
+}

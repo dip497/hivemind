@@ -15,7 +15,8 @@ self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim(
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-  if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
+  // Asked not to be kept: what the server says now, or nothing.
+  if (req.method !== "GET" || req.cache === "no-store" || new URL(req.url).origin !== location.origin) return;
   event.respondWith((async () => {
     const cache = await caches.open(CACHE);
     const kept = await cache.match(req, { ignoreSearch: true, ignoreVary: true });

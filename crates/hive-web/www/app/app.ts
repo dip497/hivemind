@@ -1,7 +1,8 @@
 // What the screens ask of the app: to open an agent, and to act for the person, told when it
 // did not land.
 
-import type { Agent, Held, Piece, Reply, Start, Startable } from "./types.js";
+import type { ViewSession } from "../pkg/hive_web.js";
+import type { Agent, Held, Offered, Piece, Reply, Screen, Start, Startable, ViewFile } from "./types.js";
 
 export interface App {
   /** Show the agent of `tile`; Back comes back here. */
@@ -19,4 +20,10 @@ export interface App {
   startable(workspace: string): Promise<Startable>;
   /** Start an agent: its tile, or null when it did not start (the person is told why). */
   start(workspace: string, start: Start): Promise<string | null>;
+  /** The views the computer offers in `workspace`. */
+  views(workspace: string): Promise<Offered[]>;
+  viewFile(workspace: string, view: string, path: string): Promise<ViewFile>;
+  openView(workspace: string, view: string, screen: Screen): Promise<ViewSession>;
+  /** `reached` is called each time the computer is reached again, until what it returns is called. */
+  onReach(reached: () => void): () => void;
 }

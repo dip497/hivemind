@@ -164,7 +164,7 @@ function computer() {
         what, (from: Connection, ...at: unknown[]) => { viewed.push({ what, by: from.actor, at }); return {}; },
       ])),
       "view.open": (from: Connection, ...at: unknown[]) => {
-        viewed.push({ what: "view.open", by: from.actor, at, may: ["agent.start", "agent.close", "store.setCore"].filter((m) => from.may?.(m)) });
+        viewed.push({ what: "view.open", by: from.actor, at, may: ["agent.start", "agent.close", "store.setCore", "widget.press"].filter((m) => from.may?.(m)) });
         return { session: "s1" };
       },
     },
@@ -439,7 +439,7 @@ test("a phone shows the workspace's community views as the owner's device: lists
   assert.deepEqual(c.viewed, [
     { what: "view.list", by: asPhone, at: [] },
     { what: "view.file", by: asPhone, at: ["priya-board", "index.html"] },
-    { what: "view.open", by: asPhone, at: ["priya-board", c.repo, screen], may: ["agent.start", "agent.close"] },
+    { what: "view.open", by: asPhone, at: ["priya-board", c.repo, screen], may: ["agent.start", "agent.close", "widget.press"] },
     { what: "view.post", by: asPhone, at: ["s1", { type: "ready", v: 1 }] },
     { what: "view.screen", by: asPhone, at: ["s1", { ...screen, w: 844, h: 390 }] },
     { what: "view.close", by: asPhone, at: ["s1"] },

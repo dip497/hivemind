@@ -259,6 +259,14 @@ button { cursor: pointer; }
 .tabs button[aria-current="page"] { background: var(--raised); color: var(--text); }
 .tabs .tab-dot { position: absolute; top: 5px; left: calc(50% + 8px); width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
 
+/* A view, in its frame on its own origin, filling what the bar above it leaves. */
+.view-screen { display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; height: var(--vh); }
+.view-host { flex: 1; min-height: 0; position: relative; }
+.view-host iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--canvas); }
+.view-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 14px 14px 16px; text-align: left; color: var(--text); font: inherit; }
+.view-row .what { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.view-row .name { font: 600 16px/22px var(--sans); letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .notice {
   position: fixed; left: 16px; right: 16px; bottom: calc(96px + env(safe-area-inset-bottom));
   margin: 0 auto; max-width: 440px; padding: 12px 16px; border-radius: 14px;

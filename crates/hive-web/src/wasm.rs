@@ -5,8 +5,11 @@ use hive_net::{
     net::{addr_of, Reach},
 };
 use hive_phone::{
-    agents, control, conversation, devices, failure::Failure, home, identity::DeviceCertificate,
-    network, pairing, person,
+    agents, control, conversation, devices,
+    failure::Failure,
+    home,
+    identity::DeviceCertificate,
+    network, pairing, person, views,
     workspace::{self, Reply},
 };
 use iroh::{
@@ -15,7 +18,7 @@ use iroh::{
 };
 use serde_json::{json, Value};
 use std::cell::RefCell;
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, watch, Mutex};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(start)]
@@ -73,7 +76,9 @@ fn reply_of(said: &JsValue) -> Result<Reply, JsError> {
             feedback: text("feedback"),
         }),
         (None, None, None, Some(n)) => Ok(Reply::Choose { n }),
-        _ => Err(err("an answer is {text}, {allow}, {approve, feedback?} or {choice}")),
+        _ => Err(err(
+            "an answer is {text}, {allow}, {approve, feedback?} or {choice}",
+        )),
     }
 }
 
@@ -110,7 +115,9 @@ pub fn device_id(seed: &[u8]) -> Result<String, JsError> {
 #[wasm_bindgen(js_name = readLink)]
 pub fn read_link(text: &str) -> Result<JsValue, JsError> {
     match pairing::parse_link(text) {
-        Some(link) => to_js(&json!({ "device": link.device, "name": link.name, "kind": link.kind })),
+        Some(link) => {
+            to_js(&json!({ "device": link.device, "name": link.name, "kind": link.kind }))
+        }
         None => Ok(JsValue::NULL),
     }
 }
@@ -230,7 +237,9 @@ impl Host {
         .await
         .map_err(|e| {
             let closed = self.connection.close_reason();
-            let closed = closed.as_ref().map(|c| c as &(dyn std::error::Error + 'static));
+            let closed = closed
+                .as_ref()
+                .map(|c| c as &(dyn std::error::Error + 'static));
             turned_away(closed).map_or_else(|| err(e).into(), unpaired)
         })
     }
@@ -266,7 +275,8 @@ impl Host {
     /// The person's other computers and hosts the device tells of, the person being the one this
     /// browser's `certificate` names: `{whose?, devices: [{device, name, kind}]}`.
     pub async fn devices(&self, certificate: JsValue) -> Result<JsValue, JsError> {
-        let mine: DeviceCertificate = serde_json::from_value(from_js(&certificate)?).map_err(err)?;
+        let mine: DeviceCertificate =
+            serde_json::from_value(from_js(&certificate)?).map_err(err)?;
         let answer = devices::ask(&self.connection, &json!({ "t": "devices" }))
             .await
             .map_err(err)?;
@@ -275,7 +285,10 @@ impl Host {
             .into_iter()
             .map(|d| json!({ "device": d.device, "name": d.name, "kind": d.kind }))
             .collect();
-        let whose = answer.get("profile").and_then(person::read_profile).map(|p| p.name);
+        let whose = answer
+            .get("profile")
+            .and_then(person::read_profile)
+            .map(|p| p.name);
         to_js(&json!({ "whose": whose, "devices": listed }))
     }
 
@@ -316,7 +329,12 @@ impl Host {
 
     /// Send the agent of `tile` the message `text`, typed in once it is at its prompt. Whether it
     /// went: not when no agent runs there.
-    pub async fn send(&self, workspace: String, tile: String, text: String) -> Result<bool, JsError> {
+    pub async fn send(
+        &self,
+        workspace: String,
+        tile: String,
+        text: String,
+    ) -> Result<bool, JsError> {
         workspace::send(&self.connection, &workspace, &tile, &text)
             .await
             .map_err(err)
@@ -380,8 +398,116 @@ impl Host {
         n0_future::future::or(followed, stopped).await.map_err(err)
     }
 
+    /// The views the device offers this browser in `workspace` (`view.list`): `[{id, name,
+    /// version, entry, page}]`.
+    pub async fn views(&self, workspace: String) -> Result<JsValue, JsError> {
+        let offered = views::list(&self.connection, &workspace)
+            .await
+            .map_err(err)?;
+        to_js(&serde_json::to_value(offered).map_err(err)?)
+    }
+
+    /// The file `path` of the view `view` (`view.file`): `{data, type, csp}`, its bytes as they are.
+    #[wasm_bindgen(js_name = viewFile)]
+    pub async fn view_file(
+        &self,
+        workspace: String,
+        view: String,
+        path: String,
+    ) -> Result<JsValue, JsError> {
+        let file = views::file(&self.connection, &workspace, &view, &path)
+            .await
+            .map_err(err)?;
+        let out = to_js(&json!({ "type": file.mime, "csp": file.csp }))?;
+        let data = js_sys::Uint8Array::from(&file.bytes[..]);
+        js_sys::Reflect::set(&out, &"data".into(), &data).map_err(|_| err("no object"))?;
+        Ok(out)
+    }
+
+    /// Open the view `view` on `workspace`, shown on `screen` (`{w, h, theme}`): its session there.
+    #[wasm_bindgen(js_name = openView)]
+    pub async fn open_view(
+        &self,
+        workspace: String,
+        view: String,
+        screen: JsValue,
+    ) -> Result<ViewSession, JsError> {
+        let screen: views::Screen = serde_json::from_value(from_js(&screen)?).map_err(err)?;
+        let session = views::Session::open(&self.connection, &workspace, &view, &screen, false)
+            .await
+            .map_err(err)?;
+        let (posts, posted) = mpsc::channel(POSTS_WAITING);
+        let (shown, watched) = watch::channel(screen);
+        Ok(ViewSession {
+            posts: RefCell::new(Some(posts)),
+            screen: shown,
+            relay: RefCell::new(Some((session, posted, watched))),
+        })
+    }
+
     pub fn close(&self) {
         self.connection.close(0u32.into(), b"closed");
+    }
+}
+
+/// How many messages a view may have posted that are not on their way yet: past them it posts
+/// faster than its host takes them, and the rest is dropped, as the host would count it flooding.
+const POSTS_WAITING: usize = 256;
+
+/// A view open for this browser, its host on the device (hive-phone's `views::Session`).
+#[wasm_bindgen]
+pub struct ViewSession {
+    posts: RefCell<Option<mpsc::Sender<Value>>>,
+    screen: watch::Sender<views::Screen>,
+    relay: RefCell<
+        Option<(
+            views::Session,
+            mpsc::Receiver<Value>,
+            watch::Receiver<views::Screen>,
+        )>,
+    >,
+}
+
+#[wasm_bindgen]
+impl ViewSession {
+    /// Post `message`, JSON text the view posted, to its host: dropped when it is not JSON, or
+    /// while the view posts faster than its host takes it.
+    pub fn post(&self, message: &str) {
+        if let (Some(posts), Ok(message)) = (&*self.posts.borrow(), serde_json::from_str(message)) {
+            let _ = posts.try_send(message);
+        }
+    }
+
+    /// The view is shown on `screen` now: its host tells it what changed.
+    pub fn screen(&self, screen: JsValue) -> Result<(), JsError> {
+        let screen = serde_json::from_value(from_js(&screen)?).map_err(err)?;
+        self.screen.send_replace(screen);
+        Ok(())
+    }
+
+    /// Relay it until it is closed (null) or its host ends it (why): `said` gets each message its
+    /// host says to the view. An error when the connection went first.
+    pub async fn relay(&self, said: js_sys::Function) -> Result<Option<String>, JsError> {
+        let (session, mut posted, mut shown) = self
+            .relay
+            .borrow_mut()
+            .take()
+            .ok_or_else(|| err("relayed already"))?;
+        let told = |message: Value| {
+            if let Ok(message) = to_js(&message) {
+                let _ = said.call1(&JsValue::NULL, &message);
+            }
+        };
+        match session.relay(&mut posted, &mut shown, false, told).await {
+            Ok(views::Ended::Closed) => Ok(None),
+            Ok(views::Ended::Host(why)) => Ok(Some(why)),
+            Err(e) => Err(err(e)),
+        }
+    }
+
+    /// Show it no more: its host lets go of its session.
+    pub fn close(&self) {
+        self.posts.borrow_mut().take();
     }
 }
 
