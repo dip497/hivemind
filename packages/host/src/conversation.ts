@@ -5,8 +5,8 @@
  * Electron-free.
  */
 import fs from "node:fs";
-import { transcriptEntries, type AgentTranscript } from "@hivemind/agents/node";
-import type { ConversationEntry as Entry, ToolAsked } from "@hivemind/workspace-api/agents";
+import { transcriptEntries, type AgentTranscript, type TranscriptEntry } from "@hivemind/agents/node";
+import type { ConversationEntry as Entry, ToolAsked, ToolUse } from "@hivemind/workspace-api/agents";
 
 /** The entries said, and how far into the file they go (bytes, at the end of a line). */
 export interface Said {
@@ -88,6 +88,37 @@ export function pendingTool(file: string, format: AgentTranscript): ToolAsked | 
   if (!use) return undefined;
   const { id: _id, ...tool } = use.tool;
   return tool;
+}
+
+/** The most characters of a tool's input, and of what it gave back, sent unfolded. */
+export const TOOL_MAX = 256 * 1024;
+
+/** The tool use `use` in the session file `file`, read as `format` maps it, unfolded: the records
+ *  that name it, read whole; undefined when none says it was used. */
+export function toolUse(file: string, format: AgentTranscript, use: string): ToolUse | undefined {
+  let bytes: Buffer;
+  try { bytes = fs.readFileSync(file); } catch { return undefined; }
+  const named = Buffer.from(JSON.stringify(use));
+  const lines: string[] = [];
+  for (let at = bytes.indexOf(named); at >= 0; ) {
+    const start = bytes.lastIndexOf(0x0a, at) + 1;
+    const end = bytes.indexOf(0x0a, at);
+    lines.push(bytes.subarray(start, end < 0 ? bytes.length : end).toString("utf8"));
+    at = end < 0 ? -1 : bytes.indexOf(named, end);
+  }
+  const entries = transcriptEntries(format, lines, { full: true });
+  const tool = entries.find((e): e is Extract<TranscriptEntry, { tool: unknown }> => "tool" in e && e.tool.id === use)?.tool;
+  if (!tool) return undefined;
+  const result = entries.find((e): e is Extract<TranscriptEntry, { result: unknown }> => "result" in e && e.result.of === use)?.result;
+  let truncated = false;
+  const cut = (text: string) => (text.length > TOOL_MAX ? ((truncated = true), text.slice(0, TOOL_MAX)) : text);
+  return {
+    name: tool.name,
+    ...(tool.about !== undefined ? { about: cut(tool.about) } : {}),
+    ...(tool.input !== undefined ? { input: cut(tool.input) } : {}),
+    ...(result ? { result: { text: cut(result.text), ...(result.error ? { error: true as const } : {}) } } : {}),
+    ...(truncated ? { truncated: true as const } : {}),
+  };
 }
 
 /** Follow the session file `file`, read as `format` maps it, from `cursor`: `said` is handed what is

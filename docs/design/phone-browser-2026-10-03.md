@@ -773,7 +773,15 @@ paragraphs, images in the conversation, tool calls that unfold to their full inp
   counted the wrapped hint; Chromium clips the hint rather than drawing an ellipsis), as it had on
   Android from the start (Compose wrapped the hint; Robolectric's legacy text layout hid it). The reader
   costs the wasm 179,382 B raw, 72,970 B gzip, 55,701 B brotli (now 3,785,584 B, 1,381,821 B gzip,
-  1,067,713 B brotli; §5's budget is 2 MB gzipped). Still open here: tool calls unfolded whole.
+  1,067,713 B brotli; §5's budget is 2 MB gzipped).
+- Done (2026-10-12): tool calls unfold whole. The conversation still sends each tool as one light
+  row (`about` a line, what it gave back cut to 2,000 characters), so a long chat stays as fast as
+  §11.7 made it; opening a row asks `agent.tool(tile, use)` (spec/agents.md 0.9) for its input and
+  what it gave back whole, up to 256 KiB each, read from the records of the session file that name
+  the use; asked again on an open while it has given back nothing. A manifest names the input
+  field (`tool.input`; Claude's on the plugins branch `claude-phone-keys`). conformance's
+  `unfolded` cases hold the host and the phone's core to one answer. The apps still show the row
+  as sent.
 
 **11.6 Views and widgets.** A view switcher as on the desktop: the installed views that declare
 phone support (P8: the view protocol's `surfaces`, the workspace API's `view.*`). The browser's

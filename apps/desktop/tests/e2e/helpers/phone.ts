@@ -104,7 +104,7 @@ export function talkerAgent(root: string): Record<string, string> {
     "    - { require: { type: user }, text: message.content, who: person }",
     "    - { require: { type: assistant }, each: message.content, item: { type: text }, text: text, who: agent }",
     "    - require: { type: assistant }", "      each: message.content", "      item: { type: tool_use }",
-    "      tool: { id: id, name: name, about: [input.command], asks: { list: input.questions, question: question, options: options, label: label, many: multiSelect } }",
+    "      tool: { id: id, name: name, about: [input.command], input: input, asks: { list: input.questions, question: question, options: options, label: label, many: multiSelect } }",
     "answer: { permission: { allow: ['y'], deny: ['n'] } }",
     "choose: ['{n}']",
     "interrupt: [escape]",

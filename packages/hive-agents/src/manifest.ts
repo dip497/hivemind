@@ -391,6 +391,7 @@ function validateTranscript(raw: unknown): AgentTranscript {
         req(strArray(x.about) && x.about.length >= 1 && x.about.length <= 8 && x.about.every((p) => DOT_PATH_RE.test(p)), `${at}.tool.about must be 1-8 field paths`);
         rule.tool.about = x.about;
       }
+      if (x.input !== undefined) rule.tool.input = path(x.input, `${at}.tool.input`);
       if (x.asks !== undefined) {
         req(isObj(x.asks), `${at}.tool.asks must be a map`);
         const k = x.asks as Record<string, unknown>;

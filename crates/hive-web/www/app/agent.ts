@@ -48,7 +48,7 @@ export class AgentScreen {
     this.agent = null;
     this.waitSig = "";
     this.waits.replaceChildren();
-    this.chat = new Chat();
+    this.chat = new Chat((use) => (this.agent ? this.app.tool(this.agent, use) : Promise.reject(new Error("it is no longer there"))));
     this.body.replaceWith(this.chat.el);
     this.body = this.chat.el;
     if (o) this.show(o);

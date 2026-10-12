@@ -16,7 +16,7 @@ export interface Asked {
 /** One thing said, as spec/agents.md sends it. */
 export type TranscriptEntry =
   | { id: string; at: number; who: "person" | "agent"; text: string }
-  | { id: string; at: number; who: "agent"; tool: { id: string; name: string; about?: string; asks?: Asked[] } }
+  | { id: string; at: number; who: "agent"; tool: { id: string; name: string; about?: string; asks?: Asked[]; input?: string } }
   | { id: string; at: number; who: "tool"; result: { of: string; text: string; error?: true } };
 
 const ABOUT_MAX = 120;
@@ -59,7 +59,7 @@ function askedIn(from: unknown, asks: TranscriptAsks): Asked[] | undefined {
 
 /** What `rule` reads in `from`, the record or an item of a list in it, as the entry `id`, said at
  *  `at`; null when what it names is not there. */
-function entryOf(rule: TranscriptRule, from: unknown, id: string, at: number, whole: boolean): TranscriptEntry | null {
+function entryOf(rule: TranscriptRule, from: unknown, id: string, at: number, whole: boolean, full: boolean): TranscriptEntry | null {
   if (rule.text !== undefined) {
     const text = valueAt(from, rule.text);
     return isText(text) ? { id, at, who: rule.who!, text } : null;
@@ -69,22 +69,26 @@ function entryOf(rule: TranscriptRule, from: unknown, id: string, at: number, wh
     if (!isText(use) || !isText(name)) return null;
     const about = rule.tool.about?.map((path) => valueAt(from, path)).find(isText);
     const asks = rule.tool.asks && askedIn(from, rule.tool.asks);
-    const cut = about === undefined ? undefined : whole ? about.slice(0, WHOLE_ABOUT_MAX) : about.split("\n")[0]!.slice(0, ABOUT_MAX);
-    return { id, at, who: "agent", tool: { id: use, name, ...(cut === undefined ? {} : { about: cut }), ...(asks ? { asks } : {}) } };
+    const cut = about === undefined ? undefined : full ? about : whole ? about.slice(0, WHOLE_ABOUT_MAX) : about.split("\n")[0]!.slice(0, ABOUT_MAX);
+    const given = full && rule.tool.input !== undefined ? valueAt(from, rule.tool.input) : undefined;
+    const input = given === undefined ? undefined : isText(given) ? given : JSON.stringify(given, null, 2);
+    return { id, at, who: "agent", tool: { id: use, name, ...(cut === undefined ? {} : { about: cut }), ...(asks ? { asks } : {}), ...(input === undefined ? {} : { input }) } };
   }
   if (rule.result) {
     const of = valueAt(from, rule.result.of);
     if (!isText(of)) return null;
     const error = rule.result.error !== undefined && valueAt(from, rule.result.error) === true;
-    return { id, at, who: "tool", result: { of, text: textOf(valueAt(from, rule.result.text)).slice(0, RESULT_MAX), ...(error ? { error: true as const } : {}) } };
+    const text = textOf(valueAt(from, rule.result.text));
+    return { id, at, who: "tool", result: { of, text: full ? text : text.slice(0, RESULT_MAX), ...(error ? { error: true as const } : {}) } };
   }
   return null;
 }
 
 /** What the records in `lines` say, read as `transcript` maps them, in order. An entry read from
  *  one item of a list of several is its record's id, `/`, and the item's index. A tool's `about`
- *  is its first line, cut short; `whole`, all of it, as a wait on it shows it. */
-export function transcriptEntries(transcript: AgentTranscript, lines: readonly string[], { whole = false }: { whole?: boolean } = {}): TranscriptEntry[] {
+ *  is its first line, cut short; `whole`, all of it, as a wait on it shows it; `full`, a tool use
+ *  and what it gave back uncut, its `input` with them (text as it is, else JSON), as unfolded. */
+export function transcriptEntries(transcript: AgentTranscript, lines: readonly string[], { whole = false, full = false }: { whole?: boolean; full?: boolean } = {}): TranscriptEntry[] {
   const entries: TranscriptEntry[] = [];
   for (const line of lines) {
     let record: unknown;
@@ -99,7 +103,7 @@ export function transcriptEntries(transcript: AgentTranscript, lines: readonly s
     const walked = new Set<string>();
     for (const rule of rules) {
       if (rule.each === undefined) {
-        const entry = entryOf(rule, record, id, at, whole);
+        const entry = entryOf(rule, record, id, at, whole, full);
         if (entry) entries.push(entry);
         continue;
       }
@@ -110,7 +114,7 @@ export function transcriptEntries(transcript: AgentTranscript, lines: readonly s
       const readers = rules.filter((r) => r.each === rule.each);
       items.forEach((item, i) => {
         const reader = readers.find((r) => fits(item, r.item));
-        const entry = reader && entryOf(reader, item, items.length > 1 ? `${id}/${i}` : id, at, whole);
+        const entry = reader && entryOf(reader, item, items.length > 1 ? `${id}/${i}` : id, at, whole, full);
         if (entry) entries.push(entry);
       });
     }

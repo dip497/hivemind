@@ -137,6 +137,50 @@ impl Handed {
     }
 }
 
+/// A tool use unfolded (spec/agents.md 0.9): its name, what it is about and its input whole, and
+/// what it gave back once it has; `truncated` when the device cut any of them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Unfolded {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub about: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<Given>,
+    #[serde(
+        default,
+        deserialize_with = "only_true",
+        skip_serializing_if = "Not::not"
+    )]
+    pub truncated: bool,
+}
+
+/// What an unfolded tool gave back.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Given {
+    pub text: String,
+    #[serde(
+        default,
+        deserialize_with = "only_true",
+        skip_serializing_if = "Not::not"
+    )]
+    pub error: bool,
+}
+
+/// The tool use `id` of the agent of `tile` in `workspace`, unfolded, as the device that holds it
+/// reads it from its conversation.
+pub async fn tool(
+    connection: &Connection,
+    workspace: &str,
+    tile: &str,
+    id: &str,
+) -> Result<Unfolded> {
+    let mut w = Workspace::open(connection, workspace).await?;
+    let answer = w.call("agent.tool", json!([tile, id])).await?;
+    serde_json::from_value(answer).context("the device unfolded the tool in a way not understood")
+}
+
 /// Follow the conversation of the agent of `tile` in `workspace`, on `connection` to the device
 /// that holds it, from the cursor in the session `from` names (none, or a session the agent keeps
 /// no more: the last of it): `said` is handed each piece, in order and once, until the device

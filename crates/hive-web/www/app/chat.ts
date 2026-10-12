@@ -1,12 +1,13 @@
 // What an agent and the person say to each other, as a chat (the Android app's ChatView): the
-// person's words in bubbles, the agent's as light markdown, each tool it used as one row whose
-// result unfolds under it. Append-only, by entry id; it follows the newest until the person
+// person's words in bubbles, the agent's as light markdown, each tool it used as one row that
+// unfolds to its input and what it gave back, whole, asked of the computer when first opened. Append-only, by entry id; it follows the newest until the person
 // scrolls up. A long conversation is drawn newest first, a slice a task, so the screen shows at once
 // and a tap waits on no more than a slice.
 
 import { h, icon } from "./dom.js";
 import { markdown } from "./markdown.js";
-import type { Entry, Piece } from "./types.js";
+import type { Entry, Piece, Unfolded } from "./types.js";
+import { message } from "./words.js";
 
 type Result = NonNullable<Entry["result"]>;
 
@@ -24,7 +25,8 @@ export class Chat {
   private drawing = new Set<string>();
   private session = "";
 
-  constructor() {
+  /** `unfold`: a tool use of its, whole; none, a tool shows what it gave back as sent. */
+  constructor(private readonly unfold?: (use: string) => Promise<Unfolded>) {
     this.el.append(this.nothing);
   }
 
@@ -89,7 +91,8 @@ export class Chat {
   }
 
   private row(e: Entry): HTMLElement {
-    const row = rowOf(e);
+    const use = e.tool?.id;
+    const row = rowOf(e, use !== undefined && this.unfold ? () => this.unfold!(use) : undefined);
     if (!e.tool) return row;
     this.tools.set(e.tool.id, row);
     this.drawing.delete(e.tool.id);
@@ -100,9 +103,9 @@ export class Chat {
   }
 }
 
-function rowOf(e: Entry): HTMLElement {
+function rowOf(e: Entry, unfold?: () => Promise<Unfolded>): HTMLElement {
   const props = { "data-entry": e.id, "data-who": e.who };
-  if (e.tool) return toolRow(e.tool.name, e.tool.about, props);
+  if (e.tool) return toolRow(e.tool.name, e.tool.about, props, unfold);
   if (e.result) {
     // What a tool gave back, its use told before what is shown began.
     const row = toolRow("Result", undefined, props);
@@ -113,19 +116,53 @@ function rowOf(e: Entry): HTMLElement {
   return h("div", { class: "said-agent md", ...props }, ...markdown(e.text ?? ""));
 }
 
-/** A tool used: a mark for how it went, `name · about` in mono; tapped, what it gave back. */
-function toolRow(name: string, about: string | undefined, props: Record<string, string>): HTMLElement {
-  const button = h("button", { type: "button", "aria-expanded": "false", disabled: true },
+/** How each tool row shows what it holds now, by its row. */
+const shows = new WeakMap<HTMLElement, () => void>();
+
+/** A tool used: a mark for how it went, `name · about` in mono; tapped, what it gave back, or with
+ *  `unfold`, its input and what it gave back whole, asked when first opened and again on an open
+ *  after it gave back nothing yet. */
+function toolRow(name: string, about: string | undefined, props: Record<string, string>, unfold?: () => Promise<Unfolded>): HTMLElement {
+  const button = h("button", { type: "button", "aria-expanded": "false", disabled: !unfold },
     h("span", { class: "mark mono" }, "○"),
     h("span", { class: "label mono" }, h("b", {}, name), about ? ` · ${about}` : ""),
     icon("chevron", "chev"));
   const result = h("pre", { class: "mono", hidden: true });
-  const row = h("div", { class: "tool", ...props }, button, result);
+  const whole = h("div", { class: "whole", hidden: true, "data-unfolded": "" });
+  const row = h("div", { class: "tool", ...props }, button, whole, result);
+  let got: Unfolded | null = null;
+  let problem: string | null = null;
+  let asking = false;
+  const show = (): void => {
+    const open = row.hasAttribute("data-open");
+    const parts: Array<HTMLElement | null> = [];
+    if (got) {
+      const input = got.input ?? got.about;
+      if (input) parts.push(h("p", { class: "part" }, "Input"), h("pre", { class: "mono", "data-input": "" }, input));
+      if (got.result) parts.push(h("p", { class: "part" }, got.result.error ? "Failed" : "Gave back"), h("pre", { class: "mono", "data-gave": "" }, got.result.text));
+      if (got.truncated) parts.push(h("p", { class: "part quiet", "data-truncated": "" }, "Cut short: it is longer than the phone is sent."));
+    }
+    if (asking) parts.push(h("p", { class: "part quiet" }, "Asking…"));
+    if (problem) parts.push(h("p", { class: "part problem", "data-unfold-error": "" }, `It could not be unfolded: ${problem}`));
+    whole.replaceChildren(...parts.filter((x): x is HTMLElement => x !== null));
+    whole.hidden = !open || !whole.childElementCount;
+    // What it gave back as sent, until the whole of it is here.
+    result.hidden = !open || !!got?.result || !result.textContent;
+  };
+  shows.set(row, show);
   button.addEventListener("click", () => {
-    const open = result.hidden === true;
-    result.hidden = !open;
+    const open = !row.hasAttribute("data-open");
     row.toggleAttribute("data-open", open);
     button.setAttribute("aria-expanded", String(open));
+    if (open && unfold && !got?.result && !asking) {
+      asking = true;
+      problem = null;
+      unfold().then((u) => { got = u; }, (e: unknown) => { problem = message(e); }).finally(() => {
+        asking = false;
+        show();
+      });
+    }
+    show();
   });
   return row;
 }
@@ -133,6 +170,7 @@ function toolRow(name: string, about: string | undefined, props: Record<string, 
 function gaveBack(row: HTMLElement, result: Result): void {
   row.dataset.ended = result.error ? "failed" : "ok";
   row.querySelector(".mark")!.textContent = result.error ? "✕" : "✓";
-  row.querySelector("pre")!.textContent = result.text;
+  row.querySelector(":scope > pre")!.textContent = result.text;
   row.querySelector("button")!.disabled = false;
+  shows.get(row)?.();
 }

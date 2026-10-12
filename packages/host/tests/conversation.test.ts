@@ -3,7 +3,8 @@
 // end or after a cursor, whole lines only; followed as it is written; served to whoever asks, then
 // each piece written to them alone, and the next session's once the agent begins one, until they
 // go; and found as the agent's manifest says it keeps it, for the session its tracker last
-// recorded. How a mapping reads records is packages/hive-agents' (transcript.test.ts).
+// recorded; one tool use unfolded, as conformance/conversation.json's `unfolded` cases say. How a
+// mapping reads records is packages/hive-agents' (transcript.test.ts).
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -14,7 +15,8 @@ import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
-import { followConversation, lastSaid, pendingTool, readConversation, TAIL_BYTES, TAIL_ENTRIES } from "../src/conversation.ts";
+import { readAgentManifest } from "@hivemind/agents/load";
+import { followConversation, lastSaid, pendingTool, readConversation, TAIL_BYTES, TAIL_ENTRIES, TOOL_MAX, toolUse } from "../src/conversation.ts";
 import { conversations, LastSaid, transcriptOf, type Transcript } from "../src/conversations.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-conversation-"));
@@ -149,6 +151,47 @@ test("asked for an agent's conversation, the caller is answered what it says so 
   } finally {
     phone.go();
     other.go();
+  }
+});
+
+type Unfolded = { about: string; use: string; lines: string[]; answer: unknown };
+const conformance = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "../../../conformance/conversation.json"), "utf8")) as {
+  mapped: { transcript: AgentTranscript };
+  unfolded: { mapped: Unfolded[]; claude: Unfolded[] };
+};
+/** Claude Code's mapping, as the agents published hold it. */
+const claudeMapping = async () => (await readAgentManifest(path.join(import.meta.dirname, "../../hive-agents/tests/fixtures/published-agents/claude/agent.yaml"), { source: "user", requireDirMatch: true })).def!.session!.transcript!;
+
+test("a tool use unfolded is read as the unfolded cases say: its input and what it gave back whole, from the records that name it wherever they are in the file", async () => {
+  const cases: Array<[AgentTranscript, Unfolded[]]> = [[conformance.mapped.transcript, conformance.unfolded.mapped], [await claudeMapping(), conformance.unfolded.claude]];
+  for (const [mapping, unfolded] of cases) {
+    assert.ok(unfolded.length > 0);
+    for (const c of unfolded) assert.deepEqual(toolUse(sessionFile(`${c.lines.join("\n")}\n`), mapping, c.use) ?? null, c.answer, c.about);
+  }
+  assert.equal(toolUse(path.join(tmp, "no-such.jsonl"), conformance.mapped.transcript, "c1"), undefined);
+});
+
+test("unfolded, a tool's input, what it is about and what it gave back are each cut to 256 KiB, and it says so", () => {
+  const big = "y".repeat(TOOL_MAX + 10);
+  const line = (rid: string, kind: string, payload: unknown) => JSON.stringify({ rid, ts: "2026-10-02T08:00:00.000Z", kind, payload });
+  const at = sessionFile(`${line("r1", "call", { call_id: "c1", name: "shell", args: { cmd: big } })}\n${line("r2", "output", { call_id: "c1", output: big })}\n`);
+  const got = toolUse(at, conformance.mapped.transcript, "c1")!;
+  assert.deepEqual([got.about?.length, got.input?.length, got.result?.text.length, got.truncated], [TOOL_MAX, TOOL_MAX, TOOL_MAX, true]);
+  const small = sessionFile(`${line("r1", "call", { call_id: "c2", name: "shell", args: "ls" })}\n`);
+  assert.equal(toolUse(small, conformance.mapped.transcript, "c2")!.truncated, undefined);
+});
+
+test("asked for a tool use an agent made, the caller is answered it unfolded; one its session does not name, or an agent keeping no conversation, is not found", async () => {
+  const c = conformance.unfolded.mapped[0]!;
+  const at = sessionFile(`${c.lines.join("\n")}\n`);
+  const { server, client } = served(() => ({ session: "s1", file: at, format: conformance.mapped.transcript }));
+  const phone = client();
+  try {
+    assert.deepEqual(await server.answer("agent.tool", ["hm:t1", c.use], phone), { result: c.answer });
+    const code = async (params: unknown[]) => ((await server.answer("agent.tool", params, phone)) as { error?: { code: string } }).error?.code;
+    assert.deepEqual([await code(["t1", "c9"]), await code(["t7", "c1"]), await code(["t1"])], ["NOT_FOUND", "NOT_FOUND", "BAD_REQUEST"]);
+  } finally {
+    phone.go();
   }
 });
 

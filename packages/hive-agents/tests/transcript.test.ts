@@ -51,6 +51,7 @@ test("a mapping is refused as it is loaded unless every rule reads one thing it 
     [mapping([{ require: { type: { nested: 1 } }, text: "text", who: "agent" }]), /said\[0\].require must map 1-4 field paths/],
     [mapping([{ result: { of: "tool_use_id" } }]), /said\[0\].result.text must be a field path/],
     [mapping([{ tool: { id: "id", name: "name", about: [] } }]), /said\[0\].tool.about must be 1-8 field paths/],
+    [mapping([{ tool: { id: "id", name: "name", input: "not a path" } }]), /said\[0\].tool.input must be a field path/],
   ];
   for (const [transcript, why] of refused) expect(() => defFromManifest(withTranscript(transcript)), String(why)).toThrow(why);
   const { exists: _, ...resume } = claude().session.resume;

@@ -54,6 +54,16 @@ export interface Entry {
   result?: { of: string; text: string; error?: boolean };
 }
 
+/** A tool use unfolded, as the computer answers `agent.tool`: what it is about and its input whole,
+ *  and what it gave back once it has; `truncated` when cut. */
+export interface Unfolded {
+  name: string;
+  about?: string;
+  input?: string;
+  result?: { text: string; error?: boolean };
+  truncated?: boolean;
+}
+
 export interface Piece {
   entries: Entry[];
   cursor: number;

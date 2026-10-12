@@ -10,7 +10,7 @@ import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import type { ToolAsked } from "@hivemind/workspace-api/agents";
 import fs from "node:fs";
-import { followConversation, lastSaid, pendingTool, readConversation, type Said } from "./conversation.js";
+import { followConversation, lastSaid, pendingTool, readConversation, toolUse, type Said } from "./conversation.js";
 import { runsIn, type HeldBoard } from "./needs.js";
 
 /** A session an agent keeps its conversation in: its id (empty while none is known), its file
@@ -89,7 +89,7 @@ export interface ConversationsOptions {
   transcriptOf(tile: string): Transcript | null;
 }
 
-export function conversations(o: ConversationsOptions): Domain<"agent.conversation"> {
+export function conversations(o: ConversationsOptions): Domain<"agent.conversation" | "agent.tool"> {
   /** What each caller follows, by tile: how to stop it. */
   const following = new WeakMap<Connection, Map<string, () => void>>();
   return {
@@ -109,6 +109,13 @@ export function conversations(o: ConversationsOptions): Domain<"agent.conversati
         mine.get(bare)?.();
         mine.set(bare, followAgent(() => o.transcriptOf(bare), now, first.cursor, (said, of) => from.send({ event: "agent.said", params: [bare, said.entries, said.cursor, of] })));
         return now.file ? { ...first, session: now.session } : first;
+      },
+      // One tool use of its session now, unfolded: asked for when the person opens its row.
+      "agent.tool": (_from, tile, use) => {
+        const now = o.transcriptOf(toBareId(text(tile, "tile")));
+        const found = now?.file ? toolUse(now.file, now.format, text(use, "use")) : undefined;
+        if (!found) throw new ApiError("NOT_FOUND", "no such tool use in what this agent said");
+        return found;
       },
     },
     effects: {},

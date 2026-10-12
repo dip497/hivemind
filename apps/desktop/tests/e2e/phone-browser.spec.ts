@@ -222,6 +222,10 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   await waiting.locator('[data-answer="allow"]').click();
   await expect(page.locator("[data-chat]")).toContainText("run answered y", { timeout: 30_000 });
   await expect(waiting).toHaveCount(0, { timeout: 30_000 });
+  // Its row in the chat unfolds to its input whole, asked of the computer.
+  const ran = page.locator("[data-chat] .tool", { hasText: "Bash" });
+  await ran.locator("button").click();
+  await expect(ran.locator("[data-input]")).toHaveText(JSON.stringify({ command: "rm -rf build\nmake all" }, null, 2), { timeout: 30_000 });
 
   // Started from the browser in a folder inside the project, chosen from its heading, the folders
   // in it listed (never a hidden one), with a prompt and a photo: the computer opens a frame there

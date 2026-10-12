@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: on the phone page, tap a tool an agent used to see its whole input (the full command, the whole edit) and what it gave back, up to 256 KB each instead of the first 2,000 characters.
 - Added: start an agent from your phone in any folder of your projects, on this computer or a saved machine, from New agent or a project's heading: pick the machine, the folder (or one inside it) and an agent found there, and attach photos, which it gets as files next to your prompt. A folder without a frame gets one opened for it under its project. Stop or close an agent from its row's menu.
 - Changed: the phone page opens faster, about 280 ms instead of 450 on a phone-speed CPU, as one script instead of fourteen with its fonts in hand before it is first drawn; and opening a long conversation no longer freezes the screen: the newest messages show at once and what was said before comes in above them.
 - Changed: what an agent says reads the same on the phone page, Android and iOS, and shows more of it: italic, strikethrough, tables, links (https only, opened when tapped, bare addresses too), nested and task lists, quotes, rules, heading levels and a code block's language. An image shows as its words and is fetched only if you tap it; raw HTML shows as the text it is. Arabic and Hebrew paragraphs run from the right.

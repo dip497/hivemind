@@ -201,8 +201,9 @@ export interface TranscriptRule {
   text?: string;
   who?: "person" | "agent";
   /** `about`: what the use is about, the first of these that is text. `asks`: where its input
-   *  asks the person questions to choose an answer to. */
-  tool?: { id: string; name: string; about?: string[]; asks?: TranscriptAsks };
+   *  asks the person questions to choose an answer to. `input`: its input, shown whole when the
+   *  person unfolds it. */
+  tool?: { id: string; name: string; about?: string[]; asks?: TranscriptAsks; input?: string };
   /** `text`: text, or a list whose items' `text` are joined a line each. `error`: when true. */
   result?: { of: string; text: string; error?: string };
 }

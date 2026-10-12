@@ -1,6 +1,7 @@
 // Reading on the phone page (docs/design/phone-browser-2026-10-03.md §11.5): what an agent says,
 // read by the core's wasm (spec/markdown.md), drawn as text nodes only, a link only to an https
-// address, each paragraph in its own direction; and the box a message is typed in. In a
+// address, each paragraph in its own direction; a tool unfolded to its input and what it gave back
+// whole, asked of the computer; and the box a message is typed in. In a
 // phone-sized Chromium with no computer: the page's built modules and wasm
 // (crates/hive-web/build.sh) served from www by route.
 import { test, expect, chromium, type Browser, type Page } from "@playwright/test";
@@ -35,6 +36,22 @@ window.say = (piece) => {
   }
   chat.said(piece);
   return chat.el.querySelectorAll("[data-entry]").length;
+};
+// A chat whose tools unfold: \`answers\` is what the computer answers for each use (\`{ error }\`: it
+// fails), \`asked\` each use asked for.
+window.asked = [];
+window.answers = {};
+let unfolding;
+window.sayUnfolding = (piece) => {
+  if (!unfolding) {
+    unfolding = new Chat((use) => {
+      window.asked.push(use);
+      const a = window.answers[use];
+      return a?.error ? Promise.reject(new Error(a.error)) : Promise.resolve(a);
+    });
+    document.getElementById("app").append(unfolding.el);
+  }
+  unfolding.said(piece);
 };
 window.composer = (hint) => document.getElementById("app").append(composer(hint, async () => true, { "data-composer": hint }));
 window.ready = true;
@@ -198,4 +215,54 @@ test("a long conversation shows its newest at once, then what was said before ab
   await expect(chat.locator('[data-entry="e5"]')).toHaveAttribute("data-ended", "ok");
   await expect(chat.locator('[data-entry="e5"] pre')).toHaveText("passed");
   expect(await chat.evaluate((c) => c.scrollHeight - c.scrollTop - c.clientHeight)).toBeLessThan(1);
+});
+
+type Unfolding = { asked: string[]; answers: Record<string, unknown>; sayUnfolding(p: unknown): void };
+const unfolding = (piece: unknown) => page.evaluate((p) => (window as unknown as Unfolding).sayUnfolding(p), piece);
+const answer = (use: string, a: unknown) => page.evaluate(([u, x]) => { (window as unknown as Unfolding).answers[u as string] = x; }, [use, a] as const);
+const asked = () => page.evaluate(() => (window as unknown as Unfolding).asked);
+
+test("a tool unfolds to its input and what it gave back, whole, asked of the computer when first opened: before it gave back, its input; after, asked again for the rest; cut short, it says so; once whole, not asked again", async () => {
+  const input = JSON.stringify({ command: "npm test", description: "Run the tests" }, null, 2);
+  await answer("u1", { name: "Bash", about: "npm test", input });
+  await unfolding({ entries: [{ id: "e1", at: 1, who: "agent", tool: { id: "u1", name: "Bash", about: "npm test" } }], cursor: 1, session: "s" });
+  const row = page.locator('[data-entry="e1"]');
+  const open = row.locator("button");
+  // Still running, it unfolds all the same: to its input.
+  await open.click();
+  await expect(row.locator("[data-input]")).toHaveText(input);
+  await expect(row.locator("[data-gave]")).toHaveCount(0);
+  expect(await asked()).toEqual(["u1"]);
+  // What it gave back comes while it is open, as sent: the row shows it under its input until the
+  // whole of it is asked for.
+  const whole = `passed\n${"ok\n".repeat(2000)}`;
+  await unfolding({ entries: [{ id: "e2", at: 2, who: "tool", result: { of: "u1", text: whole.slice(0, 2000) } }], cursor: 2, session: "s" });
+  await expect(row.locator(":scope > pre")).toHaveText(whole.slice(0, 2000));
+  await expect(row.locator(":scope > pre")).toBeVisible();
+  await open.click();
+  await expect(row.locator("[data-unfolded]")).toBeHidden();
+  await answer("u1", { name: "Bash", about: "npm test", input, result: { text: whole }, truncated: true });
+  await open.click();
+  await expect(row.locator("[data-gave]")).toHaveText(whole);
+  await expect(row.locator(":scope > pre")).toBeHidden();
+  await expect(row.locator("[data-truncated]")).toBeVisible();
+  expect(await asked()).toEqual(["u1", "u1"]);
+  await open.click();
+  await open.click();
+  await expect(row.locator("[data-gave]")).toHaveText(whole);
+  expect(await asked()).toEqual(["u1", "u1"]);
+});
+
+test("a tool the computer cannot unfold says why, and shows what it gave back as sent", async () => {
+  await answer("u2", { error: "no such tool use in what this agent said" });
+  await unfolding({ entries: [
+    { id: "e3", at: 3, who: "agent", tool: { id: "u2", name: "Read", about: "a.ts" } },
+    { id: "e4", at: 4, who: "tool", result: { of: "u2", text: "the file", error: true } },
+  ], cursor: 4, session: "s" });
+  const row = page.locator('[data-entry="e3"]');
+  await row.locator("button").click();
+  await expect(row.locator("[data-unfold-error]")).toHaveText("It could not be unfolded: no such tool use in what this agent said");
+  await expect(row.locator(":scope > pre")).toHaveText("the file");
+  await expect(row.locator(":scope > pre")).toBeVisible();
+  await expect(row).toHaveAttribute("data-ended", "failed");
 });

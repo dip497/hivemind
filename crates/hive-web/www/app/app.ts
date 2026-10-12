@@ -1,7 +1,7 @@
 // What the screens ask of the app: to open an agent, and to act for the person, told when it
 // did not land.
 
-import type { Agent, Folders, Held, Piece, Places, Reply, Start } from "./types.js";
+import type { Agent, Folders, Held, Piece, Places, Reply, Start, Unfolded } from "./types.js";
 
 export interface App {
   /** Show the agent of `tile`; Back comes back here. */
@@ -13,6 +13,8 @@ export interface App {
   stop(agent: Agent): Promise<boolean>;
   close(agent: Agent): Promise<boolean>;
   conversation(agent: Agent, said: (p: Piece) => void, ended: (why: string) => void): () => void;
+  /** The tool use `use` of `agent`, unfolded. */
+  tool(agent: Agent, use: string): Promise<Unfolded>;
   /** The computer's name, as paired. */
   computer(): string;
   workspaces(): Promise<Held[]>;

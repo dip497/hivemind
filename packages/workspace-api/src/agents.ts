@@ -149,6 +149,16 @@ export type ConversationEntry =
   | { id: string; at: number; who: "agent"; tool: { id: string; name: string; about?: string; asks?: Asked[] } }
   | { id: string; at: number; who: "tool"; result: { of: string; text: string; error?: true } };
 
+/** A tool use unfolded (spec/agents.md 0.9): its name, what it is about and its input whole, and
+ *  what it gave back once it has; each cut to `TOOL_MAX` characters, `truncated` then. */
+export interface ToolUse {
+  name: string;
+  about?: string;
+  input?: string;
+  result?: { text: string; error?: true };
+  truncated?: true;
+}
+
 /** What an agent changed in the folder it runs in, against its last commit (spec/agents.md
  *  "Changes"). */
 export interface AgentChanges {

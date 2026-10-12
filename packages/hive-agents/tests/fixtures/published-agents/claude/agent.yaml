@@ -305,6 +305,7 @@ session:
         id: id
         name: name
         about: [input.file_path, input.path, input.command, input.pattern, input.url, input.query, input.description]
+        input: input
         # AskUserQuestion's: its questions, each with the options to choose from.
         asks: { list: input.questions, question: question, options: options, label: label, many: multiSelect }
 hooks:

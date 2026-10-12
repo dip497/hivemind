@@ -6,7 +6,7 @@ import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } 
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
-import type { AgentAnswer, AgentChange, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, Startable, StatusChange, TileOpened } from "./agents.js";
+import type { AgentAnswer, AgentChange, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, Startable, StatusChange, TileOpened, ToolUse } from "./agents.js";
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
 import type { JoinQuestion, JoinRequests, PersonHere } from "./people.js";
 import type { ClientGrant, NewGrant } from "./grants.js";
@@ -131,6 +131,8 @@ export interface WorkspaceMethods {
    *  and the session; then each `agent.said` as it is written, from the start of each session it
    *  begins since, until the connection goes. `session` is left out for an agent with none. */
   "agent.conversation": (tile: string, cursor?: number, session?: string) => { entries: ConversationEntry[]; cursor: number; session?: string };
+  /** (0.9 of spec/agents.md) The tool use `use` in the conversation of the agent of `tile`, unfolded. */
+  "agent.tool": (tile: string, use: string) => ToolUse;
   /** (0.23) Name the tile `tile`: one line, what every surface shows and the control plane calls it. */
   "agent.rename": (tile: string, name: string) => { name: string };
   /** (0.23) Type keys into the agent in `tile` by name (`Down`, `Enter`, `Escape`, `C-c`) or as

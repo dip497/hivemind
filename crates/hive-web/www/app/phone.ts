@@ -5,7 +5,7 @@
 import init, { Device, type Host, HomeView, deviceId, pair, readLink, readQr } from "../pkg/hive_web.js";
 import type { Filter } from "./home.js";
 import { deviceKey, get, put, remove } from "./store.js";
-import type { Agent, Held, Others, Overview, Paired, Piece, Reply, Shown, Start, Places, Folders } from "./types.js";
+import type { Agent, Held, Others, Overview, Paired, Piece, Reply, Shown, Start, Places, Folders, Unfolded } from "./types.js";
 import { message } from "./words.js";
 
 export interface Told {
@@ -213,6 +213,11 @@ export class Phone {
   /** Start an agent in `workspace`: its tile. */
   async start(workspace: string, start: Start): Promise<string> {
     return this.reached().start(workspace, start);
+  }
+
+  /** The tool use `use` of `agent`, unfolded. */
+  async tool(agent: Agent, use: string): Promise<Unfolded> {
+    return (await this.reached().tool(agent.workspace, agent.tile, use)) as Unfolded;
   }
 
   /** Follow what `agent` and the person said, from the last of its session, again after each

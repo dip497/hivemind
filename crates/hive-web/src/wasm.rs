@@ -369,6 +369,15 @@ impl Host {
             .map_err(err)
     }
 
+    /// The tool use `id` of the agent of `tile`, unfolded: `{name, about?, input?, result?,
+    /// truncated?}`.
+    pub async fn tool(&self, workspace: String, tile: String, id: String) -> Result<JsValue, JsError> {
+        let unfolded = conversation::tool(&self.connection, &workspace, &tile, &id)
+            .await
+            .map_err(err)?;
+        to_js(&serde_json::to_value(unfolded).map_err(err)?)
+    }
+
     /// Follow what the agent of `tile` and the person said (hive-phone's `conversation::follow`):
     /// `said` is called with `{entries, cursor, session}` for each piece, in order and once, from
     /// the last of its session; until `until` settles or the device ends it.

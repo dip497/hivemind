@@ -1,4 +1,4 @@
-# Agents (0.8)
+# Agents (0.9)
 
 The person's agents, as their phone sees and drives them (M5, `docs/design/phone-app-2026-10-02.md`
 §4): every agent in the workspaces one of their devices holds, live; and starting one, stopping
@@ -209,9 +209,24 @@ before the answer. Each entry is one of
 - An agent with no session file found, or whose manifest maps no transcript, answers no entries
   and cursor 0, no session, and nothing more.
 
+(0.9) `agent.tool(tile, use)` answers one tool use of the agent's session now, unfolded, as the
+person opens its row:
+
+```json
+{ "name": "Bash", "about": "<what it is about, whole>", "input": "<its input>",
+  "result": { "text": "<what it gave back, whole>", "error": true }, "truncated": true }
+```
+
+read from the records of its session file that name `use`, wherever they are in it, as its
+manifest maps them, `input` as the field the manifest's `tool.input` names (text as it is, else
+JSON, two spaces a level); `about`, `input` and `result` each left out when there is none (no
+`result`: nothing given back yet), each cut to 262,144 characters, `truncated` then (left out
+otherwise). A use the session does not name, or an agent that keeps no conversation, is
+`NOT_FOUND`. The cases in `../conformance/conversation.json` (`unfolded`) decide it.
+
 ## Who may
 
-`agent.startable`, `agent.diff` and `agent.conversation` may be called by who may view the
+`agent.startable`, `agent.diff`, `agent.conversation` and `agent.tool` may be called by who may view the
 workspace; `agent.places` and `agent.folders` (0.8), which name the person's folders, and `agent.start`,
 `agent.interrupt` and `agent.close` by who may drive its agents (role `agents`); all of them by the
 person's own devices, a phone among them. Each of the last three is recorded in the device's audit

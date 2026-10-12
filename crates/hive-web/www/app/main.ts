@@ -63,6 +63,7 @@ const app: App = {
   stop: (agent) => act(() => phone!.stop(agent), NOTICES.notStopped),
   close: (agent) => act(() => phone!.close(agent), NOTICES.closed),
   conversation: (agent, said, ended) => phone?.conversation(agent, said, ended) ?? (() => {}),
+  tool: (agent, use) => reached().tool(agent, use),
   computer: () => paired?.with.name ?? "your computer",
   workspaces: () => reached().workspaces(),
   places: (workspace) => reached().places(workspace),
