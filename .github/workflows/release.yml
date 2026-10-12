@@ -107,7 +107,7 @@ jobs:
           set -euo pipefail
           mkdir -p release-assets stage
           cp -r crates/hive-web/www stage/phone
-          rm -rf stage/phone/app stage/phone/tsconfig.json stage/phone/echo.html stage/phone/pkg/*.d.ts stage/phone/pkg/package.json stage/phone/pkg/.gitignore
+          rm -rf stage/phone/app stage/phone/js stage/phone/tsconfig.json stage/phone/echo.html stage/phone/pkg/*.js stage/phone/pkg/*.d.ts stage/phone/pkg/package.json stage/phone/pkg/.gitignore
           tar -czf release-assets/hive-phone-page.tar.gz -C stage phone
           cp crates/hive-web/www/page.sha256 release-assets/hive-phone-page.sha256
           ls -la release-assets/

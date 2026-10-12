@@ -48,7 +48,8 @@ export class Phone {
   /** The wasm compiled as it downloads (`instantiateStreaming`, the module from the service
    *  worker's cache once kept), and this browser's key. */
   static async open(paired: Paired | null, told: Told): Promise<Phone> {
-    await init();
+    // Beside the page: bundled, this script is not beside the glue.
+    await init({ module_or_path: new URL("pkg/hive_web_bg.wasm", document.baseURI) });
     const [seed, kept] = await Promise.all([deviceKey(), get<unknown>("home")]);
     return new Phone(deviceId(seed), seed, paired, told, new HomeView(paired ? kept ?? null : null));
   }

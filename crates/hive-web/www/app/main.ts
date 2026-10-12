@@ -7,6 +7,7 @@ import { AgentScreen } from "./agent.js";
 import { Devices } from "./devices.js";
 import { h, icon } from "./dom.js";
 import { Home } from "./home.js";
+import { warm } from "./markdown.js";
 import { PairScreen, guessName } from "./pair.js";
 import type { Phone } from "./phone.js";
 import { StartScreen } from "./start.js";
@@ -222,7 +223,7 @@ async function start(): Promise<void> {
   route();
 
   navigator.serviceWorker?.register("sw.js").catch(() => {});
-  // The wasm and its glue after the first screen, which needs neither.
+  // The wasm after the first screen, which does not need it.
   const { Phone } = await import("./phone.js");
   phone = await Phone.open(paired, {
     home: render,
@@ -239,6 +240,7 @@ async function start(): Promise<void> {
   });
   devices.show(phone.id, paired);
   render();
+  warm();
   addEventListener("online", () => phone!.retry());
   document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && phone!.retry());
   phone.connect();

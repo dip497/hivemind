@@ -23,8 +23,19 @@ test.beforeEach(async () => {
 import init from "./pkg/hive_web.js";
 import { markdown } from "./js/markdown.js";
 import { composer } from "./js/dom.js";
+import { Chat } from "./js/chat.js";
 await init();
 window.draw = (text) => document.querySelector("[data-said]").replaceChildren(...markdown(text));
+let chat;
+window.say = (piece) => {
+  if (!chat) {
+    chat = new Chat();
+    chat.el.style.height = "400px";
+    document.getElementById("app").append(chat.el);
+  }
+  chat.said(piece);
+  return chat.el.querySelectorAll("[data-entry]").length;
+};
 window.composer = (hint) => document.getElementById("app").append(composer(hint, async () => true, { "data-composer": hint }));
 window.ready = true;
 </script>` });
@@ -168,4 +179,23 @@ test("a message box's hint, however long the agent's name, stays on one line, be
   await field(long).fill("x");
   await field(long).fill("");
   expect(await height(long)).toBe(one);
+});
+
+test("a long conversation shows its newest at once, then what was said before above it, in order, the screen staying on the newest", async () => {
+  const n = 600;
+  // A tool used early, what it gave back near the end: on one row, however far apart they are drawn.
+  const entries = Array.from({ length: n }, (_, i) =>
+    i === 5 ? { id: "e5", at: i, who: "agent", tool: { id: "u", name: "Bash", about: "npm test" } }
+    : i === n - 2 ? { id: `e${i}`, at: i, who: "tool", result: { of: "u", text: "passed" } }
+    : { id: `e${i}`, at: i, who: i % 2 ? "agent" : "person", text: i % 2 ? `**${i}**, with \`code\` and [a link](https://a.b/${i})` : `${i}` });
+  const atOnce = await page.evaluate((p) => (window as unknown as { say(p: unknown): number }).say(p), { entries, cursor: n, session: "s" });
+  expect(atOnce).toBeGreaterThan(0);
+  expect(atOnce).toBeLessThan(n - 1);
+  const chat = page.locator("[data-chat]");
+  await expect(chat.locator("[data-entry]")).toHaveCount(n - 1);
+  expect(await chat.locator("[data-entry]").evaluateAll((rows) => rows.map((r) => r.getAttribute("data-entry")))).toEqual(
+    entries.filter((e) => !e.result).map((e) => e.id));
+  await expect(chat.locator('[data-entry="e5"]')).toHaveAttribute("data-ended", "ok");
+  await expect(chat.locator('[data-entry="e5"] pre')).toHaveText("passed");
+  expect(await chat.evaluate((c) => c.scrollHeight - c.scrollTop - c.clientHeight)).toBeLessThan(1);
 });

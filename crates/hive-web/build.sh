@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Build the phone page into www/: the wasm and its JS glue (www/pkg), the app's TypeScript
-# (www/js), its fonts, the list the service worker keeps (shell.json), and a compressed copy of
+# Build the phone page into www/: the wasm and its JS glue (www/pkg), the app's TypeScript checked
+# and bundled with the glue into one file (www/main.js; each module also in www/js, for tests), its
+# fonts, the list the service worker keeps (shell.json), and a compressed copy of
 # each file for `hive-net serve --phone`; and the page's hash (www/page.sha256), which the desktop's
 # pairing dialog compares with what a server serves. Prints the wasm's size raw, gzipped and
 # brotli'd, and the hash.
 #
 # Needs: the wasm32-unknown-unknown target; a C compiler for wasm32 (ring's: clang, or set
-# CC_wasm32_unknown_unknown); wasm-bindgen at Cargo.lock's version (WASM_BINDGEN=<path>); tsc and
-# the fonts, from the repo's dependencies (pnpm install) or TSC=<path> FONTS=<@fontsource dir>.
+# CC_wasm32_unknown_unknown); wasm-bindgen at Cargo.lock's version (WASM_BINDGEN=<path>); tsc, esbuild
+# and the fonts, from the repo's dependencies (pnpm install) or TSC=<path> ESBUILD=<path>
+# FONTS=<@fontsource dir>.
 # tools.sh fetches what is missing. No wasm-opt: every level made the raw file smaller and the
 # compressed one, what a browser downloads, larger.
 set -euo pipefail
@@ -22,6 +24,9 @@ cargo build --release --locked --target wasm32-unknown-unknown --lib
 
 rm -rf www/js
 "${TSC:-$repo/node_modules/.bin/tsc}" -p www
+# One request, not one per module, each asked for only once the one importing it is read.
+"${ESBUILD:-$repo/node_modules/.bin/esbuild}" www/app/main.ts --bundle --format=esm --target=es2022 \
+  --minify --log-level=warning --outfile=www/main.js
 
 fonts=${FONTS:-$repo/apps/desktop/node_modules/@fontsource}
 mkdir -p www/fonts
@@ -31,13 +36,13 @@ for w in 400 500; do cp "$fonts/jetbrains-mono/files/jetbrains-mono-latin-$w-nor
 # What the app needs to open with no server reached; the page itself is `./`.
 (cd www && {
   echo '"./"'
-  find app.css manifest.webmanifest js pkg fonts icons -type f \
-    \( -name '*.css' -o -name '*.webmanifest' -o -name '*.js' -o -name '*.wasm' -o -name '*.woff2' -o -name '*.png' -o -name '*.svg' \) |
+  find app.css manifest.webmanifest main.js pkg fonts icons -type f \
+    \( -name '*.css' -o -name '*.webmanifest' -o -name 'main.js' -o -name '*.wasm' -o -name '*.woff2' -o -name '*.png' -o -name '*.svg' \) |
     LC_ALL=C sort | sed 's/.*/"&"/'
 } | paste -sd, | sed 's/.*/[&]/' > shell.json)
 
 find www -name '*.br' -delete -o -name '*.gz' -delete
-for f in www/index.html www/app.css www/js/*.js www/pkg/*.js www/pkg/*.wasm; do
+for f in www/index.html www/app.css www/main.js www/pkg/*.wasm; do
   gzip -9kf "$f"
   if command -v brotli >/dev/null; then brotli -kf -q 11 "$f"; fi
 done

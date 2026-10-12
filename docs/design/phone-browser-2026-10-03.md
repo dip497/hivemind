@@ -335,8 +335,8 @@ it (its session file), and the chat shows both sides. Reopened offline, with the
 refused, the page shows what waited from what it kept, says the computer is not reached, and
 reconnects when the network is back. Unpaired on the computer, it is refused. 34–52 s.
 
-**The app** (`crates/hive-web/www`): plain TypeScript compiled by the repo's `tsc` into `www/js`
-(no framework, no bundler), one module per screen (`needs.ts`, `agents.ts`, `agent.ts`, `chat.ts`,
+**The app** (`crates/hive-web/www`): plain TypeScript, checked by the repo's `tsc` and bundled by
+esbuild into one file, `www/main.js` (no framework; §11.7), one module per screen (`needs.ts`, `agents.ts`, `agent.ts`, `chat.ts`,
 `pair.ts`, `devices.ts`), the connection in `phone.ts`, the kit in `dom.ts`. Lists are kept by key
 (`Keyed`): an element is made once per item, made again only when what it shows changed, moved only
 when out of place; the ages tick in place. The look is the Android app's (`Theme.kt`, `Kit.kt`):
@@ -764,6 +764,51 @@ paragraphs, images in the conversation, tool calls that unfold to their full inp
 phone support (P8: the view protocol's `surfaces`, the workspace API's `view.*`). The browser's
 view host is a sandboxed iframe on its own origin under the view's CSP. Widgets through the same
 plugin contract (`widget.drawn`, `widget.press`); no widget gets a code path of its own.
+
+**11.7 Speed** (the person's brief, 2026-10-12). The page's modules in one request; the first
+screen under 500 ms at 4× CPU throttle; no task over 50 ms when a chat opens; measured before and
+after at the same throttle.
+
+- Done (2026-10-12). Traced first (`crates/hive-web/measure-open.mjs`, `TRACE=`). A kept open
+  fetched its modules in four rounds through the service worker, each found only once the module
+  importing it was read: `start.js` and `scan.js` were not preloaded, and `markdown.ts` imported the
+  wasm's glue that `main.ts` loads after the first screen. Its first layout ran in stand-in fonts,
+  192 ms, before Geist came and it was laid out again in 14 ms. A chat of 60 messages opened in one
+  task: each message read and drawn, then all laid out to scroll to the newest. And the first
+  markdown read compiled the reader, as V8 compiles a wasm function on its first call: 84–123 ms
+  for that one call at 4×, 17 ms with lazy compilation off.
+- Now `build.sh` bundles the app with esbuild (in the workspace's catalog; `tools.sh` fetches it
+  where there is no `node_modules`) into `www/main.js`: one request, 62 KB raw and 19 KB gzip, where
+  the modules were 148 KB in 14 files. `tsc` still checks the app and writes its modules to
+  `www/js` for the specs; the release leaves them out, with the glue, which is in the bundle. The
+  page preloads its five fonts. The wasm is found beside the page, not beside the script. Once the
+  core is up, the reader is run on a line of each kind of markdown, a task each (the longest 41 ms
+  at 4×). The chat draws a long conversation newest first, 12 ms of rows a task, what was said
+  before going in above it with the screen kept where it was; a tool's result joins its row
+  wherever either is drawn.
+- Measured: `measure-open.mjs`, headless Chromium, a phone's viewport, 4× CPU throttle, 7 opens
+  each; the page before and after, run in turn twice at load 6–7 on 16 CPUs. Medians, the worst in
+  brackets:
+
+  | | before | after |
+  |---|---|---|
+  | First screen, reopened offline from what it kept | 461 (679), 444 (595) ms | 290 (321), 278 (312) ms |
+  | First visit, 200 ms a request, 9 Mbit/s, until it asks to pair | 1,084, 1,104 ms; 23 requests | 941, 924 ms; 9 requests |
+  | A chat of 60 messages: its newest on screen | 207, 208 ms | 85, 86 ms |
+  | Its longest task | 159 (236), 165 (327) ms | 0 (0), 0 (52) ms |
+
+  One task in 14 chat opens took 52 ms. At load 21–37 the page after was 404–559 ms to its first
+  screen; at load 26 the chat's slices ran past 50 ms, as everything did. The harness waits on a
+  message from the page, as asking it with Playwright's `waitForFunction` ran a 103 ms script of
+  the driver's while the page opened; and it opens the chat with the app's styles and fonts in
+  hand, as the app does.
+- Proved to fail (`scripts/mutate.sh`, `phone-reading.spec.ts`): the whole conversation drawn in
+  one task; what was said before put below the newest; a slice drawn in reverse; the screen not kept
+  where it was; a result never joined to its tool's row; a result for a tool not drawn yet shown as
+  a row of its own; the newest not scrolled to.
+- Not done: once the first screen shows, the core's start (`Phone.open`: the wasm instantiated, the
+  kept Home read into it) is one task of 170–220 ms at 4×, and a tap in it waits. The first visit
+  is three round trips (the page; the script, styles and fonts; the wasm). Not measured on a phone.
 
 Out of scope, a separate B6 design: answering from the notification itself (end-to-end encrypted
 Web Push with Allow and Deny actions; on an iPhone only once the page is on the Home Screen).

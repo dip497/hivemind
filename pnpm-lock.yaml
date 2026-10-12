@@ -242,6 +242,9 @@ catalogs:
     electron-vite:
       specifier: ^5.0.0
       version: 5.0.0
+    esbuild:
+      specifier: 0.28.2
+      version: 0.28.2
     gray-matter:
       specifier: 4.0.3
       version: 4.0.3
@@ -301,6 +304,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.1
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.28.2
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

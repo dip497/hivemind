@@ -17,14 +17,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends brotli && rm -r
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
 ENV PATH=/root/.cargo/bin:$PATH
 WORKDIR /src
-COPY pnpm-lock.yaml .
+COPY pnpm-lock.yaml pnpm-workspace.yaml .
 COPY spec/ spec/
 COPY crates/Cargo.toml crates/Cargo.lock crates/
 COPY crates/hive-net/ crates/hive-net/
 COPY crates/hive-phone/ crates/hive-phone/
 COPY crates/hive-web/ crates/hive-web/
 RUN tools=$(crates/hive-web/tools.sh /tools) && eval "$tools" && crates/hive-web/build.sh \
-  && cd crates/hive-web/www && rm -rf app tsconfig.json echo.html pkg/*.d.ts pkg/package.json pkg/.gitignore
+  && cd crates/hive-web/www && rm -rf app js tsconfig.json echo.html pkg/*.js pkg/*.d.ts pkg/package.json pkg/.gitignore
 
 # glibc and CA certificates, nothing else: no shell, no package manager.
 FROM gcr.io/distroless/cc-debian12

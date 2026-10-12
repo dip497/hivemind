@@ -14,20 +14,14 @@
 <link rel="icon" href="icons/mark.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="app.css">
-<!-- The first screen's modules, asked for at once rather than as each import is found. -->
-<link rel="modulepreload" href="js/main.js">
-<link rel="modulepreload" href="js/agent.js">
-<link rel="modulepreload" href="js/answers.js">
-<link rel="modulepreload" href="js/chat.js">
-<link rel="modulepreload" href="js/devices.js">
-<link rel="modulepreload" href="js/dom.js">
-<link rel="modulepreload" href="js/home.js">
-<link rel="modulepreload" href="js/markdown.js">
-<link rel="modulepreload" href="js/pair.js">
-<link rel="modulepreload" href="js/store.js">
-<link rel="modulepreload" href="js/words.js">
+<!-- In hand before the first layout, which in a stand-in font costs several times the next. -->
+<link rel="preload" href="fonts/geist-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/geist-500.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/geist-600.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/mono-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/mono-500.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="pkg/hive_web_bg.wasm" as="fetch" type="application/wasm" crossorigin>
-<script type="module" src="js/main.js"></script>
+<script type="module" src="main.js"></script>
 </head>
 <body>
 <main id="app"></main>

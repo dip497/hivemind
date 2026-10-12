@@ -2,8 +2,8 @@
 # What build.sh needs, at the versions this repository pins, so the page is the same bytes wherever
 # it is built: the Rust rust-toolchain.toml names; and, kept in <dir>, checked against their
 # hashes, wasm-bindgen at the version Cargo.lock names (its project's own build), zig as the C
-# compiler for wasm and, in a checkout with no node_modules (a container), tsc and the fonts at the
-# versions pnpm-lock.yaml names. Prints what build.sh reads, for eval:
+# compiler for wasm and, in a checkout with no node_modules (a container), tsc, esbuild and the fonts
+# at the versions pnpm-lock.yaml and the workspace's catalog name. Prints what build.sh reads, for eval:
 #
 #   tools=$(crates/hive-web/tools.sh /tmp/hive-web-tools) && eval "$tools" && crates/hive-web/build.sh
 set -euo pipefail
@@ -69,7 +69,8 @@ if [ ! -x ../../node_modules/.bin/tsc ]; then
   locked() { grep -m1 -oE "^  '?$1@[0-9][^':(]*" ../../pnpm-lock.yaml | sed -E "s|^  '?$1@||"; }
   npm install --prefix "$dir/node" --no-save --no-audit --no-fund --loglevel=error \
     "typescript@$(locked typescript)" \
+    "esbuild@$(awk '$1 == "esbuild:" { print $2 }' ../../pnpm-workspace.yaml)" \
     "@fontsource/geist-sans@$(locked @fontsource/geist-sans)" \
     "@fontsource/jetbrains-mono@$(locked @fontsource/jetbrains-mono)" >&2
-  echo "export TSC='$dir/node/node_modules/.bin/tsc' FONTS='$dir/node/node_modules/@fontsource'"
+  echo "export TSC='$dir/node/node_modules/.bin/tsc' ESBUILD='$dir/node/node_modules/.bin/esbuild' FONTS='$dir/node/node_modules/@fontsource'"
 fi

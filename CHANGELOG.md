@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Changed: the phone page opens faster, about 280 ms instead of 450 on a phone-speed CPU, as one script instead of fourteen with its fonts in hand before it is first drawn; and opening a long conversation no longer freezes the screen: the newest messages show at once and what was said before comes in above them.
 - Changed: what an agent says reads the same on the phone page, Android and iOS, and shows more of it: italic, strikethrough, tables, links (https only, opened when tapped, bare addresses too), nested and task lists, quotes, rules, heading levels and a code block's language. An image shows as its words and is fetched only if you tap it; raw HTML shows as the text it is. Arabic and Hebrew paragraphs run from the right.
 - Fixed: on the phone page and in the Android app, the message box no longer grows to two lines when the agent's name is long.
 - Fixed: Allow tapped on your phone the moment Claude Code asked could be lost: the keys went in before its chooser was drawn, and the phone said it was answered while Claude still asked. The computer now types the answer once the chooser is on screen and says it was answered only once the chooser takes it; otherwise the phone says it did not land, and you can answer again.

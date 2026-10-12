@@ -63,6 +63,19 @@ function listed(b: Block, el: HTMLElement): HTMLElement {
   return item;
 }
 
+/** The reader's code is compiled as it is first run, which takes longer than a frame: run a little
+ *  of each kind of markdown through it now, a task each, so the first chat opened does not wait. */
+export function warm(): void {
+  const kinds = ["a", "**a** *b* `c` ~~d~~", "[a](https://a.b) ![b](c) https://d.e", "# a\n\n---", "- a\n  - b\n1. c\n- [x] d", "> a", "```ts\na\n```", "| a | b |\n|:--|--:|\n| c | d |"];
+  const next = (): void => {
+    const kind = kinds.shift();
+    if (kind === undefined) return;
+    readMarkdown(kind);
+    setTimeout(next);
+  };
+  setTimeout(next);
+}
+
 export function markdown(text: string): HTMLElement[] {
   const top = h("div");
   // The quotes open, the outermost first.
