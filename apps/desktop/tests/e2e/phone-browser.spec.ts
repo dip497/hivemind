@@ -19,7 +19,7 @@ import { parsePairLink } from "@hivemind/workspace-host/pairing";
 import { encode } from "uqr";
 
 const WWW = path.resolve("../../crates/hive-web/www");
-const hiveWebBuilt = () => fs.existsSync(path.join(WWW, "pkg", "hive_web_bg.wasm")) && fs.existsSync(path.join(WWW, "js", "main.js"));
+const hiveWebBuilt = () => fs.existsSync(path.join(WWW, "pkg", "hive_web_bg.wasm")) && fs.existsSync(path.join(WWW, "main.js"));
 
 let root: string;
 let browser: Browser | undefined;

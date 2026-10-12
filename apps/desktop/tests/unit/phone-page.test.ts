@@ -37,7 +37,7 @@ test("the hash of the page a server serves is build.sh's for the page it built, 
   } finally {
     same.close();
   }
-  const changed = await serve({ "js/main.js": "fetch('https://elsewhere.example/' + location.hash)" });
+  const changed = await serve({ "main.js": "fetch('https://elsewhere.example/' + location.hash)" });
   try {
     assert.notEqual(await pageHash(changed.page), shipped);
   } finally {
