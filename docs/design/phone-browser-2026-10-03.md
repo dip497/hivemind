@@ -1068,7 +1068,8 @@ not show) never ran (`hive ctl agents` listed nothing there); the phone shows "S
 
 Seen: "Phone test" showed "permission · 2 min" with Allow and Deny while its terminal showed
 Claude at its prompt. The rig keeps no record of status changes, so the step that left the chooser
-is not known. What is known: the wait was one the hooks reported. A wait the screen held would
+is not known. Its transcript has no tool use for that turn because Claude records one only once
+it has run (12.3). What is known: the wait was one the hooks reported. A wait the screen held would
 have ended when the screen read the prompt. And Claude draws its chooser while its
 `PermissionRequest` hook holds (claude 2.1.296 in a pty, the hook sleeping 40 s: the
 AskUserQuestion chooser drawn and still up at 25 s and 45 s).
@@ -1086,3 +1087,18 @@ the 0.2 s before the chooser is drawn. During a working turn the prompt ends not
 it shows between a key answer and the tool running. Orca does the same: its permission status
 stands only while the terminal's tail still shows the prompt
 (`orca/src/main/runtime/orca-runtime-resolve-authoritative-terminal-wait-permission.ts:49`).
+
+### 12.3 The permission card said only "permission"
+
+The phone draws the tool and its command when the computer sends them
+(`answers.ts`, `waiting.tool`). The computer took `about` only from the session file
+(`pendingTool`). But Claude writes the tool use to its file only once the tool has run. With its
+`PermissionRequest` hook holding, the file ends at the prompt: in the pty probe of 12.2 it had no
+AskUserQuestion entry at 80 s, while the chooser was up. So a wait held by the hook had the tool's
+name and nothing else, and a wait whose hook had let go had neither.
+
+Fixed in the owner of the held wait: the hook gives the tool's input (`tool_input`), and
+`toolAbout` (`hive-agents/src/transcript.ts`) reads it through the manifest's own transcript rule
+for tool uses. A wait therefore says what the chat row will say once the use is recorded, whole.
+`Waits.hold` keeps it, and `waitOn` prefers it to the file's word. hapi also takes the tool and
+its input from the hook, not the file (`hapi/cli/src/claude/utils/localPermissionBridge.ts:92-99`).

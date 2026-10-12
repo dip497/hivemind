@@ -84,6 +84,27 @@ function entryOf(rule: TranscriptRule, from: unknown, id: string, at: number, wh
   return null;
 }
 
+/** What the tool use `name`, given `input` (as an agent's hook gives a use it waits on, before its
+ *  session file records it), is about, read as `transcript` reads a use it records: whole, as a
+ *  wait shows it; undefined when no rule reads where a use's input is, or it names nothing. */
+export function toolAbout(transcript: AgentTranscript, name: string, input: unknown): string | undefined {
+  for (const rule of transcript.said) {
+    if (!rule.tool?.input || !rule.tool.about) continue;
+    const use: Record<string, unknown> = {};
+    for (const [path, value] of [[rule.tool.id, ""], [rule.tool.name, name], [rule.tool.input, input]] as const) put(use, path, value);
+    const entry = entryOf(rule, use, "", 0, true, false);
+    if (entry && "tool" in entry && entry.tool.about !== undefined) return entry.tool.about;
+  }
+  return undefined;
+}
+
+function put(obj: Record<string, unknown>, path: string, value: unknown): void {
+  const keys = path.split(".");
+  let cur = obj;
+  for (const key of keys.slice(0, -1)) cur = (cur[key] ??= {}) as Record<string, unknown>;
+  cur[keys.at(-1)!] = value;
+}
+
 /** What the records in `lines` say, read as `transcript` maps them, in order. An entry read from
  *  one item of a list of several is its record's id, `/`, and the item's index. A tool's `about`
  *  is its first line, cut short; `whole`, all of it, as a wait on it shows it; `full`, a tool use

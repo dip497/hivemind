@@ -31,6 +31,8 @@ export interface Wait {
   prompt?: true;
   /** prompt: the questions its tool asks, and whether an option of one may be chosen. */
   asks?: Asked[];
+  /** prompt: what its tool use is about (the command, file or address), as its hook gives it. */
+  about?: string;
   chooses?: boolean;
   /** plan: the plan, in markdown, and where the agent was working. */
   plan?: string;
@@ -74,7 +76,7 @@ export class Waits {
 
   /** The agent `tile`'s own hook holds for the answer to what its status says it waits on now:
    *  `reply` gives it the first. Undefined when its status waits on nothing. */
-  hold(tile: string, wait: Pick<Wait, "tool" | "asks" | "chooses">, reply: Reply): Wait | undefined {
+  hold(tile: string, wait: Pick<Wait, "tool" | "about" | "asks" | "chooses">, reply: Reply): Wait | undefined {
     const status = this.o.status.get(tile);
     const before = this.held.get(tile)?.wait;
     // A plan or a supervised tool use it waits on is answered by its own hook.

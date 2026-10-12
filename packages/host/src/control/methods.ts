@@ -16,7 +16,7 @@ import { mintId, toPtyId as ptyId, toBareId as bareOf } from "@hivemind/workspac
 import type { AgentRead, AgentSessions, TileOpened } from "@hivemind/workspace-api/agents";
 import { labelOf as labelIn } from "./names.js";
 import { agentById, agentLaunch, agentOption, cleanName, isSessionId, nextOrdinal, spawnableAgents, workerAgents, type AgentProviderDef, type AgentStatus, type InputKind, type SpawnOptions } from "@hivemind/agents";
-import { hookAnswerOf, hookAsks, printedAnswer, type HookReply } from "@hivemind/agents/node";
+import { hookAnswerOf, hookAsks, printedAnswer, toolAbout, type HookReply } from "@hivemind/agents/node";
 import { canListSessions, listSessions } from "@hivemind/agents/node";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
 import { createToolRegistry, type ToolPluginContribution } from "@hivemind/core/tool-registry";
@@ -653,12 +653,16 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // The agent's own hook holds what it asks for the answer (`agent.answer`) while the agent
         // waits on it; printing nothing leaves it to the agent's own prompt. A subagent's is its own.
         const tile = tileOf(p.callerTile);
-        const answer = tile ? hookAnswerOf(agentById(providerOf(tile)), String(p.hook ?? "")) : undefined;
+        const def = tile ? agentById(providerOf(tile)) : undefined;
+        const answer = def ? hookAnswerOf(def, String(p.hook ?? "")) : undefined;
         const tool = typeof p.tool === "string" ? p.tool : "";
         if (!tile || !answer || p.agentId != null || answer.leave?.includes(tool)) return {};
         const asks = hookAsks(answer, p.input);
+        // Its session file records the use only once it has run: what it is about is the hook's.
+        const transcript = def?.session?.transcript;
+        const about = transcript && tool ? toolAbout(transcript, tool, p.input) : undefined;
         return await new Promise((resolve) => {
-          const wait = deps.waits.hold(tile, { tool, ...(asks ? { asks } : {}), chooses: !!answer.choose }, (decision, feedback, choice) => {
+          const wait = deps.waits.hold(tile, { tool, ...(about ? { about } : {}), ...(asks ? { asks } : {}), chooses: !!answer.choose }, (decision, feedback, choice) => {
             if (!decision) return resolve({});
             const reply: HookReply = asks ? (choice === undefined ? { line: feedback ?? "" } : { choice }) : { decision, ...(feedback ? { message: feedback } : {}) };
             const stdout = printedAnswer(answer, p.input, reply);

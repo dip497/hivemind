@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
 import { defFromManifest } from "../src/manifest.js";
-import { transcriptEntries } from "../src/transcript.js";
+import { toolAbout, transcriptEntries } from "../src/transcript.js";
 import type { AgentTranscript } from "../src/types.js";
 import { AUTHORED, authoredYaml } from "./authored.js";
 
@@ -34,6 +34,16 @@ test("Claude Code's manifest maps its session file as the claude cases say", () 
   const mapping = defFromManifest(claude()).session!.transcript!;
   expect(conformance.claude.length).toBeGreaterThan(0);
   for (const c of conformance.claude) expect(transcriptEntries(mapping, c.lines), c.about).toEqual(c.entries);
+});
+
+test("a tool use its hook gives, before its session file records it, is about what the file will say of it, whole", () => {
+  const mapping = defFromManifest(claude()).session!.transcript!;
+  const input = { command: "npm test \\\n  --watch", description: "Run the tests" };
+  const line = JSON.stringify({ type: "assistant", uuid: "u1", timestamp: "2026-10-13T00:00:00Z", message: { content: [{ type: "tool_use", id: "x", name: "Bash", input }] } });
+  expect(toolAbout(mapping, "Bash", input)).toBe("npm test \\\n  --watch");
+  expect(transcriptEntries(mapping, [line], { whole: true })).toMatchObject([{ tool: { about: toolAbout(mapping, "Bash", input) } }]);
+  expect(toolAbout(mapping, "Edit", { file_path: "/p/a.ts", old_string: "a" })).toBe("/p/a.ts");
+  expect(toolAbout(mapping, "Agent", { prompt: "look around" })).toBeUndefined();
 });
 
 test("a mapping is refused as it is loaded unless every rule reads one thing it can name, and the session file is named", () => {

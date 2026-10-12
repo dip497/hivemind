@@ -45,8 +45,11 @@ holds is one item:
 - `tool` (0.7) is there on a `permission` whose agent's session file (`agents.md`, "Conversation")
   says which tool it waits to use: the first tool use since it last said anything that nothing was
   given back for. It names the tool (`name`) and says what it is about, whole (`about`: the exact
-  command, file or address, at most 4000 characters). It is left out for a wait whose screen `says`
-  it is something else, and when the agent keeps no session file or waits on no tool there.
+  command, file or address, at most 4000 characters). For a wait the agent's own hook holds
+  ("Answering", 0.9) the hook names the tool and gives its input, read for `about` as the session
+  file reads a tool use's: an agent may record a tool use only once it has run, so its file does
+  not have the one it waits on. It is left out for a wait whose screen `says` it is something
+  else, and when the agent keeps no session file or waits on no tool there.
 - `asks` (0.7) is there when that tool asks the person questions (Claude Code's AskUserQuestion):
   the wait is then a `question`, whatever kind its status says, with each question and the options
   to choose from (`many`: several may be chosen); at most 4 questions of 9 options, each at most

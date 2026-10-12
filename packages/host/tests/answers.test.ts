@@ -370,6 +370,10 @@ function hooked(answer: Record<string, unknown> | null = ANSWER) {
     answer: { permission: { allow: ["1"], deny: ["escape"] } },
     launch: { hcp: true },
     hooks: { arg: "--settings", events: { PermissionRequest: { emit: "input.requested", kind: "permission", timeout: 3600, ...(answer ? { answer } : {}) } } },
+    session: {
+      resume: { args: ["--resume", "{id}"], exists: "{home}/.acme/{id}.jsonl" },
+      transcript: { id: "uuid", at: "timestamp", said: [{ each: "content", item: { type: "tool_use" }, tool: { id: "id", name: "name", about: ["input.command", "input.file_path"], input: "input" } }] },
+    },
   })]);
   after(() => setCatalog([]));
   // The agent channel needs nothing of a window here.
@@ -401,6 +405,14 @@ test("an Allow for an agent whose hook carries the answer is printed by that hoo
   assert.equal(await plain.printed, out({ hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "deny" } } }), "no reason given: no message");
   assert.deepEqual(c.writes, [], "nothing typed");
   assert.deepEqual(c.audited(), ["agent.answer t1 allow ok", "agent.answer t1 allow, not answered ok", "agent.answer t1 reply ok", "agent.answer t1 deny ok"]);
+});
+
+test("a wait its hook holds says what the tool use is about as the hook gives it, whole: its session file records the use only once it has run", async () => {
+  const c = hooked();
+  await c.hook("Bash", { command: "rm -rf build \\\n  dist" });
+  assert.equal(c.p.waits.of("t1")?.about, "rm -rf build \\\n  dist");
+  await c.hook("Agent", { prompt: "look around" });
+  assert.equal(c.p.waits.of("t1")?.about, undefined, "nothing its transcript would name");
 });
 
 test("a question its tool asks, held by its hook, is answered by the option's label set in the tool's input under its question's text, or by the line typed; never allowed", async () => {
