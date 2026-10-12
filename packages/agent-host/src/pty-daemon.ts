@@ -31,7 +31,6 @@ import { titleBook } from "./title-book.js";
 import { AGENT_EVENT_METHOD, agentForCmd, composeResume, envToUnset, evictTrackedSession, parseAgentEvent, prepareProviders, TILE_SESSIONS_DIR, trackerSource, writeTrackedSession, setCatalog, TILE_ENV, type AgentEvent } from "@hivemind/agents/node";
 import { resolveWindowsSpawn } from "@hivemind/agents/discover";
 import { agentEventHookSource } from "./hooks/agent-event-hook-source.js";
-import { startHookHttp } from "./hooks/hook-http.js";
 import { SDK_FILE, sdkSource } from "@hivemind/agent-sdk";
 import { ScreenWatcher } from "./screen-status.js";
 import { StatusStore } from "./status-store.js";
@@ -135,9 +134,6 @@ const sdkPath = path.join(userDataDir, SDK_FILE);
 try { fs.writeFileSync(sdkPath, sdkSource()); } catch { /* best-effort */ }
 const hcpSock = hcpSockPath(userDataDir);
 const installToken = readOrCreateToken(userDataDir);
-// An agent whose hooks are http requests reaches the control plane through this door.
-const hookHttp = await startHookHttp({ sock: hcpSock, tileOf: (token) => { const h = holderOf(installToken, token); return h && "tile" in h ? h.tile : undefined; } })
-  .catch((e: unknown) => { console.error("[pty-daemon] http hook door unavailable:", (e as Error).message); return undefined; });
 
 // Provider-owned assets + config-home overlays (an extension, a private config home,
 // a hook script of its own, …): every catalogued provider's `prepare()` runs here and
@@ -162,7 +158,6 @@ const providerCtx = {
   eventHookPath,
   sdkPath,
   hcpSock,
-  ...(hookHttp ? { hcpUrl: hookHttp.url } : {}),
   driveSock: driveSockPath(userDataDir),
   hcpToken: (tile: string) => tileToken(installToken, tile),
 };

@@ -35,22 +35,6 @@ for that answer, and exits 0 printing nothing when the host is not there.
     stopped waiting, or when the host leaves it to the agent's own prompt. Refused where no
     desktop answers: the script prints nothing.
 
-## Over http
-
-An `emit:` entry with `via: http` is the agent's own http hook, where the agent has one
-(`hooks.http` in its manifest) and the daemon opened its door: it says the same lines, said by the
-daemon on its behalf, so nothing is started per event.
-
-- `POST <door>/event?event=…&kind=…&outcome=…&answer=1`, the query in place of `HIVE_EVENT*`, the
-  agent's payload as the body, `Authorization: Bearer <HCP_TOKEN>`. The token names the tile.
-- `200` with an empty body: reported, or nothing to print. `200` with a JSON body: what the hook
-  prints (`agent.await_answer`'s `stdout`), sent once the answer is there.
-- `403` without a tile's token; `404` for anything but that POST, or a request that names an
-  origin or another host than the door's (a page in a browser).
-- The agent closing the request ends the wait, as closing the connection does.
-- The door is loopback, on a port the daemon picks at start; with none, the entry is rendered as
-  the generic script.
-
 ## Plan review (on `HIVE_PLAN_SOCK`)
 
 `{"tileId":…,"plan":…,"cwd":…}` → `{"decision":"deny","feedback":…}` or any other decision to

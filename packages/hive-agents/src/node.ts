@@ -98,7 +98,6 @@ function partsFromManifest(def: AgentProviderDef): AgentNodeParts | undefined {
       hooks: hookPathsFor(def, ctx),
       execPath: ctx.execPath,
       ...(ctx.hcpSock ? { hcpSock: ctx.hcpSock } : {}),
-      ...(ctx.hcpUrl ? { hcpUrl: ctx.hcpUrl } : {}),
       ...(ctx.driveSock ? { driveSock: ctx.driveSock } : {}),
       ...(ctx.hcpToken ? { hcpToken: ctx.hcpToken } : {}),
       ...(ctx.sdkPath ? { sdk: ctx.sdkPath } : {}),

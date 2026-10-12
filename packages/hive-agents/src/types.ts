@@ -264,9 +264,6 @@ export interface AgentHookEntry {
   when?: "supervised";
   /** `input.requested` only: the hook can carry the answer, and holds until it has one. */
   answer?: HookAnswer;
-  /** `emit` only: sent as the agent's http hook (`hooks.http`) where the daemon takes one, a
-   *  held answer then costing an open connection rather than a process. */
-  via?: "http";
 }
 
 /** What a hook prints to answer what its agent asks: a map each, filled. `{message}` is the
@@ -292,9 +289,6 @@ export interface AgentHooks {
   /** One command, in this agent's shape. `{command}` is the command line; `{timeout}` and
    *  any other placeholder is dropped when the event did not ask for it. */
   entry?: Record<string, unknown>;
-  /** One http hook, in this agent's shape, for entries `via: http`: `{url}` is where it posts,
-   *  and it sends the tile's token (`HCP_TOKEN`) as `Authorization: Bearer`. */
-  http?: Record<string, unknown>;
   /** How one event's commands are wrapped — `{entries}` is the list. `false` for an agent
    *  whose events are simply a list of commands. */
   group?: Record<string, unknown> | false;
@@ -465,8 +459,6 @@ export interface ProviderSpawnContext {
   /** The SDK a plugin's own hook scripts load (`HIVE_SDK`). */
   sdkPath?: string;
   hcpSock?: string;
-  /** The daemon's http door to the control plane, for hooks `via: http`. */
-  hcpUrl?: string;
   /** Where the agent drives its workspace (the workspace API's drive socket). */
   driveSock?: string;
   /** The control-plane token a tile's agent is given: its own, which names the tile. */

@@ -310,9 +310,6 @@ session:
 hooks:
   arg: --settings
   template: '{"hooks":{events}}'
-  # Its http hook, from claude 2.1.296: it posts the payload and prints a 2xx JSON body; an empty
-  # one leaves it to its own prompt. It sends only the variables it is allowed to.
-  http: {type: http, url: '{url}', headers: {Authorization: 'Bearer ${HCP_TOKEN}'}, allowedEnvVars: [HCP_TOKEN], timeout: '{timeout}'}
   events:
     SessionStart:
     - hook: tracker
@@ -342,8 +339,6 @@ hooks:
       emit: input.requested
       kind: permission
       timeout: 3600
-      # Held until the answer, it is an open connection rather than a process.
-      via: http
       answer:
         allow: {hookSpecificOutput: {hookEventName: PermissionRequest, decision: {behavior: allow}}}
         deny: {hookSpecificOutput: {hookEventName: PermissionRequest, decision: {behavior: deny, message: '{message}'}}}

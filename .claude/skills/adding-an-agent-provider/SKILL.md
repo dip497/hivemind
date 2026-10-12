@@ -168,9 +168,7 @@ field reference; `claude/agent.yaml` in the published fixtures is the richest ex
    `input.requested` entry (`spec/needs.md` 0.9; Claude's is in the fixture manifest): the hook
    then holds until the phone answers, and nothing is typed. Probe first that the agent's own
    prompt is still drawn while the hook runs. Codex 0.162 draws its prompt only after the hook
-   returns, so a held hook leaves the desktop nothing to answer, and Codex stays on keys. If the
-   agent has http hooks, give their shape as `hooks.http` and send that entry `via: http`
-   (`spec/hook-protocol.md` "Over http"): a held answer is then a connection, not a process.
+   returns, so a held hook leaves the desktop nothing to answer, and Codex stays on keys.
 
 **Try it before you publish**: drop the folder into
 `~/.config/hivemind/agents/<id>/` (or run `hive agents install ./<id>`) — the running

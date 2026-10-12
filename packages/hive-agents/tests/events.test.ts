@@ -96,38 +96,6 @@ describe("an entry that answers what it reports", () => {
   });
 });
 
-describe("an entry sent as an http hook", () => {
-  const HTTP = { type: "http", url: "{url}", headers: { Authorization: "Bearer ${HCP_TOKEN}" }, allowedEnvVars: ["HCP_TOKEN"], timeout: "{timeout}" };
-  const entry = { emit: "input.requested", kind: "permission", timeout: 3600, answer: ANSWER, via: "http" } as const;
-
-  test("posts to the daemon's door, its event in the url, in the agent's own shape; a daemon without the door runs the generic script", () => {
-    const hooks: AgentHooks = { arg: "--settings", http: HTTP, events: { PermissionRequest: entry } };
-    const body = (r: LaunchRequest) => (renderHookEvents(hooks, r)!.PermissionRequest![0] as { hooks: Array<Record<string, unknown>> }).hooks[0];
-    expect(body(req({ paths: { ...req().paths, hcpUrl: "http://127.0.0.1:4711" } }))).toEqual({
-      type: "http", url: "http://127.0.0.1:4711/event?event=input.requested&kind=permission&answer=1",
-      headers: { Authorization: "Bearer ${HCP_TOKEN}" }, allowedEnvVars: ["HCP_TOKEN"], timeout: 3600,
-    });
-    expect(body(req())).toEqual({ type: "command", command: "env HIVEMIND_TILE='tile-1' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' ELECTRON_RUN_AS_NODE=1 '/app/hive' '/ud/hcp-event-hook.cjs' '/ud/hcp.sock'", timeout: 3600 });
-  });
-
-  test("is declared with the agent's http shape, and kept", () => {
-    const def = defFromManifest({ ...base, hooks: { ...base.hooks, http: HTTP, events: { PermissionRequest: entry } } });
-    expect(def.hooks!.http).toEqual(HTTP);
-    expect(def.hooks!.events.PermissionRequest).toEqual(entry);
-  });
-
-  test("refused: on a script, another transport, without the agent's http shape, a shape with nowhere to post", () => {
-    const { http: _h, ...noHttp } = base.hooks;
-    const bad: Array<[string, Record<string, unknown>]> = [
-      ["a script", { ...base.hooks, http: HTTP, events: { PermissionRequest: { hook: "approve", via: "http" } } }],
-      ["another transport", { ...base.hooks, http: HTTP, events: { PermissionRequest: { ...entry, via: "ws" } } }],
-      ["no shape", { ...noHttp, events: { PermissionRequest: entry } }],
-      ["no url", { ...base.hooks, http: { ...HTTP, url: "http://127.0.0.1" }, events: { PermissionRequest: entry } }],
-    ];
-    for (const [why, hooks] of bad) expect(() => defFromManifest({ ...base, hooks }), why).toThrow();
-  });
-});
-
 describe("rendering", () => {
   test("an emit entry runs the generic script with the event in its environment", () => {
     const hooks: AgentHooks = { arg: "--settings", events: { StopFailure: { emit: "turn.ended", outcome: "failed", timeout: 10 } } };

@@ -150,10 +150,6 @@ function entryFor(
   const hook = req.paths.hooks[name];
   if (!hook) return undefined; // the daemon does not have this script: the event is not wired
   const matcher = matcherFor(entry, req);
-  if (entry.via === "http" && entry.emit && hooks.http && req.paths.hcpUrl) {
-    const query = new URLSearchParams({ event: entry.emit, ...(entry.kind ? { kind: entry.kind } : {}), ...(entry.outcome ? { outcome: entry.outcome } : {}), ...(entry.answer ? { answer: "1" } : {}) });
-    return { body: fill(hooks.http, { url: `${req.paths.hcpUrl}/event?${query}`, timeout: entry.timeout, matcher }), ...(matcher ? { matcher } : {}) };
-  }
   const stable = hooks.stable && (req.platform ?? process.platform) !== "win32";
   const values = { command: stable ? stableHookCommand(name, hook, entry) : hookCommand(hook, req, entry), timeout: entry.timeout, matcher };
   return { body: fill(hooks.entry ?? DEFAULT_ENTRY, values), ...(matcher ? { matcher } : {}) };
