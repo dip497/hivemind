@@ -921,9 +921,10 @@ byte tail: the daemon's headless xterm, serialized (`SerializeAddon`), on an att
 behind, the screen not counted), `terminals.test.ts` (fit until let go or gone, the earlier size
 back, a window's resize wins; an `acks` client paced), hive-phone `tests/watching.rs` (`acks` asked,
 the ack in UTF-16 units, fit and unfit sent in order with what is typed). e2e
-`apps/desktop/tests/e2e/phone-terminal.spec.ts` is written (late join of `less` row for row, echo,
-a flood at 4× CPU, a repaint under 8 ms, Fit and its undoing) and its late join passed once;
-the whole spec is not yet run green.
+`apps/desktop/tests/e2e/phone-terminal.spec.ts` (late join of `less` row for row, echo, a flood at
+4× CPU, a repaint under 8 ms, Fit and its undoing) passes 3 of 3 at load 6–7: key echo median
+41–42 ms, repaint median 2.4–2.6 ms. Without the screen after catching up, the flood's phone stops
+at line 18,437.
 
 **11.5 Reading.** Markdown tables, tappable https links (`javascript:` stays inert), `dir=auto`
 paragraphs, images in the conversation, tool calls that unfold to their full input and output.

@@ -115,7 +115,7 @@ test("a shell tile opened on the paired page draws the computer's screen on a la
   const cdp = await context.newCDPSession(page);
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
   await page.keyboard.type("seq 1 200000; echo flood-$((2*2))\n");
-  await expect.poll(async () => (await phoneLines(page)).map((l) => l.trimEnd()).join("\n"), { timeout: 60_000 }).toMatch(/\n199999\n200000\nflood-4\n\$ $/);
+  await expect.poll(async () => (await phoneLines(page)).map((l) => l.trimEnd()).join("\n"), { timeout: 60_000 }).toMatch(/\n199999\n200000\nflood-4\n\$$/);
 
   // A full repaint, as a scroll makes one, at that CPU.
   const repaints = await page.evaluate(() => {
