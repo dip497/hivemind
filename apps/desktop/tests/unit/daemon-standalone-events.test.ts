@@ -112,6 +112,30 @@ test("standalone: hook events reach event viewers, requests are answered at once
   srv.close();
 });
 
+const HIVE_NET = path.join(here, "../../../../crates/hive-net/target/debug/hive-net");
+
+test("standalone: named a hive-net that has `hook`, the daemon opens the hook door, and a hook through it reaches event viewers; one without it opens none", { skip: (!unix || !fs.existsSync(HIVE_NET)) && "build hive-net first: cargo build in crates/hive-net", timeout: 60000 }, async () => {
+  const d = await startDaemon(true, () => ({ HIVEMIND_HIVE_NET: HIVE_NET }));
+  const door = path.join(d.dir, "hook-door.sock");
+  for (let t = 0; t < 5000 && !fs.existsSync(door); t += 25) await wait(25);
+  const viewer = net.connect(d.sock);
+  const events: ServerMsg[] = [];
+  viewer.on("data", makeLineDecoder((l) => { const m = JSON.parse(l) as ServerMsg; if (m.t === "event" && m.topic === "agent.event") events.push(m); }));
+  await new Promise((r) => viewer.once("connect", r));
+  viewer.write(frame({ t: "hello", caps: ["events"] }));
+  await wait(200);
+  const agent = spawn(HIVE_NET, ["hook", door], { env: { HIVEMIND_TILE: "tile-1", HIVE_EVENT: "turn.ended" }, stdio: ["pipe", "ignore", "ignore"] });
+  agent.stdin!.end(JSON.stringify({ session_id: "s1" }));
+  assert.equal(await new Promise((r) => agent.on("exit", r)), 0);
+  for (let t = 0; t < 5000 && events.length === 0; t += 25) await wait(25);
+  assert.deepEqual(events[0], { t: "event", topic: "agent.event", data: { tileId: "tile-1", event: "turn.ended", outcome: "done", sessionId: "s1" } });
+  viewer.destroy();
+
+  const old = await startDaemon(true, () => ({ HIVEMIND_HIVE_NET: "/bin/false" }));
+  await wait(1000);
+  assert.ok(!fs.existsSync(path.join(old.dir, "hook-door.sock")), "a hive-net from before `hook` would drop every event");
+});
+
 /** A desktop watching the machine: each session's status as the machine last sent it. */
 async function statusViewer(sock: string) {
   const c = net.connect(sock);

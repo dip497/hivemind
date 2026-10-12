@@ -20,6 +20,7 @@
 //!                                  which device hosts a workspace, as JSON (null: none known)
 //!   hive-net daemon --socket <path>  the app's network (`daemon.rs`); main starts it
 //!   hive-net doctor                whether the network's servers answer, as JSON
+//!   hive-net hook <socket>         an agent's hook: a pipe to the host's hook door (`hook.rs`)
 //!   hive-net profile verify <profile> [--replacing <profile>]  the profile, if it is one this
 //!                                  may use (and may replace the one named), as JSON
 //!   hive-net profile sign <file> --admin <key>  sign a profile's text as its network's admin
@@ -72,10 +73,13 @@ use hive_net::{
 use iroh::{protocol::Router, EndpointAddr, EndpointId, PublicKey, RelayUrl, TransportAddr};
 use iroh_relay::server::{AllowAll, DynAccessControl};
 
+#[cfg(unix)]
+mod hook;
+
 /// How long a ping waits for its answer.
 const PING_TIMEOUT: Duration = Duration::from_secs(10);
 
-const USAGE: &str = "usage: hive-net id | run | ping <id> | serve [--relay] [--lookup] [--access] [--push] [--all] … | daemon --socket <path> | doctor | profile verify|sign|link … | access voucher|redeem|vouch|register|revoke|enrol-link … | host-record publish|resolve …  [--identity <dir>] [--profile <profile>] [--relay <url>]... [--lookup <url>] [--addr <ip:port>]... [--bind <ip:port>]";
+const USAGE: &str = "usage: hive-net id | run | ping <id> | serve [--relay] [--lookup] [--access] [--push] [--all] … | daemon --socket <path> | doctor | hook <socket> | profile verify|sign|link … | access voucher|redeem|vouch|register|revoke|enrol-link … | host-record publish|resolve …  [--identity <dir>] [--profile <profile>] [--relay <url>]... [--lookup <url>] [--addr <ip:port>]... [--bind <ip:port>]";
 
 #[derive(Default)]
 struct Args {
@@ -743,19 +747,34 @@ fn profile_command(args: &Args) -> Result<()> {
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
-    match parse(std::env::args().skip(1)) {
-        Ok(args) => match run(args).await {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(e) => {
-                eprintln!("hive-net: {e:#}");
-                ExitCode::FAILURE
-            }
-        },
+fn main() -> ExitCode {
+    let argv: Vec<String> = std::env::args().skip(1).collect();
+    // A hook starts no runtime: one runs per agent event, and a held one for as long as the agent waits.
+    #[cfg(unix)]
+    if argv.first().is_some_and(|a| a == "hook") {
+        hook::run(argv.get(1).map(String::as_str));
+        return ExitCode::SUCCESS;
+    }
+    let runtime = match tokio::runtime::Runtime::new() {
+        Ok(r) => r,
         Err(e) => {
             eprintln!("hive-net: {e:#}");
-            ExitCode::from(2)
+            return ExitCode::FAILURE;
         }
-    }
+    };
+    runtime.block_on(async {
+        match parse(argv.into_iter()) {
+            Ok(args) => match run(args).await {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("hive-net: {e:#}");
+                    ExitCode::FAILURE
+                }
+            },
+            Err(e) => {
+                eprintln!("hive-net: {e:#}");
+                ExitCode::from(2)
+            }
+        }
+    })
 }

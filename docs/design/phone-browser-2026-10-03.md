@@ -761,6 +761,11 @@ changes. The design:
   wait before the chooser is drawn instead of after. It is built and checked against the real
   binary (allow ran, deny carried its reason, Esc let go) in 78d77e5 on fix/answer-late, reverted
   by the next commit so the branch stays on command; reverting that revert switches.
+  *Decided (2026-10-12): command, run by hive-net's `hook`* (spec/hook-protocol.md "The native
+  hook"): a pipe to the pty daemon's door, which says what the script says. Release build, load 11:
+  a held wait 6.5 MB RSS (4.6 MB PSS), an event 3 to 4 ms; Electron-as-node 64 MB (53 MB) and 64
+  to 77 ms. On Claude 2.1.296, held 6.9 MB: allow ran, deny carried its reason, Esc let go 0.12 s
+  later. http stays reverted.
 - **Not in it.** `always` (`updatedPermissions`): typed keys never had it either. A tool use
   matched to its `PostToolUse` by id (hapi keys by `tool_use_id` through `PreToolUse`): a parallel
   tool that finishes while another waits sets the status working and so lets go of the hook; the

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { hookSignals, parseAgentEvent } from "../src/events.js";
 import { renderHookEvents } from "../src/hooks.js";
+import { hookPathsFor } from "../src/node.js";
 import { agentDisclosures, defFromManifest } from "../src/manifest.js";
 import type { LaunchRequest } from "../src/runtime.js";
 import type { AgentHooks } from "../src/types.js";
@@ -103,6 +104,17 @@ describe("rendering", () => {
     const cmd = (out.StopFailure![0] as { hooks: Array<{ command: string; timeout: number }> }).hooks[0]!;
     expect(cmd.command).toBe("env HIVEMIND_TILE='tile-1' HIVE_EVENT='turn.ended' HIVE_EVENT_OUTCOME='failed' ELECTRON_RUN_AS_NODE=1 '/app/hive' '/ud/hcp-event-hook.cjs' '/ud/hcp.sock'");
     expect(cmd.timeout).toBe(10);
+  });
+
+  test("with the daemon's native hook, an emit entry runs it, told the same, with no runtime in front", () => {
+    const hooks: AgentHooks = { arg: "--settings", events: { PermissionRequest: { emit: "input.requested", kind: "permission", answer: ANSWER } } };
+    const def = defFromManifest(manifest({}));
+    const ctx = { execPath: "/app/hive", trackerPath: "/ud/t.cjs", tileSessionsDir: "/ud/ts", eventHookPath: "/ud/hcp-event-hook.cjs", hcpSock: "/ud/hcp.sock", hookBin: "/app/hive-net", hookDoor: "/ud/hook-door.sock" };
+    const native = req({ paths: { ...req().paths, hooks: hookPathsFor(def, ctx) } });
+    const cmd = ((renderHookEvents(hooks, native)!.PermissionRequest![0] as { hooks: Array<{ command: string }> }).hooks[0]!).command;
+    expect(cmd).toBe("env HIVEMIND_TILE='tile-1' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' '/app/hive-net' 'hook' '/ud/hook-door.sock'");
+    const { hookBin: _b, ...noDoor } = ctx;
+    expect(hookPathsFor(def, noDoor).event, "no hive-net: the script").toEqual({ path: "/ud/hcp-event-hook.cjs", arg: "/ud/hcp.sock" });
   });
 
   test("a daemon without the generic script drops emit entries, as it drops any unknown script", () => {

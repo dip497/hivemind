@@ -12,6 +12,7 @@ import { type ServerMsg, type SessionInfo, SOCKET_NAME, frame, makeLineDecoder }
 import { DaemonEndpoint, type Callbacks } from "@hivemind/agent-host/daemon-endpoint";
 import { reachDaemon } from "@hivemind/agent-host/daemon-start";
 import { ipcPath } from "./platform.js";
+import { hiveNetBin } from "./hive-net-bin.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,6 +30,11 @@ interface SpawnOpts {
 
 const socketPath = () => ipcPath(app.getPath("userData"), SOCKET_NAME);
 const daemonScript = () => path.join(__dirname, "pty-daemon.js");
+// The daemon runs agents' hooks through hive-net when it is named here.
+const daemonEnv = (): NodeJS.ProcessEnv => {
+  const hiveNet = hiveNetBin();
+  return { ...process.env, ELECTRON_RUN_AS_NODE: "1", ...(hiveNet ? { HIVEMIND_HIVE_NET: hiveNet } : {}) };
+};
 const delay = (ms: number) =>
   new Promise((r) => {
     const t = setTimeout(r, ms);
@@ -87,7 +93,7 @@ export async function ensureFreshDaemon(): Promise<void> {
 async function doConnect(): Promise<net.Socket> {
   const sp = socketPath();
   // ELECTRON_RUN_AS_NODE: Electron runs the daemon as plain Node, no Chromium.
-  const s = await reachDaemon(sp, [process.execPath, daemonScript(), sp], { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } });
+  const s = await reachDaemon(sp, [process.execPath, daemonScript(), sp], { env: daemonEnv() });
   s.unref();
   return s;
 }

@@ -456,6 +456,10 @@ export interface ProviderSpawnContext {
   planBridgeSock?: string;
   /** The generic script every `emit` entry runs. */
   eventHookPath?: string;
+  /** The native hook (`hive-net hook`) and the door it reaches: with both, `emit` entries run it
+   *  instead of the generic script. */
+  hookBin?: string;
+  hookDoor?: string;
   /** The SDK a plugin's own hook scripts load (`HIVE_SDK`). */
   sdkPath?: string;
   hcpSock?: string;
@@ -480,6 +484,10 @@ export interface DaemonPaths {
   trackerPath: string;
   tileSessionsDir: string;
   eventHookPath?: string;
+  /** The native hook (`hive-net hook`) and the door it reaches: with both, `emit` entries run it
+   *  instead of the generic script. */
+  hookBin?: string;
+  hookDoor?: string;
   sdkPath?: string;
   planBridgeSock?: string;
   hcpSock: string;
