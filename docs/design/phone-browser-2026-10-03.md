@@ -597,16 +597,29 @@ as Allow/Deny (§11.1), and the reading list, tables, links, `dir=auto`, the com
   on. First, probe the real binary: does `1` still allow in 2.1.296's chooser?
 - Regression tests that fail on today's code: Allow on a fresh chooser lands; a second Allow with
   the old id is refused; the wait clears after the answer.
-- Done (2026-10-12): the lost Allow was a race. Claude Code's `PermissionRequest` hook reports the
-  wait before its chooser takes keys, and a fast tap's `1` arrived first, was lost, and was audited
-  ok. A stand-in agent that draws its chooser 2 s after its hook shows it
+- Done (2026-10-12): a fast Allow was lost to a race. Claude Code's `PermissionRequest` hook
+  reports the wait before its chooser takes keys, and a fast tap's `1` arrived first, was lost, and
+  was audited ok. A stand-in agent that draws its chooser 2 s after its hook shows it
   (`apps/desktop/tests/e2e/answer-lands.spec.ts`): before the fix `{answered: true}` with the
   chooser still asking. Now, for an agent whose screen rules read its waits, the keys go in once
   the screen shows the chooser (4 s at most, else `TIMEOUT`, nothing typed), and it is answered
   once the screen moves on (3 s, else `FAILED`; the wait stands again and may be answered again);
-  spec/needs.md 0.8. Open: the wait still listed after "Interrupted" is not reproduced by the
-  stand-in (an early key, then Esc on the chooser, clears it); it needs that tile's status and
-  screen.
+  spec/needs.md 0.8.
+- The Allows on "perm probe" were not that race, and their cause is not found. They came 3 min
+  (18:52:51) and 15 min (19:04:10) after the chooser was drawn (18:49:37); Claude's transcript has
+  the tool use and nothing after it, no result and no interrupt, so neither they nor any Esc reached
+  it, and the "Interrupted" reported after was the same answer, not a screen of Claude's. Ruled out
+  by replay: Claude 2.1.296 takes a `1` 90 s after its chooser (a pty driven by hand) and 180 s
+  after (through the desktop); that day's host (`answers()` and the status store are the same from
+  5f1545f to 4210fb6), traced, typed a 180 s late Allow and Claude ran it; the wait's `since` did
+  not move while the chooser stood, so a page showing the wait had its `since`; the tile's Claude
+  ran once for 26 min.
+  Left, and not tellable from what was kept: that host answered `{answered: false}`, audited "ok",
+  when the `since` it was sent was not the wait's or the tile had no terminal there, and kept
+  neither; or the keys were typed and lost on the way to the terminal. The audit now says "not
+  answered" (8934cdc), so the next one says which. answer-lands has the late case: an Allow 20 s
+  after the chooser is drawn, its screen quiet since, lands; it fails when the answer waits for a
+  screen change that does not come.
 
 *Done (2026-10-12):*
 - The probe. `1` allows on Claude 2.1.296's chooser, with its kitty keyboard on and off (a pty

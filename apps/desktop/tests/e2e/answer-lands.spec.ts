@@ -51,6 +51,19 @@ test("an Allow given the moment the agent asks, before its chooser takes keys, i
   await expect.poll(async () => (await asking()).state, { timeout: 20_000 }).not.toBe("waiting");
 });
 
+test("an Allow given long after the chooser is drawn, its screen quiet since, lands there", async () => {
+  test.setTimeout(120_000);
+  const { desktop, tile, log, asking } = await started();
+  await desktop.evaluate((t) => window.hive.ptyWrite(`hm:${t}`, "perm\r"), tile);
+  await expect.poll(async () => (await asking()).state, { timeout: 20_000, intervals: [20] }).toBe("waiting");
+  // Drawn, then nothing more on its screen for longer than an answer waits on it.
+  await desktop.waitForTimeout(20_000);
+  const { since } = await asking();
+  const answered = await desktop.evaluate(([t, s]) => window.hive.agentAnswer(t, s, { decision: "allow" }), [tile, since] as const);
+  expect({ answered, log: log() }).toEqual({ answered: { answered: true }, log: "took 1\n" });
+  await expect.poll(async () => (await asking()).state, { timeout: 20_000 }).not.toBe("waiting");
+});
+
 test("a chooser cancelled with Esc waits on the person no more, though a key was pressed before it was drawn", async () => {
   test.setTimeout(120_000);
   const { desktop, tile, log, asking } = await started();
