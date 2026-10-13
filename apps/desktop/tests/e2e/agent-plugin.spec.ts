@@ -126,7 +126,7 @@ test("a manifest dropped on disk becomes a real provider in the running app", as
 test("an agent whose CLI is missing says so, links to its install page, and is not offered as ready", async () => {
   await openSettings("plugins");
   await expect(card("ghost")).toHaveAttribute("data-state", "missing");
-  await expect(card("ghost")).toContainText("Not installed");
+  await expect(card("ghost")).toContainText("Needs setup");
   await openAgent("ghost");
   await expect(detail().locator(".agent-req")).toHaveAttribute("data-state", "missing");
   await expect(detail().getByRole("link", { name: /Get Ghost/ })).toHaveAttribute("href", "https://ghost.example.dev/install");

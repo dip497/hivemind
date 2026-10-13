@@ -173,6 +173,6 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
         })}
       </PluginGroup>;
     })}
-    <p className="settings-note">Plugins come from HiveHub, with a checksum for every file. A view is named <code>@owner/name</code> after the account that published it; an agent has one name, like <code>gemini</code>.</p>
+    <p className="settings-note">Every file is checked against HiveHub's checksum.</p>
   </div>;
 }

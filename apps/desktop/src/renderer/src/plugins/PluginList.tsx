@@ -16,7 +16,7 @@ export function PluginRow({ kind, id, name, line, mark, state = "on", badge, act
   kind: PluginKind;
   id: string;
   name: string;
-  /** What it does, or what stops it, in plain words. */
+  /** What it does, or what stops it, in plain words; not shown when it only repeats the name. */
   line: string;
   mark: ReactNode;
   state?: RowState;
@@ -31,7 +31,7 @@ export function PluginRow({ kind, id, name, line, mark, state = "on", badge, act
         <span className="plugin-row-mark" aria-hidden="true">{mark}</span>
         <span className="plugin-row-text">
           <span className="plugin-row-name">{name}</span>
-          <span className="plugin-row-detail">{line}</span>
+          {line && line !== name && <span className="plugin-row-detail">{line}</span>}
         </span>
       </MenuItem>
       {action ?? (badge && <Badge variant="secondary" data-plugin-badge>{badge}</Badge>)}
