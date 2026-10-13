@@ -69,12 +69,15 @@ test("the bootstrap page carries the response nonce, is laid out at its screen's
   expect(new URL(entryUrl("@dip497/board", "index.html")).host).not.toBe(new URL(entryUrl("@dip497/queue", "index.html")).host);
 });
 
-test("every plugin document gets the SDK's import map first, under the response nonce", () => {
-  const page = withImportMap('<!doctype html><html><HEAD lang="en"><script type="module" src="./v.js"></script></head></html>', "n0");
-  const map = page.match(/<script type="importmap" nonce="n0">(.*?)<\/script>/)!;
-  expect(JSON.parse(map[1]!)).toEqual({ imports: { "@hivemind/view-sdk": "/__sdk.js" } });
+test("every plugin document gets the SDK's import map first, under the response nonce, naming the SDK from where the page is", () => {
+  const html = '<!doctype html><html><HEAD lang="en"><script type="module" src="./v.js"></script></head></html>';
+  const page = withImportMap(html, "n0", "index.html");
+  const map = (p: string) => JSON.parse(p.match(/<script type="importmap" nonce="n0">(.*?)<\/script>/)![1]!);
+  // Relative, so it is the view's own SDK wherever the view is served: at an origin's root or under a path (a browser tab).
+  expect(map(page)).toEqual({ imports: { "@hivemind/view-sdk": "./__sdk.js" } });
+  expect(map(withImportMap(html, "n0", "pages/settings/one.html"))).toEqual({ imports: { "@hivemind/view-sdk": "../../__sdk.js" } });
   expect(page.indexOf("importmap") > page.indexOf("<HEAD") && page.indexOf("importmap") < page.indexOf('type="module"')).toBe(true);
-  expect(withImportMap("<p>no head</p>", "n0").startsWith('<script type="importmap"')).toBe(true);
+  expect(withImportMap("<p>no head</p>", "n0", "index.html").startsWith('<script type="importmap"')).toBe(true);
 });
 
 test("a screen elsewhere loads a view's own page, or for a `.js` entry the page that runs it", () => {
@@ -104,8 +107,13 @@ test("each request is served as on every screen: the SDK, the page running the e
 
   const page = await serve("index.html");
   if (page.status !== 200 || !("text" in page)) throw new Error(`the page: ${page.status}`);
-  expect(page.text).toBe(withImportMap("<!doctype html>", nonceOf(page.csp)));
+  expect(page.text).toBe(withImportMap("<!doctype html>", nonceOf(page.csp), "index.html"));
   expect(nonceOf(page.csp)).not.toBe(nonce);
+  fs.mkdirSync(path.join(dir, "pages"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "pages", "one.html"), "<!doctype html>");
+  const nested = await serve("pages/one.html");
+  if (nested.status !== 200 || !("text" in nested)) throw new Error(`the nested page: ${nested.status}`);
+  expect(nested.text).toContain('"@hivemind/view-sdk":"../__sdk.js"');
 
   expect(await serve("assets/a.png")).toMatchObject({ status: 200, type: "image/png", file: fs.realpathSync(path.join(dir, "assets", "a.png")) });
   expect(await serve("leak.txt")).toEqual({ status: 403 });

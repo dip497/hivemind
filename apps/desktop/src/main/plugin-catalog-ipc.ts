@@ -136,7 +136,7 @@ export function installPluginCatalogIpc(): void {
   const installedIds = (r: { added: Array<{ id: string }>; updated: Array<{ id: string }> }) => [...r.added, ...r.updated].map((a) => a.id).join(", ") || undefined;
   handleEffect("agents:auto-install", () => ({ target: installedIds }), async () => {
     if (checkedCatalog) return { added: [], updated: [] };
-    // Settings → Network: with the update check off, the catalog is not asked either (R16).
+    // Settings → About and updates: with the update check off, the catalog is not asked either (R16).
     if (!getSettings().network.updateCheck) return { added: [], updated: [] };
     if (checking) return checking; // a second ask while the first is in flight rides along
     checking = (async () => {

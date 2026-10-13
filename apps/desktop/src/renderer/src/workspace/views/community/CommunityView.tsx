@@ -30,7 +30,7 @@ import { Loading } from "../../../components/ui/loading";
 export function CommunityViewHost({ pkg, model, commands }: WorkspaceViewProps & { pkg: ViewPackageInfo }) {
   if (pkg.source === "host") return <RemoteCommunityView pkg={pkg} model={model} commands={commands} />;
   const manifest = pkg.manifest!;
-  const url = pkg.url!;
+  const url = window.hive.resourceUrl(pkg.url!);
   const capabilities = useMemo(() => manifest.permissions as ViewPermission[], [manifest]);
   return <CommunityView pkg={pkg} url={url} manifest={manifest} capabilities={capabilities} model={model} commands={commands} />;
 }

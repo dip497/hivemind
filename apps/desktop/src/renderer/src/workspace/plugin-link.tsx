@@ -113,11 +113,13 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
   const [shareImage, setShareImage] = useState<SharePrepared | null>(null);
   const shareAnswer = useRef<((c: ShareChoice) => void) | null>(null);
   const share = async (png: ArrayBuffer, suggestedName?: string): Promise<ShareOutcome> => {
-    const prepared = await window.hive.viewSharePrepare(png);
+    const { viewSharePrepare, viewShareCommit } = window.hive;
+    if (!viewSharePrepare || !viewShareCommit) return "cancelled";
+    const prepared = await viewSharePrepare(png);
     const choice = await new Promise<ShareChoice>((resolve) => { shareAnswer.current = resolve; setShareImage(prepared); });
     shareAnswer.current = null;
     setShareImage(null);
-    return window.hive.viewShareCommit(prepared.token, choice, suggestedName ?? optsRef.current.name);
+    return viewShareCommit(prepared.token, choice, suggestedName ?? optsRef.current.name);
   };
   // A prompt the plugin wrote waits here for the person to read it and send or cancel it.
   const [promptAsk, setPromptAsk] = useState<PromptAsk | null>(null);

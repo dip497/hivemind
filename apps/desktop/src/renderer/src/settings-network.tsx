@@ -1,16 +1,13 @@
 /**
- * Settings → Network (R16, design §13.2–13.3): which network this computer is on (the local
- * network, with no servers, by default; hivemind's servers; or one someone runs, from its network
- * link), who signed it, whether its servers answer, and the update check, the one thing the app
- * reaches outside it.
+ * Settings → Servers (R16, design §13.2–13.3): the relay and discovery servers this computer uses
+ * to reach the person's other devices: none, on the local network, by default, or a network
+ * someone runs, from its network link; who signed it, and whether its servers answer.
  */
 import { useEffect, useState } from "react";
 import { Check, X } from "./components/icons";
 import type { NetworkHealth, NetworkProfile } from "@hivemind/workspace-host/network-profile";
 import { Button } from "./components/ui/button";
-import { Switch } from "./components/ui/switch";
 import { Section } from "./appearance-controls";
-import { patchSettings, useSettings } from "./settings-store";
 import { ReachChooser } from "./multiplayer/reach-chooser";
 
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e)).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
@@ -21,8 +18,7 @@ function about(net: NetworkProfile): string {
   return `Run by its admin, who signed it (${net.admin?.slice(0, 8)}…). Only its servers are used.`;
 }
 
-export function NetworkPrefs() {
-  const { network: settings } = useSettings();
+export function ServersPrefs() {
   // undefined while it is asked for; null where no app answers, or hive-net is not installed.
   const [net, setNet] = useState<NetworkProfile | null | undefined>(undefined);
   const [health, setHealth] = useState<NetworkHealth | null>(null);
@@ -51,7 +47,7 @@ export function NetworkPrefs() {
 
   return (
     <div className="settings-stack">
-      <Section title="This computer's network" hint="Where it finds and reaches other devices">
+      <Section title="Relay and discovery" hint="How this computer finds and reaches your other devices. Most people never change this.">
         {net === undefined ? null : net === null ? (
           <p className="settings-note">{error ?? "Only the app knows"}</p>
         ) : (
@@ -94,15 +90,6 @@ export function NetworkPrefs() {
           </div>
         )}
         {net && error && <p className="text-[12px] text-[var(--color-err)]" role="alert">{error}</p>}
-      </Section>
-      <Section title="Updates" hint="The one thing the app asks outside its network">
-        <div className="settings-row">
-          <div>
-            <label htmlFor="update-check">Check for new versions</label>
-            <p>Of the app (on GitHub) and of the agents it adds for you (in the plugin catalog), now and then. Off, the app reaches nothing its network does not name until you browse plugins yourself.</p>
-          </div>
-          <Switch id="update-check" checked={settings.updateCheck} onCheckedChange={(v) => patchSettings("network.updateCheck", v)} aria-label="Check for new versions" data-update-check />
-        </div>
       </Section>
     </div>
   );

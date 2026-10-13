@@ -86,7 +86,7 @@ function viewSdkPlugin(): Plugin {
 }
 
 // The phone page this build goes with, by its hash (crates/hive-web/build.sh writes it; a release
-// passes it on as HIVEMIND_PHONE_PAGE): Pair a phone says whether a server serves that page.
+// passes it on as HIVEMIND_PHONE_PAGE): Use on your phone says whether a server serves that page.
 function phonePage(): string | null {
   if (process.env.HIVEMIND_PHONE_PAGE) return process.env.HIVEMIND_PHONE_PAGE;
   try {
@@ -129,7 +129,8 @@ export default defineConfig({
     build: {
       outDir: "out/renderer",
       rollupOptions: {
-        input: { index: path.resolve("src/renderer/index.html") },
+        // browser.html: the same renderer, for a browser tab the app serves (src/browser).
+        input: { index: path.resolve("src/renderer/index.html"), browser: path.resolve("src/renderer/browser.html") },
         output: {
           // Split heavy vendors out of the giant index-*.js so cold-start
           // parse work is distributed across smaller scripts that V8 can

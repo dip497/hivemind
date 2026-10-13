@@ -15,7 +15,6 @@ export const VIEW_SCHEME = "hm-view";
 export const ENTRY_PAGE = "__entry.html";
 /** The SDK the app serves on every view origin, so a view never bundles its own copy. */
 export const SDK_PATH = "__sdk.js";
-const IMPORT_MAP = JSON.stringify({ imports: { "@hivemind/view-sdk": `/${SDK_PATH}` } });
 
 export const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
@@ -90,9 +89,13 @@ export function pageOf(entry: string): string {
 }
 
 /** Put the SDK's import map first in a plugin document, so any module script after it can
- *  import `@hivemind/view-sdk`. It carries the nonce; the page's own inline scripts still don't. */
-export function withImportMap(html: string, nonce: string): string {
-  const tag = `<script type="importmap" nonce="${nonce}">${IMPORT_MAP}</script>`;
+ *  import `@hivemind/view-sdk`. It carries the nonce; the page's own inline scripts still don't.
+ *  The SDK is named from `page`, the document's path in the package: a view is served at an
+ *  origin's root in the app and under a path in a browser tab. */
+export function withImportMap(html: string, nonce: string, page: string): string {
+  const up = page.split("/").length - 1;
+  const map = JSON.stringify({ imports: { "@hivemind/view-sdk": `${up ? "../".repeat(up) : "./"}${SDK_PATH}` } });
+  const tag = `<script type="importmap" nonce="${nonce}">${map}</script>`;
   const head = html.match(/<head\b[^>]*>/i);
   return head ? html.replace(head[0], head[0] + tag) : tag + html;
 }
@@ -124,11 +127,11 @@ export async function serveViewFile(dir: string, rel: string, o: { js: string | 
   const csp = pluginCsp(nonce);
   if (rel === ENTRY_PAGE) {
     const html = entryPage(o.js ?? "", nonce);
-    return html === null ? { status: 400 } : { status: 200, type: mimeFor(ENTRY_PAGE), csp, text: withImportMap(html, nonce) };
+    return html === null ? { status: 400 } : { status: 200, type: mimeFor(ENTRY_PAGE), csp, text: withImportMap(html, nonce, ENTRY_PAGE) };
   }
   if (rel === SDK_PATH) return { status: 200, type: mimeFor(SDK_PATH), csp, text: await o.sdk() };
   const file = resolvePackageFile(dir, rel);
   if (file.status !== 200) return file;
-  if (/\.html?$/i.test(file.abs)) return { status: 200, type: mimeFor(ENTRY_PAGE), csp, text: withImportMap(await readFile(file.abs, "utf8"), nonce) };
+  if (/\.html?$/i.test(file.abs)) return { status: 200, type: mimeFor(ENTRY_PAGE), csp, text: withImportMap(await readFile(file.abs, "utf8"), nonce, rel) };
   return { status: 200, type: mimeFor(file.abs), csp, file: file.abs };
 }

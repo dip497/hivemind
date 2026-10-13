@@ -35,7 +35,7 @@ struct PairView: View {
 
     private var form: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("On your computer, open Settings → Devices → Pair a phone, and scan the code it shows.")
+            Text("On your computer, open Settings → Your devices → Use on your phone, and scan the code it shows.")
                 .foregroundStyle(.secondary)
             if scanning {
                 QRScanner { code in

@@ -1,5 +1,5 @@
 //! `hive-net doctor` (R16, R13, §13.2): whether the network's servers answer this device, for
-//! Settings → Network and `hive network doctor`. Each relay is tried alone, by an endpoint of this
+//! Settings → Servers and `hive network doctor`. Each relay is tried alone, by an endpoint of this
 //! device that knows only that relay, for a few seconds; one that refuses this device says why.
 //! The lookup server and the access service are asked once each.
 

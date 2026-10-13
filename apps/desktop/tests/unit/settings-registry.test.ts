@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "src", "renderer", "src");
 
-const { SETTINGS_PAGES, SETTINGS_PAGE_IDS, PLUGIN_PAGE_KINDS, pluginPage, resolveSettingsPage, settingsPage } = await import("../../src/renderer/src/settings-registry.ts");
+const { SETTINGS_NAV, SETTINGS_PAGES, SETTINGS_PAGE_IDS, PLUGIN_PAGE_KINDS, pluginPage, resolveSettingsPage, settingsPage } = await import("../../src/renderer/src/settings-registry.ts");
 
 /** Ids the lazy chunk claims, read from source so the test cannot drift by import. */
 function lazyClaims(): string[] {
@@ -81,6 +81,28 @@ test("page ids resolve: fixed, per plugin, and the links of the pages Plugins re
   assert.equal(resolveSettingsPage("agent:"), null);
   assert.equal(resolveSettingsPage("plugin:agent:"), null);
   assert.equal(resolveSettingsPage("nope"), null);
+});
+
+test("the sidebar is four groups, in this order, each page named for what the person does there", () => {
+  const shown = SETTINGS_NAV.map(({ group, pages }) => [group, pages.map((p) => (p.hint ? [p.label, p.hint] : p.label))]);
+  assert.deepEqual(shown, [
+    ["General", ["Profile", "Appearance", "Notifications", "Shortcuts"]],
+    ["Connect", [
+      ["People", "Invite people to this workspace"],
+      ["Your devices", "Your phone, other computers, a browser tab"],
+      ["API access", "Scripts and tools that drive agents"],
+    ]],
+    ["Plugins", ["Plugins"]],
+    ["Advanced", [["Servers", "Relay and discovery; most people never change this"], "About and updates"]],
+  ]);
+});
+
+test("the ids the pages had before Connect still open them, so links and docs land", () => {
+  assert.equal(resolveSettingsPage("share"), "people");
+  assert.equal(resolveSettingsPage("network"), "servers");
+  assert.equal(resolveSettingsPage("devices"), "your-devices");
+  assert.equal(resolveSettingsPage("programs"), "api");
+  for (const id of ["people", "your-devices", "api", "servers", "about"]) assert.equal(resolveSettingsPage(id), id);
 });
 
 test("the e2e nav contract is stable: these ids are pinned by specs", () => {

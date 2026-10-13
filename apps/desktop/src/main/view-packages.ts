@@ -15,6 +15,7 @@ import path from "node:path";
  */
 import { dialogStart, rememberPick } from "./dialog-start";
 import { app, net, protocol, dialog, type BrowserWindow, type WebFrameMain } from "electron";
+import { serveScheme } from "./schemes.js";
 import { handle, handleEffect } from "./app-ipc.js";
 import { appWindowOf } from "./windows.js";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -97,7 +98,7 @@ export async function viewSdk(): Promise<string> {
 
 /** Call after app ready. */
 export function handleViewProtocol(): void {
-  protocol.handle(VIEW_SCHEME, async (request) => {
+  serveScheme(VIEW_SCHEME, async (request) => {
     try {
       const u = new URL(request.url);
       const source = served.get(u.host);
@@ -202,7 +203,7 @@ export function installViewManagementIpc(): void {
     if (result.canceled || !result.filePaths[0]) return null;
     rememberPick("view", result.filePaths[0]);
     return reviewViewDir(result.filePaths[0], false);
-  });
+  }, { local: true });
   handleEffect("views:install", (token) => ({ target: pending && token === pending.token ? pending.id : undefined }), async (_event, token: string) => {
     if (!pending || token !== pending.token) throw new Error("Choose the extension folder again");
     const candidate = pending;

@@ -1,5 +1,5 @@
 // Your devices (M3, design §5.2–5.3): two computers of one person, each the app with its own data.
-// The desktop shows a code in Settings → Devices; the laptop enters its six words, found on this
+// The desktop shows a code in Settings → Your devices; the laptop enters its six words, found on this
 // network, and becomes the desktop's person, the workspace it had moving with it. Each lists the
 // other; the laptop's Open recent lists the desktop's workspace, which it opens as its owner, and a
 // shell started there runs on the desktop, in the desktop's folder; and the desktop opens the
@@ -54,7 +54,7 @@ test("a laptop enters the desktop's six words and becomes its person; each opens
   await expect.poll(() => ownerOf("laptop", notes)).toBe(laptopWas.personId);
 
   // The desktop shows a code; the laptop enters its words, read off the desktop's screen.
-  const devices = (w: typeof desktop) => w.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "devices" } })));
+  const devices = (w: typeof desktop) => w.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
   await devices(desktop);
   await desktop.locator("[data-pair-offer]").click();
   const words = (await desktop.locator("[data-pair-code]").textContent())!;

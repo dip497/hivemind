@@ -1,6 +1,6 @@
 // The phone in a browser (docs/design/phone-browser-2026-10-03.md, B1 to B3): the computer, on a
 // network of its own whose server also serves the phone page (`hive-net serve --phone`), offers its
-// pairing link inside the page's address (Settings → Devices → Pair a phone); a phone-sized browser
+// pairing link inside the page's address (Settings → Your devices → Use on your phone); a phone-sized browser
 // opens it, asks, and on a tap gets onto the network with the voucher the link carries, pairs with
 // the computer through the network's relay, and is listed there as the person's phone. It is the phone app: what
 // waits on the person, answered from there; every agent, live; one agent's chat, and a message
@@ -301,7 +301,7 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
 
   // Unpaired on the computer: turned away while open, and it offers to pair again, the pairing it
   // kept forgotten.
-  await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "devices" } })));
+  await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
   await desktop.locator(`[data-device="${id}"] [data-unpair]`).click();
   await expect(desktop.locator(`[data-device="${id}"]`)).toHaveCount(0);
   await expect(page.locator("[data-pair-refused]")).toHaveText(/^.+ no longer lets this browser in: it was unpaired there\.$/, { timeout: 30_000 });

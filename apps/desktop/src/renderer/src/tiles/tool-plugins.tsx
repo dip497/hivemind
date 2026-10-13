@@ -70,7 +70,7 @@ const surfaceOf = (id: string) => `tool:${id}`;
 /** A switched-on plugin's module, imported once per install: what its tiles come from. */
 const modules = new Map<string, Promise<ToolModule>>();
 export function loadToolModule(pkg: ToolPackage): Promise<ToolModule> {
-  const url = `hm-plugin://${toolFolder(pkg.id)}/${pkg.entry}?g=${generation}`;
+  const url = window.hive.resourceUrl(`hm-plugin://${toolFolder(pkg.id)}/${pkg.entry}?g=${generation}`);
   let m = modules.get(url);
   if (!m) {
     m = (async () => {

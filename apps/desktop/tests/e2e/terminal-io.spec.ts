@@ -1,6 +1,6 @@
 // Keys typed into a terminal reach its shell, and what the shell prints reaches the window: the
 // terminal's whole path through the workspace API, as the app and, in the harness
-// (playwright.harness.config.ts), as the renderer in a browser over the dev-bridge.
+// (playwright.harness.config.ts), as a browser tab on it.
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";

@@ -3,15 +3,15 @@
  * so moving the original breaks nothing) and removed; every window is told, so none needs a
  * restart. The package format and the folder are core's (`@hivemind/core/widgets`).
  */
-import { BrowserWindow, dialog } from "electron";
+import { dialog } from "electron";
 import { installWidget, listWidgets, removeWidget } from "@hivemind/core/widgets";
 import { handle } from "./app-ipc.js";
-import { appWindowOf } from "./windows.js";
+import { appWindowOf, broadcast } from "./windows.js";
 
 export { widgetAsset } from "@hivemind/core/widgets";
 
 export const widgetsChanged = (): void => {
-  for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send("widgets:changed");
+  broadcast("widgets:changed");
 };
 
 export function installWidgetIpc(): void {
@@ -24,7 +24,7 @@ export function installWidgetIpc(): void {
     const pkg = await installWidget(from);
     widgetsChanged();
     return { id: pkg.id, name: pkg.name };
-  });
+  }, { local: true });
   handle("widgets:remove", async (_e, id: unknown) => {
     if (typeof id !== "string") throw new Error("not a widget");
     await removeWidget(id);

@@ -1,4 +1,4 @@
-// Settings → Programs and the drive socket: a program the person lets in from Settings drives the
+// Settings → API access and the drive socket: a program the person lets in from Settings drives the
 // workspace in this window with the token shown there, is refused what its role does not reach,
 // and is disconnected the moment the person takes it back.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
@@ -57,7 +57,7 @@ test("a program let in from Settings drives this workspace at its role, and is c
   const page = await launch();
   const repo = path.join(root, "api");
   await page.getByLabel("settings", { exact: true }).click();
-  await page.locator('[data-settings-page="programs"]').click();
+  await page.locator('[data-settings-page="api"]').click();
   await expect(page.locator("[data-grants-none]")).toBeVisible();
 
   await page.locator("[data-grant-name]").fill("orchestrator");

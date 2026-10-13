@@ -1,0 +1,185 @@
+/**
+ * `window.hive` over the window's channels to main, whatever carries them: Electron's IPC in an app
+ * window (preload), the browser server's socket in a tab (docs/design/browser-app-2026-10-13.md).
+ * A channel main serves only to its own windows leaves its member out, so a tab has no member it
+ * cannot use.
+ */
+import { WorkspaceClient } from "@hivemind/workspace-api/client";
+import type { Answer, EventMessage } from "@hivemind/workspace-api/protocol";
+import type { HiveApi } from "./ipc.js";
+import { hiveOverWorkspace } from "./hive-over-workspace.js";
+
+/** One way to reach main's channels. */
+export interface IpcPort {
+  invoke(channel: string, ...args: unknown[]): Promise<any>;
+  send(channel: string, ...args: unknown[]): void;
+  sendSync(channel: string, ...args: unknown[]): any;
+  /** Hear `channel`; the function returned stops. */
+  on(channel: string, listener: (...args: any[]) => void): () => void;
+  /** Main answers `channel` over this port. */
+  serves(channel: string): boolean;
+}
+
+/** The workspace API (R8) over the port: calls on one channel, notices on another, events on a third. */
+export function workspaceOver(port: IpcPort): WorkspaceClient {
+  return new WorkspaceClient({
+    call: (method, params) => port.invoke("workspace", method, params) as Promise<Answer>,
+    notice: (method, params) => port.send("workspace:notice", method, params),
+    events: (listener) => { port.on("workspace:event", (message: EventMessage) => listener(message)); },
+  });
+}
+
+export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<HiveApi, "platform" | "getPathForFile" | "resourceUrl"> {
+  const invoke = (channel: string) => (...args: unknown[]) => port.invoke(channel, ...args);
+  const send = (channel: string) => (...args: unknown[]) => port.send(channel, ...args);
+  /** Only where main serves the channel over this port. */
+  const local = <F>(channel: string, f: F): F | undefined => (port.serves(channel) ? f : undefined);
+  return {
+    ...hiveOverWorkspace(workspace),
+    resolveProject: (rootHint) => port.invoke("resolveProject", rootHint),
+    pickProjectFolder: local("pickProjectFolder", invoke("pickProjectFolder")),
+    initWorkspace: (dir, prefix) => port.invoke("initWorkspace", dir, prefix),
+    installAgentic: (dir) => port.invoke("installAgentic", dir),
+
+    listWorkspaces: () => port.invoke("listWorkspaces"),
+    workspaceSummaries: () => port.invoke("workspaceSummaries"),
+    resolveIssueRoot: (id) => port.invoke("resolveIssueRoot", id),
+
+    openPathInApp: local("openPathInApp", invoke("openPathInApp")),
+
+    diagLog: (line) => port.invoke("diagLog", line),
+
+    machinesGet: () => port.invoke("machines:get"),
+    onMachines: (cb) => port.on("machines:changed", cb),
+    machineAdd: (req) => port.invoke("machines:add", req),
+    machineCheck: (id) => port.invoke("machines:check", id),
+    machineInstall: (id) => port.invoke("machines:install", id),
+    machineUpdate: (id, patch) => port.invoke("machines:update", id, patch),
+    machineEdit: (id, patch) => port.invoke("machines:edit", id, patch),
+    viewLedgerAppend: (lines) => port.send("viewLedger:append", lines),
+    viewLedgerSnapshot: () => port.invoke("viewLedger:snapshot"),
+    viewHistory: (layoutKey, day) => port.invoke("viewLedger:history", layoutKey, day),
+    presenceNow: () => port.invoke("presence:now"),
+    onPresence: (cb) => port.on("presence:changed", cb),
+    viewSharePrepare: local("viewShare:prepare", invoke("viewShare:prepare")),
+    viewShareCommit: local("viewShare:commit", invoke("viewShare:commit")),
+
+    machineRemove: (id) => port.invoke("machines:remove", id),
+    machineSetPassword: (id, password) => port.invoke("machines:set-password", id, password),
+    machineSessions: (uri) => port.invoke("machines:sessions", uri),
+    machineReconnect: (hostId) => port.invoke("machines:reconnect", hostId),
+    sshListDir: (uri, dir) => port.invoke("sshListDir", uri, dir),
+
+    notifyAgent: local("notify:agent", send("notify:agent")),
+    layersShown: (repo, shown) => port.send("layers:shown", repo, shown),
+    recentFolders: (folders) => port.send("recent:folders", folders),
+
+    getNotificationSettings: () => port.invoke("getNotificationSettings"),
+    setNotificationSettings: (s) => port.invoke("setNotificationSettings", s),
+
+    browserRegister: local("browser:register", send("browser:register")),
+    browserCdp: local("browserCdp", invoke("browserCdp")),
+    getBrowserSettings: local("getBrowserSettings", invoke("getBrowserSettings")),
+    setBrowserCdpEnabled: local("setBrowserCdpEnabled", invoke("setBrowserCdpEnabled")),
+    relaunchApp: local("relaunchApp", invoke("relaunchApp")),
+    identity: () => port.invoke("identity:get"),
+    joinPreview: (text) => port.invoke("net:join-preview", text),
+    join: (text) => port.invoke("net:join", text),
+    joined: () => port.invoke("net:joined"),
+    sharedStatus: (workspace) => port.invoke("net:shared-status", workspace),
+    onSharedStatus: (cb) => port.on("net:shared-status", cb),
+    sharedLooks: (workspace) => port.invoke("net:shared-looks", workspace),
+    onSharedLooks: (cb) => port.on("net:shared-looks", cb),
+    leave: (workspace) => port.invoke("net:leave", workspace),
+    machineGrant: (workspace) => port.invoke("net:machine-grant", workspace),
+    setMachineGrant: (workspace, grant) => port.invoke("net:set-machine-grant", workspace, grant),
+    handOff: (workspace, uri) => port.invoke("net:hand-off", workspace, uri),
+    browserAppStatus: () => port.invoke("browserApp:status"),
+    onBrowserAppChanged: (cb) => port.on("browserApp:changed", cb),
+    devices: () => port.invoke("net:devices"),
+    onDevicesChanged: (cb) => port.on("net:devices-changed", () => cb()),
+    pairOffer: () => port.invoke("net:pair-offer"),
+    phonePage: (page) => port.invoke("net:phone-page", page),
+    pairEnter: (text) => port.invoke("net:pair-enter", text),
+    unpair: (device) => port.invoke("net:unpair", device),
+    deviceWorkspaces: () => port.invoke("net:device-workspaces"),
+    openDeviceWorkspace: (device, workspace, name) => port.invoke("net:open-device-workspace", device, workspace, name),
+    moveHosting: (repo, device) => port.invoke("net:move-hosting", repo, device),
+    folderHere: (workspace) => port.invoke("net:folder-here", workspace),
+    moveHostingHere: (workspace) => port.invoke("net:move-hosting-here", workspace),
+    takeOver: (workspace) => port.invoke("net:take-over", workspace),
+    network: () => port.invoke("net:network"),
+    networkHealth: () => port.invoke("net:network-health"),
+    useNetwork: (given) => port.invoke("net:use-network", given),
+    getAppVersion: () => port.invoke("getAppVersion"),
+    settingsSync: () => port.sendSync("settings:get-sync"),
+    workspaceCoreSync: (repo) => port.sendSync("workspace:core-sync", repo),
+    workspaceViewSync: (repo, viewId) => port.sendSync("workspace:view-sync", repo, viewId),
+    workspaceSetCoreSync: (repo, core, base) => { port.sendSync("workspace:set-core-sync", repo, core, base); },
+    workspaceSetViewSync: (repo, viewId, layout, base) => { port.sendSync("workspace:set-view-sync", repo, viewId, layout, base); },
+    workspaceImportSync: (repo, legacy) => { port.sendSync("workspace:import-sync", repo, legacy); },
+    workspaceObjectsSync: (repo) => port.sendSync("workspace:objects-sync", repo),
+    workspaceSetObjectsSync: (repo, objects, base) => { port.sendSync("workspace:set-objects-sync", repo, objects, base); },
+    workspaceUndoSync: (repo) => port.sendSync("workspace:undo-sync", repo),
+    workspaceRedoSync: (repo) => port.sendSync("workspace:redo-sync", repo),
+    settingsGet: () => port.invoke("settings:get"),
+    settingsSet: (p, v) => port.invoke("settings:set", p, v),
+    settingsPatch: (patches) => port.invoke("settings:patch", patches),
+    settingsReplace: (next) => port.invoke("settings:replace", next),
+    settingsPath: () => port.invoke("settings:path"),
+    onSettingsChanged: (cb) => port.on("settings:changed", cb),
+    listViews: (repoRoot) => port.invoke("views:list", repoRoot),
+    listAgents: (repoRoot) => port.invoke("agents:list", repoRoot),
+    agentOptionChoices: (id) => port.invoke("agents:option-choices", id),
+    agentPresence: () => port.invoke("agents:presence"),
+    verifyAgent: (id) => port.invoke("agents:verify", id),
+    previewViewInstall: local("views:preview-install", invoke("views:preview-install")),
+    pluginCatalog: () => port.invoke("plugins:catalog"),
+    pluginReadme: (from) => port.invoke("plugins:readme", from),
+    listWidgets: () => port.invoke("widgets:list"),
+    installWidget: local("widgets:install", invoke("widgets:install")),
+    removeWidget: (id) => port.invoke("widgets:remove", id),
+    onWidgetsChanged: (cb) => port.on("widgets:changed", () => cb()),
+    toolPackages: () => port.invoke("tools:list"),
+    toolHostExports: (map) => port.invoke("tools:host-exports", map),
+    installToolPackage: local("tools:install", invoke("tools:install")),
+    removeToolPackage: (id) => port.invoke("tools:remove", id),
+    toolRun: (call) => port.invoke("tools:run", call),
+    onToolsChanged: (cb) => port.on("tools:changed", () => cb()),
+    services: () => port.invoke("services:list"),
+    serviceLog: (plugin) => port.invoke("services:log", plugin),
+    onServicesChanged: (cb) => port.on("services:changed", () => cb()),
+    outdatedAgents: () => port.invoke("plugins:outdated"),
+    reviewCatalogPlugin: (type, id) => port.invoke("plugins:review", type, id),
+    installCatalogAgent: (token) => port.invoke("plugins:install-agent", token),
+    installCatalogWidget: (token) => port.invoke("plugins:install-widget", token),
+    removeAgent: (id) => port.invoke("agents:remove", id),
+    autoInstallAgents: () => port.invoke("agents:auto-install"),
+    installViewPackage: (token) => port.invoke("views:install", token),
+    removeViewPackage: (id) => port.invoke("views:remove", id),
+    onViewRunaway: (cb) => port.on("views:runaway", cb),
+    checkForUpdate: local("checkForUpdate", invoke("checkForUpdate")),
+    runUpgrade: local("runUpgrade", invoke("runUpgrade")),
+    onUpdateProgress: (cb) => port.on("update:progress", cb),
+    onBrowserPopup: (cb) => port.on("browser:popup", cb),
+
+    // Main intercepts the app's keys before the DOM (xterm would otherwise eat them) and re-emits
+    // each as its own message.
+    onMenuToggleLayers: (cb) => port.on("menu:toggle-layers", () => cb()),
+    onMenuFitOverlay: (cb) => port.on("menu:fit-overlay", () => cb()),
+    onMenuResetScale: (cb) => port.on("menu:reset-scale", () => cb()),
+    onMenuShortcut: (cb) => port.on("menu:shortcut", cb),
+    onMenuFocusTile: (cb) => port.on("menu:focus-tile", () => cb()),
+
+    getLaunchTarget: local("getLaunchTarget", invoke("getLaunchTarget")),
+    newWindow: local("window:new", invoke("window:new")),
+    onOpenProject: (cb) => port.on("open-project", cb),
+
+    // HCP control plane: main pushes a canvas verb, the window runs it and replies.
+    hcpResult: local("hcp:result", invoke("hcp:result")),
+    onHcpCommand: (cb) => port.on("hcp:command", cb),
+    onAppError: (cb) => port.on("app:error", cb),
+    importWallpaper: local("wallpaper:import", invoke("wallpaper:import")),
+    pickMedia: local("media:pick", invoke("media:pick")),
+  };
+}

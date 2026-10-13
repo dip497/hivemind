@@ -1,5 +1,5 @@
 // The phone page's hash, worked out by the desktop from what a server serves, is the one
-// crates/hive-web/build.sh gave the page it built: Pair a phone says "the page this release made"
+// crates/hive-web/build.sh gave the page it built: Use on your phone says "the page this release made"
 // only for that page, and not once one file of it differs. And the link a phone's browser is given
 // carries what a browser uses, and no more.
 import { test } from "node:test";

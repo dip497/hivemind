@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { appShortcut, menuKey } from "../../src/main/shortcuts";
+import { appKeyMessage, appShortcut, menuKey } from "../../src/shared/shortcuts";
 
 const key = (k: string, mods: Partial<{ control: boolean; meta: boolean; shift: boolean; alt: boolean }> = {}) =>
   appShortcut({ key: k, control: false, meta: false, shift: false, alt: false, ...mods });
@@ -44,4 +44,19 @@ test("Ctrl+B and Ctrl+N stay with the terminal; ⌘B is the app's, ⌘N is not",
   assert.equal(menuKey({ ...base, key: "b", meta: true }), "toggle-layers");
   assert.equal(menuKey({ ...base, key: "N", meta: true }), null);
   assert.equal(menuKey({ ...base, key: "b", meta: true, shift: true }), null);
+});
+
+test("each app key is one message to the page, the same from main and in a browser tab", () => {
+  const msg = (k: string, mods: Partial<{ control: boolean; meta: boolean; shift: boolean; alt: boolean }>) =>
+    appKeyMessage({ key: k, control: false, meta: false, shift: false, alt: false, ...mods });
+  assert.deepEqual(msg("E", { control: true, shift: true }), ["menu:shortcut", "explorer"]);
+  assert.deepEqual(msg("F", { control: true, shift: true }), ["menu:fit-overlay"]);
+  assert.deepEqual(msg(")", { control: true, shift: true }), ["menu:reset-scale"]);
+  assert.deepEqual(msg("0", { meta: true, shift: true }), ["menu:reset-scale"]);
+  assert.deepEqual(msg(".", { control: true }), ["menu:focus-tile"]);
+  assert.deepEqual(msg("b", { meta: true }), ["menu:toggle-layers"]);
+  assert.equal(msg("X", { control: true, shift: true }), null);
+  assert.equal(msg(".", { control: true, shift: true }), null);
+  assert.equal(msg("b", { control: true }), null);
+  assert.equal(msg("F", { control: true, shift: true, alt: true }), null);
 });

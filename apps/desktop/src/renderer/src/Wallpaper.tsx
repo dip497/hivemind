@@ -83,7 +83,7 @@ export function Wallpaper({ embedded = false, covering = false }: { embedded?: b
       if (!imageSrc) return null; // no photo picked yet
       return (
         <div className={`hm-wallpaper${cls}${paused ? " paused" : ""}`} data-scene="image" aria-hidden="true">
-          <img className="hm-wp-image" src={imageSrc} alt="" />
+          <img className="hm-wp-image" src={window.hive.resourceUrl(imageSrc)} alt="" />
           <div className="hm-wp-vignette" />
         </div>
       );
@@ -98,7 +98,7 @@ export function Wallpaper({ embedded = false, covering = false }: { embedded?: b
             <video
               ref={videoRef}
               className="hm-wp-video"
-              src={videoSrc}
+              src={window.hive.resourceUrl(videoSrc)}
               autoPlay={!paused}
               loop
               muted

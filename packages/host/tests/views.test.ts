@@ -143,7 +143,7 @@ test("the views here that say they work on a phone are offered with the page to 
     return { text: Buffer.from(served.data, "base64").toString(), type: served.type, nonce };
   };
   const page = await file("priya-board", "index.html");
-  assert.deepEqual([page.text, page.type], [withImportMap("<!doctype html><title>priya-board</title>", page.nonce), "text/html; charset=utf-8"]);
+  assert.deepEqual([page.text, page.type], [withImportMap("<!doctype html><title>priya-board</title>", page.nonce, "index.html"), "text/html; charset=utf-8"]);
   const script = await file("priya-board", "main.js");
   assert.deepEqual([script.text, script.type], ["export {};", "text/javascript; charset=utf-8"]);
   const sdk = await file("priya-board", "__sdk.js");

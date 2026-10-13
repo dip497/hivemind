@@ -27,6 +27,6 @@
     "tsx": "^4.23.15",
     "typescript": "catalog:"
   },
-  "description": "A workspace's host: the workspace API answered on this machine, domain by domain. The desktop app, its dev-bridge and the headless `hive host` serve these same domains.",
+  "description": "A workspace's host: the workspace API answered on this machine, domain by domain. The desktop app and the headless `hive host` serve these same domains.",
   "license": "MIT"
 }

@@ -460,7 +460,7 @@ function ThisComputer({ self, onPick }: { self: string | null | undefined; onPic
           spellCheck={false}
           className="h-8 flex-1"
         />
-        <Button type="button" size="sm" variant="ghost" onClick={() => void window.hive.pickProjectFolder().then((f) => { if (f) open(f); })}>Choose…</Button>
+        {window.hive.pickProjectFolder && <Button type="button" size="sm" variant="ghost" onClick={() => void window.hive.pickProjectFolder?.().then((f) => { if (f) open(f); })}>Choose…</Button>}
         <Button type="submit" size="sm" disabled={!self || !typed.trim().startsWith("/")} data-this-computer-go="">Run it here</Button>
       </div>
     </form>

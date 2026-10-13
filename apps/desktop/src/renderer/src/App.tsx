@@ -29,11 +29,13 @@ import {
 import { Workspace } from "./Workspace";
 import { resolveSettingsPage } from "./settings-registry";
 import { TileErrorBoundary } from "./TileErrorBoundary";
-import { flushSettings, patchSettings, saveSettingsNow } from "./settings-store";
+import { flushSettings } from "./settings-store";
 import { useSettingsNav } from "./settings-nav";
+import { UpdateCheckSwitch } from "./update-check";
 import { getNotificationSettings, setNotificationSettingsCache, subscribeNotificationSettings, saveNotificationSettings } from "./notification-settings";
 import type { NotificationSettings } from "../../shared/ipc";
 import { tellRecentFolders } from "./recent-folders";
+import { chooseFolder, FolderPathDialog } from "./choose-folder";
 const SettingsPages = preloadable(() => import("./settings-panels").then((m) => m.default));
 // Sharing's dialogs load when opened: they are nothing the first frame draws.
 const MakePluginDialog = lazy(() => import("./plugins/MakePlugin").then((m) => ({ default: m.MakePluginDialog })));
@@ -117,7 +119,7 @@ function useUpdateCheck() {
   const upgradingRef = useRef(false);
   const restart = useCallback(() => {
     toast.loading("Restarting into the new version…");
-    window.setTimeout(() => { void window.hive.relaunchApp(); }, 600);
+    window.setTimeout(() => { void window.hive.relaunchApp?.(); }, 600);
   }, []);
   const upgrade = useCallback(() => {
     if (upgradingRef.current || !window.hive?.runUpgrade) return;
@@ -161,7 +163,7 @@ export function App() {
   const [recents, setRecents] = useState<string[]>(() => loadRecents());
   const { data: project, isLoading } = useProject(rootHint);
   async function pickFolder() {
-    const picked = await window.hive.pickProjectFolder();
+    const picked = await chooseFolder();
     if (!picked) return;
     window.localStorage.setItem("hivemind:last-project", picked);
     setRecents(pushRecent(picked));
@@ -264,7 +266,7 @@ export function App() {
     openRecent(path);
     void qc.invalidateQueries({ queryKey: ["project", path] });
   };
-  // Settings → Share hands these on: Settings closes for the People panel, and for the moved workspace.
+  // Settings → People hands these on: Settings closes for the People panel, and for the moved workspace.
   useEffect(() => {
     const people = () => { setSettingsOpen(false); setPeopleOpen(true); };
     const moved = (event: Event) => { setSettingsOpen(false); openMoved((event as CustomEvent<{ uri: string }>).detail.uri); };
@@ -404,6 +406,7 @@ export function App() {
           </div>
         </div>
 
+        <FolderPathDialog />
         <RecentProjects
           open={!!recentOpen}
           joining={recentOpen === "join"}
@@ -411,7 +414,7 @@ export function App() {
           current={repoPath}
           onOpen={openRecent}
           onBrowse={() => void pickFolder()}
-          onNewWindow={() => void window.hive.newWindow()}
+          onNewWindow={() => void (window.hive.newWindow ? window.hive.newWindow() : window.open(window.location.href, "_blank"))}
           onClose={() => setRecentOpen(null)}
         />
         <Suspense fallback={null}>
@@ -597,6 +600,12 @@ function SettingsModal({
   const nav = useSettingsNav();
   const go = useCallback((id: string) => setPage(resolveSettingsPage(id) ?? id), []);
   const settingsReturnFocus = useRef<HTMLElement | null>(null);
+  const settingsNav = useRef<HTMLElement | null>(null);
+  // Focus in the sidebar follows the page shown, however it changed, so its ring is never on another.
+  useEffect(() => {
+    const nav = settingsNav.current;
+    if (nav?.contains(document.activeElement)) nav.querySelector<HTMLElement>('[aria-current="page"]')?.focus({ preventScroll: true });
+  }, [page]);
   useEffect(() => {
     setWorkspaceOccluded(open);
     return () => setWorkspaceOccluded(false);
@@ -639,13 +648,14 @@ function SettingsModal({
         >
           <aside className="settings-sidebar">
             <SettingsDialog.Title className="settings-title">Settings</SettingsDialog.Title>
-            <nav aria-label="Settings sections">
+            <nav aria-label="Settings sections" ref={settingsNav}>
               {nav.groups.map(({ group, items }) => (
                 <div key={group} className="settings-nav-group" role="group" aria-label={group}>
                   <h3 className="settings-nav-heading"><span className="settings-nav-heading-text">{group}</span></h3>
                   {items.map((item) => <button key={item.id} onClick={() => setPage(item.id)} aria-current={nav.selected(page) === item.id ? "page" : undefined}
                     title={item.label} data-settings-page={item.id}>
-                    <span className="settings-nav-icon" aria-hidden="true">{item.icon}</span><span>{item.label}</span>
+                    <span className="settings-nav-icon" aria-hidden="true">{item.icon}</span>
+                    <span className="settings-nav-text"><span>{item.label}</span>{item.hint && <span className="settings-nav-hint" data-settings-hint>{item.hint}</span>}</span>
                   </button>)}
                 </div>
               ))}
@@ -677,7 +687,7 @@ function SettingsModal({
               GitHub <ExternalLink className="size-3 text-[var(--color-fg2)]" />
             </a>
           </div>
-          <div className="settings-row">
+          {window.hive.checkForUpdate ? <div className="settings-row">
             {upgrading || progress ? (
               <UpdateWork progress={progress} busy={upgrading} onRestart={onRestart} />
             ) : update?.staged ? (
@@ -702,9 +712,6 @@ function SettingsModal({
                   <span className="size-2 rounded-full bg-[var(--color-fg3)]" aria-hidden />
                   The update check is off
                 </span>
-                <Button variant="outline" onClick={() => { patchSettings("network.updateCheck", true); void saveSettingsNow().then(() => onCheck({ force: true })); }}>
-                  Turn it on
-                </Button>
               </>
             ) : (
               <>
@@ -721,7 +728,8 @@ function SettingsModal({
                 </Button>
               </>
             )}
-          </div>
+          </div> : <p className="settings-note" data-update-elsewhere>Updates are made in the app on the computer it runs on.</p>}
+          <UpdateCheckSwitch onTurnedOn={() => onCheck({ force: true })} />
           <div className="settings-row">
             <span className="text-[var(--color-fg2)]">License</span>
             <span className="font-mono text-[var(--color-fg2)]">MIT</span>

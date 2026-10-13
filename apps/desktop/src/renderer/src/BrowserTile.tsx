@@ -114,7 +114,23 @@ function TabView({
   );
 }
 
-export function BrowserTile({ tileId, frameId, url, selected, openReq, onClose, pinned, onTogglePin }: Props) {
+/** A page: in the app window, a web view on the canvas; in a browser tab, which has none, a link
+ *  that opens it in a tab of that browser. */
+export function BrowserTile(props: Props) {
+  return window.hive.browserRegister ? <WebView {...props} /> : <OpensInATab url={props.url} />;
+}
+
+function OpensInATab({ url }: { url?: string }) {
+  const href = url ?? DEFAULT_URL;
+  return (
+    <div className="tile-drag-handle flex h-full flex-col items-center justify-center gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] p-6 text-center text-[12px]" data-browser-elsewhere>
+      <p className="text-[var(--color-fg2)]">Pages show here in the app window. In this browser, open it in a tab of its own.</p>
+      <a className="nodrag font-mono text-[var(--color-fg)] underline" href={href} target="_blank" rel="noopener noreferrer">{href}</a>
+    </div>
+  );
+}
+
+function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onTogglePin }: Props) {
   const seq = useRef(1);
   const initialUrls = useRef<Record<string, string>>({ t0: url ?? DEFAULT_URL });
   const [tabs, setTabs] = useState<TabMeta[]>(() => [
@@ -142,7 +158,7 @@ export function BrowserTile({ tileId, frameId, url, selected, openReq, onClose, 
     if (!wv) return;
     let curUrl = "";
     try { curUrl = wv.getURL(); } catch { /* not ready */ }
-    try { window.hive.browserRegister(tileId, wv.getWebContentsId(), frameId ?? null, curUrl); } catch { /* not ready */ }
+    try { window.hive.browserRegister?.(tileId, wv.getWebContentsId(), frameId ?? null, curUrl); } catch { /* not ready */ }
   }, [tileId, frameId]);
 
   const onReady = useCallback((id: string, wv: WebviewTag) => {
@@ -248,11 +264,11 @@ export function BrowserTile({ tileId, frameId, url, selected, openReq, onClose, 
   const cdpSelfTest = async () => {
     setCdpMsg("running…");
     try {
-      const t = await window.hive.browserCdp(tileId, "Runtime.evaluate", {
+      const t = await window.hive.browserCdp!(tileId, "Runtime.evaluate", {
         expression: "document.title", returnByValue: true,
       }) as { result?: { value?: string } };
       const title = t?.result?.value ?? "(no title)";
-      await window.hive.browserCdp(tileId, "Page.navigate", { url: "https://example.com" });
+      await window.hive.browserCdp!(tileId, "Page.navigate", { url: "https://example.com" });
       setCdpMsg(`CDP ok · read "${title}" · navigated to example.com`);
     } catch (e) {
       setCdpMsg(`CDP failed: ${(e as Error).message}`);

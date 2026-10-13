@@ -1,6 +1,6 @@
 /**
  * The reach chooser (design §13.3 E): what appears the first time something needs a device outside
- * this network (inviting someone elsewhere), and the same choice in Settings → Network. A way
+ * this network (inviting someone elsewhere), and the same choice in Settings → Servers. A way
  * through: the person's own servers, from their network link; one of their devices
  * serving (how); or not now, which keeps this computer on the network it is on.
  */

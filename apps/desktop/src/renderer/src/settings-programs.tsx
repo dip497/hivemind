@@ -1,7 +1,7 @@
 /**
- * Settings → Programs (spec/workspace-api.md "Drive socket"): the programs the person lets drive
- * workspaces on this computer, what each may do and where, and taking one back. A new grant is for
- * the workspace in this window; its token is shown once, to hand to the program.
+ * Settings → API access (spec/workspace-api.md "Drive socket"): tokens for the scripts and tools
+ * the person lets drive workspaces on this computer, what each may do and where, and taking one
+ * back. A new token is for the workspace in this window, and is shown once.
  */
 import { useCallback, useEffect, useState } from "react";
 import type { ClientGrant } from "@hivemind/workspace-api/grants";
@@ -21,28 +21,28 @@ const messageOf = (e: unknown): string => (e instanceof Error ? e.message : Stri
 const folder = (p: string): string => p.split(/[\\/]/).filter(Boolean).pop() ?? p;
 const day = (ms: number): string => new Date(ms).toLocaleDateString();
 
-export function ProgramsPrefs() {
+export function ApiAccessPrefs() {
   // undefined while it is asked for; null where no app answers (a window in a browser).
   const [grants, setGrants] = useState<ClientGrant[] | null | undefined>(undefined);
   const load = useCallback(() => void window.hive.grants().then(setGrants, () => setGrants(null)), []);
   useEffect(load, [load]);
   return (
     <div className="settings-stack">
-      <Section title="Let in" hint="Each reaches only its workspaces, and only at its role">
+      <Section title="New token" hint="For the workspace in this window; or hive grant create from a terminal">
+        <NewGrant onMade={load} />
+      </Section>
+      <Section title="Tokens" hint="Each reaches only its workspaces, and only at its role">
         {grants === undefined ? null : grants === null ? (
           <p className="settings-note">Only the app knows</p>
         ) : grants.length === 0 ? (
           <p className="text-[12px] text-[var(--color-fg3)]" data-grants-none>
-            None. A program you let in, an orchestrator or a dashboard, starts and answers agents here with its own token, and cannot push, share the workspace or write files.
+            None yet. A script or tool with a token, an orchestrator or a dashboard, starts and answers agents here, and cannot push, share the workspace or write files.
           </p>
         ) : (
           <ul className="flex flex-col" data-grants>
             {grants.map((g) => <GrantRow key={g.id} grant={g} onGone={load} />)}
           </ul>
         )}
-      </Section>
-      <Section title="Let a program in" hint="For the workspace in this window; or hive grant create from a terminal">
-        <NewGrant onMade={load} />
       </Section>
     </div>
   );
@@ -75,7 +75,7 @@ function NewGrant({ onMade }: { onMade: () => void }) {
   const [token, setToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (!repo || repo.startsWith("hive://")) return <p className="settings-note">Open a workspace on this computer to let a program drive it.</p>;
+  if (!repo || repo.startsWith("hive://")) return <p className="settings-note">Open a workspace on this computer to make a token for it.</p>;
   const make = async () => {
     setError(null);
     try {
@@ -95,7 +95,7 @@ function NewGrant({ onMade }: { onMade: () => void }) {
       <div className="flex gap-2">
         <Input
           value={name}
-          placeholder="its name, as you will know it"
+          placeholder="What uses it, e.g. my dashboard"
           className="flex-1 text-[12px]"
           data-grant-name
           onChange={(e) => setName(e.target.value)}
@@ -104,16 +104,16 @@ function NewGrant({ onMade }: { onMade: () => void }) {
         <select value={role} aria-label="What it may do" data-grant-role onChange={(e) => setRole(e.target.value as Role)}>
           {ROLES.map(([r, words]) => <option key={r} value={r}>{words}</option>)}
         </select>
-        <Button size="sm" disabled={!name.trim()} data-grant-create onClick={() => void make()}>Let in</Button>
+        <Button size="sm" disabled={!name.trim()} data-grant-create onClick={() => void make()}>Create token</Button>
       </div>
-      <p className="settings-note">In {folder(repo)}. The program connects to the drive socket with its token and names this folder.</p>
+      <p className="settings-note">In {folder(repo)}. The script connects to the drive socket with the token and names this folder.</p>
       {token && (
         <div className="flex items-center gap-2" data-grant-token>
           <code className="flex-1 truncate font-mono text-[12px]">{token}</code>
           <Button size="sm" variant="outline" onClick={copy}>{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? "Copied" : "Copy"}</Button>
         </div>
       )}
-      {token && <p className="settings-note">Shown this once: copy it to the program now.</p>}
+      {token && <p className="settings-note">Shown this once: copy it now.</p>}
       {error && <p className="text-[12px] text-[var(--color-err)]" role="alert">{error}</p>}
     </div>
   );

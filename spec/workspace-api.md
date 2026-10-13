@@ -1,8 +1,8 @@
 # Workspace API (0.24)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
-workspace's repo is on; today its callers are the app's windows and the dev-bridge, and later a
-peer or another device. What only the machine at hand is asked for (a folder picker, the list of
+workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
+other devices and programs on this machine. What only the machine at hand is asked for (a folder picker, the list of
 the machine's workspaces, opening a file in another app) is not part of it. Every transport carries the same messages. Design: R8 in
 `docs/design/multiplayer-2026-09-28.md`.
 
@@ -41,14 +41,14 @@ for it.
 | Transport | Caller | Its connection | A call | A notice | Events |
 |---|---|---|---|---|---|
 | Electron IPC | the app's windows | the window, from when it opens until it closes | `invoke("workspace", method, params)` → the answer | `send("workspace:notice", method, params)` | `workspace:event`, one `{event, params}` each |
-| HTTP | the dev-bridge's page | its event stream: `GET /workspace/events?token=…`, whose first event, `connection`, carries `{id}` | `POST /workspace`, body `{"method", "params"}` → 200 with the answer | `POST /workspace/notice`, same body → 204 | the stream's `data:` lines, one `{event, params}` each |
+| WebSocket | the app's window in a browser tab, served by the app on 127.0.0.1 (`docs/design/browser-app-2026-10-13.md`) | the socket, from its `{"t": "auth", "token"}` frame until it closes | a frame `{"t": "invoke", "id", "ch": "workspace", "args": [method, params]}` → `{"t": "result", "id", "value"}` with the answer | `{"t": "send", "ch": "workspace:notice", "args": [method, params]}` | frames `{"t": "event", "ch": "workspace:event", "args": [{event, params}]}` |
 
 | hive-net | a peer on another device, reaching a workspace shared from here (M1) | an `api` stream of its `hive/ws/1` connection: a connection may carry several, each a connection of its own (0.13) | a frame on that stream, `{"id", "method", "params"}` → a frame `{"id", "result"}` or `{"id", "error"}` on it | a frame without `id` | frames `{event, params}` on the same stream |
 | Drive socket (0.20) | a program on this machine, `hive grant` among them, or an agent in a tile (0.23; below) | the socket connection, from its `hello` until it closes | a line `{"id", "method", "params"}` → a line `{"id", "result"}` or `{"id", "error"}` | a line without `id` | lines `{event, params}`; for a program, one line may be a list of them |
 
-Over Electron only the main frame of an app window is heard; anything else is rejected. Over HTTP
-every request carries the token (`x-hive-token`, or `token` on the stream) and a call or notice
-names its connection (`x-hive-connection`): 401 without the token, 400 without a connection.
+Over Electron only the main frame of an app window is heard; anything else is rejected. Over the
+WebSocket the upgrade carries the launch's cookie, a loopback or configured Host and an Origin of
+that Host, and the first frame the launch's token; else it is refused (401, 403) or closed (4401).
 
 ## Drive socket
 
@@ -440,7 +440,7 @@ TypeScript: `StoreReplica` (`packages/workspace-api/src/store-replica.ts`).
 TypeScript: `packages/workspace-api` (the methods' types, a client over any transport, and the
 server that answers them, and a replica of the store for a client over a stream); the host's
 domains in `packages/host` (git and worktrees, files, issues, reviews, agents and what they wait on, terminals,
-presence, people, the store, community views on a remote screen), which the app's main process,
-the dev-bridge and `hive host` serve, each over its own way of running a session and its own
+presence, people, the store, community views on a remote screen), which the app's main process
+and `hive host` serve, each over its own way of running a session and its own
 store. A view's host is `packages/view-host`, the window's and a remote screen's both. Rust: the
 phone's core, `crates/hive-phone` (`views.rs` for the views).

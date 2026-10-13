@@ -1,7 +1,7 @@
 /**
  * Paths a call names inside a repo, a local one or a remote one: each is refused (BAD_REQUEST)
- * when it would reach outside the repo — an absolute path, `..`. Every file a window, a peer or
- * the dev-bridge names goes through here before it reaches git or the disk.
+ * when it would reach outside the repo — an absolute path, `..`. Every file a window or a peer
+ * names goes through here before it reaches git or the disk.
  */
 import path from "node:path";
 import { realpath } from "node:fs/promises";
