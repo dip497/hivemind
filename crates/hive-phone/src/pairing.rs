@@ -20,7 +20,7 @@ use crate::{
 };
 
 /// The 256 words a code is made of (spec/pairing-words.json).
-static WORDS: LazyLock<Vec<String>> = LazyLock::new(|| {
+pub(crate) static WORDS: LazyLock<Vec<String>> = LazyLock::new(|| {
     serde_json::from_str(include_str!("../../../spec/pairing-words.json"))
         .expect("the words are a list of text")
 });
@@ -31,7 +31,7 @@ const LINK_PREFIX: &str = "hivemind://pair/";
 const ANSWER_WITHIN: Duration = Duration::from_secs(60);
 
 /// Spaces, as the app splits and trims text (JavaScript's `\s`).
-fn is_space(c: char) -> bool {
+pub(crate) fn is_space(c: char) -> bool {
     (c.is_whitespace() && c != '\u{85}') || c == '\u{feff}'
 }
 
@@ -77,14 +77,14 @@ fn proven(given: Option<&str>, code: &str, label: &str, offering: &str, entering
 }
 
 /// A device's name, as another will list it: text, not too long.
-fn name_of(v: Option<&Value>) -> Option<String> {
+pub(crate) fn name_of(v: Option<&Value>) -> Option<String> {
     let text = v?.as_str()?;
     let name = text.trim_matches(is_space);
     (!name.is_empty() && units(text) <= 200).then(|| name.to_string())
 }
 
 /// Where a message says its device is reached: a few addresses, and a relay or none.
-fn reached_of(m: &Map<String, Value>) -> (Vec<String>, Option<String>) {
+pub(crate) fn reached_of(m: &Map<String, Value>) -> (Vec<String>, Option<String>) {
     let addrs = m
         .get("addrs")
         .and_then(Value::as_array)
@@ -128,7 +128,7 @@ pub struct PairLink {
 }
 
 /// What a link says of getting onto its network, when it says it well.
-fn admission_of(v: Option<&Value>) -> Option<Admission> {
+pub(crate) fn admission_of(v: Option<&Value>) -> Option<Admission> {
     let a = v?.as_object()?;
     let access = a
         .get("access")?
@@ -146,7 +146,8 @@ pub fn parse_link(text: &str) -> Option<PairLink> {
     // The phone page's address carries the link in its fragment (spec/pairing.md).
     match text.split_once('#') {
         Some((page, fragment)) if page.starts_with("https://") || page.starts_with("http://") => {
-            let (_, link) = form_urlencoded::parse(fragment.as_bytes()).find(|(k, _)| k == "pair")?;
+            let (_, link) =
+                form_urlencoded::parse(fragment.as_bytes()).find(|(k, _)| k == "pair")?;
             link_of(&link)
         }
         _ => link_of(text),
@@ -289,6 +290,22 @@ pub fn accept(me: &str, link: &PairLink, answer: &Value) -> Result<Paired> {
 /// Pair with the app whose `link` was scanned, from this phone's `endpoint`, as `name`.
 pub async fn pair(endpoint: &Endpoint, name: &str, link: &PairLink) -> Result<Paired> {
     let me = endpoint.id().to_string();
+    let (addrs, relay) = reached(endpoint);
+    let hello = prove(&me, name, &addrs, relay.as_deref(), link);
+    let at = hive_net::net::addr_of(&link.device, &link.addrs, &link.relay)?;
+    let answer = n0_future::time::timeout(ANSWER_WITHIN, hive_net::pair::ask(endpoint, at, &hello))
+        .await
+        .map_err(|_| {
+            Failure::Unreachable(
+                "the computer did not answer: is it on this network, still showing the code?"
+                    .into(),
+            )
+        })??;
+    accept(&me, link, &answer)
+}
+
+/// Where `endpoint` says it is reached: its direct addresses, and its relay.
+pub(crate) fn reached(endpoint: &Endpoint) -> (Vec<String>, Option<String>) {
     let here = endpoint.addr();
     let addrs: Vec<String> = here
         .addrs
@@ -302,17 +319,7 @@ pub async fn pair(endpoint: &Endpoint, name: &str, link: &PairLink) -> Result<Pa
         TransportAddr::Relay(url) => Some(url.to_string()),
         _ => None,
     });
-    let hello = prove(&me, name, &addrs, relay.as_deref(), link);
-    let at = hive_net::net::addr_of(&link.device, &link.addrs, &link.relay)?;
-    let answer = n0_future::time::timeout(ANSWER_WITHIN, hive_net::pair::ask(endpoint, at, &hello))
-        .await
-        .map_err(|_| {
-            Failure::Unreachable(
-                "the computer did not answer: is it on this network, still showing the code?"
-                    .into(),
-            )
-        })??;
-    accept(&me, link, &answer)
+    (addrs, relay)
 }
 
 /// What pairing came to: what the app gave, and how the phone got onto its network.
