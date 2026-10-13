@@ -114,7 +114,7 @@ export function pairProof(code: string, label: Label, offering: string, entering
   return createHmac("sha256", code).update(`hive/pair/1 ${label}\n${offering}${entering}`).digest("hex");
 }
 
-function sameProof(given: unknown, expected: string): boolean {
+export function sameProof(given: unknown, expected: string): boolean {
   if (typeof given !== "string" || given.length !== expected.length) return false;
   return timingSafeEqual(Buffer.from(given), Buffer.from(expected));
 }
@@ -143,19 +143,19 @@ export function formatPairLink(l: PairLink): string {
   return LINK_PREFIX + Buffer.from(JSON.stringify({ v: 1, ...l })).toString("base64url");
 }
 
-const isKey = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{64}$/.test(v);
+export const isKey = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{64}$/.test(v);
 /** Where a message says its device is reached: a few addresses, and a relay or none. */
-const reachedOf = (m: Record<string, unknown>): Reached => ({
+export const reachedOf = (m: Record<string, unknown>): Reached => ({
   addrs: Array.isArray(m.addrs) ? m.addrs.filter((a): a is string => typeof a === "string" && a.length <= 100).slice(0, 16) : [],
   relay: typeof m.relay === "string" && m.relay.length <= 500 ? m.relay : null,
 });
-const isKind = (v: unknown): v is DeviceKind => v === "app" || v === "host";
+export const isKind = (v: unknown): v is DeviceKind => v === "app" || v === "host";
 const isPairedKind = (v: unknown): v is PairedKind => isKind(v) || v === "phone";
 /** A device's name, as another will list it: text, not too long. */
-const nameOf = (v: unknown): string | null => (typeof v === "string" && v.trim() && v.length <= 200 ? v.trim() : null);
+export const nameOf = (v: unknown): string | null => (typeof v === "string" && v.trim() && v.length <= 200 ? v.trim() : null);
 
 /** What a link says of getting onto its network, when it says it well: nothing otherwise. */
-function admissionOf(v: unknown): { admission?: Admission } {
+export function admissionOf(v: unknown): { admission?: Admission } {
   const a = v as { access?: unknown; voucher?: unknown } | null;
   if (!a || typeof a.access !== "string" || !/^https?:\/\//.test(a.access) || a.access.length > 500) return {};
   const voucher = a.voucher && typeof a.voucher === "object" && !Array.isArray(a.voucher) ? (a.voucher as Record<string, unknown>) : null;
@@ -185,7 +185,7 @@ function linkOf(text: string): PairLink | null {
 }
 
 /** The person key in hex, or null. */
-const seedOf = (v: unknown): Seed | null => (typeof v === "string" && /^[0-9a-f]{64}$/.test(v) ? new Uint8Array(Buffer.from(v, "hex")) : null);
+export const seedOf = (v: unknown): Seed | null => (typeof v === "string" && /^[0-9a-f]{64}$/.test(v) ? new Uint8Array(Buffer.from(v, "hex")) : null);
 const hex = (seed: Seed): string => Buffer.from(seed).toString("hex");
 const fail = (error: PairError) => ({ ok: false as const, error });
 

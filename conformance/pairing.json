@@ -1,5 +1,5 @@
 {
- "about": "Cases every pairing implementation must pass (spec/pairing.md 0.5): proofs, codes, links, and a phone pairing with an app, message by message. Made with Python's hmac, hashlib and base64 and the OpenSSL command line's Ed25519, apart from the TypeScript and the Rust they test. Seeds are 32-byte Ed25519 secrets in hex, ids public keys in lowercase hex; a code's words are spec/pairing-words.json's.",
+ "about": "Cases every pairing implementation must pass (spec/pairing.md 0.10): proofs, codes, links, and a phone pairing with an app, message by message; and connecting's proofs, words and links. Made with Python's hmac, hashlib and base64 and the OpenSSL command line's Ed25519, apart from the TypeScript and the Rust they test. Seeds are 32-byte Ed25519 secrets in hex, ids public keys in lowercase hex; a code's words are spec/pairing-words.json's.",
  "proof": [
   {
    "code": "amber-cellar-helmet-lemon-salmon-zipper",
@@ -815,5 +815,213 @@
     null
    ]
   }
+ },
+ "connect": {
+  "proof": [
+   {
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "label": "entering",
+    "offering": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "entering": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+    "proof": "8ff3815a391bae5ea93b28ff55e8897093826d3ff9b1cb9ef2d32eebb3e84c8e"
+   },
+   {
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "label": "offering",
+    "offering": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "entering": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+    "proof": "6d4131eb0342e7f4b490227c7399cdfc4767baec6cbfa82c73de384bb702de01"
+   },
+   {
+    "code": "acorn-actor-adobe-agent-alarm-album",
+    "label": "entering",
+    "offering": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "entering": "2fe5d7fa1cd6e5fc97c03bfa3d94713769290c74efd772acc4de278e8926e561",
+    "proof": "a542ab0fabc3d2100cf1ad60dcd920d5d5835a89d74ed9d1e871b10c3b38680a"
+   },
+   {
+    "code": "acorn-actor-adobe-agent-alarm-album",
+    "label": "offering",
+    "offering": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "entering": "2fe5d7fa1cd6e5fc97c03bfa3d94713769290c74efd772acc4de278e8926e561",
+    "proof": "e8c84566744f15afeabad52787f679495c75a82a0531d31a3639a9933650871b"
+   }
+  ],
+  "words": [
+   {
+    "about": "a phone's request",
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "offering": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "entering": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+    "nonceO": "00112233445566778899aabbccddeeff",
+    "nonceJ": "ffeeddccbbaa99887766554433221100",
+    "words": [
+     "hammer",
+     "gazelle",
+     "nickel"
+    ]
+   },
+   {
+    "about": "the same, another offering nonce",
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "offering": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "entering": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+    "nonceO": "00112233445566778899aabbccddeef0",
+    "nonceJ": "ffeeddccbbaa99887766554433221100",
+    "words": [
+     "yogurt",
+     "kettle",
+     "zebra"
+    ]
+   },
+   {
+    "about": "the same, nonces swapped",
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "offering": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "entering": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+    "nonceO": "ffeeddccbbaa99887766554433221100",
+    "nonceJ": "00112233445566778899aabbccddeeff",
+    "words": [
+     "fennel",
+     "alley",
+     "badge"
+    ]
+   },
+   {
+    "about": "another device asking",
+    "code": "amber-cellar-helmet-lemon-salmon-zipper",
+    "offering": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "entering": "2fe5d7fa1cd6e5fc97c03bfa3d94713769290c74efd772acc4de278e8926e561",
+    "nonceO": "00112233445566778899aabbccddeeff",
+    "nonceJ": "ffeeddccbbaa99887766554433221100",
+    "words": [
+     "galaxy",
+     "pillow",
+     "hollow"
+    ]
+   },
+   {
+    "about": "another code",
+    "code": "acorn-actor-adobe-agent-alarm-album",
+    "offering": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+    "entering": "c6b269473e2487154ee3744ca55e5ba83ada69c791e262a9e2d817c78d6016f9",
+    "nonceO": "00112233445566778899aabbccddeeff",
+    "nonceJ": "ffeeddccbbaa99887766554433221100",
+    "words": [
+     "helmet",
+     "canoe",
+     "cobalt"
+    ]
+   }
+  ],
+  "link": [
+   {
+    "about": "an app's offer",
+    "text": "hivemind://connect/c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3#eyJ2IjoxLCJhZGRycyI6WyIxOTIuMTY4LjEuMjA6NDE2NDEiLCJbZmQwMDo6MjBdOjQxNjQxIl0sInJlbGF5IjpudWxsLCJjb2RlIjoiYW1iZXItY2VsbGFyLWhlbG1ldC1sZW1vbi1zYWxtb24temlwcGVyIiwibmFtZSI6IlByaXlhJ3MgZGVza3RvcCJ9",
+    "link": {
+     "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "code": "amber-cellar-helmet-lemon-salmon-zipper",
+     "name": "Priya's desktop"
+    }
+   },
+   {
+    "about": "its words typed in another way",
+    "text": "hivemind://connect/c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3#eyJ2IjoxLCJhZGRycyI6WyIxOTIuMTY4LjEuMjA6NDE2NDEiLCJbZmQwMDo6MjBdOjQxNjQxIl0sInJlbGF5IjpudWxsLCJjb2RlIjoiQW1iZXIgQ2VsbGFyIGhlbG1ldC1sZW1vbiBzYWxtb24gWklQUEVSIiwibmFtZSI6IlByaXlhJ3MgZGVza3RvcCJ9",
+    "link": {
+     "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "code": "amber-cellar-helmet-lemon-salmon-zipper",
+     "name": "Priya's desktop"
+    }
+   },
+   {
+    "about": "on a network with an access service",
+    "text": "hivemind://connect/c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3#eyJ2IjoxLCJhZGRycyI6WyIxOTIuMTY4LjEuMjA6NDE2NDEiLCJbZmQwMDo6MjBdOjQxNjQxIl0sInJlbGF5IjpudWxsLCJjb2RlIjoiYW1iZXItY2VsbGFyLWhlbG1ldC1sZW1vbi1zYWxtb24temlwcGVyIiwibmFtZSI6IlByaXlhJ3MgZGVza3RvcCIsImFkbWlzc2lvbiI6eyJhY2Nlc3MiOiJodHRwczovL2FjY2Vzcy5leGFtcGxlLm5ldCIsInZvdWNoZXIiOnsidiI6MSwidXNlcyI6MX19fQ",
+    "link": {
+     "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "code": "amber-cellar-helmet-lemon-salmon-zipper",
+     "name": "Priya's desktop",
+     "admission": {
+      "access": "https://access.example.net",
+      "voucher": {
+       "v": 1,
+       "uses": 1
+      }
+     }
+    }
+   },
+   {
+    "about": "an access service that is no URL is none",
+    "text": "hivemind://connect/c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3#eyJ2IjoxLCJhZGRycyI6WyIxOTIuMTY4LjEuMjA6NDE2NDEiLCJbZmQwMDo6MjBdOjQxNjQxIl0sInJlbGF5IjpudWxsLCJjb2RlIjoiYW1iZXItY2VsbGFyLWhlbG1ldC1sZW1vbi1zYWxtb24temlwcGVyIiwibmFtZSI6IlByaXlhJ3MgZGVza3RvcCIsImFkbWlzc2lvbiI6eyJhY2Nlc3MiOiJmdHA6Ly94Iiwidm91Y2hlciI6bnVsbH19",
+    "link": {
+     "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "code": "amber-cellar-helmet-lemon-salmon-zipper",
+     "name": "Priya's desktop"
+    }
+   },
+   {
+    "about": "inside the phone page's address",
+    "text": "https://example.net/phone/#connect=hivemind://connect/c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3#eyJ2IjoxLCJhZGRycyI6WyIxOTIuMTY4LjEuMjA6NDE2NDEiLCJbZmQwMDo6MjBdOjQxNjQxIl0sInJlbGF5IjpudWxsLCJjb2RlIjoiYW1iZXItY2VsbGFyLWhlbG1ldC1sZW1vbi1zYWxtb24temlwcGVyIiwibmFtZSI6IlByaXlhJ3MgZGVza3RvcCJ9",
+    "link": {
+     "device": "c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3",
+     "addrs": [
+      "192.168.1.20:41641",
+      "[fd00::20]:41641"
+     ],
+     "relay": null,
+     "code": "amber-cellar-helmet-lemon-salmon-zipper",
+     "name": "Priya's desktop"
+    }
+   },
+   {
+    "about": "the page's address without one",
+    "text": "https://example.net/phone/#pair=hivemind://connect/c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3#eyJ2IjoxLCJhZGRycyI6WyIxOTIuMTY4LjEuMjA6NDE2NDEiLCJbZmQwMDo6MjBdOjQxNjQxIl0sInJlbGF5IjpudWxsLCJjb2RlIjoiYW1iZXItY2VsbGFyLWhlbG1ldC1sZW1vbi1zYWxtb24temlwcGVyIiwibmFtZSI6IlByaXlhJ3MgZGVza3RvcCJ9",
+    "link": null
+   },
+   {
+    "about": "five words",
+    "text": "hivemind://connect/c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3#eyJ2IjoxLCJhZGRycyI6WyIxOTIuMTY4LjEuMjA6NDE2NDEiLCJbZmQwMDo6MjBdOjQxNjQxIl0sInJlbGF5IjpudWxsLCJjb2RlIjoiYW1iZXItY2VsbGFyLWhlbG1ldC1sZW1vbi1zYWxtb24iLCJuYW1lIjoiUHJpeWEncyBkZXNrdG9wIn0",
+    "link": null
+   },
+   {
+    "about": "a word not on the list",
+    "text": "hivemind://connect/c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3#eyJ2IjoxLCJhZGRycyI6WyIxOTIuMTY4LjEuMjA6NDE2NDEiLCJbZmQwMDo6MjBdOjQxNjQxIl0sInJlbGF5IjpudWxsLCJjb2RlIjoiYW1iZXItY2VsbGFyLWhlbG1ldC1sZW1vbi1zYWxtb24tcXdlcnR5IiwibmFtZSI6IlByaXlhJ3MgZGVza3RvcCJ9",
+    "link": null
+   },
+   {
+    "about": "another version",
+    "text": "hivemind://connect/c7b697b92fc63a2dd660f6f02f2ce32eb4a842839cbe4213845e3b4390f446c3#eyJ2IjoyLCJhZGRycyI6WyIxOTIuMTY4LjEuMjA6NDE2NDEiLCJbZmQwMDo6MjBdOjQxNjQxIl0sInJlbGF5IjpudWxsLCJjb2RlIjoiYW1iZXItY2VsbGFyLWhlbG1ldC1sZW1vbi1zYWxtb24temlwcGVyIiwibmFtZSI6IlByaXlhJ3MgZGVza3RvcCJ9",
+    "link": null
+   },
+   {
+    "about": "a device that is no key",
+    "text": "hivemind://connect/C7B697B92FC63A2DD660F6F02F2CE32EB4A842839CBE4213845E3B4390F446C3#eyJ2IjoxLCJhZGRycyI6WyIxOTIuMTY4LjEuMjA6NDE2NDEiLCJbZmQwMDo6MjBdOjQxNjQxIl0sInJlbGF5IjpudWxsLCJjb2RlIjoiYW1iZXItY2VsbGFyLWhlbG1ldC1sZW1vbi1zYWxtb24temlwcGVyIiwibmFtZSI6IlByaXlhJ3MgZGVza3RvcCJ9",
+    "link": null
+   },
+   {
+    "about": "a pairing link",
+    "text": "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOlsiMTkyLjE2OC4xLjIwOjQxNjQxIiwiW2ZkMDA6OjIwXTo0MTY0MSJdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJQcml5YSdzIGRlc2t0b3AiLCJraW5kIjoiYXBwIn0",
+    "link": null
+   }
+  ]
  }
 }

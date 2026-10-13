@@ -1,4 +1,4 @@
-// Pairing (spec/pairing.md 0.3), held to conformance/pairing.json: cases made apart from this code
+// Pairing (spec/pairing.md 0.3) and connecting (0.10), held to conformance/pairing.json: cases made apart from this code
 // (Python's hmac and OpenSSL's Ed25519), which the phone's Rust (crates/hive-phone) is held to as
 // well. The app's side here: proofs, codes and links are the spec's, and an app answers a phone that
 // scanned its link with its own certificate and one naming the phone, signed by the person key, in
@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { certificateVerifies, certifyDevice, idOf, type DeviceCertificate } from "../src/identity.ts";
 import { PairingOffer, formatPairLink, pairProof, parseCode, parsePairLink, type Pairing } from "../src/pairing.ts";
+import { connectProof, connectWords, formatConnectLink, parseConnectLink } from "../src/connect.ts";
 
 interface Device { deviceSeed: string; device: string; name: string; addrs: string[]; relay: string | null }
 interface Cases {
@@ -22,6 +23,11 @@ interface Cases {
     prove: Record<string, unknown>;
     answer: Record<string, unknown> & { certificate: DeviceCertificate; yours: DeviceCertificate };
     networks: { taken: string[]; notTaken: unknown[] };
+  };
+  connect: {
+    proof: Array<{ code: string; label: "entering" | "offering"; offering: string; entering: string; proof: string }>;
+    words: Array<{ about: string; code: string; offering: string; entering: string; nonceO: string; nonceJ: string; words: string[] }>;
+    link: Array<{ text: string; link: unknown; about: string }>;
   };
 }
 const cases = JSON.parse(fs.readFileSync(path.join(import.meta.dir, "../../../conformance/pairing.json"), "utf8")) as Cases;
@@ -80,4 +86,22 @@ test("an app on a network gives it to a phone, as it has it, in its answer", () 
     const got = offer.answer(phone.device, { ...prove, proof: pairProof(offer.code, "entering", app.device, phone.device) }) as Record<string, unknown>;
     expect(got.network).toBe(network);
   }
+});
+
+test("connecting's proofs are HMAC-SHA256, keyed by the code, of its label and the two devices", () => {
+  expect(cases.connect.proof.length).toBeGreaterThan(0);
+  for (const c of cases.connect.proof) expect(connectProof(c.code, c.label, c.offering, c.entering)).toBe(c.proof);
+});
+
+test("a request's words are the spec's, and new for another nonce, device or code", () => {
+  for (const c of cases.connect.words) {
+    expect({ about: c.about, words: connectWords(c.code, c.offering, c.entering, c.nonceO, c.nonceJ) }).toEqual({ about: c.about, words: c.words });
+  }
+  expect(new Set(cases.connect.words.map((c) => c.words.join(" "))).size).toBe(cases.connect.words.length);
+});
+
+test("an offer's link is read as the spec says, or is not one; and an app's is the spec's", () => {
+  for (const c of cases.connect.link) expect({ about: c.about, link: parseConnectLink(c.text) }).toEqual({ about: c.about, link: c.link });
+  const first = cases.connect.link[0]!;
+  expect(formatConnectLink(first.link as Parameters<typeof formatConnectLink>[0])).toBe(first.text);
 });

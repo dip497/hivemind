@@ -1,4 +1,4 @@
-# Pairing (0.9)
+# Pairing (0.10)
 
 Two devices become one person's (R14 and §5.2 in `docs/design/multiplayer-2026-09-28.md`): the
 device being added receives the person key and certifies itself with it (`identity.md`), or, a
@@ -234,5 +234,81 @@ beside the device's keys, and sent again as the device is reachable again and ev
 until that host answers. A device unpaired on one of the person's computers stays paired with the
 others until it is unpaired on each, and keeps the person key it was given.
 
+## Connecting (0.10)
+
+An app may offer to **connect** instead: one offer, decided when someone uses it. Whoever uses it
+only asks; the person at the app then answers the request: **it's me** (the device is theirs, and is
+paired as above), **someone else** (let into the workspace the offer was made from, at a role they
+pick), or **no**. A code-holder gets nothing before that answer.
+
+**The offer.** A code as above, valid for 24 hours, voided by three wrong proofs or a new offer,
+and spent by the first request let in. It is shown as the words, and as a link and its QR code:
+
+```
+hivemind://connect/<offering device's key hex>#<base64url of { "v": 1, "addrs": [ … ], "relay": … | null, "code": "<the six words>", "name": "<its name>", "admission": { … } }>
+```
+
+`admission` is as in a pairing link. The phone page carries it as `#connect=<the link>`. While an
+offer is open, the app announces `hive-connect=<tag>`, the tag of its code as above.
+
+**Proofs and words.** Over `hive/pair/1`, as pairing is:
+
+```
+proof(label) = hex(HMAC-SHA256(key = code, message = "hive/connect/1 " ‖ label ‖ "\n" ‖ offering ‖ entering))
+words        = HMAC-SHA256(key = code, message = "hive/connect/1 words\n" ‖ offering ‖ entering ‖ nonce_o ‖ nonce_j)
+```
+
+with the keys and nonces in lowercase hex. The **words** of a request are the words of its first
+three bytes, in order. Both screens show them; they are new for each request, because the
+offering device picks `nonce_o` after the entering device sent `nonce_j`, and tells it to that
+device alone.
+
+1. **Ask.** The entering device sends
+
+   ```json
+   { "v": 1, "connect": "ask", "proof": "<proof(\"entering\")>", "nonce": "<nonce_j: 16 random bytes, hex>", "name": "…",
+     "kind": "app" | "host" | "phone", "certificate": { … }, "profile": { "name": "…", "color": "…" },
+     "addrs": [ … ], "relay": …, "shares": true }
+   ```
+
+   A phone sends no certificate, profile or `shares`. The offering device answers `expired` when
+   the offer is not open, `wrong-code` for a wrong proof (counted against the code), `malformed`
+   or `not-this-device` as pairing does, and `busy` when three requests of other devices wait
+   already. Otherwise it keeps the request, in place of any request of that device's still
+   waiting, and answers
+
+   ```json
+   { "ok": true, "request": "<8 random bytes, hex>", "proof": "<proof(\"offering\")>", "nonce": "<nonce_o: 16 random bytes, hex>",
+     "name": "…", "certificate": { … }, "addrs": [ … ], "relay": … }
+   ```
+
+   The entering device checks that proof, and that the certificate verifies and names the offering
+   device, before it shows the words.
+2. **Wait.** It sends `{ "v": 1, "connect": "wait", "request": "<id>" }`, which is answered once the
+   person at the offering device has, within 170 seconds of the ask:
+   - it's me: `{ "ok": true, "as": "me", "profile": { "name", "color" } }`, the offering person's
+     profile. It is not an answer to a host, which takes a person by its own code, nor to an app
+     that shares.
+   - someone else: `{ "ok": true, "as": "guest", "workspace": "<id hex>", "host": "<key hex>",
+     "addrs": [ … ], "relay": …, "role": "view" | "edit" | "terminals", "names": { "workspace", "host" },
+     "hosting": { "key", "lookup" } | null }`, once the workspace's host let the device in as a join
+     would (`workspace-api.md`): the device's person granted that role, its profile remembered and
+     its certificate listed. The entering device keeps it among the workspaces it joined. It is not
+     an answer to a phone, nor from an offer made without a workspace.
+   - no, or nothing: `{ "ok": false, "error": "declined" }`.
+
+   A request still waiting when another is let in, when the offer expires or is voided, or when its
+   device asks again, is answered `{ "ok": false, "error": "expired" }`.
+3. **Take**, after it's me, once the entering device's person said the words match there too:
+   `{ "v": 1, "connect": "take", "request": "<id>" }`, within 170 seconds of the answer. An app is
+   answered `{ "ok": true, "person": "<the person seed, hex>" }`; a phone `{ "ok": true, "yours": { … } }`,
+   with `"network"` as pairing has it. Both devices then keep each other as after pairing. When the
+   person there says they do not match, it sends `{ "v": 1, "connect": "refuse", "request": "<id>" }`
+   instead, answered `{ "ok": true }`. A take or refuse for another request, or late, is `expired`.
+
+Only the device that asked may wait, take or refuse its request. A no, a request left unanswered
+and an offer expiring write nothing anywhere.
+
 The cases in `../conformance/pairing.json` (proofs, codes, links, and a phone pairing with an app,
-message by message) decide whether an implementation follows this.
+message by message; and connecting's proofs, words and links) decide whether an implementation
+follows this.
