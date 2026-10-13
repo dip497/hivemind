@@ -228,3 +228,41 @@ test("a row says what it last said in sans 14/20, code in mono; its time in sans
   expect(line.left).toBe(line.text);
   expect(line.bg).toBe(await page.evaluate(() => { const p = document.createElement("p"); p.style.backgroundColor = "var(--line)"; document.body.append(p); return getComputedStyle(p).backgroundColor; }));
 });
+
+test("a project whose only frame carries its name shows no frame row, its tiles one level up; its heading, 13/600 in --text2, stays on top while its rows scroll under it", async () => {
+  test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
+  const page = await home();
+  await page.evaluate(() => {
+    const tile = (id: string, frameId: string, order: number) => [`t:w0/${id}`, { of: "tile", workspace: "w0", id, frameId, kind: "claude", name: id, agent: "claude", order, state: "idle", since: 1790000000000, machine: "desk" }];
+    const rows: unknown[] = [["w:w0", { of: "workspace", workspace: "w0", name: "api" }],
+      ["f:w0/f0", { of: "frame", workspace: "w0", id: "f0", title: "API", color: "#336699", order: 0 }],
+      ["f:w0/f1", { of: "frame", workspace: "w0", id: "f1", title: "web", color: "#336699", order: 1, project: "web" }],
+      ["f:w0/f2", { of: "frame", workspace: "w0", id: "f2", title: "fix", color: "#336699", order: 2, project: "web" }]];
+    for (let i = 0; i < 30; i++) rows.push(tile("a" + i, "f0", i));
+    rows.push(tile("b0", "f1", 30), tile("c0", "f2", 31));
+    (window as unknown as Driven).change({ t: "home", layout: { seq: 1, rows }, lines: { seq: 1, rows: [] } });
+  });
+  await expect(page.locator("[data-tree] [data-project]")).toHaveText(["api+", "web+"]);
+  // "api" then "API" no more; a project of two frames keeps both.
+  await expect(page.locator("[data-tree] [data-frame] .name")).toHaveText(["web", "fix"]);
+  expect(await page.locator('[data-tree] [data-row="t:w0/a0"]').getAttribute("style")).toBe("--depth:0");
+  const heading = page.locator("[data-tree] [data-project]").first();
+  const look = await heading.evaluate((el) => {
+    const c = getComputedStyle(el);
+    const p = document.createElement("p"); p.style.color = "var(--text2)"; p.style.backgroundColor = "var(--canvas)"; document.body.append(p);
+    const t = getComputedStyle(p);
+    return { font: [c.fontSize, c.fontWeight], color: c.color, bg: c.backgroundColor, text2: t.color, canvas: t.backgroundColor };
+  });
+  expect(look.font).toEqual(["13px", "600"]);
+  expect(look.color).toBe(look.text2);
+  expect(look.bg).toBe(look.canvas);
+  const top = await heading.evaluate((el) => {
+    const screen = el.closest(".screen")!;
+    screen.scrollTop = el.getBoundingClientRect().top - screen.getBoundingClientRect().top + 600;
+    return Math.round(el.getBoundingClientRect().top - screen.getBoundingClientRect().top);
+  });
+  expect(top).toBe(0);
+  // Opaque, and over the rows passing under it.
+  const over = await heading.evaluate((el) => { const r = el.getBoundingClientRect(); return document.elementFromPoint(r.left + 4, r.top + r.height / 2)?.closest("[data-project]") === el; });
+  expect(over).toBe(true);
+});

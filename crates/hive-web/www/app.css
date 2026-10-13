@@ -389,7 +389,11 @@ button { cursor: pointer; }
   background: var(--card); font-size: 16px; outline: 0;
 }
 .section { margin: 0; padding: 20px 20px 2px; font: 500 13px/18px var(--sans); color: var(--text3); text-transform: uppercase; letter-spacing: 0.04em; }
-.project { margin: 0; padding: 14px 8px 2px 20px; font: 500 15px/20px var(--sans); display: flex; align-items: center; }
+/* Sticky over its rows (each row draws its own hairline, so it needs a layer above them). */
+.project {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 1; margin: 0; padding: 14px 8px 2px 20px;
+  background: var(--canvas); color: var(--text2); font: 600 13px/18px var(--sans); display: flex; align-items: center;
+}
 .project .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .frame {
   display: flex; align-items: center; gap: 10px;

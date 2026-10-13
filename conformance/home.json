@@ -760,11 +760,9 @@
      "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t4 0",
      "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t10 0",
      "p:desk/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/web f4",
-     "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f4 0",
-     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t7 1",
+     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t7 0",
      "p:desk/z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/ g1",
-     "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g1 0",
-     "t:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/u1 1",
+     "t:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/u1 0",
      "m:alpha",
      "p:alpha/z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/ g4",
      "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g4 0",
@@ -2050,10 +2048,8 @@
      "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f0 0",
      "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t10 0",
      "p:desk/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/web f4",
-     "f:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/f4 0",
      "p:desk/z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/ g1",
-     "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g1 0",
-     "t:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/u1 1",
+     "t:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/u1 0",
      "m:alpha",
      "p:alpha/z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/ g4",
      "f:z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9z9/g4 0",
@@ -2493,6 +2489,191 @@
      "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t8 0",
      "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t5 0",
      "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t6 0"
+    ],
+    "said": {}
+   }
+  },
+  {
+   "about": "a project's only frame, called as the project is in any case and with no frame under it, is no row of its own: its tiles are the project's, one level up; a frame called otherwise, one with a frame under it, or one among others, stays",
+   "computer": "desk",
+   "messages": [
+    {
+     "t": "home",
+     "layout": {
+      "seq": 3,
+      "rows": [
+       [
+        "w:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+        {
+         "of": "workspace",
+         "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+         "name": "Api"
+        }
+       ],
+       [
+        "f:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/f1",
+        {
+         "of": "frame",
+         "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+         "id": "f1",
+         "title": " api ",
+         "color": "#336699",
+         "order": 0
+        }
+       ],
+       [
+        "t:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/t1",
+        {
+         "of": "tile",
+         "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+         "id": "t1",
+         "frameId": "f1",
+         "kind": "claude",
+         "name": "T1",
+         "order": 0,
+         "agent": "claude",
+         "state": "idle",
+         "since": 1790000000000
+        }
+       ],
+       [
+        "t:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/t2",
+        {
+         "of": "tile",
+         "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+         "id": "t2",
+         "frameId": "f1",
+         "kind": "claude",
+         "name": "T2",
+         "order": 1,
+         "agent": "claude",
+         "state": "idle",
+         "since": 1790000000000,
+         "parent": "t1"
+        }
+       ],
+       [
+        "f:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/f2",
+        {
+         "of": "frame",
+         "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+         "id": "f2",
+         "title": "web",
+         "color": "#336699",
+         "order": 1,
+         "project": "web"
+        }
+       ],
+       [
+        "f:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/f3",
+        {
+         "of": "frame",
+         "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+         "id": "f3",
+         "title": "fix",
+         "color": "#336699",
+         "order": 2,
+         "project": "web",
+         "parentId": "f2"
+        }
+       ],
+       [
+        "t:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/t3",
+        {
+         "of": "tile",
+         "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+         "id": "t3",
+         "frameId": "f3",
+         "kind": "claude",
+         "name": "T3",
+         "order": 2,
+         "agent": "claude",
+         "state": "idle",
+         "since": 1790000000000
+        }
+       ],
+       [
+        "f:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/f4",
+        {
+         "of": "frame",
+         "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+         "id": "f4",
+         "title": "notes",
+         "color": "#336699",
+         "order": 3,
+         "project": "docs"
+        }
+       ],
+       [
+        "t:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/t4",
+        {
+         "of": "tile",
+         "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+         "id": "t4",
+         "frameId": "f4",
+         "kind": "claude",
+         "name": "T4",
+         "order": 3,
+         "agent": "claude",
+         "state": "idle",
+         "since": 1790000000000
+        }
+       ],
+       [
+        "f:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/f5",
+        {
+         "of": "frame",
+         "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+         "id": "f5",
+         "title": "cli",
+         "color": "#336699",
+         "order": 4,
+         "project": "cli"
+        }
+       ],
+       [
+        "f:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/f6",
+        {
+         "of": "frame",
+         "workspace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+         "id": "f6",
+         "title": "cli 2",
+         "color": "#336699",
+         "order": 5,
+         "project": "cli"
+        }
+       ]
+      ]
+     },
+     "lines": {
+      "seq": 0,
+      "rows": []
+     }
+    }
+   ],
+   "at": {
+    "layout": 3,
+    "lines": 0
+   },
+   "shown": {
+    "needs": [],
+    "working": [],
+    "pinned": [],
+    "machines": [],
+    "tree": [
+     "p:desk/b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/ f1",
+     "t:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/t1 0",
+     "t:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/t2 1",
+     "p:desk/b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/web f2",
+     "f:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/f2 0",
+     "f:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/f3 1",
+     "t:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/t3 2",
+     "p:desk/b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/docs f4",
+     "f:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/f4 0",
+     "t:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/t4 1",
+     "p:desk/b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/cli f5",
+     "f:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/f5 0",
+     "f:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/f6 0"
     ],
     "said": {}
    }

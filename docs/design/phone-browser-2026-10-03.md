@@ -1391,3 +1391,8 @@ Before and after at 390×844 are the `ux-*.png` pairs of the rig's scratchpad.
   `--text3` with tabular digits. A row is at least 56 px (68 with two lines, which its placeholder
   off screen now matches, so nothing moves as rows scroll in), and a 1 px `--line` hairline over
   each row that follows another starts where the text does.
+- Home's project heading is sticky, sans 13/600 `--text2` on `--canvas`, above the rows that scroll
+  under it, as hapi's is (`web/src/components/SessionList.tsx:1607`). A project's only frame, with
+  no frame under it and called as the project is, is no row of its own: its tiles are the
+  project's, one level up (`spec/home.md` 0.4, in the core so Android shares it). Home read
+  "hivemind", then "hivemind".

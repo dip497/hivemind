@@ -565,9 +565,20 @@ impl Home {
                         .iter()
                         .filter(|f| f.parent_id.is_none() && f.project.as_deref() == project);
                     let first = tops.clone().next().map(|f| f.id.clone());
+                    let name = project.unwrap_or(&w.name).to_string();
+                    // A project's only frame, called as the project is and with no frame under
+                    // it, is the project: no row of its own, its tiles the project's.
+                    let bare = match tops.clone().collect::<Vec<_>>().as_slice() {
+                        [only] => {
+                            !own.iter().any(|k| k.parent_id.as_deref() == Some(&only.id))
+                                && only.title.trim().to_lowercase() == name.trim().to_lowercase()
+                        }
+                        _ => false,
+                    };
                     fn frame_entries<'a>(
                         f: &'a FrameRow,
                         depth: u32,
+                        bare: bool,
                         own: &[&'a FrameRow],
                         tiles_of: &dyn Fn(&str) -> Vec<(String, TileRow, u32)>,
                         filtering: bool,
@@ -580,21 +591,31 @@ impl Home {
                             mine.push(Entry::Tile {
                                 line: None,
                                 key,
-                                depth: depth + 1 + d,
+                                depth: depth + u32::from(!bare) + d,
                                 tile,
                             });
                         }
                         for k in own.iter().filter(|k| k.parent_id.as_deref() == Some(&f.id)) {
-                            any |= frame_entries(k, depth + 1, own, tiles_of, filtering, &mut mine);
+                            any |= frame_entries(
+                                k,
+                                depth + 1,
+                                false,
+                                own,
+                                tiles_of,
+                                filtering,
+                                &mut mine,
+                            );
                         }
                         if filtering && !any {
                             return false;
                         }
-                        out.push(Entry::Frame {
-                            key: format!("f:{}/{}", f.workspace, f.id),
-                            depth,
-                            frame: f.clone(),
-                        });
+                        if !bare {
+                            out.push(Entry::Frame {
+                                key: format!("f:{}/{}", f.workspace, f.id),
+                                depth,
+                                frame: f.clone(),
+                            });
+                        }
                         out.extend(mine);
                         true
                     }
@@ -608,8 +629,10 @@ impl Home {
                             .collect();
                         in_list(&list)
                     };
+                    let mut shown = false;
                     for f in tops {
-                        frame_entries(f, 0, &own, &tiles_of, filtering, &mut entries);
+                        shown |=
+                            frame_entries(f, 0, bare, &own, &tiles_of, filtering, &mut entries);
                     }
                     // Tiles in no frame, or in one that is gone: the workspace's own project, on the
                     // computer.
@@ -633,10 +656,9 @@ impl Home {
                             });
                         }
                     }
-                    if entries.is_empty() {
+                    if entries.is_empty() && !shown {
                         continue;
                     }
-                    let name = project.unwrap_or(&w.name).to_string();
                     under_machine.push(Entry::Project {
                         key: format!("p:{m}/{}/{}", w.workspace, project.unwrap_or("")),
                         name,
