@@ -5,7 +5,8 @@
  * options, the toolbar, browser control) sit in the same tab.
  */
 import { lazy, Suspense, useEffect, useState } from "react";
-import { ArrowLeft, ExternalLink, LayoutGrid } from "../components/icons";
+import { ArrowLeft, ExternalLink, LayoutGrid, Trash } from "../components/icons";
+import { cleanError } from "../settings-plugins";
 import { isPluginEnabled, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
 import { Loading } from "../components/ui/loading";
@@ -148,5 +149,21 @@ function WidgetSettings({ id }: { id: string }) {
     {w.options.length > 0
       ? <p className="settings-note">Each one you place has its own {w.options.map((o) => o.label.toLowerCase()).join(", ")}: select it and use the settings button above it.</p>
       : <p className="settings-note">It has nothing to set.</p>}
+    {!w.builtin && <RemoveWidget id={id} name={w.name} />}
+  </div>;
+}
+
+function RemoveWidget({ id, name }: { id: string; name: string }) {
+  const go = useSettingsNavigate();
+  const [asking, setAsking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!asking) return <Button variant="destructive" size="sm" className="mt-3" onClick={() => setAsking(true)}><Trash />Remove {name}</Button>;
+  return <div className="settings-remove-confirm">
+    <p>Remove {name}?</p>
+    {error && <p role="alert" className="settings-note error">{error}</p>}
+    <div className="settings-actions">
+      <Button size="sm" variant="outline" onClick={() => setAsking(false)}>Keep it</Button>
+      <Button size="sm" variant="destructive" onClick={() => void window.hive.removeWidget(id).then(() => go("plugins"), (e) => setError(cleanError(e)))}>Remove</Button>
+    </div>
   </div>;
 }

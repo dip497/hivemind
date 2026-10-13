@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, FileCode, Earth, ListTodo, Puzzle, Trash } from "./components/icons";
+import { FileCode, Earth, ListTodo, Puzzle, Trash } from "./components/icons";
 import { toast } from "sonner";
 import { BUNDLED_TOOL_PLUGINS, BROWSER_PLUGIN_ID, bundledToolRegistry, CODE_PLUGIN_ID, ISSUES_PLUGIN_ID } from "@hivemind/core/tool-plugins";
 import { toolPreferences } from "@hivemind/core/settings-schema";
@@ -13,6 +13,7 @@ import { useToolPackages, useToolProblem } from "./tiles/tool-plugins";
 import { SettingsForm } from "./plugins/SettingsForm";
 import { ServiceSection } from "./plugins/ServiceSection";
 import { cleanError } from "./settings-plugins";
+import { PluginGroup, PluginRow } from "./plugins/PluginList";
 import type { ToolPackage } from "@hivemind/core/tool-format";
 
 /** A tool plugin you added, by id; undefined for one that comes with the app. */
@@ -56,60 +57,38 @@ const ToolIcon = ({ pluginId, size }: { pluginId: string; size: number }) => {
 };
 
 function ToolRow({ pluginId }: { pluginId: string }) {
-  const [enabled, toggle] = useToolEnabled(pluginId);
-  const go = useSettingsNavigate();
-  const title = toolLabel(pluginId);
+  const [enabled] = useToolEnabled(pluginId);
   const added = useAdded(pluginId);
   const problem = useToolProblem(pluginId);
-  const about = problem ?? added?.description ?? BUNDLED_TOOL_PLUGINS.find((p) => p.id === pluginId)?.tools[0]?.description;
-  return <div className="settings-extension" data-tool-plugin={pluginId}>
-    <div className="settings-extension-row">
-      <div className="settings-extension-icon"><ToolIcon pluginId={pluginId} size={19} /></div>
-      <div className="settings-extension-label"><h4>{title}</h4>{about && <p>{about}</p>}</div>
-      <Button variant="ghost" size="icon-sm" aria-label={`${title} settings`} data-plugin-open={`tool:${pluginId}`} onClick={() => go(`plugin:tool:${pluginId}`)}><ChevronRight /></Button>
-      {added && <RemoveTool pkg={added} />}
-      <Switch aria-label={`Enable ${title}`} checked={enabled} disabled={!!added?.problem} onCheckedChange={toggle} />
+  const about = added?.description ?? BUNDLED_TOOL_PLUGINS.find((p) => p.id === pluginId)?.tools[0]?.description ?? "";
+  return <PluginRow kind="tool" id={pluginId} name={toolLabel(pluginId)} mark={<ToolIcon pluginId={pluginId} size={16} />}
+    line={problem ?? about} state={problem ? "unavailable" : enabled ? "on" : "off"} badge={problem ? "Can't load" : enabled ? undefined : "Off"} />;
+}
+
+function RemoveTool({ pkg }: { pkg: ToolPackage }) {
+  const go = useSettingsNavigate();
+  const [asking, setAsking] = useState(false);
+  if (!asking) return <Button variant="destructive" size="sm" className="mt-3" onClick={() => setAsking(true)}><Trash />Remove {pkg.name}</Button>;
+  return <div className="settings-remove-confirm">
+    <p>Remove {pkg.name}? Its panels close.</p>
+    <div className="settings-actions">
+      <Button size="sm" variant="outline" onClick={() => setAsking(false)}>Keep it</Button>
+      <Button size="sm" variant="destructive" onClick={() => void window.hive.removeToolPackage(pkg.id).then(() => go("plugins"), (e) => toast.error(cleanError(e)))}>Remove</Button>
     </div>
   </div>;
 }
 
-function RemoveTool({ pkg }: { pkg: ToolPackage }) {
-  const [asking, setAsking] = useState(false);
-  if (!asking) return <Button variant="ghost" size="icon-sm" aria-label={`remove ${pkg.name}`} onClick={() => setAsking(true)}><Trash /></Button>;
-  return <span className="settings-actions">
-    <Button size="xs" variant="outline" onClick={() => setAsking(false)}>Keep</Button>
-    <Button size="xs" variant="destructive" onClick={() => void window.hive.removeToolPackage(pkg.id).catch((e) => toast.error(cleanError(e)))}>Remove</Button>
-  </span>;
-}
-
-/** The tools on the Plugins page: the optional ones, then the ones included. */
+/** The tools on the Plugins page: the ones included, the optional ones, then the ones you added. */
 export function ToolsSection({ matches }: { matches: (text: string) => boolean }) {
   const shown = BUNDLED_TOOL_PLUGINS.filter((p) => matches(`${toolLabel(p.id)} ${p.id} ${p.tools.map((t) => t.description ?? "").join(" ")}`));
-  const optional = shown.filter((p) => !p.builtin);
-  const builtin = shown.filter((p) => p.builtin);
   const { packages, safeMode } = useToolPackages();
   const added = packages.filter((p) => p.source === "you" && matches(`${p.name} ${p.id} ${p.description}`));
-  if (!shown.length && !added.length) return null;
-  return <section className="settings-stack plugins-kind" aria-label="Tools" data-plugins-kind="tool">
-    <h3 className="plugins-kind-heading">Tools</h3>
-    {optional.length > 0 && <section aria-label="Optional tools">
-      <div className="settings-section-heading"><h3>Optional tools</h3></div>
-      <p className="settings-note">Switch on the ones you use; switching one off keeps open panels.</p>
-      <div className="settings-extension-list">{optional.map((p) => <ToolRow key={p.id} pluginId={p.id} />)}</div>
-    </section>}
-    {added.length > 0 && <section aria-label="Tools you added" data-tools-added>
-      <div className="settings-section-heading"><h3>Added by you</h3></div>
-      <p className="settings-note">{safeMode
-        ? "Hivemind started in safe mode: none of these runs until you start it normally."
-        : "These run inside the app, with the access it has. Switch one on only if you trust who wrote it."}</p>
-      <div className="settings-extension-list">{added.map((p) => <ToolRow key={p.id} pluginId={p.id} />)}</div>
-    </section>}
-    {builtin.length > 0 && <section aria-label="Included tools">
-      <div className="settings-section-heading"><h3>Included</h3></div>
-      <p className="settings-note">These come with Hivemind and are on unless you switch them off. Terminals and agent tiles are always available.</p>
-      <div className="settings-extension-list">{builtin.map((p) => <ToolRow key={p.id} pluginId={p.id} />)}</div>
-    </section>}
-  </section>;
+  const ids = [...shown.filter((p) => p.builtin), ...shown.filter((p) => !p.builtin), ...added].map((p) => p.id);
+  if (!ids.length) return null;
+  return <PluginGroup kind="tool" count={ids.length}
+    foot={added.length > 0 && safeMode ? <p className="warn">Hivemind started in safe mode: no tool you added runs until you start it normally.</p> : undefined}>
+    {ids.map((id) => <ToolRow key={id} pluginId={id} />)}
+  </PluginGroup>;
 }
 
 export function ToolPage({ id }: { id: string }) {
@@ -132,6 +111,7 @@ export function ToolPage({ id }: { id: string }) {
     </section>}
     {added?.service && <ServiceSection id={id} service={added.service} on={enabled} />}
     {id === BROWSER_PLUGIN_ID && <BrowserControl toolOn={enabled} />}
+    {added && <RemoveTool pkg={added} />}
   </div>;
 }
 

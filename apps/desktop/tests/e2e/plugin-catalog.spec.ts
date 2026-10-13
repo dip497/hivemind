@@ -37,7 +37,7 @@ const settings = async (id: string) => {
 };
 /** Plugins, listing what HiveHub has; or what this machine has. */
 const hub = async () => { await settings("plugins"); await page.locator('[data-plugins-scope="hub"]').click(); };
-const yours = async () => { await settings("plugins"); await page.getByRole("group", { name: "Where" }).getByRole("button", { name: "Yours" }).click(); };
+const yours = async () => { await settings("plugins"); await page.getByRole("tab", { name: "Installed", exact: true }).click(); };
 
 test.beforeAll(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-plugin-catalog-"));
@@ -62,9 +62,9 @@ test("the catalog lists the published plugins, and search and type filters narro
   await hub();
   await expect(entry("view", QUEUE)).toContainText("Queue");
   await expect(entry("agent", CODER)).toContainText("Catalog Coder");
-  await page.getByRole("group", { name: "Plugin type" }).getByRole("button", { name: "Agents", exact: true }).click();
+  await page.getByRole("combobox", { name: "Kind" }).selectOption("agent");
   await expect(entry("view", QUEUE)).toHaveCount(0);
-  await page.getByRole("group", { name: "Plugin type" }).getByRole("button", { name: "All", exact: true }).click();
+  await page.getByRole("combobox", { name: "Kind" }).selectOption("all");
   await page.getByLabel("Search plugins").fill("tiled");
   await expect(page.locator("[data-catalog-plugin]")).toHaveCount(1);
   await expect(entry("view", TILED)).toBeVisible();
@@ -81,7 +81,7 @@ test("a view installs only after review, and lands in the user's views", async (
   await expect(entry("view", QUEUE)).toContainText("Installed");
   expect(fs.existsSync(path.join(xdg, "hivemind/views", QUEUE, "queue.js"))).toBe(true);
   await yours();
-  await expect(page.locator(`[data-view-row="${QUEUE}"]`)).toBeVisible();
+  await expect(page.locator(`[data-plugin-row="view:${QUEUE}"]`)).toBeVisible();
 });
 
 test("a view from the registry runs in a sandbox of its own", async () => {
@@ -105,7 +105,7 @@ test("an agent from the catalog becomes a card, and says its CLI is not installe
   await review.getByRole("button", { name: "Install" }).click();
   await expect(entry("agent", CODER)).toContainText("Installed");
   await yours();
-  await expect(page.locator(`[data-agent-card="${CODER}"]`)).toHaveAttribute("data-state", "missing");
+  await expect(page.locator(`[data-plugin-row="agent:${CODER}"]`)).toHaveAttribute("data-state", "missing");
 });
 
 test("a file that changed after it was listed is refused", async () => {

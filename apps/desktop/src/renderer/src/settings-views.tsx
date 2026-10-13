@@ -1,9 +1,8 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { isPluginEnabled } from "@hivemind/core/plugin-settings";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ExternalLink, Puzzle, Trash } from "./components/icons";
+import { ArrowDown, ArrowUp, ChevronDown, ExternalLink, Puzzle, Trash } from "./components/icons";
 import { Button } from "./components/ui/button";
-import { RowChoice } from "./plugins/RowChoice";
-import { MenuItem } from "./components/ui/menu-item";
+import { PluginGroup, PluginRow } from "./plugins/PluginList";
 import { Switch } from "./components/ui/switch";
 import { getSettings, patchSettings, useSettings, setPluginEnabled } from "./settings-store";
 import { getView, resolveChrome, resolveViewId, useViews } from "./workspace/workspace-view";
@@ -15,53 +14,32 @@ import { useSettingsNavigate } from "./settings-panels";
 
 export const rescan = () => { window.dispatchEvent(new CustomEvent("hivemind:reload-views")); };
 
-/** The views on the Plugins page: the one in use, the others to choose from, the ones off. */
+/** The views on the Plugins page: the one in use says so; one off or that cannot load is listed
+ *  from its package, so it can be opened and switched back on. */
 export function ViewsSection({ matches }: { matches: (text: string) => boolean }) {
-  const go = useSettingsNavigate();
   const mode = resolveViewId(useViewMode()) ?? "canvas";
   const report = useCommunityReport();
   useEffect(rescan, []);
   const on = useViews().filter((v) => matches(`${v.label} ${v.id} ${v.hint}`));
-  // A view that is off, or cannot load, is not registered: it is listed from its package, so it
-  // can be opened and switched back on.
   const off = report.packages.filter((p) => report.refused[p.id] && matches(`${p.manifest?.name ?? p.id} ${p.id}`));
-  const row = (id: string, label: string, detail: string, mark: ReactNode, state: "on" | "ready" | "off" | "unavailable") => (
-    <div key={id} className="plugin-row" data-view-row={id} data-state={state}>
-      <MenuItem className="flex-1 min-w-0" data-plugin-open={`view:${id}`} onClick={() => go(`plugin:view:${id}`)}>
-        <span className="plugin-row-mark" aria-hidden="true">{mark}</span>
-        <span className="plugin-row-text">
-          <span className="plugin-row-name">{label}</span>
-          <span className="plugin-row-detail">{detail}</span>
-        </span>
-      </MenuItem>
-      {(state === "on" || state === "ready") && (
-        <RowChoice chosen={mode === id} said="In use" offer="Use" data-view-choice={id}
-          aria-label={mode === id ? `${label} is in use` : `Use ${label}`}
-          onClick={() => setViewMode(id)} />
-      )}
-      <ChevronRight className="plugin-row-go" size={15} />
-    </div>
-  );
-  if (!on.length && !off.length) return null;
-  return <section className="settings-stack plugins-kind" aria-label="Views" data-plugins-kind="view">
-    <h3 className="plugins-kind-heading">Views</h3>
-    {on.length > 0 && <section aria-label="Workspace view">
-      <div className="settings-section-heading"><h3>Workspace view · {on.length}</h3><span>⌘E cycles through them</span></div>
-      <div className="plugin-rows" role="radiogroup" aria-label="Workspace view">
-        {on.map((v) => row(v.id, v.label, v.hint, <v.icon />, mode === v.id ? "on" : "ready"))}
-      </div>
-    </section>}
-    {off.length > 0 && <section aria-label="Off">
-      <div className="settings-section-heading"><h3>Off · {off.length}</h3><span>Open one to switch it back on</span></div>
-      <div className="plugin-rows">
-        {off.map((p) => {
-          const why = report.refused[p.id]!;
-          const switchedOff = why === "disabled in Settings";
-          return row(p.id, p.manifest?.name ?? p.id, switchedOff ? `Off${p.manifest?.version ? ` · ${p.manifest.version}` : ""}` : why, <Puzzle />, switchedOff ? "off" : "unavailable");
-        })}
-      </div>
-    </section>}
-  </section>;
+  const count = on.length + off.length;
+  // A package's own words for what it does, else which one it is.
+  const about = (id: string): string | undefined => {
+    const p = report.packages.find((x) => x.id === id);
+    if (!p) return undefined;
+    return (p.manifest as { description?: string } | null)?.description || (p.source === "app" ? "Comes with the app" : `Version ${p.manifest?.version ?? "unknown"}`);
+  };
+  if (!count) return null;
+  return <PluginGroup kind="view" count={count} foot={<p>⌘E switches between the views that are on.</p>}>
+    {on.map((v) => <PluginRow key={v.id} kind="view" id={v.id} name={v.label} line={about(v.id) ?? v.hint} mark={<v.icon />} badge={mode === v.id ? "In use" : undefined} />)}
+    {off.map((p) => {
+      const why = report.refused[p.id]!;
+      const switchedOff = why === "disabled in Settings";
+      return <PluginRow key={p.id} kind="view" id={p.id} name={p.manifest?.name ?? p.id} mark={<Puzzle />}
+        line={switchedOff ? about(p.id)! : why}
+        state={switchedOff ? "off" : "unavailable"} badge={switchedOff ? "Off" : "Can't load"} />;
+    })}
+  </PluginGroup>;
 }
 
 export function ViewPage({ id }: { id: string }) {

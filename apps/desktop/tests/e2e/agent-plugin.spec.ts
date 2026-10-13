@@ -94,7 +94,7 @@ test.afterAll(async () => {
   await fs.promises.rm(BIN, { recursive: true, force: true }).catch(() => {});
 });
 
-const card = (id: string) => page.locator(`[data-agent-card="${id}"]`);
+const card = (id: string) => page.locator(`[data-plugin-row="agent:${id}"]`);
 const detail = () => page.locator("[data-agent-detail]");
 /** Plugins → the agent's own page (its Settings tab). */
 async function openAgent(id: string): Promise<void> {
@@ -224,7 +224,7 @@ test("a catalog agent can be switched off too, and any launchable agent can be t
   await detail().getByRole("button", { name: "Make default" }).click();
   await expect(detail().locator(".agent-badge")).toHaveText("Default");
   await openSettings("plugins");
-  await expect(page.locator('[data-default-choice="codex"]')).toHaveAttribute("aria-checked", "true");
+  await expect(card("codex").locator("[data-plugin-badge]")).toHaveText("Default");
   await openAgent("codex");
   await detail().getByRole("switch").click();
   await openSettings("plugins");
@@ -234,14 +234,9 @@ test("a catalog agent can be switched off too, and any launchable agent can be t
   await openAgent("codex");
   await detail().getByRole("switch").click();
   await openSettings("plugins");
-  // Another row offers it in words, and only while the row is pointed at.
-  const claude = page.locator('[data-default-choice="claude"]');
-  await page.mouse.move(0, 0);
-  await expect(claude).toHaveText("Make default");
-  await expect(claude).toHaveCSS("opacity", "0");
-  await card("claude").hover();
-  await expect(claude).toHaveCSS("opacity", "1");
-  await claude.click();
-  await expect(claude).toHaveAttribute("aria-checked", "true");
-  await expect(claude).toHaveText("Default");
+  await openAgent("claude");
+  await detail().getByRole("button", { name: "Make default" }).click();
+  await openSettings("plugins");
+  await expect(card("claude").locator("[data-plugin-badge]")).toHaveText("Default");
+  await expect(card("codex").locator("[data-plugin-badge]")).toHaveCount(0);
 });
