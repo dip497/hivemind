@@ -91,3 +91,34 @@ test("opened on Home, no frame shows two screens", async () => {
   const { seen } = await page.evaluate(() => { const w = window as unknown as Seen; return { seen: w.seen, usable: w.usable }; });
   expect(Math.max(...seen)).toBeLessThanOrEqual(1);
 });
+
+// conformance/pairing.json's first link: Priya's desktop.
+const LINK = "hivemind://pair/eyJ2IjoxLCJkZXZpY2UiOiJjN2I2OTdiOTJmYzYzYTJkZDY2MGY2ZjAyZjJjZTMyZWI0YTg0MjgzOWNiZTQyMTM4NDVlM2I0MzkwZjQ0NmMzIiwiYWRkcnMiOlsiMTkyLjE2OC4xLjIwOjQxNjQxIiwiW2ZkMDA6OjIwXTo0MTY0MSJdLCJyZWxheSI6bnVsbCwiY29kZSI6ImFtYmVyLWNlbGxhci1oZWxtZXQtbGVtb24tc2FsbW9uLXppcHBlciIsIm5hbWUiOiJQcml5YSdzIGRlc2t0b3AiLCJraW5kIjoiYXBwIn0";
+
+test("opened with a pairing link, it shows that link, not the page's address; until the link is read, Pair says it is starting and cannot be pressed; read, it names the computer and can", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  // The wasm held back: what shows before it is read.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route(`${PAGE}**`, async (route) => {
+    const name = new URL(route.request().url()).pathname.replace(/^\/phone\//, "") || "index.html";
+    const file = path.join(WWW, name);
+    if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return route.fulfill({ status: 404 });
+    if (name.endsWith(".wasm")) await held;
+    return route.fulfill({ contentType: TYPES[name.split(".").pop()!] ?? "application/octet-stream", body: fs.readFileSync(file) });
+  });
+  await page.goto(`${PAGE}#pair=${encodeURIComponent(LINK)}&name=Phone`);
+  const pair = page.locator("[data-pair]");
+  await expect(pair).toBeVisible();
+  await expect(page.locator("[data-pair-link]")).toHaveValue(LINK);
+  await expect(pair).toBeDisabled();
+  await expect(pair).toHaveText("Starting…");
+  release();
+  await expect(page.locator('[data-screen="pair"] h1')).toHaveText("Pair with Priya's desktop?");
+  await expect(pair).toBeEnabled();
+  await expect(pair).toHaveText("Pair");
+  await expect(page.locator("[data-pair-link]")).toHaveValue(LINK);
+  await expect(page.locator("[data-pair-name]")).toHaveValue("Phone");
+});

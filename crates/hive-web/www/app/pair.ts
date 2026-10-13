@@ -2,7 +2,7 @@
 // Use on your phone, opened here from its QR code, scanned here, or pasted; hive-phone's core reads it
 // and pairs.
 
-import { h, mark, pill } from "./dom.js";
+import { h, mark, pill, say } from "./dom.js";
 import { Scanner } from "./scan.js";
 import { deviceName } from "./device-name.js";
 
@@ -65,6 +65,15 @@ export class PairScreen {
     this.error.textContent = why;
   }
 
+  /** A link the page was opened with, shown before the phone can read it: Pair waits, saying so,
+   *  since who it pairs with is not yet known. */
+  starting(link: string, name: string): void {
+    this.link.value = link;
+    this.name.value = name;
+    this.button.disabled = true;
+    say(this.button, "Starting…");
+  }
+
   /**
    * A link the page was opened with, shown to pair with on a tap and never on its own: anyone can
    * send a link, and pairing with theirs would put their computer where this one is.
@@ -78,6 +87,7 @@ export class PairScreen {
       ? "Pair only with a computer you just asked to pair with, in its Settings → Your devices."
       : "This is not a pairing link. On your computer, open Settings → Your devices → Use on your phone.";
     this.button.disabled = !computer;
+    say(this.button, "Pair");
     this.replaces.hidden = !now;
     this.replaces.textContent = now ? `This page is paired with ${now.name}; pairing replaces it.` : "";
     this.keep.hidden = !now;
@@ -99,6 +109,7 @@ export class PairScreen {
     this.title.textContent = "Pair with hivemind";
     this.how.textContent = "On your computer, open Settings → Your devices → Use on your phone, and scan its code, or paste here the link it shows.";
     this.button.disabled = false;
+    say(this.button, "Pair");
     this.replaces.hidden = true;
     this.keep.hidden = true;
   }
