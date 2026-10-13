@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/png" href="./favicon.png" />
+  <title>hivemind</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Pierre's diff/file viewer spawns a module Web Worker (worker-*.js) and
+       shiki dynamically imports language grammars. Under file:// in packaged
+       Electron, strict 'self'-only CSP blocks the module worker and the
+       dynamic imports the worker performs — DiffTile and FileViewerTile
+       silently render nothing. worker-src + blob: + connect-src unblock both. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' hivemedia:; script-src 'self' 'wasm-unsafe-eval' hm-plugin:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: hm-media: hivemedia:; media-src 'self' blob: data: hm-media: hivemedia:; font-src 'self' data:; connect-src 'self' data: blob:; frame-src hm-view:;" />
+</head>
+<body class="bg-[#0d0e12] text-[#e7e9ee] font-sans antialiased overflow-hidden">
+  <div id="root"></div>
+  <script type="module" src="../browser/index.ts"></script>
+</body>
+</html>

@@ -13,6 +13,6 @@
     },
     "outDir": "out/.tsc-web"
   },
-  "include": ["src/renderer/**/*", "src/shared/**/*", "views/*/src/**/*", "tools/*/src/**/*"],
+  "include": ["src/renderer/**/*", "src/shared/**/*", "src/browser/**/*", "views/*/src/**/*", "tools/*/src/**/*"],
   "exclude": ["node_modules", "out", "dist"]
 }
