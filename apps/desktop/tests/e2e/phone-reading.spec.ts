@@ -203,6 +203,7 @@ test("a long conversation shows its newest at once, then what was said before ab
   // A tool used early, what it gave back near the end: on one row, however far apart they are drawn.
   const entries = Array.from({ length: n }, (_, i) =>
     i === 5 ? { id: "e5", at: i, who: "agent", tool: { id: "u", name: "Bash", about: "npm test" } }
+    : i === 6 ? { id: "e6", at: i, who: "agent", tool: { id: "u6", name: "Read", about: "a.ts" } }
     : i === n - 2 ? { id: `e${i}`, at: i, who: "tool", result: { of: "u", text: "passed" } }
     : { id: `e${i}`, at: i, who: i % 2 ? "agent" : "person", text: i % 2 ? `**${i}**, with \`code\` and [a link](https://a.b/${i})` : `${i}` });
   const atOnce = await page.evaluate((p) => (window as unknown as { say(p: unknown): number }).say(p), { entries, cursor: n, session: "s" });
@@ -213,6 +214,8 @@ test("a long conversation shows its newest at once, then what was said before ab
   expect(await chat.locator("[data-entry]").evaluateAll((rows) => rows.map((r) => r.getAttribute("data-entry")))).toEqual(
     entries.filter((e) => !e.result).map((e) => e.id));
   await expect(chat.locator('[data-entry="e5"]')).toHaveAttribute("data-ended", "ok");
+  // Its two tools in a row, drawn among what was said before, in one fold.
+  await expect(chat.locator("[data-tools] [data-tools-summary]")).toHaveText("Run 1 · Read 1");
   await expect(chat.locator('[data-entry="e5"] pre')).toHaveText("passed");
   expect(await chat.evaluate((c) => c.scrollHeight - c.scrollTop - c.clientHeight)).toBeLessThan(1);
 });
@@ -265,4 +268,61 @@ test("a tool the computer cannot unfold says why, and shows what it gave back as
   await expect(row.locator(":scope > pre")).toHaveText("the file");
   await expect(row.locator(":scope > pre")).toBeVisible();
   await expect(row).toHaveAttribute("data-ended", "failed");
+});
+
+test("tools used one after another fold into one row that counts them, \"Read 3 · Edit 2 · Run 1\", and unfolds to them in order; one alone stays a row; one used next joins them", async () => {
+  const tool = (n: number, name: string, about: string) => ({ id: `e${n}`, at: n, who: "agent", tool: { id: `u${n}`, name, about } });
+  const gave = (n: number, of: number, error = false) => ({ id: `e${n}`, at: n, who: "tool", result: { of: `u${of}`, text: error ? "2 failed" : "ok", ...(error ? { error } : {}) } });
+  await unfolding({ entries: [
+    { id: "e0", at: 0, who: "agent", text: "Looking." },
+    tool(1, "Read", "a.ts"), tool(2, "Read", "b.ts"), tool(3, "Edit", "a.ts"), tool(4, "Read", "c.ts"), tool(5, "Edit", "b.ts"), tool(6, "Bash", "npm test"),
+    gave(7, 1), gave(8, 6, true),
+    { id: "e9", at: 9, who: "agent", text: "One failed." },
+    tool(10, "Read", "d.ts"),
+  ], cursor: 10, session: "s" });
+  const group = page.locator("[data-chat] [data-tools]");
+  await expect(group).toHaveCount(1);
+  await expect(group.locator("[data-tools-summary]")).toHaveText("Read 3 · Edit 2 · Run 1");
+  const failed = group.locator("[data-tools-failed]");
+  await expect(failed).toHaveText("1 failed");
+  const color = (sel: string) => page.locator(sel).first().evaluate((el) => getComputedStyle(el).color);
+  const token = (name: string) => page.evaluate((n) => { const p = document.createElement("p"); p.style.color = `var(${n})`; document.body.append(p); return getComputedStyle(p).color; }, name);
+  expect(await color("[data-chat] [data-tools-failed]")).toBe(await token("--err"));
+  expect(await color("[data-chat] [data-tools-summary]")).toBe(await token("--text3"));
+  // Folded, its tools are out of sight; tapped, they show in the order used.
+  await expect(group.locator("[data-entry]").first()).toBeHidden();
+  await group.locator(":scope > button").click();
+  expect(await group.locator("[data-entry]").evaluateAll((rows) => rows.map((r) => r.getAttribute("data-entry")))).toEqual(["e1", "e2", "e3", "e4", "e5", "e6"]);
+  await expect(group.locator("[data-entry]").first()).toBeVisible();
+  // One alone after the agent spoke is a row of its own.
+  const alone = page.locator('[data-chat] > [data-entry="e10"]');
+  await expect(alone).toHaveCount(1);
+  // Labels in sans 14, only a command in mono; no tick for a tool that went well.
+  const font = (sel: string) => page.locator(sel).evaluate((el) => { const c = getComputedStyle(el); return [c.fontSize, c.fontFamily.split(",")[0]]; });
+  expect(await font('[data-entry="e1"] .label')).toEqual(["14px", "Geist"]);
+  expect(await font('[data-entry="e1"] .about')).toEqual(["14px", "Geist"]);
+  expect((await font('[data-entry="e6"] .about'))[1]).toBe('"JetBrains Mono"');
+  await expect(page.locator("[data-chat]")).not.toContainText("✓");
+  expect(await color('[data-entry="e1"] .label')).toBe(await token("--text3"));
+  expect(await color('[data-entry="e6"] .label')).toBe(await token("--err"));
+  // A tool used next, with nothing said between, joins the one before it.
+  await unfolding({ entries: [tool(11, "Edit", "d.ts")], cursor: 11, session: "s" });
+  await expect(group).toHaveCount(2);
+  await expect(group.nth(1).locator("[data-tools-summary]")).toHaveText("Read 1 · Edit 1");
+  await expect(page.locator('[data-chat] > [data-entry="e10"]')).toHaveCount(0);
+  // What a folded tool gave back, once it comes, is counted in its fold.
+  await unfolding({ entries: [gave(12, 11, true)], cursor: 12, session: "s" });
+  await expect(group.nth(1).locator("[data-tools-failed]")).toHaveText("1 failed");
+});
+
+test("a long conversation of words and tools, drawn newest first a slice at a time, folds each run of tools and leaves every word outside the folds", async () => {
+  const entries = Array.from({ length: 900 }, (_, i) => i % 3 === 0
+    ? { id: `e${i}`, at: i, who: "agent", text: `step ${i}` }
+    : { id: `e${i}`, at: i, who: "agent", tool: { id: `u${i}`, name: i % 3 === 1 ? "Read" : "Edit", about: `f${i}.ts` } });
+  await unfolding({ entries, cursor: 900, session: "s" });
+  const chat = page.locator("[data-chat]");
+  await expect(chat.locator("[data-tools]")).toHaveCount(300);
+  expect(await chat.locator("[data-tools] .said-agent").count()).toBe(0);
+  expect(await chat.locator(":scope > [data-entry], :scope > [data-tools]").evaluateAll((rows) => rows.map((r) => (r.hasAttribute("data-tools") ? "tools" : r.getAttribute("data-entry"))).join(" "))).toBe(
+    Array.from({ length: 300 }, (_, i) => `e${i * 3} tools`).join(" "));
 });

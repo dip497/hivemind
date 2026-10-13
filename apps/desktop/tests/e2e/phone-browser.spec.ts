@@ -223,7 +223,10 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   await expect(page.locator("[data-chat]")).toContainText("run answered y", { timeout: 30_000 });
   await expect(waiting).toHaveCount(0, { timeout: 30_000 });
   // Its row in the chat unfolds to its input whole, asked of the computer.
-  const ran = page.locator("[data-chat] .tool", { hasText: "Bash" });
+  const ran = page.locator(`[data-chat] .tool[data-tool="Bash"]`);
+  // Used next to other tools, it is in their fold, unfolded first.
+  const fold = page.locator("[data-chat] [data-tools]", { has: ran });
+  if (await fold.count()) await fold.locator(":scope > button").click();
   await ran.locator("button").click();
   await expect(ran.locator("[data-input]")).toHaveText(JSON.stringify({ command: "rm -rf build\nmake all" }, null, 2), { timeout: 30_000 });
 

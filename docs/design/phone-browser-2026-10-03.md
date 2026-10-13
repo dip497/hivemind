@@ -1362,3 +1362,10 @@ Before and after at 390×844 are the `ux-*.png` pairs of the rig's scratchpad.
   left the header for the message box: while the agent is in a turn and nothing is typed its
   button is a stop square; typing makes it Send again, so a follow-up never stops the agent (Happy
   `packages/happy-app/sources/components/agentInputPrimaryAction.ts:19-30`).
+- Tools used one after another, with nothing said between, fold into one line counting each kind,
+  "Read 3 · Edit 2 · Run 1" and "· 1 failed" in `--err` when one failed, which unfolds to them in
+  order (hapi `web/src/chat/toolGroups.ts:270-326`, its labels `components/ToolCard/
+  groupedPresentation.ts:223-239`). One alone stays a line. The fold is kept as the chat is drawn,
+  slices of what was said before included (`chat.ts` `fold`), and a result that comes later is
+  counted in it. A tool's line is sans 14 `--text3` with no tick; a command (`Bash`, shown as
+  "Run") is the only mono.
