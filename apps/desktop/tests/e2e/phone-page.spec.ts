@@ -190,3 +190,41 @@ test("a tile that runs a terminal opens it from its row, as the computer marks i
   await page.locator('[data-tree] [data-row="t:w0/s1"]').click();
   expect(await page.evaluate(() => (window as unknown as { opened: unknown[] }).opened)).toEqual([["w0", "s1", "s1"]]);
 });
+
+test("a row says what it last said in sans 14/20, code in mono; its time in sans 13 with even digits; it is at least 56 px, a hairline between rows from where the text starts", async () => {
+  test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
+  const page = await home();
+  await page.evaluate(() => {
+    const w = window as unknown as Driven;
+    w.change({ ...w.snapshot(20, 0), lines: { seq: 1, rows: [["t:w0/t1", "`pnpm test` passes: 631 tests"], ["t:w0/t2", "Writing the notes"]] } });
+  });
+  const token = (name: string) => page.evaluate((n) => { const p = document.createElement("p"); p.style.color = `var(${n})`; document.body.append(p); return getComputedStyle(p).color; }, name);
+  const style = (sel: string) => page.locator(sel).first().evaluate((el) => { const c = getComputedStyle(el); return { font: [c.fontSize, c.lineHeight, c.fontFamily.split(",")[0]], color: c.color, nums: c.fontVariantNumeric }; });
+  const said = await style('[data-tree] [data-row="t:w0/t2"] [data-line]');
+  expect(said.font).toEqual(["14px", "20px", "Geist"]);
+  expect(said.color).toBe(await token("--text2"));
+  await expect(page.locator('[data-tree] [data-row="t:w0/t1"] [data-line] code')).toHaveText("pnpm test");
+  expect((await style('[data-tree] [data-row="t:w0/t1"] [data-line] code')).font[2]).toBe('"JetBrains Mono"');
+  // What waits on the person: the tool in sans, its command in mono, in amber.
+  await expect(page.locator('[data-tree] [data-row="t:w0/t0"] [data-line] code')).toHaveText("npm test");
+  expect((await style('[data-tree] [data-row="t:w0/t0"] [data-line]')).color).toBe(await token("--warn"));
+  const time = await style('[data-tree] [data-row="t:w0/t2"] [data-since]');
+  expect(time.font.slice(0, 1).concat(time.font.slice(2))).toEqual(["13px", "Geist"]);
+  expect(time.color).toBe(await token("--text3"));
+  expect(time.nums).toBe("tabular-nums");
+  // Measured on screen: a row away from it keeps a size of its own until scrolled near.
+  const rows = page.locator("[data-tree] [data-agent]");
+  for (const i of [0, 1, 2]) {
+    await rows.nth(i).scrollIntoViewIfNeeded();
+    expect(await rows.nth(i).evaluate((r) => r.getBoundingClientRect().height)).toBeGreaterThanOrEqual(56);
+  }
+  // The hairline over the second of two rows (frame 0's) starts where the text does.
+  const line = await page.locator('[data-tree] [data-row="t:w0/t10"]').evaluate((row) => {
+    const c = getComputedStyle(row, "::before");
+    return { drawn: c.content !== "none", h: c.height, bg: c.backgroundColor, left: Math.round(parseFloat(c.left)), text: Math.round(row.querySelector(".col")!.getBoundingClientRect().left - row.getBoundingClientRect().left) };
+  });
+  expect(line.drawn).toBe(true);
+  expect(line.h).toBe("1px");
+  expect(line.left).toBe(line.text);
+  expect(line.bg).toBe(await page.evaluate(() => { const p = document.createElement("p"); p.style.backgroundColor = "var(--line)"; document.body.append(p); return getComputedStyle(p).backgroundColor; }));
+});

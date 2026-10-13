@@ -144,8 +144,8 @@ export class Home {
       h("span", { class: "dot", "data-state": t.state ?? "none" }),
       h("span", { class: "col" },
         h("span", { class: "name" }, t.name),
-        h("span", { class: `status mono${t.waiting ? " waits" : ""}`, "data-line": "" }, lineOf(t, e.line))),
-      t.since !== undefined && h("span", { class: "age mono", "data-since": t.since }, ago(t.since)),
+        h("span", { class: `status${t.waiting ? " waits" : ""}`, "data-line": "" }, ...lineOf(t, e.line))),
+      t.since !== undefined && h("span", { class: "age", "data-since": t.since }, ago(t.since)),
     ];
     const row = h("div", {
       class: "agent", style: pad, "data-row": e.key, "data-kind": t.kind,
@@ -202,15 +202,16 @@ export class Home {
 }
 
 /** What a tile's row says under its name: what it waits on, else what it last said, else its
- *  state and what runs it. */
-function lineOf(t: HomeTile, line: string | undefined): string {
+ *  state and what runs it. Code in it, a command or what is in backticks, is set as code. */
+function lineOf(t: HomeTile, line: string | undefined): Array<string | HTMLElement> {
   const w = t.waiting;
-  if (w?.tool) return [w.tool.name, w.tool.about?.split("\n")[0]].filter(Boolean).join(": ");
-  if (w?.asks?.[0]) return w.asks[0].question;
-  if (w) return kindLabel(w.kind);
-  if (line) return line;
-  if (t.state) return [stateLabel(t.state), t.program?.label].filter(Boolean).join(" · ");
-  return t.kind;
+  const about = w?.tool?.about?.split("\n")[0];
+  if (w?.tool) return about ? [`${w.tool.name}: `, h("code", {}, about)] : [w.tool.name];
+  if (w?.asks?.[0]) return [w.asks[0].question];
+  if (w) return [kindLabel(w.kind)];
+  if (line) return line.split("`").map((part, i) => (i % 2 ? h("code", {}, part) : part)).filter((p) => p !== "");
+  if (t.state) return [[stateLabel(t.state), t.program?.label].filter(Boolean).join(" · ")];
+  return [t.kind];
 }
 
 /** Working agents past which their dots stop breathing. */

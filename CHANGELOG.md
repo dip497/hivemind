@@ -21,6 +21,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - On the phone, an agent's Terminal no longer shows the waiting card under it, halving it: the terminal shows the chooser itself, and the header still says it waits. Back in Chat the card is there as before.
 - On the phone, an agent whose manifest says no transcript the phone can read (one it maps but never says where to find included) opens in its terminal instead of a chat that stays empty.
 - The phone page updates itself: it opens at once from the newest build it has, fetches a new one alongside, and the next open shows it, never files of two builds together. It never waits on the network to open.
+- On the phone's Home, each row reads in plain text, monospace only for code (a command, or what is in backticks); the time is in even-width digits, and a hairline from where the text starts separates rows.
 - On the phone, a permission names its tool and shows its command in monospace, four lines until you tap it; Allow and Deny are full-width rows, Allow first.
 - On the phone, a chat breathes: 20 px between turns, 8 px between what the agent does within one, and what it says at 16/24.
 - On the phone, scrolled up in a chat, a round button above the message box counts the new messages and takes you back to the newest.

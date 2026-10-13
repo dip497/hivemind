@@ -146,8 +146,17 @@ button { cursor: pointer; }
 .machine { margin: 0; padding: 20px 20px 2px; font: 500 15px/20px var(--sans); }
 .workspace { margin: 0; padding: 4px 20px 2px; color: var(--text3); }
 .agent {
-  display: flex; align-items: center; gap: 14px; width: 100%;
+  position: relative; display: flex; align-items: center; gap: 14px; width: 100%; min-height: 56px;
   padding: 12px 20px; border: 0; background: transparent; text-align: left;
+}
+.agent .status { font: 400 14px/20px var(--sans); color: var(--text2); }
+.agent .status.waits { color: var(--warn); }
+.agent code { font: 400 13px/20px var(--mono); }
+.agent .age { flex: none; font: 400 13px/18px var(--sans); color: var(--text3); font-variant-numeric: tabular-nums; }
+/* A hairline between two rows, from where the text starts: past the depth, the dot and its gap. */
+.agent + .agent::before {
+  content: ""; position: absolute; top: 0; right: 0; height: 1px; background: var(--line);
+  left: calc(20px + var(--depth, 0) * 16px + 8px + 14px);
 }
 .agent:active { background: var(--panel); }
 .agent .col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -169,7 +178,7 @@ button { cursor: pointer; }
 .need { contain-intrinsic-size: auto 150px; }
 .machine { contain-intrinsic-size: auto 42px; }
 .workspace { contain-intrinsic-size: auto 22px; }
-.agent { contain-intrinsic-size: auto 60px; }
+.agent { contain-intrinsic-size: auto 68px; }
 
 /* One agent: a back bar, its chat, and what it waits on above the reply box. */
 .agent-screen { display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; height: var(--vh); }

@@ -1386,3 +1386,8 @@ Before and after at 390×844 are the `ux-*.png` pairs of the rig's scratchpad.
   Allow and Deny are full-width 44 px rows, Allow first, as Happy stacks its choices
   (`packages/happy-app/sources/components/tools/PermissionFooter.tsx:500-592`). Home's Needs cards
   share it (`answers.ts`).
+- Home's rows: what a row last said is sans 14/20 `--text2` (amber while it waits), code set as
+  code: a waiting command after its tool's name, or what is in backticks. Its time is sans 13
+  `--text3` with tabular digits. A row is at least 56 px (68 with two lines, which its placeholder
+  off screen now matches, so nothing moves as rows scroll in), and a 1 px `--line` hairline over
+  each row that follows another starts where the text does.
