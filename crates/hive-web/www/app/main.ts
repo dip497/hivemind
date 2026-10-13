@@ -12,6 +12,7 @@ import { PairScreen, guessName } from "./pair.js";
 import type { Phone } from "./phone.js";
 import { KEPT as START_KEPT, StartScreen } from "./start.js";
 import { TermScreen } from "./term-screen.js";
+import { followViewport } from "./viewport.js";
 import { ViewScreen, Views } from "./views.js";
 import { get, put, remove } from "./store.js";
 import type { Overview, Paired, Shown } from "./types.js";
@@ -257,8 +258,7 @@ setInterval(() => {
   }
 }, 15_000);
 
-// The keyboard takes the bottom of the screen on a phone: the agent's reply box stays above it.
-visualViewport?.addEventListener("resize", () => document.documentElement.style.setProperty("--vh", `${visualViewport!.height}px`));
+followViewport();
 
 async function start(): Promise<void> {
   // The link is a secret: out of the address bar and the history once read.

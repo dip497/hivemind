@@ -1324,6 +1324,15 @@ On the rig the phone showed "permission" with Allow and Deny for an AskUserQuest
   so its keys no longer size the session: the page no longer sends `terminal.resize`, and the wasm
   `Term.size` is gone (the Android core keeps `Watching::size`). One owner still: `terminals.ts`,
   the last to fit holding it (workspace-api 0.25).
+- (2026-10-13) Tapping the message box pushed it up on iOS. Safari keeps the page whole under the
+  keyboard and moves what is seen down over it (`visualViewport.offsetTop`); the page sized its
+  screens to what is seen (`--vh`) but kept them at the top. `viewport.ts` now keeps the top as well
+  (`--vv-top`, on `resize` and `scroll`), so an agent's, Start's and a view's screen is exactly what
+  is seen and its bar sits on the keyboard. Chrome on Android shrinks the page instead
+  (`interactive-widget=resizes-content`), its `offsetTop` 0. hapi sizes to `visualViewport.height`
+  and scrolls the window back to the top (`web/src/hooks/useViewportHeight.ts:27-46`); its screens
+  are not fixed, ours are. The chat keeps how far above the newest the person reads as its box
+  changes size, so the keyboard coming up hides nothing that was in sight.
 
 ### 12.11 Opening the page: every screen at once, then Start not ready
 

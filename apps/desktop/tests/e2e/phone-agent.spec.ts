@@ -1,7 +1,7 @@
 // One agent on the phone page (crates/hive-web/www/app/agent.ts), in a phone-sized Chromium with no
 // computer: the page's built modules (crates/hive-web/build.sh) served from www by route, the
 // computer's overview given by the test through `window.show(overview)`.
-import { test, expect, chromium, type Browser, type Page } from "@playwright/test";
+import { test, expect, chromium, devices, type Browser, type BrowserContextOptions, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -22,9 +22,9 @@ const overview = (...agents: object[]) => ({ agents, needs: [], working: 0 });
 
 /** The agent screen; `window.open(tile, started)` opens it as the page does, `window.show(o)` tells it
  *  the agents. With `clock`, the page's time starts there and moves only as the test moves it. */
-async function screen(clock?: number): Promise<Page> {
+async function screen(clock?: number, phone: BrowserContextOptions = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }): Promise<Page> {
   browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const page = await browser.newPage(phone);
   if (clock !== undefined) await page.clock.install({ time: clock - 60_000 });
   page.on("pageerror", (e) => { throw e; });
   await page.route("http://page.test/**", (route) => {
@@ -33,6 +33,8 @@ async function screen(clock?: number): Promise<Page> {
       return route.fulfill({ contentType: "text/html", body: `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="app.css"><main id="app"></main>
 <script type="module">
 import { AgentScreen } from "./js/agent.js";
+import { followViewport } from "./js/viewport.js";
+followViewport();
 window.calls = [];
 const app = {
   back() {}, computer: () => "desk",
@@ -312,6 +314,55 @@ test("scrolled 200 px up from the newest, a round button above the message box c
   // Over the terminal there is no chat to go back in.
   await page.locator("[data-view-toggle]").click();
   await expect(newest).toBeHidden();
+});
+
+test("with the keyboard up, as Chrome on Android and Safari on iOS each report it, the message box's bar sits right on it and the newest message stays in sight; scrolled up, the same lines stay", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const { defaultBrowserType: _, ...pixel } = devices["Pixel 7"];
+  const page = await screen(undefined, pixel);
+  await show(page, overview(agent("t1", "Claude")));
+  await open(page, "t1");
+  await page.evaluate(() => (window as unknown as { said(p: unknown): void }).said({ session: "s", cursor: 60,
+    entries: Array.from({ length: 60 }, (_, i) => ({ id: `e${i}`, at: i, who: "person", text: `line ${i}` })) }));
+  const box = page.locator("[data-screen=agent] [data-message]");
+  const newest = page.locator("[data-screen=agent] [data-chat]").getByText("line 59", { exact: true });
+  await expect(newest).toBeInViewport();
+  await box.locator("textarea").tap();
+  await expect(box.locator("textarea")).toBeFocused();
+  /** The bottom of the message box's bar against what is seen, and whether the newest shows above the box. */
+  const placed = () => page.evaluate(() => {
+    const box = document.querySelector("[data-screen=agent] [data-message]")!;
+    const b = { bottom: box.closest(".dock")!.getBoundingClientRect().bottom, top: box.getBoundingClientRect().top };
+    const chat = document.querySelector("[data-screen=agent] [data-chat]")!.getBoundingClientRect();
+    const last = [...document.querySelectorAll("[data-screen=agent] [data-chat] *")].find((e) => e.textContent === "line 59")!.getBoundingClientRect();
+    const v = visualViewport!;
+    return { off: Math.round(b.bottom - (v.offsetTop + v.height)), seen: last.top >= Math.max(chat.top, v.offsetTop) && last.bottom <= b.top };
+  });
+  // Chrome on Android (index.html's interactive-widget): the page is what is left above the keyboard.
+  await page.setViewportSize({ width: 412, height: 500 });
+  await expect.poll(placed).toEqual({ off: 0, seen: true });
+  // Read 300 px up from the newest, the keyboard going down leaves the same lines in sight.
+  const chat = page.locator("[data-screen=agent] [data-chat]");
+  const fromEnd = () => chat.evaluate((c) => Math.round(c.scrollHeight - c.scrollTop - c.clientHeight));
+  /** Scrolled to `away` px above the newest, once the chat has seen the scroll. */
+  const scrolled = (away: number) => chat.evaluate((c, a) => new Promise((done) => {
+    c.addEventListener("scroll", done, { once: true });
+    c.scrollTop = c.scrollHeight - c.clientHeight - a;
+  }), away);
+  await scrolled(300);
+  await page.setViewportSize({ width: 412, height: 839 });
+  await expect.poll(() => chat.evaluate((c) => c.clientHeight)).toBeGreaterThan(500);
+  await expect.poll(fromEnd).toBe(300);
+  await scrolled(0);
+  // Safari on iOS: the page stays whole; what is seen gets shorter, then moves down over it to the box.
+  await page.evaluate(() => {
+    const v = visualViewport!;
+    Object.defineProperty(v, "height", { configurable: true, get: () => 480 });
+    v.dispatchEvent(new Event("resize"));
+    Object.defineProperty(v, "offsetTop", { configurable: true, get: () => 300 });
+    v.dispatchEvent(new Event("scroll"));
+  });
+  await expect.poll(placed).toEqual({ off: 0, seen: true });
 });
 
 test("a permission names its tool in sans and shows its command in mono on a panel, four lines until tapped; Allow and Deny are full-width 44 px rows, Allow first", async () => {
