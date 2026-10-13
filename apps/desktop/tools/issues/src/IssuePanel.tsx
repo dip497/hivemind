@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Play, FileQuestion, X } from "@hivemind/app-ui";
-import { Button, Dialog, DialogContent, DialogTitle, Input, Label, MarkdownPreview, MenuItem, Textarea, Loading } from "@hivemind/app-ui";
+import { Button, Dialog, DialogContent, DialogTitle, Input, Label, MarkdownPreview, MenuItem, Textarea, Loading, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@hivemind/app-ui";
 import { useIssue, useIssueList, write, type AcceptanceItem, type Issue, type IssueState } from "./data";
 import type { PanelProps } from "./data";
 import { STATE_COLOR, STATE_LABEL, STATE_ORDER, StateIcon } from "./StateMeta";
@@ -287,7 +287,7 @@ function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) =
           setEditing(false);
         }
       }}
-      className="w-full text-heading font-semibold tracking-tight leading-tight bg-[var(--color-bg3)] border border-[var(--color-brand)] rounded px-1 -mx-1 text-[var(--color-fg)] focus:outline-none"
+      className="w-full text-heading font-semibold tracking-tight leading-tight bg-[var(--color-bg3)] border border-[var(--color-brand)] rounded px-1 -mx-1 text-[var(--color-fg)]"
     />
   );
 }
@@ -516,16 +516,16 @@ function RelationsSection({ issue, onClose, openIssue, hm }: { issue: Issue; onC
             onKeyDown={(e) => { if (e.key === "Enter") void submitLink(); if (e.key === "Escape") setLinking(false); }}
             placeholder="OTHER-ID"
             font="mono"
+            size="sm"
             className="flex-1"
           />
-          <select
-            value={linkType}
-            onChange={(e) => setLinkType(e.target.value as LinkType)}
-            className="bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-1 py-1 text-count text-[var(--color-fg2)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]"
-          >
-            {LINK_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <Button size="xs" onClick={() => void submitLink()} disabled={pending}>Add</Button>
+          <Select value={linkType} onValueChange={(v) => setLinkType(v as LinkType)}>
+            <SelectTrigger size="sm" aria-label="Link type"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {LINK_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button size="sm" onClick={() => void submitLink()} disabled={pending}>Add</Button>
         </div>
       ) : (
         <Button variant="outline" size="xs" onClick={() => setLinking(true)}>+ Link issue</Button>
@@ -534,17 +534,15 @@ function RelationsSection({ issue, onClose, openIssue, hm }: { issue: Issue; onC
       {otherWorkspaces.length > 0 && (
         <div className="flex items-center gap-1.5 pt-1">
           <span className="text-count text-[var(--color-fg2)]">Transfer:</span>
-          <select
-            value={dest}
-            onChange={(e) => setDest(e.target.value)}
-            className="bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-1 py-1 text-count text-[var(--color-fg2)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]"
-          >
-            <option value="">workspace…</option>
-            {otherWorkspaces.map((w) => <option key={w.prefix} value={w.prefix}>{w.title} ({w.prefix})</option>)}
-          </select>
-          <Button variant="secondary" size="xs" disabled={!dest || pending} onClick={() => void transfer("copy")}
+          <Select value={dest} onValueChange={setDest}>
+            <SelectTrigger size="sm" aria-label="Workspace"><SelectValue placeholder="workspace…" /></SelectTrigger>
+            <SelectContent>
+              {otherWorkspaces.map((w) => <SelectItem key={w.prefix} value={w.prefix}>{w.title} ({w.prefix})</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button variant="secondary" size="sm" disabled={!dest || pending} onClick={() => void transfer("copy")}
             title="Copy this issue into the selected workspace (source kept, linked)">Copy</Button>
-          <Button variant="secondary" size="xs" disabled={!dest || pending} onClick={() => void transfer("move")}
+          <Button variant="secondary" size="sm" disabled={!dest || pending} onClick={() => void transfer("move")}
             title="Move this issue into the selected workspace (source deleted)">Move</Button>
         </div>
       )}

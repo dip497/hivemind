@@ -31,7 +31,7 @@ export function ThemePanel() {
       tabIndex={-1}
       aria-label="Appearance"
       data-theme-panel
-      onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); } }}
+      onKeyDown={(e) => { if (e.key === "Escape" && !e.defaultPrevented) { e.stopPropagation(); setOpen(false); } }}
       className="theme-panel fixed right-2 top-2 bottom-2 z-[60] w-[380px] max-w-[calc(92vw-1rem)] flex flex-col overflow-hidden rounded-sheet border border-[var(--color-line)] shadow-2xl outline-none"
     >
       <header className="flex items-center gap-2 px-4 h-12 shrink-0 border-b border-[var(--color-line)]">

@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { buildRegistry, SCOPE } from "./helpers/registry";
+import { pick } from "./helpers/select";
 
 let app: ElectronApplication;
 let page: Page;
@@ -62,9 +63,9 @@ test("the catalog lists the published plugins, and search and type filters narro
   await hub();
   await expect(entry("view", QUEUE)).toContainText("Queue");
   await expect(entry("agent", CODER)).toContainText("Catalog Coder");
-  await page.getByRole("combobox", { name: "Kind" }).selectOption("agent");
+  await pick(page.getByRole("combobox", { name: "Kind" }), "Agents");
   await expect(entry("view", QUEUE)).toHaveCount(0);
-  await page.getByRole("combobox", { name: "Kind" }).selectOption("all");
+  await pick(page.getByRole("combobox", { name: "Kind" }), "All kinds");
   await page.getByLabel("Search plugins").fill("tiled");
   await expect(page.locator("[data-catalog-plugin]")).toHaveCount(1);
   await expect(entry("view", TILED)).toBeVisible();

@@ -8,6 +8,7 @@ import { FolderPlus, Sparkles } from "../components/icons";
 import { isPluginEnabled } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { useSettings } from "../settings-store";
 import { useWidgetPackages } from "../board-objects/widget-runtime";
 import { SETTINGS_PAGES } from "../settings-registry";
@@ -47,10 +48,13 @@ export function PluginsHome() {
         {SCOPES.map(([s, label]) => <button key={s} type="button" role="tab" aria-selected={scope === s} data-plugins-scope={s} onClick={() => setScope(s)}>{label}</button>)}
       </div>
       <Input type="search" placeholder="Search plugins" aria-label="Search plugins" value={query} onChange={(e) => setQuery(e.target.value)} className="flex-1 min-w-[140px]" />
-      <select aria-label="Kind" value={kind} onChange={(e) => setKind(e.target.value as "all" | PluginKind)}>
-        <option value="all">All kinds</option>
-        {PLUGIN_KINDS.map((k) => <option key={k} value={k}>{KIND_LABEL[k]}s</option>)}
-      </select>
+      <Select value={kind} onValueChange={(v) => setKind(v as "all" | PluginKind)}>
+        <SelectTrigger aria-label="Kind" className="min-w-32"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All kinds</SelectItem>
+          {PLUGIN_KINDS.map((k) => <SelectItem key={k} value={k}>{KIND_LABEL[k]}s</SelectItem>)}
+        </SelectContent>
+      </Select>
     </div>
     {scope === "hub"
       ? <BrowsePlugins query={query} kind={kind} />

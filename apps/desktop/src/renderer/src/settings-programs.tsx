@@ -8,6 +8,7 @@ import type { ClientGrant } from "@hivemind/workspace-api/grants";
 import { Check, Copy } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Section } from "./appearance-controls";
 import { useShown } from "./multiplayer/shown";
 
@@ -96,14 +97,15 @@ function NewGrant({ onMade }: { onMade: () => void }) {
         <Input
           value={name}
           placeholder="What uses it, e.g. my dashboard"
-          className="flex-1 text-label"
+          className="flex-1"
           data-grant-name
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) void make(); }}
         />
-        <select value={role} aria-label="What it may do" data-grant-role onChange={(e) => setRole(e.target.value as Role)}>
-          {ROLES.map(([r, words]) => <option key={r} value={r}>{words}</option>)}
-        </select>
+        <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+          <SelectTrigger aria-label="What it may do" data-grant-role className="min-w-40"><SelectValue /></SelectTrigger>
+          <SelectContent>{ROLES.map(([r, words]) => <SelectItem key={r} value={r}>{words}</SelectItem>)}</SelectContent>
+        </Select>
         <Button disabled={!name.trim()} data-grant-create onClick={() => void make()}>Create token</Button>
       </div>
       <p className="settings-note">In {folder(repo)}. The script connects to the drive socket with the token and names this folder.</p>

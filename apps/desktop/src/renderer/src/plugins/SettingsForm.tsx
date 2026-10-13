@@ -1,3 +1,7 @@
+import { cn } from "../lib/cn";
+import { Input } from "../components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Switch } from "../components/ui/switch";
 import { fitValue, type SettingField, type SettingValue } from "@hivemind/core/plugin-settings";
 
 /** A plugin's settings, drawn from the fields it declares: the same controls for every kind, on a
@@ -18,13 +22,15 @@ export function SettingsForm({ fields, values, onChange, compact }: {
             {!compact && f.description && <span className="text-label text-[var(--color-fg3)]">{f.description}</span>}
           </span>
           {f.type === "boolean"
-            ? <input type="checkbox" checked={values[f.id] === true} onChange={(e) => set(f, e.target.checked)} />
+            ? <Switch checked={values[f.id] === true} onCheckedChange={(on) => set(f, on)} />
             : f.type === "choice"
-            ? <select className="rounded border border-[var(--color-line)] bg-[var(--color-bg2)] px-1 py-0.5" value={String(values[f.id] ?? f.default)}
-                onChange={(e) => set(f, e.target.value)}>
-                {f.values.map((v, i) => <option key={v} value={v}>{f.labels?.[i] ?? v}</option>)}
-              </select>
-            : <input type={f.type === "number" ? "number" : "text"} className="w-28 rounded border border-[var(--color-line)] bg-transparent px-1.5 py-0.5"
+            ? <Select value={String(values[f.id] ?? f.default)} onValueChange={(v) => set(f, v)}>
+                <SelectTrigger size={compact ? "sm" : "default"}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {f.values.map((v, i) => <SelectItem key={v} value={v}>{f.labels?.[i] ?? v}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            : <Input type={f.type === "number" ? "number" : "text"} className={cn("w-28", compact && "h-control-compact")}
                 key={String(values[f.id] ?? "")} defaultValue={String(values[f.id] ?? "")}
                 {...(f.type === "number" ? { min: f.min, max: f.max } : { maxLength: f.maxLength })}
                 onBlur={(e) => set(f, f.type === "number" ? Number(e.target.value) : e.target.value)} />}

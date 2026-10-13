@@ -20,6 +20,7 @@
 import { useState } from "react";
 import { Film, Image as ImageIcon, Plus, Trash, ChevronDown } from "./components/icons";
 import { Button } from "./components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch as SwitchPrimitive } from "./components/ui/switch";
 import { PRESETS, type TerminalPalette } from "@hivemind/core/settings-schema";
 import {
@@ -68,8 +69,8 @@ export function Section({ title, hint, action, children }: {
  *  chosen preset looks like. The strip is five flat colours — no preview
  *  rendering, no motion.
  *
- *  SELECTOR NOTE: `data-preset-option` now lives on each <option> (it was on a
- *  card <button>); the select itself carries `data-preset-select`. */
+ *  SELECTOR NOTE: `data-preset-option` lives on each item of the list; the control
+ *  itself carries `data-preset-select`. */
 export function PresetRow({ t }: { t: ThemeState }) {
   const preset = PRESETS[t.preset] ?? PRESETS.ubuntu!;
   const swatches = [preset.palette.bg, preset.palette.bg3, preset.terminal.background, preset.terminal.ansi[1]!, preset.terminal.ansi[2]!];
@@ -82,19 +83,20 @@ export function PresetRow({ t }: { t: ThemeState }) {
             <span key={i} className="settings-swatch" style={{ background: c }} />
           ))}
         </span>
-        <select
-          id="theme-preset"
-          data-preset-select
+        <Select
           value={t.preset in PRESETS ? t.preset : "ubuntu"}
-          onChange={(e) => {
-            const p = PRESETS[e.target.value];
+          onValueChange={(v) => {
+            const p = PRESETS[v];
             if (p) setTheme({ preset: p.id, mode: p.mode, palette: { ...p.palette }, accent: p.accent, terminal: { ...p.terminal, ansi: [...p.terminal.ansi] } });
           }}
         >
-          {Object.values(PRESETS).map((p) => (
-            <option key={p.id} value={p.id} data-preset-option={p.id}>{p.label}</option>
-          ))}
-        </select>
+          <SelectTrigger id="theme-preset" data-preset-select className="min-w-40"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {Object.values(PRESETS).map((p) => (
+              <SelectItem key={p.id} value={p.id} data-preset-option={p.id}>{p.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );

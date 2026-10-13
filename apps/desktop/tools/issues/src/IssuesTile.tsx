@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Inbox } from "@hivemind/app-ui";
 import type { TileProps } from "@hivemind/tile-sdk";
 import type { ViewClient, ViewIssuesStatus } from "@hivemind/view-sdk";
-import { Button, Input, Label, Loading } from "@hivemind/app-ui";
+import { Button, Input, Label, Loading, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@hivemind/app-ui";
 import { useIssueList, useIssuesPlugin, write, type IssueSummary } from "./data";
 import { FilterBar, emptyFilters, applyFilters, type Filters } from "./FilterBar";
 import { ViewSwitcher, type ViewKind } from "./ViewSwitcher";
@@ -48,18 +48,12 @@ function GroupByMenu({ value, onChange }: { value: GroupBy; onChange: (g: GroupB
   return (
     <label className="nodrag inline-flex items-center gap-1 text-count text-[var(--color-fg2)]">
       <span className="text-[var(--color-fg3)]">Group</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value as GroupBy)}
-        aria-label="Group issues by"
-        className="bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md text-label text-[var(--color-fg)] px-2 py-1 outline-none cursor-pointer hm-soft focus:border-[var(--color-brand)]"
-      >
-        {GROUP_BY_ORDER.map((g) => (
-          <option key={g} value={g}>
-            {GROUP_BY_LABEL[g]}
-          </option>
-        ))}
-      </select>
+      <Select value={value} onValueChange={(v) => onChange(v as GroupBy)}>
+        <SelectTrigger size="sm" aria-label="Group issues by"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {GROUP_BY_ORDER.map((g) => <SelectItem key={g} value={g}>{GROUP_BY_LABEL[g]}</SelectItem>)}
+        </SelectContent>
+      </Select>
     </label>
   );
 }

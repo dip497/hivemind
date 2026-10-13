@@ -15,6 +15,7 @@ import { useShown } from "./shown";
 import { useCanShare } from "./workspace-actions";
 import { Check, ChevronDown, Copy } from "../components/icons";
 import { Button } from "../components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { QrCode } from "../components/qr-code";
 import { useSettingsNavigate } from "../settings-panels";
 
@@ -84,22 +85,31 @@ function Share({ repo }: { repo: string }) {
         </div>
         <div className="flex flex-wrap gap-3" data-share-choices>
           <label className={field}>They can
-            <select id="share-role" value={role} onChange={(e) => { setRole(e.target.value as LinkRole); setLink(null); }}>
-              <option value="view">{ROLE_LABELS.view}</option>
-              <option value="edit">{ROLE_LABELS.edit}</option>
-              <option value="terminals">{ROLE_LABELS.terminals}</option>
-            </select>
+            <Select value={role} onValueChange={(v) => { setRole(v as LinkRole); setLink(null); }}>
+              <SelectTrigger id="share-role" className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="view">{ROLE_LABELS.view}</SelectItem>
+                <SelectItem value="edit">{ROLE_LABELS.edit}</SelectItem>
+                <SelectItem value="terminals">{ROLE_LABELS.terminals}</SelectItem>
+              </SelectContent>
+            </Select>
           </label>
           <label className={field}>Expires in
-            <select id="share-expiry" value={expiresIn} onChange={(e) => { setExpiresIn(Number(e.target.value)); setLink(null); }}>
-              {EXPIRIES.map(([label, ms]) => <option key={ms} value={ms}>{label}</option>)}
-            </select>
+            <Select value={String(expiresIn)} onValueChange={(v) => { setExpiresIn(Number(v)); setLink(null); }}>
+              <SelectTrigger id="share-expiry" className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {EXPIRIES.map(([label, ms]) => <SelectItem key={ms} value={String(ms)}>{label}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </label>
           <label className={field}>Who can use it
-            <select id="share-reusable" value={reusable ? "anyone" : "first"} onChange={(e) => { setReusable(e.target.value === "anyone"); setLink(null); }}>
-              <option value="first">Only the first person</option>
-              <option value="anyone">Anyone with the link</option>
-            </select>
+            <Select value={reusable ? "anyone" : "first"} onValueChange={(v) => { setReusable(v === "anyone"); setLink(null); }}>
+              <SelectTrigger id="share-reusable" className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="first">Only the first person</SelectItem>
+                <SelectItem value="anyone">Anyone with the link</SelectItem>
+              </SelectContent>
+            </Select>
           </label>
         </div>
         {link ? (
@@ -158,9 +168,12 @@ function Hosting({ repo, onMoved }: { repo: string; onMoved: (uri: string) => vo
           <Button variant="outline" onClick={() => go("your-devices")} data-keep-running>Keep it running</Button>
         ) : (
           <>
-            <select aria-label="Move to" value={to} onChange={(e) => setTo(e.target.value)} data-move-to>
-              {hosts.map((h) => <option key={h.device} value={h.device}>{h.name}</option>)}
-            </select>
+            <Select value={to} onValueChange={setTo}>
+              <SelectTrigger aria-label="Move to" className="min-w-40" data-move-to><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {hosts.map((h) => <SelectItem key={h.device} value={h.device}>{h.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
             <Button variant="outline" disabled={!to || busy} onClick={() => void move()} data-move-hosting>
               {busy ? "Moving…" : "Move there"}
             </Button>

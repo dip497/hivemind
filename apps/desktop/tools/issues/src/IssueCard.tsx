@@ -39,7 +39,7 @@ export function IssueCard({
       onClick={open}
       onKeyDown={onActivate(open)}
       title={`open ${issue.id}`}
-      className={`nodrag group hm-card relative overflow-hidden p-2.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-brand)] ${
+      className={`nodrag group hm-card relative overflow-hidden p-2.5 ${
         draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
       }`}
     >

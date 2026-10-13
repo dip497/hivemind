@@ -193,13 +193,16 @@ test("each agent shows its own launch options, and a choice is saved for that ag
   await expect(detail().locator("[data-agent-option-row]")).toHaveCount(2);
   const mode = page.locator("#agent-acme-mode");
   // the stub CLI's --help lists nothing, so the values are the ones the manifest maps specially
-  await expect(mode.locator("option")).toHaveText(["Acme Coder decides", "plan"]);
-  await mode.selectOption("plan");
+  await mode.click();
+  await expect(page.getByRole("option")).toHaveText(["Acme Coder decides", "plan"]);
+  await page.getByRole("option", { name: "plan", exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.hive.settingsGet().then((s) => s.plugins.state))).toEqual({ "agent:acme": { options: { mode: "plan" } } });
 
   // A published agent's own option, mapped to its CLI's flag rather than passed through.
   await openAgent("kiro");
-  await expect(page.locator("#agent-kiro-mode option")).toHaveText(["Kiro decides", "yolo"]);
+  await page.locator("#agent-kiro-mode").click();
+  await expect(page.getByRole("option")).toHaveText(["Kiro decides", "yolo"]);
+  await page.keyboard.press("Escape");
 });
 
 test("switching an agent off in Settings removes it everywhere, and back on restores it", async () => {

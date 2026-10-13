@@ -8,6 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { hiveNetBuilt, join, note, notes, openShare, person, share, sharedWorkspace } from "./helpers/multiplayer";
+import { pick } from "./helpers/select";
 
 let root: string;
 const apps: ElectronApplication[] = [];
@@ -35,10 +36,10 @@ test("the host changes a guest's role and removes them: the guest works under th
   await openPeople(host);
   const row = host.locator(`[data-shared-person="${me.personId}"]`);
   await expect(row).toContainText("Here now");
-  await expect(row.locator("[data-person-role]")).toHaveValue("edit");
+  await expect(row.locator("[data-person-role]")).toHaveText("Can edit board");
 
   // To viewer: the guest is reconnected under it, and what they write is taken back.
-  await row.locator("[data-person-role]").selectOption("view");
+  await pick(row.locator("[data-person-role]"), "Can view");
   await expect(banner(guest)).toHaveAttribute("data-access", "view", { timeout: 10_000 });
   await expect(banner(guest)).toHaveAttribute("data-state", "connected");
   await host.keyboard.press("Escape");

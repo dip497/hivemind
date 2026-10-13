@@ -85,10 +85,10 @@ test("CLI preferences persist and an empty toolbar has no handle; Settings resto
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
   await settings();
   await expect(page.getByText("No toolbar actions selected.", { exact: false })).toBeVisible();
-  await expect(page.getByLabel("Display", { exact: true })).toHaveValue("hidden");
+  await expect(page.getByLabel("Display", { exact: true })).toHaveText("Collapsed");
   await page.getByRole("button", { name: "Reset actions", exact: true }).click();
   await expect(page.getByRole("checkbox", { name: "Show labels", exact: true })).not.toBeChecked();
-  await expect(page.getByLabel("Display", { exact: true })).toHaveValue("hidden");
+  await expect(page.getByLabel("Display", { exact: true })).toHaveText("Collapsed");
   await close();
   await page.getByRole("button", { name: "show tools", exact: true }).click();
   await expect.poll(order).toEqual(["agent", "frame", "board", "theme"]);

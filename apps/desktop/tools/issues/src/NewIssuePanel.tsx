@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@hivemind/app-ui";
 import { Input } from "@hivemind/app-ui";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@hivemind/app-ui";
 import { Label } from "@hivemind/app-ui";
 import { Textarea } from "@hivemind/app-ui";
 import { useIssueList, write, type Assignee, type IssueState } from "./data";
@@ -77,10 +78,6 @@ export function NewIssuePanel({ hm, close, openPanel }: PanelProps) {
     openPanel("issue", { id: issue.id });
   }
 
-  // Only the native <select> still uses this — the shadcn primitives own the text fields.
-  const inputCls =
-    "w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-lg px-3 py-2 text-body text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)]";
-
   return (
     <Dialog open onOpenChange={(o) => { if (!o) close(); }}>
       <DialogContent className="sm:max-w-[480px]">
@@ -105,11 +102,12 @@ export function NewIssuePanel({ hm, close, openPanel }: PanelProps) {
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="State">
-                <select value={state} onChange={(e) => setState(e.target.value as IssueState)} className={inputCls}>
-                  {STATES.map((s) => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
-                </select>
+                <Select value={state} onValueChange={(v) => setState(v as IssueState)}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {STATES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </Field>
               <Field label="Assignee">
                 <PickerBox>

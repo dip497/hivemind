@@ -288,7 +288,7 @@ export function PeopleHere({ repo, onManage, follow }: { repo: string; onManage?
           aria-label={followed === p.person ? `Stop following ${p.name}` : `Follow ${p.name}`}
           aria-pressed={followed === p.person}
           onClick={() => followPerson(repo, followed === p.person ? null : p.person)}
-          className="grid size-7 place-items-center rounded-full text-count font-semibold text-white ring-2 ring-[var(--color-bg)] focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
+          className="grid size-7 place-items-center rounded-full text-count font-semibold text-white ring-2 ring-[var(--color-bg)]"
           style={{ background: colorOf(p) }}
         >{initialsOf(p.name)}</button> : (
         <span

@@ -9,6 +9,7 @@ import { patchSettings, useSettings, setPluginOption } from "./settings-store";
 import { Button } from "./components/ui/button";
 import { PluginGroup, PluginRow, type RowState } from "./plugins/PluginList";
 import { Input } from "./components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch } from "./components/ui/switch";
 import { notReady, useAgentEntries, useAgentPresence, setAgentDisabled, refreshAgentPresence, syncAgentPlugins } from "./agent-plugins";
 import { useSettingsNavigate } from "./settings-panels";
@@ -239,6 +240,8 @@ function LaunchOptions({ def }: { def: AgentProviderDef }) {
 }
 
 const MAX_SELECT = 24;
+/** A Select item cannot carry "", the value that means the option is left to the agent. */
+const UNSET = "\u0000unset";
 
 function OptionRow({ def, option: o, value, found }: {
   def: AgentProviderDef; option: AgentOption; value: string;
@@ -258,10 +261,13 @@ function OptionRow({ def, option: o, value, found }: {
     <div className="settings-row" data-agent-option-row={o.id}>
       <div><label htmlFor={id}>{o.label}</label><p>{source}</p></div>
       {asSelect ? (
-        <select id={id} value={value} onChange={(e) => set(e.target.value)}>
-          <option value="">{unset}</option>
-          {values.filter((v) => v !== o.default).map((v) => <option key={v} value={v}>{v}</option>)}
-        </select>
+        <Select value={value || UNSET} onValueChange={(v) => set(v === UNSET ? "" : v)}>
+          <SelectTrigger id={id} className="w-[220px] max-w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={UNSET}>{unset}</SelectItem>
+            {values.filter((v) => v !== o.default).map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+          </SelectContent>
+        </Select>
       ) : (
         <>
           <Input id={id} list={`${id}-values`} value={value} placeholder={unset} className="w-[220px] max-w-full"

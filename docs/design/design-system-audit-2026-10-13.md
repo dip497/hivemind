@@ -167,10 +167,10 @@ that are not a button or a field are justified here; the rest move to the primit
 | `appearance-controls` (4), `settings-profile` | swatch, wallpaper and anchor pickers (radio groups of previews) | Justified: a preview is the control |
 | `components/qr-code` | the code is the button | Justified |
 | `App.tsx:650` | Settings sidebar items | Justified: sidebar rows |
-| `plugins/PluginPage` (3), `PluginsHome` (3), `MakePlugin`, `add-dialog` (2), `MachinesHub` (6) | tabs, links, choices | Links move to `Button variant="link"`; tabs stay until a `Tabs` primitive exists |
+| `plugins/PluginPage` (3), `PluginsHome` (3), `MakePlugin`, `add-dialog` (2), `MachinesHub` (6) | tabs, links, choices | The standalone back link moves to `Button variant="link"`; a link inside a sentence keeps `.settings-link`, a text style rather than a control; tabs stay until a `Tabs` primitive exists |
 | `type="range"`, `type="color"`, `type="file"` (hidden) | native pickers | Justified: themed by `accent-color` and `.hm-range` |
-| checkboxes (`MachinesHub`, `SettingsForm`, `settings-views` ×2) | | `SettingsForm` → `Switch`; the toolbar list keeps checkboxes, themed by `accent-color` |
-| text inputs (`SettingsForm`, `GitCommitModal`, `BranchPicker`, `DiffTile`, `IssuePanel`) | | move to `Input` |
+| checkboxes (`MachinesHub`, `SettingsForm`, `settings-views` ×2, `GitCommitModal`) | | `SettingsForm` → `Switch`; the rest are lists of ticks and keep checkboxes, themed by the app-wide `accent-color` |
+| text inputs (`SettingsForm`, `BranchPicker`, `DiffTile`, `IssuePanel`) | | `SettingsForm` → `Input`. Justified: `BranchPicker` and `DiffTile` are the bare field inside a search box that draws the border with its icon; `IssuePanel` is the issue's title edited in place |
 | `FrameNode`, `board-objects/TextDraft` | inline rename on the canvas | Justified: the field is the object |
 
 ## Patterns & Systemic Issues

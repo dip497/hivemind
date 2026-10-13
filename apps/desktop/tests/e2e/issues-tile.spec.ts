@@ -66,7 +66,7 @@ test("renders the issue card with id + title", async () => {
 
 test("card has a state dropdown and a work button", async () => {
   const node = page.locator('[data-tool-plugin="hivemind/issues"]');
-  expect(await node.locator("select").count()).toBeGreaterThan(0);
+  expect(await node.getByRole("combobox").count()).toBeGreaterThan(0);
   // work button is opacity-0 until hover but present in the DOM
   expect(await node.locator('button', { hasText: /work/ }).count()).toBeGreaterThan(0);
 });

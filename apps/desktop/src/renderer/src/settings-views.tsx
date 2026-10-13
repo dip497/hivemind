@@ -3,6 +3,7 @@ import { isPluginEnabled } from "@hivemind/core/plugin-settings";
 import { ArrowDown, ArrowUp, ChevronDown, ExternalLink, Puzzle, Trash } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { PluginGroup, PluginRow } from "./plugins/PluginList";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch } from "./components/ui/switch";
 import { getSettings, patchSettings, useSettings, setPluginEnabled } from "./settings-store";
 import { getView, resolveChrome, resolveViewId, useViews } from "./workspace/workspace-view";
@@ -77,15 +78,18 @@ export function ViewPage({ id }: { id: string }) {
       <h3>Toolbar</h3>
       <div className="settings-row">
         <div><label htmlFor="toolbar-position">Display</label><p>Use the view’s default or choose a position.</p></div>
-        <select id="toolbar-position" value={override ?? "auto"} onChange={(e) => {
+        <Select value={override ?? "auto"} onValueChange={(v) => {
           const chrome = { ...getSettings().views.chrome };
-          if (e.target.value === "auto") delete chrome[id];
-          else chrome[id] = { island: e.target.value as IslandPlacement };
+          if (v === "auto") delete chrome[id];
+          else chrome[id] = { island: v as IslandPlacement };
           patchSettings("views.chrome", chrome);
         }}>
-          <option value="auto">Automatic ({resolveChrome(view).island})</option>
-          <option value="top">Top</option><option value="bottom">Bottom</option><option value="hidden">Collapsed</option><option value="off">Off</option>
-        </select>
+          <SelectTrigger id="toolbar-position" className="min-w-40"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="auto">Automatic ({resolveChrome(view).island})</SelectItem>
+            <SelectItem value="top">Top</SelectItem><SelectItem value="bottom">Bottom</SelectItem><SelectItem value="hidden">Collapsed</SelectItem><SelectItem value="off">Off</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       {override === "hidden" && <p className="settings-note">Show a handle to expand the toolbar.</p>}
       {override === "off" && <p className="settings-note">Shortcuts and custom view controls remain available.</p>}

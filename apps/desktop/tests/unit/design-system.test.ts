@@ -1,6 +1,7 @@
 // The design system's scales, held for the whole renderer and the tools bundled with it
 // (DESIGN.md): text is set in the named steps, colours are defined once as custom properties,
-// corners come from the radius scale. A literal in their place is drift, and fails here.
+// corners come from the radius scale, a choice is the app's Select and focus is drawn by one
+// rule. A literal or a second way in their place is drift, and fails here.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -81,6 +82,31 @@ export function offScaleRadii(text: string, css: boolean): string[] {
   return out;
 }
 
+/** A native <select>: drawn by the operating system, with its accent and its list. */
+export function nativeSelects(text: string, css: boolean): string[] {
+  if (css) return [];
+  const src = code(text, css);
+  return [...src.matchAll(/<select\b/g)].map((m) => `${at(src, m.index!)}: ${m[0]}`);
+}
+
+/** The one focus rule: styles.css draws the ring from --color-focus, and only it may take it off. */
+const FOCUS_HOME = "src/renderer/src/styles.css";
+
+/** A focus ring drawn anywhere but the one rule. */
+export function ownFocusRings(text: string, css: boolean, home = false): string[] {
+  const src = code(text, css), out: string[] = [];
+  if (css) {
+    for (const m of src.matchAll(/([^{}]*:focus[^{}]*)\{([^{}]*)\}/g)) {
+      if (!/\b(?:outline|box-shadow)\b/.test(m[2])) continue;
+      const ours = home && (/outline\s*:\s*2px solid var\(--color-focus\)/.test(m[2]) || /^\s*outline\s*:\s*none;?\s*$/.test(m[2]));
+      if (!ours) out.push(`${at(src, m.index! + m[0].search(/\S/))}: ${m[1].trim()}`);
+    }
+  } else {
+    for (const m of src.matchAll(/\bfocus(?:-visible|-within)?:(?:ring|outline|border-ring|shadow)[^\s"'`]*/g)) out.push(`${at(src, m.index!)}: ${m[0]}`);
+  }
+  return out;
+}
+
 /** Files that are palettes: their colours are data a person picks or a scanner reads, not chrome. */
 const PALETTES: Record<string, string> = {
   "src/renderer/src/frame-color.ts": "the frame colours a person picks",
@@ -105,6 +131,11 @@ test("each check finds what it names, and passes the system's own spelling", () 
   assert.deepEqual(offScaleRadii(".a { border-radius: 3px; }\n.b { border-radius: 6px 6px 0 0; }", true), ["1: border-radius: 3px"]);
   assert.deepEqual(offScaleRadii('<i className="rounded-[10px] rounded-t-[3px] rounded-menu rounded-[inherit]" />', false), ["1: rounded-[10px]", "1: rounded-t-[3px]"]);
   assert.deepEqual(offScaleRadii('const a = { borderRadius: 3 }, b = { borderRadius: "4px" }, c = { borderRadius: r.radius };', false), ["1: borderRadius: 3"]);
+  assert.deepEqual(nativeSelects('<Select value={v}>\n<select value={v}>', false), ["2: <select"]);
+  assert.deepEqual(ownFocusRings('<b className="outline-none focus:bg-secondary focus-visible:ring-2 focus:outline-none" />', false), ["1: focus-visible:ring-2", "1: focus:outline-none"]);
+  const rules = ":focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }\n.x:focus-visible { outline: none; }\n.y:focus { border-color: red; }\n.z:focus-visible { box-shadow: 0 0 0 2px var(--color-brand); }";
+  assert.deepEqual(ownFocusRings(rules, true, true), ["4: .z:focus-visible"]);
+  assert.deepEqual(ownFocusRings(rules, true), ["1: :focus-visible", "2: .x:focus-visible", "4: .z:focus-visible"]);
 });
 
 for (const f of sources()) {
@@ -117,4 +148,11 @@ for (const f of sources()) {
     assert.deepEqual(literalColours(text(), css).filter((h) => !allowed.some((a) => h.endsWith(`: ${a}`))), []);
   });
   test(`${f} rounds corners on the scale`, () => assert.deepEqual(offScaleRadii(text(), css), []));
+  test(`${f} offers a choice through the app's Select`, () => assert.deepEqual(nativeSelects(text(), css), []));
+  test(`${f} leaves focus to the one ring`, () => assert.deepEqual(ownFocusRings(text(), css, f === FOCUS_HOME), []));
 }
+
+test("the one ring is drawn from the focus token", () => {
+  const home = code(fs.readFileSync(path.join(APP, FOCUS_HOME), "utf8"), true);
+  assert.match(home, /(?:^|\})\s*:focus-visible\s*\{\s*outline:\s*2px solid var\(--color-focus\);\s*outline-offset:\s*2px;\s*\}/);
+});

@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import type { SharedPerson } from "../../../shared/ipc";
 import { useSettings } from "../settings-store";
 import { Button } from "../components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { ROLE_LABELS, colorOf, initialsOf } from "./people";
 import { useFacesHere } from "./presence";
 
@@ -87,11 +88,14 @@ export function PeopleList({ repo }: { repo: string }) {
               </>
             ) : (
               <>
-                <select aria-label={`Role of ${p.name || "someone"}`} value={p.role} onChange={(e) => setRole(p, e.target.value)} data-person-role>
-                  {ROLES.map((r) => (
-                    <option key={r} value={r} disabled={r === "agents" && !p.present && p.role !== "agents"}>{ROLE_LABELS[r]}</option>
-                  ))}
-                </select>
+                <Select value={p.role} onValueChange={(v) => setRole(p, v)}>
+                  <SelectTrigger aria-label={`Role of ${p.name || "someone"}`} className="min-w-36" data-person-role><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {ROLES.map((r) => (
+                      <SelectItem key={r} value={r} disabled={r === "agents" && !p.present && p.role !== "agents"}>{ROLE_LABELS[r]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button variant="ghost" onClick={() => setRemoving(p.person)} data-remove>Remove</Button>
               </>
             )}

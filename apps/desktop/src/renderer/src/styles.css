@@ -110,6 +110,8 @@
   --color-brand-hover: oklch(0.57 0.03 250);
   --color-select: oklch(0.80 0.005 250);
   --color-accent: oklch(0.74 0.035 245);
+  /* The focus ring: the accent pulled toward the text, so it holds 3:1 on every surface whatever accent is picked. */
+  --color-focus: color-mix(in oklab, var(--color-brand) 60%, var(--color-fg));
 
   /* Semantic: muted enough to live with all day, distinct enough never to be confused. */
   --color-ok:     oklch(0.74 0.07 155);
@@ -477,10 +479,17 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
   .hm-spinner { animation: none; }
 }
 
-*:focus-visible {
-  outline: 2px solid var(--color-brand);
-  outline-offset: 1px;
-  border-radius: 4px;
+/* The one focus ring. Native controls take the theme, not the operating system's colours. */
+:root { color-scheme: dark; accent-color: var(--color-brand); }
+:root[data-theme-mode="light"] { color-scheme: light; }
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+/* An item in a list or menu shows focus by its highlight; a board object is itself the field. */
+:is([role="option"], [role^="menuitem"]):focus-visible,
+:is([data-board-object] textarea, [data-board-object] input, [data-arrow-label] input):focus-visible {
+  outline: none;
 }
 
 
@@ -1255,7 +1264,6 @@ html.glass-on .react-flow__node-browser {
   height: 4px;
   border-radius: 999px;
   background: var(--color-bg4);
-  accent-color: var(--color-brand);
 }
 .hm-range::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -1327,13 +1335,7 @@ html.glass-on .react-flow__node-browser {
    its local contrast is unpredictable. Only applies while glass is actually on. */
 html.glass-on .u-eyebrow { color: var(--color-fg); }
 
-/* Board objects (board-objects/): a selected one is outlined like a selected tile, and the field
-   you write in is the object itself, so it draws no focus ring of its own. */
-[data-board-object] textarea:focus-visible,
-[data-board-object] input:focus-visible,
-[data-arrow-label] input:focus-visible {
-  outline: none;
-}
+/* Board objects (board-objects/): a selected one is outlined like a selected tile. */
 .react-flow__node .hm-board-selected {
   outline: 2px solid var(--color-select);
   outline-offset: 2px;

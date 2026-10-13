@@ -11,9 +11,8 @@
   border: 1px solid var(--color-line); border-radius: 14px; box-shadow: var(--hm-shadow-3);
   background: var(--color-bg); color: var(--color-fg); font-size: var(--text-body); line-height: 1.5;
 }
-:is(.settings-dialog, .theme-panel) :is(button, input, select, summary, a):focus-visible { outline: 2px solid var(--color-brand); outline-offset: 3px; }
 :is(.settings-dialog, .theme-panel) button { cursor: pointer; }
-:is(.settings-dialog, .theme-panel) :is(button, input, select):disabled { cursor: default; opacity: .45; }
+:is(.settings-dialog, .theme-panel) :is(button, input):disabled { cursor: default; opacity: .45; }
 .settings-sidebar { width: 232px; flex-shrink: 0; padding: 28px 16px 20px; display: flex; flex-direction: column; background: var(--color-bg2); border-right: 1px solid var(--color-line2); }
 .settings-title { padding: 0 12px; margin-bottom: 28px; font-size: var(--text-row); font-weight: 600; }
 .settings-sidebar nav { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; min-height: 0; margin-right: -8px; padding-right: 8px; }
@@ -44,8 +43,6 @@
 .settings-row > :first-child { min-width: 0; }
 .settings-row label { font-weight: 500; }
 .settings-row p, .settings-note { font-size: var(--text-label); line-height: 1.5; color: var(--color-fg2); margin-top: 3px; }
-:is(.settings-dialog, .theme-panel, [role="dialog"]) select { max-width: 100%; min-width: 160px; background: var(--color-bg2); border: 1px solid var(--color-line2); color: var(--color-fg); border-radius: 5px; padding: 6px 28px 6px 10px; font-size: var(--text-body); }
-select option { background: var(--color-bg2); color: var(--color-fg); }
 .settings-icon-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 6px; font-size: var(--text-label); white-space: nowrap; min-height: 30px; }
 .settings-icon-button { border: 0; padding: 6px; color: var(--color-fg2); }
 .settings-icon-button:hover { background: var(--color-bg3); }
@@ -74,7 +71,6 @@ select option { background: var(--color-bg2); color: var(--color-fg); }
 .settings-dialog .error, .settings-dialog .danger { color: var(--color-err); }
 .settings-toolbar-customize { margin-top: 12px; }
 .settings-toolbar-customize label { display: flex; align-items: center; gap: 9px; }
-.settings-toolbar-customize input[type=checkbox] { accent-color: var(--color-brand); }
 .settings-toolbar-actions { padding: 0; list-style: none; }
 .settings-toolbar-actions li { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px solid var(--color-line2); }
 .settings-toolbar-actions label { flex: 1; }
@@ -95,7 +91,6 @@ select option { background: var(--color-bg2); color: var(--color-fg); }
   .settings-page-header { padding: 18px; }
   .settings-page-content { padding: 8px 18px 28px; }
   .settings-row { gap: 12px; flex-wrap: wrap; }
-  :is(.settings-dialog, .theme-panel, [role="dialog"]) select { min-width: 120px; }
 }
 .settings-inline { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .settings-disclosure { border-bottom: 1px solid var(--color-line2); }
@@ -169,8 +164,6 @@ select option { background: var(--color-bg2); color: var(--color-fg); }
 .agent-options { margin-top: 8px; border-top: 1px solid var(--color-line2); }
 .agent-options .settings-row + .settings-row { border-top: 1px solid var(--color-line2); }
 .agent-options-empty { padding: 12px 0; }
-.agent-options select { width: 220px; }
-.agent-options select { background: var(--color-bg); }
 @media (max-width: 540px) {
   .plugin-head { flex-wrap: wrap; }
 }
@@ -349,7 +342,6 @@ select option { background: var(--color-bg2); color: var(--color-fg); }
 .plugins-lead { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .plugins-lead p { font-size: var(--text-label); color: var(--color-fg2); }
 .plugins-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.plugins-controls select { min-width: 0; height: 32px; padding-top: 0; padding-bottom: 0; font-size: var(--text-label); }
 .plugins-scope { display: flex; gap: 2px; padding: 2px; border-radius: 6px; background: var(--color-bg3); }
 .plugins-scope > button { padding: 4px 10px; border-radius: 4px; font-size: var(--text-label); color: var(--color-fg2); }
 .plugins-scope > button:hover { color: var(--color-fg); }
@@ -369,7 +361,6 @@ select option { background: var(--color-bg2); color: var(--color-fg); }
 .catalog-item:not(:last-child) { border-bottom: 1px solid var(--color-line2); }
 .catalog-item > .plugin-row { border-bottom: 0; }
 .catalog-item > .settings-install-review, .catalog-item > [role=alert] { margin: 0 12px 12px 40px; }
-.plugin-back { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; }
 .plugin-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--color-line); }
 .plugin-tabs > button { padding: 6px 10px; font-size: var(--text-body); color: var(--color-fg2); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .plugin-tabs > button:hover { color: var(--color-fg); }

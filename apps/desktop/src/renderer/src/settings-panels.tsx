@@ -20,6 +20,7 @@ import { useRef, useState } from "react";
 import { ChevronDown } from "./components/icons";
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { getSettings, patchSettings } from "./settings-store";
 import { setTheme, useTheme } from "./theme-store";
 import {
@@ -72,14 +73,13 @@ function AppearancePrefs() {
             <label htmlFor="plugin-surfaces">Tools in scene views</label>
             <p>How terminals and editors look inside a view you installed.</p>
           </div>
-          <select
-            id="plugin-surfaces"
-            value={t.pluginSurfaces}
-            onChange={(e) => setTheme({ pluginSurfaces: e.target.value as "theme" | "opaque" })}
-          >
-            <option value="theme">Use my theme</option>
-            <option value="opaque">Opaque</option>
-          </select>
+          <Select value={t.pluginSurfaces} onValueChange={(v) => setTheme({ pluginSurfaces: v as "theme" | "opaque" })}>
+            <SelectTrigger id="plugin-surfaces" className="min-w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="theme">Use my theme</SelectItem>
+              <SelectItem value="opaque">Opaque</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <OverlayControls t={t} />
       </Section>

@@ -8,7 +8,6 @@ function Input({ className, type, font = "sans", size = "default", ...props }: O
       data-slot="input"
       className={cn(
         "w-full min-w-0 rounded-md border border-input bg-background text-body text-foreground outline-none transition-[border-color,box-shadow] duration-[var(--hm-dur-2)] selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground/70 disabled:cursor-not-allowed disabled:opacity-45",
-        "focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20",
         "aria-invalid:border-destructive aria-invalid:ring-destructive/20",
         size === "sm" ? "h-control-compact px-2 text-label" : "h-control px-2.5",
         font === "mono" && "font-mono",

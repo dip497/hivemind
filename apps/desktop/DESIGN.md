@@ -272,7 +272,7 @@ The components are calm, exact and small. Nothing raises its voice until it need
 - **Primary:** chalk-text fill with graphite-ground text, 13px medium, 12px side padding. Hover drops it to 90%.
 - **Ghost:** pencil-text on nothing; graphite-card fill and chalk text on hover. Icon buttons are square (32, 28, 24, 20px).
 - **Press:** scales to 0.96 in 100ms. Hover and colour changes take 150ms on the house curve `cubic-bezier(0.32, 0.72, 0, 1)`.
-- **Focus:** a 2px ring in dust-text at half strength. In Settings it is a 2px steel outline offset by 3px.
+- **Focus:** the one focus ring (see Inputs / Fields).
 - **Ghost destructive:** quiet until hovered, then brick text on a 10% brick tint.
 
 ### Chips
@@ -286,8 +286,10 @@ The components are calm, exact and small. Nothing raises its voice until it need
 
 ### Inputs / Fields
 - **Style:** graphite-ground fill, control-line border, 6px corners, 32px tall (28px small), 13px text.
-- **Focus:** the border turns dust-text with a soft 2px ring at 20%.
-- **Error / Disabled:** brick border and ring on error; 45% opacity disabled.
+- **Focus:** one ring for the whole app, set once in `styles.css`: a 2px outline offset 2px in `--color-focus`, the steel accent mixed 60/40 with chalk-text so it holds 3:1 on every surface whatever accent is picked. It shows on keyboard focus only (`:focus-visible`). A list or menu item shows focus by its highlight instead; a canvas object being written in is itself the field. No component draws a ring of its own.
+- **Error / Disabled:** brick border on error; 45% opacity disabled.
+- **Select:** the Input's box (32px, 28px small, same border, corners and ground) with a chevron; its list is the menu surface, items as menu items with a check on the chosen one. Keyboard and type-ahead work as in a native select. Never a native `<select>`: it draws the operating system's accent and highlight.
+- **Native controls:** `color-scheme` follows the theme and `accent-color` is the steel accent, so checkboxes, ranges, scrollbars and pickers never show the operating system's colours.
 
 ### Navigation
 - **Icon rail:** 32px square targets, 18px icons. Pencil-text at rest, graphite-card on hover, graphite-hover and chalk text when active. A needs-you count sits in the corner as an amber dot.

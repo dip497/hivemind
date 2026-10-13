@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-13T12:00:00.000Z",
+  "generatedAt": "2026-10-13T18:00:00Z",
   "title": "Design System: hivemind",
   "extensions": {
     "colorMeta": {
@@ -456,7 +456,14 @@
         "value": "24px, 20px, 16px",
         "purpose": "Tile chrome buttons (xs, 2xs, micro)."
       }
-    ]
+    ],
+    "focus": {
+      "token": "--color-focus",
+      "value": "color-mix(in oklab, var(--color-brand) 60%, var(--color-fg))",
+      "width": "2px",
+      "offset": "2px",
+      "rule": "styles.css :focus-visible, the only focus rule; list and menu items show focus by their highlight"
+    }
   },
   "components": [
     {
@@ -511,9 +518,17 @@
       "name": "Input",
       "kind": "input",
       "refersTo": "input",
-      "description": "A text field: ground fill, control-line border, the border warms to dust on focus with a soft ring.",
+      "description": "A text field: ground fill, control-line border, 32px tall; on keyboard focus it takes the app's one ring.",
       "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Search tiles\" />",
-      "css": ".ds-input { width: 240px; height: 32px; padding: 0 10px; background: var(--color-bg, oklch(0.165 0.004 250)); border: 1px solid var(--color-line2, oklch(0.34 0.006 250)); border-radius: 6px; color: var(--color-fg, oklch(0.93 0.004 250)); font: 400 13px/1 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; letter-spacing: -0.005em; outline: none; transition: border-color var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)), box-shadow var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)); } .ds-input::placeholder { color: color-mix(in srgb, var(--color-fg2, oklch(0.80 0.005 250)) 70%, transparent); } .ds-input:hover { border-color: var(--color-fg3, oklch(0.62 0.006 250)); } .ds-input:focus-visible { border-color: var(--color-fg3, oklch(0.62 0.006 250)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-fg3, oklch(0.62 0.006 250)) 20%, transparent); }"
+      "css": ".ds-input { width: 240px; height: 32px; padding: 0 10px; background: var(--color-bg, oklch(0.165 0.004 250)); border: 1px solid var(--color-line2, oklch(0.34 0.006 250)); border-radius: 6px; color: var(--color-fg, oklch(0.93 0.004 250)); font: 400 13px/1 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; letter-spacing: -0.005em; outline: none; transition: border-color var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)), box-shadow var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)); } .ds-input::placeholder { color: color-mix(in srgb, var(--color-fg2, oklch(0.80 0.005 250)) 70%, transparent); } .ds-input:hover { border-color: var(--color-fg3, oklch(0.62 0.006 250)); } .ds-input:focus-visible { outline: 2px solid color-mix(in oklab, var(--color-brand, oklch(0.52 0.03 250)) 60%, var(--color-fg, oklch(0.93 0.004 250))); outline-offset: 2px; }"
+    },
+    {
+      "name": "Select",
+      "kind": "input",
+      "refersTo": "select",
+      "description": "A choice from a list: the Input's box with a chevron, its list on the menu surface with a check on the chosen item. Never a native select.",
+      "html": "<button class=\"ds-select\" type=\"button\" role=\"combobox\" aria-expanded=\"false\"><span>Can view</span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 256 256\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"16\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><polyline points=\"208 96 128 176 48 96\"/></svg></button>",
+      "css": ".ds-select { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 160px; height: 32px; padding: 0 8px 0 10px; background: var(--color-bg, oklch(0.165 0.004 250)); border: 1px solid var(--color-line2, oklch(0.34 0.006 250)); border-radius: 6px; color: var(--color-fg, oklch(0.93 0.004 250)); font: 400 13px/1 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; letter-spacing: -0.005em; cursor: pointer; outline: none; } .ds-select svg { color: var(--color-fg2, oklch(0.80 0.005 250)); } .ds-select:focus-visible { outline: 2px solid color-mix(in oklab, var(--color-brand, oklch(0.52 0.03 250)) 60%, var(--color-fg, oklch(0.93 0.004 250))); outline-offset: 2px; }"
     },
     {
       "name": "Sheet",

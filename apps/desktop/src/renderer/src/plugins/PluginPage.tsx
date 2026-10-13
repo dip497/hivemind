@@ -68,7 +68,7 @@ export function PluginPage({ kind, id }: { kind: string; id: string }) {
   const toHub = () => { setPluginsScope("hub"); go("plugins"); };
   return (
     <div className="settings-stack plugin-page" data-plugin-page={`${p.kind}:${p.id}`}>
-      <button type="button" className="settings-link plugin-back" onClick={() => go("plugins")}><ArrowLeft size={13} />All plugins</button>
+      <Button variant="link" className="self-start" onClick={() => go("plugins")}><ArrowLeft />All plugins</Button>
       <header className="plugin-page-head">
         <div className="settings-extension-icon" aria-hidden="true"><LayoutGrid size={20} /></div>
         <div className="min-w-0 flex-1">
