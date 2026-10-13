@@ -5,12 +5,13 @@
  * entering another's becomes its person. Either way the workspaces each holds are yours, and open
  * from Open recent. A phone scans this computer's code and is certified as yours; it runs nothing.
  * Enter the six words the other device shows (found on this network) or its link (from anywhere),
- * or show a code from here.
+ * or show a code from here. And the app itself in a browser (docs/design/browser-app-2026-10-13.md).
  */
 import { useEffect, useMemo, useState } from "react";
 import { Check, Copy, Laptop, Server, Smartphone } from "./components/icons";
 import { encode } from "uqr";
-import type { PairedDeviceSummary } from "../../shared/ipc";
+import type { BrowserAppStatus, PairedDeviceSummary } from "../../shared/ipc";
+import { patchSettings, useSettings } from "./settings-store";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Section, Switch } from "./appearance-controls";
@@ -39,6 +40,9 @@ export function DevicesPrefs() {
             {devices.map((d) => <DeviceRow key={d.device} device={d} />)}
           </ul>
         )}
+      </Section>
+      <Section title="Open in a browser" hint="This app, whole, in a browser on this computer">
+        <BrowserApp />
       </Section>
       <Section title="Pair with a device" hint="Another computer's Settings → Devices, or hive host pair on a host">
         <EnterLink />
@@ -230,5 +234,57 @@ function Qr({ text }: { text: string }) {
     <svg viewBox={`0 0 ${size} ${size}`} width={168} height={168} shapeRendering="crispEdges" className="shrink-0 rounded bg-white" aria-label="QR code of the pairing link" data-pair-qr>
       <path d={cells.join("")} fill="#000" />
     </svg>
+  );
+}
+
+/** The app served to a browser: a switch, the link that signs a tab in, and what it answers to. */
+function BrowserApp() {
+  const { browserApp } = useSettings();
+  const [status, setStatus] = useState<BrowserAppStatus | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [port, setPort] = useState(String(browserApp.port));
+  const [names, setNames] = useState(browserApp.names.join(", "));
+  useEffect(() => {
+    void window.hive.browserAppStatus().then(setStatus, () => setStatus(null));
+    return window.hive.onBrowserAppChanged(setStatus);
+  }, []);
+  useEffect(() => { setPort(String(browserApp.port)); setNames(browserApp.names.join(", ")); }, [browserApp.port, browserApp.names]);
+  const savePort = () => {
+    const n = Number(port);
+    if (Number.isInteger(n) && n >= 1024 && n <= 65535) patchSettings("browserApp.port", n);
+    else setPort(String(browserApp.port));
+  };
+  const saveNames = () => patchSettings("browserApp.names", names.split(/[\s,]+/).filter(Boolean));
+  return (
+    <div className="flex flex-col gap-2" data-browser-app>
+      <div className="settings-row">
+        <div>
+          <label>Serve the app to a browser</label>
+          <p>On 127.0.0.1 only. The link carries a key that changes each time the app starts: whoever has it can use your terminals. For another device, put it behind <code>tailscale serve</code> and add the machine's tailnet name below.</p>
+        </div>
+        <Switch on={browserApp.enabled} onChange={(v) => patchSettings("browserApp.enabled", v)} label="Serve the app to a browser" />
+      </div>
+      {status?.url && (
+        <div className="settings-row">
+          <code className="min-w-0 flex-1 truncate text-[12px]" data-browser-app-url>{status.url.replace(/#token=.*/, "#token=…")}</code>
+          <Button size="sm" variant="outline" data-browser-app-copy
+            onClick={() => { void navigator.clipboard.writeText(status.url!).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}>
+            Copy the link {copied ? <Check /> : <Copy />}
+          </Button>
+          <Button size="sm" variant="outline" asChild><a href={status.url} target="_blank" rel="noopener noreferrer" data-browser-app-open>Open</a></Button>
+        </div>
+      )}
+      {status?.error && <p className="text-[12px] text-[var(--color-err)]" role="alert" data-browser-app-error>{status.error}</p>}
+      <div className="settings-row">
+        <label htmlFor="browser-app-port">Port</label>
+        <Input id="browser-app-port" className="h-8 w-28" inputMode="numeric" value={port} onChange={(e) => setPort(e.target.value)} onBlur={savePort}
+          onKeyDown={(e) => { if (e.key === "Enter") savePort(); }} />
+      </div>
+      <div className="settings-row">
+        <label htmlFor="browser-app-names">Other names</label>
+        <Input id="browser-app-names" className="h-8 flex-1" placeholder="box.tail1234.ts.net" spellCheck={false} value={names} onChange={(e) => setNames(e.target.value)} onBlur={saveNames}
+          onKeyDown={(e) => { if (e.key === "Enter") saveNames(); }} />
+      </div>
+    </div>
   );
 }
