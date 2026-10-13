@@ -277,3 +277,38 @@ test("scrolled 200 px up from the newest, a round button above the message box c
   await page.locator("[data-view-toggle]").click();
   await expect(newest).toBeHidden();
 });
+
+test("a permission names its tool in sans and shows its command in mono on a panel, four lines until tapped; Allow and Deny are full-width 44 px rows, Allow first", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await screen();
+  const about = ["cd apps/desktop &&", "  unset ELECTRON_RUN_AS_NODE &&", "  xvfb-run -a \\", "  pnpm test:e2e \\", "  --retries=0 \\", "  tests/e2e/phone-open.spec.ts \\", "  tests/e2e/phone-start.spec.ts"].join("\n");
+  const waiting = { kind: "permission", since: 5, decide: true, tool: { name: "Bash", about } };
+  await show(page, overview(agent("t1", "Claude", { state: "waiting", waiting })));
+  await open(page, "t1");
+  const card = page.locator("[data-screen=agent] [data-waiting-card]");
+  const name = card.locator("[data-tool] .tool-name");
+  await expect(name).toHaveText("Bash");
+  expect(await name.evaluate((el) => { const c = getComputedStyle(el); return [c.fontSize, c.fontWeight, c.fontFamily.split(",")[0]]; })).toEqual(["14px", "600", "Geist"]);
+  const command = card.locator("[data-tool] pre");
+  await expect(command).toHaveText(about);
+  const look = await command.evaluate((el) => { const c = getComputedStyle(el); return { size: c.fontSize, family: c.fontFamily.split(",")[0], line: parseFloat(c.lineHeight), pad: parseFloat(c.paddingTop) + parseFloat(c.paddingBottom), bg: c.backgroundColor, h: el.clientHeight }; });
+  expect([look.size, look.family]).toEqual(["13px", '"JetBrains Mono"']);
+  expect(look.bg).toBe(await page.evaluate(() => { const p = document.createElement("p"); p.style.backgroundColor = "var(--panel)"; document.body.append(p); return getComputedStyle(p).backgroundColor; }));
+  expect(Math.round((look.h - look.pad) / look.line)).toBe(4);
+  // Nothing of its fifth line shows under the fourth.
+  expect(await command.evaluate((el) => { const r = document.createRange(); r.selectNodeContents(el); const box = el.getBoundingClientRect();
+    const fifth = [...r.getClientRects()].filter((q) => q.height > 0).map((q) => q.top).filter((t, i, all) => all.indexOf(t) === i).sort((x, y) => x - y)[4];
+    return fifth === undefined || fifth >= box.bottom - parseFloat(getComputedStyle(el).borderBottomWidth); })).toBe(true);
+  await command.click();
+  const whole = await command.evaluate((el) => { const c = getComputedStyle(el); return Math.round((el.clientHeight - parseFloat(c.paddingTop) - parseFloat(c.paddingBottom)) / parseFloat(c.lineHeight)); });
+  expect(whole).toBe(7);
+  // The answers: one row each, the card's width, Allow above Deny.
+  const allow = await card.locator("[data-answer=allow]").boundingBox();
+  const deny = await card.locator("[data-answer=deny]").boundingBox();
+  const inner = await card.locator(".answers").boundingBox();
+  expect([Math.round(allow!.width), Math.round(allow!.height)]).toEqual([Math.round(inner!.width), 44]);
+  expect([Math.round(deny!.width), Math.round(deny!.height)]).toEqual([Math.round(inner!.width), 44]);
+  expect(allow!.y).toBeLessThan(deny!.y);
+  await card.locator("[data-answer=allow]").click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { calls: unknown[][] }).calls.filter((c) => c[0] === "answer"))).toEqual([["answer", "t1", { allow: true }]]);
+});

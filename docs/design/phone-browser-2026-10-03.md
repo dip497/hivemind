@@ -1381,3 +1381,8 @@ Before and after at 390×844 are the `ux-*.png` pairs of the rig's scratchpad.
 - Spacing: a turn begins with the person's message; turns are 20 px apart and the agent's rows in
   one 8 px apart (the chat's gap, with 12 px more round each of the person's messages). What the
   agent says is 16/24.
+- A permission names its tool in sans 14/600 and shows its command in mono 13 on `--panel`, four
+  lines of it until tapped (the room under the fourth is a border, so nothing past it shows).
+  Allow and Deny are full-width 44 px rows, Allow first, as Happy stacks its choices
+  (`packages/happy-app/sources/components/tools/PermissionFooter.tsx:500-592`). Home's Needs cards
+  share it (`answers.ts`).

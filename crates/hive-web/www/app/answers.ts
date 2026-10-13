@@ -52,9 +52,10 @@ export function answers(tile: string, w: Waiting, answer: (reply: Reply) => Prom
   };
   let typed: Answers["typed"] = null;
   if (w.tool) {
-    box.append(h("div", { class: "asked", "data-tool": w.tool.name },
-      h("span", { class: "label-small" }, w.tool.name),
-      ...(w.tool.about ? [h("pre", { class: "mono" }, w.tool.about)] : [])));
+    // Its command, four lines of it until tapped.
+    const command = w.tool.about ? h("pre", { class: "mono command" }, w.tool.about) : null;
+    command?.addEventListener("click", () => command.toggleAttribute("data-whole"));
+    box.append(h("div", { class: "asked", "data-tool": w.tool.name }, h("p", { class: "tool-name" }, w.tool.name), command));
   }
   for (const q of w.asks ?? []) {
     box.append(h("div", { class: "asked", "data-question": "" },
@@ -72,9 +73,10 @@ export function answers(tile: string, w: Waiting, answer: (reply: Reply) => Prom
     })));
     typed = line(boxed ? "Or type your own answer" : "Type something");
   } else if (w.kind === "permission" && w.decide) {
-    box.append(h("div", { class: "row" },
-      pill("Deny", () => void hold({ allow: false }), "", { "data-answer": "deny" }),
-      pill("Allow", () => void hold({ allow: true }), "primary", { "data-answer": "allow" })));
+    // Full-width rows, yes first (Happy's PermissionFooter.tsx:500-592).
+    box.append(h("div", { class: "rows" },
+      pill("Allow", () => void hold({ allow: true }), "primary", { "data-answer": "allow" }),
+      pill("Deny", () => void hold({ allow: false }), "", { "data-answer": "deny" })));
   } else if (w.kind === "plan") {
     const plan = w.plan ? h("div", { class: "plan md", hidden: true, "data-plan": "" }, ...markdown(w.plan)) : null;
     const read = plan && pill("Read the plan", () => {

@@ -102,6 +102,12 @@ button { cursor: pointer; }
   margin: 0; background: var(--panel); border-radius: 10px; padding: 10px 12px;
   max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text2);
 }
+.asked .tool-name { font: 600 14px/20px var(--sans); }
+.asked pre.command { font: 400 13px/18px var(--mono); }
+/* Clipped at its fourth line: the room below is a border, so nothing past it shows there. */
+.asked pre.command:not([data-whole]) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; padding-bottom: 0; border-bottom: 10px solid var(--panel); }
+.answers .rows { display: flex; flex-direction: column; gap: 8px; }
+.answers .rows > .pill { width: 100%; min-height: 44px; border-radius: 12px; }
 .choices { display: flex; flex-direction: column; gap: 8px; }
 .choice {
   min-height: 44px; padding: 10px 16px; border: 0; border-radius: 14px; text-align: left;
