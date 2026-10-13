@@ -446,13 +446,13 @@ function UpdateWork({ progress, busy, onRestart }: { progress: UpdateProgress | 
   return (
     <>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
+        <div className="flex items-center gap-1.5 text-label text-[var(--color-fg)]">
           {busy && <Spinner className="size-3 animate-spin text-[var(--color-fg2)]" />}
           <span className="truncate">{p.label}</span>
         </div>
         <div className="hm-update-bar mt-1.5" data-busy={busy ? "1" : "0"} role="progressbar"
           aria-valuemin={0} aria-valuemax={UPDATE_STEPS.length} aria-valuenow={UPDATE_STEPS.indexOf(p.step) + 1} aria-label={p.label}>
-          <span style={{ width: `${filled}%` }} />
+          <span style={{ transform: `scaleX(${filled / 100})` }} />
         </div>
       </div>
       {ready && <Button onClick={onRestart} size="xs" title="Restart into the new version">Restart</Button>}
@@ -483,7 +483,7 @@ function NotificationPrefs() {
       <div className="settings-row">
         <div className="flex items-center gap-2">
           <Bell size={14} className="text-[var(--color-fg2)]" />
-          <span className="text-[13px] font-medium text-[var(--color-fg)]">Notifications</span>
+          <span className="text-body font-medium text-[var(--color-fg)]">Notifications</span>
         </div>
         <Switch checked={s.enabled} onCheckedChange={(v) => update({ enabled: v })} aria-label="Enable notifications" />
       </div>
@@ -494,7 +494,7 @@ function NotificationPrefs() {
         {kinds.map((k) => (
           <div key={k.key} className="settings-row">
             <div className="min-w-0">
-              <div className="text-[12px] text-[var(--color-fg)]">{k.label}</div>
+              <div className="text-label text-[var(--color-fg)]">{k.label}</div>
               <div className="settings-note">{k.hint}</div>
             </div>
             <Switch
@@ -511,11 +511,11 @@ function NotificationPrefs() {
       <div className="settings-section">
         <div className="settings-subheading">Delivery</div>
         <div className="settings-row">
-          <div className="text-[12px] text-[var(--color-fg)]">In-app toasts</div>
+          <div className="text-label text-[var(--color-fg)]">In-app toasts</div>
           <Switch disabled={dim} checked={s.inApp} onCheckedChange={(v) => update({ inApp: v })} aria-label="In-app toasts" />
         </div>
         <div className="settings-row">
-          <div className="text-[12px] text-[var(--color-fg)]">Native OS popups</div>
+          <div className="text-label text-[var(--color-fg)]">Native OS popups</div>
           <Switch disabled={dim} checked={s.osPopups} onCheckedChange={(v) => update({ osPopups: v })} aria-label="Native OS popups" />
         </div>
       </div>
@@ -524,7 +524,7 @@ function NotificationPrefs() {
       <div className="settings-section">
         <div className="settings-row">
           <div className="min-w-0">
-            <div className="text-[12px] text-[var(--color-fg)]">Do Not Disturb</div>
+            <div className="text-label text-[var(--color-fg)]">Do Not Disturb</div>
             <div className="settings-note">Mutes finished/failed; needs-you still fires</div>
           </div>
           <Switch disabled={dim} checked={s.dnd.enabled} onCheckedChange={(v) => update({ dnd: { ...s.dnd, enabled: v } })} aria-label="Do Not Disturb" />
@@ -539,7 +539,7 @@ function NotificationPrefs() {
               className="w-auto"
               aria-label="DND start"
             />
-            <span className="text-[11px] text-[var(--color-fg2)]">to</span>
+            <span className="text-count text-[var(--color-fg2)]">to</span>
             <Input
               type="time"
               disabled={dim}
@@ -548,7 +548,7 @@ function NotificationPrefs() {
               className="w-auto"
               aria-label="DND end"
             />
-            <span className="text-[10px] text-[var(--color-fg2)] ml-auto">local time</span>
+            <span className="text-chip text-[var(--color-fg2)] ml-auto">local time</span>
           </div>
         )}
       </div>
@@ -670,14 +670,14 @@ function SettingsModal({
         <div className="settings-section">
           <div className="flex items-baseline justify-between gap-2">
             <div className="flex items-baseline gap-2">
-              <span className="text-[14px] font-semibold text-[var(--color-fg)]">hivemind</span>
-              <span className="text-[11px] font-mono text-[var(--color-fg2)]">{version ? `v${version}` : "version…"}</span>
+              <span className="text-row font-semibold text-[var(--color-fg)]">hivemind</span>
+              <span className="text-count font-mono text-[var(--color-fg2)]">{version ? `v${version}` : "version…"}</span>
             </div>
             <a
               href={REPO_URL}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-[11px] text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
+              className="inline-flex items-center gap-1 text-count text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
             >
               GitHub <ExternalLink className="size-3 text-[var(--color-fg2)]" />
             </a>
@@ -687,7 +687,7 @@ function SettingsModal({
               <UpdateWork progress={progress} busy={upgrading} onRestart={onRestart} />
             ) : update?.staged ? (
               <>
-                <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
+                <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg)]">
                   <span className="size-2 rounded-full bg-[var(--color-ok)]" aria-hidden />
                   v{update.staged} is downloaded — restart to finish
                 </span>
@@ -695,7 +695,7 @@ function SettingsModal({
               </>
             ) : update?.updateAvailable ? (
               <>
-                <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
+                <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg)]">
                   <span className="size-2 rounded-full bg-[var(--color-warn)]" aria-hidden />
                   Update available{update.latest ? ` — v${update.latest}` : ""}
                 </span>
@@ -703,14 +703,14 @@ function SettingsModal({
               </>
             ) : update?.off ? (
               <>
-                <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg2)]" data-update-off>
+                <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg2)]" data-update-off>
                   <span className="size-2 rounded-full bg-[var(--color-fg3)]" aria-hidden />
                   The update check is off
                 </span>
               </>
             ) : (
               <>
-                <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg2)]">
+                <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg2)]">
                   <span className="size-2 rounded-full" style={{ background: checking ? "var(--color-fg3)" : "var(--color-ok)" }} aria-hidden />
                   {checking ? "Checking…" : "Up to date"}
                 </span>

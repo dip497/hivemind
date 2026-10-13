@@ -6,6 +6,6 @@ import { tileKind } from "./api";
 export function KindMark({ kind, size = 12 }: { kind: string; size?: number }) {
   const { icon: Icon, glyph } = tileKind(kind);
   if (Icon) return <Icon size={size} />;
-  if (glyph) return <span aria-hidden className="text-[11px] leading-none">{glyph}</span>;
+  if (glyph) return <span aria-hidden className="text-count leading-none">{glyph}</span>;
   return <AppWindow size={size} />;
 }

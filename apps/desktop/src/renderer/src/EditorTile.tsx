@@ -96,25 +96,25 @@ const cmTheme = EditorView.theme(
     "&.cm-focused": { outline: "none" },
     ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--color-brand)" },
     "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
-      { backgroundColor: "rgba(255,255,255,0.20)" },
+      { backgroundColor: "var(--color-selection)" },
     ".cm-gutters": {
       backgroundColor: "var(--color-bg2)",
       color: "var(--color-fg3)",
       border: "none",
     },
     ".cm-activeLineGutter": { backgroundColor: "var(--color-bg3)" },
-    ".cm-activeLine": { backgroundColor: "rgba(255,255,255,0.025)" },
+    ".cm-activeLine": { backgroundColor: "var(--color-current-line)" },
     ".cm-foldPlaceholder": {
       backgroundColor: "var(--color-bg4)",
       border: "none",
       color: "var(--color-fg3)",
     },
     ".cm-matchingBracket, &.cm-focused .cm-matchingBracket": {
-      backgroundColor: "rgba(91,108,255,0.25)",
+      backgroundColor: "var(--color-bracket-match)",
       outline: "none",
     },
     // Highlight of all matches of the current selection (highlightSelectionMatches).
-    ".cm-selectionMatch": { backgroundColor: "rgba(56,189,248,0.20)" },
+    ".cm-selectionMatch": { backgroundColor: "var(--color-match)" },
     // Find/replace panel (search({ top: true })) — themed to the app tokens so
     // it doesn't render as the default light-grey browser bar.
     ".cm-panels": {
@@ -122,8 +122,8 @@ const cmTheme = EditorView.theme(
       color: "var(--color-fg)",
       borderBottom: "1px solid var(--color-line2)",
     },
-    ".cm-panel.cm-search": { padding: "5px 8px", fontFamily: "var(--font-sans)", fontSize: "11.5px" },
-    ".cm-panel.cm-search label": { color: "var(--color-fg2)", fontSize: "11px" },
+    ".cm-panel.cm-search": { padding: "5px 8px", fontFamily: "var(--font-sans)", fontSize: "var(--text-label)" },
+    ".cm-panel.cm-search label": { color: "var(--color-fg2)", fontSize: "var(--text-count)" },
     ".cm-textfield": {
       backgroundColor: "var(--color-bg)",
       color: "var(--color-fg)",
@@ -146,17 +146,17 @@ const cmTheme = EditorView.theme(
 
 const highlightStyle = HighlightStyle.define([
   { tag: [t.comment, t.lineComment, t.blockComment], color: "var(--color-fg3)", fontStyle: "italic" },
-  { tag: [t.keyword, t.modifier, t.controlKeyword, t.operatorKeyword], color: "#c084fc" },
-  { tag: [t.string, t.special(t.string), t.regexp], color: "#22c55e" },
-  { tag: [t.number, t.bool, t.null, t.atom], color: "#f59e0b" },
-  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: "#60a5fa" },
-  { tag: [t.typeName, t.className, t.namespace], color: "#5eead4" },
-  { tag: [t.propertyName, t.attributeName], color: "#93c5fd" },
-  { tag: [t.tagName], color: "#f472b6" },
+  { tag: [t.keyword, t.modifier, t.controlKeyword, t.operatorKeyword], color: "var(--color-syntax-keyword)" },
+  { tag: [t.string, t.special(t.string), t.regexp], color: "var(--color-syntax-string)" },
+  { tag: [t.number, t.bool, t.null, t.atom], color: "var(--color-syntax-number)" },
+  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: "var(--color-syntax-function)" },
+  { tag: [t.typeName, t.className, t.namespace], color: "var(--color-syntax-type)" },
+  { tag: [t.propertyName, t.attributeName], color: "var(--color-syntax-property)" },
+  { tag: [t.tagName], color: "var(--color-syntax-tag)" },
   { tag: [t.variableName, t.definition(t.variableName)], color: "var(--color-fg)" },
   { tag: [t.operator, t.punctuation, t.separator, t.bracket], color: "var(--color-fg2)" },
-  { tag: [t.heading], color: "#60a5fa", fontWeight: "bold" },
-  { tag: [t.link, t.url], color: "#60a5fa", textDecoration: "underline" },
+  { tag: [t.heading], color: "var(--color-syntax-function)", fontWeight: "bold" },
+  { tag: [t.link, t.url], color: "var(--color-syntax-function)", textDecoration: "underline" },
   { tag: [t.invalid], color: "var(--color-err)" },
 ]);
 
@@ -564,20 +564,20 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
       className={
         embedded
           ? "hm-glass-embed flex h-full flex-col bg-[var(--color-bg2)] overflow-hidden min-w-0"
-          : "hm-glass-surface flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]"
+          : "hm-glass-surface flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[var(--hm-shadow-float)]"
       }
       style={{ fontSize: `${font.size}px` }}
       onKeyDownCapture={(e) => handleFontKey(e, font)}
     >
       {/* drag handle + tile chrome — only when standalone; embedded host owns chrome */}
       {!embedded && (
-        <header className="tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
+        <header className="tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-count font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
           <GripVertical size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
           <span className="font-semibold text-[var(--color-fg)]">Editor</span>
           {activeMeta?.dirty && (
-            <span className="text-[10px] text-[var(--color-warn)]" title="unsaved changes">●</span>
+            <span className="text-chip text-[var(--color-warn)]" title="unsaved changes">●</span>
           )}
-          {saving && <span className="text-[10px] text-[var(--color-fg3)]">saving…</span>}
+          {saving && <span className="text-chip text-[var(--color-fg3)]">saving…</span>}
           <span className="ml-auto flex items-center gap-2">
             {active && (
               <>
@@ -605,7 +605,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
               </Button>
               </>
             )}
-            <span className="text-[9.5px] text-[var(--color-fg3)]">⌘S to save</span>
+            <span className="text-chip text-[var(--color-fg3)]">⌘S to save</span>
             <FontStepper {...font} />
           </span>
           <Button
@@ -622,7 +622,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
       {/* tab bar */}
       <div className="nodrag flex items-stretch overflow-x-auto bg-[var(--color-bg2)] border-b border-[var(--color-line)] min-h-[28px]">
         {tabs.length === 0 ? (
-          <span className="px-3 py-1.5 text-[11px] text-[var(--color-fg3)]">no files open</span>
+          <span className="px-3 py-1.5 text-count text-[var(--color-fg3)]">no files open</span>
         ) : (
           tabs.map((path) => {
             const isActive = path === active;
@@ -635,7 +635,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
                 aria-selected={isActive}
                 title={path}
                 onClick={() => setActive(path)}
-                className={`group flex items-center gap-1.5 px-2.5 max-w-[200px] cursor-pointer border-r border-[var(--color-line)] text-[11px] ${
+                className={`group flex items-center gap-1.5 px-2.5 max-w-[200px] cursor-pointer border-r border-[var(--color-line)] text-count ${
                   isActive
                     ? "bg-[var(--color-bg2)] text-[var(--color-fg)] border-b-2 border-b-[var(--color-brand)]"
                     : "bg-[var(--color-bg3)] text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
@@ -711,7 +711,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
             Sticky so it stays put when the tabs overflow-scroll. */}
         <button
           onClick={() => setOverlay((v) => !v)}
-          className="nodrag ml-auto sticky right-0 shrink-0 px-2 grid place-items-center bg-[var(--color-bg2)] border-l border-[var(--color-line)] text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors text-[12px] leading-none"
+          className="nodrag ml-auto sticky right-0 shrink-0 px-2 grid place-items-center bg-[var(--color-bg2)] border-l border-[var(--color-line)] text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors text-label leading-none"
           aria-label="fullscreen editor"
           title="Fullscreen · Esc to exit"
         >
@@ -722,7 +722,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
       {/* Changed-on-disk banner: the file was edited externally while this tab
           had unsaved changes. Non-destructive — the user picks Reload or Keep. */}
       {activeMeta?.diskChanged && (
-        <div className="nodrag flex items-center gap-2 px-3 py-1.5 bg-[var(--color-bg4)] border-b border-[var(--color-warn)] text-[11px] text-[var(--color-fg)]">
+        <div className="nodrag flex items-center gap-2 px-3 py-1.5 bg-[var(--color-bg4)] border-b border-[var(--color-warn)] text-count text-[var(--color-fg)]">
           <span className="text-[var(--color-warn)]">●</span>
           <span>This file changed on disk and you have unsaved edits.</span>
           <Button
@@ -743,11 +743,11 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
       {/* editor body — nowheel so scrolling doesn't pan the canvas */}
       <div className="relative flex-1 min-h-0">
         {tabs.length === 0 ? (
-          <div className="p-4 text-[11px] text-[var(--color-fg3)]">
+          <div className="p-4 text-count text-[var(--color-fg3)]">
             Open a file from the tree to start editing.
           </div>
         ) : activeMeta?.error ? (
-          <div className="p-3 text-[11px] text-[var(--color-err)] font-mono">
+          <div className="p-3 text-count text-[var(--color-err)] font-mono">
             <div className="font-semibold mb-1">failed</div>
             <div className="text-[var(--color-fg3)]">{activeMeta.error}</div>
           </div>
@@ -770,7 +770,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
         {activeMarkdown && activePreview && !activeMeta?.error && (
           <Suspense
             fallback={
-              <div className="absolute inset-0 grid place-items-center text-[11px] text-[var(--color-fg3)]">
+              <div className="absolute inset-0 grid place-items-center text-count text-[var(--color-fg3)]">
                 rendering…
               </div>
             }

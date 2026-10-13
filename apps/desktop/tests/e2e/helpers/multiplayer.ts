@@ -5,6 +5,8 @@ import { expect, _electron as electron, type ElectronApplication, type Page } fr
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { pick } from "./select";
+import { ROLE_LABELS } from "../../../src/renderer/src/multiplayer/people";
 
 /** Settings → People, for the workspace the window shows. */
 export async function openShare(page: Page): Promise<void> {
@@ -57,7 +59,7 @@ export async function person(root: string, name: string, cwd: string, apps: Elec
 /** The host makes an invite link for `role` from Share. */
 export async function share(host: Page, role: "view" | "edit" | "terminals"): Promise<string> {
   await openShare(host);
-  await host.locator("#share-role").selectOption(role);
+  await pick(host.locator("#share-role"), ROLE_LABELS[role]!);
   await host.locator("[data-share-create]").click();
   const link = (await host.locator("[data-share-link]").textContent())!;
   await host.keyboard.press("Escape");

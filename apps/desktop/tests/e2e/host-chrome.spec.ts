@@ -10,6 +10,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { QUEUE_DIR, dockViaQueue, queueReady } from "./helpers/queue-view";
 import { seedAgents } from "./helpers/agents";
+import { pick } from "./helpers/select";
 
 test.use({ trace: "off" });
 
@@ -91,15 +92,17 @@ test("the toolbar's Theme button opens Appearance beside the workspace, live, fr
   await expect(page.getByRole("dialog")).toHaveCount(0); // not modal: the app stays usable behind it
   const before = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--color-bg"));
   const select = panel.locator("[data-preset-select]");
-  const current = await select.inputValue();
-  const other = await select.locator("option").evaluateAll((os, cur) => (os as HTMLOptionElement[]).map((o) => o.value).filter((v) => v !== cur), current);
+  const current = (await select.textContent())!;
+  await select.click();
+  const other = (await page.getByRole("option").allTextContents()).filter((n) => n !== current);
+  await page.keyboard.press("Escape");
   let changed = false;
-  for (const v of other) {
-    await select.selectOption(v);
+  for (const name of other) {
+    await pick(select, name);
     if (await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--color-bg")) !== before) { changed = true; break; }
   }
   expect(changed, "a preset picked in the panel applies to the app behind it").toBe(true);
-  await select.selectOption(current);
+  await pick(select, current);
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
   await expect(theme).toBeFocused();
@@ -167,7 +170,7 @@ test("toolbar Off is per-view, persists through restart, and Settings restores i
   const settings = () => page.getByRole("button", { name: "settings", exact: true });
   await settings().click();
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "view:canvas" } })));
-  await page.getByLabel("Display", { exact: true }).selectOption("off");
+  await pick(page.getByLabel("Display", { exact: true }), "Off");
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
   // No island: Settings is the Layers rail's, and no second one waits in the window's corner.
@@ -191,8 +194,8 @@ test("toolbar Off is per-view, persists through restart, and Settings restores i
   await page.locator('[data-layers-rail="settings"]').focus();
   await page.keyboard.press("Enter");
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "view:canvas" } })));
-  await expect(page.getByLabel("Display", { exact: true })).toHaveValue("off");
-  await page.getByLabel("Display", { exact: true }).selectOption("auto");
+  await expect(page.getByLabel("Display", { exact: true })).toHaveText("Off");
+  await pick(page.getByLabel("Display", { exact: true }), /^Automatic/);
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.locator('[data-host-island="top"]')).toBeVisible();
 });

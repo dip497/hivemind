@@ -53,16 +53,16 @@ export function ServersPrefs() {
         ) : (
           <div className="flex flex-col gap-3" data-network={net.builtin ?? "signed"}>
             <div>
-              <div className="text-[14px] font-medium" data-network-name>{net.profile.name}</div>
-              <p className="text-[12px] text-[var(--color-fg3)]">{about(net)}</p>
+              <div className="text-row font-medium" data-network-name>{net.profile.name}</div>
+              <p className="text-label text-[var(--color-fg3)]">{about(net)}</p>
             </div>
             {servers && (
-              <ul className="flex flex-col gap-1 text-[12px]" data-network-relays>
+              <ul className="flex flex-col gap-1 text-label" data-network-relays>
                 {net.profile.relays.map((r) => (
                   <li key={r.url} className="flex items-center gap-2" data-relay={r.url} data-ok={String(ok(r.url) ?? "")}>
                     {mark(ok(r.url))}
                     <span className="text-[var(--color-fg3)]">Relay</span>
-                    <code className="truncate font-mono text-[11px]">{r.url}</code>
+                    <code className="truncate font-mono text-count">{r.url}</code>
                     {relay(r.url)?.refused && <span className="text-[var(--color-err)]" data-relay-refused>turned this computer away: {relay(r.url)!.refused}</span>}
                   </li>
                 ))}
@@ -70,7 +70,7 @@ export function ServersPrefs() {
                   <li className="flex items-center gap-2" data-lookup={net.profile.lookup} data-ok={String(health?.lookup?.ok ?? "")}>
                     {mark(health?.lookup?.ok)}
                     <span className="text-[var(--color-fg3)]">Finds devices at</span>
-                    <code className="truncate font-mono text-[11px]">{net.profile.lookup}</code>
+                    <code className="truncate font-mono text-count">{net.profile.lookup}</code>
                   </li>
                 )}
                 {net.profile.access && (
@@ -82,14 +82,14 @@ export function ServersPrefs() {
               </ul>
             )}
             <div className="flex gap-2">
-              {servers && <Button size="sm" variant="outline" onClick={() => void check()} disabled={checking} data-network-check>{checking ? "Checking…" : "Check"}</Button>}
-              <Button size="sm" variant="outline" onClick={() => setChanging((c) => !c)} data-network-change>Change…</Button>
+              {servers && <Button variant="outline" onClick={() => void check()} disabled={checking} data-network-check>{checking ? "Checking…" : "Check"}</Button>}
+              <Button variant="outline" onClick={() => setChanging((c) => !c)} data-network-change>Change…</Button>
             </div>
             {changing && <ReachChooser current={net} onChosen={chosen} onCancel={() => setChanging(false)} />}
-            {admission && <p className="text-[12px] text-[var(--color-fg3)]" data-network-admission>{admission}</p>}
+            {admission && <p className="text-label text-[var(--color-fg3)]" data-network-admission>{admission}</p>}
           </div>
         )}
-        {net && error && <p className="text-[12px] text-[var(--color-err)]" role="alert">{error}</p>}
+        {net && error && <p className="text-label text-[var(--color-err)]" role="alert">{error}</p>}
       </Section>
     </div>
   );

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-08T22:28:13.461Z",
+  "generatedAt": "2026-10-13T18:00:00Z",
   "title": "Design System: hivemind",
   "extensions": {
     "colorMeta": {
@@ -273,9 +273,19 @@
           "oklch(0.84 0.006 250)",
           "oklch(0.95 0.006 250)"
         ]
+      },
+      "scrim": {
+        "role": "neutral",
+        "displayName": "Scrim",
+        "canonical": "oklch(0 0 0 / 0.55)",
+        "purpose": "Behind a modal dialog or Settings, and the minimap off-screen area."
       }
     },
     "typographyMeta": {
+      "heading": {
+        "displayName": "Heading",
+        "purpose": "A page own name: a Settings page, the empty canvas first line, an open issue."
+      },
       "title": {
         "displayName": "Title",
         "purpose": "The workspace name at the top of the panel."
@@ -325,6 +335,21 @@
         "name": "hm-highlight",
         "value": "inset 0 1px 0 0 oklch(1 0 0 / 0.07)",
         "purpose": "Top light, added to lifted and raised surfaces."
+      },
+      {
+        "name": "hm-shadow-float",
+        "value": "0 8px 22px oklch(0 0 0 / 0.45)",
+        "purpose": "Float: tiles, the tool island and the canvas controls."
+      },
+      {
+        "name": "hm-shadow-glass",
+        "value": "0 10px 36px oklch(0 0 0 / 0.5)",
+        "purpose": "Glass: the floating surfaces under glass, and toasts."
+      },
+      {
+        "name": "hm-highlight-glass",
+        "value": "inset 0 1px 0 0 oklch(1 0 0 / 0.10)",
+        "purpose": "Top light for glass surfaces and toasts."
       }
     ],
     "motion": [
@@ -387,7 +412,58 @@
         "value": "60%",
         "purpose": "Solid fraction of a frosted surface; panels and menus clamp it to 68–92%."
       }
-    ]
+    ],
+    "tints": [
+      {
+        "name": "color-selection",
+        "value": "color-mix(in oklab, var(--color-fg) 20%, transparent)",
+        "purpose": "Selected text in the editor and diff."
+      },
+      {
+        "name": "color-current-line",
+        "value": "color-mix(in oklab, var(--color-fg) 2.5%, transparent)",
+        "purpose": "The editor current line."
+      },
+      {
+        "name": "color-match",
+        "value": "color-mix(in oklab, var(--color-accent) 22%, transparent)",
+        "purpose": "Other matches of the selection."
+      },
+      {
+        "name": "color-bracket-match",
+        "value": "color-mix(in oklab, var(--color-brand) 25%, transparent)",
+        "purpose": "The matching bracket."
+      },
+      {
+        "name": "color-grid-dot",
+        "value": "oklch(0.70 0.012 260 / 0.10)",
+        "purpose": "The canvas dot grid."
+      }
+    ],
+    "controlHeights": [
+      {
+        "name": "control",
+        "value": "32px",
+        "purpose": "Every button, input and select by default; all of Settings and dialogs."
+      },
+      {
+        "name": "control-compact",
+        "value": "28px",
+        "purpose": "Dense rows only: tile chrome, popovers and pickers, the panel."
+      },
+      {
+        "name": "chrome",
+        "value": "24px, 20px, 16px",
+        "purpose": "Tile chrome buttons (xs, 2xs, micro)."
+      }
+    ],
+    "focus": {
+      "token": "--color-focus",
+      "value": "var(--color-select)",
+      "width": "2px",
+      "offset": "2px",
+      "rule": "styles.css :focus-visible, the only focus rule; the palette's selection colour, never the accent; list and menu items show focus by their highlight"
+    }
   },
   "components": [
     {
@@ -442,9 +518,17 @@
       "name": "Input",
       "kind": "input",
       "refersTo": "input",
-      "description": "A text field: ground fill, control-line border, the border warms to dust on focus with a soft ring.",
+      "description": "A text field: ground fill, control-line border, 32px tall; on keyboard focus it takes the app's one ring.",
       "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Search tiles\" />",
-      "css": ".ds-input { width: 240px; height: 32px; padding: 0 10px; background: var(--color-bg, oklch(0.165 0.004 250)); border: 1px solid var(--color-line2, oklch(0.34 0.006 250)); border-radius: 6px; color: var(--color-fg, oklch(0.93 0.004 250)); font: 400 13px/1 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; letter-spacing: -0.005em; outline: none; transition: border-color var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)), box-shadow var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)); } .ds-input::placeholder { color: color-mix(in srgb, var(--color-fg2, oklch(0.80 0.005 250)) 70%, transparent); } .ds-input:hover { border-color: var(--color-fg3, oklch(0.62 0.006 250)); } .ds-input:focus-visible { border-color: var(--color-fg3, oklch(0.62 0.006 250)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-fg3, oklch(0.62 0.006 250)) 20%, transparent); }"
+      "css": ".ds-input { width: 240px; height: 32px; padding: 0 10px; background: var(--color-bg, oklch(0.165 0.004 250)); border: 1px solid var(--color-line2, oklch(0.34 0.006 250)); border-radius: 6px; color: var(--color-fg, oklch(0.93 0.004 250)); font: 400 13px/1 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; letter-spacing: -0.005em; outline: none; transition: border-color var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)), box-shadow var(--hm-dur-2, 150ms) var(--hm-ease-out, cubic-bezier(0.32, 0.72, 0, 1)); } .ds-input::placeholder { color: color-mix(in srgb, var(--color-fg2, oklch(0.80 0.005 250)) 70%, transparent); } .ds-input:hover { border-color: var(--color-fg3, oklch(0.62 0.006 250)); } .ds-input:focus-visible { outline: 2px solid var(--color-select, oklch(0.80 0.005 250)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Select",
+      "kind": "input",
+      "refersTo": "select",
+      "description": "A choice from a list: the Input's box with a chevron, its list on the menu surface with a check on the chosen item. Never a native select.",
+      "html": "<button class=\"ds-select\" type=\"button\" role=\"combobox\" aria-expanded=\"false\"><span>Can view</span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 256 256\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"16\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><polyline points=\"208 96 128 176 48 96\"/></svg></button>",
+      "css": ".ds-select { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 160px; height: 32px; padding: 0 8px 0 10px; background: var(--color-bg, oklch(0.165 0.004 250)); border: 1px solid var(--color-line2, oklch(0.34 0.006 250)); border-radius: 6px; color: var(--color-fg, oklch(0.93 0.004 250)); font: 400 13px/1 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif; letter-spacing: -0.005em; cursor: pointer; outline: none; } .ds-select svg { color: var(--color-fg2, oklch(0.80 0.005 250)); } .ds-select:focus-visible { outline: 2px solid var(--color-select, oklch(0.80 0.005 250)); outline-offset: 2px; }"
     },
     {
       "name": "Sheet",
@@ -485,8 +569,8 @@
         "section": "colors"
       },
       {
-        "name": "The Five Sizes Rule",
-        "body": "The panel, menus, frame header and menu primitive set text only at 15, 14, 12, 11 and 10. A unit test enforces it. A new size there is a defect, not a variant.",
+        "name": "The Named Steps Rule",
+        "body": "Text is set only through the seven named steps (heading 20, title 15, row 14, body 13, label 12, count 11, chip 10), everywhere: the renderer, its CSS and the tools that ship with the app. The panel, menus and frame header use five of them. tests/unit/design-system.test.ts fails on a literal size. A new size is a defect, not a variant.",
         "section": "typography"
       },
       {

@@ -8,6 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { openShare, person, share } from "./helpers/multiplayer";
+import { pick } from "./helpers/select";
 
 const HIVE_NET = path.resolve("../../crates/hive-net/target/debug/hive-net");
 
@@ -41,7 +42,7 @@ test("a person with an invite link asks to join; denied they are not let in, all
   const guest = await launch("guest", guestDir);
 
   await openShare(host);
-  await host.locator("#share-role").selectOption("edit");
+  await pick(host.locator("#share-role"), "Can edit board");
   await host.locator("[data-share-create]").click();
   const link = (await host.locator("[data-share-link]").textContent())!;
   expect(link).toMatch(/^hivemind:\/\/join\/[0-9a-f]{64}#/);

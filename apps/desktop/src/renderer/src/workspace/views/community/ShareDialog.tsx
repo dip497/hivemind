@@ -18,7 +18,7 @@ export function ShareDialog({ viewName, image, onChoose }: { viewName: string; i
           <img
             src={image.preview}
             alt={`Image from ${viewName}, ${image.width} by ${image.height} pixels`}
-            className="max-h-[50vh] w-full rounded-[var(--radius)] border border-[var(--color-line)] object-contain"
+            className="max-h-[50vh] w-full rounded-lg border border-[var(--color-line)] object-contain"
           />
         )}
         <DialogFooter>

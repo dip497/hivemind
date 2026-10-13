@@ -26,12 +26,12 @@ export function AssigneePicker({
       width={200}
       trigger={
         value ? (
-          <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg)] hover:text-[var(--color-accent)]">
+          <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg)] hover:text-[var(--color-accent)]">
             <Avatar id={value.id} size={18} />
             {value.id}
           </span>
         ) : (
-          <span className="text-[11.5px] text-[var(--color-fg2)] hover:text-[var(--color-fg)]">Unassigned</span>
+          <span className="text-label text-[var(--color-fg2)] hover:text-[var(--color-fg)]">Unassigned</span>
         )
       }
     >
@@ -55,7 +55,7 @@ export function AssigneePicker({
             {q.trim() && !allAssignees.includes(q.trim()) && (
               <button
                 onClick={() => { onChange({ type: "member", id: q.trim() }); close(); }}
-                className="w-full text-left px-2 py-1 text-[12px] hover:bg-[var(--color-bg4)] rounded text-[var(--color-accent)] cursor-pointer"
+                className="w-full text-left px-2 py-1 text-label hover:bg-[var(--color-bg4)] rounded text-[var(--color-accent)] cursor-pointer"
               >
                 Assign “{q.trim()}”
               </button>
@@ -89,7 +89,7 @@ export function LabelPicker({
             ))}
           </div>
         ) : (
-          <span className="text-[11.5px] text-[var(--color-fg2)] hover:text-[var(--color-fg)]">Add labels…</span>
+          <span className="text-label text-[var(--color-fg2)] hover:text-[var(--color-fg)]">Add labels…</span>
         )
       }
     >
@@ -128,7 +128,7 @@ export function LabelPicker({
             {q.trim() && !allLabels.includes(q.trim()) && (
               <button
                 onClick={() => { onChange([...value, q.trim()]); setQ(""); }}
-                className="w-full text-left px-2 py-1 text-[12px] hover:bg-[var(--color-bg4)] rounded text-[var(--color-accent)] cursor-pointer"
+                className="w-full text-left px-2 py-1 text-label hover:bg-[var(--color-bg4)] rounded text-[var(--color-accent)] cursor-pointer"
               >
                 Create “{q.trim()}”
               </button>
@@ -158,9 +158,9 @@ export function ParentPicker({
       width={250}
       trigger={
         value ? (
-          <span className="font-mono text-[11px] text-[var(--color-fg)] hover:text-[var(--color-accent)]">{value}</span>
+          <span className="font-mono text-count text-[var(--color-fg)] hover:text-[var(--color-accent)]">{value}</span>
         ) : (
-          <span className="text-[11.5px] text-[var(--color-fg2)] hover:text-[var(--color-fg)]">Set parent…</span>
+          <span className="text-label text-[var(--color-fg2)] hover:text-[var(--color-fg)]">Set parent…</span>
         )
       }
     >
@@ -175,8 +175,8 @@ export function ParentPicker({
             )}
             {matches.map((i) => (
               <MenuItem key={i.id} size="sm" onClick={() => { onChange(i.id); close(); }}>
-                <span className="font-mono text-[10.5px] text-[var(--color-fg3)] tabular-nums shrink-0">{i.id}</span>
-                <span className="text-[12px] text-[var(--color-fg)] truncate">{i.title}</span>
+                <span className="font-mono text-count text-[var(--color-fg3)] tabular-nums shrink-0">{i.id}</span>
+                <span className="text-label text-[var(--color-fg)] truncate">{i.title}</span>
               </MenuItem>
             ))}
           </div>

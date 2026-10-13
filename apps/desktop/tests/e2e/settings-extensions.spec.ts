@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { seedAgents } from "./helpers/agents";
+import { pick } from "./helpers/select";
 
 let app: ElectronApplication;
 let page: Page;
@@ -75,13 +76,13 @@ test("Settings' code is fetched while the app is idle, so its first open shows t
 test("settings has a focused dialog, view-specific automatic toolbar, and independent extension management", async () => {
   await settings("view:canvas");
   await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page.getByLabel("Display", { exact: true })).toHaveValue("auto");
-  await page.getByLabel("Display", { exact: true }).selectOption("bottom");
+  await expect(page.getByLabel("Display", { exact: true })).toHaveText(/^Automatic/);
+  await pick(page.getByLabel("Display", { exact: true }), "Bottom");
   await settings("view:windows");
-  await expect(page.getByLabel("Display", { exact: true })).toHaveValue("auto");
+  await expect(page.getByLabel("Display", { exact: true })).toHaveText(/^Automatic/);
   await settings("view:canvas");
-  await expect(page.getByLabel("Display", { exact: true })).toHaveValue("bottom");
-  await page.getByLabel("Display", { exact: true }).selectOption("auto");
+  await expect(page.getByLabel("Display", { exact: true })).toHaveText("Bottom");
+  await pick(page.getByLabel("Display", { exact: true }), /^Automatic/);
   // The file first appears when the change is saved, which is debounced.
   const chrome = () => { try { return JSON.parse(fs.readFileSync(path.join(xdg, "hivemind/settings.json"), "utf8")).views.chrome; } catch { return undefined; } };
   await expect.poll(chrome).toEqual({});

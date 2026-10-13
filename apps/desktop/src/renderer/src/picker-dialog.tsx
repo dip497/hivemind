@@ -48,7 +48,7 @@ export function PickerDialog({ title, description, rows, extra = [], onPick, onC
       onMouseEnter={() => setActive(i)} onClick={() => pick(r.id)} style={r.indent ? { paddingLeft: 22 } : undefined}>
       {r.icon && <span className="grid size-4 shrink-0 place-items-center text-[var(--color-fg3)]">{r.icon}</span>}
       <span className="flex-1 truncate">{r.label}</span>
-      {r.detail && <span className="shrink-0 text-[10.5px] text-[var(--color-fg3)]">{r.detail}</span>}
+      {r.detail && <span className="shrink-0 text-count text-[var(--color-fg3)]">{r.detail}</span>}
     </MenuItem>
   );
   let lastGroup: string | undefined;
@@ -58,21 +58,21 @@ export function PickerDialog({ title, description, rows, extra = [], onPick, onC
         // The search box takes the keys when there is one; else the card, for the arrows and Enter.
         onOpenAutoFocus={(e) => { if (rows.length < SEARCH_FROM) { e.preventDefault(); card.current?.focus(); } }}>
         <div className="border-b border-[var(--color-line)] px-3.5 pb-2.5 pt-3 pr-10">
-          <DialogTitle className="text-[13px] font-semibold">{title}</DialogTitle>
-          {description && <DialogDescription className="mt-1 line-clamp-2 text-[11.5px] text-[var(--color-fg3)]">{description}</DialogDescription>}
+          <DialogTitle className="text-body font-semibold">{title}</DialogTitle>
+          {description && <DialogDescription className="mt-1 line-clamp-2 text-label text-[var(--color-fg3)]">{description}</DialogDescription>}
         </div>
         {rows.length >= SEARCH_FROM && (
           <div className="px-2 pt-2">
-            <Input value={query} onChange={(e) => { setQuery(e.target.value); setActive(0); }} placeholder="Search" aria-label="Search" className="h-7 text-[12px]" />
+            <Input value={query} onChange={(e) => { setQuery(e.target.value); setActive(0); }} placeholder="Search" aria-label="Search" size="sm" />
           </div>
         )}
         <div className="max-h-[min(420px,60vh)] overflow-y-auto p-1.5" role="listbox" aria-label={title}>
-          {shown.length === 0 && <p className="px-2 py-3 text-[12px] text-[var(--color-fg3)]">Nothing matches.</p>}
+          {shown.length === 0 && <p className="px-2 py-3 text-label text-[var(--color-fg3)]">Nothing matches.</p>}
           {shown.map((r, i) => {
             const heading = r.group && r.group !== lastGroup ? r.group : null;
             lastGroup = r.group;
             return [
-              heading && <div key={`g:${heading}`} className="px-2 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-fg3)] first:pt-0.5">{heading}</div>,
+              heading && <div key={`g:${heading}`} className="px-2 pb-0.5 pt-2 text-count font-medium text-[var(--color-fg2)] first:pt-0.5">{heading}</div>,
               row(r, i),
             ];
           })}

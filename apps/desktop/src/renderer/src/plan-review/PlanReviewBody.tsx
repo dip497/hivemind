@@ -131,8 +131,8 @@ export function PlanReviewBody({
       {/* ── annotation panel + actions ────────────────────────────────── */}
       <aside className="flex flex-col min-h-0 bg-[var(--color-bg2)]">
         <div className="px-3 py-2 border-b border-[var(--color-line)] flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-[var(--color-fg)]">Annotations</span>
-          <span className="text-[11px] text-[var(--color-fg3)] tabular-nums">{count}</span>
+          <span className="text-count font-semibold text-[var(--color-fg)]">Annotations</span>
+          <span className="text-count text-[var(--color-fg3)] tabular-nums">{count}</span>
           <Button
             variant="link"
             size="xs"
@@ -146,7 +146,7 @@ export function PlanReviewBody({
 
         <div className="flex-1 overflow-auto p-2 flex flex-col gap-1.5">
           {count === 0 ? (
-            <p className="text-[11px] text-[var(--color-fg3)] leading-relaxed px-1 pt-1">
+            <p className="text-count text-[var(--color-fg3)] leading-relaxed px-1 pt-1">
               Select text in the plan, or hover a block, to comment or mark for removal. Or approve as-is.
             </p>
           ) : (
@@ -174,7 +174,7 @@ export function PlanReviewBody({
               </Button>
             </>
           ) : (
-            <p className="px-1 text-[11px] leading-relaxed text-[var(--color-fg3)]" data-plan-read-only>
+            <p className="px-1 text-count leading-relaxed text-[var(--color-fg3)]" data-plan-read-only>
               Someone who can drive agents answers this plan.
             </p>
           )}
@@ -185,7 +185,7 @@ export function PlanReviewBody({
       {freeText !== null && onDecide && (
         <div className="absolute inset-0 z-50 bg-black/40 grid place-items-center p-6" onMouseDown={() => setFreeText(null)}>
           <div className="w-[440px] max-w-full bg-[var(--color-bg2)] border border-[var(--color-line)] rounded-xl p-3 flex flex-col gap-2" onMouseDown={(e) => e.stopPropagation()}>
-            <span className="text-[12px] font-semibold text-[var(--color-fg)]">Request changes</span>
+            <span className="text-label font-semibold text-[var(--color-fg)]">Request changes</span>
             <Textarea
               autoFocus value={freeText} onChange={(e) => setFreeText(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && freeText.trim()) onDecide("deny", freeText.trim()); if (e.key === "Escape") setFreeText(null); }}
@@ -225,14 +225,14 @@ function BlockView({
 }) {
   const deleted = marks.some((m) => m.kind === "deletion");
   const commented = marks.some((m) => m.kind === "comment");
-  const accent = deleted ? "var(--color-danger, #e5484d)" : commented ? "var(--color-brand)" : "transparent";
+  const accent = deleted ? "var(--color-err)" : commented ? "var(--color-brand)" : "transparent";
   return (
     <div
       data-block-id={block.id}
       className="group relative rounded-md pl-3 pr-8 -ml-3 my-0.5 transition-colors hover:bg-[var(--color-bg3)]/40"
       style={{ borderLeft: `2px solid ${accent}`, opacity: deleted ? 0.55 : 1, textDecoration: deleted ? "line-through" : undefined }}
     >
-      <Suspense fallback={<pre className="text-[11px] text-[var(--color-fg3)] whitespace-pre-wrap">{block.text}</pre>}>
+      <Suspense fallback={<pre className="text-count text-[var(--color-fg3)] whitespace-pre-wrap">{block.text}</pre>}>
         <MarkdownPreview source={block.raw} className="md-preview" />
       </Suspense>
       <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5">
@@ -252,10 +252,10 @@ function BlockView({
 
 function AnnotationCard({ a, onRemove }: { a: Annotation; onRemove: () => void }) {
   const tint =
-    a.kind === "deletion" ? "var(--color-danger, #e5484d)" : "var(--color-brand)";
+    a.kind === "deletion" ? "var(--color-err)" : "var(--color-brand)";
   const label = a.kind === "deletion" ? "Delete" : a.kind === "global" ? "General" : a.quickLabel ?? "Comment";
   return (
-    <div className="rounded-md border border-[var(--color-line2)] bg-[var(--color-bg)] p-1.5 text-[11px]" style={{ borderLeft: `2px solid ${tint}` }}>
+    <div className="rounded-md border border-[var(--color-line2)] bg-[var(--color-bg)] p-1.5 text-count" style={{ borderLeft: `2px solid ${tint}` }}>
       <div className="flex items-center gap-1.5">
         <span className="font-medium text-[var(--color-fg)]">{label}</span>
         <Button variant="ghost" size="icon-micro" onClick={onRemove} className="nodrag ml-auto" title="remove">
@@ -263,10 +263,10 @@ function AnnotationCard({ a, onRemove }: { a: Annotation; onRemove: () => void }
         </Button>
       </div>
       {a.originalText && (
-        <div className="mt-0.5 text-[10.5px] text-[var(--color-fg3)] line-clamp-2 italic">“{a.originalText}”</div>
+        <div className="mt-0.5 text-count text-[var(--color-fg3)] line-clamp-2 italic">“{a.originalText}”</div>
       )}
       {a.comment && a.kind !== "deletion" && (
-        <div className="mt-0.5 text-[10.5px] text-[var(--color-fg2)] line-clamp-3">{a.comment}</div>
+        <div className="mt-0.5 text-count text-[var(--color-fg2)] line-clamp-3">{a.comment}</div>
       )}
     </div>
   );

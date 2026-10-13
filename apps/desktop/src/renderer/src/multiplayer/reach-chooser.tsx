@@ -21,10 +21,10 @@ export function ReachChooser({ onChosen, onCancel, current }: { onChosen: (net: 
     try { onChosen(await window.hive.useNetwork(given)); } catch (e) { setError(messageOf(e)); }
   };
   return (
-    <div className="flex min-w-0 flex-col gap-2 rounded-md border border-[var(--color-line)] p-3 text-[12px]" data-reach-chooser>
+    <div className="flex min-w-0 flex-col gap-2 rounded-md border border-[var(--color-line)] p-3 text-label" data-reach-chooser>
       <p className="text-[var(--color-fg2)]">To reach devices outside this network, hivemind needs a way through. Choose one:</p>
       {current?.builtin !== "local" && (
-        <Button size="sm" variant="ghost" className="justify-start" onClick={() => void use("local")} data-use-network="local">
+        <Button variant="ghost" className="justify-start" onClick={() => void use("local")} data-use-network="local">
           Local network — no servers; only devices here
         </Button>
       )}
@@ -32,10 +32,10 @@ export function ReachChooser({ onChosen, onCancel, current }: { onChosen: (net: 
         <span>Use my own servers — paste the network link from its admin:</span>
         <div className="flex gap-2">
           <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="hivemind://network/…" className="flex-1" data-network-link />
-          <Button size="sm" onClick={() => void use(link)} disabled={!link.trim()} data-use-network="link">Use</Button>
+          <Button onClick={() => void use(link)} disabled={!link.trim()} data-use-network="link">Use</Button>
         </div>
       </div>
-      <Button size="sm" variant="ghost" className="justify-start" onClick={() => setServing((s) => !s)} data-reach-serve>
+      <Button variant="ghost" className="justify-start" onClick={() => setServing((s) => !s)} data-reach-serve>
         Serve from one of my devices
       </Button>
       {serving && (
@@ -46,7 +46,7 @@ export function ReachChooser({ onChosen, onCancel, current }: { onChosen: (net: 
         </p>
       )}
       {onCancel && (
-        <Button size="sm" variant="ghost" className="justify-start" onClick={onCancel} data-reach-not-now>
+        <Button variant="ghost" className="justify-start" onClick={onCancel} data-reach-not-now>
           Not now — stay on this network
         </Button>
       )}

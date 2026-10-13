@@ -1228,12 +1228,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   }, [tileId]);
 
   return (
-    <div className="hm-term-root flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]" data-term-bg={termBg}>
+    <div className="hm-term-root flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[var(--hm-shadow-float)]" data-term-bg={termBg}>
       {/* Entire header is the drag handle. Previously only the ⋮⋮ icon (~5px
           wide) carried `.tile-drag-handle` — invisible target, users
           clicked the wide header bar expecting drag and nothing happened
           (verified via playwright element-from-point probe). */}
-      <div data-tile-titlebar className="group tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
+      <div data-tile-titlebar className="group tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-count font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
         <GripVertical size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
         {editing ? (
           <Input
@@ -1329,7 +1329,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         </span>
         <span
           ref={statusWrapRef}
-          className="inline-flex items-center gap-1.5 text-[10px]"
+          className="inline-flex items-center gap-1.5 text-chip"
           title="agent status — working / blocked / exited (idle is not shown)"
         >
           <span
@@ -1374,7 +1374,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             <Skeleton className="h-2.5 w-7/12" />
             <Skeleton className="h-2.5 w-9/12" />
             <Skeleton className="h-2.5 w-5/12" />
-            <span className="mt-auto text-[11px] text-[var(--color-fg3)]">
+            <span className="mt-auto text-count text-[var(--color-fg3)]">
               Starting soon{bootWait > 0 ? ` · ${bootWait} ahead` : ""}
             </span>
           </div>

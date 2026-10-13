@@ -62,7 +62,7 @@ export function SharedBanner({ onMoved }: { onMoved: (folder: string) => void })
   };
   return (
     <div
-      className={`pointer-events-auto flex items-center gap-2 rounded-md border bg-[var(--color-bg2)] px-2.5 py-1 text-[12px] shadow-sm ${TONE[status.state]}`}
+      className={`pointer-events-auto flex items-center gap-2 rounded-md border bg-[var(--color-bg2)] px-2.5 py-1 text-label shadow-sm ${TONE[status.state]}`}
       data-shared-banner
       data-state={status.state}
       data-access={status.access}

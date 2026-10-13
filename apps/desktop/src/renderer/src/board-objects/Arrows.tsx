@@ -84,7 +84,7 @@ function ArrowLabel({ arrow }: { arrow: ArrowObject }) {
   const editing = board.editingId === arrow.id;
   if (!shape || (!editing && !arrow.label)) return null;
   return (
-    <div className="nodrag nopan hm-island absolute left-0 top-0 rounded-md px-1.5 py-0.5 text-[12px] text-[var(--color-fg)]"
+    <div className="nodrag nopan hm-island absolute left-0 top-0 rounded-md px-1.5 py-0.5 text-label text-[var(--color-fg)]"
       style={{ transform: `translate(-50%, -50%) translate(${shape.mid.x}px, ${shape.mid.y}px)`, pointerEvents: "all" }}
       data-arrow-label={arrow.id} onDoubleClick={() => board.edit(arrow.id)}>
       {editing
@@ -129,7 +129,7 @@ export function ArrowDraft() {
     <div ref={layer} className="absolute inset-0 z-10 cursor-crosshair" data-arrow-draft
       onPointerMove={(e) => setPointer(at(e))}
       onClick={(e) => { const hit = hitTest(at(e), targets()); if (hit) board.pickArrowEnd(hit); }}>
-      <div className="hm-island pointer-events-none absolute left-1/2 top-16 -translate-x-1/2 rounded-lg px-3 py-1.5 text-[12px] text-[var(--color-fg2)]">
+      <div className="hm-island pointer-events-none absolute left-1/2 top-16 -translate-x-1/2 rounded-lg px-3 py-1.5 text-label text-[var(--color-fg2)]">
         {from ? "Click where the arrow ends" : "Click the tile, frame or note the arrow starts at"} · Esc cancels
       </div>
       {line && origin && (

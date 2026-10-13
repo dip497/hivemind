@@ -68,12 +68,12 @@ function ToolRow({ pluginId }: { pluginId: string }) {
 function RemoveTool({ pkg }: { pkg: ToolPackage }) {
   const go = useSettingsNavigate();
   const [asking, setAsking] = useState(false);
-  if (!asking) return <Button variant="destructive" size="sm" className="mt-3" onClick={() => setAsking(true)}><Trash />Remove {pkg.name}</Button>;
+  if (!asking) return <Button variant="destructive" className="mt-3" onClick={() => setAsking(true)}><Trash />Remove {pkg.name}</Button>;
   return <div className="settings-remove-confirm">
     <p>Remove {pkg.name}? Its panels close.</p>
     <div className="settings-actions">
-      <Button size="sm" variant="outline" onClick={() => setAsking(false)}>Keep it</Button>
-      <Button size="sm" variant="destructive" onClick={() => void window.hive.removeToolPackage(pkg.id).then(() => go("plugins"), (e) => toast.error(cleanError(e)))}>Remove</Button>
+      <Button variant="outline" onClick={() => setAsking(false)}>Keep it</Button>
+      <Button variant="destructive" onClick={() => void window.hive.removeToolPackage(pkg.id).then(() => go("plugins"), (e) => toast.error(cleanError(e)))}>Remove</Button>
     </div>
   </div>;
 }
@@ -136,7 +136,7 @@ function BrowserControl({ toolOn }: { toolOn: boolean }) {
     <p className="settings-note warn">Opens 127.0.0.1:{state.port}. Local processes can also control the app window. Only enable this for agents you trust.</p>
     <div className="settings-row">
       <span className="settings-note">Right now: {state.active ? "active" : "off"}</span>
-      {state.enabled !== state.active && <Button size="sm" variant="outline" onClick={() => void window.hive.relaunchApp?.()}>Relaunch to apply</Button>}
+      {state.enabled !== state.active && <Button variant="outline" onClick={() => void window.hive.relaunchApp?.()}>Relaunch to apply</Button>}
     </div>
   </section>;
 }

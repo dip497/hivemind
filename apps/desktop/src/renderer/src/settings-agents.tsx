@@ -9,6 +9,7 @@ import { patchSettings, useSettings, setPluginOption } from "./settings-store";
 import { Button } from "./components/ui/button";
 import { PluginGroup, PluginRow, type RowState } from "./plugins/PluginList";
 import { Input } from "./components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch } from "./components/ui/switch";
 import { notReady, useAgentEntries, useAgentPresence, setAgentDisabled, refreshAgentPresence, syncAgentPlugins } from "./agent-plugins";
 import { useSettingsNavigate } from "./settings-panels";
@@ -127,7 +128,7 @@ export function AgentPage({ id }: { id: string }) {
         </div>
         {def?.enabled && card.on && !notReady(presence, card.id) && (card.id === defaultId
           ? <span className="agent-badge">Default</span>
-          : <Button size="sm" variant="outline" onClick={() => patchSettings("agents.defaultAgent", card.id)}>Make default</Button>)}
+          : <Button variant="outline" onClick={() => patchSettings("agents.defaultAgent", card.id)}>Make default</Button>)}
         <Switch aria-label={`Enable ${label}`} checked={card.on}
           disabled={!!card.error} onCheckedChange={() => { void setAgentDisabled(card.id, card.on); }} />
       </header>
@@ -150,13 +151,13 @@ function RemoveAgent({ id, label }: { id: string; label: string }) {
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return <section className="plugin-section" aria-label="Remove">
-    {!confirm ? <Button variant="destructive" size="sm" className="mt-3" onClick={() => setConfirm(true)}><Trash />Remove {label}</Button>
+    {!confirm ? <Button variant="destructive" className="mt-3" onClick={() => setConfirm(true)}><Trash />Remove {label}</Button>
       : <div className="settings-remove-confirm">
         <p>Remove {label}? Hivemind will not add it again on its own. Its CLI stays installed.</p>
         {error && <p role="alert" className="settings-note error">{error}</p>}
         <div className="settings-actions">
-          <Button size="sm" variant="outline" onClick={() => setConfirm(false)}>Keep it</Button>
-          <Button size="sm" variant="destructive" onClick={() => void window.hive.removeAgent(id)
+          <Button variant="outline" onClick={() => setConfirm(false)}>Keep it</Button>
+          <Button variant="destructive" onClick={() => void window.hive.removeAgent(id)
             .then(() => syncAgentPlugins()).then(() => go("plugins"), (e: Error) => setError(e.message))}>Remove</Button>
         </div>
       </div>}
@@ -198,9 +199,9 @@ function Requirement({ def }: { def: AgentProviderDef }) {
           </details>
         )}
         <div className="agent-req-actions">
-          {def.install && <Button asChild size="sm"><a href={def.install.url} target="_blank" rel="noreferrer">Get {def.label}<ExternalLink /></a></Button>}
+          {def.install && <Button asChild><a href={def.install.url} target="_blank" rel="noreferrer">Get {def.label}<ExternalLink /></a></Button>}
           {def.install?.command && <CopyCommand command={def.install.command} />}
-          <Button size="sm" variant="outline" onClick={again}>Check again</Button>
+          <Button variant="outline" onClick={again}>Check again</Button>
         </div>
       </div>
     </div>
@@ -210,7 +211,7 @@ function Requirement({ def }: { def: AgentProviderDef }) {
 function CopyCommand({ command }: { command: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <Button variant="outline" size="sm" className="max-w-full" title="Copy install command"
+    <Button variant="outline" className="max-w-full" title="Copy install command"
       onClick={() => { void navigator.clipboard.writeText(command).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}>
       <code className="agent-req-command">{command}</code>{copied ? <Check /> : <Copy />}
     </Button>
@@ -239,6 +240,8 @@ function LaunchOptions({ def }: { def: AgentProviderDef }) {
 }
 
 const MAX_SELECT = 24;
+/** A Select item cannot carry "", the value that means the option is left to the agent. */
+const UNSET = "\u0000unset";
 
 function OptionRow({ def, option: o, value, found }: {
   def: AgentProviderDef; option: AgentOption; value: string;
@@ -258,10 +261,13 @@ function OptionRow({ def, option: o, value, found }: {
     <div className="settings-row" data-agent-option-row={o.id}>
       <div><label htmlFor={id}>{o.label}</label><p>{source}</p></div>
       {asSelect ? (
-        <select id={id} value={value} onChange={(e) => set(e.target.value)}>
-          <option value="">{unset}</option>
-          {values.filter((v) => v !== o.default).map((v) => <option key={v} value={v}>{v}</option>)}
-        </select>
+        <Select value={value || UNSET} onValueChange={(v) => set(v === UNSET ? "" : v)}>
+          <SelectTrigger id={id} className="w-[220px] max-w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={UNSET}>{unset}</SelectItem>
+            {values.filter((v) => v !== o.default).map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+          </SelectContent>
+        </Select>
       ) : (
         <>
           <Input id={id} list={`${id}-values`} value={value} placeholder={unset} className="w-[220px] max-w-full"

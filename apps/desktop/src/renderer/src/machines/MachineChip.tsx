@@ -20,7 +20,7 @@ export function MachineChip({ uri, frameId, onUnbind }: { uri: string; frameId: 
       <button
         ref={btn}
         onClick={() => setOpen((x) => !x)}
-        className="nodrag flex items-center gap-1.5 min-w-0 max-w-[60%] rounded px-1.5 py-0.5 text-[10px] font-mono cursor-pointer hover:brightness-110"
+        className="nodrag flex items-center gap-1.5 min-w-0 max-w-[60%] rounded px-1.5 py-0.5 text-chip font-mono cursor-pointer hover:brightness-110"
         style={{ background: "color-mix(in oklab, var(--color-brand) 18%, transparent)", color: "var(--color-fg)" }}
         title={`${name} · ${remotePath(uri)} — ${statusWords(status)}`}
         aria-label={`machine ${name}`}

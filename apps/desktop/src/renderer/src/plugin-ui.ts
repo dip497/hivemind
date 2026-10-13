@@ -12,6 +12,7 @@ export * from "./components/ui/loading";
 export * from "./components/ui/label";
 export * from "./components/ui/menu-item";
 export * from "./components/ui/popover";
+export * from "./components/ui/select";
 export * from "./components/ui/skeleton";
 export * from "./components/ui/switch";
 export * from "./components/ui/textarea";

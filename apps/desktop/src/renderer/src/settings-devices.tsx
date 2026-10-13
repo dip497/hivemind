@@ -44,7 +44,7 @@ export function YourDevicesPrefs() {
   }, []);
   return (
     <div className="settings-stack">
-      <p className="text-[13px] text-[var(--color-fg2)]" data-page-lead>Computers and phones that are you: they see every workspace you own.</p>
+      <p className="text-body text-[var(--color-fg2)]" data-page-lead>Computers and phones that are you: they see every workspace you own.</p>
       <div className="flex flex-col gap-3" data-connect-cards>
         <Card icon={Smartphone} title="Use on your phone" what="Scan a code with it. Your phone sees what needs you and answers it; it runs nothing itself." name="phone">
           <PhoneCode offering={offering} />
@@ -60,7 +60,7 @@ export function YourDevicesPrefs() {
         {devices === undefined ? null : devices === null ? (
           <p className="settings-note">Only the app knows</p>
         ) : devices.length === 0 ? (
-          <p className="text-[12px] text-[var(--color-fg3)]" data-devices-none>None yet.</p>
+          <p className="text-label text-[var(--color-fg3)]" data-devices-none>None yet.</p>
         ) : (
           <>
             <ul className="flex flex-col" data-devices>
@@ -86,8 +86,8 @@ function Card({ icon: Icon, title, what, name, children }: { icon: ComponentType
       <div className="flex items-start gap-3">
         <Icon size={18} className="mt-0.5 shrink-0 text-[var(--color-fg2)]" />
         <div className="flex flex-col gap-0.5">
-          <h3 className="text-[13px] font-semibold">{title}</h3>
-          <p className="text-[12px] text-[var(--color-fg3)]">{what}</p>
+          <h3 className="text-body font-semibold">{title}</h3>
+          <p className="text-label text-[var(--color-fg3)]">{what}</p>
         </div>
       </div>
       {children}
@@ -117,7 +117,7 @@ function DeviceRow({ device }: { device: PairedDeviceSummary }) {
           </p>
         </div>
       </div>
-      <Button size="sm" variant="outline" data-unpair onClick={() => void window.hive.unpair(device.device).catch((e: unknown) => setError(messageOf(e)))}>
+      <Button variant="outline" data-unpair onClick={() => void window.hive.unpair(device.device).catch((e: unknown) => setError(messageOf(e)))}>
         Unpair
       </Button>
     </li>
@@ -131,8 +131,8 @@ function PhoneCode({ offering }: { offering: Offering }) {
   if (!offer?.phone) {
     return (
       <div className="flex flex-col gap-2">
-        <div><Button size="sm" data-pair-phone onClick={() => { setInBrowser(false); show(true); }}><Smartphone /> Show the code</Button></div>
-        {error && <p className="text-[12px] text-[var(--color-err)]" role="alert">{error}</p>}
+        <div><Button data-pair-phone onClick={() => { setInBrowser(false); show(true); }}><Smartphone /> Show the code</Button></div>
+        {error && <p className="text-label text-[var(--color-err)]" role="alert">{error}</p>}
       </div>
     );
   }
@@ -147,15 +147,15 @@ function PhoneCode({ offering }: { offering: Offering }) {
     <div className="flex flex-wrap items-start gap-4" data-pair-offered="phone">
       <QrCode text={shown} label="QR code of the pairing link" data-pair-qr />
       <div className="flex min-w-[200px] flex-1 flex-col gap-2">
-        <p className="text-[12px] text-[var(--color-fg2)]">
+        <p className="text-label text-[var(--color-fg2)]">
           {shown === page ? "Scan this with your phone's camera, or with hivemind on it." : "Scan this with hivemind on your phone."} It works once, until {until}.
         </p>
         {page && (
           <div className="flex flex-col gap-1" data-pair-browser={inBrowser ? "on" : "off"}>
-            <label className="flex items-center gap-2 text-[12px]">
+            <label className="flex items-center gap-2 text-label">
               <Switch on={inBrowser} onChange={setInBrowser} label="Open in the phone's browser" /> Open in the phone's browser, no app needed
             </label>
-            <p className="text-[12px] text-[var(--color-fg3)]" data-pair-server={server}>
+            <p className="text-label text-[var(--color-fg3)]" data-pair-server={server}>
               The page comes from {server}, this network's server. Whoever runs it could pair as you: turn this on only if that is you.
             </p>
             {inBrowser && <PageHash page={page.split("#")[0]!} />}
@@ -174,13 +174,13 @@ function ComputerCode({ offering }: { offering: Offering }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2" data-pair-side="show">
-        <p className="text-[12px] font-medium">Adding this computer to another?</p>
+        <p className="text-label font-medium">Adding this computer to another?</p>
         {offer && !offer.phone ? (
           <div className="flex flex-wrap items-start gap-4" data-pair-offered="code">
             <QrCode text={offer.link} label="QR code of the pairing link" data-pair-qr />
             <div className="flex min-w-[200px] flex-1 flex-col gap-2">
-              <p className="font-mono text-[14px] tracking-wide" data-pair-code>{offer.code.split("-").join(" ")}</p>
-              <p className="text-[12px] text-[var(--color-fg3)]">
+              <p className="font-mono text-row tracking-wide" data-pair-code>{offer.code.split("-").join(" ")}</p>
+              <p className="text-label text-[var(--color-fg3)]">
                 Enter these words (on this network) or the link on the other computer, under Settings → Your devices, or run <code className="font-mono">hive host pair</code> with them on a host. It works once, until {new Date(offer.expires).toLocaleTimeString()}.
               </p>
               <CopyLink text={offer.link} />
@@ -189,20 +189,20 @@ function ComputerCode({ offering }: { offering: Offering }) {
         ) : (
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="outline" data-pair-offer onClick={() => show(false)}>Show a code</Button>
-              <span className="text-[12px] text-[var(--color-fg3)]">then type its six words on the other one</span>
+              <Button variant="outline" data-pair-offer onClick={() => show(false)}>Show a code</Button>
+              <span className="text-label text-[var(--color-fg3)]">then type its six words on the other one</span>
             </div>
-            {error && <p className="text-[12px] text-[var(--color-err)]" role="alert">{error}</p>}
+            {error && <p className="text-label text-[var(--color-err)]" role="alert">{error}</p>}
           </div>
         )}
       </div>
       <div className="flex flex-col gap-2" data-pair-side="enter">
-        <p className="text-[12px] font-medium">Have a code from your other computer?</p>
+        <p className="text-label font-medium">Have a code from your other computer?</p>
         <EnterLink />
       </div>
       <details className="settings-disclosure" data-pairing-how>
         <summary>How pairing works <ChevronDown size={14} /></summary>
-        <div className="flex flex-col gap-1.5 text-[12px] text-[var(--color-fg3)]">
+        <div className="flex flex-col gap-1.5 text-label text-[var(--color-fg3)]">
           <p>The six words find the other device on this network; the link finds it from anywhere.</p>
           <p>A host (<code className="font-mono">hive host</code> on a server) keeps your workspaces, and their agents, running while this computer sleeps. It becomes you: it can open, and run agents in, every workspace you own there.</p>
           <p>Entering another computer's code makes this computer that person.</p>
@@ -216,7 +216,7 @@ function CopyLink({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div>
-      <Button size="sm" variant="outline" data-pair-copy title={text}
+      <Button variant="outline" data-pair-copy title={text}
         onClick={() => { void navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}>
         Copy the link {copied ? <Check /> : <Copy />}
       </Button>
@@ -256,16 +256,16 @@ function EnterLink() {
           placeholder="six words or hivemind://pair/… link"
           spellCheck={false}
           autoComplete="off"
-          className="flex-1 font-mono text-[12px]"
+          className="flex-1 font-mono text-label"
           aria-label="Code from your other computer"
           data-pair-link
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && text.trim() && !busy) void pair(); }}
         />
-        <Button size="sm" disabled={!text.trim() || busy} data-pair-go onClick={() => void pair()}>{busy ? "Pairing…" : "Pair"}</Button>
+        <Button disabled={!text.trim() || busy} data-pair-go onClick={() => void pair()}>{busy ? "Pairing…" : "Pair"}</Button>
       </div>
       {result && (
-        <p className={`text-[12px] ${result.ok ? "text-[var(--color-ok)]" : "text-[var(--color-err)]"}`} role={result.ok ? "status" : "alert"} data-pair-result={result.ok ? "paired" : "failed"}>
+        <p className={`text-label ${result.ok ? "text-[var(--color-ok)]" : "text-[var(--color-err)]"}`} role={result.ok ? "status" : "alert"} data-pair-result={result.ok ? "paired" : "failed"}>
           {result.message}
         </p>
       )}
@@ -282,12 +282,12 @@ function PageHash({ page }: { page: string }) {
     return () => { on = false; };
   }, [page]);
   const short = (h: string) => `${h.slice(0, 16)}…`;
-  if (!hash) return <p className="text-[12px] text-[var(--color-fg3)]">Working out the page's hash…</p>;
-  if ("error" in hash) return <p className="text-[12px] text-[var(--color-err)]" data-pair-page="error">The page's hash could not be worked out: {hash.error}</p>;
+  if (!hash) return <p className="text-label text-[var(--color-fg3)]">Working out the page's hash…</p>;
+  if ("error" in hash) return <p className="text-label text-[var(--color-err)]" data-pair-page="error">The page's hash could not be worked out: {hash.error}</p>;
   const { served, shipped } = hash;
   const verdict = shipped === null ? "unknown" : served === shipped ? "same" : "other";
   return (
-    <p className="text-[12px] text-[var(--color-fg3)]" data-pair-page={verdict} title={served}>
+    <p className="text-label text-[var(--color-fg3)]" data-pair-page={verdict} title={served}>
       Page <span className="font-mono">{short(served)}</span>
       {verdict === "same" && ": the page this release of hivemind made."}
       {verdict === "other" && <span className="text-[var(--color-err)]">: not the page this release made (<span className="font-mono">{short(shipped!)}</span>). It is another version, or was changed.</span>}
@@ -325,26 +325,26 @@ function BrowserApp() {
       </div>
       {status?.url && (
         <div className="settings-row">
-          <code className="min-w-0 flex-1 truncate text-[12px]" data-browser-app-url>{status.url.replace(/#token=.*/, "#token=…")}</code>
-          <Button size="sm" variant="outline" data-browser-app-copy
+          <code className="min-w-0 flex-1 truncate text-label" data-browser-app-url>{status.url.replace(/#token=.*/, "#token=…")}</code>
+          <Button variant="outline" data-browser-app-copy
             onClick={() => { void navigator.clipboard.writeText(status.url!).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}>
             Copy the link {copied ? <Check /> : <Copy />}
           </Button>
-          <Button size="sm" variant="outline" asChild><a href={status.url} target="_blank" rel="noopener noreferrer" data-browser-app-open>Open</a></Button>
+          <Button variant="outline" asChild><a href={status.url} target="_blank" rel="noopener noreferrer" data-browser-app-open>Open</a></Button>
         </div>
       )}
-      {status?.error && <p className="text-[12px] text-[var(--color-err)]" role="alert" data-browser-app-error>{status.error}</p>}
+      {status?.error && <p className="text-label text-[var(--color-err)]" role="alert" data-browser-app-error>{status.error}</p>}
       <details className="settings-disclosure" data-browser-app-more>
         <summary>More options <ChevronDown size={14} /></summary>
-        <p className="text-[12px] text-[var(--color-fg3)]">For another device, put the app behind <code>tailscale serve</code> and add the machine's tailnet name under Other names.</p>
+        <p className="text-label text-[var(--color-fg3)]">For another device, put the app behind <code>tailscale serve</code> and add the machine's tailnet name under Other names.</p>
         <div className="settings-row">
           <label htmlFor="browser-app-port">Port</label>
-          <Input id="browser-app-port" className="h-8 w-28" inputMode="numeric" value={port} onChange={(e) => setPort(e.target.value)} onBlur={savePort}
+          <Input id="browser-app-port" className="w-28" inputMode="numeric" value={port} onChange={(e) => setPort(e.target.value)} onBlur={savePort}
             onKeyDown={(e) => { if (e.key === "Enter") savePort(); }} />
         </div>
         <div className="settings-row">
           <label htmlFor="browser-app-names">Other names</label>
-          <Input id="browser-app-names" className="h-8 flex-1" placeholder="box.tail1234.ts.net" spellCheck={false} value={names} onChange={(e) => setNames(e.target.value)} onBlur={saveNames}
+          <Input id="browser-app-names" className="flex-1" placeholder="box.tail1234.ts.net" spellCheck={false} value={names} onChange={(e) => setNames(e.target.value)} onBlur={saveNames}
             onKeyDown={(e) => { if (e.key === "Enter") saveNames(); }} />
         </div>
       </details>

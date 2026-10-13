@@ -18,6 +18,7 @@ import path from "node:path";
 import { HIVE_NET, hiveNetBuilt, join, note, notes, openShare, person, share, tiles } from "./helpers/multiplayer";
 import { guest as windowless } from "./helpers/guest";
 import { stopDaemons } from "./helpers/daemons";
+import { pick } from "./helpers/select";
 
 const HIVE = path.resolve("../cli/dist/hive");
 const hostable = fs.existsSync(HIVE) && `${spawnSync(HIVE, ["host", "--help"], { encoding: "utf8" }).stdout}`.includes("pair");
@@ -121,7 +122,8 @@ async function sharedAndPaired(profile?: string) {
  *  guest follows. */
 async function moveToHost(laptop: Page, guest: Page, hostDevice: string): Promise<void> {
   await openShare(laptop);
-  await expect(laptop.locator("[data-move-to]")).toHaveValue(hostDevice);
+  const hostName = await laptop.evaluate((d) => window.hive.devices().then((all) => all.find((x) => x.device === d)?.name), hostDevice);
+  await expect(laptop.locator("[data-move-to]")).toHaveText(hostName!);
   await laptop.locator("[data-move-hosting]").click();
   await expect(laptop.locator('[data-shared-banner][data-state="connected"]')).toHaveAttribute("data-access", "owner", { timeout: 20_000 });
   await expect.poll(async () => ((await guest.evaluate(() => window.hive.joined()))[0] as { host?: string } | undefined)?.host, { timeout: 10_000 }).toBe(hostDevice);
@@ -222,7 +224,7 @@ test("on a network with a lookup server, the laptop shares the workspace at the 
   await openShare(laptop);
   const row = laptop.locator(`[data-shared-person="${guestId}"]`);
   await expect(row).toContainText("Here now", { timeout: 20_000 });
-  await row.locator("[data-person-role]").selectOption("terminals");
+  await pick(row.locator("[data-person-role]"), "Can use terminals");
   await expect(guest.locator('[data-shared-banner][data-state="connected"]')).toHaveAttribute("data-access", "terminals", { timeout: 20_000 });
   await laptop.keyboard.press("Escape");
 

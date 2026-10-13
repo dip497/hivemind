@@ -21,7 +21,7 @@ interface BoxNodeProps<T extends BoxObject> {
   selected?: boolean;
 }
 
-const HANDLE = { width: 10, height: 10, borderRadius: 3, border: "2px solid var(--color-bg)" } as const;
+const HANDLE = { width: 10, height: 10, borderRadius: 4, border: "2px solid var(--color-bg)" } as const;
 
 function BoxShell({ id, object, selected, children }: { id: string; object: BoxObject; selected: boolean; children: ReactNode }) {
   const board = useBoardContext();

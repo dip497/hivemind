@@ -133,8 +133,8 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
     </>}
     <p className="settings-note">Every file matches the checksum in the catalog index. The index itself is not signed, so install only what you trust.</p>
     <div className="settings-actions">
-      <Button size="sm" variant="outline" disabled={busy === key(e)} onClick={() => setReview(null)}>Cancel</Button>
-      <Button size="sm" disabled={busy === key(e)} onClick={() => void install(e, open)}>{busy === key(e) ? "Installing…" : outdatedOf(e) ? "Update" : "Install"}</Button>
+      <Button variant="outline" disabled={busy === key(e)} onClick={() => setReview(null)}>Cancel</Button>
+      <Button disabled={busy === key(e)} onClick={() => void install(e, open)}>{busy === key(e) ? "Installing…" : outdatedOf(e) ? "Update" : "Install"}</Button>
     </div>
   </section>;
 
@@ -142,12 +142,12 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
     {done && <div role="status" className="settings-message catalog-done">
       <span>{done.entry.name} is installed.</span>
       {done.entry.type === "view"
-        ? <Button size="sm" onClick={() => { setViewMode(done.entry.id); go(`plugin:view:${done.entry.id}`); }}>Use this view</Button>
-        : <Button size="sm" onClick={() => go(`plugin:${done.entry.type}:${done.entry.id}`)}>Open its page</Button>}
+        ? <Button onClick={() => { setViewMode(done.entry.id); go(`plugin:view:${done.entry.id}`); }}>Use this view</Button>
+        : <Button onClick={() => go(`plugin:${done.entry.type}:${done.entry.id}`)}>Open its page</Button>}
     </div>}
     {loadError && <div role="alert" className="settings-message error">
       <p>Could not load the plugin catalog: {loadError}</p>
-      <div className="settings-actions"><Button size="sm" variant="outline" onClick={load}>Try again</Button></div>
+      <div className="settings-actions"><Button variant="outline" onClick={load}>Try again</Button></div>
     </div>}
     {!entries && !loadError && <Loading label="Loading the catalog" />}
     {entries && !shown.length && <p className="settings-empty">

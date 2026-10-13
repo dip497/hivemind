@@ -25,7 +25,7 @@ function TextField({ n }: { n: Record<string, unknown> }) {
   if (!f) return null;
   const o = f.object;
   const multiline = n.type === "textarea";
-  const size = n.size === "large" ? "text-[20px] font-semibold leading-tight" : "text-[14px] leading-snug";
+  const size = n.size === "large" ? "text-heading font-semibold leading-tight" : "text-row leading-snug";
   const placeholder = str(n.placeholder);
   const Field = multiline ? TextArea : TextLine;
   return f.editing
@@ -119,13 +119,13 @@ function draw(node: unknown, id: string, images: Images, key: number | string = 
     case "image": return <Picture key={key} n={n} images={images} />;
     case "stack": return <div key={key} className={`flex min-w-0 flex-col gap-1.5${n.fill ? " h-full" : ""}`}>{kids}</div>;
     case "row": return <div key={key} className="flex min-w-0 items-center gap-2">{kids}</div>;
-    case "text": return <span key={key} className={`truncate ${n.size === "large" ? "text-[18px] font-semibold" : n.muted ? "text-[11px] text-[var(--color-fg3)]" : "text-[13px]"}`}>{str(n.text)}</span>;
-    case "number": return <div key={key} className="flex flex-col"><span className="text-[26px] font-semibold tabular-nums leading-none">{str(n.value)}</span>{n.label != null && <span className="text-[11px] text-[var(--color-fg3)]">{str(n.label)}</span>}</div>;
+    case "text": return <span key={key} className={`truncate ${n.size === "large" ? "text-heading font-semibold" : n.muted ? "text-count text-[var(--color-fg3)]" : "text-body"}`}>{str(n.text)}</span>;
+    case "number": return <div key={key} className="flex flex-col"><span className="text-heading font-semibold tabular-nums leading-none">{str(n.value)}</span>{n.label != null && <span className="text-count text-[var(--color-fg3)]">{str(n.label)}</span>}</div>;
     case "meter": {
       const max = Math.max(num(n.max, 1), 1e-9);
       const pct = Math.min(100, Math.max(0, (num(n.value) / max) * 100));
       return <div key={key} className="flex flex-col gap-1">
-        {n.label != null && <span className="text-[11px] text-[var(--color-fg3)]">{str(n.label)}</span>}
+        {n.label != null && <span className="text-count text-[var(--color-fg3)]">{str(n.label)}</span>}
         <div className="h-2 overflow-hidden rounded-full bg-[var(--color-bg3)]" role="meter" aria-valuenow={num(n.value)} aria-valuemax={max}>
           <div className="h-full rounded-full bg-[var(--color-select)]" style={{ width: `${pct}%` }} />
         </div>
@@ -141,7 +141,7 @@ function draw(node: unknown, id: string, images: Images, key: number | string = 
  *  saying so until it has drawn. */
 export function WidgetBody({ id, widget, name, repo, drawing }: { id: string; widget: string; name: string; repo: string | null; drawing: Drawing | undefined }) {
   return <>{drawing === undefined || drawing.tree === null
-    ? <span className="text-[12px] text-[var(--color-fg3)]">{name}: waiting for it to draw</span>
+    ? <span className="text-label text-[var(--color-fg3)]">{name}: waiting for it to draw</span>
     : draw(drawing.tree, id, { repo, widget })}</>;
 }
 
@@ -162,7 +162,7 @@ export function WidgetContent({ object, pkg, selected = false }: { object: Widge
   const name = pkg?.name ?? object.widget;
   return <FieldsOf.Provider value={{ object, editing: board.editingId === object.id, selected }}>
     {tree === null
-      ? <span className="text-[12px] text-[var(--color-fg3)]">{name}: waiting for it to draw</span>
+      ? <span className="text-label text-[var(--color-fg3)]">{name}: waiting for it to draw</span>
       : draw(tree, object.id, { repo: widgetsRepo(), widget: object.widget })}
   </FieldsOf.Provider>;
 }

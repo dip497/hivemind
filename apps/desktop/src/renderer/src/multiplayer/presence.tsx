@@ -236,7 +236,7 @@ export function PresenceLayer({ repo, pane }: { repo: string; pane: RefObject<HT
             <svg width={16} height={20} viewBox="0 0 16 20" aria-hidden className="block">
               <path d="M1 1 L1 16 L5 12 L8 19 L11 18 L8 11 L14 11 Z" fill="currentColor" stroke="var(--color-fg)" strokeWidth={1.2} strokeLinejoin="round" />
             </svg>
-            <span className="ml-3 -mt-1 block w-max max-w-[180px] truncate rounded px-1.5 py-0.5 text-[11px] font-medium text-white" style={{ background: colorOf(p) }}>
+            <span className="ml-3 -mt-1 block w-max max-w-[180px] truncate rounded px-1.5 py-0.5 text-count font-medium text-white" style={{ background: colorOf(p) }}>
               {p.name || "Someone"}
             </span>
           </div>
@@ -254,7 +254,7 @@ function SelectionRing({ id, who }: { id: string; who: Participant }) {
   return (
     <div
       data-presence-selection={id}
-      className="pointer-events-none absolute left-0 top-0 rounded-[10px]"
+      className="pointer-events-none absolute left-0 top-0 rounded-menu"
       style={{
         transform: `translate(${x - 4}px, ${y - 4}px)`,
         width: (node.measured?.width ?? 0) + 8,
@@ -288,14 +288,14 @@ export function PeopleHere({ repo, onManage, follow }: { repo: string; onManage?
           aria-label={followed === p.person ? `Stop following ${p.name}` : `Follow ${p.name}`}
           aria-pressed={followed === p.person}
           onClick={() => followPerson(repo, followed === p.person ? null : p.person)}
-          className="grid size-7 place-items-center rounded-full text-[11px] font-semibold text-white ring-2 ring-[var(--color-bg)] focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
+          className="grid size-7 place-items-center rounded-full text-count font-semibold text-white ring-2 ring-[var(--color-bg)]"
           style={{ background: colorOf(p) }}
         >{initialsOf(p.name)}</button> : (
         <span
           key={p.person}
           title={p.name || "Someone"}
           data-person={p.person}
-          className="grid size-7 place-items-center rounded-full text-[11px] font-semibold text-white ring-2 ring-[var(--color-bg)]"
+          className="grid size-7 place-items-center rounded-full text-count font-semibold text-white ring-2 ring-[var(--color-bg)]"
           style={{ background: colorOf(p) }}
         >
           {initialsOf(p.name)}
@@ -303,7 +303,7 @@ export function PeopleHere({ repo, onManage, follow }: { repo: string; onManage?
         )
       ))}
       {persons.length > 5 && (
-        <span className="grid size-7 place-items-center rounded-full bg-[var(--color-bg3)] text-[11px] text-[var(--color-fg2)] ring-2 ring-[var(--color-bg)]">
+        <span className="grid size-7 place-items-center rounded-full bg-[var(--color-bg3)] text-count text-[var(--color-fg2)] ring-2 ring-[var(--color-bg)]">
           +{persons.length - 5}
         </span>
       )}

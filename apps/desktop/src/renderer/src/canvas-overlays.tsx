@@ -116,14 +116,14 @@ function ToastCard({
           <Icon size={15} />
         </span>
         <div className="flex flex-col min-w-0 flex-1 leading-tight">
-          <span className="font-mono text-[13px] font-semibold tracking-[-0.01em] text-[var(--color-fg)] truncate">
+          <span className="font-mono text-body font-semibold tracking-[-0.01em] text-[var(--color-fg)] truncate">
             {displayName(t.label)}
           </span>
-          <span className="hm-toast-verb text-[11.5px] font-medium mt-0.5">{verb}</span>
+          <span className="hm-toast-verb text-label font-medium mt-0.5">{verb}</span>
           {t.detail && (
-            <span className="font-mono text-[11px] mt-1 text-[var(--color-fg2)] truncate">{t.detail}</span>
+            <span className="font-mono text-count mt-1 text-[var(--color-fg2)] truncate">{t.detail}</span>
           )}
-          <span className="text-[10.5px] tracking-[0.01em] mt-1 text-[var(--color-fg3)] truncate">
+          <span className="text-count tracking-[0.01em] mt-1 text-[var(--color-fg3)] truncate">
             {t.frame ? <>{t.frame} · </> : null}{relTime(t.at, now)}
           </span>
           {/* Inline actions (FUTURE SEAM — see Toast.actions). Renders a button row
@@ -238,10 +238,10 @@ export function CanvasEmptyState({
   return (
     <div className="pointer-events-none absolute inset-0 grid place-items-center">
       <div className="pointer-events-auto w-full max-w-[460px] px-8" data-canvas-empty>
-        <h2 className="text-[20px] font-semibold text-[var(--color-fg)] tracking-tight leading-tight">
+        <h2 className="text-heading font-semibold text-[var(--color-fg)] tracking-tight leading-tight">
           Start with an agent.
         </h2>
-        <p className="text-[13px] text-[var(--color-fg2)] mt-1.5 leading-relaxed">
+        <p className="text-body text-[var(--color-fg2)] mt-1.5 leading-relaxed">
           {!agentLabel
             ? <>No agent CLI is installed on this machine yet. Get one, or open a tool below.</>
             : folder
@@ -259,10 +259,10 @@ export function CanvasEmptyState({
             {agentId ? <AgentIcon id={agentId} size={20} /> : <SquarePen size={18} />}
           </span>
           <span className="flex-1 min-w-0">
-            <span className="block text-[14px] font-medium text-[var(--color-fg)]">{agentLabel ? "New agent" : "Get an agent"}</span>
-            <span className="block text-[12px] text-[var(--color-fg2)] leading-snug">{agentLabel ? `${agentLabel}, in its own tile` : "See which agents Hivemind works with, and how to install one"}</span>
+            <span className="block text-row font-medium text-[var(--color-fg)]">{agentLabel ? "New agent" : "Get an agent"}</span>
+            <span className="block text-label text-[var(--color-fg2)] leading-snug">{agentLabel ? `${agentLabel}, in its own tile` : "See which agents Hivemind works with, and how to install one"}</span>
           </span>
-          {agentLabel && <kbd className="font-mono text-[11px] text-[var(--color-fg2)] shrink-0">2</kbd>}
+          {agentLabel && <kbd className="font-mono text-count text-[var(--color-fg2)] shrink-0">2</kbd>}
         </button>
 
         <div className="mt-3 flex flex-wrap items-center gap-1">
@@ -276,7 +276,7 @@ export function CanvasEmptyState({
               title={s.disabled ? "Open a folder first" : s.label}
             >
               {s.label}
-              {s.hint && <kbd className="font-mono text-[10px]">{s.hint}</kbd>}
+              {s.hint && <kbd className="font-mono text-chip">{s.hint}</kbd>}
             </Button>
           ))}
         </div>

@@ -49,10 +49,10 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                 color: "var(--color-fg)",
                 border: "1px solid var(--color-line2)",
                 borderRadius: "12px",
-                boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.08), 0 10px 36px rgba(0,0,0,0.5)",
+                boxShadow: "var(--hm-highlight-glass), var(--hm-shadow-glass)",
                 backdropFilter: "blur(10px) saturate(135%)",
                 fontFamily: "var(--font-sans)",
-                fontSize: "12px",
+                fontSize: "var(--text-label)",
               },
             }}
           />

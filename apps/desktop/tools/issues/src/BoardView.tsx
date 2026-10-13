@@ -62,9 +62,9 @@ export function BoardView({
                 : "bg-[color-mix(in_srgb,var(--color-bg3)_50%,transparent)]"
             }`}
           >
-            <div className="flex items-center gap-1.5 px-2.5 py-2 text-[11px] font-semibold text-[var(--color-fg2)]">
+            <div className="flex items-center gap-1.5 px-2.5 py-2 text-count font-semibold text-[var(--color-fg2)]">
               {g.header}
-              <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-mono tabular-nums bg-[var(--color-bg4)] text-[var(--color-fg3)]">
+              <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-chip font-mono tabular-nums bg-[var(--color-bg4)] text-[var(--color-fg3)]">
                 {g.items.length}
               </span>
             </div>
@@ -86,7 +86,7 @@ export function BoardView({
                 />
               ))}
               {g.items.length === 0 && (
-                <div className="text-[10.5px] text-[var(--color-fg3)] px-2 py-3 rounded-md border border-dashed border-[var(--color-line2)] text-center">
+                <div className="text-count text-[var(--color-fg3)] px-2 py-3 rounded-md border border-dashed border-[var(--color-line2)] text-center">
                   {droppable ? "Drop here" : "No issues"}
                 </div>
               )}
