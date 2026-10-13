@@ -662,9 +662,10 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const transcript = def?.session?.transcript;
         const about = transcript && tool ? toolAbout(transcript, tool, p.input) : undefined;
         return await new Promise((resolve) => {
-          const wait = deps.waits.hold(tile, { tool, ...(about ? { about } : {}), ...(asks ? { asks } : {}), chooses: !!answer.choose }, (decision, feedback, choice) => {
+          const wait = deps.waits.hold(tile, { tool, ...(about ? { about } : {}), ...(asks ? { asks } : {}), chooses: !!answer.choose }, (decision, feedback, answers) => {
             if (!decision) return resolve({});
-            const reply: HookReply = asks ? (choice === undefined ? { line: feedback ?? "" } : { choice }) : { decision, ...(feedback ? { message: feedback } : {}) };
+            // A line typed answers each of its questions.
+            const reply: HookReply = asks ? { answers: answers ?? asks.map(() => ({ text: feedback ?? "" })) } : { decision, ...(feedback ? { message: feedback } : {}) };
             const stdout = printedAnswer(answer, p.input, reply);
             resolve(stdout ? { stdout } : {});
           });

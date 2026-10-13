@@ -352,12 +352,19 @@ pub enum Reply {
         approve: bool,
         feedback: Option<String>,
     },
-    /// A question, answered with its option `n`, counting from 0.
-    Choose { n: u32 },
+    /// Questions, each answered in order.
+    Answers(Vec<Answer>),
+}
+
+/// The answer to one question: the options chosen, counting from 0, or a line.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Answer {
+    Chosen(Vec<u32>),
+    Text(String),
 }
 
 impl Reply {
-    /// As `agent.answer` takes it: `{text}`, `{decision, feedback?}` or `{choice}`.
+    /// As `agent.answer` takes it: `{text}`, `{decision, feedback?}` or `{answers}`.
     fn said(&self) -> Value {
         let decision = |yes: bool| if yes { "allow" } else { "deny" };
         match self {
@@ -368,7 +375,10 @@ impl Reply {
                 feedback: Some(feedback),
             } => json!({ "decision": decision(*approve), "feedback": feedback }),
             Reply::Plan { approve, .. } => json!({ "decision": decision(*approve) }),
-            Reply::Choose { n } => json!({ "choice": n }),
+            Reply::Answers(answers) => json!({ "answers": answers.iter().map(|a| match a {
+                Answer::Chosen(n) => json!({ "chosen": n }),
+                Answer::Text(text) => json!({ "text": text }),
+            }).collect::<Vec<_>>() }),
         }
     }
 }
@@ -442,7 +452,14 @@ mod tests {
                 },
                 json!({ "decision": "deny", "feedback": "split it" }),
             ),
-            (Reply::Choose { n: 1 }, json!({ "choice": 1 })),
+            (
+                Reply::Answers(vec![
+                    Answer::Chosen(vec![2]),
+                    Answer::Chosen(vec![0, 2]),
+                    Answer::Text("Durian".into()),
+                ]),
+                json!({ "answers": [{ "chosen": [2] }, { "chosen": [0, 2] }, { "text": "Durian" }] }),
+            ),
         ];
         for (reply, wire) in said {
             assert_eq!(reply.said(), wire, "{reply:?}");

@@ -13,7 +13,7 @@
 import type { AnswerKeys, InputKind } from "@hivemind/agents";
 import { keyBytes } from "@hivemind/agent-host/keys";
 import type { ScreenReading, SessionStatus } from "@hivemind/agent-host/status-store";
-import type { Answerer, ToolAsked } from "@hivemind/workspace-api/agents";
+import type { Answerer, QuestionAnswer, ToolAsked } from "@hivemind/workspace-api/agents";
 import { ApiError, oneOf, text, written } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
@@ -88,20 +88,33 @@ function line(value: unknown, name: string): string {
   return t;
 }
 
-/** Option `n` of the one question `on` is chosen from: else `BAD_REQUEST`. */
-function optionOf(on: ReturnType<typeof waitOn>, n: unknown): number {
-  const options = on.choose ? on.asks![0]!.options.length : 0;
-  if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0 || n >= options) throw new ApiError("BAD_REQUEST", "answer.choice is an option, from 0, of the one question it asks, when its keys choose one");
-  return n;
+const NOT_ANSWERS = "answer.answers is one answer to each question it asks, in order: {chosen: [options, from 0]}, one unless several may be, or {text}";
+
+/** One answer to each question `on` is chosen from, in order: else `BAD_REQUEST`. */
+function answersOf(on: ReturnType<typeof waitOn>, value: unknown): QuestionAnswer[] {
+  const asks = on.choose ? on.asks! : [];
+  if (!Array.isArray(value) || !asks.length || value.length !== asks.length) throw new ApiError("BAD_REQUEST", NOT_ANSWERS);
+  return value.map((a: unknown, i): QuestionAnswer => {
+    const { chosen, text: said } = (a ?? {}) as { chosen?: unknown; text?: unknown };
+    if (said !== undefined && chosen === undefined) return { text: line(said, `answer.answers[${i}].text`) };
+    const q = asks[i]!;
+    const ok = Array.isArray(chosen) && chosen.length > 0 && (chosen.length === 1 || !!q.many) && new Set(chosen).size === chosen.length
+      && chosen.every((n) => Number.isSafeInteger(n) && n >= 0 && n < q.options.length);
+    if (!ok) throw new ApiError("BAD_REQUEST", NOT_ANSWERS);
+    return { chosen: chosen as number[] };
+  });
 }
 
 const NOT_DECIDED = "it asks a question: an option of it is chosen, or a line is typed, never allowed or denied";
 
-/** How an answer is recorded: its decision, the option chosen (from 1), else that it was a reply. */
+/** How an answer is recorded: its decision; the options chosen (from 1) of each question, or that
+ *  it was a reply; else that it was a reply. Never its words. */
 const decidedOf = (answer: unknown): string => {
-  const { decision, choice } = (answer ?? {}) as { decision?: unknown; choice?: unknown };
+  const { decision, answers } = (answer ?? {}) as { decision?: unknown; answers?: unknown };
   if (decision === "allow" || decision === "deny") return decision;
-  return typeof choice === "number" ? `choice ${choice + 1}` : "reply";
+  if (!Array.isArray(answers)) return "reply";
+  const each = answers.map((a: { chosen?: unknown } | null) => (Array.isArray(a?.chosen) ? a.chosen.map((n) => Number(n) + 1).join("+") : "reply"));
+  return `choice ${each.join(", ")}`;
 };
 
 export function answers(o: AnswersOptions): Domain<"agent.answer"> {
@@ -111,7 +124,7 @@ export function answers(o: AnswersOptions): Domain<"agent.answer"> {
       "agent.answer": (from, tile, since, answer) => {
         const bare = toBareId(text(tile, "tile"));
         if (typeof since !== "number") throw new ApiError("BAD_REQUEST", "since must be a number");
-        const a = (answer ?? {}) as { text?: unknown; decision?: unknown; choice?: unknown; feedback?: unknown; always?: unknown };
+        const a = (answer ?? {}) as { text?: unknown; decision?: unknown; answers?: unknown; feedback?: unknown; always?: unknown };
         const plane = o.plane();
         const held = plane.waits.of(bare);
         if (held?.since === since && held.prompt) {
@@ -119,7 +132,7 @@ export function answers(o: AnswersOptions): Domain<"agent.answer"> {
           if (a.always !== undefined) throw new ApiError("BAD_REQUEST", "answer.always is true, and answers a supervised tool use alone");
           const on = waitOn(bare, { kind: held.kind, since }, { decides: () => true, wait: () => held });
           const by = o.who(from);
-          if (a.choice !== undefined) return plane.waits.answer(bare, since, "allow", { by, choice: optionOf(on, a.choice) });
+          if (a.answers !== undefined) return plane.waits.answer(bare, since, "allow", { by, answers: answersOf(on, a.answers) });
           if (a.decision !== undefined) {
             if (on.kind === "question") throw new ApiError("BAD_REQUEST", NOT_DECIDED);
             const decision = oneOf(a.decision, "answer.decision", ["allow", "deny"] as const);
@@ -143,9 +156,11 @@ export function answers(o: AnswersOptions): Domain<"agent.answer"> {
         if (!status || !waitsOnThePerson(status) || status.since !== since || answered.has(`${bare}@${since}`)) return { answered: false };
         const on = waitOn(bare, { kind: status.kind!, says: status.says, since }, { decides: () => false, asking: o.asking, chooses: (t) => !!o.chooseKeys(t) });
         let parts: string[];
-        if (a.choice !== undefined) {
-          const n = optionOf(on, a.choice);
-          parts = o.chooseKeys(bare)!.map((k) => keyBytes(k.replaceAll("{n}", String(n + 1))));
+        if (a.answers !== undefined) {
+          // Its keys choose one option of its one question; a line is typed as {text}.
+          const [only] = answersOf(on, a.answers);
+          if (!only || !("chosen" in only)) throw new ApiError("BAD_REQUEST", "this agent's question is answered on its screen: one option of it, or a line as {text}");
+          parts = o.chooseKeys(bare)!.map((k) => keyBytes(k.replaceAll("{n}", String(only.chosen[0]! + 1))));
         } else if (a.decision !== undefined) {
           if (on.kind === "question") throw new ApiError("BAD_REQUEST", NOT_DECIDED);
           const decision = oneOf(a.decision, "answer.decision", ["allow", "deny"] as const);

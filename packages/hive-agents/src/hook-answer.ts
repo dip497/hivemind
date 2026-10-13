@@ -19,9 +19,12 @@ export function hookAsks(answer: HookAnswer, input: unknown): Asked[] | undefine
   return answer.choose && answer.asks ? askedIn(input, answer.asks) : undefined;
 }
 
-/** What the person said: allowed or denied, with a reason; or, to its questions, option `choice`
- *  of the one it asks, or a line for each. */
-export type HookReply = { decision: "allow" | "deny"; message?: string } | { choice: number } | { line: string };
+/** The person's answer to one question: the options chosen, by their place from 0, or a line. */
+export type QuestionAnswer = { chosen: number[] } | { text: string };
+
+/** What the person said: allowed or denied, with a reason; or, to its questions, an answer to
+ *  each, in order. */
+export type HookReply = { decision: "allow" | "deny"; message?: string } | { answers: QuestionAnswer[] };
 
 /** A shape with each `{name}` that stands alone filled from `values`; one with no value leaves. */
 function filled(shape: unknown, values: Record<string, unknown>): unknown {
@@ -46,19 +49,26 @@ export function printedAnswer(answer: HookAnswer, input: unknown, reply: HookRep
   if (!answer.choose || !answer.asks || !answer.chosen || !input || typeof input !== "object") return undefined;
   const asks = answer.asks;
   const list = valueAt(input, asks.list);
-  if (!Array.isArray(list)) return undefined;
+  if (!Array.isArray(list) || !list.length || list.length !== reply.answers.length) return undefined;
   const set: Record<string, string> = {};
   for (const [i, q] of list.entries()) {
     const question = valueAt(q, asks.question);
-    if (typeof question !== "string") continue;
-    if ("line" in reply) set[question] = reply.line;
-    else if (i === 0) {
-      const options = valueAt(q, asks.options);
-      const label = Array.isArray(options) ? valueAt(options[reply.choice], asks.label) : undefined;
-      if (typeof label !== "string") return undefined;
-      set[question] = label;
-    }
+    const a = reply.answers[i]!;
+    const said = "text" in a ? a.text : labels(q, a.chosen, answer);
+    if (typeof question !== "string" || said === undefined) return undefined;
+    set[question] = said;
   }
-  if (!Object.keys(set).length) return undefined;
   return JSON.stringify(filled(answer.choose, { input: { ...(input as Record<string, unknown>), [answer.chosen]: set } }));
+}
+
+/** The labels of options `chosen` of question `q`, joined as Claude Code joins several
+ *  (code.claude.com/docs/en/agent-sdk/user-input); undefined for none, one it does not list, or
+ *  several of a question that takes one. */
+function labels(q: unknown, chosen: number[], answer: HookAnswer): string | undefined {
+  const asks = answer.asks!;
+  const options = valueAt(q, asks.options);
+  const many = asks.many !== undefined && valueAt(q, asks.many) === true;
+  if (!Array.isArray(options) || !chosen.length || (chosen.length > 1 && !many) || new Set(chosen).size !== chosen.length) return undefined;
+  const said = chosen.map((n) => valueAt(options[n], asks.label));
+  return said.every((l): l is string => typeof l === "string") ? said.join(", ") : undefined;
 }

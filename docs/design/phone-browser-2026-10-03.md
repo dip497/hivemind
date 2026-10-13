@@ -1305,6 +1305,18 @@ On the rig the phone showed "permission" with Allow and Deny for an AskUserQuest
   (`status-store.ts` fold), and the `question` readings after it do not bring the wait back. Claude's
   question rule now also reads a selected option, `❯ 1.`, as a chooser.
 
+- (2026-10-13) A wait with two questions could not be answered: the page drew options only for
+  one question, and an answer carried one option (`{choice}`), which the hook set under the first
+  question alone. An answer is now one per question, in order: the options chosen (several where
+  the question says `many`) or the person's own line (needs 0.11). The page, the core's `Reply`, the
+  host and the hook pass that one shape, and `{choice}` is gone. The hook sets every question in
+  `updatedInput.answers`, several labels joined by `, ` as Claude Code's Agent SDK docs join them
+  (code.claude.com/docs/en/agent-sdk/user-input). On the page each question is its own block, with its
+  options and a line of its own, and one Send that waits for an answer to each; hapi keeps the same
+  per question (`web/src/components/ToolCard/AskUserQuestionFooter.tsx:59-115`) but steps through the
+  questions one at a time. One question of one answer is still answered by a tap. An agent whose
+  hook does not hold the wait still has its option's digit typed, for one question of one answer only.
+
 ### 12.11 Opening the page: every screen at once, then Start not ready
 
 On the rig (4× CPU, opened on `#start`), a frame at about 355 ms showed every screen on top of each

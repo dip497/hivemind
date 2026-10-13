@@ -8,7 +8,9 @@
 import { composer, h, pill } from "./dom.js";
 import { markdown } from "./markdown.js";
 import { NOTICES } from "./words.js";
-import type { Reply, Waiting } from "./types.js";
+import type { QuestionAnswer, Reply, Waiting } from "./types.js";
+
+type Asked = NonNullable<Waiting["asks"]>[number];
 
 /** Waits answered with no word back, by tile and since. */
 const unconfirmed = new Set<string>();
@@ -57,21 +59,24 @@ export function answers(tile: string, w: Waiting, answer: (reply: Reply) => Prom
     command?.addEventListener("click", () => command.toggleAttribute("data-whole"));
     box.append(h("div", { class: "asked", "data-tool": w.tool.name }, h("p", { class: "tool-name" }, w.tool.name), command));
   }
-  for (const q of w.asks ?? []) {
-    box.append(h("div", { class: "asked", "data-question": "" },
-      h("p", {}, q.question),
-      ...(w.choose ? [] : [h("ul", {}, ...q.options.map((o) => h("li", {}, o)))])));
+  const asks = w.kind === "question" && w.choose ? w.asks ?? [] : [];
+  if (!asks.length) {
+    for (const q of w.asks ?? []) {
+      box.append(h("div", { class: "asked", "data-question": "" }, h("p", {}, q.question), h("ul", {}, ...q.options.map((o) => h("li", {}, o)))));
+    }
   }
-  if (w.kind === "question" && w.choose && w.asks?.length === 1) {
-    const q = w.asks[0]!;
-    box.append(h("div", { class: "choices" }, ...q.options.map((o, n) => {
-      const said = q.descriptions?.[n];
-      const choice = h("button", { type: "button", class: "choice", "data-choice": String(n) },
-        h("span", { class: "label" }, o), ...(said ? [h("span", { class: "description" }, said)] : []));
-      choice.addEventListener("click", () => void hold({ choice: n }));
-      return choice;
-    })));
+  if (asks.length === 1 && !asks[0]!.many) {
+    // One option of one question: a tap answers it.
+    const q = asks[0]!;
+    box.append(h("div", { class: "asked", "data-question": "" }, h("p", {}, q.question)),
+      h("div", { class: "choices" }, ...q.options.map((o, n) => {
+        const choice = option(q, n);
+        choice.addEventListener("click", () => void hold({ answers: [{ chosen: [n] }] }));
+        return choice;
+      })));
     typed = line(boxed ? "Or type your own answer" : "Type something");
+  } else if (asks.length) {
+    box.append(form(asks, (answers) => void hold({ answers })));
   } else if (w.kind === "permission" && w.decide) {
     // Full-width rows, yes first (Happy's PermissionFooter.tsx:500-592).
     box.append(h("div", { class: "rows" },
@@ -96,4 +101,51 @@ export function answers(tile: string, w: Waiting, answer: (reply: Reply) => Prom
     typed = line("Reply");
   }
   return { el: box, typed };
+}
+
+/** Option `n` of `q`: its label, and what it means when it says. */
+function option(q: Asked, n: number): HTMLButtonElement {
+  const said = q.descriptions?.[n];
+  return h("button", { type: "button", class: "choice", "data-choice": String(n) },
+    h("span", { class: "label" }, q.options[n]!), ...(said ? [h("span", { class: "description" }, said)] : []));
+}
+
+/** Several questions, or one of several answers: each its own options and a line of its own, the
+ *  one or the other; one Send once each has an answer (hapi keeps the same per question,
+ *  AskUserQuestionFooter.tsx:59-115). */
+function form(asks: Asked[], send: (answers: QuestionAnswer[]) => void): HTMLElement {
+  const chosen = asks.map(() => new Set<number>());
+  const own = asks.map(() => "");
+  const go = pill("Send", () => send(asks.map((_, i): QuestionAnswer => (own[i] ? { text: own[i]! } : { chosen: [...chosen[i]!].sort((a, b) => a - b) }))), "primary", { "data-answer": "send" });
+  const ready = () => (go.disabled = !asks.every((_, i) => own[i] || chosen[i]!.size));
+  const blocks = asks.map((q, i) => {
+    const typed = h("input", { class: "field", maxlength: 1000, enterkeyhint: "done", placeholder: "Type something", "aria-label": `Your own answer to: ${q.question}`, "data-own": "" });
+    const buttons = q.options.map((_, n) => {
+      const choice = option(q, n);
+      choice.setAttribute("aria-pressed", "false");
+      choice.addEventListener("click", () => {
+        const picked = chosen[i]!;
+        if (!q.many) picked.clear();
+        if (picked.has(n)) picked.delete(n);
+        else picked.add(n);
+        typed.value = own[i] = "";
+        show();
+      });
+      return choice;
+    });
+    const show = () => {
+      for (const [n, b] of buttons.entries()) b.setAttribute("aria-pressed", String(chosen[i]!.has(n)));
+      ready();
+    };
+    typed.addEventListener("input", () => {
+      own[i] = typed.value.trim();
+      if (own[i]) chosen[i]!.clear();
+      show();
+    });
+    return h("div", { class: "asked", "data-question": String(i) },
+      h("p", {}, q.question), q.many ? h("p", { class: "status" }, "Choose any") : null,
+      h("div", { class: "choices" }, ...buttons), typed);
+  });
+  ready();
+  return h("div", { class: "form", "data-questions": "" }, ...blocks, go);
 }

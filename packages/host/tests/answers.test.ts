@@ -253,7 +253,7 @@ test("allowed from a phone on a fresh chooser, its keys go in as the person's: t
   assert.deepEqual(c.writes, ['hm:t1:"1"', 'hm:t1:"\\u001b"']);
   assert.notEqual(c.p.status.get("t1")!.state, "waiting", "denied, it waits no more");
   c.ask({ name: "AskUserQuestion", asks: [{ question: "Which color?", options: ["Red", "Blue"] }] });
-  assert.deepEqual(await c.answer(c.asks(), { choice: 1 }), { answered: true });
+  assert.deepEqual(await c.answer(c.asks(), { answers: [{ chosen: [1] }] }), { answered: true });
   assert.notEqual(c.p.status.get("t1")!.state, "waiting", "chosen, it waits no more");
   c.ask(undefined);
   assert.deepEqual(await c.answer(c.asks(), { text: "use the staging database" }), { answered: true });
@@ -333,9 +333,10 @@ test("a question its tool asks is answered by choosing an option, with the keys 
   const c = computer(keys, { asking: color, choose: ["{n}"] });
   const asked = c.waitOn("permission");
   assert.equal(code(() => c.answer("t1", asked, { decision: "allow" })), "BAD_REQUEST", "allowed, it would choose the first");
-  for (const choice of [2, -1, 0.5, "1"]) assert.equal(code(() => c.answer("t1", asked, { choice })), "BAD_REQUEST", JSON.stringify(choice));
+  const bad = [[{ chosen: [2] }], [{ chosen: [-1] }], [{ chosen: [0.5] }], [{ chosen: ["1"] }], [{ chosen: [] }], [{ chosen: [0, 1] }], [], [{ chosen: [0] }, { chosen: [0] }], [{ text: "Red" }]];
+  for (const answers of bad) assert.equal(code(() => c.answer("t1", asked, { answers })), "BAD_REQUEST", JSON.stringify(answers));
   assert.deepEqual(c.typed, []);
-  assert.deepEqual(c.answer("t1", asked, { choice: 1 }), { answered: true });
+  assert.deepEqual(c.answer("t1", asked, { answers: [{ chosen: [1] }] }), { answered: true });
   assert.deepEqual(c.typed, ['t1:"2"']);
   const cannot: Array<[string, ToolAsked | undefined, string[] | undefined]> = [
     ["two questions", { name: "AskUserQuestion", asks: [color.asks[0]!, { question: "Which size?", options: ["S", "M"] }] }, ["{n}"]],
@@ -346,7 +347,7 @@ test("a question its tool asks is answered by choosing an option, with the keys 
   for (const [why, asking, choose] of cannot) {
     const d = computer(keys, { asking, choose });
     const since = d.waitOn("permission");
-    assert.equal(code(() => d.answer("t1", since, { choice: 0 })), "BAD_REQUEST", why);
+    assert.equal(code(() => d.answer("t1", since, { answers: [{ chosen: [0] }] })), "BAD_REQUEST", why);
     assert.deepEqual(d.answer("t1", since, { text: "Red" }), { answered: true }, why);
   }
 });
@@ -424,8 +425,8 @@ test("a question its tool asks, held by its hook, is answered by the option's la
   const c = hooked();
   const color = await c.hook("AskUserQuestion", COLOR);
   await assert.rejects(c.answer(color.since, { decision: "allow" }), (e: ApiError) => e.code === "BAD_REQUEST");
-  await assert.rejects(c.answer(color.since, { choice: 2 }), (e: ApiError) => e.code === "BAD_REQUEST", "no third option");
-  assert.deepEqual(await c.answer(color.since, { choice: 1 }), { answered: true });
+  await assert.rejects(c.answer(color.since, { answers: [{ chosen: [2] }] }), (e: ApiError) => e.code === "BAD_REQUEST", "no third option");
+  assert.deepEqual(await c.answer(color.since, { answers: [{ chosen: [1] }] }), { answered: true });
   const chosen = (answers: Record<string, string>) => out({ hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "allow", updatedInput: { ...COLOR, answers } } } });
   assert.equal(await color.printed, chosen({ "Which color?": "Blue" }));
   const again = await c.hook("AskUserQuestion", COLOR);
@@ -451,14 +452,46 @@ test("Claude's question held by its permission hook is a question with each opti
     options: ["Nothing", "A timestamp", "\"test passed\""],
     descriptions: ["Leave hello.txt as it is", "Add today's date and time as a new line", "Add the line \"test passed\""],
   }] });
-  assert.deepEqual(await c.answer(asked.since, { choice: 1 }), { answered: true });
+  assert.deepEqual(await c.answer(asked.since, { answers: [{ chosen: [1] }] }), { answered: true });
   const printed = JSON.parse((await asked.printed)!);
   assert.deepEqual(printed.hookSpecificOutput.decision.updatedInput.answers, { "Which line should I add to hello.txt next?": "A timestamp" });
   assert.deepEqual(c.writes, [], "nothing typed: the hook gives the answer");
   const several = await c.hook("AskUserQuestion", { questions: [{ ...NEXT_LINE.questions[0]!, multiSelect: true }] });
   const many = waitOn("t1", { kind: "permission", since: several.since }, { decides: () => true, wait: (t) => c.p.waits.of(t) });
   assert.equal(many.asks?.[0]?.many, true);
-  assert.equal(many.choose, undefined, "several chosen: not one option's");
+  assert.equal(many.choose, true, "its hook sets several as well as one");
+});
+
+// Claude's AskUserQuestion with two questions, the second several may be chosen of.
+const TWO = { questions: [
+  { question: "Which fruit?", header: "Fruit", multiSelect: false, options: [{ label: "Apple", description: "" }, { label: "Banana", description: "" }, { label: "Mango", description: "" }] },
+  { question: "Which colours?", header: "Colour", multiSelect: true, options: [{ label: "Red", description: "" }, { label: "Green", description: "" }, { label: "Blue", description: "" }] },
+] };
+
+test("two questions held by Claude's hook are chosen from, each answered by its place: an answer that leaves one out, names an option either does not list, or several of the one that takes one is refused; the whole is printed and recorded", async () => {
+  const claude = (await readAgentManifest(path.join(import.meta.dirname, "../../hive-agents/tests/fixtures/published-agents/claude/agent.yaml"), { source: "user", requireDirMatch: true })).def!;
+  const c = hooked(hookAnswerOf(claude, "PermissionRequest") as unknown as Record<string, unknown>);
+  const asked = await c.hook("AskUserQuestion", TWO);
+  const need = waitOn("t1", { kind: "permission", since: asked.since }, { decides: () => true, wait: (t) => c.p.waits.of(t) });
+  assert.equal(need.choose, true);
+  assert.deepEqual(need.asks?.map((q) => q.many ?? false), [false, true]);
+  const refused = [
+    [{ chosen: [0] }],
+    [{ chosen: [0] }, { chosen: [0] }, { chosen: [0] }],
+    [{ chosen: [3] }, { chosen: [0] }],
+    [{ chosen: [0] }, { chosen: [0, 3] }],
+    [{ chosen: [0, 1] }, { chosen: [0] }],
+    [{ chosen: [0] }, { chosen: [] }],
+    [{ chosen: [0] }, { chosen: [1, 1] }],
+    [{ chosen: [0] }, { text: "" }],
+  ];
+  for (const answers of refused) await assert.rejects(c.answer(asked.since, { answers }), (e: ApiError) => e.code === "BAD_REQUEST", JSON.stringify(answers));
+  assert.deepEqual(await c.answer(asked.since, { answers: [{ chosen: [2] }, { chosen: [0, 2] }] }), { answered: true });
+  assert.deepEqual(JSON.parse((await asked.printed)!).hookSpecificOutput.decision.updatedInput.answers, { "Which fruit?": "Mango", "Which colours?": "Red, Blue" });
+  const typed = await c.hook("AskUserQuestion", TWO);
+  assert.deepEqual(await c.answer(typed.since, { answers: [{ text: "Durian" }, { chosen: [1] }] }), { answered: true });
+  assert.deepEqual(JSON.parse((await typed.printed)!).hookSpecificOutput.decision.updatedInput.answers, { "Which fruit?": "Durian", "Which colours?": "Green" });
+  assert.deepEqual(c.audited().filter((l) => l.endsWith(" ok")), ["agent.answer t1 choice 3, 1+3 ok", "agent.answer t1 choice reply, 2 ok"]);
 });
 
 test("the agent's own prompt answered first, its hook is let go, printing nothing, and an answer after does nothing: a key typed there, Esc, its tool run, its hook gone", async () => {

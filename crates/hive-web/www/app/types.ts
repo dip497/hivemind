@@ -71,7 +71,10 @@ export interface Piece {
 }
 
 /** The person's answer to a wait. */
-export type Reply = { text: string } | { allow: boolean } | { approve: boolean; feedback?: string } | { choice: number };
+export type Reply = { text: string } | { allow: boolean } | { approve: boolean; feedback?: string } | { answers: QuestionAnswer[] };
+
+/** The answer to one question: the options chosen, by their place, or a line. */
+export type QuestionAnswer = { chosen: number[] } | { text: string };
 
 /** A view the computer offers this browser (`view.list`): `page` is the file that shows it. */
 export interface Offered {
