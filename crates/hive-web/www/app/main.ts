@@ -262,9 +262,14 @@ visualViewport?.addEventListener("resize", () => document.documentElement.style.
 
 async function start(): Promise<void> {
   // The link is a secret: out of the address bar and the history once read.
-  const address = location.href;
   const linked = new URLSearchParams(location.hash.slice(1));
-  if (linked.has("pair")) history.replaceState(null, "", location.pathname + location.search);
+  const link = linked.get("pair");
+  const name = linked.get("name") ?? guessName();
+  if (link !== null) {
+    history.replaceState(null, "", location.pathname + location.search);
+    offered = true;
+    pairing.starting(link, name);
+  }
   const [kept, last] = await Promise.all([get<Paired>("paired"), get<First>("first")]);
   paired = kept ?? null;
   if (paired && last) apply(last);
@@ -295,7 +300,7 @@ async function start(): Promise<void> {
   addEventListener("online", () => phone!.retry());
   document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && phone!.retry());
   phone.connect();
-  if (linked.has("pair")) offer(address, linked.get("name") ?? guessName());
+  if (link !== null) offer(link, name);
 }
 
 start().catch((e: unknown) => {

@@ -21,6 +21,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - On the phone, an agent's Terminal no longer shows the waiting card under it, halving it: the terminal shows the chooser itself, and the header still says it waits. Back in Chat the card is there as before.
 - On the phone, an agent whose manifest says no transcript the phone can read (one it maps but never says where to find included) opens in its terminal instead of a chat that stays empty.
 - The phone page updates itself: it opens at once from the newest build it has, fetches a new one alongside, and the next open shows it, never files of two builds together. It never waits on the network to open.
+- On the phone, a page opened from a pairing link no longer ignores a quick tap on Pair: until the link is read, Pair says "Starting…". The field shows the pairing link itself, not the page's address.
 - On the phone's Home, rows have no ⋯: hold a row (or right-click it) for what can be done to it, or swipe it left for Stop and Close. Start is a + and the search a plain field.
 - On the phone's Home, a project's name stays at the top while you scroll its agents, and a project with one frame of the same name no longer lists that name twice.
 - On the phone's Home, each row reads in plain text, monospace only for code (a command, or what is in backticks); the time is in even-width digits, and a hairline from where the text starts separates rows.

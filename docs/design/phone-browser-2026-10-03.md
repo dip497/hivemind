@@ -1345,6 +1345,12 @@ disabled until about 907 ms.
   before routing; Start not drawn from what was kept; the answer not kept; Start pressed before
   reached not waiting; asked again on every reach; a choice made meanwhile dropped by the answer;
   looking in a folder superseding the answer; the wasm preloaded again (3 of 3 over 500 ms).
+- Opened with `#pair=…`, Pair drew before the wasm with its field empty, and a tap then did nothing
+  (`run` returns on no link): e2e `phone-terminal.spec.ts` failed 2 of 3 runs on it. The field now
+  holds the link from the address at once, and Pair is disabled and says "Starting…" until the
+  phone reads it. It does not wait and pair on its own: who it would pair with is not known
+  until the link is read, and the person confirms that name. The field holds the `hivemind://`
+  link, not the page's address with it in the fragment.
 
 ### 12.12 Chat first, as clean as GitHub Mobile
 
