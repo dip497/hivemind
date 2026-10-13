@@ -1,8 +1,9 @@
 // One agent (the Android app's AgentScreen): its chat, or its terminal a tap away; what it waits on
-// as a card above the reply box, where the thumb is; Stop while it is in a turn.
+// as a card above the reply box, where the thumb is, the box its one place to type; Stop while it
+// is in a turn.
 
 import type { App } from "./app.js";
-import { answers } from "./answers.js";
+import { type Answers, answers } from "./answers.js";
 import { Chat } from "./chat.js";
 import { Ask, composer, h, icon, pill, say } from "./dom.js";
 import { TerminalView } from "./terminal.js";
@@ -29,6 +30,8 @@ export class AgentScreen {
   private tile: string | null = null;
   private agent: Agent | null = null;
   private waitSig = "";
+  /** A line typed answers what it waits on, when that takes one. */
+  private typed: Answers["typed"] = null;
   private chat: Chat | null = null;
   private unfollow: (() => void) | null = null;
   /** Agents started from here that the computer has not listed yet. */
@@ -43,7 +46,7 @@ export class AgentScreen {
       this.gone,
       this.body,
       this.dock);
-    const message = composer("Message", (text) => (this.agent ? app.send(this.agent, text) : Promise.resolve(false)), { "data-message": "" });
+    const message = composer("Message", (text) => (this.typed ? this.typed.send(text) : this.agent ? app.send(this.agent, text) : Promise.resolve(false)), { "data-message": "" });
     this.message = message.querySelector("textarea")!;
     this.composing = message;
     this.dock.append(this.closing.el, this.waits, message);
@@ -66,6 +69,7 @@ export class AgentScreen {
     delete this.dot.dataset.state;
     this.stop.hidden = true;
     this.waitSig = "";
+    this.typed = null;
     this.waits.replaceChildren();
     this.chat = new Chat((use) => (this.agent ? this.app.tool(this.agent, use) : Promise.reject(new Error("it is no longer there"))));
     this.terminal = false;
@@ -95,10 +99,7 @@ export class AgentScreen {
     if (!a) return;
     const was = this.agent;
     this.agent = a;
-    if (was?.agent !== a.agent) {
-      say(this.title, a.agent);
-      this.message.placeholder = `Message ${a.agent}`;
-    }
+    if (was?.agent !== a.agent) say(this.title, a.agent);
     if (was?.state !== a.state || was.name !== a.name || was.machine !== a.machine) {
       this.dot.dataset.state = a.state;
       say(this.sub, [stateLabel(a.state), where(a.name, a.machine)].join(" · "));
@@ -106,6 +107,11 @@ export class AgentScreen {
       this.stop.hidden = !(a.interrupt && (a.state === "working" || a.state === "waiting"));
     }
     this.showWait(a);
+    const hint = this.typed?.hint ?? `Message ${a.agent}`;
+    if (this.message.placeholder !== hint) {
+      this.message.placeholder = hint;
+      this.message.setAttribute("aria-label", hint);
+    }
     if (!this.unfollow && this.chat) {
       const chat = this.chat;
       if (a.conversation) this.unfollow = this.app.conversation(a, (p) => chat.said(p), (why) => chat.ended(why));
@@ -145,9 +151,12 @@ export class AgentScreen {
     const sig = w ? JSON.stringify(w) : "";
     if (sig === this.waitSig) return;
     this.waitSig = sig;
+    this.typed = null;
     if (!w) return this.waits.replaceChildren();
     const label = h("p", { class: "kind" }, `${kindLabel(w.kind)} · `, h("span", { "data-since": w.since }, ago(w.since)));
-    this.waits.replaceChildren(h("div", { class: "card rail waiting", "data-waiting-card": w.kind }, label, answers(a.tile, w, (reply) => this.app.answer(a, reply))));
+    const given = answers(a.tile, w, (reply) => this.app.answer(a, reply), true);
+    this.typed = given.typed;
+    this.waits.replaceChildren(h("div", { class: "card rail waiting", "data-waiting-card": w.kind }, label, given.el));
   }
 
   private async stopIt(): Promise<void> {

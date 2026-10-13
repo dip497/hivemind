@@ -38,6 +38,7 @@ const app = {
   terminal: () => null,
   tool: async () => ({}),
   answer: async (a, reply) => (window.calls.push(["answer", a.tile, reply]), true),
+  send: async (a, text) => (window.calls.push(["send", a.tile, text]), true),
 };
 const screen = new AgentScreen(app);
 document.getElementById("app").append(screen.el);
@@ -117,7 +118,7 @@ test("a question its agent asks shows each option with what it means, chosen by 
   await expect(choices.nth(1).locator(".label")).toHaveText("A timestamp");
   await expect(choices.nth(1).locator(".description")).toHaveText("Add today's date and time as a new line");
   await expect(card.locator("[data-answer=allow], [data-answer=deny]")).toHaveCount(0);
-  await expect(card.locator("[data-reply] textarea")).toHaveAttribute("placeholder", "Type something");
+  await expect(card.locator("textarea")).toHaveCount(0);
   await choices.nth(1).click();
   await expect.poll(() => page.evaluate(() => (window as unknown as { calls: unknown[] }).calls.filter((c) => (c as string[])[0] === "answer"))).toEqual([["answer", "t1", { choice: 1 }]]);
 });
@@ -144,4 +145,25 @@ test("in its terminal, which shows the chooser itself, a waiting agent's card is
   await show(page, overview(agent("t1", "Phone test", { state: "waiting", waiting }), agent("t2", "Other", { state: "waiting", waiting })));
   await open(page, "t2");
   await expect(card).toBeVisible();
+});
+
+test("one place to type: while a question waits, the message box offers the person's own answer and sends it as the answer; once answered it is a message again", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await screen();
+  const waiting = { kind: "question", since: 5, choose: true, asks: [{ question: "Which colour?", options: ["Red", "Green"] }] };
+  await show(page, overview(agent("t1", "Claude", { state: "waiting", waiting })));
+  await open(page, "t1");
+  const box = page.locator("[data-screen=agent] textarea");
+  await expect(box).toHaveCount(1);
+  await expect(box).toHaveAttribute("placeholder", "Or type your own answer");
+  await box.fill("Purple");
+  await page.locator("[data-message] button[type=submit]").click();
+  const said = () => page.evaluate(() => (window as unknown as { calls: string[][] }).calls.filter((c) => c[0] !== "conversation"));
+  await expect.poll(said).toEqual([["answer", "t1", { text: "Purple" }]]);
+  await expect(box).toHaveValue("");
+  await show(page, overview(agent("t1", "Claude", { state: "working" })));
+  await expect(box).toHaveAttribute("placeholder", "Message Claude");
+  await box.fill("Thanks");
+  await page.locator("[data-message] button[type=submit]").click();
+  await expect.poll(said).toEqual([["answer", "t1", { text: "Purple" }], ["send", "t1", "Thanks"]]);
 });

@@ -1345,3 +1345,15 @@ disabled until about 907 ms.
   before routing; Start not drawn from what was kept; the answer not kept; Start pressed before
   reached not waiting; asked again on every reach; a choice made meanwhile dropped by the answer;
   looking in a folder superseding the answer; the wasm preloaded again (3 of 3 over 500 ms).
+
+### 12.12 Chat first, as clean as GitHub Mobile
+
+The person asked for the phone page to read as cleanly as GitHub Mobile, its chat first. Each change
+keeps the desktop's tokens, Geist and JetBrains Mono, and amber only for what waits on the person.
+Before and after at 390×844 are the `ux-*.png` pairs of the rig's scratchpad.
+
+- One place to type. A question's card drew a "Type something" box under its options, above the
+  message box: two boxes. On the agent's screen the message box now answers: while a wait takes a
+  line its hint is "Or type your own answer" (a question) or "Reply", and what is sent goes through
+  the card's guarded answer, so an answer not confirmed is not offered again. Home's Needs cards,
+  which have no box of their own, keep theirs (`answers.ts`, `boxed`).

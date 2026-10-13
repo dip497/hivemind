@@ -2,7 +2,7 @@
 // Answering.kt has them: Allow and Deny for a permission its device can decide, below the tool and
 // what it is about; a question's options to choose from; Approve or Ask for changes for a plan; and
 // a line of reply for anything else. One place for the Needs you list and
-// the agent's own screen. An answer the computer did not confirm is not offered again: it may have
+// the agent's own screen, whose message box is where the line is typed. An answer the computer did not confirm is not offered again: it may have
 // landed, and a second would answer whatever the agent asks next.
 
 import { composer, h, pill } from "./dom.js";
@@ -13,13 +13,21 @@ import type { Reply, Waiting } from "./types.js";
 /** Waits answered with no word back, by tile and since. */
 const unconfirmed = new Set<string>();
 
-export function answers(tile: string, w: Waiting, answer: (reply: Reply) => Promise<boolean | null>): HTMLElement {
+/** The answers drawn, and how a line typed in the screen's own box answers, when the wait takes one:
+ *  its hint and its sending, which says whether it landed. */
+export interface Answers {
+  el: HTMLElement;
+  typed: { hint: string; send: (text: string) => Promise<boolean> } | null;
+}
+
+/** `boxed`: the screen has a box of its own to type in, so none is drawn here. */
+export function answers(tile: string, w: Waiting, answer: (reply: Reply) => Promise<boolean | null>, boxed = false): Answers {
   const box = h("div", { class: "answers" });
   const wait = `${tile}@${w.since}`;
   const sentAlready = () => box.replaceChildren(h("p", { class: "status problem", "data-unconfirmed": "" }, NOTICES.unconfirmed));
   if (unconfirmed.has(wait)) {
     sentAlready();
-    return box;
+    return { el: box, typed: null };
   }
   // Answering, or reading the plan, is not opening the agent.
   box.addEventListener("click", (e) => e.stopPropagation());
@@ -37,6 +45,12 @@ export function answers(tile: string, w: Waiting, answer: (reply: Reply) => Prom
       box.inert = false;
     }
   };
+  const line = (hint: string): Answers["typed"] => {
+    const send = async (text: string) => !box.inert && (await hold({ text })) === true;
+    if (!boxed) box.append(composer(hint, send, { "data-reply": "" }));
+    return { hint, send };
+  };
+  let typed: Answers["typed"] = null;
   if (w.tool) {
     box.append(h("div", { class: "asked", "data-tool": w.tool.name },
       h("span", { class: "label-small" }, w.tool.name),
@@ -55,7 +69,8 @@ export function answers(tile: string, w: Waiting, answer: (reply: Reply) => Prom
         h("span", { class: "label" }, o), ...(said ? [h("span", { class: "description" }, said)] : []));
       choice.addEventListener("click", () => void hold({ choice: n }));
       return choice;
-    })), composer("Type something", async (text) => (await hold({ text })) === true, { "data-reply": "" }));
+    })));
+    typed = line(boxed ? "Or type your own answer" : "Type something");
   } else if (w.kind === "permission" && w.decide) {
     box.append(h("div", { class: "row" },
       pill("Deny", () => void hold({ allow: false }), "", { "data-answer": "deny" }),
@@ -76,7 +91,7 @@ export function answers(tile: string, w: Waiting, answer: (reply: Reply) => Prom
     box.append(...[plan, changes, read].filter((e) => e !== null), h("div", { class: "row" },
       ask, pill("Approve", () => void hold({ approve: true }), "primary", { "data-answer": "approve" })));
   } else {
-    box.append(composer("Reply", async (text) => (await hold({ text })) === true, { "data-reply": "" }));
+    typed = line("Reply");
   }
-  return box;
+  return { el: box, typed };
 }
