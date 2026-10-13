@@ -12,7 +12,10 @@ function figure(source, title, id) {
     .replace(/url\(#/g, `url(#${id}-`)
     .replace(/href="#/g, `href="#${id}-`)
     .replace('<svg ', `<svg role="img" aria-label="${esc(title ?? 'Diagram')}" `);
-  return `<figure class="diagram">${svg}${title ? `<figcaption>${esc(title)}</figcaption>` : ''}</figure>`;
+  // Shrunk to a phone, text stays readable at 80% or more; the figure scrolls past that.
+  const width = Number(svg.match(/ width="([\d.]+)"/)?.[1]);
+  const floor = width ? ` style="--min:${Math.round(width * 0.8)}px"` : '';
+  return `<figure class="diagram"${floor}>${svg}${title ? `<figcaption>${esc(title)}</figcaption>` : ''}</figure>`;
 }
 
 // A Sätteri mdast plugin (Astro 7's Markdown processor); the factory runs once per page.

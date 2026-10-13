@@ -390,6 +390,7 @@ h1, .content-panel h1 {
 .sl-markdown-content figure.diagram svg {
   width: auto;
   max-width: 100%;
+  min-width: var(--min, 0);
   margin: 0 auto;
   padding: 0;
   border: 0;
@@ -408,6 +409,7 @@ h1, .content-panel h1 {
   --_key-badge:    color-mix(in srgb, var(--fg) 10%, var(--bg));
 }
 .sl-markdown-content figure.diagram text { font-family: var(--sl-font); }
+@media (max-width: 50rem) { .sl-markdown-content figure.diagram { padding: .75rem; } }
 .sl-markdown-content figure.diagram .mono { font-family: var(--sl-font-mono); }
 
 /* A status chip means here exactly what the same dot means in the workspace. */
