@@ -173,7 +173,7 @@ The code is migrating to two settled decisions. The UI font moves from bundled G
 The palette is neutral graphite tinted a hair toward blue (hue 250), with colour kept for meaning. All values are oklch so blends and alpha mixes stay even. A preset may recolour every value; the meanings stay.
 
 ### Primary
-- **Steel Accent** (steel-accent; steel-accent-hover on hover): the user's accent, a quiet desaturated steel by default. It marks focus outlines in Settings, resize handles under the pointer, and checkbox fills. The user may set it to grey, so it never carries meaning.
+- **Steel Accent** (steel-accent; steel-accent-hover on hover): the user's accent, a quiet desaturated steel by default. It marks resize handles under the pointer and checkbox fills; never focus, which is the selection colour. The user may set it to grey, so it never carries meaning.
 
 ### Tertiary
 - **Signal Amber** (signal-amber): needs-you, and nothing else. Blocked, asking and plan-review chips, the needs-you badge on the rail, the needs-you count. Nothing decorative borrows it.
@@ -286,7 +286,7 @@ The components are calm, exact and small. Nothing raises its voice until it need
 
 ### Inputs / Fields
 - **Style:** graphite-ground fill, control-line border, 6px corners, 32px tall (28px small), 13px text.
-- **Focus:** one ring for the whole app, set once in `styles.css`: a 2px outline offset 2px in `--color-focus`, the steel accent mixed 60/40 with chalk-text so it holds 3:1 on every surface whatever accent is picked. It shows on keyboard focus only (`:focus-visible`). A list or menu item shows focus by its highlight instead; a canvas object being written in is itself the field. No component draws a ring of its own.
+- **Focus:** one ring for the whole app, set once in `styles.css`: a 2px outline offset 2px in `--color-focus`, which is the steel selection colour (`--color-select`): it comes from the palette, never from the person's accent, so a ring never turns amber, the colour of "waits on you". It shows on keyboard focus only (`:focus-visible`). A list or menu item shows focus by its highlight instead; a canvas object being written in is itself the field. No component draws a ring of its own.
 - **Error / Disabled:** brick border on error; 45% opacity disabled.
 - **Select:** the Input's box (32px, 28px small, same border, corners and ground) with a chevron; its list is the menu surface, items as menu items with a check on the chosen one. Keyboard and type-ahead work as in a native select. Never a native `<select>`: it draws the operating system's accent and highlight.
 - **Native controls:** `color-scheme` follows the theme and `accent-color` is the steel accent, so checkboxes, ranges, scrollbars and pickers never show the operating system's colours.

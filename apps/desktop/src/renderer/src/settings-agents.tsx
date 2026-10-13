@@ -86,7 +86,7 @@ export function AgentsSection({ matches }: { matches: (text: string) => boolean 
     : presence[c.id]?.mismatch ? "Another program answers to its name"
     : missing(c) ? `Needs the ${c.def?.bin ?? c.id} command`
     : `Runs the ${c.def?.bin ?? c.id} command`;
-  const badge = (c: Card) => ({ on: c.id === defaultId ? "Default" : undefined, missing: "Not installed", off: "Off", unavailable: "Can't load" })[state(c)];
+  const badge = (c: Card) => ({ on: c.id === defaultId ? "Default" : undefined, missing: "Needs setup", off: "Off", unavailable: "Can't load" })[state(c)];
   // Searching hides it when nothing matches; otherwise its footer stays, even with no agents.
   if (!cards.length && !matches("")) return null;
   return (

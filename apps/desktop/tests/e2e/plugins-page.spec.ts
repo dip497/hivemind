@@ -48,11 +48,12 @@ async function groups(): Promise<{ heading: string[]; rows: number }[]> {
 }
 
 /** What each row has besides the part that opens it and its chevron: its name, line and state. */
-async function rows(where: Locator): Promise<{ id: string; name: number; line: number; extra: string[] }[]> {
+async function rows(where: Locator): Promise<{ id: string; name: number; line: number; said: string[]; extra: string[] }[]> {
   return where.locator("[data-plugin-row]").evaluateAll((all) => all.map((r) => ({
     id: r.getAttribute("data-plugin-row")!,
     name: r.querySelectorAll(".plugin-row-name").length,
     line: r.querySelectorAll(".plugin-row-detail").length,
+    said: [...r.querySelectorAll(".plugin-row-name, .plugin-row-detail")].map((e) => e.textContent!),
     extra: [...r.children].filter((c) => !c.hasAttribute("data-plugin-open") && c.tagName.toLowerCase() !== "svg")
       .map((c) => c.getAttribute("data-slot") === "badge" ? `badge:${c.textContent}` : `${c.tagName.toLowerCase()}:${c.getAttribute("role") ?? ""}:${c.textContent}`),
   })));
@@ -86,7 +87,8 @@ test("each kind is one heading with its count, and every row has the same parts,
   }
   const badge = (id: string) => installed.find((r) => r.id === id)?.extra;
   expect(badge("agent:claude")).toEqual(["badge:Default"]);
-  expect(badge("agent:codex")).toEqual(["badge:Not installed"]);
+  // Installed, its program missing: not "Not installed" under Installed.
+  expect(badge("agent:codex")).toEqual(["badge:Needs setup"]);
   expect(badge("view:canvas")).toEqual(["badge:In use"]);
   expect(badge("tool:hivemind/web")).toEqual(["badge:Off"]);
   expect(badge("tool:hivemind/code")).toEqual([]);
@@ -94,10 +96,14 @@ test("each kind is one heading with its count, and every row has the same parts,
 
   await show("HiveHub");
   await expect(body().locator("[data-plugin-row]").first()).toBeVisible();
-  for (const r of await rows(body())) {
-    expect(r, r.id).toMatchObject({ name: 1, line: 1 });
+  const hub = await rows(body());
+  for (const r of hub) {
     expect(r.extra, r.id).toEqual([expect.stringMatching(/^badge:Installed$|^button::(Install|Update)$/)]);
+    // A description that only repeats the name (the catalog's agents and views here) is not shown.
+    expect(r, r.id).toMatchObject(/^(agent|view):/.test(r.id) ? { name: 1, line: 0 } : { name: 1, line: 1 });
+    expect(new Set(r.said).size, r.id).toBe(r.said.length);
   }
+  expect(hub.filter((r) => r.line === 0).length).toBeGreaterThan(0);
   for (const g of await groups()) expect(g.heading).toEqual([expect.stringMatching(new RegExp(`^(Agents|Views|Widgets|Tools)${g.rows}$`))]);
   await show("Installed");
 });

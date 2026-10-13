@@ -73,6 +73,7 @@ function Share({ repo }: { repo: string }) {
 
   return (
     <div className="flex flex-col gap-6" data-share-page>
+      <p className="text-body text-[var(--color-fg2)]" data-page-lead>Other people, invited to this one workspace, with the role you give them.</p>
       <section aria-label="Who has access" className="flex flex-col gap-1" data-share-access>
         <h3 className="text-body font-semibold">Who has access</h3>
         <PeopleList repo={repo} />
@@ -122,11 +123,11 @@ function Share({ repo }: { repo: string }) {
             </div>
           </div>
         ) : (
-          <Button className="self-start" onClick={() => void create()} disabled={busy} data-share-create><Copy />{busy ? "Making the link…" : "Copy invite link"}</Button>
+          <Button onClick={() => void create()} disabled={busy} data-share-create><Copy />{busy ? "Making the link…" : "Copy invite link"}</Button>
         )}
         {!elsewhere && net?.builtin === "local" && (reaching
           ? <ReachChooser current={net} onChosen={(n) => { setNet(n); setReaching(false); setLink(null); }} onCancel={() => { setReaching(false); setError("Stays on this network: the link works only here."); }} />
-          : <Button variant="ghost" className="self-start" onClick={() => setReaching(true)} data-invite-elsewhere>Invite someone elsewhere…</Button>)}
+          : <Button variant="ghost" onClick={() => setReaching(true)} data-invite-elsewhere>Invite someone elsewhere…</Button>)}
         {error && <p className="text-label text-[var(--color-err)]" role="alert">{error}</p>}
       </section>
 

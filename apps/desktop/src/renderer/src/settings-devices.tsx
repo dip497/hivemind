@@ -44,11 +44,12 @@ export function YourDevicesPrefs() {
   }, []);
   return (
     <div className="settings-stack">
+      <p className="text-body text-[var(--color-fg2)]" data-page-lead>Computers and phones that are you: they see every workspace you own.</p>
       <div className="flex flex-col gap-3" data-connect-cards>
         <Card icon={Smartphone} title="Use on your phone" what="Scan a code with it. Your phone sees what needs you and answers it; it runs nothing itself." name="phone">
           <PhoneCode offering={offering} />
         </Card>
-        <Card icon={Laptop} title="Another computer" what="Pair with a code; each can then open the other's workspaces." name="computer">
+        <Card icon={Laptop} title="Another computer" what="Use your other computer's workspaces here, and this one's there." name="computer">
           <ComputerCode offering={offering} />
         </Card>
         <Card icon={Globe} title="In a browser on this computer" what="This app, whole, in a browser tab here." name="browser">
@@ -158,29 +159,39 @@ function PhoneCode({ offering }: { offering: Offering }) {
   );
 }
 
-/** Another computer or a host: show this computer's code, or enter the one it shows. */
+/** Another computer or a host, by which side the person is on: this computer's code to show, or
+ *  the one the other shows to enter. */
 function ComputerCode({ offering }: { offering: Offering }) {
   const { offer, error, show } = offering;
   return (
     <div className="flex flex-col gap-3">
-      {offer && !offer.phone ? (
-        <div className="flex flex-wrap items-start gap-4" data-pair-offered="code">
-          <QrCode text={offer.link} label="QR code of the pairing link" data-pair-qr />
-          <div className="flex min-w-[200px] flex-1 flex-col gap-2">
-            <p className="font-mono text-row tracking-wide" data-pair-code>{offer.code.split("-").join(" ")}</p>
-            <p className="text-label text-[var(--color-fg3)]">
-              Enter these words (on this network) or the link on the other computer, under Settings → Your devices, or run <code className="font-mono">hive host pair</code> with them on a host. It works once, until {new Date(offer.expires).toLocaleTimeString()}.
-            </p>
-            <CopyLink text={offer.link} />
+      <div className="flex flex-col gap-2" data-pair-side="show">
+        <p className="text-label font-medium">Adding this computer to another?</p>
+        {offer && !offer.phone ? (
+          <div className="flex flex-wrap items-start gap-4" data-pair-offered="code">
+            <QrCode text={offer.link} label="QR code of the pairing link" data-pair-qr />
+            <div className="flex min-w-[200px] flex-1 flex-col gap-2">
+              <p className="font-mono text-row tracking-wide" data-pair-code>{offer.code.split("-").join(" ")}</p>
+              <p className="text-label text-[var(--color-fg3)]">
+                Enter these words (on this network) or the link on the other computer, under Settings → Your devices, or run <code className="font-mono">hive host pair</code> with them on a host. It works once, until {new Date(offer.expires).toLocaleTimeString()}.
+              </p>
+              <CopyLink text={offer.link} />
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          <div><Button variant="outline" data-pair-offer onClick={() => show(false)}>Show a code</Button></div>
-          {error && <p className="text-label text-[var(--color-err)]" role="alert">{error}</p>}
-        </div>
-      )}
-      <EnterLink />
+        ) : (
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" data-pair-offer onClick={() => show(false)}>Show a code</Button>
+              <span className="text-label text-[var(--color-fg3)]">then type its six words on the other one</span>
+            </div>
+            {error && <p className="text-label text-[var(--color-err)]" role="alert">{error}</p>}
+          </div>
+        )}
+      </div>
+      <div className="flex flex-col gap-2" data-pair-side="enter">
+        <p className="text-label font-medium">Have a code from your other computer?</p>
+        <EnterLink />
+      </div>
       <details className="settings-disclosure" data-pairing-how>
         <summary>How pairing works <ChevronDown size={14} /></summary>
         <div className="flex flex-col gap-1.5 text-label text-[var(--color-fg3)]">
@@ -234,10 +245,11 @@ function EnterLink() {
       <div className="flex gap-2">
         <Input
           value={text}
-          placeholder="or enter the six words, or hivemind://pair/…, it shows"
+          placeholder="six words or hivemind://pair/… link"
           spellCheck={false}
           autoComplete="off"
           className="flex-1 font-mono text-label"
+          aria-label="Code from your other computer"
           data-pair-link
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && text.trim() && !busy) void pair(); }}

@@ -214,7 +214,7 @@ that adds this section. Re-measured on that tree, renderer + bundled tools.
 | Native `<select>` | 16 in 10 files | 0 (one `Select` in `components/ui`) |
 | `text-[Npx]` literals | 405 in 17 sizes | 0; 7 named steps (20, 15, 14, 13, 12, 11, 10) |
 | CSS font sizes by hand | yes | 0 (`var(--text-*)`) |
-| Focus recipes | 3, doubled on primitives | 1 rule, `--color-focus`, ≥3:1 for any accent |
+| Focus recipes | 3, doubled on primitives | 1 rule, `--color-focus` = the palette's `--color-select`, never the accent (so never amber); it replaced the Settings-only selection-colour rule from `7e6f214` |
 | `accent-color` / `color-scheme` | 2 rules / none | app-wide, follows the theme |
 | Control heights | 12 Button sizes, 36px `lg`, h-7/h-8 by hand | 32 / 28, and 24, 20, 16 in tile chrome; none set at a call site |
 | Colour literals outside token definitions | 79 TS/TSX, CSS uses | 30 TS/TSX, all in the allow-listed palettes (frame and people colours, QR, issue states) and one xterm value; 0 in CSS |

@@ -110,8 +110,8 @@
   --color-brand-hover: oklch(0.57 0.03 250);
   --color-select: oklch(0.80 0.005 250);
   --color-accent: oklch(0.74 0.035 245);
-  /* The focus ring: the accent pulled toward the text, so it holds 3:1 on every surface whatever accent is picked. */
-  --color-focus: color-mix(in oklab, var(--color-brand) 60%, var(--color-fg));
+  /* The focus ring: the selection colour, from the palette, never the accent (which may be amber, "waits on you"). */
+  --color-focus: var(--color-select);
 
   /* Semantic: muted enough to live with all day, distinct enough never to be confused. */
   --color-ok:     oklch(0.74 0.07 155);
