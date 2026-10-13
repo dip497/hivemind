@@ -115,3 +115,41 @@ test("a computer on a network of its own offers a link that gets the device ente
   expect(kept.redeemed[voucher.nonce]).toBe(1);
   expect(await allowed()).toBe("true");
 });
+
+test("unpaired, a laptop is let into the desktop's workspace no more and is off its network, though it keeps the person key", async () => {
+  test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
+  test.setTimeout(180_000);
+  const net = await ownNetwork(root, procs, "closed");
+  const desktop = await person(root, "desktop", repo("api"), apps);
+  expect(await desktop.evaluate((l) => window.hive.useNetwork(l), net.link)).toMatchObject({ admission: "enrolled" });
+  const laptop = await person(root, "laptop", repo("notes"), apps);
+  const laptopIs = (await laptop.evaluate(() => window.hive.identity())).deviceId;
+  const allowed = async () => (await fetch(`${net.access}/allowed/${laptopIs}`)).text();
+  const { link } = await desktop.evaluate(() => window.hive.pairOffer()) as { link: string };
+  await laptop.evaluate((l) => window.hive.pairEnter(l), link);
+  await expect.poll(allowed).toBe("true");
+
+  // Paired, the laptop opens the desktop's workspace as its owner.
+  const banner = laptop.locator("[data-shared-banner]");
+  const open = async () => {
+    await laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-recent")));
+    await laptop.locator("[data-host-workspace]").filter({ hasText: "api" }).click({ timeout: 20_000 });
+  };
+  await open();
+  await expect(banner).toHaveAttribute("data-state", "connected", { timeout: 30_000 });
+  await expect(banner).toHaveAttribute("data-access", "owner");
+
+  // Unpaired on the desktop: let go at once, and off the network the desktop vouched it onto.
+  await desktop.evaluate((d) => window.hive.unpair(d), laptopIs);
+  await expect(banner).not.toHaveAttribute("data-state", "connected", { timeout: 20_000 });
+  await expect.poll(allowed, { timeout: 20_000 }).toBe("false");
+  // Opened again, it is not let back in: each opening dials once, and a dial is answered in seconds.
+  await laptop.keyboard.press("Escape");
+  await open().catch(() => {});
+  const states: string[] = [];
+  for (let i = 0; i < 20; i++) {
+    states.push((await banner.getAttribute("data-state").catch(() => null)) ?? "none");
+    await laptop.waitForTimeout(1_000);
+  }
+  expect(states).not.toContain("connected");
+});

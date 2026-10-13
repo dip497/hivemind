@@ -338,6 +338,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - Fixed: in the Windows view, a tab restored from the Layers rail no longer comes back minimized when the view is switched straight away. The restore happens with the click, and a view that closes before showing its last layout change still saves it.
 - The app now keeps each project's canvas and view layouts itself, in `workspaces/` under its data folder, instead of in the window's browser storage — the first step towards several windows, devices and people sharing one workspace. Each project's layout is one document that records a change as the edits it makes (a tile moved, a frame renamed), so that once several windows or devices edit it, changes to different things merge instead of one replacing the other. Layouts saved by an earlier version are imported the first time a project opens, and nothing newer is overwritten.
 
+### Security
+
+- Unpair takes back the visit to a closed network that this computer vouched the device onto, so an unpaired computer is off that network at once, not for up to 30 days. A certificate of yours kept on a workspace's list no longer lets a device in by itself: your own devices get in only while paired.
+
 ## [2026.10.1] — 2026-10-03
 
 ### Changed

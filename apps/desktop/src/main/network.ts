@@ -77,15 +77,17 @@ function pushSubscriptions(): PushSubscriptions {
 function pairedDevices(): Devices {
   return (paired ??= new Devices(path.join(app.getPath("userData"), "identity", "devices.json")));
 }
-/** Forget one of the person's devices: it is let in no more, its workspaces are no longer listed
- *  here, and a phone is told nothing more. A phone that paired here is forgotten by the person's
- *  other devices as they are told so; one another of them paired with, by that one, as it is asked
- *  (spec/pairing.md 0.7). False when it was not kept here. */
+/** Forget one of the person's devices: it is let in no more, nor onto this network's relays as
+ *  this device vouched it, its workspaces are no longer listed here, and a phone is told nothing
+ *  more. A phone that paired here is forgotten by the person's other devices as they are told so;
+ *  one another of them paired with, by that one, as it is asked (spec/pairing.md 0.7). False when
+ *  it was not kept here. */
 function forgetDevice(device: string): boolean {
   const was = pairedDevices().list().find((d) => d.device === device);
   if (!was || !pairedDevices().remove(device)) return false;
   pushSubscriptions().remove(device);
   admitNow();
+  void unvouch(device);
   broadcast("net:devices-changed");
   if (was.kind === "phone") void (was.via ? forgetWhereItPaired(was) : introducePhones());
   return true;
@@ -240,6 +242,17 @@ async function vouchFor(device: string): Promise<void> {
     vouched.set(device, Date.now());
   } catch (e) {
     console.warn(`[network] could not vouch for ${device.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/** Take back the visit this device vouched `device` onto a closed network for. */
+async function unvouch(device: string): Promise<void> {
+  vouched.delete(device);
+  try {
+    const access = (await networkProfiles().active()).profile.access;
+    if (access?.policy === "closed") await networkProfiles().revoke(access.url, device);
+  } catch (e) {
+    console.warn(`[network] could not take back the visit of ${device.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 

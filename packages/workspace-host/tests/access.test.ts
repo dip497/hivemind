@@ -34,10 +34,19 @@ test("a person's certified devices have the role granted to them; the owner's ar
   expect(a.accessOf(ws, laptop.device)).toBeNull();
   a.addDevice(ws, laptop);
   expect(a.accessOf(ws, laptop.device)).toBe("edit");
-  // The owner's own device, certified by the owner's key.
+  // A device the owner's key certified is the owner only while paired here (the test below): a
+  // certificate of the owner's is not kept on a workspace's list, and counts for nothing there.
   const mine = certifyDevice(owner, idOf(newSeed()));
-  a.addDevice(ws, mine);
-  expect(a.accessOf(ws, mine.device)).toBe("owner");
+  expect(a.addDevice(ws, mine)).toBe(false);
+  expect(a.accessOf(ws, mine.device)).toBeNull();
+  expect(a.admitted()).not.toContain(mine.device);
+  // One kept on the list before this was so counts for nothing either.
+  const doc = readDoc(dir, ws, (m) => { throw new Error(m); });
+  doc.getMap("devices").set(mine.device, mine);
+  doc.commit();
+  writeDoc(dir, ws, doc);
+  expect(lists().accessOf(ws, mine.device)).toBeNull();
+  expect(lists().admitted()).not.toContain(mine.device);
   // Someone with no grant: their certificate is not kept, and they have nothing.
   expect(a.addDevice(ws, stranger.cert)).toBe(false);
   expect(a.accessOf(ws, stranger.cert.device)).toBeNull();
