@@ -15,7 +15,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
-- Settings is regrouped by what you do: General, Connect (People, Your devices, API access), Plugins, Advanced (Servers, About and updates), each Connect page with a line saying what it is for. Your devices leads with three ways in: on your phone, another computer, in a browser here; the browser's port and other names, and how pairing works, are folded away until asked for. A browser that pairs is named by what it is ("Chrome on Android"). The update check is switched on About and updates only. Links to the old page names still open the new pages.
+- Settings is regrouped by what you do: General, Connect (People, Your devices, API access), Plugins, Advanced (Servers, About and updates), each Connect page with a line saying what it is for. Your devices leads with three ways in: on your phone, another computer, in a browser here; the browser's port and other names, and how pairing works, are folded away until asked for. A browser that pairs is named by what it is ("Chrome on Android"). The update check is switched on About and updates only. Links to the old page names still open the new pages. API access is marked with a key, for its tokens.
 - Settings → Plugins is one list: Installed or HiveHub, a search and a kind in one row, then a group per kind with its count. Every plugin's row looks the same and says its state in one badge (Default, In use, Off, Not installed, Installed); making one the default, using a view, switching one off and removing one are on its own page. Adding agents found on this machine sits under the agents. The refresh button is gone: the list is read again when the window comes back.
 
 ### Fixed

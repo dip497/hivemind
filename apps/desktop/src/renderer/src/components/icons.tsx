@@ -11,7 +11,7 @@ import {
   EllipsisIcon, EllipsisVerticalIcon, ExternalLinkIcon, EyeIcon, EyeOffIcon, FileCodeCornerIcon,
   FileQuestionMarkIcon, Files01Icon, Film01Icon, Folder01Icon, FolderGitIcon, FolderMinusIcon, FolderOpenIcon,
   FolderPlusIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareIcon, GlobeIcon, GripVerticalIcon,
-  HistoryIcon, Home01Icon, Image01Icon, InboxIcon, InfoIcon, KeyboardIcon, LaptopIcon,
+  HistoryIcon, Home01Icon, Image01Icon, InboxIcon, InfoIcon, Key01Icon, KeyboardIcon, LaptopIcon,
   LayoutGridIcon, LayoutListIcon, ListTodoIcon, LoaderCircleIcon, LogInIcon, LogOutIcon, Mail01Icon,
   MailOpenIcon, Maximize01Icon, MessageSquareIcon, MessagesSquareIcon, MonitorIcon, MonitorSmartphoneIcon,
   MoveUpRightIcon, NetworkIcon, PaletteIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PanelsTopLeftIcon, PencilIcon, PinIcon,
@@ -85,6 +85,7 @@ export const House = icon("house", Home01Icon);
 export const Image = icon("image", Image01Icon);
 export const Inbox = icon("inbox", InboxIcon);
 export const Info = icon("info", InfoIcon);
+export const Key = icon("key", Key01Icon);
 export const Keyboard = icon("keyboard", KeyboardIcon);
 export const Laptop = icon("laptop", LaptopIcon);
 export const LayoutGrid = icon("layout-grid", LayoutGridIcon);

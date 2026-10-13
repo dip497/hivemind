@@ -1,7 +1,7 @@
 /** Settings navigation: fixed pages, grouped, plus one page per plugin of any kind
  *  (`plugin:agent:claude`, `plugin:view:canvas`, `plugin:widget:pet`, `plugin:tool:hivemind/web`).
  *  `chunk` keeps cheap pages out of the lazy Settings bundle. */
-import { Bell, Blocks, Bot, Info, Keyboard, Palette, UserRound, UserPlus, Network, MonitorSmartphone } from "./components/icons";
+import { Bell, Blocks, Info, Key, Keyboard, Palette, UserRound, UserPlus, Network, MonitorSmartphone } from "./components/icons";
 import type { Icon } from "./components/icons";
 
 export type SettingsGroup = "General" | "Connect" | "Plugins" | "Advanced";
@@ -28,7 +28,7 @@ export const SETTINGS_PAGES: readonly SettingsPageDef[] = [
   { id: "shortcuts", group: "General", label: "Shortcuts", icon: Keyboard, description: "Keyboard shortcuts.", chunk: "lazy" },
   { id: "people", group: "Connect", label: "People", hint: "Invite people to this workspace", icon: UserPlus, description: "An invite link to the workspace in this window, who has access, and where it is hosted.", chunk: "lazy" },
   { id: "your-devices", group: "Connect", label: "Your devices", hint: "Your phone, other computers, a browser tab", icon: MonitorSmartphone, description: "Use this app on your phone, on another computer, or in a browser here; and the devices paired with it.", chunk: "lazy" },
-  { id: "api", group: "Connect", label: "API access", hint: "Scripts and tools that drive agents", icon: Bot, description: "Tokens for scripts and tools that start and answer agents here, and taking them back.", chunk: "lazy" },
+  { id: "api", group: "Connect", label: "API access", hint: "Scripts and tools that drive agents", icon: Key, description: "Tokens for scripts and tools that start and answer agents here, and taking them back.", chunk: "lazy" },
   { id: "plugins", group: "Plugins", label: "Plugins", icon: Blocks, description: "Agents, views, widgets and tools: the ones you have and the ones on HiveHub.", chunk: "lazy" },
   { id: "servers", group: "Advanced", label: "Servers", hint: "Relay and discovery; most people never change this", icon: Network, description: "The relay and discovery servers this computer uses, if any.", chunk: "lazy" },
   { id: "about", group: "Advanced", label: "About and updates", icon: Info, description: "Version, updates, and whether the app checks for them.", chunk: "eager" },
