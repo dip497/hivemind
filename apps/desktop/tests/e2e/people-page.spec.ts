@@ -137,7 +137,17 @@ test("its QR code fills its box with a four-module margin, opens large and close
   expect(wasm.readQr(Uint8Array.from(await frame(small.png)), 640, 480)).toBe(link);
 });
 
+/** A phone's pairing link of a known length. The app's own lists every address of the machine it
+ *  runs on, so its code would be as large as that machine's network. */
+const PHONE_LINK = "hivemind://pair/" + Buffer.from(JSON.stringify({
+  v: 1, device: "3f".repeat(32), addrs: ["10.0.0.2:7420"], relay: null, code: "oak-elm-fig-yew-ash-bay", name: "Asha", kind: "app",
+})).toString("base64url");
+
 test("a longer code, the phone's pairing link, grows its box rather than spill out of it, still whole pixels a module", async () => {
+  await app.evaluate(({ ipcMain }, link) => {
+    ipcMain.removeHandler("net:pair-offer");
+    ipcMain.handle("net:pair-offer", () => ({ code: "oak-elm-fig-yew-ash-bay", link, expires: Date.now() + 600_000 }));
+  }, PHONE_LINK);
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
   await page.locator("[data-pair-phone]").click();
   const offered = page.locator('[data-pair-offered="phone"]');
@@ -146,9 +156,10 @@ test("a longer code, the phone's pairing link, grows its box rather than spill o
   const n = Number(await code.locator("svg").getAttribute("data-qr-modules"));
   const box = (await code.boundingBox())!;
   const svg = (await code.locator("svg").boundingBox())!;
-  // Whole pixels a module, at least 200 across: more than the 240 a box is otherwise given.
-  expect(Math.ceil(200 / n) * n).toBeGreaterThan(240);
+  // 65 modules at whole pixels and at least 200 across is 260: more than the 240 a box is otherwise given.
+  expect(n).toBe(65);
   expect(svg.width / n).toBe(Math.round(svg.width / n));
+  expect(box.width).toBeGreaterThan(240);
   expect(svg.x).toBeGreaterThanOrEqual(box.x);
   expect(svg.x + svg.width).toBeLessThanOrEqual(box.x + box.width);
   // What is beside it starts after it.
