@@ -135,6 +135,9 @@ export function writePty(tileId: string, data: string, paste?: boolean): void {
 export function resizePty(tileId: string, cols: number, rows: number): void {
   local.resize(tileId, cols, rows);
 }
+export function repaintPty(tileId: string): void {
+  local.repaint(tileId);
+}
 /** Renderer back-pressure (see TerminalTile flow control); the daemon also
  *  resumes on its own on detach/kill/reattach, so a dropped resume can't wedge a session. */
 export function pausePty(tileId: string): void {

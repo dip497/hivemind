@@ -56,6 +56,8 @@ export interface SessionBackend {
    *  batching. */
   echoes(tile: string): boolean;
   resize(tile: string, cols: number, rows: number): void;
+  /** Its program redraws all of its screen, its size unchanged. */
+  repaint(tile: string): void;
   pause(tile: string): void;
   resume(tile: string): void;
   /** End the session for good, and the host's own teardown for it. */
@@ -286,18 +288,15 @@ export class Terminals {
 
   /**
    * A viewer shows a copy of a session's screen (a replay on attaching, the host's screen when it
-   * joins or is shown again): the program repaints all of it, once, a moment later, by its size
-   * stepping one row down and back. A program that repaints only what changed would otherwise patch
-   * its own idea of the screen over the copy. A session sized on another machine is sized there.
+   * joins or is shown again): the program repaints all of it, once, a moment later. A program that
+   * repaints only what changed would otherwise patch its own idea of the screen over the copy. A
+   * session sized on another machine is sized there.
    */
   private repaintSoon(tile: string): void {
     if (this.repaints.has(tile) || this.machines.has(tile)) return;
     this.repaints.set(tile, setTimeout(() => {
       this.repaints.delete(tile);
-      const size = this.sizes.get(tile);
-      if (!size || size.rows < 2) return;
-      this.opts.backend.resize(tile, size.cols, size.rows - 1);
-      this.opts.backend.resize(tile, size.cols, size.rows);
+      this.opts.backend.repaint(tile);
     }, REPAINT_AFTER_MS));
   }
 

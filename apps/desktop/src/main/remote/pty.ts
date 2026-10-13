@@ -260,6 +260,10 @@ export function resizeRemotePty(tileId: string, cols: number, rows: number): voi
   const ep = daemonTiles.get(tileId);
   if (ep) ep.resize(tileId, cols, rows); else remotePtys.get(tileId)?.resize(cols, rows);
 }
+/** Only a daemon keeps a copy of its screen to show, so only a session under one repaints. */
+export function repaintRemotePty(tileId: string): void {
+  daemonTiles.get(tileId)?.repaint(tileId);
+}
 /** Whether a remote session runs under a daemon, which keeps its screen. */
 export function remoteKeepsScreen(tileId: string): boolean { return daemonTiles.has(tileId); }
 /** Ask a daemon-backed remote session for its screen now; false for one with no screen kept. */

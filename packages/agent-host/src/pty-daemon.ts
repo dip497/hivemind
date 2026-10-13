@@ -611,6 +611,9 @@ const server = net.createServer((sock) => {
       case "resize":
         manager.resize(msg.id, msg.cols, msg.rows, viewers.get(msg.id));
         break;
+      case "repaint":
+        manager.repaint(msg.id);
+        break;
       case "detach":
         leave(msg.id);
         break;

@@ -30,6 +30,7 @@ function host(opts: { askedByHost?: (bare: string) => boolean; hidden?: () => bo
       write: (t, d) => calls.push(`write ${t} ${d}`),
       echoes: () => true,
       resize: (t, c, r) => calls.push(`resize ${t} ${c}x${r}`),
+      repaint: (t) => calls.push(`repaint ${t}`),
       pause: (t) => calls.push(`pause ${t}`),
       resume: (t) => calls.push(`resume ${t}`),
       kill: (t) => calls.push(`kill ${t}`),
@@ -237,22 +238,23 @@ test("a client that acknowledges what it takes is paced by it: past its window i
 
 // A program that repaints only what changed draws against the screen it thinks is there. Shown a
 // copy instead (a replay on attaching, the host's screen for one that joins), it patches the copy
-// wherever the two differ, and text runs into text: it is made to repaint all of it, once.
-test("a session whose screen a client is shown from a copy repaints all of it, once; live output does not", async (t) => {
+// wherever the two differ, and text runs into text: it is made to repaint all of it, once, its size
+// never changed (a screen a row shorter, read meanwhile, cuts what its last row says).
+test("a session whose screen a client is shown from a copy repaints all of it, once, never resized; live output does not", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const h = host();
   const a = h.client();
   await h.open(a, "hm:t1");
-  const resizes = () => h.calls.filter((c) => c.startsWith("resize"));
+  const asked = () => h.calls.filter((c) => c.startsWith("resize") || c.startsWith("repaint"));
   h.outputs.get("hm:t1")!.data("live bytes");
   t.mock.timers.tick(REPAINT_AFTER_MS * 2);
-  assert.deepEqual(resizes(), []);
-  // The screen again on attaching, twice in a row: one repaint, a row down and back.
+  assert.deepEqual(asked(), []);
+  // The screen again on attaching, twice in a row: one repaint.
   h.outputs.get("hm:t1")!.data("\x1b[H screen", true);
   h.outputs.get("hm:t1")!.data("\x1b[H screen", true);
-  assert.deepEqual(resizes(), [], "the copy is drawn first");
+  assert.deepEqual(asked(), [], "the copy is drawn first");
   t.mock.timers.tick(REPAINT_AFTER_MS);
-  assert.deepEqual(resizes(), ["resize hm:t1 80x23", "resize hm:t1 80x24"]);
+  assert.deepEqual(asked(), ["repaint hm:t1"]);
 });
 
 test("a client that joins a running session is shown the host's screen, and the session repaints all of it", async (t) => {
@@ -263,7 +265,7 @@ test("a client that joins a running session is shown the host's screen, and the 
   await h.open(b, "hm:t1");
   assert.ok(output(b).some((m) => JSON.stringify(m.params).includes("the host's screen")));
   t.mock.timers.tick(REPAINT_AFTER_MS);
-  assert.deepEqual(h.calls.filter((c) => c.startsWith("resize")), ["resize hm:t1 80x23", "resize hm:t1 80x24"]);
+  assert.deepEqual(h.calls.filter((c) => c.startsWith("resize") || c.startsWith("repaint")), ["repaint hm:t1"]);
 });
 
 test("a phone that asks for some of a session's history is sent the screen with that much of it on joining, and with more as it asks, alone", async () => {

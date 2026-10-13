@@ -596,6 +596,28 @@ export class SessionManager {
   }
 
   /** Resizing is interacting: that viewer's size wins. */
+  /** Its program redraws all of its screen, its size unchanged, so the screen read meanwhile is
+   *  never a row short: its process group is told the size changed. ConPTY has no signals: its
+   *  size steps a row down and back, this screen kept at its size. */
+  repaint(id: string): void {
+    const s = this.sessions.get(id);
+    if (!s || s.exited) return;
+    if (process.platform === "win32") {
+      if (s.spec.rows < 2) return;
+      try {
+        s.pty.resize(s.spec.cols, s.spec.rows - 1);
+        s.pty.resize(s.spec.cols, s.spec.rows);
+      } catch { /* resize on a dying pty */ }
+      return;
+    }
+    for (const to of [-s.pty.pid, s.pty.pid]) {
+      try {
+        process.kill(to, "SIGWINCH");
+        return;
+      } catch { /* not a group of its own, or gone */ }
+    }
+  }
+
   resize(id: string, cols: number, rows: number, client?: SessionClient): void {
     const s = this.sessions.get(id);
     if (!s) return;

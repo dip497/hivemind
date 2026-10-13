@@ -41,6 +41,7 @@ export function daemonSessions({ endpoint, pace }: DaemonSessionsOptions): Sessi
     write: (tile, data, paste) => endpoint.write(tile, data, paste),
     echoes: () => true,
     resize: (tile, cols, rows) => endpoint.resize(tile, cols, rows),
+    repaint: (tile) => endpoint.repaint(tile),
     pause: (tile) => endpoint.pause(tile),
     resume: (tile) => endpoint.resume(tile),
     kill: (tile) => endpoint.kill(tile),
