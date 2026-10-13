@@ -414,7 +414,7 @@ const manager = new SessionManager(factory, {
   // restore re-execs from the persisted spec, so an un-stripped prompt is re-appended
   // as positional argv and the task RUNS AGAIN — for every agent that takes an argv
   // prompt. A property of restore, not of any one agent.
-  transformSpecOnRestore: (spec, id) => resume.transformSpecOnRestore(stripInitialPrompt(spec), id),
+  transformSpecOnRestore: (spec, id, ran) => resume.transformSpecOnRestore(stripInitialPrompt(spec), id, ran),
   restoreRetryMs: resume.restoreRetryMs,
   restoreRetryTransform: (spec) => resume.restoreRetryTransform(spec),
 });

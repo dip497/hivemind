@@ -106,6 +106,9 @@ interface Session {
   carry: string;
   serializer: SerializeAddonInstance;
   spec: SpawnSpec;
+  /** What its starter asked for, before the agent's launch made it `spec`: what a restore
+   *  launches from, with the agent's manifest as it is then. Unknown for a snapshot of before. */
+  asked?: SpawnSpec;
   exited: boolean;
   /** Output and exit fan out to every viewer. */
   clients: Set<SessionClient>;
@@ -177,7 +180,7 @@ export interface SessionManagerOptions {
    *  the underlying agent to resume its prior session, so a reboot replay isn't
    *  just a screen image but an actual resume of the agent's task. If unset, the original spec is used verbatim (the user
    *  sees their last screen but the agent forgets prior context). */
-  transformSpecOnRestore?: (spec: SpawnSpec, id: string) => SpawnSpec;
+  transformSpecOnRestore?: (spec: SpawnSpec, id: string, ran?: SpawnSpec) => SpawnSpec;
   /** OPTIONAL — transform the SpawnSpec when spawning a BRAND-NEW session.
    *  Used to bind an agent to a session id so the snapshot remembers the binding
    *  and restore can resume exactly that session.
@@ -201,6 +204,8 @@ export interface SessionManagerOptions {
 export interface SessionSnapshot {
   id: string;
   spec: SpawnSpec;
+  /** What its starter asked for, before the agent's launch (`Session.asked`). */
+  asked?: SpawnSpec;
   /** Output of SerializeAddon.serialize() — a VT-escape string. */
   replay: string;
   /** Last OSC window title (SerializeAddon omits it) so a reboot-restored
@@ -226,7 +231,7 @@ export class SessionManager {
   private readonly onSnapshot?: (id: string, snap: SessionSnapshot) => void | Promise<void>;
   private readonly onSnapshotEvict?: (id: string) => void;
   private readonly snapshotDebounceMs: number;
-  private readonly transformSpecOnRestore?: (spec: SpawnSpec, id: string) => SpawnSpec;
+  private readonly transformSpecOnRestore?: (spec: SpawnSpec, id: string, ran?: SpawnSpec) => SpawnSpec;
   private readonly transformSpecOnSpawn?: (spec: SpawnSpec, id: string) => SpawnSpec;
   private readonly restoreRetryTransform?: (spec: SpawnSpec) => SpawnSpec | null;
   private readonly onOutput?: (id: string) => void;
@@ -308,11 +313,14 @@ export class SessionManager {
     // For RESTORE paths, also run the optional transform so the daemon can
     // add the agent's resume arguments and get a real agent-level resume, not
     // just a screen image with an amnesiac agent underneath.
+    // A restore launches from what was asked, the agent's launch made afresh: its hooks and
+    // paths are the ones installed now. What it ran with says only which session it was in.
+    const asked = frozenSnap ? frozenSnap.asked : spec;
     let effectiveSpec: SpawnSpec = frozenSnap
-      ? { ...frozenSnap.spec, cols: spec.cols, rows: spec.rows }
+      ? { ...(frozenSnap.asked ?? frozenSnap.spec), cols: spec.cols, rows: spec.rows }
       : spec;
     if (frozenSnap && this.transformSpecOnRestore) {
-      effectiveSpec = this.transformSpecOnRestore(effectiveSpec, id);
+      effectiveSpec = this.transformSpecOnRestore(effectiveSpec, id, frozenSnap.asked ? frozenSnap.spec : undefined);
     } else if (!frozenSnap && this.transformSpecOnSpawn) {
       // Brand-new session: inject e.g. `--session-id <uuid>` BEFORE the spec
       // is stored on the session — snapshots persist this so future restores
@@ -340,6 +348,7 @@ export class SessionManager {
       carry: "",
       serializer,
       spec: effectiveSpec,
+      ...(asked ? { asked } : {}),
       exited: false,
       clients: new Set([client]),
       sizes: new Map([[client, { cols: effectiveSpec.cols, rows: effectiveSpec.rows }]]),
@@ -774,6 +783,7 @@ export class SessionManager {
           r = this.onSnapshot?.(s.id, {
             id: s.id,
             spec: s.spec,
+            ...(s.asked ? { asked: s.asked } : {}),
             replay: s.serializer.serialize({ scrollback: this.scrollback }),
             title: s.lastTitle,
             savedAt: Date.now(),

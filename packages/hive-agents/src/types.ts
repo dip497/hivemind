@@ -437,8 +437,9 @@ export interface SpawnSpec {
 export interface ProviderResumeTransforms {
   /** Fresh spawn: bind a deterministic session id + inject signal hooks. */
   transformSpecOnSpawn?: (spec: SpawnSpec, id: string) => SpawnSpec;
-  /** Restore after a daemon restart: resume the prior session. */
-  transformSpecOnRestore?: (spec: SpawnSpec, id: string) => SpawnSpec;
+  /** Restore after a daemon restart: resume the prior session. `spec` is what was asked for,
+   *  `ran` what it last ran with; without `ran`, `spec` is what it ran with. */
+  transformSpecOnRestore?: (spec: SpawnSpec, id: string, ran?: SpawnSpec) => SpawnSpec;
   /** A restored session died fast → respawn once with this transformed spec. */
   restoreRetryTransform?: (spec: SpawnSpec) => SpawnSpec | null;
   /** Window in which a fast death triggers `restoreRetryTransform`. */
