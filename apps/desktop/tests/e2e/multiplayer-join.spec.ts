@@ -7,8 +7,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { openShare, person, share } from "./helpers/multiplayer";
-import { pick } from "./helpers/select";
+import { person, share } from "./helpers/multiplayer";
 
 const HIVE_NET = path.resolve("../../crates/hive-net/target/debug/hive-net");
 
@@ -41,15 +40,8 @@ test("a person with an invite link asks to join; denied they are not let in, all
   fs.mkdirSync(guestDir);
   const guest = await launch("guest", guestDir);
 
-  await openShare(host);
-  await pick(host.locator("#share-role"), "Can edit board");
-  await host.locator("[data-share-create]").click();
-  const link = (await host.locator("[data-share-link]").textContent())!;
+  const link = await share(host, "edit", repo);
   expect(link).toMatch(/^hivemind:\/\/join\/[0-9a-f]{64}#/);
-  // The one press copied it too, ready to paste.
-  await expect(host.locator("[data-share-copy]")).toHaveText(/Copied/);
-  expect(await apps[0]!.evaluate(({ clipboard }) => clipboard.readText())).toBe(link);
-  await host.keyboard.press("Escape");
 
   const ask = async () => {
     await guest.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-recent")));

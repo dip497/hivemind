@@ -1,5 +1,5 @@
-// Pairing (the Android app's PairScreen): the link the computer shows under Settings → Your devices →
-// Use on your phone, or its offer to connect under Settings → Connect, opened here from its QR code,
+// Pairing (the Android app's PairScreen): a computer's offer to connect under Settings → Connect, or
+// a host's pairing link (`hive host pair` on it), opened here from its QR code,
 // scanned here, or pasted; hive-phone's core reads it and pairs, or connects.
 
 import { h, mark, pill } from "./dom.js";
@@ -9,10 +9,10 @@ import { deviceName } from "./device-name.js";
 
 export class PairScreen {
   readonly el = h("section", { class: "screen", "data-screen": "pair" });
-  private readonly link = h("textarea", { class: "field mono", rows: 3, placeholder: "hivemind://pair/…", "aria-label": "Pairing link", "data-pair-link": "" });
+  private readonly link = h("textarea", { class: "field mono", rows: 3, placeholder: "hivemind://connect/…", "aria-label": "Pairing link", "data-pair-link": "" });
   private readonly name = h("input", { class: "field", value: guessName(), "aria-label": "This device's name", "data-pair-name": "" });
   private readonly title = h("h1", {}, "Pair with hivemind");
-  private readonly how = h("p", {}, "On your computer, open Settings → Your devices → Use on your phone, and scan its code, or paste here the link it shows.");
+  private readonly how = h("p", {}, "On your computer, open Settings → Connect, and scan its code, or paste here the link it shows.");
   private readonly replaces = h("p", { class: "problem", hidden: true, "data-pair-replaces": "" });
   private readonly refusedBy = h("p", { class: "problem", hidden: true, "data-pair-refused": "" });
   private readonly said = h("p", { hidden: true, "data-pairing": "" });
@@ -84,10 +84,10 @@ export class PairScreen {
     this.refusedBy.hidden = true;
     this.title.textContent = !computer ? "Pair with hivemind" : computer.connect ? `Connect to ${computer.name}?` : `Pair with ${computer.name}?`;
     this.how.textContent = !computer
-      ? "This is not a pairing link. On your computer, open Settings → Your devices → Use on your phone."
+      ? "This is not a link to connect with. On your computer, open Settings → Connect."
       : computer.connect
         ? "Connect only to a computer you just asked to connect to, in its Settings → Connect."
-        : "Pair only with a computer you just asked to pair with, in its Settings → Your devices.";
+        : "Pair only with a host you just asked to pair with (`hive host pair` on it).";
     this.button.textContent = computer?.connect ? "Connect" : "Pair";
     this.button.disabled = !computer;
     this.replaces.hidden = !now;
@@ -109,7 +109,7 @@ export class PairScreen {
     this.refusedBy.hidden = true;
     this.link.value = "";
     this.title.textContent = "Pair with hivemind";
-    this.how.textContent = "On your computer, open Settings → Your devices → Use on your phone, and scan its code, or paste here the link it shows.";
+    this.how.textContent = "On your computer, open Settings → Connect, and scan its code, or paste here the link it shows.";
     this.button.disabled = false;
     this.button.textContent = "Pair";
     this.replaces.hidden = true;

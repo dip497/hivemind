@@ -1,7 +1,7 @@
 import { ProfilePrefs } from "./settings-profile";
-import { PeoplePrefs } from "./multiplayer/share-prefs";
+import { ConnectPrefs } from "./settings-connect";
 import { ServersPrefs } from "./settings-network";
-import { YourDevicesPrefs } from "./settings-devices";
+import { BrowserPrefs } from "./settings-browser";
 import { ApiAccessPrefs } from "./settings-programs";
 import { PluginPage } from "./plugins/PluginPage";
 import { PluginsHome } from "./plugins/PluginsHome";
@@ -169,7 +169,7 @@ const NavigateContext = createContext<(id: string) => void>(() => {});
 export const useSettingsNavigate = (): ((id: string) => void) => useContext(NavigateContext);
 
 /** Must match the registry's `chunk: "lazy"` pages (unit tested); plugin pages (`agent:…`) are always lazy. */
-export const LAZY_SETTINGS_PAGES = ["profile", "appearance", "shortcuts", "people", "your-devices", "api", "plugins", "servers"] as const;
+export const LAZY_SETTINGS_PAGES = ["profile", "appearance", "shortcuts", "connect", "api", "plugins", "browser", "servers"] as const;
 
 export default function SettingsPages({ page, navigate }: { page: string; navigate: (id: string) => void }) {
   return <NavigateContext.Provider value={navigate}>{renderPage(page)}</NavigateContext.Provider>;
@@ -177,8 +177,8 @@ export default function SettingsPages({ page, navigate }: { page: string; naviga
 
 function renderPage(page: string) {
   if (page === "profile") return <ProfilePrefs />;
-  if (page === "people") return <PeoplePrefs />;
-  if (page === "your-devices") return <YourDevicesPrefs />;
+  if (page === "connect") return <ConnectPrefs />;
+  if (page === "browser") return <BrowserPrefs />;
   if (page === "api") return <ApiAccessPrefs />;
   if (page === "servers") return <ServersPrefs />;
   if (page === "appearance") return <AppearancePrefs />;

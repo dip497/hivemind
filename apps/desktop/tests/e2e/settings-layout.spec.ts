@@ -60,7 +60,7 @@ test("Settings stays opaque, pauses decoration, preserves a terminal and fits a 
     await app.evaluate(({ BrowserWindow }) => { const win = BrowserWindow.getAllWindows()[0]!; win.setMinimumSize(400, 600); win.setContentSize(500, 800); });
     await expect.poll(() => page.evaluate(() => innerWidth)).toBeLessThanOrEqual(500);
     await expect(page.getByRole("button", { name: "Appearance", exact: true })).toBeVisible();
-    for (const section of ["appearance", "notifications", "shortcuts", "people", "your-devices", "api", "servers", "about", "plugins", "plugin:agent:claude", "plugin:view:canvas", "plugin:tool:hivemind/web", "plugin:widget:note"]) {
+    for (const section of ["appearance", "notifications", "shortcuts", "connect", "api", "browser", "servers", "about", "plugins", "plugin:agent:claude", "plugin:view:canvas", "plugin:tool:hivemind/web", "plugin:widget:note"]) {
       if (section.includes(":")) await page.evaluate((p) => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: p } })), section);
       else await page.locator(`[data-settings-page="${section}"]`).click();
       await expect.poll(() => page.locator("[data-settings-body]").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -89,7 +89,7 @@ test("Settings stays opaque, pauses decoration, preserves a terminal and fits a 
   } finally { await app.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-test("the sidebar is four groups, each Connect page says what it is for, and an old page's name opens its new page, focus following it", async () => {
+test("the sidebar is four groups, each Connect page says what it is for, and an old page's name opens Connect, focus following it", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-settings-nav-"));
   const env = { ...process.env, XDG_CONFIG_HOME: path.join(root, "config"), HIVE_SETTINGS: path.join(root, "settings.json") } as Record<string, string>;
   delete env.ELECTRON_RUN_AS_NODE;
@@ -100,12 +100,12 @@ test("the sidebar is four groups, each Connect page says what it is for, and an 
     await page.getByLabel("settings", { exact: true }).click();
     const groups = page.locator(".settings-nav-group");
     await expect.poll(() => groups.evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")))).toEqual(["General", "Connect", "Plugins", "Advanced"]);
-    await expect(page.locator('[data-settings-page="your-devices"] [data-settings-hint]')).toHaveText("Your phone, other computers, a browser tab");
+    await expect(page.locator('[data-settings-page="connect"] [data-settings-hint]')).toHaveText("Your phone, other computers, other people");
     await expect(page.locator('[data-settings-page="servers"] [data-settings-hint]')).toBeVisible();
     await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "devices" } })));
-    await expect(page.locator('[data-settings-page="your-devices"]')).toHaveAttribute("aria-current", "page");
+    await expect(page.locator('[data-settings-page="connect"]')).toHaveAttribute("aria-current", "page");
     // Focus, and its ring, moved with it: not left on the page that was shown before.
-    await expect(page.locator('[data-settings-page="your-devices"]')).toBeFocused();
-    await expect(page.locator('[data-connect="phone"]')).toBeVisible();
+    await expect(page.locator('[data-settings-page="connect"]')).toBeFocused();
+    await expect(page.locator("[data-connect-offer]")).toBeVisible();
   } finally { await app.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });

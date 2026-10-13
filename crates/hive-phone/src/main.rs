@@ -1,8 +1,8 @@
 //! `hive-phone`: in a terminal, what the phone does (M5).
 //!
 //!   hive-phone id               print this phone's id (its device key's public half)
-//!   hive-phone pair <link>      pair with the app that shows this link (Settings → Your devices on a
-//!                               computer): this phone is that app's person from then on
+//!   hive-phone pair <link>      pair with the host that shows this link (`hive host pair` on a
+//!                               server): this phone is that host's person from then on
 //!   hive-phone connect <link> [--sure yes|no]
 //!                               connect to the computer whose offer this is (Settings → Connect
 //!                               on it): its name (`connecting to <name>`) and the words both
@@ -381,7 +381,7 @@ async fn run(args: Args) -> Result<()> {
                 .map(String::as_str)
                 .context("pair: which link?")?;
             let link = pairing::parse_link(text).context(
-                "that is not a pairing link: it is the one under Settings → Your devices on your computer",
+                "that is not a pairing link: it is the one `hive host pair` prints on your host",
             )?;
             let Pairing { paired, admission } = phone
                 .pair_with(args.name.as_deref().unwrap_or("Phone"), &link)
@@ -942,7 +942,7 @@ async fn run(args: Args) -> Result<()> {
                 );
             } else {
                 println!(
-                    "This phone forgot {0}, but {0} is away and still lists this phone: unpair it there too (Settings → Your devices).",
+                    "This phone forgot {0}, but {0} is away and still lists this phone: unpair it there too (Settings → Connect).",
                     device.name
                 );
             }

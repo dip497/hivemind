@@ -327,7 +327,7 @@ export interface NetworkSettings {
    *  network profile does not name, unless the person browses plugins. */
   updateCheck: boolean;
 }
-/** Settings → Your devices, "In a browser on this computer" (docs/design/browser-app-2026-10-13.md): the app served
+/** Settings → Advanced → In a browser (docs/design/browser-app-2026-10-13.md): the app served
  *  to a browser on 127.0.0.1, off until the person turns it on. */
 export interface BrowserAppSettings {
   enabled: boolean;

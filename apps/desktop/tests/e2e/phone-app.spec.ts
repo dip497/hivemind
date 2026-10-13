@@ -1,6 +1,6 @@
 // The phone apps against a real computer (docs/design/phone-app-2026-10-02.md §7): the Android app
-// on an emulator, or the iOS app on a simulator, pairs with the desktop app by the link its Settings
-// → Your devices → Use on your phone shows, and drives an agent there. This is the computer's side, once for
+// on an emulator, or the iOS app on a simulator, connects with the desktop app by the link its Settings
+// → Connect shows, the person there saying it is theirs, and drives an agent there. This is the computer's side, once for
 // both platforms: the desktop with the workspace `api` and a stand-in agent asked something at the
 // computer; the link; the platform's own UI test, run with the link and told what to find there
 // (apps/android/maestro/computer, or HivePhoneUITests/ComputerUITests); and what the computer shows
@@ -21,7 +21,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { hiveNetBuilt, person } from "./helpers/multiplayer";
-import { offerPhonePairing, talkerAgent } from "./helpers/phone";
+import { itsMe, offerToConnect, talkerAgent } from "./helpers/phone";
 import { stopDaemons } from "./helpers/daemons";
 
 const platform = process.env.PHONE_APP === "android" || process.env.PHONE_APP === "ios" ? process.env.PHONE_APP : null;
@@ -157,9 +157,10 @@ test("the phone app pairs with the computer by the link it shows, finds it and i
   const installed = spawnSync("bun", [CLI, "views", "install", VIEW, "--json"], { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: path.join(root, "desktop") } });
   expect(installed.status, installed.stdout + installed.stderr).toBe(0);
 
-  // Use on your phone: the link, and the phone's own UI test with it, told what it should find there.
+  // Settings → Connect: the link, and the phone's own UI test with it, told what it should find
+  // there; the person here says the phone asking is theirs.
   const told: Told = {
-    PAIR_LINK: await offerPhonePairing(desktop),
+    PAIR_LINK: await offerToConnect(desktop),
     PAIR_PERSON: "Priya",
     PAIR_COMPUTER: os.hostname(),
     PAIR_AGENT: "Talker #1",
@@ -173,11 +174,13 @@ test("the phone app pairs with the computer by the link it shows, finds it and i
     PAIR_VIEW_AGENT: "Talker #1",
     PAIR_VIEW_SELECTED: "Selected: Talker #1",
   };
+  const answered = itsMe(desktop, 300_000);
   const ran = await runPhoneTest(platform!, told, testInfo);
+  await answered;
   expect(ran.code, `the phone's UI test (its output: ${testInfo.outputPath(platform!)}):\n${ran.tail}`).toBe(0);
 
   // The computer lists the phone among the person's devices, as a phone.
-  await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
+  await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "connect" } })));
   await expect(desktop.locator('[data-devices] [data-device-kind="phone"]')).toHaveCount(1, { timeout: 30_000 });
   // What the phone sent is what the agent heard, as the person's, once; and it answered.
   await expect.poll(() => said(home), { timeout: 30_000 }).toContainEqual(["agent", told.PAIR_ANSWER]);

@@ -1,16 +1,16 @@
-// Settings → People: who has access is shown without a click, above the invite link; the link's
-// choices come before the button that makes it. Its QR code fills its box with the four-module
+// Settings → Connect (docs/design/connect-2026-10-13.md §5.4): one line says what it is for; the offer
+// comes first, then Have a code? Join, then who is connected, the people in this window's workspace
+// shown without a click, with where it runs. The offer's QR code fills its box with the four-module
 // margin a reader needs, opens as large as the window allows and closes with Esc, and a phone's
-// camera frame of it reads back the link, by the phone page's own reader (crates/hive-web). People
-// and Your devices each say in one line whom they are for, and Your devices' Another computer is
-// split by which side of the pairing the person is on.
+// camera frame of it reads back the link, by the phone page's own reader (crates/hive-web); it stays
+// inside its box. Join closes Settings for the join form.
 import { test, expect, _electron as electron, type ElectronApplication, type Locator, type Page } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
-import { HIVE_NET, hiveNetBuilt, openShare } from "./helpers/multiplayer";
+import { HIVE_NET, hiveNetBuilt, openConnect } from "./helpers/multiplayer";
 
 const PKG = path.resolve("../../crates/hive-web/www/pkg");
 const pageBuilt = (): boolean => fs.existsSync(path.join(PKG, "hive_web_bg.wasm"));
@@ -29,7 +29,7 @@ test.beforeAll(async () => {
   page = await app.firstWindow();
   await page.waitForSelector(".react-flow");
   await page.evaluate(() => window.hive.settingsSet("profile.name", "Asha Rao"));
-  await openShare(page);
+  await openConnect(page);
 });
 
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });
@@ -40,16 +40,19 @@ async function order(a: Locator, b: Locator): Promise<number> {
   return a.evaluate((x, y) => (x.compareDocumentPosition(y!) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1), other);
 }
 
-test("who has access is shown without a click, and the link's choices come before the button that makes it", async () => {
+test("one line says what it is for; the offer comes first, then Join, then who is connected, the people here shown without a click, with where it runs", async () => {
+  await expect(page.locator("[data-connect-page] [data-page-lead]")).toHaveText("Another computer, a phone, or someone else uses this computer's offer; you say who they are when they do.");
+  const [offer, join, connected] = [page.locator("[data-connect-offer]"), page.locator("[data-connect-join]"), page.locator("[data-connected]")];
+  expect(await order(offer, join)).toBe(-1);
+  expect(await order(join, connected)).toBe(-1);
   const access = page.locator("[data-share-access]");
   await expect(access.locator("[data-people-owner]")).toContainText("Asha Rao");
   await expect(access.locator("[data-people-owner]")).toContainText("Owner");
   await expect(access.locator("[data-people-none]")).toBeVisible();
-  for (const choice of ["#share-role", "#share-expiry", "#share-reusable"]) {
-    expect(await order(access, page.locator(choice)), choice).toBe(-1);
-    expect(await order(page.locator(choice), page.locator("[data-share-create]")), choice).toBe(-1);
-  }
   await expect(page.locator("[data-hosting-status]")).toHaveText("Runs on this computer; offline while it sleeps.");
+  // With no host yet, Keep it running says how to get one.
+  await page.locator("[data-keep-running]").click();
+  await expect(page.locator("[data-hosting-how]")).toContainText("Run hive host pair on a server and enter the words it shows under Join.");
 });
 
 /** The pixels a locator shows, as the screen draws them, read in the page: rows of 0 (dark) / 1 (light). */
@@ -93,9 +96,10 @@ async function measure(code: Locator) {
 
 test("its QR code fills its box with a four-module margin, opens large and closes with Esc, and a phone's camera reads it", async () => {
   test.skip(!pageBuilt(), "no page build: run crates/hive-web/build.sh");
-  await page.locator("[data-share-create]").click();
-  const link = (await page.locator("[data-share-link]").textContent())!;
-  const card = page.locator("[data-share-qr]");
+  await page.locator("[data-connect-offer]").click();
+  const card = page.locator("[data-connect-qr]");
+  await expect(card).toBeVisible({ timeout: 20_000 });
+  const link = (await page.locator("[data-connect-copy]").getAttribute("title"))!;
   const small = await measure(card);
   expect((await card.boundingBox())!.width).toBeGreaterThanOrEqual(200);
   // Every module the same whole number of pixels, and four of them white each side.
@@ -112,7 +116,7 @@ test("its QR code fills its box with a four-module margin, opens large and close
   for (const side of [big.left, big.right]) expect(Math.abs(side - 4)).toBeLessThanOrEqual(0.5);
   await page.keyboard.press("Escape");
   await expect(large).toHaveCount(0);
-  await expect(page.locator("[data-share-page]")).toBeVisible();
+  await expect(page.locator("[data-connect-page]")).toBeVisible();
 
   // A camera frame as the phone page reads one (640 by 480, scan.ts) with the card's code in it as
   // the screen shows it, slightly soft.
@@ -137,17 +141,14 @@ test("its QR code fills its box with a four-module margin, opens large and close
   expect(wasm.readQr(Uint8Array.from(await frame(small.png)), 640, 480)).toBe(link);
 });
 
-test("a longer code, the phone's pairing link, grows its box rather than spill out of it, still whole pixels a module", async () => {
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
-  await page.locator("[data-pair-phone]").click();
-  const offered = page.locator('[data-pair-offered="phone"]');
-  const code = offered.locator("[data-pair-qr]");
+test("the offer's code, with this computer's addresses, stays inside its box, whole pixels a module, and what is beside it starts after it", async () => {
+  const offered = page.locator("[data-connect-offered]");
+  if (!(await offered.count())) await page.locator("[data-connect-offer]").click();
+  const code = offered.locator("[data-connect-qr]");
   await expect(code).toBeVisible({ timeout: 20_000 });
   const n = Number(await code.locator("svg").getAttribute("data-qr-modules"));
   const box = (await code.boundingBox())!;
   const svg = (await code.locator("svg").boundingBox())!;
-  // Whole pixels a module, at least 200 across: more than the 240 a box is otherwise given.
-  expect(Math.ceil(200 / n) * n).toBeGreaterThan(240);
   expect(svg.width / n).toBe(Math.round(svg.width / n));
   expect(svg.x).toBeGreaterThanOrEqual(box.x);
   expect(svg.x + svg.width).toBeLessThanOrEqual(box.x + box.width);
@@ -156,22 +157,9 @@ test("a longer code, the phone's pairing link, grows its box rather than spill o
   expect(text.y >= box.y + box.height || text.x >= box.x + box.width).toBe(true);
 });
 
-test("People and Your devices each say whom they are for; Another computer is one row for each side of the pairing, showing first", async () => {
-  await openShare(page);
-  await expect(page.locator("[data-share-page] [data-page-lead]")).toHaveText("Other people, invited to this one workspace, with the role you give them.");
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
-  await expect(page.locator("[data-page-lead]")).toHaveText("Computers and phones that are you: they see every workspace you own.");
-
-  const card = page.locator('[data-connect="computer"]');
-  await expect(card).toContainText("Use your other computer's workspaces here, and this one's there.");
-  const show = card.locator('[data-pair-side="show"]');
-  const enter = card.locator('[data-pair-side="enter"]');
-  await expect(show).toContainText("Adding this computer to another?");
-  await expect(show.getByRole("button")).toHaveText(["Show a code"]);
-  await expect(show.getByRole("textbox")).toHaveCount(0);
-  await expect(enter).toContainText("Have a code from your other computer?");
-  await expect(enter.getByRole("textbox", { name: "Code from your other computer" })).toHaveAttribute("placeholder", "six words or hivemind://pair/… link");
-  await expect(enter.getByRole("button")).toHaveText(["Pair"]);
-  // As the person sees them: showing a code above entering one.
-  expect((await show.boundingBox())!.y + (await show.boundingBox())!.height).toBeLessThanOrEqual((await enter.boundingBox())!.y);
+test("Join closes Settings and opens the join form, where a code from elsewhere is entered", async () => {
+  await page.locator("[data-connect-join-open]").click();
+  await expect(page.locator(".settings-dialog")).toHaveCount(0);
+  await expect(page.locator("[data-join-link]")).toBeVisible();
+  await page.keyboard.press("Escape");
 });

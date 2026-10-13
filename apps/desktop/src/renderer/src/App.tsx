@@ -213,7 +213,8 @@ export function App() {
   }, []);
   useEffect(() => {
     const onFolder = () => void pickFolder();
-    const onRecent = (e: Event) => setRecentOpen((e as CustomEvent<{ join?: boolean }>).detail?.join ? "join" : "recent");
+    // One dialog at a time: Join from Settings → Connect closes Settings.
+    const onRecent = (e: Event) => { setSettingsOpen(false); setRecentOpen((e as CustomEvent<{ join?: boolean }>).detail?.join ? "join" : "recent"); };
     // The Layers panel's Projects: this window shows that workspace instead.
     const onWorkspace = (e: Event) => { const repo = (e as CustomEvent<{ repo?: string }>).detail?.repo; if (repo) openRecent(repo); };
     window.addEventListener("hivemind:open-folder", onFolder);
@@ -235,7 +236,7 @@ export function App() {
     openRecent(path);
     void qc.invalidateQueries({ queryKey: ["project", path] });
   };
-  // Settings → People hands this on: Settings closes for the moved workspace.
+  // Settings → Connect hands this on: Settings closes for the moved workspace.
   useEffect(() => {
     const moved = (event: Event) => { setSettingsOpen(false); openMoved((event as CustomEvent<{ uri: string }>).detail.uri); };
     window.addEventListener("hivemind:open-moved", moved);
@@ -368,7 +369,7 @@ export function App() {
           />
           <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
             <SharedBanner onMoved={openMoved} />
-            <WorkspaceActions onPeople={() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "people" } }))} />
+            <WorkspaceActions onPeople={() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "connect" } }))} />
             {!islandShown && !layersShown && <AppControls corner />}
           </div>
         </div>

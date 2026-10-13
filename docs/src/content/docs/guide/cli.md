@@ -206,21 +206,19 @@ hive host run         # serve until stopped (what a service runs); one host per 
 hive host status      # whether it runs, as which device, where it is reached, its workspaces
 hive host stop        # stop serving; the terminals keep running in the daemon
 hive host pair        # print six words, a link and a QR code for your app to enter
-hive host pair <code> # or enter the words (quoted) or the link your app shows
-                      #   (Settings → Your devices → Or show a code)
 hive host add <dir>   # serve a folder on this machine as one of its workspaces
 hive host install     # run it as a service of yours (systemd): at boot, and again if it stops
 hive host uninstall   # stop running it as a service; its terminals keep running
 ```
 
 The host is the same device the app would be on that machine (it uses the app's keys), so it
-does not run while the app does. Pairing makes it you: in the app, **Settings → Your devices → Pair
-with a device** takes the six words `hive host pair` prints, which find the host on your network, or
+does not run while the app does. Pairing makes it you: in the app, **Settings → Connect → Have a code?
+Join** takes the six words `hive host pair` prints, which find the host on your network, or
 its link, which finds it from anywhere; from then on **Open recent → On your devices** lists the
 workspaces it serves. A workspace opened from there is yours; its terminals and
 agents run on the host and keep running whatever your computer does.
 
-A workspace on your computer moves to the host from **Share → Move there**, so it stays open
+A workspace on your computer moves to the host from **Settings → Connect → Move there**, so it stays open
 while your computer sleeps: the board, notes, the people in it and their invite links go to the
 host, whoever is in it follows by themselves, and your computer opens it from the host from then
 on. Terminals and agents in frames on your computer keep running there, reached through the host.

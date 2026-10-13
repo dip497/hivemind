@@ -1,6 +1,6 @@
 // An always-on host (R14), end to end on one machine: `hive host` (the built binary, with its own
 // data folder, as on a server) serves a folder as a workspace; the app pairs with it from
-// Settings → Your devices, entering the six words `hive host pair` prints (the host found by them on
+// Open recent → Join, entering the six words `hive host pair` prints (the host found by them on
 // this network) or its link; Open recent lists the workspace on the host and opens it; a shell
 // started there runs on the host, in its folder, and goes on after the app has quit. And a frame
 // of the app's own workspace runs on the host (M3): placed on one of the host's folders, its
@@ -18,7 +18,8 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { HiveNet } from "@hivemind/workspace-host/hive-net";
 import { heldWorkspaces } from "@hivemind/host/peer-links";
-import { HIVE_NET, hiveNetBuilt, person, share, tiles } from "./helpers/multiplayer";
+import { HIVE_NET, enterCode, hiveNetBuilt, openConnect, person, share, tiles } from "./helpers/multiplayer";
+import { itsMe, offerToConnect } from "./helpers/phone";
 import { stopDaemons } from "./helpers/daemons";
 
 const HIVE = path.resolve("../cli/dist/hive");
@@ -81,16 +82,14 @@ for (const entered of ["words", "link"] as const) test(`the app pairs with a hos
   fs.mkdirSync(elsewhere);
   const laptop = await person(root, "laptop", elsewhere, apps);
 
-  // The host shows a code; the app enters its link in Settings → Your devices.
+  // The host shows a code; the app enters it under Join.
   const pairing = spawn(HIVE, ["host", "pair", "--json"], { env: hostEnv() });
   procs.push(pairing);
   const printed = lines(pairing.stdout!);
   const offer = (JSON.parse(await printed()) as { data: { offer: { code: string; link: string } } }).data.offer;
-  await laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
   // The words as a person reads them off the host's screen, or its link.
-  await laptop.locator("[data-pair-link]").fill(entered === "words" ? offer.code.split("-").join(" ") : offer.link);
-  await laptop.locator("[data-pair-go]").click();
-  await expect(laptop.locator('[data-pair-result="paired"]')).toBeVisible({ timeout: 20_000 });
+  await enterCode(laptop, entered === "words" ? offer.code.split("-").join(" ") : offer.link);
+  await openConnect(laptop);
   await expect(laptop.locator('[data-device-kind="host"]')).toHaveCount(1);
   expect(JSON.parse(await printed())).toMatchObject({ ok: true, data: { paired: { kind: "app" } } });
   await laptop.keyboard.press("Escape");
@@ -144,11 +143,7 @@ test("a frame of the app's own workspace runs on the paired host: placed on one 
   const pairing = spawn(HIVE, ["host", "pair", "--json"], { env: hostEnv() });
   procs.push(pairing);
   const offer = (JSON.parse(await lines(pairing.stdout!)()) as { data: { offer: { link: string } } }).data.offer;
-  await laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
-  await laptop.locator("[data-pair-link]").fill(offer.link);
-  await laptop.locator("[data-pair-go]").click();
-  await expect(laptop.locator('[data-pair-result="paired"]')).toBeVisible({ timeout: 20_000 });
-  await laptop.keyboard.press("Escape");
+  await enterCode(laptop, offer.link);
   await expect.poll(() => status()?.devices.length ?? 0, { timeout: 30_000 }).toBe(1);
 
   // The laptop's own frame (made with its first shell, which stays here), placed on the host's
@@ -210,6 +205,8 @@ test("a phone paired with the app is the person's at the host too: the host lets
     "printf '\\033]0;Editing Nav.tsx\\007Allow edit to Nav.tsx? (y/n) '",
     "read -r answer",
     `printf '%s' "$answer" > '${answered}'`,
+    // Answered, its screen moves on, as a chooser's does.
+    "printf '\\033[2J\\033[Hprobe is working\\n'",
     "exec sleep 600",
   ].join("\n"), { mode: 0o755 });
   // Its agents are in the host's data folder, where the host and `hive ctl` there look for them,
@@ -241,23 +238,17 @@ test("a phone paired with the app is the person's at the host too: the host lets
   procs.push(pairing);
   const printed = lines(pairing.stdout!);
   const offer = (JSON.parse(await printed()) as { data: { offer: { link: string } } }).data.offer;
-  const devices = () => laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
-  await devices();
-  await laptop.locator("[data-pair-link]").fill(offer.link);
-  await laptop.locator("[data-pair-go]").click();
-  await expect(laptop.locator('[data-pair-result="paired"]')).toBeVisible({ timeout: 20_000 });
-  await laptop.keyboard.press("Escape");
+  await enterCode(laptop, offer.link);
   // The host starts again as the laptop's person.
   expect(JSON.parse(await printed())).toMatchObject({ ok: true, data: { paired: { kind: "app" } } });
 
-  // A phone pairs with the laptop: Settings → Your devices → Use on your phone.
-  await devices();
-  await laptop.locator("[data-pair-phone]").click();
-  const link = (await laptop.locator("[data-pair-copy]").getAttribute("title"))!;
+  // A phone connects with the laptop's offer, Settings → Connect, and is the person's.
+  const link = await offerToConnect(laptop);
   const phone = path.join(root, "phone");
-  await run(HIVE_PHONE, ["pair", link, "--identity", phone, "--name", "Priya's phone", "--json"], { timeout: 60_000 });
+  const connecting = run(HIVE_PHONE, ["connect", link, "--sure", "yes", "--identity", phone, "--name", "Priya's phone", "--json"], { timeout: 60_000 });
+  await itsMe(laptop);
+  await connecting;
   const phoneId = (await run(HIVE_PHONE, ["id", "--identity", phone])).stdout.trim();
-  await laptop.keyboard.press("Escape");
 
   // The host learns of it from the laptop, as a phone.
   await expect.poll(() => status()?.devices.map((d) => `${(d as { kind: string }).kind} ${(d as { device: string }).device}`).sort(), { timeout: 30_000 })
@@ -333,7 +324,7 @@ test("a phone paired with the app is the person's at the host too: the host lets
   expect(await ended).toBe(0);
 
   // Unpaired on the laptop: the host forgets it.
-  await devices();
+  await openConnect(laptop);
   await laptop.locator(`[data-device="${phoneId}"] [data-unpair]`).click();
   await expect.poll(() => status()?.devices.map((d) => (d as { kind: string }).kind), { timeout: 30_000 }).toEqual(["app"]);
 });
@@ -356,9 +347,8 @@ test("a host that joined someone else's workspace as the person is let go there 
   const pairing = spawn(HIVE, ["host", "pair", "--json"], { env: hostEnv() });
   procs.push(pairing);
   const offer = (JSON.parse(await lines(pairing.stdout!)()) as { data: { offer: { link: string } } }).data.offer;
-  await laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
-  await laptop.locator("[data-pair-link]").fill(offer.link);
-  await laptop.locator("[data-pair-go]").click();
+  await enterCode(laptop, offer.link);
+  await openConnect(laptop);
   const row = laptop.locator('[data-device-kind="host"]');
   await expect(row).toHaveCount(1, { timeout: 20_000 });
   const hostIs = (await row.getAttribute("data-device"))!;

@@ -88,21 +88,19 @@ test("the sidebar is four groups, in this order, each page named for what the pe
   assert.deepEqual(shown, [
     ["General", ["Profile", "Appearance", "Notifications", "Shortcuts"]],
     ["Connect", [
-      ["People", "Invite people to this workspace"],
-      ["Your devices", "Your phone, other computers, a browser tab"],
+      ["Connect", "Your phone, other computers, other people"],
       ["API access", "Scripts and tools that drive agents"],
     ]],
     ["Plugins", ["Plugins"]],
-    ["Advanced", [["Servers", "Relay and discovery; most people never change this"], "About and updates"]],
+    ["Advanced", [["In a browser", "This app in a browser tab here"], ["Servers", "Relay and discovery; most people never change this"], "About and updates"]],
   ]);
 });
 
-test("the ids the pages had before Connect still open them, so links and docs land", () => {
-  assert.equal(resolveSettingsPage("share"), "people");
+test("the ids the pages had before still open them, so links and docs land: sharing and devices on Connect", () => {
+  for (const id of ["share", "people", "devices", "your-devices"]) assert.equal(resolveSettingsPage(id), "connect", id);
   assert.equal(resolveSettingsPage("network"), "servers");
-  assert.equal(resolveSettingsPage("devices"), "your-devices");
   assert.equal(resolveSettingsPage("programs"), "api");
-  for (const id of ["people", "your-devices", "api", "servers", "about"]) assert.equal(resolveSettingsPage(id), id);
+  for (const id of ["connect", "api", "browser", "servers", "about"]) assert.equal(resolveSettingsPage(id), id);
 });
 
 test("the e2e nav contract is stable: these ids are pinned by specs", () => {

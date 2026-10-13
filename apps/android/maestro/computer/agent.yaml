@@ -1,5 +1,6 @@
 # The app against a real computer (docs/design/phone-app-2026-10-02.md §7): it pastes the link the
-# computer's Settings → Your devices → Use on your phone shows, pairs, and is the person's; finds the computer
+# computer's Settings → Connect shows, says the words match once the person there says it is theirs,
+# and is the person's; finds the computer
 # and its agent among the agents; opens the agent and reads its line in its terminal, then what it
 # and the person said in its chat; and sends it a message from the reply box, which it answers in
 # the chat and in its terminal, still followed. Then the community view the computer offers the
@@ -26,6 +27,13 @@ name: Pair with a computer, and drive its agent
 - hideKeyboard
 - tapOn:
     id: "pair-button"
+# The person at the computer says it is theirs (the spec answers there); the words match.
+- extendedWaitUntil:
+    visible:
+      id: "connect-yes"
+    timeout: 120000
+- tapOn:
+    id: "connect-yes"
 - extendedWaitUntil:
     visible: "This phone is ${PAIR_PERSON}'s now."
     timeout: 120000

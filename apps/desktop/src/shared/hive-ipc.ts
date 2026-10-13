@@ -98,7 +98,6 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     onBrowserAppChanged: (cb) => port.on("browserApp:changed", cb),
     devices: () => port.invoke("net:devices"),
     onDevicesChanged: (cb) => port.on("net:devices-changed", () => cb()),
-    pairOffer: () => port.invoke("net:pair-offer"),
     phonePage: (page) => port.invoke("net:phone-page", page),
     connectOffer: (repo) => port.invoke("net:connect-offer", repo),
     connectCancel: () => port.invoke("net:connect-cancel"),

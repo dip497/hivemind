@@ -235,6 +235,8 @@ export function CanvasEmptyState({
     { label: "Open code", hint: "3", action: onShowTree, disabled: !repoPath },
     { label: "Machines", hint: "", action: () => openMachines({ kind: "manage" }), disabled: false },
   ];
+  // Home, before any workspace: a code from another computer, a phone's offer or an invite.
+  if (!repoPath) secondary.push({ label: "Have a code? Join", hint: "", action: () => window.dispatchEvent(new CustomEvent("hivemind:open-recent", { detail: { join: true } })), disabled: false });
   return (
     <div className="pointer-events-none absolute inset-0 grid place-items-center">
       <div className="pointer-events-auto w-full max-w-[460px] px-8" data-canvas-empty>

@@ -39,7 +39,7 @@ import { appearance } from "./appearance.js";
 import { DEFAULT_APPEARANCE, type Appearance, type Settings } from "@hivemind/core/settings-schema";
 import { AccessLists } from "@hivemind/workspace-host/access";
 import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
-import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, PairingOffer, parseCode, parsePairLink, type Pairing, type PairingDevice } from "@hivemind/workspace-host/pairing";
+import { formatPairLink, pairAnnouncement, PairingOffer, type Pairing, type PairingDevice } from "@hivemind/workspace-host/pairing";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { Sharing } from "@hivemind/workspace-host/sharing";
 import { join, type JoinReply } from "@hivemind/workspace-host/join";
@@ -116,9 +116,6 @@ export interface HeadlessHost {
    *  resolves with that device once it has, when the host must be started again, as that person;
    *  it rejects when the code expires first. */
   offerPairing(): { code: string; link: string; expires: number; paired: Promise<PairedDevice> };
-  /** Enter the code or link another device offers. Resolves with that device once paired, when the
-   *  host must be started again, as that person. */
-  enterPairing(text: string): Promise<PairedDevice>;
   stop(): Promise<void>;
 }
 
@@ -670,18 +667,6 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       });
       const link = formatPairLink({ device: keys.deviceId, addrs: ready.addrs, relay: ready.relay, code: made.code, name: deviceName(), kind: "host" });
       return { code: made.code, link, expires: made.expires, paired };
-    },
-    enterPairing: async (text) => {
-      mayTake();
-      const link = parsePairLink(text);
-      const code = link?.code ?? parseCode(text);
-      if (!code) throw new Error("that is not a pairing code or link");
-      if (!net) throw new Error("this host is not on the network yet: is hive-net installed beside hive?");
-      const on = net;
-      // From the words alone, the device offering them on this network; a link says where it is.
-      const offering = link?.device ?? (await offeringNearby([pairAnnouncement(code)], () => on.nearby())).id;
-      const where = link ? { addrs: link.addrs, relay: link.relay } : { addrs: [], relay: null };
-      return keep(await enterPairing({ me: me(), code, offering, ask: (hello) => on.pair(offering, where, hello) }));
     },
     stop: async () => {
       stopping = true;

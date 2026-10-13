@@ -1,7 +1,8 @@
 /**
  * What others ask of this computer, as prompts that stay until answered: to join one of the
  * person's workspaces, or to connect with this app's offer (spec/pairing.md 0.10). Answered at
- * another window or device, a prompt goes; closed, it is no.
+ * another window or device, a prompt goes; closed, it is no. While a page shows the connect
+ * requests itself (Settings → Connect, a dialog the toasts sit behind), their toasts give way to it.
  */
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -23,8 +24,26 @@ function ended(last: NonNullable<ConnectState["last"]>): string {
   return `${last.name} said the words did not match. Nothing was kept.`;
 }
 
+/** Answer the request `id`; a refusal from main is said. */
+export const answerRequest = (id: string, a: ConnectAnswer): void =>
+  void window.hive.connectAnswer(id, a).catch((e: unknown) => { toast.error(messageOf(e)); });
+
+/** Pages showing the connect requests now, and who is told when that changes. */
+let shownElsewhere = 0;
+const told = new Set<() => void>();
+const changed = () => { for (const t of told) t(); };
+
+/** The connect requests are shown by the calling page while it is mounted: no toasts meanwhile. */
+export function useRequestsShownHere(): void {
+  useEffect(() => {
+    shownElsewhere++;
+    changed();
+    return () => { shownElsewhere--; changed(); };
+  }, []);
+}
+
 /** One device asking to connect: deny first in tab order, so a key pressed by chance answers nothing. */
-function ConnectRequest({ r, answer }: { r: ConnectAsking; answer: (a: ConnectAnswer) => void }) {
+export function ConnectRequest({ r, answer }: { r: ConnectAsking; answer: (a: ConnectAnswer) => void }) {
   const [role, setRole] = useState<GuestRole>("view");
   return (
     <div className="hm-connect-request flex flex-col gap-2 p-3" data-connect-request={r.id}>
@@ -92,14 +111,17 @@ export function Requests() {
   const shown = useRef(new Map<string, boolean>());
   useEffect(() => {
     let lastSeen: string | null = null;
+    let latest: ConnectState = { offer: null, requests: [], last: null };
     const show = (state: ConnectState, fresh: boolean) => {
-      const now = new Set(state.requests.map((r) => `connect:${r.id}`));
+      latest = state;
+      const asking = shownElsewhere ? [] : state.requests;
+      const now = new Set(asking.map((r) => `connect:${r.id}`));
       for (const id of [...shown.current.keys()]) if (!now.has(id)) { shown.current.delete(id); toast.dismiss(id); }
-      for (const r of state.requests) {
+      for (const r of asking) {
         const id = `connect:${r.id}`;
         const answer = (a: ConnectAnswer) => {
           if (a.as === "no") shown.current.set(id, false);
-          window.hive.connectAnswer(r.id, a).catch((e) => toast.error(messageOf(e)));
+          answerRequest(r.id, a);
         };
         if (!shown.current.has(id)) shown.current.set(id, true);
         toast.custom(() => <ConnectRequest r={r} answer={answer} />, {
@@ -111,10 +133,12 @@ export function Requests() {
       if (fresh && last && last !== lastSeen) toast(ended(state.last!), { className: "hm-connect-ended" });
       lastSeen = last;
     };
+    const again = () => show(latest, false);
+    told.add(again);
     let live = true;
     void window.hive.connectState().then((s) => { if (live) show(s, false); });
     const off = window.hive.onConnectChanged((s) => show(s, true));
-    return () => { live = false; off(); };
+    return () => { live = false; off(); told.delete(again); };
   }, []);
   return null;
 }

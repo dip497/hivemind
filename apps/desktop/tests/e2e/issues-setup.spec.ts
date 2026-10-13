@@ -1,6 +1,6 @@
-// A folder with no .hivemind: the empty canvas starts an agent or opens a folder, and says nothing
-// about setting anything up. Issues are the Issues tool's: it offers to keep them in its folder,
-// and once it has, they can be made.
+// A folder with no .hivemind: the empty canvas starts an agent, opens a folder or joins with a code,
+// and says nothing about setting anything up. Issues are the Issues tool's: it offers to keep them
+// in its folder, and once it has, they can be made.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,6 +61,11 @@ test("the empty canvas leads with a new agent, wearing its logo, and opens a fol
   await expect(empty.getByRole("button", { name: "Open folder" })).toBeVisible();
   await expect(empty).not.toContainText(/initiali[sz]e/i);
   expect(fsSync.existsSync(path.join(workspace, ".hivemind"))).toBe(false);
+  // Before any workspace, a code from elsewhere is entered from here.
+  await empty.getByRole("button", { name: "Have a code? Join" }).click();
+  await expect(page.locator("[data-join-link]")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("[data-join-link]")).toHaveCount(0);
 });
 
 test("the Issues tool keeps issues in its folder when asked, and then its issues can be made", async () => {

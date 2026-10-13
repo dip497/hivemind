@@ -24,14 +24,14 @@ import { parseJoinLink } from "@hivemind/workspace-host/join-link";
 import { JoinedList } from "@hivemind/workspace-host/joined";
 import { NetworkProfiles } from "@hivemind/workspace-host/network-profile";
 import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
-import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, PairingOffer, parseCode, parsePairLink, type Admission, type PairedWith, type PairingDevice, type PairLink } from "@hivemind/workspace-host/pairing";
+import { enterPairing, offeringNearby, pairAnnouncement, parseCode, parsePairLink, type Admission, type PairedWith, type PairingDevice, type PairLink } from "@hivemind/workspace-host/pairing";
 import { askToForget, heldWorkspaces, tellGuestOf, tellPhones } from "@hivemind/host/peer-links";
 import { HostRecords, type Hosted } from "@hivemind/workspace-host/host-records";
 import { Hosting } from "@hivemind/host/hosting";
 import type { LayersShown } from "@hivemind/host/home";
 import { People } from "@hivemind/host/people";
 import { handle, handleEffect, on } from "./app-ipc.js";
-import { connectPageLink, pageHash, pageLink, phonePageAt, SHIPPED_PAGE } from "./phone-page.js";
+import { connectPageLink, pageHash, phonePageAt, SHIPPED_PAGE } from "./phone-page.js";
 import { hostIntents } from "./audit.js";
 import { displayName, machineIdentity, takePerson } from "./identity.js";
 import { idOf, revokeDevice, workspaceSeed, type Seed } from "@hivemind/workspace-host/identity";
@@ -323,12 +323,9 @@ export function network(): Promise<HiveNet> {
         peers.serve(link);
         void vouchFor(link.peer);
       },
-      // A host entering the code this app offers; a device using its offer to connect; anyone
-      // else asks to join.
+      // A device using this app's offer to connect; anyone else asks to join.
       onPairRequest: async (peer, hello) => {
-        const h = hello as { pair?: unknown; connect?: unknown } | null;
-        if (h?.pair) return offered?.open() ? offered.answer(peer, hello) : { ok: false, error: "expired" };
-        if (h?.connect) return connecting.answer(peer, hello);
+        if ((hello as { connect?: unknown } | null)?.connect) return connecting.answer(peer, hello);
         return sharingOf().answer(peer, hello);
       },
       onExit: (why) => { current = null; records?.stop(); records = null; console.warn(`[network] ${why}`); },
@@ -464,9 +461,6 @@ function joinedStatus(workspace: string): ({ names: { workspace: string; host: s
   return { names: joined.names, state: joined.ended ?? live?.state ?? "offline", access: live?.access ?? joined.role };
 }
 
-/** A code this app offers for one of the person's hosts to enter (Settings → Your devices). */
-let offered: PairingOffer | null = null;
-
 /** The person here, asked whether the words match while a computer waits to give its person. */
 let sure: ((yes: boolean) => void) | null = null;
 
@@ -568,7 +562,7 @@ export function isYourDevice(device: string): boolean {
 /** Connect to one of the person's computers or hosts, where it said it is reached when it paired. */
 export async function dialDevice(device: string): Promise<Link> {
   const d = placesToRun().find((x) => x.device === device);
-  if (!d) throw new Error("that device is not one of yours: pair it under Settings → Your devices");
+  if (!d) throw new Error("that device is not one of yours: connect it under Settings → Connect");
   return (await network()).dial(device, { addrs: d.addrs, relay: d.relay });
 }
 
@@ -782,35 +776,8 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
   handle("net:shared-status", (_e, workspace: unknown) => (typeof workspace === "string" ? joinedStatus(workspace) : null));
   handle("net:shared-looks", (_e, workspace: unknown) => (typeof workspace === "string" ? sharedLooks(workspace) : null));
 
-  // The person's devices this app paired with (Settings → Your devices).
+  // The person's devices this app paired with (Settings → Connect).
   handle("net:devices", () => pairedDevices().list().map(summary));
-
-  // A code for another of the person's devices to enter (a host's `hive host pair <link>`, or
-  // another computer's Settings → Your devices): this app gives its person.
-  handleEffect("net:pair-offer", () => ({}), async () => {
-    const me = await pairingMe();
-    // The phone page, where the relay's server serves it: a phone without hivemind opens the link
-    // in its browser (docs/design/phone-browser-2026-10-03.md §10).
-    const page = phonePageAt(me.relay);
-    const hn = await network();
-    // Found from its words by the devices on this network, until it is used or expires.
-    const withdraw = () => { if (offered !== offer) return; offered = null; hn.advertise(null); };
-    const offer = new PairingOffer(me, ({ with: other }) => { withdraw(); keepPaired({ ...other, pairedAt: Date.now() }); });
-    offered = offer;
-    hn.advertise(pairAnnouncement(offer.code));
-    setTimeout(withdraw, offer.expires - Date.now()).unref();
-    // On a network whose relays admit only who they are told to, the link carries a voucher for
-    // the device entering it from elsewhere, for as long as the code lasts; on an open one, where
-    // to register (0.6).
-    const access = (await networkProfiles().active()).profile.access;
-    const admission = !access ? undefined : {
-      access: access.url,
-      voucher: access.policy === "closed" ? await networkProfiles().voucher({ expiresIn: (offer.expires - Date.now()) / 1000, uses: 1 }) : null,
-    };
-    const pair = { device: me.device, addrs: me.addrs, relay: me.relay, code: offer.code, name: me.name, kind: "app" as const, ...(admission ? { admission } : {}) };
-    const at = await page;
-    return { code: offer.code, link: formatPairLink(pair), ...(at ? { page: pageLink(at, pair) } : {}), expires: offer.expires };
-  });
 
   // An offer to connect, from the window showing `repo` (none: Home), and the person's answers to
   // the devices that use it.

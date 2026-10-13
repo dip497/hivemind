@@ -14,7 +14,7 @@ import type { Grant } from "@hivemind/host/machine-share";
 import type { ClientGrant, NewGrant } from "@hivemind/workspace-api/grants";
 export type { Grant };
 
-/** One of the person's other devices, as Settings → Your devices lists it (R14, spec/pairing.md). */
+/** One of the person's other devices, as Settings → Connect lists it (R14, spec/pairing.md). */
 export interface PairedDeviceSummary {
   device: string;
   name: string;
@@ -254,7 +254,7 @@ export interface ViewPackageInfo {
 
 // ── full IPC surface ──────────────────────────────────────────────────────
 
-/** Settings → Your devices, "In a browser on this computer": whether the app is served, at which link, or why not. */
+/** Settings → Advanced → In a browser: whether the app is served, at which link, or why not. */
 export interface BrowserAppStatus { on: boolean; url: string | null; error: string | null }
 
 export interface HiveIpc {
@@ -469,11 +469,6 @@ export interface HiveIpc {
   devices(): Promise<PairedDeviceSummary[]>;
   /** A device was paired with, or forgotten. */
   onDevicesChanged(cb: () => void): () => void;
-  /** A code for another of your devices to enter (a host's `hive host pair <link>`, another
-   *  computer's Settings → Your devices, or a phone scanning its link): it takes your person, or, a
-   *  phone, a certificate naming it as yours. `page`: the link inside the address of the phone
-   *  page, when the network's server serves one, for a phone to open in its browser. */
-  pairOffer(): Promise<{ code: string; link: string; page?: string; expires: number }>;
   /** Offer to connect (spec/pairing.md 0.10), from the window showing `repo` (null: Home): a code,
    *  its link and the phone page's address for it. Whoever uses it only asks; the person answers
    *  each request with `connectAnswer`. A new offer voids the last. */

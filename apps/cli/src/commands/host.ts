@@ -115,7 +115,6 @@ const runCmd = defineCommand({
         if (!pairing) throw new Error("no code is offered here: `hive host pair` offers one");
         return pairing;
       },
-      "pair-enter": async (a) => startAgain(await running().enterPairing(String(a.text ?? ""))),
       add: (a) => running().add(String(a.path ?? "")),
     });
     if (control.claim === "taken") return err(ctx, "already_running", "hive host is already running here (`hive host status`)", EXIT.unavailable);
@@ -171,9 +170,8 @@ const statusCmd = defineCommand({
 });
 
 const pairCmd = defineCommand({
-  meta: { name: "pair", description: "Make this host one of your devices: print a code for your app, or enter the code it shows" },
+  meta: { name: "pair", description: "Make this host one of your devices: print a code for your app to enter" },
   args: {
-    link: { type: "positional", required: false, description: "the six words (quoted) or the link your app shows (Settings → Your devices → Show a code)" },
     json: { type: "boolean" },
   },
   async run({ args }) {
@@ -193,12 +191,11 @@ const pairCmd = defineCommand({
       if (ctx.json) console.log(JSON.stringify({ ok: true, data: result }));
       else console.log(`Paired with ${named(paired)}. It can open this host's workspaces now.`);
     };
-    if (args.link) return done((await ask("pair-enter", { text: String(args.link) }, 60_000)) as PairedDevice);
     const offer = (await ask("pair-offer")) as { code: string; link: string; expires: number };
     if (ctx.json) console.log(JSON.stringify({ ok: true, data: { offer } }));
     else {
       process.stdout.write([
-        "On your computer: Settings → Your devices → Another computer, and enter",
+        "On your computer: Settings → Connect → Have a code? Join, and enter",
         "",
         `  ${offer.code.split("-").join(" ")}`,
         "",
