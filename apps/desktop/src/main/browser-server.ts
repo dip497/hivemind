@@ -6,9 +6,11 @@
 import * as http from "node:http";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { Readable } from "node:stream";
+import type { ReadableStream as WebStream } from "node:stream/web";
 import { WebSocketServer, WebSocket } from "ws";
-import { cookieName, cookieOf, hostAllowed, sameOrigin, sameToken, sessionCookie } from "./browser-gate.js";
-import { CLOSE_UNAUTHORIZED, SESSION_PATH, SOCKET_PATH, TOKEN_KEY, type MainFrame, type TabFrame } from "../shared/browser-socket.js";
+import { cookieName, cookieOf, hostAllowed, sameOrigin, sameToken, sessionCookie, viewsKey } from "./browser-gate.js";
+import { CLOSE_UNAUTHORIZED, KEYED_SCHEME, SESSION_PATH, SOCKET_PATH, TOKEN_KEY, schemeOf, type MainFrame, type TabFrame } from "../shared/browser-socket.js";
 
 /** A browser tab, to main as a window is: it is sent events, and it goes. */
 export interface Tab {
@@ -35,6 +37,8 @@ export interface BrowserServerOptions {
   page: string;
   platform: string;
   channels: TabChannels;
+  /** The handler that answers one of the app's schemes, as it answers a window. */
+  schemes(scheme: string): ((request: Request) => Response | Promise<Response>) | undefined;
   onTab(tab: Tab): void;
   onError(message: string): void;
 }
@@ -120,6 +124,7 @@ class SocketTab implements Tab {
 
 export function serveBrowser(opts: BrowserServerOptions): Promise<BrowserServer> {
   const root = path.resolve(opts.root);
+  const key = viewsKey(opts.token);
   let port = opts.port;
   const signedIn = (req: http.IncomingMessage): boolean => {
     const cookie = cookieOf(req.headers.cookie, cookieName(port));
@@ -147,6 +152,19 @@ export function serveBrowser(opts: BrowserServerOptions): Promise<BrowserServer>
     }
   }
 
+  /** One of the app's schemes, as its handler answers it; a view's under the handler's own policy. */
+  async function scheme(at: NonNullable<ReturnType<typeof schemeOf>>, req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const handler = opts.schemes(at.scheme);
+    if (!handler) return deny(res, 404, "not found");
+    const range = req.headers.range;
+    const answer = await handler(new Request(at.url, { headers: range ? { range } : {} }));
+    const headers: Record<string, string> = at.scheme === KEYED_SCHEME ? { "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", "cache-control": "no-store" } : { ...HEADERS };
+    answer.headers.forEach((value, name) => { headers[name] = value; });
+    res.writeHead(answer.status, headers);
+    if (req.method === "HEAD" || !answer.body) return void res.end();
+    Readable.fromWeb(answer.body as WebStream).on("error", () => res.destroy()).pipe(res);
+  }
+
   async function session(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     if (!sameOrigin(req.headers.origin, req.headers.host)) return deny(res, 403, "only this server's own page signs in");
     let body = "";
@@ -165,11 +183,13 @@ export function serveBrowser(opts: BrowserServerOptions): Promise<BrowserServer>
       const { pathname } = new URL(req.url ?? "/", "http://host");
       if (req.method === "POST" && pathname === SESSION_PATH) return session(req, res);
       if (req.method !== "GET" && req.method !== "HEAD") return deny(res, 405, "not allowed");
+      const at = schemeOf(pathname, new URL(req.url ?? "/", "http://host").search);
+      if (at?.key != null) return sameToken(at.key, key) ? scheme(at, req, res) : deny(res, 401, "not this launch's key");
       if (!signedIn(req)) {
         if (pathname === "/") return void res.writeHead(401, { ...HEADERS, "content-type": "text/html; charset=utf-8" }).end(SIGN_IN);
         return deny(res, 401, "sign in with the link the app shows");
       }
-      return file(pathname, res);
+      return at ? scheme(at, req, res) : file(pathname, res);
     })().catch((e: unknown) => {
       opts.onError(`request: ${(e as Error).message}`);
       if (!res.headersSent) deny(res, 500, "failed");
@@ -222,7 +242,7 @@ export function serveBrowser(opts: BrowserServerOptions): Promise<BrowserServer>
         clearTimeout(late);
         tab = new SocketTab(ws, opts.onError);
         served = new Set(opts.channels.served());
-        ws.send(json({ t: "hello", channels: [...served], platform: opts.platform }));
+        ws.send(json({ t: "hello", channels: [...served], platform: opts.platform, viewsKey: key }));
         opts.onTab(tab);
         return;
       }

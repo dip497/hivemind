@@ -325,6 +325,10 @@ handler's.
 | a module script or image the sandboxed frame loads | **no** | cross-site |
 | `document.cookie` inside the frame | throws `SecurityError` | — |
 
+And inside such a frame, under a view's policy (`pluginCsp`) served over http from this server:
+its `'self'` covers its own files (its module and the SDK through a relative import map ran),
+while `new WebSocket` to the socket and `fetch("/")` are blocked as `connect-src` violations.
+
 So a view's files cannot be gated by the cookie: its own requests come from an opaque origin and
 carry none. They are gated by a **views key**, HMAC-SHA256 of the launch token over `hm-view`,
 in the path. The tab is told it in `hello`, after the socket's token check; the server compares

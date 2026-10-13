@@ -801,6 +801,9 @@ export type HiveApi = HiveIpc & {
   onMenuShortcut?: (cb: (action: string) => void) => () => void;
   /** Resolve a picked File's absolute path (persistent video wallpaper). */
   getPathForFile?: (file: File) => string;
+  /** Where this window loads a URL of the app's schemes (a view, a tool's module, a wallpaper):
+   *  the URL itself in an app window, a path on the browser server in a tab. */
+  resourceUrl(url: string): string;
   /** Copy a picked media file into the sandboxed wallpaper dir → its hm-media:// URL. */
   importWallpaper?: (srcPath: string) => Promise<string | null>;
   /** Pick a custom media file for a canvas layer (background/overlay) → copied

@@ -9,6 +9,7 @@ import { mintToken } from "./browser-gate.js";
 import { serveBrowser, type BrowserServer } from "./browser-server.js";
 import { handle, tabChannels } from "./app-ipc.js";
 import { broadcast, registerTab } from "./windows.js";
+import { schemeHandler } from "./schemes.js";
 
 const token = mintToken();
 let server: BrowserServer | null = null;
@@ -42,6 +43,7 @@ async function follow(root: string, want: BrowserAppSettings): Promise<void> {
       page: "browser.html",
       platform: process.platform,
       channels: tabChannels,
+      schemes: schemeHandler,
       onTab: registerTab,
       onError: (m) => console.warn(`[browser-app] ${m}`),
     });

@@ -29,7 +29,7 @@ export function workspaceOver(port: IpcPort): WorkspaceClient {
   });
 }
 
-export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<HiveApi, "platform" | "getPathForFile"> {
+export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<HiveApi, "platform" | "getPathForFile" | "resourceUrl"> {
   const invoke = (channel: string) => (...args: unknown[]) => port.invoke(channel, ...args);
   const send = (channel: string) => (...args: unknown[]) => port.send(channel, ...args);
   /** Only where main serves the channel over this port. */

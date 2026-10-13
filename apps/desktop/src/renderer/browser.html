@@ -5,13 +5,12 @@
   <link rel="icon" type="image/png" href="./favicon.png" />
   <title>hivemind</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- Pierre's diff/file viewer spawns a module Web Worker (worker-*.js) and
-       shiki dynamically imports language grammars. Under file:// in packaged
-       Electron, strict 'self'-only CSP blocks the module worker and the
-       dynamic imports the worker performs — DiffTile and FileViewerTile
-       silently render nothing. worker-src + blob: + connect-src unblock both. -->
+  <!-- The app in a browser tab (docs/design/browser-app-2026-10-13.md §11): what the window loads
+       from the app's schemes comes from this server's paths, a tool plugin's imports of the app's
+       modules by this map (exact keys: a custom scheme matches no prefix), allowed by its hash. -->
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self' hivemedia:; script-src 'self' 'wasm-unsafe-eval' hm-plugin:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: hm-media: hivemedia:; media-src 'self' blob: data: hm-media: hivemedia:; font-src 'self' data:; connect-src 'self' data: blob:; frame-src hm-view:;" />
+        content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-UjmM0ylE7/0AziilmNbNZjcQ3BFQbwA01rX2wNOK7bQ='; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self' data: blob:; frame-src 'self';" />
+  <script type="importmap">{"imports":{"hm-plugin://host/react.js":"/hm-plugin/host/react.js","hm-plugin://host/react-jsx-runtime.js":"/hm-plugin/host/react-jsx-runtime.js","hm-plugin://host/sdk.js":"/hm-plugin/host/sdk.js","hm-plugin://host/ui.js":"/hm-plugin/host/ui.js"}}</script>
 </head>
 <body class="bg-[#0d0e12] text-[#e7e9ee] font-sans antialiased overflow-hidden">
   <div id="root"></div>

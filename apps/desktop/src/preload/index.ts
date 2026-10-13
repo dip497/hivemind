@@ -23,6 +23,7 @@ const api: HiveApi = {
   // absolute path under contextIsolation (File.path was removed). Used to build
   // the persistent hm-media:// video-wallpaper URL.
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
+  resourceUrl: (url) => url,
 };
 
 // A native agent notification was clicked → focus that tile on the canvas.

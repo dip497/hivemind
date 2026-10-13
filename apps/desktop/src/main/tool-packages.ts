@@ -10,7 +10,8 @@ import { constants } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { dialog, net, protocol } from "electron";
+import { dialog, net } from "electron";
+import { serveScheme } from "./schemes.js";
 import { isPluginEnabled } from "@hivemind/core/plugin-settings";
 import { isToolId, type ToolPackage } from "@hivemind/core/tool-format";
 import { installToolPackage, listToolPackages, removeToolPackage, toolFile } from "@hivemind/core/tool-packages";
@@ -54,7 +55,7 @@ const served = (body: BodyInit | null, type: string, status = 200) =>
 
 /** Call after app ready. */
 export function handleToolProtocol(): void {
-  protocol.handle(PLUGIN_SCHEME, async (request) => {
+  serveScheme(PLUGIN_SCHEME, async (request) => {
     try {
       const u = new URL(request.url);
       if (u.host === "host") {

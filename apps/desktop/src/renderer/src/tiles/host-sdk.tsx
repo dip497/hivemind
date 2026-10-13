@@ -13,6 +13,7 @@ import type { ViewClient } from "@hivemind/view-sdk";
 import { Button } from "../components/ui/button";
 import { Loading } from "../components/ui/loading";
 import * as ui from "../plugin-ui";
+import type { HostModuleName } from "../../../shared/plugin-host";
 
 const MarkdownPreview = lazy(() => import("../markdown-preview").then((m) => ({ default: m.MarkdownPreview })));
 
@@ -63,7 +64,7 @@ export const hostSdk: HostSdk = {
   useTileState: useTileState as HostSdk["useTileState"],
 };
 
-const MODULES: Record<string, object> = { react: React, "react-jsx-runtime": jsxRuntime, sdk: hostSdk, ui };
+const MODULES: Record<HostModuleName, object> = { react: React, "react-jsx-runtime": jsxRuntime, sdk: hostSdk, ui };
 
 let exposed: Promise<void> | null = null;
 /** Put the host modules where main's re-exports read them, once, before the first plugin loads. */

@@ -16,6 +16,7 @@ fs.writeFileSync(path.join(root, "assets", "app.js"), "console.log('app')");
 fs.writeFileSync(path.join(dir, "secret.txt"), "not served");
 
 const calls: Array<{ ch: string; args: unknown[] }> = [];
+const asked: Array<{ url: string; range: string | null }> = [];
 const server = await serveBrowser({
   port: 0,
   names: ["box.tail1234.ts.net"],
@@ -33,6 +34,10 @@ const server = await serveBrowser({
     },
     send: (ch, _tab, args) => { calls.push({ ch, args }); },
   },
+  schemes: (scheme) => scheme === "hm-plugin" || scheme === "hm-view" ? (req: Request) => {
+    asked.push({ url: req.url, range: req.headers.get("range") });
+    return new Response(`served ${req.url}`, { headers: { "content-type": "text/javascript", "content-security-policy": "default-src 'none'; script-src 'self'" } });
+  } : undefined,
   onTab: () => {},
   onError: () => {},
 });
@@ -142,7 +147,7 @@ test("a signed-in tab calls the channels served, hears events, and nothing else"
   tab.ws.close();
 
   const [hello, ...rest] = tab.frames as Array<Record<string, unknown>>;
-  assert.deepEqual(hello, { t: "hello", channels: ["settings:get", "when", "echo:later", "workspace:notice"], platform: "linux" });
+  assert.deepEqual({ ...hello, viewsKey: undefined }, { t: "hello", channels: ["settings:get", "when", "echo:later", "workspace:notice"], platform: "linux", viewsKey: undefined });
   const result = (id: number) => rest.find((f) => f.t === "result" && f.id === id);
   assert.deepEqual(result(1), { t: "result", id: 1, value: { ch: "settings:get", args: ["a"] } });
   assert.match(String(result(2)?.error), /only in the app/);
@@ -163,3 +168,51 @@ test("the server listens on 127.0.0.1 only", { timeout: 10_000 }, async () => {
   assert.equal(reached, false);
 });
 
+
+/** The views key, as a signed-in tab is told it. */
+async function viewsKey(): Promise<string> {
+  const tab = await socket({ cookie, origin: `http://${here}` });
+  assert.ok("ws" in tab);
+  tab.ws.send(JSON.stringify({ t: "auth", token: TOKEN }));
+  await until(() => tab.frames.length >= 1);
+  tab.ws.close();
+  return (tab.frames[0] as { viewsKey: string }).viewsKey;
+}
+
+test("the app's schemes are paths behind the cookie, each answered by its own handler as its URL", { timeout: 10_000 }, async () => {
+  asked.length = 0;
+  const path = "/hm-plugin/owner--tool/index.js?g=2";
+  const out = await request({ path });
+  assert.equal(out.status, 401);
+  assert.equal(asked.length, 0);
+
+  const got = await request({ path, headers: { cookie, range: "bytes=0-9" } });
+  assert.equal(got.status, 200);
+  assert.equal(got.body, "served hm-plugin://owner--tool/index.js?g=2");
+  assert.equal(got.headers["content-type"], "text/javascript");
+  assert.equal(got.headers["x-content-type-options"], "nosniff");
+  assert.deepEqual(asked, [{ url: "hm-plugin://owner--tool/index.js?g=2", range: "bytes=0-9" }]);
+  assert.equal((await request({ path: "/hm-media/v/x.png", headers: { cookie } })).status, 404);
+});
+
+test("a view's files need the views key, which a sandboxed frame can carry, and it opens nothing else", { timeout: 10_000 }, async () => {
+  asked.length = 0;
+  const key = await viewsKey();
+  assert.match(key, /^[\w-]{43}$/);
+  assert.notEqual(key, TOKEN);
+
+  assert.equal((await request({ path: `/hm-view/${"k".repeat(43)}/windows/index.html`, headers: { cookie } })).status, 401);
+  assert.equal((await request({ path: "/hm-view/windows/index.html", headers: { cookie } })).status, 401);
+  assert.equal(asked.length, 0);
+  // A sandboxed frame's own requests are cross-site: no cookie, and an Origin of "null".
+  const file = await request({ path: `/hm-view/${key}/windows/index.html?r=1`, headers: { origin: "null" } });
+  assert.equal(file.status, 200);
+  assert.equal(file.body, "served hm-view://windows/index.html?r=1");
+  assert.equal(file.headers["content-security-policy"], "default-src 'none'; script-src 'self'");
+
+  const asCookie = `hive-${server.port}=${key}`;
+  assert.equal((await request({ headers: { cookie: asCookie } })).status, 401);
+  assert.equal((await request({ path: "/hm-plugin/owner--tool/index.js", headers: { cookie: asCookie } })).status, 401);
+  assert.equal((await request({ method: "POST", path: "/session", headers: { origin: `http://${here}` }, body: key })).status, 401);
+  assert.deepEqual(await socket({ cookie, origin: "null" }), { refused: 403 });
+});

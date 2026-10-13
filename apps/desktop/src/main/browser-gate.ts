@@ -3,12 +3,15 @@
  * this launch, the cookie it is traded for, and the Host and Origin a request may carry.
  * Electron-free.
  */
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 /** Names a request's Host may carry besides the ones the person configured. */
 const LOOPBACK = ["127.0.0.1", "localhost"];
 
 export const mintToken = (): string => randomBytes(32).toString("base64url");
+
+/** What opens a view's files and nothing else (§11): a sandboxed frame's requests carry no cookie. */
+export const viewsKey = (token: string): string => createHmac("sha256", token).update("hm-view").digest("base64url");
 
 /** Constant time, whatever the lengths. */
 export function sameToken(given: string, token: string): boolean {

@@ -109,6 +109,7 @@ import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
 import { installBrowserApp } from "./browser-app.js";
+import { serveScheme } from "./schemes.js";
 import { fileIn } from "@hivemind/host/repo-paths";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1617,7 +1618,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // Beside settings.json, which names these files: a dev run keeps its own userData profile
     // but shares settings with the app, so media kept in userData was missing on the other side.
     const wallpaperDir = path.join(path.dirname(settingsFile()), "wallpapers");
-    protocol.handle("hm-media", (request) => {
+    serveScheme("hm-media", (request) => {
       try {
         const abs = path.resolve(decodeURIComponent(new URL(request.url).pathname.replace(/^\/+/, "")));
         if (abs !== wallpaperDir && !abs.startsWith(wallpaperDir + path.sep)) {
@@ -1679,7 +1680,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // ever read to files the user explicitly chose (never an arbitrary path from
     // the URL), and survives the original being moved/deleted.
     const mediaDir = path.join(path.dirname(settingsFile()), "media"); // beside settings.json (see wallpaperDir)
-    protocol.handle("hivemedia", (request) => {
+    serveScheme("hivemedia", (request) => {
       try {
         // hivemedia://media/<filename> — the filename rides in the PATH (host is
         // the fixed marker "media"). Resolve against mediaDir, then verify it

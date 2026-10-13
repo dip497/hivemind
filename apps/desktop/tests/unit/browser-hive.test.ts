@@ -6,6 +6,7 @@ import path from "node:path";
 import { WebSocket as Socket } from "ws";
 import { serveBrowser, type Tab } from "../../src/main/browser-server.ts";
 import { connectHive } from "../../src/browser/hive.ts";
+import { viewsKey } from "../../src/main/browser-gate.ts";
 
 const TOKEN = "k".repeat(43);
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-tab-"));
@@ -36,6 +37,7 @@ const server = await serveBrowser({
     },
     send: (_ch, _from, args) => { notices.push(args); },
   },
+  schemes: () => undefined,
   onTab: (t) => { tab = t; },
   onError: () => {},
 });
@@ -82,4 +84,14 @@ test("a terminal a tab opens is paced: it asks for acks and acknowledges what it
   await hive.ptySpawn(opts);
   await until(() => acks().length >= 4);
   assert.deepEqual(acks().slice(2), [["hm:t1", 3], ["hm:t1", 7]]);
+});
+
+test("a tab loads the app's schemes from the server's paths, a view's with the views key, and anything else as it is", { timeout: 10_000 }, () => {
+  const key = viewsKey(TOKEN);
+  assert.equal(hive.resourceUrl("hm-view://windows/__entry.html?js=main.js"), `/hm-view/${key}/windows/__entry.html?js=main.js`);
+  assert.equal(hive.resourceUrl("hm-plugin://owner--tool/index.js?g=2"), "/hm-plugin/owner--tool/index.js?g=2");
+  assert.equal(hive.resourceUrl("hm-media://v/%2Fhome%2Fwp.mp4"), "/hm-media/v/%2Fhome%2Fwp.mp4");
+  assert.equal(hive.resourceUrl("hivemedia://media/background-1.png"), "/hivemedia/media/background-1.png");
+  assert.equal(hive.resourceUrl("data:image/svg+xml;base64,AA=="), "data:image/svg+xml;base64,AA==");
+  assert.equal(hive.resourceUrl("https://example.com/a.png"), "https://example.com/a.png");
 });

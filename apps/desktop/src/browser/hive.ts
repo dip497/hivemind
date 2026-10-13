@@ -11,7 +11,7 @@ import { StoreReplica } from "@hivemind/workspace-api/store-replica";
 import type { Settings } from "@hivemind/core/settings-schema";
 import type { HiveApi } from "../shared/ipc";
 import { hiveOverIpc, workspaceOver, type IpcPort } from "../shared/hive-ipc";
-import type { MainFrame, TabFrame } from "../shared/browser-socket";
+import { tabUrl, type MainFrame, type TabFrame } from "../shared/browser-socket";
 import { appKeyMessage } from "../shared/shortcuts";
 
 export async function connectHive(url: string, token: string, onClose: (code: number) => void): Promise<HiveApi> {
@@ -46,7 +46,7 @@ export async function connectHive(url: string, token: string, onClose: (code: nu
       onClose(ev.code);
     });
   });
-  const { channels, platform } = await hello;
+  const { channels, platform, viewsKey } = await hello;
   const served = new Set(channels);
 
   const port: IpcPort = {
@@ -94,6 +94,7 @@ export async function connectHive(url: string, token: string, onClose: (code: nu
   return {
     ...hive,
     platform: platform as NodeJS.Platform,
+    resourceUrl: (url) => tabUrl(url, viewsKey),
     ptySpawn: (opts) => {
       taken.set(opts.tileId, 0);
       return hive.ptySpawn({ ...opts, acks: true });
