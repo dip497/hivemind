@@ -253,6 +253,11 @@ Each step is a commit with a test that fails first (test-audit gate, mutation no
 7. **The e2e spec** `browser-app.spec.ts`: setting on, Chromium opens the URL, sees the canvas,
    starts a shell tile, types, reads the echo; without the token it gets 401 and no canvas.
 8. **Latency**: echo p50/p95 in the tab and in the window on one machine, recorded here.
+9. **Plugins in the tab** (§11): the app's schemes as paths on the same server, one handler each
+   for windows and tabs; views in sandboxed frames behind a key; tool plugins' host modules by
+   import map. Unit: each path's gate; e2e: a note and a plugin widget pressed in the tab, the
+   Windows view and a widget view shown there, a view that cannot read the cookie or open the
+   socket.
 
 ## 9. Prior art (source)
 
@@ -285,15 +290,73 @@ only a connection proven to come from tailscaled could trust them.
 
 ## 10. Unknown
 
-- Custom schemes (`hm-view:` views, `hm-plugin:` tool plugins, `hm-media:` wallpapers) do not
-  exist in a browser. Their handlers return web `Response`s, so the server can serve them under
-  paths; views must keep an origin of their own (today `hm-view://<id>` isolates each), which on
-  one port means a sandboxed frame or a host per view (`<id>.localhost`). Until that step, the
-  tab shows the built-in views, a tool plugin's tile says it opens in the app, and wallpapers fall
-  back to the theme. Check: open a community view in the tab.
 - Whether Safari's CSP treats `connect-src 'self'` as allowing `ws:` to the same host (Chromium
   and Firefox do). Check: open the tab in Safari behind `tailscale serve`.
 - `platform` in the tab is the host's (paths, shells); keyboard labels follow it, which is wrong
   for a Mac browsing a Linux host. Check: the key hints in a tab from another OS.
 - hive-net serve does not proxy a local port today; until it does, other devices reach the tab
   through Tailscale only.
+
+## 11. Plugins in the tab
+
+Notes, checklists and every widget, the Windows view and the Issues tile are plugins, so a tab
+without the app's schemes is not the app. What the window reaches by scheme:
+
+| Scheme | What | Loaded by | In the tab |
+|---|---|---|---|
+| `hm-view://<host>/…` | a view's files | a sandboxed frame (`allow-scripts`, no `allow-same-origin`) | `/hm-view/<key>/<host>/…` |
+| `hm-plugin://<id>/…`, `hm-plugin://host/<m>.js` | a tool plugin's module; the app's React and kits it imports | the page itself (`import()`) | `/hm-plugin/<id>/…` |
+| `hm-media://v/…`, `hivemedia://media/…` | wallpapers and the person's media | the page itself (`<img>`, `<video>`) | `/hm-media/…`, `/hivemedia/…` |
+
+Widgets need none: their code runs in a worker made from a `blob:` URL and comes over a channel
+(`widgets:list`), their images as `data:` URLs.
+
+**One handler per scheme.** Each is a function from a `Request` to a `Response` already; main
+registers it once (`main/schemes.ts`), for Electron's protocol and for the browser server, which
+turns `/<scheme>/<host>/<path>` back into `<scheme>://<host>/<path>` and calls it. Nothing is
+served twice or differently: a view's CSP, a tool's switch, a wallpaper's folder are the
+handler's.
+
+**Who may ask.** Measured in Chromium 1223 against a test server (probe kept out of the repo):
+
+| Request | Cookie sent | `Sec-Fetch-Site` |
+|---|---|---|
+| the frame's own document (`<iframe src>` from the page) | yes | same-origin |
+| a module script or image the sandboxed frame loads | **no** | cross-site |
+| `document.cookie` inside the frame | throws `SecurityError` | — |
+
+So a view's files cannot be gated by the cookie: its own requests come from an opaque origin and
+carry none. They are gated by a **views key**, HMAC-SHA256 of the launch token over `hm-view`,
+in the path. The tab is told it in `hello`, after the socket's token check; the server compares
+it in constant time. The key opens view files only: not the page, not `/session` (which takes the
+token itself), not the socket (cookie, `Origin` equal to `Host`, and the token in the first frame;
+a frame's `Origin` is `null`). A view knows the key (it is in its own address), so it could load
+another view's published code into itself, which it could ship anyway; it cannot read it
+(`connect-src 'none'`). Everything else under a scheme path is the page's own request and needs
+the cookie, as every other path does.
+
+**A view's own origin.** The app gives each view `hm-view://<host>`; the sandbox makes the
+frame's origin opaque anyway, so in the tab every view is cross-origin to the page and to every
+other view without a host each. What changes is the root: a view's import map named the SDK at
+`/__sdk.js`, which in the tab is the server's root. The map now names it relative to the page it
+is in (`./__sdk.js`, `../__sdk.js` for a page one folder down), which resolves to the same file on
+`hm-view://`, on the phone's view server and in the tab. A view that names its own files from the
+root (`/app.js`) still breaks in the tab; the built-in views do not, and the view guide says to
+name files relatively.
+
+**Tool plugins' imports.** A tool plugin is built against `hm-plugin://host/react.js` and three
+more host modules (`packages/tile-sdk`'s list), literal URLs in its code. A browser's import map
+remaps them, but only by exact key: a prefix key for a non-special scheme (`hm-plugin://host/`)
+does not match in Chromium (measured above). The four keys are exact, in `browser.html`, whose CSP
+allows that one inline script by its hash; a unit test holds the keys to the SDK's list and the
+hash to the map. The plugin's own entry is imported through the URL the tab maps.
+
+**Mapping once.** `window.hive.resourceUrl(url)` is the URL this window loads `url` at: itself in
+an app window, the path above in a tab. The renderer calls it where it hands a scheme URL to the
+DOM or to `import()` (a view's frame, a tool's module, a wallpaper), and nowhere else.
+
+**Rejected.** A host per view (`<id>.localhost:<port>`) keeps root-relative paths working, but
+`*.localhost` is not resolved everywhere (Safari, older Firefox) and does not survive `tailscale
+serve`, which forwards one name. A second port for views, as the phone server has, is a second
+listener to secure and forward. Rewriting plugin code on the way out is a parser in the server.
+

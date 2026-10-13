@@ -270,6 +270,8 @@ kind's icon) as one `<svg>` in `currentColor`: put it in your markup and size it
 - Render on change: subscribe per tile for status, coalesce draws, stop work while
   `document.hidden`.
 - Keep the entry bundle small; heavy libraries load inside your iframe.
+- Name your own files relatively (`./main.js`, never `/main.js`): in a browser tab the app
+  serves your view under a path, not at a root of its own.
 - Store camera/placements via `setLayout`; version your blob yourself.
 - A disabled plugin recovers from its layout blob on next mount.
 
