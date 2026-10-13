@@ -9,7 +9,7 @@ import path from "node:path";
 import { AccessLists } from "../src/access.ts";
 import { Sharing, type JoinRequest } from "../src/sharing.ts";
 import { formatJoinLink, parseJoinLink } from "../src/join-link.ts";
-import { certifyDevice, idOf, newSeed, newWorkspaceId } from "../src/identity.ts";
+import { certifyDevice, idOf, newSeed, newWorkspaceId, revokeDevice } from "../src/identity.ts";
 
 let dir: string;
 beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "sharing-")); });
@@ -25,7 +25,7 @@ function host(answers: Array<boolean | "view"> = []) {
 function guest() {
   const person = newSeed();
   const certificate = certifyDevice(person, idOf(newSeed()));
-  return { person: idOf(person), certificate, device: certificate.device };
+  return { person: idOf(person), seed: person, certificate, device: certificate.device };
 }
 const hello = (ws: string, secret: string, g: ReturnType<typeof guest>, name = "Priya") =>
   ({ v: 1, workspace: ws, secret, certificate: g.certificate, profile: { name, color: "#14B8A6" } });
@@ -119,4 +119,23 @@ test("the person may let someone in at another role than the invite's; a reusabl
   expect((await sharing.answer(sam.device, hello(ws, secret, sam))).ok).toBe(true);
   const kim = guest();
   expect(await sharing.answer(kim.device, hello(ws, secret, kim))).toEqual({ ok: false, error: "expired" });
+});
+
+test("a device a person unpaired is let into none of their workspaces here, whichever device brings the word; the host's person is not asked", async () => {
+  const { lists, sharing, asked, admitted } = host();
+  const [ws, other] = [newWorkspaceId(), newWorkspaceId()];
+  const priya = guest();
+  for (const w of [ws, other]) expect((await sharing.answer(priya.device, hello(w, lists.invite(w, "/work/api", "edit", 60_000), priya))).ok).toBe(true);
+  const desktop = idOf(newSeed());
+  // Not hers, or not signed: nothing changes.
+  expect(await sharing.answer(desktop, { v: 1, revoke: revokeDevice(newSeed(), priya.device) })).toEqual({ ok: true, forgot: false });
+  expect(await sharing.answer(desktop, { v: 1, revoke: { ...revokeDevice(priya.seed, priya.device), at: 1 } })).toEqual({ ok: false, error: "malformed" });
+  expect(lists.accessOf(other, priya.device)).toBe("edit");
+
+  asked.length = 0;
+  expect(await sharing.answer(desktop, { v: 1, revoke: revokeDevice(priya.seed, priya.device) })).toEqual({ ok: true, forgot: true });
+  expect(lists.accessOf(ws, priya.device)).toBeNull();
+  expect(lists.accessOf(other, priya.device)).toBeNull();
+  expect(admitted.at(-1)).toEqual([]);
+  expect(asked).toEqual([]);
 });

@@ -1,4 +1,4 @@
-# Identity (0.1)
+# Identity (0.2)
 
 Who a device, a person and a workspace are (R3 in `docs/design/multiplayer-2026-09-28.md`).
 Every key is Ed25519 (RFC 8032). A key's secret is its 32-byte seed; a key is named by its public
@@ -40,6 +40,28 @@ issuedAt                        u64, big-endian
 
 A certificate verifies when every field has its form and the signature is the person key's over
 those bytes. Anything else does not verify.
+
+## Device revocation
+
+"Device `device` is person `person`'s no more", from `at`, signed by the person key (0.2):
+
+```json
+{ "v": 1, "person": "<hex>", "device": "<hex>", "at": <ms since the epoch>, "signature": "<hex>" }
+```
+
+The signature is Ed25519 over the bytes a certificate signs, under another tag:
+
+```
+"hive/device-revocation/1\n"    25 bytes of ASCII
+person                          the person's public key, 32 bytes
+device                          the device's public key, 32 bytes
+at                              u64, big-endian
+```
+
+It verifies as a certificate does. A certificate of that person's for that device issued at `at`
+or before counts for nothing where the revocation is taken; one issued after it does. Whoever
+holds the person key can sign one, the device revoked too: it ends what a device already has, and
+is no key rotation.
 
 ## Where keys are kept
 

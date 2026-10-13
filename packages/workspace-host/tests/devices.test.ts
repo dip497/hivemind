@@ -72,3 +72,17 @@ test("anything not one of the person's phones is not kept: another person's, a c
   devices.introduce(desk, [{ ...pixel, kind: "host" }], priya, 2);
   expect(devices.list().map((d) => d.kind)).toEqual(["phone"]);
 });
+
+test("where one of the person's computers says it is a guest is kept with it, all of it each time; what is not a workspace on a host is not kept", () => {
+  const devices = new Devices(path.join(dir, "devices.json"));
+  const cert = certifyDevice(person, laptop);
+  devices.add({ device: laptop, name: "Laptop", kind: "app", certificate: cert, addrs: [], relay: null, pairedAt: 1 });
+  const theirs = { workspace: "8f2c9e4a1b7d3f6e5a0c9b8d7e6f5a4b", host: idOf(newSeed()), addrs: ["10.0.0.4:4433"], relay: "https://relay.example" };
+  expect(devices.guestOf(laptop, [theirs, { workspace: 7 }, null, { ...theirs, host: "nobody" }, { ...theirs, addrs: "here" }])).toBe(true);
+  expect(new Devices(path.join(dir, "devices.json")).list()[0]!.guestOf).toEqual([theirs]);
+  expect(devices.guestOf(laptop, [])).toBe(true);
+  expect(devices.list()[0]!.guestOf).toEqual([]);
+  // Of a device not kept here, nothing is.
+  expect(devices.guestOf(desk, [theirs])).toBe(false);
+  expect(devices.list().map((d) => d.device)).toEqual([laptop]);
+});

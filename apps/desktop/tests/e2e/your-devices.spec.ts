@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { readDoc } from "@hivemind/workspace-host/doc-file";
 import { parsePairLink } from "@hivemind/workspace-host/pairing";
-import { hiveNetBuilt, ownNetwork, person, tiles } from "./helpers/multiplayer";
+import { hiveNetBuilt, join, ownNetwork, person, share, tiles } from "./helpers/multiplayer";
 import { stopDaemons } from "./helpers/daemons";
 
 let root: string;
@@ -152,4 +152,37 @@ test("unpaired, a laptop is let into the desktop's workspace no more and is off 
     await laptop.waitForTimeout(1_000);
   }
   expect(states).not.toContain("connected");
+});
+
+test("unpaired, a laptop that joined someone else's workspace as this person is let in there no more", async () => {
+  test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
+  test.setTimeout(240_000);
+  const design = repo("design");
+  const priya = await person(root, "priya", design, apps);
+  await priya.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
+  const desktop = await person(root, "desktop", repo("api"), apps);
+  const laptop = await person(root, "laptop", repo("notes"), apps);
+  const laptopIs = (await laptop.evaluate(() => window.hive.identity())).deviceId;
+  const { link } = await desktop.evaluate(() => window.hive.pairOffer()) as { link: string };
+  await laptop.evaluate((l) => window.hive.pairEnter(l), link);
+
+  // As the desktop's person, the laptop joins Priya's workspace and opens it.
+  await join(laptop, priya, await share(priya, "edit"));
+  await laptop.locator("[data-join-open]").click();
+  const banner = laptop.locator("[data-shared-banner]");
+  await expect(banner).toHaveAttribute("data-state", "connected", { timeout: 30_000 });
+  await expect(banner).toHaveAttribute("data-access", "edit");
+  const devicesThere = async () => (await priya.evaluate((r) => window.hive.people(r), design)).flatMap((p) => p.devices);
+  expect(await devicesThere()).toContain(laptopIs);
+
+  // What Unpair does, and what it does not, said before it is pressed.
+  await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
+  await expect(desktop.locator(`[data-device="${laptopIs}"] [data-unpair]`)).toBeVisible();
+  await expect(desktop.locator("[data-unpair-says]")).toHaveText(
+    "Unpair lets that device into nothing on this computer, takes it off your network if this computer let it on, and tells the computers of people whose workspaces it joined as you to let it in no more (one that is off hears it once it is back). A phone is forgotten by your other devices too. A computer or host stays paired with your other devices until you unpair it on each, and keeps your person key: with it, it can still join workspaces and pair devices as you.");
+  await desktop.locator(`[data-device="${laptopIs}"] [data-unpair]`).click();
+  // Priya's computer is told: it lets the laptop go, and keeps it off her list, Asha still on it.
+  await expect(banner).toHaveAttribute("data-state", "removed", { timeout: 30_000 });
+  expect(await devicesThere()).not.toContain(laptopIs);
+  expect(await priya.evaluate((r) => window.hive.people(r), design)).toHaveLength(1);
 });

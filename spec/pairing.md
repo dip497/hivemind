@@ -1,4 +1,4 @@
-# Pairing (0.8)
+# Pairing (0.9)
 
 Two devices become one person's (R14 and §5.2 in `docs/design/multiplayer-2026-09-28.md`): the
 device being added receives the person key and certifies itself with it (`identity.md`), or, a
@@ -206,6 +206,33 @@ phone paired with that app (which then forgets it as above) and `false` otherwis
 one of the person's devices the app paired with itself, never from a phone. A phone does not unpair
 itself from a device it learned of from an app: it unpairs from the app, and forgets with it the
 devices that app alone told of.
+
+A computer or host unpaired is also let go by the hosts of the workspaces it joined as a guest
+(0.9), workspaces other people shared with the person (`workspace-api.md`), whose lists hold its
+certificate. Each app or host tells each of the person's apps and hosts it paired with itself
+where it is a guest, on the `device` stream, all of it each time: as it joins a workspace, and as
+it starts and wakes (an app also as it tells them of its phones):
+
+```json
+{ "t": "guest", "workspaces": [ { "workspace": "<id hex>", "host": "<key hex>", "addrs": [ … ], "relay": … } ] }
+```
+
+answered `{ "t": "guest", "ok": true }` once kept (`false` from a device that unpairs nothing, as
+`hive host` does). It is taken from one of the person's apps or hosts this one paired with itself,
+never from a phone, and kept with that device. When the person unpairs that device, this one signs a device
+revocation for it (`identity.md`) and sends it to each host it named, over `hive/pair/1`:
+
+```json
+{ "v": 1, "revoke": { "v": 1, "person": "…", "device": "…", "at": …, "signature": "…" } }
+```
+
+A host takes it from any device, asking nobody: it forgets the certificate the revocation undoes
+in every workspace of its own that lists it, lets the device in no more, and answers
+`{ "ok": true, "forgot": <whether it listed it> }`, or `{ "ok": false, "error": "malformed" }` for
+a revocation that does not verify. A host that does not answer is owed it: the revocation is kept,
+beside the device's keys, and sent again as the device is reachable again and every few minutes,
+until that host answers. A device unpaired on one of the person's computers stays paired with the
+others until it is unpaired on each, and keeps the person key it was given.
 
 The cases in `../conformance/pairing.json` (proofs, codes, links, and a phone pairing with an app,
 message by message) decide whether an implementation follows this.

@@ -8,7 +8,8 @@
 // host's folder's, read there (M4). And a phone paired with the app is the person's at the host too
 // (spec/pairing.md 0.7): the host lets it in, as a phone, and tells it what waits on the person
 // there, and shows it a community view installed there (P8); unpaired on the app, the host forgets
-// it.
+// it. And a host that joined someone else's workspace as the person is let go there once the app
+// unpairs it (spec/pairing.md 0.9).
 import { test, expect, type ElectronApplication } from "@playwright/test";
 import { execFile, execSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -17,7 +18,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { HiveNet } from "@hivemind/workspace-host/hive-net";
 import { heldWorkspaces } from "@hivemind/host/peer-links";
-import { HIVE_NET, hiveNetBuilt, person, tiles } from "./helpers/multiplayer";
+import { HIVE_NET, hiveNetBuilt, person, share, tiles } from "./helpers/multiplayer";
 import { stopDaemons } from "./helpers/daemons";
 
 const HIVE = path.resolve("../cli/dist/hive");
@@ -335,4 +336,42 @@ test("a phone paired with the app is the person's at the host too: the host lets
   await devices();
   await laptop.locator(`[data-device="${phoneId}"] [data-unpair]`).click();
   await expect.poll(() => status()?.devices.map((d) => (d as { kind: string }).kind), { timeout: 30_000 }).toEqual(["app"]);
+});
+
+test("a host that joined someone else's workspace as the person is let go there once the app unpairs it", async () => {
+  test.skip(!hiveNetBuilt() || !hostable, "needs hive-net (cargo build in crates/hive-net) and a current apps/cli/dist/hive (cd apps/cli && bun scripts/build.ts)");
+  test.setTimeout(180_000);
+  const host = spawn(HIVE, ["host", "run"], { env: hostEnv(), stdio: "ignore" });
+  procs.push(host);
+  await expect.poll(() => status()?.running ?? false, { timeout: 30_000 }).toBe(true);
+  const design = path.join(root, "design");
+  fs.mkdirSync(design);
+  execSync("git init -q", { cwd: design });
+  const priya = await person(root, "priya", design, apps);
+  await priya.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
+  const elsewhere = path.join(root, "elsewhere");
+  fs.mkdirSync(elsewhere);
+  const laptop = await person(root, "laptop", elsewhere, apps);
+
+  const pairing = spawn(HIVE, ["host", "pair", "--json"], { env: hostEnv() });
+  procs.push(pairing);
+  const offer = (JSON.parse(await lines(pairing.stdout!)()) as { data: { offer: { link: string } } }).data.offer;
+  await laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
+  await laptop.locator("[data-pair-link]").fill(offer.link);
+  await laptop.locator("[data-pair-go]").click();
+  const row = laptop.locator('[data-device-kind="host"]');
+  await expect(row).toHaveCount(1, { timeout: 20_000 });
+  const hostIs = (await row.getAttribute("data-device"))!;
+  await expect.poll(() => status()?.devices.length ?? 0, { timeout: 30_000 }).toBe(1);
+
+  // As the laptop's person, the host joins Priya's workspace.
+  const joining = run(HIVE, ["join", await share(priya, "edit"), "--json"], { env: hostEnv(), timeout: 120_000 });
+  await priya.locator(".hm-join-request").getByRole("button", { name: "Allow" }).click({ timeout: 60_000 });
+  await joining;
+  const devicesThere = async () => (await priya.evaluate((r) => window.hive.people(r), design)).flatMap((p) => p.devices);
+  await expect.poll(devicesThere).toContain(hostIs);
+
+  await row.locator("[data-unpair]").click();
+  await expect(row).toHaveCount(0);
+  await expect.poll(devicesThere, { timeout: 30_000 }).not.toContain(hostIs);
 });

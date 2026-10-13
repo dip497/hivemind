@@ -13,7 +13,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { LoroDoc } from "loro-crdt";
 import { readDoc, storedKeys, writeDoc } from "./doc-file.js";
-import { certificateVerifies, idOf, signWith, verifies, type DeviceCertificate, type Seed } from "./identity.js";
+import { certificateVerifies, idOf, revocationVerifies, signWith, verifies, type DeviceCertificate, type Seed } from "./identity.js";
 
 /** Roles (design §6), least to most. The owner is not a role that can be granted. */
 export const ROLES = ["view", "edit", "terminals", "agents"] as const;
@@ -157,6 +157,22 @@ export class AccessLists {
       }
     });
     return true;
+  }
+
+  /** Forget, in every workspace here, the device `revocation` names as its person's, as they
+   *  certified it then or before (spec/identity.md). False when it was in none, or the revocation
+   *  is not its person's. */
+  forgetDevice(revocation: unknown): boolean {
+    if (!revocationVerifies(revocation)) return false;
+    const { person, device, at } = revocation;
+    let forgot = false;
+    for (const ws of this.workspaces()) {
+      const cert = this.doc(ws).getMap("devices").get(device) as DeviceCertificate | undefined;
+      if (!cert || cert.person !== person || cert.issuedAt > at) continue;
+      this.edit(ws, (doc) => doc.getMap("devices").delete(device));
+      forgot = true;
+    }
+    return forgot;
   }
 
   /** Record a device a person has shown its certificate for. Only a certificate that verifies, of

@@ -64,7 +64,7 @@ import { Hosting } from "./hosting.js";
 import { workspaceDomains } from "./domains.js";
 import { HANDED_OFF, handOff } from "./hand-off.js";
 import { answers } from "./answers.js";
-import { PeerLinks } from "./peer-links.js";
+import { PeerLinks, tellGuestOf } from "./peer-links.js";
 import { answerKeys, heldBoards, manifestOf, participantNamed, runsIn } from "./needs.js";
 import { agentControl } from "./agent-control.js";
 import { StartPlaces } from "./start-places.js";
@@ -536,16 +536,30 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   let stopping = false;
   let again: ReturnType<typeof setTimeout> | null = null;
   const profiles = o.hiveNet ? new NetworkProfiles({ dir: path.join(o.dir, "network"), bin: o.hiveNet, identity }) : null;
+  const joined = new JoinedList(path.join(o.dir, "joined.json"));
+  /** Tell each of the person's computers this host paired with where it is a guest, so that they
+   *  tell those hosts if they unpair it (spec/pairing.md 0.9): as it joins one and as its network
+   *  starts. */
+  const tellWhereGuest = async (): Promise<void> => {
+    const where = joined.guestOf();
+    await Promise.all(devices.list().filter((d) => d.kind !== "phone").map(async (d) => {
+      try {
+        const link = await dialDevice(d.device);
+        try { await tellGuestOf(link, where); } finally { link.close(); }
+      } catch (e) {
+        o.onWarn(`${d.name} was not told where this host is a guest: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }));
+  };
   // `hive join`: resolves once the workspace's owner answered.
   joinWith = async (text) => {
     const link = parseJoinLink(text);
     if (!link) throw new Error("that is not an invite link");
     if (!net || !profiles) throw new Error("this host is not on the network yet: is hive-net installed beside hive?");
     const { name, color } = catalog.settings().profile;
-    return join(link, {
-      net, profiles, certificate: keys.certificate, profile: { name: name || deviceName(), color },
-      joined: new JoinedList(path.join(o.dir, "joined.json")),
-    });
+    const reply = await join(link, { net, profiles, certificate: keys.certificate, profile: { name: name || deviceName(), color }, joined });
+    if (reply?.ok) void tellWhereGuest();
+    return reply;
   };
   const startNet = async (): Promise<void> => {
     again = null;
@@ -582,6 +596,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       });
       void records.start();
       notices.back();
+      void tellWhereGuest();
     } catch (e) {
       o.onWarn(`hive-net did not start: ${e instanceof Error ? e.message : String(e)}; trying again`);
       again = setTimeout(() => void startNet(), 5_000);

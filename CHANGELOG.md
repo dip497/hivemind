@@ -341,6 +341,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ### Security
 
 - Unpair takes back the visit to a closed network that this computer vouched the device onto, so an unpaired computer is off that network at once, not for up to 30 days. A certificate of yours kept on a workspace's list no longer lets a device in by itself: your own devices get in only while paired.
+- Unpair lets a computer or `hive host` go from the workspaces other people shared with you that it joined: their computers are told and stop letting it in, and one that is off is told once it is back. Before, it stayed in. Settings → Your devices says under the list what Unpair does, and what it does not: a computer stays paired with your other devices until unpaired on each, and keeps your person key.
 
 ## [2026.10.1] — 2026-10-03
 

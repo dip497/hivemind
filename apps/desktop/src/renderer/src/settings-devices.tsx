@@ -62,9 +62,17 @@ export function YourDevicesPrefs() {
         ) : devices.length === 0 ? (
           <p className="text-[12px] text-[var(--color-fg3)]" data-devices-none>None yet.</p>
         ) : (
-          <ul className="flex flex-col" data-devices>
-            {devices.map((d) => <DeviceRow key={d.device} device={d} />)}
-          </ul>
+          <>
+            <ul className="flex flex-col" data-devices>
+              {devices.map((d) => <DeviceRow key={d.device} device={d} />)}
+            </ul>
+            <p className="settings-note" data-unpair-says>
+              Unpair lets that device into nothing on this computer, takes it off your network if this computer let it on, and tells
+              the computers of people whose workspaces it joined as you to let it in no more (one that is off hears it once it is
+              back). A phone is forgotten by your other devices too. A computer or host stays paired with your other devices until
+              you unpair it on each, and keeps your person key: with it, it can still join workspaces and pair devices as you.
+            </p>
+          </>
         )}
       </Section>
     </div>

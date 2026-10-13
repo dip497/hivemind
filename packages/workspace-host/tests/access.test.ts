@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { AccessLists, grantBytes } from "../src/access.ts";
 import { readDoc, writeDoc } from "../src/doc-file.ts";
-import { certifyDevice, idOf, newSeed, newWorkspaceId, signWith } from "../src/identity.ts";
+import { certifyDevice, idOf, newSeed, newWorkspaceId, revokeDevice, signWith } from "../src/identity.ts";
 
 let dir: string;
 beforeEach(() => { dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "access-")), "access"); });
@@ -106,6 +106,42 @@ test("a revoked person, and one whose grant has expired, gets nothing, on any of
   await Bun.sleep(200);
   expect(a.accessOf(ws, sam.cert.device)).toBeNull();
   expect(a.people(ws).map((p) => p.person)).toEqual([priya.id]);
+});
+
+test("a device its person revoked gets into none of their workspaces here; one they certified after, and their other devices, keep their place", () => {
+  const [ws, other] = [newWorkspaceId(), newWorkspaceId()];
+  const a = lists();
+  const priya = someone();
+  const sam = someone();
+  const phone = certifyDevice(priya.person, idOf(newSeed()));
+  for (const w of [ws, other]) {
+    a.grant(w, priya.id, "edit");
+    a.addDevice(w, priya.cert);
+  }
+  a.addDevice(ws, phone);
+  const laptop = priya.cert.device;
+
+  // Signed by anyone but Priya, or not signed at all, it does nothing.
+  expect(a.forgetDevice({ ...revokeDevice(sam.person, laptop), person: priya.id })).toBe(false);
+  expect(a.forgetDevice(revokeDevice(sam.person, laptop))).toBe(false);
+  expect(a.forgetDevice({ v: 1, person: priya.id, device: laptop, at: Date.now() })).toBe(false);
+  expect(a.accessOf(other, laptop)).toBe("edit");
+
+  const revoked = revokeDevice(priya.person, laptop);
+  expect(a.forgetDevice(revoked)).toBe(true);
+  for (const w of [ws, other]) {
+    expect(a.accessOf(w, laptop)).toBeNull();
+    expect(lists().accessOf(w, laptop)).toBeNull();
+  }
+  expect(a.accessOf(ws, phone.device)).toBe("edit");
+  expect(a.admitted()).toEqual([phone.device]);
+  expect(a.forgetDevice(revoked)).toBe(false);
+
+  // Certified again afterwards and shown again, as an invite let it: the old revocation, sent
+  // again, leaves it.
+  expect(a.addDevice(ws, certifyDevice(priya.person, laptop, revoked.at + 1))).toBe(true);
+  expect(a.forgetDevice(revoked)).toBe(false);
+  expect(a.accessOf(ws, laptop)).toBe("edit");
 });
 
 test("the owner's other devices, paired with this one, are the owner in every workspace and are let in; one not the owner's is not", () => {

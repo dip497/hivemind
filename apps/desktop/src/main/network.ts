@@ -25,7 +25,7 @@ import { JoinedList } from "@hivemind/workspace-host/joined";
 import { NetworkProfiles } from "@hivemind/workspace-host/network-profile";
 import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
 import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, PairingOffer, parseCode, parsePairLink, type PairedWith, type PairingDevice } from "@hivemind/workspace-host/pairing";
-import { askToForget, heldWorkspaces, tellPhones } from "@hivemind/host/peer-links";
+import { askToForget, heldWorkspaces, tellGuestOf, tellPhones } from "@hivemind/host/peer-links";
 import { HostRecords, type Hosted } from "@hivemind/workspace-host/host-records";
 import { Hosting } from "@hivemind/host/hosting";
 import type { LayersShown } from "@hivemind/host/home";
@@ -34,7 +34,8 @@ import { handle, handleEffect, on } from "./app-ipc.js";
 import { pageHash, pageLink, phonePageAt, SHIPPED_PAGE } from "./phone-page.js";
 import { hostIntents } from "./audit.js";
 import { displayName, machineIdentity, takePerson } from "./identity.js";
-import { idOf, workspaceSeed, type Seed } from "@hivemind/workspace-host/identity";
+import { idOf, revokeDevice, workspaceSeed, type Seed } from "@hivemind/workspace-host/identity";
+import { OwedRevocations } from "@hivemind/workspace-host/revocations";
 import { getSettings } from "./settings-store.js";
 import { broadcast, userWindow } from "./windows.js";
 import { onWorkspaceChange, sharedStore, workspaceStore } from "./workspace-store-ipc.js";
@@ -78,19 +79,46 @@ function pairedDevices(): Devices {
   return (paired ??= new Devices(path.join(app.getPath("userData"), "identity", "devices.json")));
 }
 /** Forget one of the person's devices: it is let in no more, nor onto this network's relays as
- *  this device vouched it, its workspaces are no longer listed here, and a phone is told nothing
- *  more. A phone that paired here is forgotten by the person's other devices as they are told so;
- *  one another of them paired with, by that one, as it is asked (spec/pairing.md 0.7). False when
- *  it was not kept here. */
+ *  this device vouched it, nor by the hosts of the workspaces it said it is a guest of (spec/pairing.md
+ *  0.9); its workspaces are no longer listed here, and a phone is told nothing more. A phone that
+ *  paired here is forgotten by the person's other devices as they are told so; one another of them
+ *  paired with, by that one, as it is asked (0.7). False when it was not kept here. */
 function forgetDevice(device: string): boolean {
   const was = pairedDevices().list().find((d) => d.device === device);
   if (!was || !pairedDevices().remove(device)) return false;
   pushSubscriptions().remove(device);
   admitNow();
   void unvouch(device);
+  if (was.guestOf?.length) {
+    owedRevocations().add(revokeDevice(machineIdentity().person, device), was.guestOf);
+    void payRevocations();
+  }
   broadcast("net:devices-changed");
-  if (was.kind === "phone") void (was.via ? forgetWhereItPaired(was) : introducePhones());
+  if (was.kind === "phone") void (was.via ? forgetWhereItPaired(was) : tellDevices());
   return true;
+}
+
+/** How often word of a device unpaired here is tried again on a host that did not take it. */
+const PAY_AGAIN_MS = 5 * 60_000;
+
+let owed: OwedRevocations | null = null;
+function owedRevocations(): OwedRevocations {
+  return (owed ??= new OwedRevocations(path.join(app.getPath("userData"), "identity", "revocations.json")));
+}
+
+/** Tell each host owed it that a device unpaired here is the person's no more. One that does not
+ *  answer is told again as this app is reachable again, and every few minutes until it is. */
+async function payRevocations(): Promise<void> {
+  if (owedRevocations().list().length === 0) return;
+  const hn = await network();
+  await Promise.all(owedRevocations().list().map(async (o) => {
+    try {
+      const reply = await hn.pair(o.host, { addrs: o.addrs, relay: o.relay }, { v: 1, revoke: o.revocation }) as { ok?: unknown } | null;
+      if (reply?.ok === true) owedRevocations().paid(o.host, o.revocation.device);
+    } catch (e) {
+      console.warn(`[devices] ${o.host.slice(0, 8)}… was not told ${o.revocation.device.slice(0, 8)}… is unpaired: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }));
 }
 
 /** One of the person's devices, as another of theirs is told of it. */
@@ -101,10 +129,11 @@ const pairedWith = ({ device, name, kind, certificate, addrs, relay }: PairedDev
 const TELL_AGAIN_MS = [2_000, 5_000, 15_000];
 
 /** Tell each of the person's computers and hosts paired here which phones paired with this app
- *  (spec/pairing.md 0.7), so that they let them in too, and forget one unpaired here: as one pairs
- *  or is forgotten, and as this app is reachable again, when one that was away hears it. Each try
- *  tells the phones as they are then. */
-async function introducePhones(): Promise<void> {
+ *  (spec/pairing.md 0.7), so that they let them in too, and forget one unpaired here; and where this
+ *  app is a guest, so that they tell those hosts if they unpair it (0.9): as one pairs or is
+ *  forgotten, as this app joins a workspace, and as it is reachable again, when one that was away
+ *  hears it. Each try tells them as things are then. */
+async function tellDevices(): Promise<void> {
   const hn = await network();
   await Promise.all(placesToRun().map(async (d) => {
     for (let tried = 0; ; tried++) {
@@ -112,12 +141,13 @@ async function introducePhones(): Promise<void> {
         const link = await hn.dial(d.device, { addrs: d.addrs, relay: d.relay });
         try {
           await tellPhones(link, pairedDevices().list().filter((p) => p.kind === "phone" && !p.via).map(pairedWith));
+          await tellGuestOf(link, joinedList().guestOf());
         } finally {
           link.close();
         }
         return;
       } catch (e) {
-        if (tried === TELL_AGAIN_MS.length) return console.warn(`[devices] ${d.name} was not told of the phones paired here: ${e instanceof Error ? e.message : String(e)}`);
+        if (tried === TELL_AGAIN_MS.length) return console.warn(`[devices] ${d.name} was not told of the phones paired here, or where this app is a guest: ${e instanceof Error ? e.message : String(e)}`);
         await new Promise((r) => setTimeout(r, TELL_AGAIN_MS[tried]));
       }
     }
@@ -453,7 +483,7 @@ function keepPaired(device: PairedDevice): void {
   void vouchFor(device.device);
   broadcast("net:devices-changed");
   // A phone is the person's other devices' too; a computer or host is told of the phones here.
-  void introducePhones();
+  void tellDevices();
 }
 
 /** What asking to join answers: the host's reply, or that this device could not get onto the
@@ -546,6 +576,7 @@ export async function joinLink(text: unknown): Promise<JoinReply> {
       net: await network(), profiles: networkProfiles(), certificate: machineIdentity().certificate,
       profile: await shownProfile(), joined: joinedList(),
     });
+    if (reply?.ok) void tellDevices();
     if (reply?.ok && apiServer) {
       const server = apiServer;
       // A window may still show this workspace. Replace its old link so the new grant and
@@ -589,6 +620,8 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
       admitNow();
       broadcast("net:devices-changed");
     },
+    // Where another of the person's computers is a guest: the hosts told if it is unpaired here.
+    guestOf: (by, workspaces) => placesToRun().some((d) => d.device === by) && pairedDevices().guestOf(by, workspaces),
     forget: (by, device) => {
       if (!placesToRun().some((d) => d.device === by) || !pairedDevices().list().some((d) => d.device === device && d.kind === "phone" && !d.via)) return false;
       const there = { kind: "peer", person: machineIdentity().personId, device: by, access: "owner" } as const;
@@ -621,14 +654,15 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
   }));
   onStatus((change) => notices.changed(change));
   // Be where the people let in, and the person's other devices, reach this computer, when anything
-  // is shared from here or the person has other devices: as this app starts (below), and as the
-  // computer wakes, once it is online again. Then each phone is told it is back, and shows it if
-  // it found this computer away (spec/push.md).
+  // is shared from here, the person has other devices or a host is owed word of one unpaired: as
+  // this app starts (below), and as the computer wakes, once it is online again. Then each phone is
+  // told it is back, and shows it if it found this computer away (spec/push.md).
   const reachable = () => {
-    if (!accessLists().workspaces().some((ws) => accessLists().people(ws).length > 0) && pairedDevices().list().length === 0) return;
-    void network().then(() => { notices.back(); void introducePhones(); }, (e: unknown) => console.warn(`[network] ${e instanceof Error ? e.message : String(e)}`));
+    if (!accessLists().workspaces().some((ws) => accessLists().people(ws).length > 0) && pairedDevices().list().length === 0 && owedRevocations().list().length === 0) return;
+    void network().then(() => { notices.back(); void tellDevices(); void payRevocations(); }, (e: unknown) => console.warn(`[network] ${e instanceof Error ? e.message : String(e)}`));
   };
   powerMonitor.on("resume", () => void online().then(reachable));
+  setInterval(() => void payRevocations(), PAY_AGAIN_MS).unref();
   // The network in use, changed by `hive network use`: the daemon starts again on it. A change
   // made here has done that already (below).
   try {
