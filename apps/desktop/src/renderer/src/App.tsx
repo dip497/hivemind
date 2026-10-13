@@ -39,7 +39,6 @@ import { chooseFolder, FolderPathDialog } from "./choose-folder";
 const SettingsPages = preloadable(() => import("./settings-panels").then((m) => m.default));
 // Sharing's dialogs load when opened: they are nothing the first frame draws.
 const MakePluginDialog = lazy(() => import("./plugins/MakePlugin").then((m) => ({ default: m.MakePluginDialog })));
-const PeopleDialog = lazy(() => import("./multiplayer/people-dialog").then((m) => ({ default: m.PeopleDialog })));
 
 // Last 8 opened folders, most recent first. Persisted via localStorage —
 // mirrors VSCode's "Open Recent" (Ctrl+R) behavior at workspace granularity.
@@ -205,7 +204,6 @@ export function App() {
   // Ctrl+O / Ctrl+R on the canvas (useCanvasShortcuts): VS Code's Open Folder and Open Recent.
   // Which page of the Recent dialog is open: its list, or joining a workspace shared with you.
   const [recentOpen, setRecentOpen] = useState<"recent" | "join" | null>(null);
-  const [peopleOpen, setPeopleOpen] = useState(false);
   const { islandShown, layersShown } = useChromeState();
   // Make your own plugin (the Add menu, Settings ▸ Plugins): a prompt to copy or hand an agent here.
   const [making, setMaking] = useState<"widget" | "tool" | "view" | null>(null);
@@ -266,13 +264,11 @@ export function App() {
     openRecent(path);
     void qc.invalidateQueries({ queryKey: ["project", path] });
   };
-  // Settings → People hands these on: Settings closes for the People panel, and for the moved workspace.
+  // Settings → People hands this on: Settings closes for the moved workspace.
   useEffect(() => {
-    const people = () => { setSettingsOpen(false); setPeopleOpen(true); };
     const moved = (event: Event) => { setSettingsOpen(false); openMoved((event as CustomEvent<{ uri: string }>).detail.uri); };
-    window.addEventListener("hivemind:open-people", people);
     window.addEventListener("hivemind:open-moved", moved);
-    return () => { window.removeEventListener("hivemind:open-people", people); window.removeEventListener("hivemind:open-moved", moved); };
+    return () => window.removeEventListener("hivemind:open-moved", moved);
   });
 
   // A plugin set issues up in a folder: the workspace there now has a `.hivemind`, so read it again,
@@ -401,7 +397,7 @@ export function App() {
           />
           <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
             <SharedBanner onMoved={openMoved} />
-            <WorkspaceActions onPeople={() => setPeopleOpen(true)} />
+            <WorkspaceActions onPeople={() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "people" } }))} />
             {!islandShown && !layersShown && <AppControls corner />}
           </div>
         </div>
@@ -420,7 +416,6 @@ export function App() {
         <Suspense fallback={null}>
           {making && <MakePluginDialog kind={making} onClose={() => setMaking(null)}
             onStart={(prompt) => window.dispatchEvent(new CustomEvent("hivemind:deliver-to-agent", { detail: { text: prompt } }))} />}
-          {repoPath && peopleOpen && <PeopleDialog repo={repoPath} open onClose={() => setPeopleOpen(false)} />}
         </Suspense>
         <ThemePanel />
         <SettingsModal

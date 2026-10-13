@@ -10,7 +10,7 @@
  */
 import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { Check, ChevronDown, Copy, Globe, Laptop, Server, Smartphone } from "./components/icons";
-import { encode } from "uqr";
+import { QrCode } from "./components/qr-code";
 import type { BrowserAppStatus, PairedDeviceSummary } from "../../shared/ipc";
 import { patchSettings, useSettings } from "./settings-store";
 import { Button } from "./components/ui/button";
@@ -135,9 +135,9 @@ function PhoneCode({ offering }: { offering: Offering }) {
   const shown = page && inBrowser ? page : offer.link;
   const server = page && new URL(page).host;
   return (
-    <div className="flex items-start gap-4" data-pair-offered="phone">
-      <Qr text={shown} />
-      <div className="flex min-w-0 flex-col gap-2">
+    <div className="flex flex-wrap items-start gap-4" data-pair-offered="phone">
+      <QrCode text={shown} label="QR code of the pairing link" data-pair-qr />
+      <div className="flex min-w-[200px] flex-1 flex-col gap-2">
         <p className="text-[12px] text-[var(--color-fg2)]">
           {shown === page ? "Scan this with your phone's camera, or with hivemind on it." : "Scan this with hivemind on your phone."} It works once, until {until}.
         </p>
@@ -164,9 +164,9 @@ function ComputerCode({ offering }: { offering: Offering }) {
   return (
     <div className="flex flex-col gap-3">
       {offer && !offer.phone ? (
-        <div className="flex items-start gap-4" data-pair-offered="code">
-          <Qr text={offer.link} />
-          <div className="flex min-w-0 flex-col gap-2">
+        <div className="flex flex-wrap items-start gap-4" data-pair-offered="code">
+          <QrCode text={offer.link} label="QR code of the pairing link" data-pair-qr />
+          <div className="flex min-w-[200px] flex-1 flex-col gap-2">
             <p className="font-mono text-[14px] tracking-wide" data-pair-code>{offer.code.split("-").join(" ")}</p>
             <p className="text-[12px] text-[var(--color-fg3)]">
               Enter these words (on this network) or the link on the other computer, under Settings → Your devices, or run <code className="font-mono">hive host pair</code> with them on a host. It works once, until {new Date(offer.expires).toLocaleTimeString()}.
@@ -273,18 +273,6 @@ function PageHash({ page }: { page: string }) {
       {verdict === "other" && <span className="text-[var(--color-err)]">: not the page this release made (<span className="font-mono">{short(shipped!)}</span>). It is another version, or was changed.</span>}
       {verdict === "unknown" && ": compare it with hive-phone-page.sha256 on the release."}
     </p>
-  );
-}
-
-/** A QR code of `text`, drawn from its modules. */
-function Qr({ text }: { text: string }) {
-  const { data, size } = useMemo(() => encode(text, { border: 2 }), [text]);
-  const cells: string[] = [];
-  data.forEach((row, y) => row.forEach((on, x) => { if (on) cells.push(`M${x} ${y}h1v1h-1z`); }));
-  return (
-    <svg viewBox={`0 0 ${size} ${size}`} width={168} height={168} shapeRendering="crispEdges" className="shrink-0 rounded bg-white" aria-label="QR code of the pairing link" data-pair-qr>
-      <path d={cells.join("")} fill="#000" />
-    </svg>
   );
 }
 

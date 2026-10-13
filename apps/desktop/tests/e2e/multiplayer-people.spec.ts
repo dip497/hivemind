@@ -20,8 +20,7 @@ test.afterEach(async () => {
 const banner = (w: Page) => w.locator("[data-shared-banner]");
 async function openPeople(host: Page): Promise<void> {
   await openShare(host);
-  await host.locator("[data-share-people]").click();
-  await expect(host.locator("[data-people-dialog]")).toBeVisible();
+  await expect(host.locator("[data-people-list]")).toBeVisible();
 }
 
 test("the host changes a guest's role and removes them: the guest works under the new role at once, and once removed is disconnected, told so, and keeps a copy only to read", async () => {

@@ -1,6 +1,6 @@
 /**
  * Who is in the workspace a window shows, and what its owner may do about them (top right): their
- * faces, and for the workspace's owner, the People panel. Share sits in the tool island. The owner is the person here
+ * faces, and for the workspace's owner, Settings → People. Share sits in the tool island. The owner is the person here
  * for a workspace of this machine's, and for one of theirs hosted on another of their devices,
  * which its host answers (M3); someone else's, joined from elsewhere, is its owner's to share.
  */

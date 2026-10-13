@@ -220,7 +220,6 @@ test("on a network with a lookup server, the laptop shares the workspace at the 
   // In People, the guest is here, and given another role: they work under it at once.
   const guestId = (await guest.evaluate(() => window.hive.identity())).personId;
   await openShare(laptop);
-  await laptop.locator("[data-share-people]").click();
   const row = laptop.locator(`[data-shared-person="${guestId}"]`);
   await expect(row).toContainText("Here now", { timeout: 20_000 });
   await row.locator("[data-person-role]").selectOption("terminals");
