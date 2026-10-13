@@ -9,6 +9,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -19,6 +20,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import java.io.File
+import java.util.Base64
 
 /**
  * Pairing over the real core: the facade as scripts/phone/build-android.sh builds it for this
@@ -40,8 +42,18 @@ class PairOverCoreTest {
     private fun pairing() = PairViewModel(Phone.open(dir.root.path, "Priya's Pixel"))
 
     private suspend fun PairViewModel.settled(): PairState {
-        withTimeout(30_000) { while (state is PairState.Pairing) delay(10) }
+        withTimeout(30_000) { while (state is PairState.Pairing || state is PairState.Connecting) delay(10) }
         return state
+    }
+
+    /** conformance/pairing.json's offer to connect from "Priya's desktop", with no address: one
+     *  that names its computer, and reaches nothing. */
+    private fun offerReachingNothing(): String {
+        val cases = JSONObject(File("../../../conformance/pairing.json").readText()).getJSONObject("connect").getJSONArray("link")
+        val text = (0 until cases.length()).map { cases.getJSONObject(it) }.single { it.getString("about") == "an app's offer" }.getString("text")
+        val (head, body) = text.split("#", limit = 2)
+        val offer = JSONObject(String(Base64.getUrlDecoder().decode(body))).put("addrs", JSONArray())
+        return head + "#" + Base64.getUrlEncoder().withoutPadding().encodeToString(offer.toString().toByteArray())
     }
 
     @Test
@@ -76,5 +88,25 @@ class PairOverCoreTest {
         assertEquals("Desk", (pairing.state as PairState.Pairing).with?.name)
         val state = pairing.settled()
         assertTrue("$state", state is PairState.Failed && state.message.isNotBlank())
+    }
+
+    @Test
+    fun `while it asks with an offer to connect it names the computer, and one it cannot reach is refused in the core's words`() = runBlocking {
+        val pairing = pairing()
+
+        pairing.pair(offerReachingNothing())
+
+        assertEquals("Priya's desktop", (pairing.state as PairState.Connecting).with.name)
+        val state = pairing.settled()
+        assertTrue("$state", state is PairState.Failed && state.message.isNotBlank())
+    }
+
+    @Test
+    fun `a code the camera reads that is an offer to connect is asked with`() {
+        val pairing = pairing()
+
+        pairing.scanned(offerReachingNothing())
+
+        assertEquals("Priya's desktop", (pairing.state as PairState.Connecting).with.name)
     }
 }

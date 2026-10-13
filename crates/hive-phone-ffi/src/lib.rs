@@ -7,6 +7,7 @@ use std::{future::Future, sync::LazyLock};
 
 use tokio::runtime::{Builder, Runtime};
 
+mod connect;
 mod control;
 mod conversation;
 mod error;
@@ -19,6 +20,7 @@ mod records;
 mod view;
 mod watch;
 
+pub use connect::{connects_with, Connecting};
 pub use control::{Diff, DiffFile, Frame, Start, StartOption, StartProgram, Startable};
 pub use conversation::{
     Conversation, ConversationEnded, ConversationListener, Entry, Said, Tool, ToolResult,

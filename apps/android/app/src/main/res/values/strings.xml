@@ -136,8 +136,8 @@
 
     <!-- Pair -->
     <string name="pair_title">Pair with hivemind</string>
-    <string name="pair_how">On your computer, open Settings → Your devices → Use on your phone, and point the camera at the code. Or paste the link it shows.</string>
-    <string name="pair_how_paste">On your computer, open Settings → Your devices → Use on your phone, and paste here the link it shows.</string>
+    <string name="pair_how">On your computer, open Settings → Connect, and point the camera at the code. Or paste the link it shows.</string>
+    <string name="pair_how_paste">On your computer, open Settings → Connect, and paste here the link it shows.</string>
     <string name="pair_camera_unavailable">The camera can\'t be opened here. Paste the link instead.</string>
     <string name="action_allow_camera">Use the camera</string>
     <string name="pair_link">Link</string>
@@ -147,6 +147,15 @@
     <string name="pair_pairing_with">Pairing with %s…</string>
     <string name="pair_whose">This phone is %s\'s now.</string>
     <string name="pair_with">Paired with %s.</string>
+    <string name="connect_connecting">Connecting to %s…</string>
+    <string name="connect_check">Check that %s shows these words:</string>
+    <string name="connect_waiting">Waiting for %s…</string>
+    <string name="connect_told">%1$s says this phone is %2$s\'s. Do the words match?</string>
+    <string name="connect_told_nobody">%s says this phone is its person\'s. Do the words match?</string>
+    <string name="connect_yes">Yes, make this phone %s\'s</string>
+    <string name="connect_yes_nobody">Yes, the words match</string>
+    <string name="connect_no">No</string>
+    <string name="connect_refused">Nothing was taken: the words did not match.</string>
     <string name="action_continue">Continue</string>
 
     <!-- What a screen tells once, after an action -->

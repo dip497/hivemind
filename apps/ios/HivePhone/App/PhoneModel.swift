@@ -12,7 +12,7 @@ final class PhoneModel {
     private(set) var overview: Overview
     /// What the last call to a device that went wrong said, shown for a moment.
     var notice: String? = nil
-    /// A pairing link the system handed the app (`hivemind://pair/…`), until Pair takes it.
+    /// A link the system handed the app (`hivemind://connect/…` or `hivemind://pair/…`), until Pair takes it.
     var pendingLink: String? = nil
 
     @ObservationIgnored private var following: Following? = nil

@@ -56,8 +56,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Pair with hivemind (design §6.1): the camera reads the QR code the computer shows (Settings →
- * Your devices → Use on your phone), or the link is pasted; then whose the phone is now, in their name and
- * colour.
+ * Connect), or the link is pasted. An offer to connect shows the words the computer shows too, and
+ * the person here says whether they match; then whose the phone is now, in their name and colour.
  */
 @Composable
 fun PairScreen(vm: PairViewModel, onDone: () -> Unit) {
@@ -75,6 +75,8 @@ fun PairScreen(vm: PairViewModel, onDone: () -> Unit) {
             Text(stringResource(R.string.pair_title), style = MaterialTheme.typography.headlineSmall)
             when (val state = vm.state) {
                 is PairState.Done -> Paired(state.paired, onDone)
+                is PairState.Words -> Asked(vm, state.computer, state.words, null)
+                is PairState.Told -> Asked(vm, state.computer, state.words, state)
                 else -> Pairing(vm, state)
             }
         }
@@ -91,7 +93,7 @@ private fun Pairing(vm: PairViewModel, state: PairState) {
     var link by rememberSaveable { mutableStateOf("") }
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
-    val pairing = state is PairState.Pairing
+    val pairing = state is PairState.Pairing || state is PairState.Connecting
 
     // The camera is optional (an emulator, a Chromebook, some tablets have none): without one, or
     // with one that cannot be opened, the link is pasted.
@@ -145,6 +147,11 @@ private fun Pairing(vm: PairViewModel, state: PairState) {
             val with = state.with
             Text(if (with != null) stringResource(R.string.pair_pairing_with, with.name) else stringResource(R.string.pair_pairing))
         }
+        is PairState.Connecting -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            Text(stringResource(R.string.connect_connecting, state.with.name))
+        }
+        is PairState.Refused -> Text(stringResource(R.string.connect_refused), modifier = Modifier.testTag("pair-error"))
         is PairState.Failed -> Text(
             state.message.ifEmpty { stringResource(R.string.notice_failed) },
             color = MaterialTheme.colorScheme.error,
@@ -152,6 +159,35 @@ private fun Pairing(vm: PairViewModel, state: PairState) {
         )
         else -> Unit
     }
+}
+
+/**
+ * An offer asked with: the words to check on the computer, waiting on the person there; then, once it
+ * says the phone is its person's, the person here says whether the words match.
+ */
+@Composable
+private fun Asked(vm: PairViewModel, computer: String, words: List<String>, told: PairState.Told?) {
+    Text(stringResource(R.string.connect_check, computer), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(words.joinToString(" · "), style = MaterialTheme.typography.headlineLarge, modifier = Modifier.testTag("connect-words"))
+    if (told == null) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            Text(stringResource(R.string.connect_waiting, computer))
+        }
+        return
+    }
+    val whose = told.whose
+    Text(if (whose == null) stringResource(R.string.connect_told_nobody, computer) else stringResource(R.string.connect_told, computer, whose), modifier = Modifier.testTag("connect-told"))
+    Button(
+        onClick = { vm.answer(true) },
+        enabled = !told.answering,
+        modifier = Modifier.fillMaxWidth().testTag("connect-yes"),
+    ) { Text(if (whose == null) stringResource(R.string.connect_yes_nobody) else stringResource(R.string.connect_yes, whose)) }
+    OutlinedButton(
+        onClick = { vm.answer(false) },
+        enabled = !told.answering,
+        modifier = Modifier.fillMaxWidth().testTag("connect-no"),
+    ) { Text(stringResource(R.string.connect_no)) }
 }
 
 @Composable

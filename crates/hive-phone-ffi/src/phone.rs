@@ -7,6 +7,7 @@ use std::{
 };
 
 use hive_phone::{
+    connect,
     connections::Connections,
     identity::Identity,
     pairing::{self, Pairing},
@@ -14,6 +15,7 @@ use hive_phone::{
 };
 
 use crate::{
+    connect::Connecting,
     on_runtime,
     overview::{Following, OverviewListener, Overviews},
     records::{AgentRef, Answer, JoinRef, Overview, Paired, Person},
@@ -84,6 +86,24 @@ impl Phone {
                 name: paired.with.name,
                 person: identity.person().map(Person::from),
             })
+        })
+        .await
+    }
+
+    /// Ask with the offer to connect whose link, the QR code's text, was scanned
+    /// (spec/pairing.md 0.10): what to show while the person at the computer decides.
+    pub async fn connect(&self, link: String) -> Result<Arc<Connecting>, PhoneError> {
+        let (identity, name) = (self.identity.clone(), self.name.clone());
+        let connections = self.connections.clone();
+        on_runtime(async move {
+            let link = connect::parse_link(&link).ok_or_else(|| {
+                PhoneError::Invalid(
+                    "that is not a link to connect with: it is the one under Settings → Connect on your computer"
+                        .into(),
+                )
+            })?;
+            let asking = identity.connect_with(&name, &link).await?;
+            Ok(Arc::new(Connecting::new(identity, connections, asking)))
         })
         .await
     }
