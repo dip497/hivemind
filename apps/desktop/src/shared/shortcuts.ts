@@ -30,3 +30,18 @@ export function menuKey(i: KeyInput): "toggle-layers" | null {
   if (!i.meta || i.control || i.alt || i.shift) return null;
   return i.key.toLowerCase() === "b" ? "toggle-layers" : null;
 }
+
+/** What an app key tells the page, as main sends it to a window and a browser tab raises it
+ *  itself: the message's channel and its arguments. Null: the key is the focused tile's. */
+export function appKeyMessage(i: KeyInput): [channel: string, ...args: string[]] | null {
+  if (!(i.control || i.meta) || i.alt) return null;
+  const action = appShortcut(i);
+  if (action) return ["menu:shortcut", action];
+  const k = i.key.toLowerCase();
+  // Ctrl/Cmd+Shift+F toggles the selected tile's fit-to-screen overlay; +0 resets its scale.
+  if (i.shift) return k === "f" ? ["menu:fit-overlay"] : k === "0" || k === ")" ? ["menu:reset-scale"] : null;
+  // Plain `.` is the terminal's, so focusing the selected tile takes the modifier.
+  if (k === ".") return ["menu:focus-tile"];
+  const menu = menuKey(i);
+  return menu ? [`menu:${menu}`] : null;
+}

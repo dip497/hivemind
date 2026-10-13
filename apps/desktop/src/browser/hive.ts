@@ -5,18 +5,25 @@
  * are a replica (spec/workspace-api.md, "A client that holds the layouts") and the settings are
  * read before the renderer starts and kept as main changes them. A terminal's output is paced by
  * acknowledging what arrived, as a phone does, so a slow link is sent its screen, not a backlog.
+ * The app's keys are taken before the page sees them, as main takes them from a window.
  */
 import { StoreReplica } from "@hivemind/workspace-api/store-replica";
 import type { Settings } from "@hivemind/core/settings-schema";
 import type { HiveApi } from "../shared/ipc";
 import { hiveOverIpc, workspaceOver, type IpcPort } from "../shared/hive-ipc";
 import type { MainFrame, TabFrame } from "../shared/browser-socket";
+import { appKeyMessage } from "../shared/shortcuts";
 
 export async function connectHive(url: string, token: string, onClose: (code: number) => void): Promise<HiveApi> {
   const ws = new WebSocket(url);
   const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   const listeners = new Map<string, Set<(...args: unknown[]) => void>>();
   let next = 1;
+  const deliver = (ch: string, args: unknown[]): void => {
+    for (const l of listeners.get(ch) ?? []) {
+      try { l(...args); } catch (e) { console.error(`[hive] a listener for ${ch} failed:`, e); }
+    }
+  };
   const put = (frame: TabFrame): void => {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(frame));
   };
@@ -30,11 +37,7 @@ export async function connectHive(url: string, token: string, onClose: (code: nu
         pending.delete(frame.id);
         if (frame.error !== undefined) call?.reject(new Error(frame.error));
         else call?.resolve(frame.value);
-      } else {
-        for (const l of listeners.get(frame.ch) ?? []) {
-          try { l(...frame.args); } catch (e) { console.error(`[hive] a listener for ${frame.ch} failed:`, e); }
-        }
-      }
+      } else deliver(frame.ch, frame.args);
     });
     ws.addEventListener("close", (ev) => {
       reject(new Error(`the app closed the connection (${ev.code})`));
@@ -63,6 +66,16 @@ export async function connectHive(url: string, token: string, onClose: (code: nu
     },
     serves: (ch) => served.has(ch),
   };
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("keydown", (e) => {
+      const message = appKeyMessage({ key: e.key, control: e.ctrlKey, meta: e.metaKey, shift: e.shiftKey, alt: e.altKey });
+      if (!message) return;
+      e.preventDefault();
+      e.stopPropagation();
+      deliver(message[0], message.slice(1));
+    }, true);
+  }
 
   const workspace = workspaceOver(port);
   const store = new StoreReplica(workspace);

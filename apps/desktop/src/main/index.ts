@@ -8,7 +8,7 @@ import { listWidgets } from "@hivemind/core/widgets";
 import { installToolPackageIpc, handleToolProtocol, PLUGIN_SCHEME, safeMode, toolsChanged } from "./tool-packages.js";
 import { installServicesIpc, startServices, stopServices } from "./services.js";
 import { listToolPackages } from "@hivemind/core/tool-packages";
-import { appShortcut, menuKey } from "./shortcuts";
+import { appKeyMessage } from "../shared/shortcuts.js";
 import { recoverOnProcessLoss } from "./recover";
 import desktopPkg from "../../package.json" with { type: "json" };
 import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
@@ -341,43 +341,12 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
       try { win.setFullScreen(!win.isFullScreen()); } catch { /* window gone */ }
       return;
     }
-    if (!(input.control || input.meta)) return;
-    if (input.alt) return;
-    const k = input.key.toLowerCase();
-    // VS Code's app keys (see shortcuts.ts) — intercepted here, before xterm, so they work
-    // from inside a terminal too.
-    const action = appShortcut(input);
-    if (action) {
+    // The app's keys (shared/shortcuts.ts), taken here before xterm so they work from inside a
+    // terminal too.
+    const message = appKeyMessage(input);
+    if (message) {
       event.preventDefault();
-      try { wc.send("menu:shortcut", action); } catch { /* destroyed mid-call */ }
-      return;
-    }
-    // Tile scaling shortcuts forwarded to the renderer (xterm eats the keys when a
-    // terminal is focused, so they must be intercepted here, like ⌘N/⌘L).
-    // Ctrl/Cmd+Shift+F = toggle the crisp fit-to-screen overlay on the selected
-    // tile; Ctrl/Cmd+Shift+0 = reset that tile's scale to the screen's best.
-    if (input.shift) {
-      if (k === "f") {
-        event.preventDefault();
-        try { wc.send("menu:fit-overlay"); } catch { /* destroyed mid-call */ }
-      } else if (k === "0" || k === ")") {
-        event.preventDefault();
-        try { wc.send("menu:reset-scale"); } catch { /* destroyed mid-call */ }
-      }
-      return;
-    }
-    // Ctrl/Cmd+. focuses the selected tile. The plain `.` binding fails when a
-    // terminal is focused (xterm consumes it), so the modifier combo is forwarded
-    // from here instead. NEVER bind plain `.` (it's load-bearing terminal input).
-    if (k === ".") {
-      event.preventDefault();
-      try { wc.send("menu:focus-tile"); } catch { /* destroyed mid-call */ }
-      return;
-    }
-    const menu = menuKey(input);
-    if (menu) {
-      event.preventDefault();
-      try { wc.send(`menu:${menu}`); } catch { /* destroyed mid-call */ }
+      try { wc.send(...message); } catch { /* destroyed mid-call */ }
     }
   });
 
