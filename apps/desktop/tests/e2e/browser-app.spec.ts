@@ -59,6 +59,7 @@ test("off until the person turns it on, then the page shows its link with the ke
   const desktop = app.page;
   await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
   const section = desktop.locator("[data-browser-app]");
+  await section.locator("[data-browser-app-more] > summary").click();
   await section.locator("#browser-app-port").fill(String(port));
   await section.locator("#browser-app-port").press("Enter");
   await expect.poll(() => desktop.evaluate(() => window.hive.settingsSync().browserApp.port)).toBe(port);

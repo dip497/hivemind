@@ -89,7 +89,7 @@ test("Settings stays opaque, pauses decoration, preserves a terminal and fits a 
   } finally { await app.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-test("the sidebar is four groups, each Connect page says what it is for, and an old page's name opens its new page", async () => {
+test("the sidebar is four groups, each Connect page says what it is for, and an old page's name opens its new page, focus following it", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-settings-nav-"));
   const env = { ...process.env, XDG_CONFIG_HOME: path.join(root, "config"), HIVE_SETTINGS: path.join(root, "settings.json") } as Record<string, string>;
   delete env.ELECTRON_RUN_AS_NODE;
@@ -104,6 +104,8 @@ test("the sidebar is four groups, each Connect page says what it is for, and an 
     await expect(page.locator('[data-settings-page="servers"] [data-settings-hint]')).toBeVisible();
     await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "devices" } })));
     await expect(page.locator('[data-settings-page="your-devices"]')).toHaveAttribute("aria-current", "page");
+    // Focus, and its ring, moved with it: not left on the page that was shown before.
+    await expect(page.locator('[data-settings-page="your-devices"]')).toBeFocused();
     await expect(page.locator('[data-connect="phone"]')).toBeVisible();
   } finally { await app.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });

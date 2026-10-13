@@ -13,7 +13,7 @@
     "dist:mac": "electron-vite build && electron-builder --mac dir && codesign --force --deep --sign - dist-electron/mac-arm64/hivemind.app",
     "dist:win": "electron-vite build && electron-builder --win zip",
     "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
-    "test:unit": "tsx --test tests/unit/*.test.ts",
+    "test:unit": "tsx --tsconfig tsconfig.web.json --test tests/unit/*.test.ts",
     "test:e2e": "electron-vite build && node scripts/build-views.mjs && playwright test",
     "test:e2e:nb": "playwright test",
     "test:e2e:harness": "electron-vite build && node scripts/build-views.mjs && playwright test -c playwright.harness.config.ts",

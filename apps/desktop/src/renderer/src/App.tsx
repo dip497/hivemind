@@ -600,6 +600,12 @@ function SettingsModal({
   const nav = useSettingsNav();
   const go = useCallback((id: string) => setPage(resolveSettingsPage(id) ?? id), []);
   const settingsReturnFocus = useRef<HTMLElement | null>(null);
+  const settingsNav = useRef<HTMLElement | null>(null);
+  // Focus in the sidebar follows the page shown, however it changed, so its ring is never on another.
+  useEffect(() => {
+    const nav = settingsNav.current;
+    if (nav?.contains(document.activeElement)) nav.querySelector<HTMLElement>('[aria-current="page"]')?.focus({ preventScroll: true });
+  }, [page]);
   useEffect(() => {
     setWorkspaceOccluded(open);
     return () => setWorkspaceOccluded(false);
@@ -642,7 +648,7 @@ function SettingsModal({
         >
           <aside className="settings-sidebar">
             <SettingsDialog.Title className="settings-title">Settings</SettingsDialog.Title>
-            <nav aria-label="Settings sections">
+            <nav aria-label="Settings sections" ref={settingsNav}>
               {nav.groups.map(({ group, items }) => (
                 <div key={group} className="settings-nav-group" role="group" aria-label={group}>
                   <h3 className="settings-nav-heading"><span className="settings-nav-heading-text">{group}</span></h3>

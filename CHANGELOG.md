@@ -15,7 +15,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
-- Settings is regrouped by what you do: General, Connect (People, Your devices, API access), Plugins, Advanced (Servers, About and updates), each Connect page with a line saying what it is for. Your devices leads with three ways in: on your phone, another computer, in a browser here. A browser that pairs is named by what it is ("Chrome on Android"). The update check is switched on About and updates only. Links to the old page names still open the new pages.
+- Settings is regrouped by what you do: General, Connect (People, Your devices, API access), Plugins, Advanced (Servers, About and updates), each Connect page with a line saying what it is for. Your devices leads with three ways in: on your phone, another computer, in a browser here; the browser's port and other names, and how pairing works, are folded away until asked for. A browser that pairs is named by what it is ("Chrome on Android"). The update check is switched on About and updates only. Links to the old page names still open the new pages.
 
 ### Fixed
 

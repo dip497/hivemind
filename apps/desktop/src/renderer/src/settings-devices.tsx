@@ -9,7 +9,7 @@
  * (docs/design/browser-app-2026-10-13.md). Then the devices paired with this one.
  */
 import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
-import { Check, Copy, Globe, Laptop, Server, Smartphone } from "./components/icons";
+import { Check, ChevronDown, Copy, Globe, Laptop, Server, Smartphone } from "./components/icons";
 import { encode } from "uqr";
 import type { BrowserAppStatus, PairedDeviceSummary } from "../../shared/ipc";
 import { patchSettings, useSettings } from "./settings-store";
@@ -48,7 +48,7 @@ export function YourDevicesPrefs() {
         <Card icon={Smartphone} title="Use on your phone" what="Scan a code with it. Your phone sees what needs you and answers it; it runs nothing itself." name="phone">
           <PhoneCode offering={offering} />
         </Card>
-        <Card icon={Laptop} title="Another computer" what="Pair with a code: each opens the other's workspaces. A host (hive host on a server) keeps them, and their agents, running while this computer sleeps." name="computer">
+        <Card icon={Laptop} title="Another computer" what="Pair with a code; each can then open the other's workspaces." name="computer">
           <ComputerCode offering={offering} />
         </Card>
         <Card icon={Globe} title="In a browser on this computer" what="This app, whole, in a browser tab here." name="browser">
@@ -181,6 +181,14 @@ function ComputerCode({ offering }: { offering: Offering }) {
         </div>
       )}
       <EnterLink />
+      <details className="settings-disclosure" data-pairing-how>
+        <summary>How pairing works <ChevronDown size={14} /></summary>
+        <div className="flex flex-col gap-1.5 text-[12px] text-[var(--color-fg3)]">
+          <p>The six words find the other device on this network; the link finds it from anywhere.</p>
+          <p>A host (<code className="font-mono">hive host</code> on a server) keeps your workspaces, and their agents, running while this computer sleeps. It becomes you: it can open, and run agents in, every workspace you own there.</p>
+          <p>Entering another computer's code makes this computer that person.</p>
+        </div>
+      </details>
     </div>
   );
 }
@@ -236,9 +244,6 @@ function EnterLink() {
         />
         <Button size="sm" disabled={!text.trim() || busy} data-pair-go onClick={() => void pair()}>{busy ? "Pairing…" : "Pair"}</Button>
       </div>
-      <p className="text-[12px] text-[var(--color-fg3)]">
-        The six words find the device on this network; the link finds it from anywhere. A host becomes you: it can open, and run agents in, every workspace you own there. Entering another computer's code makes this computer that person.
-      </p>
       {result && (
         <p className={`text-[12px] ${result.ok ? "text-[var(--color-ok)]" : "text-[var(--color-err)]"}`} role={result.ok ? "status" : "alert"} data-pair-result={result.ok ? "paired" : "failed"}>
           {result.message}
@@ -306,7 +311,7 @@ function BrowserApp() {
       <div className="settings-row">
         <div>
           <label>Serve the app to a browser</label>
-          <p>On 127.0.0.1 only. The link carries a key that changes each time the app starts: whoever has it can use your terminals. For another device, put it behind <code>tailscale serve</code> and add the machine's tailnet name below.</p>
+          <p>On 127.0.0.1 only. The link carries a key that changes each time the app starts: whoever has it can use your terminals.</p>
         </div>
         <Switch on={browserApp.enabled} onChange={(v) => patchSettings("browserApp.enabled", v)} label="Serve the app to a browser" />
       </div>
@@ -321,16 +326,20 @@ function BrowserApp() {
         </div>
       )}
       {status?.error && <p className="text-[12px] text-[var(--color-err)]" role="alert" data-browser-app-error>{status.error}</p>}
-      <div className="settings-row">
-        <label htmlFor="browser-app-port">Port</label>
-        <Input id="browser-app-port" className="h-8 w-28" inputMode="numeric" value={port} onChange={(e) => setPort(e.target.value)} onBlur={savePort}
-          onKeyDown={(e) => { if (e.key === "Enter") savePort(); }} />
-      </div>
-      <div className="settings-row">
-        <label htmlFor="browser-app-names">Other names</label>
-        <Input id="browser-app-names" className="h-8 flex-1" placeholder="box.tail1234.ts.net" spellCheck={false} value={names} onChange={(e) => setNames(e.target.value)} onBlur={saveNames}
-          onKeyDown={(e) => { if (e.key === "Enter") saveNames(); }} />
-      </div>
+      <details className="settings-disclosure" data-browser-app-more>
+        <summary>More options <ChevronDown size={14} /></summary>
+        <p className="text-[12px] text-[var(--color-fg3)]">For another device, put the app behind <code>tailscale serve</code> and add the machine's tailnet name under Other names.</p>
+        <div className="settings-row">
+          <label htmlFor="browser-app-port">Port</label>
+          <Input id="browser-app-port" className="h-8 w-28" inputMode="numeric" value={port} onChange={(e) => setPort(e.target.value)} onBlur={savePort}
+            onKeyDown={(e) => { if (e.key === "Enter") savePort(); }} />
+        </div>
+        <div className="settings-row">
+          <label htmlFor="browser-app-names">Other names</label>
+          <Input id="browser-app-names" className="h-8 flex-1" placeholder="box.tail1234.ts.net" spellCheck={false} value={names} onChange={(e) => setNames(e.target.value)} onBlur={saveNames}
+            onKeyDown={(e) => { if (e.key === "Enter") saveNames(); }} />
+        </div>
+      </details>
     </div>
   );
 }
