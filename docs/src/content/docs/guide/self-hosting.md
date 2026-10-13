@@ -3,6 +3,8 @@ title: Self-hosting
 description: Run your own network for hivemind — a relay, a lookup server, admission and push, on one machine.
 ---
 
+**Development preview.** `hive-net` is not in a release yet.
+
 A fresh install uses no servers at all: devices on the same network find each other there, and
 nothing leaves it (**Settings → Servers** reads *Local network*). To reach devices elsewhere —
 a teammate at home, your laptop on the train, a server in the cloud — hivemind needs a way
@@ -21,7 +23,9 @@ that `install.sh` puts beside `hive`, MIT-licensed.
 | **Push** | Tells your phones what happens on your devices while you are away (an agent waiting on you, finished, failed). What it passes on is encrypted to the phone, so it reads none of it, and it passes on only what the devices the phone named have signed. |
 
 `hive-net serve` runs any of them, on **one port**: the lookup server at `/pkarr`, access at
-`/access`, push at `/push`, the relay on the rest. `--all` is all four. A network is described by a **profile**,
+`/access`, push at `/push`, the relay on the rest. `--all` is all four. `--phone <folder>` also serves the
+[phone page](../phone/) at `/phone/`, and `--views <port>` its views on a port of their own; the
+Docker stack does both (views on 3341, or 8443 with a public name). A network is described by a **profile**,
 signed by the network's **admin key**, and handed around as a link (`hivemind://network/…`).
 
 ## On a server with a public name
@@ -217,6 +221,7 @@ it where it sees the devices' own addresses.
 | 443/tcp (or `--bind`) | HTTPS: relay, lookup, access, push. 3340 without a certificate. |
 | 80/tcp (`--http-bind`) | The captive-portal check, with HTTPS. |
 | 7842/udp (`--quic-bind`) | QUIC address discovery, with HTTPS. |
+| 3341 or 8443 (`--views`) | The phone page's views, an origin of their own. |
 | 53 (`--dns-bind`, off) | The lookup server's DNS side, answering for `--domain` once you delegate it there. hivemind's apps do not need it. |
 
 ## Back up

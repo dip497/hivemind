@@ -3,13 +3,15 @@ title: Tool plugins
 description: Add a kind of tile to the app — a pull request panel, a commit browser — drawn by your own code.
 ---
 
-A tool plugin adds a kind of tile. Open it from a frame's **Open** menu, or with
-`hive ctl open-tool <owner>/<name>/<tool>`, and it sits on the board beside terminals and the Code
-tile, in every view. The Browser, Issues and the Code tile are tools that come with the app; the
+**Development preview.** Not in a release yet.
+
+A tool plugin adds a kind of tile. Open it from the toolbar's **Add**, a frame's ⋯ → **Add a tool
+or widget…**, or with `hive ctl open-tool <owner>/<name>/<tool>`, and it sits on the board beside
+terminals and the Code tile, in every view. The Browser, Issues and the Code tile are tools that come with the app; the
 ones you add are written against the same contract.
 
 A tool plugin runs **inside the app**, with the access the app has: your files, your programs and
-your logins. So one you add is off until you switch it on, in **Settings ▸ Plugins ▸ Tools** or
+your logins. So one you add is off until you switch it on, on its page in **Settings ▸ Plugins** or
 with `hive plugins enable tool:<owner>/<name>`. Switch on only what you trust. If one makes the
 app misbehave, start it in safe mode, where none loads: `HIVEMIND_SAFE_MODE=1 hivemind`.
 
@@ -35,6 +37,9 @@ hive ctl open-tool dip497/git-history/history
 hive tools new my-tool        # a starter in ./my-tool, id <your GitHub login>/my-tool
 cd my-tool && hive tools install . && hive plugins enable tool:<you>/my-tool
 ```
+
+The starter's `PROMPT.md` is a brief a coding agent can build the tool from: write what you want
+at the top and hand it the file.
 
 A tool plugin is a folder with `hivemind-tool.json` and an ES module:
 
@@ -65,11 +70,11 @@ A tool plugin is a folder with `hivemind-tool.json` and an ES module:
 - `category` is what it is for: `code`, `git`, `agents`, `productivity`, `monitoring`, `team`, `web`, `fun` or `other` (the default). The Add menu groups tools and widgets by it, and
   HiveHub lists plugins by it.
 - A tool's `icon` is an `.svg` in the folder (32 KB at most), drawn in the menu's text colour
-  wherever the app shows the tool: the Add menu, the Open menu, tabs and Layers. Without one, its
+  wherever the app shows the tool: the Add menu, tabs and Layers. Without one, its
   `glyph` is shown.
 - Each tool is one kind of tile. `needsRepo` hides it in a frame with no repository;
   `singleton` focuses the open one instead of opening a second.
-- `permissions` and `settings` are a view's, word for word ([Views](./views/)): the same
+- `permissions` and `settings` are a view's, word for word ([Extension authoring](../extension-authoring/#permissions)): the same
   permissions, asked for the same way, and the same setting fields, drawn on its Settings page and
   set with `hive plugins set tool:acme/prs state all`.
 
@@ -103,7 +108,7 @@ It imports the app's own React and parts from `hm-plugin://host/`, so it bundles
 |---|---|
 | `tile` | `{ id, kind, name, frameId }` |
 | `hm` | the client a view has (`@hivemind/view-sdk`): the workspace's frames, tiles and names, agents' status and events, commands (`hm.commands.spawnAgent`, `focusTile`…), requests (`hm.prompt`, `hm.agents()`), its settings (`hm.settings`, `hm.on("settings")`) and its saved state, kept per tile (`hm.hello.layout`, `hm.setLayout`). Each is held to the permissions the manifest declares. |
-| `host` | what only a tile has: `repoPath`, `cwd`, `run(bin, args, { maxAgeMs, stdin })` (a program on PATH, in the tile's folder, without a shell), `openFile(path)` in the editor beside it, `openUrl(url)` in the frame's browser |
+| `host` | what only a tile has: `repoPath`, `cwd`, `run(bin, args, { maxAgeMs, stdin })` (a program on PATH, in the tile's folder, without a shell), `openFile(path)` in the frame's Code tile, `openUrl(url)` in the frame's browser |
 | `selected` | it has the person's focus |
 
 `sdk.js` gives `Button`, `PatchView` (a unified diff drawn by the app's diff view), `Markdown` and
@@ -173,8 +178,9 @@ it is started with its own token, made for this run and taken back when it stops
 
 With one workspace picked, `workspace` can be left out of the hello. `hive ctl` run by the service
 uses its token as it is; with several workspaces, set `HIVE_WORKSPACE` to the one each call is
-for. From the app's environment the service gets `PATH`, `HOME`, the locale and the temp folder,
-and nothing else.
+for. From the app's environment the service gets where programs are and who and where you are
+(`PATH`, `HOME`, `USER`, `SHELL`, the locale, `TZ`, the temp and XDG folders), and nothing else:
+no token an agent's terminal carries.
 
 If it exits with an error, it is started again after 1 s, then 2, 4 and so on up to a minute.
 If it exits cleanly, or its grant is taken back in Settings → API access, it stays stopped. It

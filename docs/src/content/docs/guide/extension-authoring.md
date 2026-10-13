@@ -46,7 +46,7 @@ are free.
 
 `hive views install <dir>` validates the manifest and copies it to
 `$XDG_CONFIG_HOME/hivemind/views/<id>`; `hive views list` reports load errors. In the app,
-Settings ▸ Plugins ▸ Installed → Install from folder shows a review step first.
+**Settings ▸ Plugins ▸ Yours → Add a view from a folder** shows a review step first.
 
 ## Publish
 
@@ -94,8 +94,8 @@ caught). `setLayout` gathers saves for 250 ms, as a drag makes many; pass `{ now
 change made in one step, so a view switched away from straight after it keeps it.
 
 The manifest's `"toolbar"` says where the app's toolbar sits over your view: `"top"`,
-`"bottom"` (the default), `"hidden"` behind a handle, or `"off"`. Settings → Views can still
-change it per view.
+`"bottom"` (the default), `"hidden"` behind a handle, or `"off"`. The view's page in Settings ▸
+Plugins (**Toolbar → Display**) can still change it.
 
 
 The hello/structure payload includes the resolved palette (`applyThemeVars`), so chrome

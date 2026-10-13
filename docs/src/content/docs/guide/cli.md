@@ -19,16 +19,16 @@ you supply. See [Getting started](../getting-started/) for runnable examples.
 
 ## Exit codes
 
-| Exit | Meaning |
-|---:|---|
-| 0 | ok |
-| 2 | usage — the error lists valid values |
-| 3 | app not running (canvas verbs) |
-| 4 | timeout (`hive ctl read`) |
-| 5 | not found |
-| 6 | unauthorized |
-| 7 | refused/unsupported — the runtime cannot do this |
-| 1 | other |
+| Exit | `code` in `--json` | Meaning |
+|---:|---|---|
+| 0 | | ok |
+| 2 | `BAD_REQUEST`, `UNKNOWN_METHOD` | usage — the error lists valid values |
+| 3 | `UNAVAILABLE` | neither the app nor `hive host` is running |
+| 4 | `TIMEOUT` | a wait ran out (`read`, `open-review`, `workflow`) |
+| 5 | `NOT_FOUND` | no such tile, frame, issue or workspace |
+| 6 | `FORBIDDEN` | a bad or missing token, or a call the caller may not make |
+| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED` | refused — the runtime cannot do this, or not now |
+| 1 | `FAILED` | other |
 
 ## Issues
 
@@ -75,9 +75,11 @@ hive resolve "text"                     # expand @ID mentions to markdown links
 hive ctl agents [--watch]               # the workspace's agents, their state and what each waits on
 hive ctl frames                         # frames an agent may start in: id, name, machine
 hive ctl spawn [--agent claude] [--prompt "…"] [--name "title"]
-               [--frame id|repo|title] [--mode plan] [--model sonnet]
-               [--no-report] [--supervise all|Bash,Edit]
+               [--frame <id or name>] [--mode plan] [--model sonnet]
+               [--no-report] [--supervise all|Bash,Edit] [--resume <session>]
                                         # → {"tile":…}; workers auto-report by default
+hive ctl sessions [agent] [--cwd dir] [--limit 100]
+                                        # past sessions in a folder, to --resume
 hive ctl send <tileId> "text"
 hive ctl keys <tileId> Down,Enter       # Esc, Tab, digits, …
 hive ctl read <tileId> [--timeout 90s] [--poll]   # default wait 100 s; --poll: no wait
@@ -90,9 +92,9 @@ hive ctl connect <src> <dst>
 hive ctl disconnect <src> [<dst>]
 ```
 
-Run inside an agent's tile, `list` and `frames` answer for that tile's workspace; anywhere
-else, for the one the app's window shows (on a machine running `hive host`, the one it serves,
-when it serves one). Neither needs the window: the app answers them itself.
+Run inside an agent's tile, these act on that agent's workspace, as that agent. Anywhere else
+they act as you, on the workspace `--repo` names, else the open one your folder is in, else the
+only one open. `send` and `close` to a tile no agent runs exit 5.
 
 ## `hive ctl` — plugins
 
@@ -131,7 +133,8 @@ hive ctl workflow --shape fanout|pipeline|mapreduce
                                         # per-worker timeout; blocks until all replies
 hive ctl approve <reqId> allow|deny|always|never [--reason "…"]
 hive ctl report "summary"               # to the tile that spawned you ($HIVEMIND_TILE)
-hive ctl open-review --file plan.md [--cwd dir] [--timeout 30m]   # default ceiling 24 h
+hive ctl open-review --file plan.md [--cwd dir] [--timeout 30m] [--tile id]
+                                        # default ceiling 24 h; --tile from a terminal
 ```
 
 ## `hive ctl` — issue verbs
@@ -148,7 +151,8 @@ hive ctl list-workspaces
 
 ```text
 hive views list                         # installed view plugins + load errors
-hive views install <dir>                # dir with hivemind-view.json; asks the app to rescan
+hive views install <dir>|@owner/name    # a folder with hivemind-view.json, or from HiveHub
+hive views new <name>                   # a starter view in ./<name>, with PROMPT.md
 hive views remove <id>
 
 hive agents list                        # every agent, its source, on/off, and why any failed
@@ -158,6 +162,7 @@ hive agents remove <id>                 # removes the agent from this machine; a
 
 hive widgets list                       # the app's own widgets and the ones you added
 hive widgets install <dir>|@owner/name  # from a folder, or from HiveHub
+hive widgets new <name>                 # a starter widget in ./<name>, with PROMPT.md
 hive widgets remove <id>
 
 hive tools list                         # what each tool contributes: tiles and commands, yours included
@@ -170,6 +175,12 @@ hive plugins show agent:claude          # its settings: each one's value and wha
 hive plugins enable tool:hivemind/web   # or disable
 hive plugins set view:@you/board columns all   # checked against what the setting takes
 hive plugins reset view:@you/board [columns]   # back to its default
+hive plugins workspaces tool:<id> <folder>…    # the workspaces a tool's service drives (hive host)
+
+hive grant create <name> -w <folder> [--role agents] [--expires 30d]
+                                        # a token for one program to drive these workspaces
+hive grant list
+hive grant revoke <id>
 
 hive config path
 hive config get [dotted.path]
@@ -207,15 +218,15 @@ hive host status      # whether it runs, as which device, where it is reached, i
 hive host stop        # stop serving; the terminals keep running in the daemon
 hive host pair        # print six words, a link and a QR code for your app to enter
 hive host pair <code> # or enter the words (quoted) or the link your app shows
-                      #   (Settings → Your devices → Or show a code)
+                      #   (Settings → Your devices → Another computer → Show a code)
 hive host add <dir>   # serve a folder on this machine as one of its workspaces
 hive host install     # run it as a service of yours (systemd): at boot, and again if it stops
 hive host uninstall   # stop running it as a service; its terminals keep running
 ```
 
 The host is the same device the app would be on that machine (it uses the app's keys), so it
-does not run while the app does. Pairing makes it you: in the app, **Settings → Your devices → Pair
-with a device** takes the six words `hive host pair` prints, which find the host on your network, or
+does not run while the app does. Pairing makes it you: in the app, **Settings → Your devices → Another
+computer** takes the six words `hive host pair` prints, which find the host on your network, or
 its link, which finds it from anywhere; from then on **Open recent → On your devices** lists the
 workspaces it serves. A workspace opened from there is yours; its terminals and
 agents run on the host and keep running whatever your computer does.
