@@ -63,5 +63,5 @@ export function registerAgentNotifications(getWin: () => BrowserWindow | null): 
     try { app.dock?.bounce?.(critical ? "critical" : "informational"); } catch { /* macOS only */ }
   };
 
-  on("notify:agent", onNotice);
+  on("notify:agent", onNotice, { local: true });
 }

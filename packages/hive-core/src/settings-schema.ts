@@ -327,6 +327,15 @@ export interface NetworkSettings {
    *  network profile does not name, unless the person browses plugins. */
   updateCheck: boolean;
 }
+/** Settings → Devices, "Open in a browser" (docs/design/browser-app-2026-10-13.md): the app served
+ *  to a browser on 127.0.0.1, off until the person turns it on. */
+export interface BrowserAppSettings {
+  enabled: boolean;
+  /** 1024–65535. Fixed, so a `tailscale serve` set up for it keeps working. */
+  port: number;
+  /** Host names a request may name besides 127.0.0.1 and localhost: the machine's tailnet name. */
+  names: string[];
+}
 export interface Settings {
   v: 1;
   appearance: Appearance;
@@ -335,6 +344,7 @@ export interface Settings {
   agents: AgentsSettings;
   profile: ProfileSettings;
   network: NetworkSettings;
+  browserApp: BrowserAppSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -348,6 +358,7 @@ export const DEFAULT_SETTINGS: Settings = {
   agents: { defaultAgent: "", autoInstall: true, declined: [], fromCatalog: [] },
   profile: { name: "", color: "" },
   network: { updateCheck: true },
+  browserApp: { enabled: false, port: 4483, names: [] },
 };
 
 // ── validation / merge ───────────────────────────────────────────────────────
@@ -528,7 +539,19 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
     },
     profile: profileOf(p.profile, base.profile),
     network: { updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck) },
+    browserApp: browserAppOf(p.browserApp, base.browserApp),
   };
+}
+
+const HOST_NAME_RE = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/;
+
+function browserAppOf(raw: unknown, base: BrowserAppSettings): BrowserAppSettings {
+  const p = isObj(raw) ? raw : {};
+  const port = typeof p.port === "number" && Number.isInteger(p.port) && p.port >= 1024 && p.port <= 65535 ? p.port : base.port;
+  const names = Array.isArray(p.names)
+    ? [...new Set(p.names.filter((n): n is string => typeof n === "string").map((n) => n.trim().toLowerCase()).filter((n) => HOST_NAME_RE.test(n)))].slice(0, 8)
+    : base.names;
+  return { enabled: bool(p.enabled, base.enabled), port, names };
 }
 
 /** A profile as others see it, from anything (settings.json, or someone asking to join): its

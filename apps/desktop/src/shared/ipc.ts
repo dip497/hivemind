@@ -205,6 +205,9 @@ export interface ViewPackageInfo {
 
 // ── full IPC surface ──────────────────────────────────────────────────────
 
+/** Settings → Devices, "Open in a browser": whether the app is served, at which link, or why not. */
+export interface BrowserAppStatus { on: boolean; url: string | null; error: string | null }
+
 export interface HiveIpc {
   // ── workspace layout (main owns it; see main/workspace-store-ipc.ts) ──
   /** The workspace's core layout blob (frames, tiles, membership, names, tabs), or null. */
@@ -409,6 +412,9 @@ export interface HiveIpc {
   handOff(workspace: string, uri: string): Promise<HandedOff>;
   // ── your devices (R14, M3, spec/pairing.md) ───────────────
   /** The person's devices this app paired with. */
+  /** The app in a browser: served or not, and the link that signs a tab in. */
+  browserAppStatus(): Promise<BrowserAppStatus>;
+  onBrowserAppChanged(cb: (status: BrowserAppStatus) => void): () => void;
   devices(): Promise<PairedDeviceSummary[]>;
   /** A device was paired with, or forgotten. */
   onDevicesChanged(cb: () => void): () => void;

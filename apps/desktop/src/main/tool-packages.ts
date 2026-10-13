@@ -10,12 +10,12 @@ import { constants } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { BrowserWindow, dialog, net, protocol } from "electron";
+import { dialog, net, protocol } from "electron";
 import { isPluginEnabled } from "@hivemind/core/plugin-settings";
 import { isToolId, type ToolPackage } from "@hivemind/core/tool-format";
 import { installToolPackage, listToolPackages, removeToolPackage, toolFile } from "@hivemind/core/tool-packages";
 import { handle } from "./app-ipc.js";
-import { appWindowOf } from "./windows.js";
+import { appWindowOf, broadcast } from "./windows.js";
 import { getSettings, reloadSettings } from "./settings-store.js";
 import type { ToolRun, ToolRunResult } from "../shared/ipc.js";
 
@@ -81,7 +81,7 @@ const toolListeners = new Set<() => void>();
 /** Be told each time a tool plugin is added or removed. */
 export const onToolsChanged = (l: () => void): void => { toolListeners.add(l); };
 export const toolsChanged = (): void => {
-  for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send("tools:changed");
+  broadcast("tools:changed");
   for (const l of toolListeners) l();
 };
 
@@ -168,7 +168,7 @@ export function installToolPackageIpc(): void {
     await reloadSettings();
     toolsChanged();
     return { id: pkg.id, name: pkg.name };
-  });
+  }, { local: true });
   handle("tools:remove", async (_e, id: unknown) => {
     if (typeof id !== "string") throw new Error("not a tool plugin");
     await removeToolPackage(id);

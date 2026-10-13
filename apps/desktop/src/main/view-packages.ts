@@ -202,7 +202,7 @@ export function installViewManagementIpc(): void {
     if (result.canceled || !result.filePaths[0]) return null;
     rememberPick("view", result.filePaths[0]);
     return reviewViewDir(result.filePaths[0], false);
-  });
+  }, { local: true });
   handleEffect("views:install", (token) => ({ target: pending && token === pending.token ? pending.id : undefined }), async (_event, token: string) => {
     if (!pending || token !== pending.token) throw new Error("Choose the extension folder again");
     const candidate = pending;

@@ -79,7 +79,7 @@ import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
 import { agentFeed, dialDevice, homeChanged, installNetworkIpc, isYourDevice, joinLink, knownMachines, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
 import { elsewhere, mayWriteShared, onceStarted, placedRun, refusedShared, startedByOthers, wroteShared } from "./shared-workspaces.js";
-import { broadcast, openWindows, registerWindow, userWindow } from "./windows.js";
+import { broadcast, openWindows, registerWindow, tabsOpen, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
@@ -108,6 +108,7 @@ import { askingOf, conversations, LastSaid, transcriptOf } from "@hivemind/host/
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
+import { installBrowserApp } from "./browser-app.js";
 import { fileIn } from "@hivemind/host/repo-paths";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -446,9 +447,9 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
  * renderer-side global error toast is tracked separately (out of scope here
  * because preload + renderer are owned by other agents).
  */
-function wrap<A extends unknown[], R>(
-  fn: (e: Electron.IpcMainInvokeEvent, ...args: A) => Promise<R> | R,
-): (e: Electron.IpcMainInvokeEvent, ...args: A) => Promise<R> {
+function wrap<E, A extends unknown[], R>(
+  fn: (e: E, ...args: A) => Promise<R> | R,
+): (e: E, ...args: A) => Promise<R> {
   return async (e, ...args) => {
     try {
       return await fn(e, ...args);
@@ -545,7 +546,7 @@ on("browser:register", (e, tileId: unknown, webContentsId: unknown, frameId: unk
   if (typeof tileId !== "string" || typeof webContentsId !== "number" || !browserPages.get(e.sender)?.has(webContentsId)) return;
   browserGuests.set(tileId, { webContentsId, frameId: typeof frameId === "string" ? frameId : null, url: typeof url === "string" ? url : "" });
   void writeBrowserTargets();
-});
+}, { local: true });
 /** A page that has gone takes its tile's registration with it (the tile closed, or its tab did). */
 function forgetBrowserPage(pageId: number): void {
   let gone = false;
@@ -580,7 +581,7 @@ handleEffect(
       }
     }
     return await guest.debugger.sendCommand(method, params ?? {});
-  }),
+  }), { local: true },
 );
 
 // Agent-browser settings for the in-app toggle. `active` = is the bridge live
@@ -590,11 +591,11 @@ handle("getBrowserSettings", () => ({
   active: process.env.HIVEMIND_BROWSER_CDP === "1",
   enabled: readSettings().browserCdp === true,
   port: process.env.HIVEMIND_BROWSER_CDP_PORT ?? "9333",
-}));
+}), { local: true });
 handleEffect("setBrowserCdpEnabled", (enabled) => ({ detail: enabled ? "on" : "off" }), wrap(async (_e, enabled: boolean) => {
   await writeSettings({ browserCdp: !!enabled });
   return { ok: true as const };
-}));
+}), { local: true });
 
 // ── notification preferences ──────────────────────────────────────────────
 // The persisted blob lives in settings.json; this module owns the read + the
@@ -630,7 +631,7 @@ handle("relaunchApp", () => {
   else app.relaunch();
   stopServices();
   app.exit(0);
-});
+}, { local: true });
 
 // ── app version + self-update ─────────────────────────────────────────────
 handle("getAppVersion", () => app.getVersion());
@@ -745,7 +746,7 @@ handle("checkForUpdate", async () => {
   } catch {
     return { current, latest: null, updateAvailable: false, ok: false, staged };
   }
-});
+}, { local: true });
 
 // Upgrade-in-place for the IN-APP button: run the same installer `hivemind
 // upgrade` uses, STREAM its output to the renderer (last line of each chunk →
@@ -783,13 +784,13 @@ handleEffect("runUpgrade", () => ({}), () => new Promise<{ ok: boolean; code: nu
   child.stderr?.on("data", relay);
   child.on("error", () => resolve({ ok: false, code: 127 }));
   child.on("close", (code) => resolve({ ok: code === 0, code: code ?? null }));
-}));
+}), { local: true });
 
 // The repo passed on the CLI (`hivemind .`), or null for a bare launch (then
 // the renderer falls back to its persisted last-project).
-handle("getLaunchTarget", (e) => launchTargets.get(e.sender) ?? null);
+handle("getLaunchTarget", (e) => launchTargets.get(e.sender) ?? null, { local: true });
 // A New Window command: another window on the workspace the asking one shows.
-handle("window:new", (e) => createWindow(workspaceShownBy(e.sender)));
+handle("window:new", (e) => createWindow(workspaceShownBy(e.sender)), { local: true });
 
 // findGitRoot + computeRepoPath now live in ./workspace-paths (pure + tested).
 
@@ -814,7 +815,7 @@ handle("pickProjectFolder", async () => {
   if (result.canceled || result.filePaths.length === 0) return null;
   rememberPick("project", result.filePaths[0]!);
   return result.filePaths[0];
-});
+}, { local: true });
 // Initialize a .hivemind/ workspace in `dir` (no terminal needed). Mirrors
 // `hive init --prefix`. Returns the new root path. Renderer then re-resolves
 // the project so the New-issue button + board light up.
@@ -935,7 +936,7 @@ handleEffect("openPathInApp", (repo, target) => ({ target: fileIn(repo, target) 
   }
   const err = await shell.openPath(realResolved); // "" on success
   return err ? { ok: false, error: err } : { ok: true };
-}));
+}), { local: true });
 
 // Diagnostics sink: append render-quality lines to userData/render-diag.log so a
 // blurry-text report becomes a readable trace (incl. over SSH). Best-effort and
@@ -1132,9 +1133,9 @@ const terminals = new Terminals({
     // reads is stripped as a whole.
     record: (tileId, data) => control.recorder.record(tileId, data),
     screenPrefix: REATTACH_RESET,
-    // Every window minimized or hidden: no renderer can paint, so stretch the batching
-    // (backgroundThrottling is off: a backgrounded agent must keep streaming).
-    hidden: () => BrowserWindow.getAllWindows().every((w) => w.isDestroyed() || w.isMinimized() || !w.isVisible()),
+    // Every window minimized or hidden and no browser tab open: no renderer can paint, so stretch
+    // the batching (backgroundThrottling is off: a backgrounded agent must keep streaming).
+    hidden: () => !tabsOpen() && BrowserWindow.getAllWindows().every((w) => w.isDestroyed() || w.isMinimized() || !w.isVisible()),
   },
   askedByHost: (bare) => control.takeSpawned(bare),
   // Who holds each terminal's keyboard, and each session's size, told to every client (M2).
@@ -1513,6 +1514,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     handleViewProtocol();
     handleToolProtocol();
     installSettingsIpc(broadcast);
+    installBrowserApp(path.join(__dirname, "../renderer"), getAppSettings, onSettingsChange);
     installIdentityIpc();
     // The person's other devices run terminals here in this computer's daemon, when it has one.
     // A participant who lends their machine's keyboards, or keeps them again (M4).
@@ -1701,7 +1703,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       } catch {
         return null;
       }
-    });
+    }, { local: true });
 
     // ── Custom-media layers (bring-your-own background + overlay) ─────────────
     // Files the user picks are COPIED into userData/media and served by bare
@@ -1774,7 +1776,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       } catch {
         return null;
       }
-    });
+    }, { local: true });
     // Dev rebuild safety: if a daemon from an older build is still running,
     // replace it BEFORE the renderer attaches tiles, so new sessions carry the
     // current code (HCP/plan hooks + env injection). No-op in prod / when current.
@@ -1853,7 +1855,7 @@ handle(
     clearTimeout(p.timer);
     if (ok) p.resolve(result);
     else p.reject(new ApiError("FAILED", errorMessage || "renderer verb failed"));
-  }),
+  }), { local: true },
 );
 /** View protocol 1.3 host services: the status ledger, presence, and sharing an image. */
 function startViewHost(): void {
@@ -1911,11 +1913,11 @@ function startViewHost(): void {
     const buf = png instanceof ArrayBuffer ? png : ArrayBuffer.isView(png) ? png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) as ArrayBuffer : null;
     if (!buf) throw new Error("not an image");
     return share.prepare(buf);
-  });
+  }, { local: true });
   handle("viewShare:commit", (_e, token: unknown, action: unknown, name: unknown) => {
     if (typeof token !== "string" || (action !== "copy" && action !== "save" && action !== "cancel")) throw new Error("bad share request");
     return share.commit(token, action, typeof name === "string" ? name : "");
-  });
+  }, { local: true });
 }
 
 function startHcpControlPlane(): void {

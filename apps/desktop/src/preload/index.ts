@@ -96,6 +96,12 @@ const api: HiveApi = {
   machineGrant: (workspace) => ipcRenderer.invoke("net:machine-grant", workspace),
   setMachineGrant: (workspace, grant) => ipcRenderer.invoke("net:set-machine-grant", workspace, grant),
   handOff: (workspace, uri) => ipcRenderer.invoke("net:hand-off", workspace, uri),
+  browserAppStatus: () => ipcRenderer.invoke("browserApp:status"),
+  onBrowserAppChanged: (cb) => {
+    const h = (_e: Electron.IpcRendererEvent, status: Parameters<typeof cb>[0]) => cb(status);
+    ipcRenderer.on("browserApp:changed", h);
+    return () => { ipcRenderer.removeListener("browserApp:changed", h); };
+  },
   devices: () => ipcRenderer.invoke("net:devices"),
   onDevicesChanged: (cb) => {
     const h = () => cb();
