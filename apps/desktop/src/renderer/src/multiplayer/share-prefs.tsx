@@ -113,11 +113,11 @@ function Share({ repo }: { repo: string }) {
             </div>
           </div>
         ) : (
-          <Button className="self-start" onClick={() => void create()} disabled={busy} data-share-create><Copy />{busy ? "Making the link…" : "Copy invite link"}</Button>
+          <Button onClick={() => void create()} disabled={busy} data-share-create><Copy />{busy ? "Making the link…" : "Copy invite link"}</Button>
         )}
         {!elsewhere && net?.builtin === "local" && (reaching
           ? <ReachChooser current={net} onChosen={(n) => { setNet(n); setReaching(false); setLink(null); }} onCancel={() => { setReaching(false); setError("Stays on this network: the link works only here."); }} />
-          : <Button size="sm" variant="ghost" className="self-start" onClick={() => setReaching(true)} data-invite-elsewhere>Invite someone elsewhere…</Button>)}
+          : <Button size="sm" variant="ghost" onClick={() => setReaching(true)} data-invite-elsewhere>Invite someone elsewhere…</Button>)}
         {error && <p className="text-[12px] text-[var(--color-err)]" role="alert">{error}</p>}
       </section>
 

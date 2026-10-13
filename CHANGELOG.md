@@ -22,6 +22,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- Settings: a button is as wide as its label on every page, never stretched across it; a field's focus ring is the selection colour, not the theme's accent (Amber read as "waits on you").
+
 - What a widget keeps (a counter's count) is no longer put back by another window or tab that edited the board before it saw the change.
 - An agent busy with its first turn when the terminal service restarts is restored with the rest instead of ending: its screen is saved within 2 seconds even while it keeps printing. The status history keeps each exit's code and signal. Started from the phone, the new agent's screen says "Starting…" until it appears, not the name of the agent shown before.
 - An agent no longer stays "waiting on you" after it went back to its prompt: a wait ends once its screen moves from the chooser to the prompt, however the chooser was answered.
