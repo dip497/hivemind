@@ -1,7 +1,6 @@
 import * as SettingsDialog from "@radix-ui/react-dialog";
 import { ThemePanel } from "./ThemePanel";
 import { RecentProjects } from "./RecentProjects";
-import { ROLE_LABELS } from "./multiplayer/people";
 import { WorkspaceActions } from "./multiplayer/workspace-actions";
 import { AppControls } from "./workspace/app-controls";
 import { useChromeState } from "./workspace/chrome-store";
@@ -211,34 +210,6 @@ export function App() {
     const open = (e: Event) => { setSettingsOpen(false); setMaking((e as CustomEvent<{ kind?: "widget" | "tool" | "view" }>).detail?.kind ?? "widget"); };
     window.addEventListener("hivemind:make-plugin", open);
     return () => window.removeEventListener("hivemind:make-plugin", open);
-  }, []);
-  // Someone asks to join a workspace of the person's, hosted here or on another of their devices:
-  // they let them in, or not. Answered at another window or device, the question goes.
-  const joinAsked = useRef(new Map<string, string | number>());
-  useEffect(() => {
-    const offAsked = window.hive.onJoinRequest((r) => {
-      const key = `${r.repo}#${r.req}`;
-      const answer = (allow: boolean) => {
-        if (!joinAsked.current.delete(key)) return;
-        window.hive.answerJoin(r.repo, r.req, allow);
-      };
-      const who = r.profile.name || "Someone";
-      joinAsked.current.set(key, toast(`${who} wants to join ${r.workspace} as ${ROLE_LABELS[r.role] ?? r.role}`, {
-        duration: Infinity,
-        action: { label: "Allow", onClick: () => answer(true) },
-        cancel: { label: "Deny", onClick: () => answer(false) },
-        onDismiss: () => answer(false),
-        className: "hm-join-request",
-      }));
-    });
-    const offAnswered = window.hive.onJoinAnswered((repo, req) => {
-      const key = `${repo}#${req}`;
-      const id = joinAsked.current.get(key);
-      if (id === undefined) return;
-      joinAsked.current.delete(key);
-      toast.dismiss(id);
-    });
-    return () => { offAsked(); offAnswered(); };
   }, []);
   useEffect(() => {
     const onFolder = () => void pickFolder();

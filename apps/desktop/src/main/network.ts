@@ -52,7 +52,7 @@ import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { elsewhere, forgetShared, handOffTo, leaveShared, machineGrant, openShared, setMachineGrant, sharedLooks, sharedStatus, type SharedStatus } from "./shared-workspaces.js";
 import { Connecting } from "./connecting.js";
 import { connectAnnouncement, enterConnect, parseConnectLink, TAKE_WITHIN_MS, type GuestAnswer } from "@hivemind/workspace-host/connect";
-import type { ConnectAnswer, ConnectEntered, ConnectEntering, PairedDeviceSummary } from "../shared/ipc.js";
+import type { ConnectAnswer, ConnectEntered, ConnectEntering, JoinPreview, PairedDeviceSummary } from "../shared/ipc.js";
 import { GRANTS, type Grant } from "@hivemind/host/machine-share";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
@@ -758,10 +758,16 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     if (j.role !== "owner" || j.ended) continue;
     void openJoined(j.workspace, (event) => server.relay(event)).catch((e: unknown) => console.warn(`[network] ${j.workspace.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`));
   }
-  // What a link offers, to show before joining: null when it is not one.
-  handle("net:join-preview", (_e, text: unknown) => {
-    const link = typeof text === "string" ? parseJoinLink(text) : null;
-    return link && { workspace: link.names.workspace, host: link.names.host };
+  // What a link offers, to show before using it: null when it is none.
+  handle("net:join-preview", (_e, text: unknown): JoinPreview => {
+    if (typeof text !== "string") return null;
+    const join = parseJoinLink(text);
+    if (join) return { kind: "join", workspace: join.names.workspace, host: join.names.host };
+    const connect = parseConnectLink(text);
+    if (connect) return { kind: "connect", name: connect.name };
+    const pair = parsePairLink(text);
+    if (pair) return { kind: "pair", name: pair.name };
+    return parseCode(text) ? { kind: "words" } : null;
   });
 
   // Ask the host a link names to let this person in.
@@ -877,7 +883,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
         ...(g.hosting ? { hosting: g.hosting } : {}),
       });
       void tellDevices();
-      return { as: "guest", workspace: `hive://${g.workspace}`, names: g.names };
+      return { as: "guest", workspace: `hive://${g.workspace}`, role: g.role, names: g.names };
     } finally {
       sure?.(false);
       show(null);

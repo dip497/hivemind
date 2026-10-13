@@ -59,11 +59,18 @@ export interface ConnectEntering {
   theirs: { name: string; color: string } | null;
 }
 
+/** What the join form was given, as `joinPreview` reads it. */
+export type JoinPreview =
+  | { kind: "join"; workspace: string; host: string }
+  | { kind: "connect" | "pair"; name: string }
+  | { kind: "words" }
+  | null;
+
 /** What using an offer came to: this computer is that person's now; or it was let into their
  *  workspace (its `hive://` name); or the words found a host's code, and it paired as pairEnter. */
 export type ConnectEntered =
   | { as: "me"; device: PairedDeviceSummary }
-  | { as: "guest"; workspace: string; names: { workspace: string; host: string } }
+  | { as: "guest"; workspace: string; role: string; names: { workspace: string; host: string } }
   | { as: "paired"; device: PairedDeviceSummary & { took: boolean } };
 
 /** A workspace one of the person's other devices holds. */
@@ -408,7 +415,9 @@ export interface HiveIpc {
   /** An invite link to the workspace `repo` for `role`, for `expiresIn` ms, used once unless `reusable`. */
   share(repo: string, role: "view" | "edit" | "terminals", expiresIn: number, reusable: boolean): Promise<string>;
   /** What an invite link offers, to show before joining; null when the text is not one. */
-  joinPreview(text: string): Promise<{ workspace: string; host: string } | null>;
+  /** What `text` is, before using it: an invite link (whose workspace), another computer's offer
+   *  to connect or a host's pairing link (the device's name), six words, or nothing to use. */
+  joinPreview(text: string): Promise<JoinPreview>;
   /** Ask the host a link names to let this person in: the role they were given, or why not. */
   join(text: string): Promise<{ ok: true; role: string; workspace: string } | { ok: false; error: string; message?: string }>;
   /** Someone asks to join a workspace of this person's (`repo`: as this window names it): answer

@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WorkerPoolContextProvider } from "@pierre/diffs/react";
 import { Toaster } from "sonner";
+import { Requests } from "./multiplayer/requests";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { workerFactory } from "./pierre-worker";
 import { App } from "./App";
@@ -35,6 +36,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       >
         <TooltipProvider delayDuration={200} skipDelayDuration={500}>
           <App />
+          <Requests />
           <Toaster
             theme="dark"
             position="bottom-right"
