@@ -5,7 +5,7 @@
 // `hive/pair/1` gives is the call to the offer with the asking device's key as the peer.
 import { describe, expect, test } from "bun:test";
 import {
-  ConnectOffer, OFFER_TTL_MS, TAKE_WITHIN_MS, WAITING_AT_MOST, connectProof, connectWords, enterConnect,
+  ConnectOffer, OFFER_TTL_MS, TAKE_WITHIN_MS, WAITING_AT_MOST, connectAnnouncement, connectProof, connectWords, enterConnect,
   type ConnectRequest, type Entering, type GuestAnswer,
 } from "../src/connect.ts";
 import { certificateVerifies, certifyDevice, idOf, newSeed, type Seed } from "../src/identity.ts";
@@ -31,13 +31,14 @@ type Offered = ReturnType<typeof offering>;
 /** `joiner` using `o`'s offer, and what its screen showed. */
 function use(joiner: Entering, o: Offered, sure = true) {
   const shown: string[][] = [];
+  const names: string[] = [];
   const sureOf: unknown[] = [];
   const done = enterConnect({
     me: joiner, code: o.offer.code, offering: o.me.device, ask: async (hello) => o.offer.answer(joiner.device, hello),
-    words: (w) => shown.push(w), sure: async (p) => (sureOf.push(p), sure),
+    words: (w, name) => (shown.push(w), names.push(name)), sure: async (p) => (sureOf.push(p), sure),
   });
   done.catch(() => {});
-  return { done, shown, sureOf };
+  return { done, shown, names, sureOf };
 }
 const settle = () => new Promise((r) => setTimeout(r, 0));
 
@@ -57,6 +58,7 @@ describe("it's me", () => {
     expect(request).toMatchObject({ device: laptop.device, name: "Asha's laptop", kind: "app", certificate: laptop.certificate, profile: { name: "Ravi", color: "#aa3300" }, shares: false, addrs: laptop.addrs });
     expect(request.words).toHaveLength(3);
     expect(u.shown).toEqual([request.words]);
+    expect(u.names).toEqual(["Asha's desktop"]);
     expect(o.settled).toEqual([]);
 
     expect(o.offer.itsMe(request.id)).toBe(true);
@@ -88,7 +90,11 @@ describe("it's me", () => {
     expect(o.settled).toEqual([{ with: { device: phone, name: "iPhone", kind: "phone", certificate: taken.yours, addrs: [], relay: null }, person: null }]);
   });
 
-  test("the words are the same on both sides, and new when either side's nonce is", () => {
+  test("an offer is announced by the tag of its code, as pairing's", () => {
+  expect(connectAnnouncement("acorn-actor-adobe-agent-alarm-album")).toBe("hive-connect=ef49cd5e");
+});
+
+test("the words are the same on both sides, and new when either side's nonce is", () => {
     const o = offering();
     const phone = idOf(newSeed());
     const nonceJ = "cd".repeat(16);

@@ -92,17 +92,17 @@ export const pairAnnouncement = (code: string): string => `hive-pair=${pairTag(c
 export const FIND_WITHIN_MS = 10_000;
 
 /**
- * The device on this network offering `code`, from the words alone: the one announcing its tag
- * among the devices `nearby` (hive-net's mDNS) finds, looked for until `withinMs`. None is "not
- * found on this network"; two are refused, since a device that copied the announcement would be
- * one of them.
+ * The device on this network offering a code, from its words alone: the one making one of the
+ * `announced` announcements of it (a pairing's, or an offer to connect's) among the devices
+ * `nearby` (hive-net's mDNS) finds, looked for until `withinMs`, and which one it makes. None is
+ * "not found on this network"; two are refused, since a device that copied the announcement would
+ * be one of them.
  */
-export async function offeringNearby(code: string, nearby: () => Promise<Array<{ id: string; data: string | null }>>, withinMs = FIND_WITHIN_MS): Promise<string> {
-  const announced = pairAnnouncement(code);
+export async function offeringNearby(announced: readonly string[], nearby: () => Promise<Array<{ id: string; data: string | null }>>, withinMs = FIND_WITHIN_MS): Promise<{ id: string; announced: string }> {
   for (const end = Date.now() + withinMs; ; await new Promise((r) => setTimeout(r, 250))) {
-    const offering = (await nearby()).filter((d) => d.data === announced);
+    const offering = (await nearby()).filter((d) => d.data !== null && announced.includes(d.data));
     if (offering.length > 1) throw new PairingFailed("two devices on this network offer that code: ask for a new one");
-    if (offering.length === 1) return offering[0]!.id;
+    if (offering.length === 1) return { id: offering[0]!.id, announced: offering[0]!.data! };
     if (Date.now() >= end) throw new PairingFailed("no device on this network offers that code: check the words, or enter the link");
   }
 }

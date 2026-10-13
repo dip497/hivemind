@@ -50,6 +50,22 @@ export interface ConnectState {
   last: { name: string; as: "me" | "guest" | "refused" } | null;
 }
 
+/** Using another computer's offer to connect, as this computer's window shows it: that computer's
+ *  name and the words both screens show; and, once it says this computer is its person's, who
+ *  that is, for the person here to say whether the words match. */
+export interface ConnectEntering {
+  name: string;
+  words: string[];
+  theirs: { name: string; color: string } | null;
+}
+
+/** What using an offer came to: this computer is that person's now; or it was let into their
+ *  workspace (its `hive://` name); or the words found a host's code, and it paired as pairEnter. */
+export type ConnectEntered =
+  | { as: "me"; device: PairedDeviceSummary }
+  | { as: "guest"; workspace: string; names: { workspace: string; host: string } }
+  | { as: "paired"; device: PairedDeviceSummary & { took: boolean } };
+
 /** A workspace one of the person's other devices holds. */
 export interface DeviceWorkspace { workspace: string; name: string; repo: string }
 
@@ -457,6 +473,12 @@ export interface HiveIpc {
   connectState(): Promise<ConnectState>;
   onConnectChanged(cb: (state: ConnectState) => void): () => void;
   connectAnswer(id: string, answer: ConnectAnswer): Promise<void>;
+  /** Use another computer's offer, its link or its words (the words of a host's code pair with
+   *  it, as pairEnter): `onConnectEntering` says what to show meanwhile, and `connectSure` is the
+   *  person's word that the words match, once that computer says this one is its person's. */
+  connectEnter(text: string): Promise<ConnectEntered>;
+  onConnectEntering(cb: (entering: ConnectEntering | null) => void): () => void;
+  connectSure(yes: boolean): Promise<void>;
   /** The hash of the phone page at `page`, worked out from what its server serves, and of the
    *  page this build goes with (null: a build made without one). */
   phonePage(page: string): Promise<{ served: string; shipped: string | null }>;

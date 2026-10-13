@@ -9,8 +9,9 @@ import { connectProof, type ConnectRequest, type GuestAnswer } from "@hivemind/w
 import { certifyDevice, idOf, newSeed } from "@hivemind/workspace-host/identity";
 import type { Pairing } from "@hivemind/workspace-host/pairing";
 import { ANSWER_WITHIN_MS } from "@hivemind/host/people";
-import { OFFER_TTL_MS, TAKE_WITHIN_MS } from "@hivemind/workspace-host/connect";
-import { Connecting, connectAnnouncement, type ConnectState } from "../../src/main/connecting.ts";
+import { OFFER_TTL_MS, TAKE_WITHIN_MS, connectAnnouncement } from "@hivemind/workspace-host/connect";
+import { Connecting } from "../../src/main/connecting.ts";
+import type { ConnectState } from "../../src/shared/ipc.ts";
 
 const GUEST: GuestAnswer = { workspace: "0f".repeat(16), host: "1e".repeat(32), addrs: [], relay: null, role: "view", names: { workspace: "api", host: "Asha" }, hosting: null };
 

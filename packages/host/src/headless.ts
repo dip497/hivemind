@@ -679,7 +679,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       if (!net) throw new Error("this host is not on the network yet: is hive-net installed beside hive?");
       const on = net;
       // From the words alone, the device offering them on this network; a link says where it is.
-      const offering = link?.device ?? (await offeringNearby(code, () => on.nearby()));
+      const offering = link?.device ?? (await offeringNearby([pairAnnouncement(code)], () => on.nearby())).id;
       const where = link ? { addrs: link.addrs, relay: link.relay } : { addrs: [], relay: null };
       return keep(await enterPairing({ me: me(), code, offering, ask: (hello) => on.pair(offering, where, hello) }));
     },

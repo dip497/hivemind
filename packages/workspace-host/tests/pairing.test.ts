@@ -243,12 +243,16 @@ describe("codes and links", () => {
     const someoneElse = { id: "a".repeat(64), data: pairAnnouncement(newCode()) };
     const quiet = { id: "b".repeat(64), data: null };
     const offering = { id: "c".repeat(64), data: pairAnnouncement(code) };
-    expect(await offeringNearby(code, async () => [someoneElse, quiet, offering], 0)).toBe(offering.id);
+    const mine = [pairAnnouncement(code)];
+    expect(await offeringNearby(mine, async () => [someoneElse, quiet, offering], 0)).toEqual({ id: offering.id, announced: offering.data });
     // It may take a moment to be seen.
     let asked = 0;
-    expect(await offeringNearby(code, async () => (++asked < 3 ? [quiet] : [quiet, offering]), 5_000)).toBe(offering.id);
-    await expect(offeringNearby(code, async () => [someoneElse, quiet], 0)).rejects.toThrow(/no device on this network offers that code/);
-    await expect(offeringNearby(code, async () => [offering, { id: "d".repeat(64), data: offering.data }], 0)).rejects.toThrow(/two devices/);
+    expect((await offeringNearby(mine, async () => (++asked < 3 ? [quiet] : [quiet, offering]), 5_000)).id).toBe(offering.id);
+    await expect(offeringNearby(mine, async () => [someoneElse, quiet], 0)).rejects.toThrow(/no device on this network offers that code/);
+    await expect(offeringNearby(mine, async () => [offering, { id: "d".repeat(64), data: offering.data }], 0)).rejects.toThrow(/two devices/);
+    // Of the announcements looked for, the one the device makes.
+    const connecting = { id: "e".repeat(64), data: `hive-connect=${pairTag(code)}` };
+    expect(await offeringNearby([...mine, connecting.data], async () => [someoneElse, connecting], 0)).toEqual({ id: connecting.id, announced: connecting.data });
   });
 
   test("the words are the spec's list: 256 of them, no two alike in their first four letters", () => {

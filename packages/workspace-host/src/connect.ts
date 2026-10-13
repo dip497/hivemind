@@ -14,7 +14,7 @@ import { profileOf, type ProfileSettings } from "@hivemind/core/settings-schema"
 import { LINK_ROLES, type LinkRole } from "./access.js";
 import { certificateVerifies, certifyDevice, idOf, type DeviceCertificate } from "./identity.js";
 import {
-  admissionOf, CODE_TRIES, isKey, isKind, nameOf, newCode, parseCode, PairingFailed, reachedOf, sameProof, seedOf,
+  admissionOf, CODE_TRIES, isKey, isKind, nameOf, newCode, pairTag, parseCode, PairingFailed, reachedOf, sameProof, seedOf,
   type Admission, type DeviceKind, type PairedKind, type Pairing, type PairingDevice, type Reached,
 } from "./pairing.js";
 import { PAIRING_WORDS } from "./pairing-words.js";
@@ -39,6 +39,9 @@ export function connectWords(code: string, offering: string, entering: string, n
   const mac = createHmac("sha256", code).update(`hive/connect/1 words\n${offering}${entering}${nonceO}${nonceJ}`).digest();
   return [...mac.subarray(0, 3)].map((b) => PAIRING_WORDS[b]!);
 }
+
+/** What the offering app announces (its mDNS user data) while the offer of `code` is open. */
+export const connectAnnouncement = (code: string): string => `hive-connect=${pairTag(code)}`;
 
 export interface ConnectLink extends Reached {
   device: string;
@@ -319,7 +322,8 @@ export async function enterConnect(o: {
   code: string;
   offering: string;
   ask(hello: unknown): Promise<unknown>;
-  words(words: string[]): void;
+  /** The words both screens show, and the offering computer's name. */
+  words(words: string[], name: string): void;
   sure(profile: ProfileSettings): Promise<boolean>;
 }): Promise<Connected> {
   const { me, code, offering } = o;
@@ -333,7 +337,7 @@ export async function enterConnect(o: {
   const name = nameOf(asked.name);
   const cert = asked.certificate;
   if (!name || !isHex(asked.request, 8) || !isHex(asked.nonce, 16) || !certificateVerifies(cert) || cert.device !== offering) throw failed({ error: "malformed" });
-  o.words(connectWords(code, offering, me.device, asked.nonce, nonce));
+  o.words(connectWords(code, offering, me.device, asked.nonce, nonce), name);
 
   const told = (await o.ask({ v: 1, connect: "wait", request: asked.request })) as Record<string, unknown> | null;
   if (!told?.ok) throw failed(told);

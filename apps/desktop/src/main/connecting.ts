@@ -6,15 +6,12 @@
  * host. A new offer voids the last.
  */
 import type { LinkRole } from "@hivemind/workspace-host/access";
-import { ConnectOffer, TAKE_WITHIN_MS, formatConnectLink, type ConnectLink, type ConnectRequest, type GuestAnswer } from "@hivemind/workspace-host/connect";
-import { pairTag, type Admission, type Pairing, type PairingDevice } from "@hivemind/workspace-host/pairing";
+import { ConnectOffer, TAKE_WITHIN_MS, connectAnnouncement, formatConnectLink, type ConnectLink, type ConnectRequest, type GuestAnswer } from "@hivemind/workspace-host/connect";
+import type { Admission, Pairing, PairingDevice } from "@hivemind/workspace-host/pairing";
 import { ANSWER_WITHIN_MS } from "@hivemind/host/people";
 import type { ProfileSettings } from "@hivemind/core/settings-schema";
 import type { ConnectAnswer, ConnectState } from "../shared/ipc.js";
 
-
-/** What a device on this network finds the offer of a code by, from its words alone. */
-export const connectAnnouncement = (code: string): string => `hive-connect=${pairTag(code)}`;
 
 export interface ConnectingOptions {
   /** This app, as connecting needs it. */

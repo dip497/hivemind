@@ -24,7 +24,7 @@ import { parseJoinLink } from "@hivemind/workspace-host/join-link";
 import { JoinedList } from "@hivemind/workspace-host/joined";
 import { NetworkProfiles } from "@hivemind/workspace-host/network-profile";
 import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
-import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, PairingOffer, parseCode, parsePairLink, type PairedWith, type PairingDevice } from "@hivemind/workspace-host/pairing";
+import { enterPairing, formatPairLink, offeringNearby, pairAnnouncement, PairingOffer, parseCode, parsePairLink, type Admission, type PairedWith, type PairingDevice, type PairLink } from "@hivemind/workspace-host/pairing";
 import { askToForget, heldWorkspaces, tellGuestOf, tellPhones } from "@hivemind/host/peer-links";
 import { HostRecords, type Hosted } from "@hivemind/workspace-host/host-records";
 import { Hosting } from "@hivemind/host/hosting";
@@ -51,8 +51,8 @@ import type { TerminalMachine } from "@hivemind/host/terminals";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { elsewhere, forgetShared, handOffTo, leaveShared, machineGrant, openShared, setMachineGrant, sharedLooks, sharedStatus, type SharedStatus } from "./shared-workspaces.js";
 import { Connecting } from "./connecting.js";
-import type { GuestAnswer } from "@hivemind/workspace-host/connect";
-import type { ConnectAnswer } from "../shared/ipc.js";
+import { connectAnnouncement, enterConnect, parseConnectLink, TAKE_WITHIN_MS, type GuestAnswer } from "@hivemind/workspace-host/connect";
+import type { ConnectAnswer, ConnectEntered, ConnectEntering, PairedDeviceSummary } from "../shared/ipc.js";
 import { GRANTS, type Grant } from "@hivemind/host/machine-share";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
@@ -467,6 +467,28 @@ function joinedStatus(workspace: string): ({ names: { workspace: string; host: s
 /** A code this app offers for one of the person's hosts to enter (Settings → Your devices). */
 let offered: PairingOffer | null = null;
 
+/** The person here, asked whether the words match while a computer waits to give its person. */
+let sure: ((yes: boolean) => void) | null = null;
+
+/** Onto another device's network, as its link says: redeeming its voucher, or registering. */
+async function admitTo(admission: Admission): Promise<void> {
+  if (admission.voucher) await networkProfiles().redeem(admission.access, admission.voucher);
+  else await networkProfiles().register(admission.access);
+}
+
+/** Pair with the device `offering`, which offers `code` (its `link`, when one was entered). */
+async function enterPair(code: string, link: PairLink | null, offering: string): Promise<PairedDeviceSummary & { took: boolean }> {
+  const hn = await network();
+  const where = link ? { addrs: link.addrs, relay: link.relay } : { addrs: [], relay: null };
+  // Onto the offering device's network first, as its link says.
+  if (link?.admission) await admitTo(link.admission);
+  const done = await enterPairing({ me: { ...(await pairingMe()), shares: sharesWorkspaces() }, code, offering, ask: (hello) => hn.pair(offering, where, hello) });
+  if (done.person) becomePerson(done.person);
+  const device = { ...done.with, pairedAt: Date.now() };
+  keepPaired(device);
+  return { ...summary(device), took: done.person !== null };
+}
+
 /** The one offer to connect this app makes (Settings → Connect), and the requests made with it. */
 const connecting = new Connecting({
   me: async () => ({ ...(await pairingMe()), profile: await shownProfile() }),
@@ -811,18 +833,60 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     if (!code) throw new Error("pair: that is not a pairing code or link");
     const hn = await network();
     // From the words alone, the device offering them on this network; a link says where it is.
-    const offering = link?.device ?? (await offeringNearby(code, () => hn.nearby()));
+    return enterPair(code, link, link?.device ?? (await offeringNearby([pairAnnouncement(code)], () => hn.nearby())).id);
+  });
+
+  // Use another computer's offer to connect (spec/pairing.md 0.10), by its link or its words; words
+  // a host announces for its code pair with it instead. The windows show the words both screens
+  // show, and, once that computer says this one is its person's, ask the person here whether they
+  // match: it takes the person only on their yes.
+  handleEffect("net:connect-enter", () => ({}), async (_e, text: unknown): Promise<ConnectEntered> => {
+    const link = typeof text === "string" ? parseConnectLink(text) : null;
+    const code = link?.code ?? (typeof text === "string" ? parseCode(text) : null);
+    if (!code) throw new Error("connect: that is not a code or a link to connect with");
+    const hn = await network();
+    const found = link ? null : await offeringNearby([connectAnnouncement(code), pairAnnouncement(code)], () => hn.nearby());
+    if (found && found.announced === pairAnnouncement(code)) return { as: "paired", device: await enterPair(code, null, found.id) };
+    const offering = link?.device ?? found!.id;
     const where = link ? { addrs: link.addrs, relay: link.relay } : { addrs: [], relay: null };
-    // Onto the offering device's network first, as its link says.
-    if (link?.admission) {
-      if (link.admission.voucher) await networkProfiles().redeem(link.admission.access, link.admission.voucher);
-      else await networkProfiles().register(link.admission.access);
+    if (link?.admission) await admitTo(link.admission);
+    let shown: ConnectEntering | null = null;
+    const show = (s: ConnectEntering | null) => { shown = s; broadcast("net:connect-entering", s); };
+    try {
+      const { person: _, ...me } = await pairingMe();
+      const done = await enterConnect({
+        me: { ...me, profile: await shownProfile(), shares: sharesWorkspaces() }, code, offering, ask: (hello) => hn.pair(offering, where, hello),
+        words: (words, name) => show({ name, words, theirs: null }),
+        sure: (theirs) => new Promise<boolean>((resolve) => {
+          // Asked until that computer would no longer give it; no answer is no.
+          const timer = setTimeout(() => settle(false), TAKE_WITHIN_MS - 10_000);
+          const settle = (yes: boolean) => { clearTimeout(timer); if (sure === settle) sure = null; resolve(yes); };
+          sure = settle;
+          show({ ...shown!, theirs });
+        }),
+      });
+      if (done.as === "me") {
+        becomePerson(done.pairing.person!);
+        const device = { ...done.pairing.with, pairedAt: Date.now() };
+        keepPaired(device);
+        return { as: "me", device: summary(device) };
+      }
+      const g = done.guest;
+      joinedList().add({
+        workspace: g.workspace, host: g.host, where: { addrs: g.addrs, relay: g.relay }, role: g.role, names: g.names, joinedAt: Date.now(),
+        ...(g.hosting ? { hosting: g.hosting } : {}),
+      });
+      void tellDevices();
+      return { as: "guest", workspace: `hive://${g.workspace}`, names: g.names };
+    } finally {
+      sure?.(false);
+      show(null);
     }
-    const done = await enterPairing({ me: { ...(await pairingMe()), shares: sharesWorkspaces() }, code, offering, ask: (hello) => hn.pair(offering, where, hello) });
-    if (done.person) becomePerson(done.person);
-    const device = { ...done.with, pairedAt: Date.now() };
-    keepPaired(device);
-    return { ...summary(device), took: done.person !== null };
+  });
+  // The person here says whether the words match, while a computer waits to give its person.
+  handleEffect("net:connect-sure", (yes: unknown) => ({ detail: yes === true ? "yes" : "no" }), (_e, yes: unknown) => {
+    if (!sure) throw new Error("connect: nothing waits on that");
+    sure(yes === true);
   });
 
   // Forget one of the person's devices: its workspaces are no longer listed here.
