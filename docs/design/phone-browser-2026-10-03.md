@@ -1357,3 +1357,8 @@ Before and after at 390×844 are the `ux-*.png` pairs of the rig's scratchpad.
   line its hint is "Or type your own answer" (a question) or "Reply", and what is sent goes through
   the card's guarded answer, so an answer not confirmed is not offered again. Home's Needs cards,
   which have no box of their own, keep theirs (`answers.ts`, `boxed`).
+- The header: back, the name at 17/600 and its state in sans 13 `--text3` (amber while it waits),
+  then Terminal as a 44 px icon and a ⋯ whose menu holds Close (asked before it is done). Stop
+  left the header for the message box: while the agent is in a turn and nothing is typed its
+  button is a stop square; typing makes it Send again, so a follow-up never stops the agent (Happy
+  `packages/happy-app/sources/components/agentInputPrimaryAction.ts:19-30`).

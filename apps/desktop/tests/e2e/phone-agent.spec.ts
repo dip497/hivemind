@@ -39,6 +39,8 @@ const app = {
   tool: async () => ({}),
   answer: async (a, reply) => (window.calls.push(["answer", a.tile, reply]), true),
   send: async (a, text) => (window.calls.push(["send", a.tile, text]), true),
+  stop: async (a) => (window.calls.push(["stop", a.tile]), true),
+  close: async (a) => (window.calls.push(["close", a.tile]), true),
 };
 const screen = new AgentScreen(app);
 document.getElementById("app").append(screen.el);
@@ -95,10 +97,10 @@ test("an agent that keeps no conversation the phone can read opens in its termin
   await show(page, overview(agent("t1", "Claude"), unread));
   await open(page, "t2");
   await expect(page.locator("[data-screen=agent] [data-terminal]")).toBeVisible();
-  await expect(flip).toHaveText("Chat");
+  await expect(flip).toHaveAttribute("aria-label", "Chat");
   await open(page, "t1");
   await expect(page.locator("[data-screen=agent] [data-terminal]")).toBeHidden();
-  await expect(flip).toHaveText("Terminal");
+  await expect(flip).toHaveAttribute("aria-label", "Terminal");
 });
 
 test("a question its agent asks shows each option with what it means, chosen by its place, and a line typed for anything else; never Allow or Deny", async () => {
@@ -166,4 +168,42 @@ test("one place to type: while a question waits, the message box offers the pers
   await box.fill("Thanks");
   await page.locator("[data-message] button[type=submit]").click();
   await expect.poll(said).toEqual([["answer", "t1", { text: "Purple" }], ["send", "t1", "Thanks"]]);
+});
+
+test("the header is the agent's name and state in plain words, Terminal as an icon and a ⋯ holding Close; Stop is the message box's button while it works and nothing is typed", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await screen();
+  await show(page, overview(agent("t1", "Claude", { state: "working" })));
+  await open(page, "t1");
+  const bar = page.locator("[data-screen=agent] .backbar");
+  const size = (sel: string) => bar.locator(sel).evaluate((el) => { const r = el.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });
+  expect(await size("[data-back]")).toEqual([44, 44]);
+  expect(await size("[data-view-toggle]")).toEqual([44, 44]);
+  expect(await size("[data-more]")).toEqual([44, 44]);
+  await expect(bar.locator("[data-view-toggle]")).toHaveText("");
+  const font = (sel: string) => bar.locator(sel).evaluate((el) => { const c = getComputedStyle(el); return [c.fontSize, c.fontWeight, c.fontFamily.split(",")[0]]; });
+  expect(await font("h1")).toEqual(["17px", "600", "Geist"]);
+  expect(await font(".status")).toEqual(["13px", "400", "Geist"]);
+  expect(await bar.locator(".status").evaluate((el) => getComputedStyle(el).color)).toBe(await page.evaluate(() => { const p = document.createElement("p"); p.style.color = "var(--text3)"; document.body.append(p); return getComputedStyle(p).color; }));
+  // Close is in the ⋯, asked before it is done.
+  await expect(bar.locator("[data-close]")).toBeHidden();
+  await expect(bar.locator("[data-stop]")).toHaveCount(0);
+  await bar.locator("[data-more]").click();
+  await page.locator("[data-screen=agent] [data-close]").click();
+  await page.locator("[data-close-ask] [data-yes]").click();
+  const did = () => page.evaluate(() => (window as unknown as { calls: string[][] }).calls.filter((c) => c[0] !== "conversation"));
+  await expect.poll(did).toEqual([["close", "t1"]]);
+  // At work and nothing typed: the box's button stops it. Typing makes it send again.
+  const button = page.locator("[data-message] button");
+  await expect(button).toHaveAttribute("aria-label", "Stop");
+  await button.click();
+  await expect.poll(did).toEqual([["close", "t1"], ["stop", "t1"]]);
+  await page.locator("[data-message] textarea").fill("and the docs");
+  await expect(button).toHaveAttribute("aria-label", "Send");
+  await button.click();
+  await expect.poll(did).toEqual([["close", "t1"], ["stop", "t1"], ["send", "t1", "and the docs"]]);
+  // Idle, there is nothing to stop.
+  await show(page, overview(agent("t1", "Claude", { state: "idle" })));
+  await expect(button).toHaveAttribute("aria-label", "Send");
+  await expect(button).toBeDisabled();
 });

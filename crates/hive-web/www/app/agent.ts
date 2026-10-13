@@ -1,11 +1,11 @@
 // One agent (the Android app's AgentScreen): its chat, or its terminal a tap away; what it waits on
-// as a card above the reply box, where the thumb is, the box its one place to type; Stop while it
-// is in a turn.
+// as a card above the reply box, where the thumb is, the box its one place to type, its button Stop
+// while the agent is in a turn and nothing is typed; Close in the header's ⋯.
 
 import type { App } from "./app.js";
 import { type Answers, answers } from "./answers.js";
 import { Chat } from "./chat.js";
-import { Ask, composer, h, icon, pill, say } from "./dom.js";
+import { Ask, type Composer, composer, h, icon, iconButton, say } from "./dom.js";
 import { TerminalView } from "./terminal.js";
 import type { Agent, Overview } from "./types.js";
 import { NOTICES, ago, kindLabel, stateLabel, where } from "./words.js";
@@ -14,17 +14,18 @@ export class AgentScreen {
   readonly el = h("section", { class: "screen agent-screen", "data-screen": "agent" });
   private readonly title = h("h1", {});
   private readonly dot = h("span", { class: "dot" });
-  private readonly sub = h("span", { class: "status mono" });
-  private readonly stop = pill("Stop", () => void this.stopIt(), "danger compact", { "data-stop": "" });
+  private readonly sub = h("span", { class: "status" });
   private readonly closing = new Ask("Close", () => void this.closeIt(), { "data-close-ask": "" });
   private body: HTMLElement = h("div", {});
   private readonly dock = h("div", { class: "dock" });
   private readonly waits = h("div", { "data-waits": "" });
   private readonly gone = h("p", { class: "quiet", hidden: true }, NOTICES.notRunning);
   private readonly message: HTMLTextAreaElement;
-  private readonly composing: HTMLFormElement;
+  private readonly composing: Composer;
   private readonly term = new TerminalView();
-  private readonly flip = pill("Terminal", () => this.showTerminal(!this.terminal), "compact", { "data-view-toggle": "" });
+  private readonly flip = iconButton("agents", "Terminal", () => this.showTerminal(!this.terminal), { "data-view-toggle": "" });
+  /** What the ⋯ holds. */
+  private readonly menu = h("div", { class: "card menu", role: "menu", hidden: true });
   /** Whether its terminal shows, rather than its chat. */
   private terminal = false;
   private tile: string | null = null;
@@ -40,13 +41,21 @@ export class AgentScreen {
   constructor(private readonly app: App) {
     const back = h("button", { type: "button", class: "back", "aria-label": "Back", "data-back": "" }, icon("back"));
     back.addEventListener("click", () => app.back());
+    const close = h("button", { type: "button", role: "menuitem", "data-close": "" }, "Close");
+    close.addEventListener("click", () => {
+      this.menu.hidden = true;
+      if (this.agent) this.closing.ask(`Close ${this.agent.agent}? It stops, and its tile closes on ${app.computer()}.`);
+    });
+    this.menu.append(close);
+    const more = iconButton("more", "More", () => (this.menu.hidden = !this.menu.hidden), { "data-more": "" });
+    this.el.addEventListener("click", () => (this.menu.hidden = true));
     this.el.append(
-      h("header", { class: "backbar" }, back, h("div", { class: "what" }, this.title, h("p", { class: "sub" }, this.dot, this.sub)), this.flip, this.stop,
-        pill("Close", () => this.agent && this.closing.ask(`Close ${this.agent.agent}? It stops, and its tile closes on ${app.computer()}.`), "compact", { "data-close": "" })),
+      h("header", { class: "backbar" }, back, h("div", { class: "what" }, this.title, h("p", { class: "sub" }, this.dot, this.sub)), this.flip, more, this.menu),
       this.gone,
       this.body,
       this.dock);
-    const message = composer("Message", (text) => (this.typed ? this.typed.send(text) : this.agent ? app.send(this.agent, text) : Promise.resolve(false)), { "data-message": "" });
+    const message = composer("Message", (text) => (this.typed ? this.typed.send(text) : this.agent ? app.send(this.agent, text) : Promise.resolve(false)), { "data-message": "" },
+      () => void this.stopIt());
     this.message = message.querySelector("textarea")!;
     this.composing = message;
     this.dock.append(this.closing.el, this.waits, message);
@@ -67,7 +76,8 @@ export class AgentScreen {
     say(this.title, "");
     say(this.sub, "");
     delete this.dot.dataset.state;
-    this.stop.hidden = true;
+    this.composing.stoppable(false);
+    this.menu.hidden = true;
     this.waitSig = "";
     this.typed = null;
     this.waits.replaceChildren();
@@ -76,7 +86,7 @@ export class AgentScreen {
     this.place(this.chat.el);
     this.composing.hidden = false;
     this.waits.hidden = false;
-    say(this.flip, "Terminal");
+    this.flipTo(false);
     if (o) this.show(o);
   }
 
@@ -104,7 +114,7 @@ export class AgentScreen {
       this.dot.dataset.state = a.state;
       say(this.sub, [stateLabel(a.state), where(a.name, a.machine)].join(" · "));
       this.sub.classList.toggle("waits", a.state === "waiting");
-      this.stop.hidden = !(a.interrupt && (a.state === "working" || a.state === "waiting"));
+      this.composing.stoppable(!!a.interrupt && (a.state === "working" || a.state === "waiting"));
     }
     this.showWait(a);
     const hint = this.typed?.hint ?? `Message ${a.agent}`;
@@ -130,13 +140,21 @@ export class AgentScreen {
     const a = this.agent;
     if (on === this.terminal || !a || !this.chat) return;
     this.terminal = on;
-    say(this.flip, on ? "Chat" : "Terminal");
+    this.flipTo(on);
     this.composing.hidden = on;
     // The terminal shows the chooser itself; the header still says it waits.
     this.waits.hidden = on;
     this.place(on ? this.term.el : this.chat.el);
     if (on) this.term.watch(this.app, a.workspace, a.tile);
     else this.term.unwatch();
+  }
+
+  /** The header's button: to the chat from the terminal, to the terminal from the chat. */
+  private flipTo(terminal: boolean): void {
+    const label = terminal ? "Chat" : "Terminal";
+    if (this.flip.getAttribute("aria-label") === label) return;
+    this.flip.setAttribute("aria-label", label);
+    this.flip.replaceChildren(icon(terminal ? "chat" : "agents"));
   }
 
   private place(el: HTMLElement): void {

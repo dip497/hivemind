@@ -268,6 +268,7 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
 
   // Closed from the browser, once asked and confirmed: the computer closes it, as that device, and
   // Back leads to the list it was started from.
+  await page.locator('[data-screen="agent"] [data-more]').click();
   await page.locator('[data-screen="agent"] [data-close]').click();
   await expect(page.locator("[data-close-ask]")).toHaveText(/^Close .+\? It stops, and its tile closes on .+\./);
   await page.locator("[data-close-ask] [data-yes]").click();
