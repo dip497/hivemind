@@ -6,11 +6,11 @@ import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-/** Settings → Share, for the workspace the window shows. */
+/** Settings → People, for the workspace the window shows. */
 export async function openShare(page: Page): Promise<void> {
   // As the toolbar's and the Layers panel's Settings buttons do: a view may show either, or neither.
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: {} })));
-  await page.locator('[data-settings-page="share"]').click();
+  await page.locator('[data-settings-page="people"]').click();
 }
 
 export const HIVE_NET = path.resolve("../../crates/hive-net/target/debug/hive-net");

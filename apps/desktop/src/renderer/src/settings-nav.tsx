@@ -7,9 +7,9 @@ import { getAgentEntries } from "./agent-plugins";
 import { useViews } from "./workspace/workspace-view";
 import { useWidgetPackages } from "./board-objects/widget-runtime";
 import { getToolPackages } from "./tiles/tool-plugins";
-import { SETTINGS_GROUPS, SETTINGS_PAGES, pluginPage, type SettingsGroup } from "./settings-registry";
+import { SETTINGS_NAV, SETTINGS_PAGES, pluginPage, type SettingsGroup } from "./settings-registry";
 
-export interface SettingsNavItem { id: string; label: string; icon: ReactNode }
+export interface SettingsNavItem { id: string; label: string; hint?: string; icon: ReactNode }
 export interface SettingsNavGroup { group: SettingsGroup; items: SettingsNavItem[] }
 
 /** Name for any agent Hivemind knows, including ones switched off. */
@@ -25,9 +25,9 @@ export const toolLabel = (pluginId: string): string =>
 export function useSettingsNav(): { groups: SettingsNavGroup[]; titleOf: (id: string) => string; describe: (id: string) => string; selected: (page: string) => string } {
   const views = useViews();
   const widgets = useWidgetPackages();
-  const groups = SETTINGS_GROUPS.map((group) => ({
+  const groups = SETTINGS_NAV.map(({ group, pages }) => ({
     group,
-    items: SETTINGS_PAGES.filter((p) => p.group === group).map((p) => ({ id: p.id, label: p.label, icon: <p.icon size={16} /> })),
+    items: pages.map((p) => ({ id: p.id, label: p.label, hint: p.hint, icon: <p.icon size={16} /> })),
   }));
   const titleOf = (id: string): string => {
     const fixed = SETTINGS_PAGES.find((p) => p.id === id);

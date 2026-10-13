@@ -14,7 +14,7 @@ import type { Grant } from "@hivemind/host/machine-share";
 import type { ClientGrant, NewGrant } from "@hivemind/workspace-api/grants";
 export type { Grant };
 
-/** One of the person's other devices, as Settings → Devices lists it (R14, spec/pairing.md). */
+/** One of the person's other devices, as Settings → Your devices lists it (R14, spec/pairing.md). */
 export interface PairedDeviceSummary {
   device: string;
   name: string;
@@ -182,7 +182,7 @@ export interface UpdateStatus {
    *  False on offline / timeout / rate-limit — the renderer must NOT treat a
    *  false-ok result as "up to date" or persist it over a known-good state. */
   ok: boolean;
-  /** The check is off (Settings → Network): nothing was asked. */
+  /** The check is off (Settings → About and updates): nothing was asked. */
   off?: boolean;
   /** A version already downloaded and waiting for a restart to become the one that
    *  runs (the installer could not replace a live app), when it is newer than this one.
@@ -205,7 +205,7 @@ export interface ViewPackageInfo {
 
 // ── full IPC surface ──────────────────────────────────────────────────────
 
-/** Settings → Devices, "Open in a browser": whether the app is served, at which link, or why not. */
+/** Settings → Your devices, "In a browser on this computer": whether the app is served, at which link, or why not. */
 export interface BrowserAppStatus { on: boolean; url: string | null; error: string | null }
 
 export interface HiveIpc {
@@ -419,7 +419,7 @@ export interface HiveIpc {
   /** A device was paired with, or forgotten. */
   onDevicesChanged(cb: () => void): () => void;
   /** A code for another of your devices to enter (a host's `hive host pair <link>`, another
-   *  computer's Settings → Devices, or a phone scanning its link): it takes your person, or, a
+   *  computer's Settings → Your devices, or a phone scanning its link): it takes your person, or, a
    *  phone, a certificate naming it as yours. `page`: the link inside the address of the phone
    *  page, when the network's server serves one, for a phone to open in its browser. */
   pairOffer(): Promise<{ code: string; link: string; page?: string; expires: number }>;

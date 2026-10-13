@@ -414,7 +414,7 @@ function joinedStatus(workspace: string): ({ names: { workspace: string; host: s
   return { names: joined.names, state: joined.ended ?? live?.state ?? "offline", access: live?.access ?? joined.role };
 }
 
-/** A code this app offers for one of the person's hosts to enter (Settings → Devices). */
+/** A code this app offers for one of the person's hosts to enter (Settings → Your devices). */
 let offered: PairingOffer | null = null;
 
 /** This app, as pairing needs it: it gives the person it holds, and a phone the network it is on. */
@@ -458,7 +458,7 @@ export function isYourDevice(device: string): boolean {
 /** Connect to one of the person's computers or hosts, where it said it is reached when it paired. */
 export async function dialDevice(device: string): Promise<Link> {
   const d = placesToRun().find((x) => x.device === device);
-  if (!d) throw new Error("that device is not one of yours: pair it under Settings → Devices");
+  if (!d) throw new Error("that device is not one of yours: pair it under Settings → Your devices");
   return (await network()).dial(device, { addrs: d.addrs, relay: d.relay });
 }
 
@@ -624,7 +624,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     });
   } catch { /* hive-net is not installed: there is no network to change */ }
 
-  // This device's network (Settings → Network): which it is, whether its servers answer, and
+  // This device's network (Settings → Servers): which it is, whether its servers answer, and
   // another to use.
   handle("net:network", () => networkProfiles().active());
   handle("net:network-health", () => networkProfiles().health());
@@ -662,11 +662,11 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
   handle("net:shared-status", (_e, workspace: unknown) => (typeof workspace === "string" ? joinedStatus(workspace) : null));
   handle("net:shared-looks", (_e, workspace: unknown) => (typeof workspace === "string" ? sharedLooks(workspace) : null));
 
-  // The person's devices this app paired with (Settings → Devices).
+  // The person's devices this app paired with (Settings → Your devices).
   handle("net:devices", () => pairedDevices().list().map(summary));
 
   // A code for another of the person's devices to enter (a host's `hive host pair <link>`, or
-  // another computer's Settings → Devices): this app gives its person.
+  // another computer's Settings → Your devices): this app gives its person.
   handleEffect("net:pair-offer", () => ({}), async () => {
     const me = await pairingMe();
     // The phone page, where the relay's server serves it: a phone without hivemind opens the link

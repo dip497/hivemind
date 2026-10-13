@@ -18,7 +18,7 @@ tab, and it behaves as a window of the app: same build, same host, realtime.
 1. One host. Main serves `out/renderer` and one WebSocket with the IPC contract (calls, events,
    terminal streams). No browser-only UI logic. The dev-bridge goes, with `dev:bridge`.
 2. The port is remote control of the person's terminals. 127.0.0.1 only, off until turned on in
-   Settings → Devices, a random token per launch carried in the URL's fragment and traded for an
+   Settings → Your devices, a random token per launch carried in the URL's fragment and traded for an
    HttpOnly SameSite=Strict cookie, checked on every request and on the upgrade; Host and Origin
    checked against DNS rebinding; constant-time compares. Other devices reach it only through the
    person's Tailscale (`tailscale serve`) or hive-net serve, never a 0.0.0.0 bind.
@@ -240,7 +240,7 @@ Each step is a commit with a test that fails first (test-audit gate, mutation no
    it, and `src/browser/` (the socket port, the replica, settings before boot, ack pacing,
    reconnect). Unit: the adapter over the real server in Node: a call answers, an event arrives,
    a terminal's output is acked cumulatively, an unserved channel's member is absent.
-4. **Settings → Devices, "Open in a browser"**: switch, port, names, the URL with a copy button,
+4. **Settings → Your devices, "In a browser on this computer"**: switch, port, names, the URL with a copy button,
    the bind error. Setting `browserApp: {enabled, port, names}`; main starts and stops the server
    as it changes.
 5. **Local-only calls in the tab**: `HiveApi` members optional; each site hides or takes the

@@ -114,7 +114,7 @@ tile bodies live in the TileHost and are never remounted by a view.
   the file name only as their accessible name) — wait on state, never on time.
 - The harness (`pnpm test:e2e:harness`, `playwright.harness.config.ts`) runs the canvas, terminal,
   git and issue specs in a browser tab on the app: `tests/e2e/helpers/window.ts` launches the app,
-  turns on Settings → Devices, "Open in a browser", and opens its link in Chromium, so the spec
+  turns on Settings → Your devices, "In a browser on this computer", and opens its link in Chromium, so the spec
   drives the renderer over the browser server's socket. A spec in it asks only the window
   (`window.hive`), never Electron's main. Set `HIVE_HARNESS_CHROMIUM` to a Chromium binary when
   Playwright's own is not installed (in the cloud containers: `/opt/pw-browsers/chromium`).

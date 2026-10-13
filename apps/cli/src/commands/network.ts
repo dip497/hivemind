@@ -1,5 +1,5 @@
 /**
- * `hive network` (R16): this computer's network, as Settings → Network shows it. The profile is the
+ * `hive network` (R16): this computer's network, as Settings → Servers shows it. The profile is the
  * app's (`network/profile` in its data folder), verified by hive-net; a running app starts its
  * network again when it changes.
  *
@@ -111,7 +111,7 @@ const enrolLinkCmd = defineCommand({
     const r = spawnSync(bin, ["access", "enrol-link", profile, "--admin", admin, "--uses", String(uses), "--expires-in", String(ms / 1000)], { encoding: "utf8" });
     if (r.status !== 0) return err(ctx, "refused", (r.stderr || r.error?.message || "hive-net failed").trim());
     const link = r.stdout.trim();
-    return ok(ctx, { link, uses, expires: Date.now() + ms }, () => `${link}\nenrols ${uses === 1 ? "one device" : `${uses} devices`} for ${args.expires ?? "7d"}: \`hive network use <link>\` there, or Settings → Network → Change…`);
+    return ok(ctx, { link, uses, expires: Date.now() + ms }, () => `${link}\nenrols ${uses === 1 ? "one device" : `${uses} devices`} for ${args.expires ?? "7d"}: \`hive network use <link>\` there, or Settings → Servers → Change…`);
   },
 });
 

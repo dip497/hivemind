@@ -1,8 +1,8 @@
 import { ProfilePrefs } from "./settings-profile";
-import { SharePrefs } from "./multiplayer/share-prefs";
-import { NetworkPrefs } from "./settings-network";
-import { DevicesPrefs } from "./settings-devices";
-import { ProgramsPrefs } from "./settings-programs";
+import { PeoplePrefs } from "./multiplayer/share-prefs";
+import { ServersPrefs } from "./settings-network";
+import { YourDevicesPrefs } from "./settings-devices";
+import { ApiAccessPrefs } from "./settings-programs";
 import { PluginPage } from "./plugins/PluginPage";
 import { PluginsHome } from "./plugins/PluginsHome";
 /**
@@ -169,7 +169,7 @@ const NavigateContext = createContext<(id: string) => void>(() => {});
 export const useSettingsNavigate = (): ((id: string) => void) => useContext(NavigateContext);
 
 /** Must match the registry's `chunk: "lazy"` pages (unit tested); plugin pages (`agent:…`) are always lazy. */
-export const LAZY_SETTINGS_PAGES = ["profile", "share", "network", "devices", "programs", "appearance", "shortcuts", "plugins"] as const;
+export const LAZY_SETTINGS_PAGES = ["profile", "appearance", "shortcuts", "people", "your-devices", "api", "plugins", "servers"] as const;
 
 export default function SettingsPages({ page, navigate }: { page: string; navigate: (id: string) => void }) {
   return <NavigateContext.Provider value={navigate}>{renderPage(page)}</NavigateContext.Provider>;
@@ -177,10 +177,10 @@ export default function SettingsPages({ page, navigate }: { page: string; naviga
 
 function renderPage(page: string) {
   if (page === "profile") return <ProfilePrefs />;
-  if (page === "share") return <SharePrefs />;
-  if (page === "network") return <NetworkPrefs />;
-  if (page === "devices") return <DevicesPrefs />;
-  if (page === "programs") return <ProgramsPrefs />;
+  if (page === "people") return <PeoplePrefs />;
+  if (page === "your-devices") return <YourDevicesPrefs />;
+  if (page === "api") return <ApiAccessPrefs />;
+  if (page === "servers") return <ServersPrefs />;
   if (page === "appearance") return <AppearancePrefs />;
   if (page === "shortcuts") return <ShortcutPrefs />;
   if (page === "plugins") return <PluginsHome />;

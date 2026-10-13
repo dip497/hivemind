@@ -1,6 +1,6 @@
 // The phone apps against a real computer (docs/design/phone-app-2026-10-02.md §7): the Android app
 // on an emulator, or the iOS app on a simulator, pairs with the desktop app by the link its Settings
-// → Devices → Pair a phone shows, and drives an agent there. This is the computer's side, once for
+// → Your devices → Use on your phone shows, and drives an agent there. This is the computer's side, once for
 // both platforms: the desktop with the workspace `api` and a stand-in agent asked something at the
 // computer; the link; the platform's own UI test, run with the link and told what to find there
 // (apps/android/maestro/computer, or HivePhoneUITests/ComputerUITests); and what the computer shows
@@ -157,7 +157,7 @@ test("the phone app pairs with the computer by the link it shows, finds it and i
   const installed = spawnSync("bun", [CLI, "views", "install", VIEW, "--json"], { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: path.join(root, "desktop") } });
   expect(installed.status, installed.stdout + installed.stderr).toBe(0);
 
-  // Pair a phone: the link, and the phone's own UI test with it, told what it should find there.
+  // Use on your phone: the link, and the phone's own UI test with it, told what it should find there.
   const told: Told = {
     PAIR_LINK: await offerPhonePairing(desktop),
     PAIR_PERSON: "Priya",
@@ -177,7 +177,7 @@ test("the phone app pairs with the computer by the link it shows, finds it and i
   expect(ran.code, `the phone's UI test (its output: ${testInfo.outputPath(platform!)}):\n${ran.tail}`).toBe(0);
 
   // The computer lists the phone among the person's devices, as a phone.
-  await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "devices" } })));
+  await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
   await expect(desktop.locator('[data-devices] [data-device-kind="phone"]')).toHaveCount(1, { timeout: 30_000 });
   // What the phone sent is what the agent heard, as the person's, once; and it answered.
   await expect.poll(() => said(home), { timeout: 30_000 }).toContainEqual(["agent", told.PAIR_ANSWER]);

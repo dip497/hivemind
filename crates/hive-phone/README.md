@@ -8,7 +8,7 @@ fails if it ever links them again.
 
 ```bash
 hive-phone id                         # this phone's id (its device key, made the first time)
-hive-phone pair 'hivemind://pair/…'   # the link under Settings → Devices on your computer
+hive-phone pair 'hivemind://pair/…'   # the link under Settings → Your devices on your computer
 hive-phone devices                    # the person's devices this phone paired with, and whose
                                       # they are (their name and colour, from their app)
 hive-phone network                    # the network it reaches them through (the app's), if any

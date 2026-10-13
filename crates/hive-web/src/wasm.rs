@@ -160,7 +160,8 @@ pub async fn pair(seed: Vec<u8>, link: String, name: String) -> Result<JsValue, 
     let key = key_of(&seed)?;
     let link = pairing::parse_link(&link).ok_or_else(|| {
         err(Failure::Invalid(
-            "that is not a pairing link: copy it from Settings → Devices → Pair a phone".into(),
+            "that is not a pairing link: copy it from Settings → Your devices → Use on your phone"
+                .into(),
         ))
     })?;
     let relay = link.relay.clone().ok_or_else(|| {

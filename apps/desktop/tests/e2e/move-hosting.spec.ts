@@ -98,7 +98,7 @@ async function sharedAndPaired(profile?: string) {
       if (nl >= 0) resolve((JSON.parse(out.slice(0, nl)) as { data: { offer: { link: string } } }).data.offer);
     });
   });
-  await laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "devices" } })));
+  await laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
   await laptop.locator("[data-pair-link]").fill(offer.link);
   await laptop.locator("[data-pair-go]").click();
   await expect(laptop.locator('[data-pair-result="paired"]')).toBeVisible({ timeout: 20_000 });

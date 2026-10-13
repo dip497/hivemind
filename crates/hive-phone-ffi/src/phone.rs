@@ -73,7 +73,7 @@ impl Phone {
         on_runtime(async move {
             let link = pairing::parse_link(&link).ok_or_else(|| {
                 PhoneError::Invalid(
-                    "that is not a pairing link: it is the one under Settings → Devices on your computer"
+                    "that is not a pairing link: it is the one under Settings → Your devices on your computer"
                         .into(),
                 )
             })?;

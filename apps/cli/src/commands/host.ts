@@ -173,7 +173,7 @@ const statusCmd = defineCommand({
 const pairCmd = defineCommand({
   meta: { name: "pair", description: "Make this host one of your devices: print a code for your app, or enter the code it shows" },
   args: {
-    link: { type: "positional", required: false, description: "the six words (quoted) or the link your app shows (Settings → Devices → Show a code)" },
+    link: { type: "positional", required: false, description: "the six words (quoted) or the link your app shows (Settings → Your devices → Show a code)" },
     json: { type: "boolean" },
   },
   async run({ args }) {
@@ -198,7 +198,7 @@ const pairCmd = defineCommand({
     if (ctx.json) console.log(JSON.stringify({ ok: true, data: { offer } }));
     else {
       process.stdout.write([
-        "On your computer: Settings → Devices → Pair with a host, and enter",
+        "On your computer: Settings → Your devices → Another computer, and enter",
         "",
         `  ${offer.code.split("-").join(" ")}`,
         "",

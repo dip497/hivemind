@@ -1,7 +1,7 @@
-// Settings → Network (R16, R13, design §13.2–13.3): a fresh install is on the local network, with
+// Settings → Servers (R16, R13, design §13.2–13.3): a fresh install is on the local network, with
 // no servers; a network link from its admin is used from then on, its relay and its lookup server
 // answer, and the app's network reaches out through it (an invite link names it); and the update
-// check, when off, asks GitHub nothing until it is turned on again.
+// check, switched on About and updates only, asks GitHub nothing while off.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -80,7 +80,7 @@ test("a fresh install is on the local network; a network's link is used from the
   await page.locator("[data-reach-not-now]").click();
   await expect(page.locator("[data-share-page]")).toContainText("Stays on this network: the link works only here.");
   await page.keyboard.press("Escape");
-  await openSettings(page, "network");
+  await openSettings(page, "servers");
   await expect(page.locator("[data-network-name]")).toHaveText("Local network");
   await expect(page.locator("[data-relay]")).toHaveCount(0);
 
@@ -97,22 +97,24 @@ test("a fresh install is on the local network; a network's link is used from the
   await expect.poll(inviteRelay, { timeout: 20_000 }).toBe(url.replace(/\/$/, ""));
 
   // Back to the local network.
-  await openSettings(page, "network");
+  await openSettings(page, "servers");
   await page.locator("[data-network-change]").click();
   await page.locator('[data-use-network="local"]').click();
   await expect(page.locator("[data-network-name]")).toHaveText("Local network");
 });
 
-test("with the update check off, nothing is asked: About says so, and turning it on checks again", async () => {
+test("with the update check off, nothing is asked: About says so, and its switch, the only one, turns it back on", async () => {
   const page = await launch({ HIVEMIND_TEST_UPDATE: JSON.stringify({ latest: "9999.1.0" }) }, { network: { updateCheck: false } });
   await openSettings(page, "about");
   const about = page.locator(".settings-dialog");
   await expect(about.locator("[data-update-off]")).toBeVisible();
   await expect(about.getByText(/Update available/)).toHaveCount(0);
-  await about.getByRole("button", { name: "Turn it on" }).click();
+  await about.locator("[data-update-check]").click();
   await expect(about.getByText(/Update available — v9999\.1\.0/)).toBeVisible();
 
-  await page.locator('[data-settings-page="network"]').click();
-  await page.locator("[data-update-check]").click();
+  await about.locator("[data-update-check]").click();
   await expect.poll(() => JSON.parse(fs.readFileSync(path.join(root, "config", "settings.json"), "utf8")).network).toEqual({ updateCheck: false });
+  await page.locator('[data-settings-page="servers"]').click();
+  await expect(page.locator("[data-network]")).toBeVisible();
+  await expect(page.locator("[data-update-check]")).toHaveCount(0);
 });

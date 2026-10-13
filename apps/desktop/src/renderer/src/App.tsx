@@ -29,8 +29,9 @@ import {
 import { Workspace } from "./Workspace";
 import { resolveSettingsPage } from "./settings-registry";
 import { TileErrorBoundary } from "./TileErrorBoundary";
-import { flushSettings, patchSettings, saveSettingsNow } from "./settings-store";
+import { flushSettings } from "./settings-store";
 import { useSettingsNav } from "./settings-nav";
+import { UpdateCheckSwitch } from "./update-check";
 import { getNotificationSettings, setNotificationSettingsCache, subscribeNotificationSettings, saveNotificationSettings } from "./notification-settings";
 import type { NotificationSettings } from "../../shared/ipc";
 import { tellRecentFolders } from "./recent-folders";
@@ -265,7 +266,7 @@ export function App() {
     openRecent(path);
     void qc.invalidateQueries({ queryKey: ["project", path] });
   };
-  // Settings → Share hands these on: Settings closes for the People panel, and for the moved workspace.
+  // Settings → People hands these on: Settings closes for the People panel, and for the moved workspace.
   useEffect(() => {
     const people = () => { setSettingsOpen(false); setPeopleOpen(true); };
     const moved = (event: Event) => { setSettingsOpen(false); openMoved((event as CustomEvent<{ uri: string }>).detail.uri); };
@@ -647,7 +648,8 @@ function SettingsModal({
                   <h3 className="settings-nav-heading"><span className="settings-nav-heading-text">{group}</span></h3>
                   {items.map((item) => <button key={item.id} onClick={() => setPage(item.id)} aria-current={nav.selected(page) === item.id ? "page" : undefined}
                     title={item.label} data-settings-page={item.id}>
-                    <span className="settings-nav-icon" aria-hidden="true">{item.icon}</span><span>{item.label}</span>
+                    <span className="settings-nav-icon" aria-hidden="true">{item.icon}</span>
+                    <span className="settings-nav-text"><span>{item.label}</span>{item.hint && <span className="settings-nav-hint" data-settings-hint>{item.hint}</span>}</span>
                   </button>)}
                 </div>
               ))}
@@ -704,9 +706,6 @@ function SettingsModal({
                   <span className="size-2 rounded-full bg-[var(--color-fg3)]" aria-hidden />
                   The update check is off
                 </span>
-                <Button variant="outline" onClick={() => { patchSettings("network.updateCheck", true); void saveSettingsNow().then(() => onCheck({ force: true })); }}>
-                  Turn it on
-                </Button>
               </>
             ) : (
               <>
@@ -724,6 +723,7 @@ function SettingsModal({
               </>
             )}
           </div> : <p className="settings-note" data-update-elsewhere>Updates are made in the app on the computer it runs on.</p>}
+          <UpdateCheckSwitch onTurnedOn={() => onCheck({ force: true })} />
           <div className="settings-row">
             <span className="text-[var(--color-fg2)]">License</span>
             <span className="font-mono text-[var(--color-fg2)]">MIT</span>

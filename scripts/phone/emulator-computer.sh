@@ -2,7 +2,7 @@
 # The Android app against the desktop app, on an emulator that has booted
 # (.github/workflows/phone-android.yml, job `computer`): installs the app once adb has stayed online
 # a while, then runs the desktop's e2e spec apps/desktop/tests/e2e/phone-app.spec.ts with
-# PHONE_APP=android, under xvfb. The spec starts the desktop app, offers Pair a phone and runs
+# PHONE_APP=android, under xvfb. The spec starts the desktop app, offers Use on your phone and runs
 # apps/android/maestro/computer with its link; what each side saw lands in apps/desktop/test-results.
 # When it fails, what the device logged is kept too; a run that skipped the spec fails.
 #

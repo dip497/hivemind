@@ -86,7 +86,7 @@ function viewSdkPlugin(): Plugin {
 }
 
 // The phone page this build goes with, by its hash (crates/hive-web/build.sh writes it; a release
-// passes it on as HIVEMIND_PHONE_PAGE): Pair a phone says whether a server serves that page.
+// passes it on as HIVEMIND_PHONE_PAGE): Use on your phone says whether a server serves that page.
 function phonePage(): string | null {
   if (process.env.HIVEMIND_PHONE_PAGE) return process.env.HIVEMIND_PHONE_PAGE;
   try {

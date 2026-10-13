@@ -56,7 +56,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Pair with hivemind (design §6.1): the camera reads the QR code the computer shows (Settings →
- * Devices → Pair a phone), or the link is pasted; then whose the phone is now, in their name and
+ * Your devices → Use on your phone), or the link is pasted; then whose the phone is now, in their name and
  * colour.
  */
 @Composable

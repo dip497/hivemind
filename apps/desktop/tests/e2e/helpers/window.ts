@@ -1,6 +1,6 @@
 // The app's window for a spec. As the app by default; with HIVE_HARNESS=browser (the harness,
 // playwright.harness.config.ts), as a browser tab on the same app: the app is launched as usual,
-// serves itself to a browser (Settings → Devices, "Open in a browser") and Chromium opens the link
+// serves itself to a browser (Settings → Your devices, "In a browser on this computer") and Chromium opens the link
 // it shows, so the spec drives the renderer over the browser server's socket instead of IPC.
 import { _electron as electron, chromium, type Page } from "@playwright/test";
 import net from "node:net";
@@ -44,7 +44,7 @@ export async function launchWindow(opts: LaunchOptions): Promise<AppWindow> {
   };
 }
 
-/** Turns the app's browser server on at `port`, as Settings → Devices does, and returns the link it shows. */
+/** Turns the app's browser server on at `port`, as Settings → Your devices does, and returns the link it shows. */
 export async function openInABrowser(app: Page, port: number): Promise<string> {
   await app.waitForFunction(() => "hive" in window);
   await app.evaluate((p) => window.hive.settingsSet("browserApp", { enabled: true, port: p, names: [] }), port);

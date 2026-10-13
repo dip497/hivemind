@@ -4,7 +4,7 @@ description: Run your own network for hivemind — a relay, a lookup server, adm
 ---
 
 A fresh install uses no servers at all: devices on the same network find each other there, and
-nothing leaves it (**Settings → Network** reads *Local network*). To reach devices elsewhere —
+nothing leaves it (**Settings → Servers** reads *Local network*). To reach devices elsewhere —
 a teammate at home, your laptop on the train, a server in the cloud — hivemind needs a way
 through, and you choose it once: **your own** network, or one of your devices serving the rest.
 The built-in *Hosted* profile is not available yet: its `*.hivemind.griiken.com` server names do
@@ -96,7 +96,7 @@ that machine's Tailscale IP address (replace `<tailscale-ip>`):
 hive-net serve --all --data ~/hive-net --url http://<tailscale-ip>:3340 --bind <tailscale-ip>:3340
 ```
 
-On the owner's computer, make an enrolment link and use it in **Settings → Network → Change…**:
+On the owner's computer, make an enrolment link and use it in **Settings → Servers → Change…**:
 
 ```bash
 hive network enrol-link --data ~/hive-net
@@ -108,7 +108,7 @@ Tailscale access to the server, but does not need the owner's enrolment link.
 
 ## Using it
 
-To join the network directly on a computer: **Settings → Network → Change…**, paste the link,
+To join the network directly on a computer: **Settings → Servers → Change…**, paste the link,
 **Use** (or `hive network use <link>` in a terminal). On a closed network that device must also be
 enrolled. As the admin, make an enrolment link — the network's link with a one-time voucher in it —
 and give it to the device's owner:
@@ -127,11 +127,11 @@ It enrols one device and lasts seven days (`--uses <n>`, and `--expires 12h` for
 is on the network, people it invites get in through the invite itself: your device vouches for
 theirs, for as long as their invite lasts.
 
-**Check** under Settings → Network (or `hive network doctor`) says whether the relay, the lookup
+**Check** under Settings → Servers (or `hive network doctor`) says whether the relay, the lookup
 server and the access service answer, and when the relay turns this computer away, why.
 
 To take a device off: `hive-net access revoke https://hive.example.com/access <device id> --admin
-admin.key`. To leave the network: **Settings → Network → Change… → Local network**.
+admin.key`. To leave the network: **Settings → Servers → Change… → Local network**.
 
 ## Sharing from a machine with no screen
 

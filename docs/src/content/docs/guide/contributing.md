@@ -40,7 +40,7 @@ pnpm test:unit        # node:test; add tests here first
 pnpm test:e2e         # when touching canvas/frame/tile/issue behaviour
 ```
 
-Dev loop: `pnpm --filter @hivemind/desktop run dev` (the app; Settings → Devices, "Open in a
+Dev loop: `pnpm --filter @hivemind/desktop run dev` (the app; Settings → Your devices, "Open in a
 browser", serves it to a browser tab too); CLI: `pnpm --filter @hivemind/cli run dev <cmd>`.
 
 Known traps: e2e needs

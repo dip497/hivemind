@@ -1,7 +1,7 @@
 import XCTest
 
-/// The app against a real computer (design §7): it pastes the link the computer's Settings → Devices
-/// → Pair a phone shows, pairs, and is the person's; finds the computer and its agent among the
+/// The app against a real computer (design §7): it pastes the link the computer's Settings → Your devices
+/// → Use on your phone shows, pairs, and is the person's; finds the computer and its agent among the
 /// agents; opens the agent and reads its line in its terminal, then what it and the person said in
 /// its chat; and sends it a message from the reply box, which it answers in the chat and in its
 /// terminal, still followed. Then the community view the computer offers the phone (P8): its page,

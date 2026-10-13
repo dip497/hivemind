@@ -158,7 +158,7 @@ a dashboard, a watcher. Declare it in `hivemind-tool.json`:
 - `command` is a program on PATH, or a file in the plugin's folder written `./bin/serve`, and its
   arguments. It runs in the plugin's folder.
 - `role` is what it may do in the workspaces it drives, as for a program you let in from
-  Settings → Programs: `view`, `edit`, `terminals` or `agents`. It can never share a workspace or
+  Settings → API access: `view`, `edit`, `terminals` or `agents`. It can never share a workspace or
   push.
 
 Switched on, it waits until you pick the workspaces it may drive: on its page, or with
@@ -177,7 +177,7 @@ for. From the app's environment the service gets `PATH`, `HOME`, the locale and 
 and nothing else.
 
 If it exits with an error, it is started again after 1 s, then 2, 4 and so on up to a minute.
-If it exits cleanly, or its grant is taken back in Settings → Programs, it stays stopped. It
+If it exits cleanly, or its grant is taken back in Settings → API access, it stays stopped. It
 should exit when its stdin closes: that is the app going away, however it went. What it prints
 is on its page, and in `services/<owner>--<name>.log` in the app's data folder.
 

@@ -1,6 +1,6 @@
 // An always-on host (R14), end to end on one machine: `hive host` (the built binary, with its own
 // data folder, as on a server) serves a folder as a workspace; the app pairs with it from
-// Settings → Devices, entering the six words `hive host pair` prints (the host found by them on
+// Settings → Your devices, entering the six words `hive host pair` prints (the host found by them on
 // this network) or its link; Open recent lists the workspace on the host and opens it; a shell
 // started there runs on the host, in its folder, and goes on after the app has quit. And a frame
 // of the app's own workspace runs on the host (M3): placed on one of the host's folders, its
@@ -80,12 +80,12 @@ for (const entered of ["words", "link"] as const) test(`the app pairs with a hos
   fs.mkdirSync(elsewhere);
   const laptop = await person(root, "laptop", elsewhere, apps);
 
-  // The host shows a code; the app enters its link in Settings → Devices.
+  // The host shows a code; the app enters its link in Settings → Your devices.
   const pairing = spawn(HIVE, ["host", "pair", "--json"], { env: hostEnv() });
   procs.push(pairing);
   const printed = lines(pairing.stdout!);
   const offer = (JSON.parse(await printed()) as { data: { offer: { code: string; link: string } } }).data.offer;
-  await laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "devices" } })));
+  await laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
   // The words as a person reads them off the host's screen, or its link.
   await laptop.locator("[data-pair-link]").fill(entered === "words" ? offer.code.split("-").join(" ") : offer.link);
   await laptop.locator("[data-pair-go]").click();
@@ -143,7 +143,7 @@ test("a frame of the app's own workspace runs on the paired host: placed on one 
   const pairing = spawn(HIVE, ["host", "pair", "--json"], { env: hostEnv() });
   procs.push(pairing);
   const offer = (JSON.parse(await lines(pairing.stdout!)()) as { data: { offer: { link: string } } }).data.offer;
-  await laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "devices" } })));
+  await laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
   await laptop.locator("[data-pair-link]").fill(offer.link);
   await laptop.locator("[data-pair-go]").click();
   await expect(laptop.locator('[data-pair-result="paired"]')).toBeVisible({ timeout: 20_000 });
@@ -240,7 +240,7 @@ test("a phone paired with the app is the person's at the host too: the host lets
   procs.push(pairing);
   const printed = lines(pairing.stdout!);
   const offer = (JSON.parse(await printed()) as { data: { offer: { link: string } } }).data.offer;
-  const devices = () => laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "devices" } })));
+  const devices = () => laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
   await devices();
   await laptop.locator("[data-pair-link]").fill(offer.link);
   await laptop.locator("[data-pair-go]").click();
@@ -249,7 +249,7 @@ test("a phone paired with the app is the person's at the host too: the host lets
   // The host starts again as the laptop's person.
   expect(JSON.parse(await printed())).toMatchObject({ ok: true, data: { paired: { kind: "app" } } });
 
-  // A phone pairs with the laptop: Settings → Devices → Pair a phone.
+  // A phone pairs with the laptop: Settings → Your devices → Use on your phone.
   await devices();
   await laptop.locator("[data-pair-phone]").click();
   const link = (await laptop.locator("[data-pair-copy]").getAttribute("title"))!;

@@ -1,4 +1,4 @@
-// A phone pairs (M5, design §9.2, spec/pairing.md 0.3): Settings → Devices → Pair a phone shows a
+// A phone pairs (M5, design §9.2, spec/pairing.md 0.3): Settings → Your devices → Use on your phone shows a
 // QR code of this computer's link, and the phone (`hive-phone`: the phone's Rust core, in a
 // terminal) pairs with it over hive/pair/1. The phone is given a certificate naming it as the
 // person's and never the person key; each lists the other; the phone is never a place to open a
@@ -61,11 +61,11 @@ async function desktopWith(env: Record<string, string> = {}) {
   execSync("git init -q", { cwd: repo });
   const desktop = await person(root, "desktop", repo, apps, { ...env });
   const me = await desktop.evaluate(() => window.hive.identity());
-  const devices = () => desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "devices" } })));
+  const devices = () => desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
   return { repo, desktop, me, devices };
 }
 
-/** Settings → Devices → Pair a phone, on `d`: a QR code of the computer's link (read here off its
+/** Settings → Your devices → Use on your phone, on `d`: a QR code of the computer's link (read here off its
  *  Copy button, as the phone reads it off the code), which the phone scans, and pairs. */
 async function pairPhone(d: Awaited<ReturnType<typeof desktopWith>>) {
   const link = await offerPhonePairing(d.desktop);

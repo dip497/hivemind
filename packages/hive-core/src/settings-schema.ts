@@ -320,14 +320,14 @@ export interface ProfileSettings {
   /** `#rrggbb`, lowercase. */
   color: string;
 }
-/** Settings → Network (R16): what this app reaches outside the network profile's servers. */
+/** Settings → About and updates (R16): what this app reaches outside the network profile's servers. */
 export interface NetworkSettings {
   /** Ask, now and then, whether a newer release is out (GitHub) and whether the agents the app
    *  adds by itself have new versions (the plugin catalog). Off: the app reaches nothing the
    *  network profile does not name, unless the person browses plugins. */
   updateCheck: boolean;
 }
-/** Settings → Devices, "Open in a browser" (docs/design/browser-app-2026-10-13.md): the app served
+/** Settings → Your devices, "In a browser on this computer" (docs/design/browser-app-2026-10-13.md): the app served
  *  to a browser on 127.0.0.1, off until the person turns it on. */
 export interface BrowserAppSettings {
   enabled: boolean;

@@ -7,7 +7,7 @@ import { connectHive } from "./hive";
 import { CLOSE_UNAUTHORIZED, SOCKET_PATH, TOKEN_KEY } from "../shared/browser-socket";
 import type { HiveApi } from "../shared/ipc";
 
-const SIGN_IN_AGAIN = "Open the link the app shows in Settings → Devices → Open in a browser.";
+const SIGN_IN_AGAIN = "Open the link the app shows in Settings → Your devices → In a browser on this computer.";
 
 function stored(): string | null {
   try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }

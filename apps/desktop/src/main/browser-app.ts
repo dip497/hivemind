@@ -1,5 +1,5 @@
 /**
- * Settings → Devices, "Open in a browser" (docs/design/browser-app-2026-10-13.md): the browser
+ * Settings → Your devices, "In a browser on this computer" (docs/design/browser-app-2026-10-13.md): the browser
  * server runs while the setting is on, with a token minted once per launch, and each signed-in
  * tab is a client of the app as a window is.
  */
