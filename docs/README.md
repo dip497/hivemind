@@ -31,6 +31,11 @@ run, prerequisites, and actual limitations. Avoid taglines and repeated introduc
 Mark unreleased features as development previews. Verify command examples against
 `apps/cli/src/commands/` and SDK examples against `packages/hive-view-sdk/src/`.
 
+Draw a flow, a connection or a layout as a diagram instead of describing it: a ```` ```mermaid ````
+block (optionally ```` ```mermaid title="Caption" ````) is drawn as an inline SVG at build time by
+`src/lib/mermaid.mjs`, in the site's colours, with no script on the page. Flowcharts, sequence,
+state, class and ER diagrams are supported.
+
 Use relative links to sibling guides (`../agents/`). The build resolves these to
 absolute URLs in the Markdown exports. Do not copy documentation into a second
 agent-only version.
