@@ -72,6 +72,7 @@ function Share({ repo }: { repo: string }) {
 
   return (
     <div className="flex flex-col gap-6" data-share-page>
+      <p className="text-[13px] text-[var(--color-fg2)]" data-page-lead>Other people, invited to this one workspace, with the role you give them.</p>
       <section aria-label="Who has access" className="flex flex-col gap-1" data-share-access>
         <h3 className="text-[13px] font-semibold">Who has access</h3>
         <PeopleList repo={repo} />

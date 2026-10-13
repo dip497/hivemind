@@ -1,7 +1,9 @@
 // Settings → People: who has access is shown without a click, above the invite link; the link's
 // choices come before the button that makes it. Its QR code fills its box with the four-module
 // margin a reader needs, opens as large as the window allows and closes with Esc, and a phone's
-// camera frame of it reads back the link, by the phone page's own reader (crates/hive-web).
+// camera frame of it reads back the link, by the phone page's own reader (crates/hive-web). People
+// and Your devices each say in one line whom they are for, and Your devices' Another computer is
+// split by which side of the pairing the person is on.
 import { test, expect, _electron as electron, type ElectronApplication, type Locator, type Page } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";
@@ -152,4 +154,24 @@ test("a longer code, the phone's pairing link, grows its box rather than spill o
   // What is beside it starts after it.
   const text = (await offered.locator("p").first().boundingBox())!;
   expect(text.y >= box.y + box.height || text.x >= box.x + box.width).toBe(true);
+});
+
+test("People and Your devices each say whom they are for; Another computer is one row for each side of the pairing, showing first", async () => {
+  await openShare(page);
+  await expect(page.locator("[data-share-page] [data-page-lead]")).toHaveText("Other people, invited to this one workspace, with the role you give them.");
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
+  await expect(page.locator("[data-page-lead]")).toHaveText("Computers and phones that are you: they see every workspace you own.");
+
+  const card = page.locator('[data-connect="computer"]');
+  await expect(card).toContainText("Use your other computer's workspaces here, and this one's there.");
+  const show = card.locator('[data-pair-side="show"]');
+  const enter = card.locator('[data-pair-side="enter"]');
+  await expect(show).toContainText("Adding this computer to another?");
+  await expect(show.getByRole("button")).toHaveText(["Show a code"]);
+  await expect(show.getByRole("textbox")).toHaveCount(0);
+  await expect(enter).toContainText("Have a code from your other computer?");
+  await expect(enter.getByRole("textbox", { name: "Code from your other computer" })).toHaveAttribute("placeholder", "six words or hivemind://pair/… link");
+  await expect(enter.getByRole("button")).toHaveText(["Pair"]);
+  // As the person sees them: showing a code above entering one.
+  expect((await show.boundingBox())!.y + (await show.boundingBox())!.height).toBeLessThanOrEqual((await enter.boundingBox())!.y);
 });
