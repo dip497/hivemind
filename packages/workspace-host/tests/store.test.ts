@@ -472,6 +472,20 @@ test("a tile the control plane opens is kept, told with its writer, and stays wh
   ]);
 });
 
+test("what a widget keeps is written by the client that changed it: another's edit made from an older board leaves it", () => {
+  const s = new WorkspaceStore({ dir, person });
+  const widget = (state: unknown) => ({ id: "w1", kind: "widget", z: 0, widget: "counter", placement: "board", x: 0, y: 0, w: 100, h: 80, state });
+  const board = [note("draft"), widget({ n: 1 })];
+  s.setObjects("/a", board as never);
+  s.setObjects("/a", [note("draft"), widget({ n: 2 })] as never, { writer: "window:1", base: board });
+  // A tab that has not yet read that press edits the note, from the board it holds.
+  s.setObjects("/a", [note("drafted"), widget({ n: 1 })] as never, { writer: "tab:1", base: board });
+  expect(s.getObjects("/a")).toEqual([note("drafted"), widget({ n: 2 })] as never);
+  // A client that does change what it keeps still writes it, from whatever board it held.
+  s.setObjects("/a", [note("drafted"), widget({ n: 3 })] as never, { writer: "tab:1", base: board });
+  expect(s.getObjects("/a")).toEqual([note("drafted"), widget({ n: 3 })] as never);
+});
+
 test("what a widget keeps is never an undo step: undo takes back the edit before it", () => {
   const s = new WorkspaceStore({ dir, person });
   const widget = (fields: Record<string, unknown>) => ({ id: "w1", kind: "widget", z: 0, widget: "counter", ...fields });

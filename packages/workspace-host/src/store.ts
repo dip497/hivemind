@@ -30,6 +30,7 @@
 import { UndoManager, VersionVector, type LoroDoc } from "loro-crdt";
 import { addFrame, addTile, hasCore, readCore, removeFrame, removeTile, tileIds, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
 import { readObjects, writeObjects } from "@hivemind/workspace-doc/objects";
+import { rebaseBoard } from "@hivemind/workspace-doc/rebase";
 import { readView, readViews, writeView } from "@hivemind/workspace-doc/views";
 import { readOwnership, replaceOwnership, stampOwnership, stampSchema, type Ownership } from "@hivemind/workspace-doc/schema";
 import type { BoardObject, CoreLayout, FrameRecord, TileRecord, ViewLayout } from "@hivemind/workspace-doc/shapes";
@@ -190,7 +191,10 @@ export class WorkspaceStore {
     this.write(repo, "board", WIDGETS, from, (doc) => {
       writeObjects(doc, drawnAsKept(objects, readObjects(doc)), from.base);
       doc.commit({ origin: boardOf(writer) });
-      writeObjects(doc, drawnAsKept(readObjects(doc), Array.isArray(objects) ? objects as BoardObject[] : []));
+      // A widget's state too is this writer's only where it changed it from the board it read.
+      const mine = Array.isArray(objects) ? objects as BoardObject[] : [];
+      const states = from.base === undefined ? mine : rebaseBoard(Array.isArray(from.base) ? from.base as BoardObject[] : [], mine, readObjects(doc));
+      writeObjects(doc, drawnAsKept(readObjects(doc), states));
     });
   }
 

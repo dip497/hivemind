@@ -462,7 +462,7 @@ test("a community view that says it works on a phone is offered there with its f
     return { type: file.type, text: Buffer.from(file.data, "base64").toString(), nonce };
   };
   const page = await served("index.html");
-  expect([page.type, page.text]).toEqual(["text/html; charset=utf-8", withImportMap(fs.readFileSync(path.join(board, "index.html"), "utf8"), page.nonce)]);
+  expect([page.type, page.text]).toEqual(["text/html; charset=utf-8", withImportMap(fs.readFileSync(path.join(board, "index.html"), "utf8"), page.nonce, "index.html")]);
   const sdk = await served("__sdk.js");
   expect([sdk.type, sdk.text]).toEqual(["text/javascript; charset=utf-8", fs.readFileSync(path.resolve("out/main/view-sdk.js"), "utf8")]);
   await expect(run(HIVE_PHONE, ["views", workspace, "priya-board", "../desk-only/index.html", "--identity", phone])).rejects.toThrow(/not inside priya-board/);
