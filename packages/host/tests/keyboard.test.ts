@@ -303,3 +303,25 @@ test("whoever types is named to the others showing the session, again only after
   assert.deepEqual((h.told(guest, "terminal.typing").at(-1) as [string, { person: string; name: string }])[1].name, "Adarsh");
   assert.equal(marks().length, 2);
 });
+
+test("while a guest holds a terminal's keyboard, the person's phones letting go of their fit, or going, leave the guest's size", async () => {
+  const h = host();
+  const phone = () => h.client({ kind: "peer", person: "a".repeat(64), device: "e".repeat(64), access: "owner" });
+  const [win, a, b, guest] = [h.client({ kind: "person" }), phone(), phone(), h.client(guestActor)];
+  await h.open(win, true);
+  for (const c of [a, b, guest]) await h.open(c);
+  const sizes = () => h.calls.filter((call) => call.startsWith("resize")).map((call) => call.split(" ")[1]);
+  h.notice(win, "terminal.resize", "hm:t1", 120, 40);
+  h.notice(a, "terminal.fit", "hm:t1", 48, 30);
+  h.notice(b, "terminal.fit", "hm:t1", 50, 20);
+  h.notice(guest, "terminal.keyboard.ask", "hm:t1");
+  const asker = (h.told(win, "terminal.keyboard.asked").at(-1) as [string, { id: string }])[1];
+  h.notice(win, "terminal.keyboard.give", "hm:t1", asker.id);
+  h.notice(guest, "terminal.resize", "hm:t1", 100, 30);
+  h.notice(b, "terminal.fit", "hm:t1");
+  a.close();
+  assert.deepEqual(sizes(), ["120x40", "48x30", "50x20", "100x30"], "the guest's size stays");
+  h.notice(win, "terminal.keyboard.take", "hm:t1");
+  h.notice(win, "terminal.write", "hm:t1", "q");
+  assert.deepEqual(sizes().at(-1), "120x40", "taken back, the window's key sizes it");
+});

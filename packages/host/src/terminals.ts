@@ -17,8 +17,8 @@
  * R4), and a guest's typing is marked in the audit log once a burst (never what was typed). A
  * session on a participant's machine (M4) is typed into and sized there, by its person
  * (`machineOf`): nobody here types into it, and its size is the one that machine says. A client
- * may fit a session to its screen (a phone): it takes that size until the client goes or lets go,
- * and then the one it had, unless a window here sized it meanwhile.
+ * may fit a session to its screen (a phone): it takes that size, as if it typed, until the client
+ * goes or lets go, and then the size of whoever sized it before.
  *
  * Starting a session is the intent of whoever opens it, unless the host asked for it itself (a
  * control-plane spawn) or the client only shows one the host holds; ending one is the intent of
@@ -118,8 +118,9 @@ export class Terminals {
   readonly domain: Domain<TerminalMethod, TerminalNotice>;
   private readonly relay: SessionRelay;
   private readonly viewers = new WeakMap<Connection, Viewer>();
-  /** The clients that typed into each session, the last to type last. */
-  private readonly typers = new Map<string, Connection[]>();
+  /** Who sized each session, by typing, fitting it or (a window here) its own size, the latest
+   *  last: the session is the latest's size, and when it lets go or goes, the one before's. */
+  private readonly holders = new Map<string, Connection[]>();
   /** The lines of each session's scrollback a client asked to be sent with its screen. */
   private readonly histories = new Map<string, Map<Connection, number>>();
   /** The size each client showing a session says it is: the session's while it typed last. */
@@ -136,8 +137,6 @@ export class Terminals {
   /** Each session's size, as last given: whoever opens it is told. */
   private readonly sizes = new Map<string, { cols: number; rows: number }>();
   private readonly repaints = new Map<string, ReturnType<typeof setTimeout>>();
-  /** The sessions a client fitted to its screen, and the size each had before. */
-  private readonly fits = new Map<string, { by: Connection; was: { cols: number; rows: number } | undefined }>();
   /** The sessions that run on a participant's machine (M4), and whose it is. */
   private readonly machines = new Map<string, TerminalMachine>();
   private readonly keyboards: Keyboards;
@@ -189,20 +188,13 @@ export class Terminals {
       },
       gone: (connection) => {
         this.keyboards.gone(connection);
-        for (const [tile, fit] of this.fits) if (fit.by === connection) this.unfit(tile);
         for (const opened of this.openers.values()) opened.delete(connection);
         const viewer = this.viewers.get(connection);
         if (!viewer) return;
         for (const tile of this.relay.leaveAll(viewer)) this.letGo(tile);
         for (const mine of this.said.values()) mine.delete(connection);
         for (const mine of this.histories.values()) mine.delete(connection);
-        for (const [tile, typers] of this.typers) {
-          const at = typers.indexOf(connection);
-          if (at < 0) continue;
-          typers.splice(at, 1);
-          // Like tmux's window-size latest: the one who typed before it takes the size back.
-          if (at === typers.length && at > 0) this.takeSize(tile, typers[at - 1]!);
-        }
+        for (const tile of this.holders.keys()) this.letGoOfSize(tile, connection);
         for (const [tile, told] of this.typing) if (told.by === connection) this.typing.delete(tile);
       },
     };
@@ -324,11 +316,7 @@ export class Terminals {
     this.keyboards.typed(tile, from);
     // Among the host's windows and the person's devices, the last to type sizes the session, at
     // its first key; a guest does while they hold its keyboard.
-    if (isHost(from)) {
-      const typers = this.typers.get(tile) ?? [];
-      if (typers.at(-1) !== from) this.typers.set(tile, [...typers.filter((c) => c !== from), from]);
-      this.takeSize(tile, from);
-    }
+    if (isHost(from)) this.hold(tile, from);
     this.attribute(tile, from);
     if (this.opts.backend.echoes(tile)) this.relay.markInput(tile);
     this.opts.backend.write(tile, data, paste);
@@ -362,45 +350,47 @@ export class Terminals {
       let mine = this.said.get(tile);
       if (!mine) this.said.set(tile, (mine = new Map()));
       mine.set(from, { cols, rows });
-      const typer = this.typers.get(tile)?.at(-1);
-      // A device of the person's sizes it by typing; a window here, also before anyone typed.
-      if (typer !== from && (from.actor.kind === "peer" || (typer !== undefined && this.relay.count(tile) > 1))) return;
+      const latest = this.holders.get(tile)?.at(-1);
+      // A device of the person's sizes it by typing or fitting; a window here, also before anyone did.
+      if (latest !== from && (from.actor.kind === "peer" || (latest !== undefined && this.relay.count(tile) > 1))) return;
+      return this.hold(tile, from);
     }
-    // Sized here: what it had before a fit is not what to give back.
-    this.fits.delete(tile);
     this.size(tile, cols, rows);
   }
 
-  /** `from` fits `tile` to its screen; null: back to the size it had. A session sized on another
-   *  machine is sized there. A fit is also `from`'s own size, which its typing takes. */
+  /** `from` fits `tile` to its screen; null: it lets go. A session sized on another machine is
+   *  sized there. A fit is also `from`'s own size, which its typing takes. */
   private fit(tile: string, size: { cols: number; rows: number } | null, from: Connection): void {
     if (!size) {
       this.said.get(tile)?.delete(from);
-      if (this.fits.get(tile)?.by === from) this.unfit(tile);
-      return;
+      return this.letGoOfSize(tile, from);
     }
     if (this.machines.has(tile) || !this.keyboards.mayType(tile, from)) return;
     let mine = this.said.get(tile);
     if (!mine) this.said.set(tile, (mine = new Map()));
     mine.set(from, size);
-    const fit = this.fits.get(tile);
-    this.fits.set(tile, { by: from, was: fit ? fit.was : this.sizes.get(tile) });
-    this.size(tile, size.cols, size.rows);
+    this.hold(tile, from);
   }
 
-  private unfit(tile: string): void {
-    const was = this.fits.get(tile)?.was;
-    this.fits.delete(tile);
-    if (was) this.size(tile, was.cols, was.rows);
-  }
-
-  /** `from` typed into `tile`: it takes the size `from` says it is, if it said one. */
-  private takeSize(tile: string, from: Connection): void {
+  /** `from` sizes `tile` now: it is the latest holder, and the session takes its size, if it said one. */
+  private hold(tile: string, from: Connection): void {
+    const holders = this.holders.get(tile) ?? [];
+    if (holders.at(-1) !== from) this.holders.set(tile, [...holders.filter((c) => c !== from), from]);
     const mine = this.said.get(tile)?.get(from);
-    if (!mine) return;
-    // Sized by someone else's typing: what it had before a fit is not what to give back.
-    if (this.fits.get(tile)?.by !== from) this.fits.delete(tile);
-    this.size(tile, mine.cols, mine.rows);
+    if (mine) this.size(tile, mine.cols, mine.rows);
+  }
+
+  /** `from` sizes `tile` no more: if it was the latest, the one before that still says a size
+   *  takes it back, unless a guest holds the keyboard and sizes it. */
+  private letGoOfSize(tile: string, from: Connection): void {
+    const holders = this.holders.get(tile)?.filter((c) => c !== from && !c.closed.aborted) ?? [];
+    const was = this.holders.get(tile)?.at(-1);
+    this.holders.set(tile, holders);
+    if (was !== from || this.keyboards.holder(tile)) return;
+    const said = this.said.get(tile);
+    const next = holders.findLast((c) => said?.has(c));
+    const size = next && said!.get(next)!;
+    if (size) this.size(tile, size.cols, size.rows);
   }
 
   private size(tile: string, cols: number, rows: number): void {
@@ -439,7 +429,7 @@ export class Terminals {
 
   private drop(tile: string): void {
     this.relay.forget(tile);
-    this.typers.delete(tile);
+    this.holders.delete(tile);
     this.said.delete(tile);
     this.histories.delete(tile);
     this.typing.delete(tile);
@@ -447,7 +437,6 @@ export class Terminals {
     this.sizes.delete(tile);
     this.keyboards.forget(tile);
     this.machines.delete(tile);
-    this.fits.delete(tile);
     const lease = this.pauses.get(tile);
     if (lease) { clearTimeout(lease); this.pauses.delete(tile); }
   }
