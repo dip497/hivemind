@@ -1369,3 +1369,7 @@ Before and after at 390×844 are the `ux-*.png` pairs of the rig's scratchpad.
   slices of what was said before included (`chat.ts` `fold`), and a result that comes later is
   counted in it. A tool's line is sans 14 `--text3` with no tick; a command (`Bash`, shown as
   "Run") is the only mono.
+- While the agent works, a line right above the message box says so and for how long, "● working ·
+  12s", sans 13 `--text3`, its dot breathing (Happy `packages/happy-app/sources/components/
+  AgentInput.tsx:545-580`, a 6 px pulsing dot over the input). It counts once a second only while
+  it shows: not at rest, not over the terminal.

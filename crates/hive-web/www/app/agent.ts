@@ -8,7 +8,7 @@ import { Chat } from "./chat.js";
 import { Ask, type Composer, composer, h, icon, iconButton, say } from "./dom.js";
 import { TerminalView } from "./terminal.js";
 import type { Agent, Overview } from "./types.js";
-import { NOTICES, ago, kindLabel, stateLabel, where } from "./words.js";
+import { NOTICES, ago, elapsed, kindLabel, stateLabel, where } from "./words.js";
 
 export class AgentScreen {
   readonly el = h("section", { class: "screen agent-screen", "data-screen": "agent" });
@@ -20,6 +20,10 @@ export class AgentScreen {
   private readonly dock = h("div", { class: "dock" });
   private readonly waits = h("div", { "data-waits": "" });
   private readonly gone = h("p", { class: "quiet", hidden: true }, NOTICES.notRunning);
+  /** While it works, above the box: for how long (Happy's AgentInput.tsx:545-580). */
+  private readonly workingFor = h("span", {});
+  private readonly working = h("p", { class: "working-line", hidden: true, "data-working-line": "" }, h("span", { class: "dot", "data-state": "working" }), this.workingFor);
+  private ticking = 0;
   private readonly message: HTMLTextAreaElement;
   private readonly composing: Composer;
   private readonly term = new TerminalView();
@@ -58,7 +62,7 @@ export class AgentScreen {
       () => void this.stopIt());
     this.message = message.querySelector("textarea")!;
     this.composing = message;
-    this.dock.append(this.closing.el, this.waits, message);
+    this.dock.append(this.closing.el, this.waits, this.working, message);
   }
 
   /** `tile` was just started from here: until the computer lists it, it is starting, not gone. */
@@ -97,6 +101,7 @@ export class AgentScreen {
     this.unfollow = null;
     this.term.unwatch();
     this.tile = null;
+    this.showWorking();
   }
 
   show(o: Overview): void {
@@ -117,6 +122,7 @@ export class AgentScreen {
       this.composing.stoppable(!!a.interrupt && (a.state === "working" || a.state === "waiting"));
     }
     this.showWait(a);
+    this.showWorking();
     const hint = this.typed?.hint ?? `Message ${a.agent}`;
     if (this.message.placeholder !== hint) {
       this.message.placeholder = hint;
@@ -141,12 +147,28 @@ export class AgentScreen {
     if (on === this.terminal || !a || !this.chat) return;
     this.terminal = on;
     this.flipTo(on);
+    this.showWorking();
     this.composing.hidden = on;
     // The terminal shows the chooser itself; the header still says it waits.
     this.waits.hidden = on;
     this.place(on ? this.term.el : this.chat.el);
     if (on) this.term.watch(this.app, a.workspace, a.tile);
     else this.term.unwatch();
+  }
+
+  /** The working line, shown and counting while the agent works and its chat shows. */
+  private showWorking(): void {
+    const a = this.tile ? this.agent : null;
+    const on = !!a && a.state === "working" && !this.terminal;
+    this.working.hidden = !on;
+    if (!on) {
+      clearInterval(this.ticking);
+      this.ticking = 0;
+      return;
+    }
+    const tick = () => say(this.workingFor, `working · ${elapsed(Date.now() - a.since)}`);
+    tick();
+    if (!this.ticking) this.ticking = setInterval(tick, 1000);
   }
 
   /** The header's button: to the chat from the terminal, to the terminal from the chat. */

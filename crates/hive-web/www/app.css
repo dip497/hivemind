@@ -243,6 +243,8 @@ button { cursor: pointer; }
 }
 /* Under a terminal, with nothing waiting: the key bar is the bottom. */
 .dock:not(:has(> :not([hidden]):not(:empty))) { display: none; }
+.working-line { display: flex; align-items: center; gap: 6px; margin: 0; padding: 0 8px; font: 400 13px/18px var(--sans); color: var(--text3); font-variant-numeric: tabular-nums; }
+.working-line .dot { width: 6px; height: 6px; }
 .waiting { padding: 12px 12px 12px 18px; display: flex; flex-direction: column; gap: 10px; }
 
 /* A terminal: the core's screen on a canvas, drawn as the desktop's terminal looks, and its keys. */

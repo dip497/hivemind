@@ -8,6 +8,15 @@ export function ago(since: number, now = Date.now()): string {
   return `${Math.floor(s / 86400)} d`;
 }
 
+/** How long, as a clock reads it: 12s, 1m 02s, 1h 05m. */
+export function elapsed(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const two = (n: number) => String(n).padStart(2, "0");
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${two(s % 60)}s`;
+  return `${Math.floor(s / 3600)}h ${two(Math.floor(s / 60) % 60)}m`;
+}
+
 const STATES: Record<string, string> = {
   idle: "idle", working: "working", waiting: "waiting on you", done: "done",
   failed: "failed", interrupted: "interrupted", limited: "limited", exited: "exited",

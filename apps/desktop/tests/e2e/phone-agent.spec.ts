@@ -20,10 +20,12 @@ const agent = (tile: string, name: string, more: object = {}) => ({
 });
 const overview = (...agents: object[]) => ({ agents, needs: [], working: 0 });
 
-/** The agent screen; `window.open(tile, started)` opens it as the page does, `window.show(o)` tells it the agents. */
-async function screen(): Promise<Page> {
+/** The agent screen; `window.open(tile, started)` opens it as the page does, `window.show(o)` tells it
+ *  the agents. With `clock`, the page's time starts there and moves only as the test moves it. */
+async function screen(clock?: number): Promise<Page> {
   browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  if (clock !== undefined) await page.clock.install({ time: clock - 60_000 });
   page.on("pageerror", (e) => { throw e; });
   await page.route("http://page.test/**", (route) => {
     const name = new URL(route.request().url()).pathname.slice(1);
@@ -56,6 +58,7 @@ window.ready = true;
   });
   await page.goto("http://page.test/index.html");
   await page.waitForFunction(() => (window as unknown as { ready?: boolean }).ready);
+  if (clock !== undefined) await page.clock.pauseAt(clock);
   return page;
 }
 
@@ -206,4 +209,31 @@ test("the header is the agent's name and state in plain words, Terminal as an ic
   await show(page, overview(agent("t1", "Claude", { state: "idle" })));
   await expect(button).toHaveAttribute("aria-label", "Send");
   await expect(button).toBeDisabled();
+});
+
+test("while it works, a line above the message box says so and for how long, with a breathing dot; at rest, or in its terminal, it is gone", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const T = 1_790_000_000_000;
+  const page = await screen(T);
+  await show(page, overview(agent("t1", "Claude", { state: "working", since: T - 12_000 })));
+  await open(page, "t1");
+  const line = page.locator("[data-screen=agent] [data-working-line]");
+  await expect(line).toBeVisible();
+  await expect(line).toHaveText("working · 12s");
+  const style = await line.evaluate((el) => { const c = getComputedStyle(el); return [c.fontSize, c.fontFamily.split(",")[0]]; });
+  expect(style).toEqual(["13px", "Geist"]);
+  expect(await line.evaluate((el) => getComputedStyle(el).color)).toBe(await page.evaluate(() => { const p = document.createElement("p"); p.style.color = "var(--text3)"; document.body.append(p); return getComputedStyle(p).color; }));
+  expect(await line.locator(".dot").evaluate((el) => getComputedStyle(el).animationName)).toBe("breathe");
+  // It sits right above the message box.
+  const gap = await page.evaluate(() => document.querySelector("[data-message]")!.getBoundingClientRect().top - document.querySelector("[data-working-line]")!.getBoundingClientRect().bottom);
+  expect(gap).toBeGreaterThanOrEqual(0);
+  expect(gap).toBeLessThan(12);
+  await page.clock.runFor(50_000);
+  await expect(line).toHaveText("working · 1m 02s");
+  await page.locator("[data-view-toggle]").click();
+  await expect(line).toBeHidden();
+  await page.locator("[data-view-toggle]").click();
+  await expect(line).toBeVisible();
+  await show(page, overview(agent("t1", "Claude", { state: "idle" })));
+  await expect(line).toBeHidden();
 });
