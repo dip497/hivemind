@@ -1,7 +1,7 @@
 // The phone page's service worker (crates/hive-web/www/sw.js) in plain Chromium, against a server
-// in the test that answers as hive-net's pages.rs does (no-cache, an ETag per file): a page the
-// server changed is the one the next open shows, whole, and with the server not answering, the page
-// as last fetched opens.
+// in the test that answers as hive-net's pages.rs does (no-cache, an ETag per file): an open shows
+// the newest build had whole at once, never waiting on the server; a build the server changed is
+// fetched whole alongside and is what the next open shows.
 import { test, expect, chromium, type Browser, type Page } from "@playwright/test";
 import fs from "node:fs";
 import http from "node:http";
@@ -10,9 +10,9 @@ import path from "node:path";
 
 const SW = fs.readFileSync(path.resolve("../../crates/hive-web/www/sw.js"));
 
-/** What the server serves: page `version`, whose `broken` files answer 500; or, `quiet`, nothing at
- *  all; or, `down`, a closed connection. */
-interface Served { version: string; broken: Set<string>; quiet: boolean; down: boolean }
+/** What the server serves: page `version`, whose `broken` files answer 500 and `slow` ones 1.5 s
+ *  late, as they were asked; or, `quiet`, nothing at all; or, `down`, a closed connection. */
+interface Served { version: string; broken: Set<string>; slow?: Set<string>; quiet: boolean; down: boolean }
 
 let browser: Browser | undefined;
 let server: http.Server | undefined;
@@ -51,8 +51,10 @@ async function opened(served: Served): Promise<Page> {
       res.writeHead(304, head);
       return res.end();
     }
-    res.writeHead(200, head);
-    res.end(body);
+    setTimeout(() => {
+      res.writeHead(200, head);
+      res.end(body);
+    }, served.slow?.has(name) ? 1500 : 0);
   }).listen(0, "127.0.0.1");
   await new Promise((r) => server!.once("listening", r));
   browser = await chromium.launch();
@@ -63,41 +65,63 @@ async function opened(served: Served): Promise<Page> {
 }
 
 const shown = (page: Page) => page.evaluate(() => [(window as unknown as { main: string }).main, (window as unknown as { part: string }).part]);
+/** Until build `v` is had whole. */
+const had = (page: Page, v: string) => expect.poll(() => page.evaluate(async (n) => (await caches.has(n)) && !!(await (await caches.open(n)).match("page.sha256")), `hive-web-${v}`)).toBe(true);
+const builds = (page: Page) => page.evaluate(async () => (await caches.keys()).filter((k) => k.startsWith("hive-web-")));
 
-test("a page the server changed is the one the next reload opens, every file of it", async () => {
+test("a build the server changed is fetched whole as an open shows the one had, and the next open shows it", async () => {
   const served: Served = { version: "A", broken: new Set(), quiet: false, down: false };
   const page = await opened(served);
   await page.reload();
   expect(await shown(page)).toEqual(["A", "A"]);
   served.version = "B";
   await page.reload();
-  expect(await shown(page)).toEqual(["B", "B"]);
+  expect(await shown(page)).toEqual(["A", "A"]);
+  await had(page, "B");
   await page.reload();
   expect(await shown(page)).toEqual(["B", "B"]);
+  // Nothing new: once the page that ran it has gone, the build no page runs is dropped.
+  await page.reload();
+  expect(await shown(page)).toEqual(["B", "B"]);
+  await expect.poll(() => builds(page)).toEqual(["hive-web-B"]);
 });
 
-test("a new page only partly fetched is never run: the page as it was opens until all of the new one is had", async () => {
+test("a new build only partly fetched is never run: the one had opens until all of the new one is", async () => {
   const served: Served = { version: "A", broken: new Set(), quiet: false, down: false };
   const page = await opened(served);
   served.version = "B";
   served.broken.add("part.js");
-  await page.reload();
-  expect(await shown(page)).toEqual(["A", "A"]);
-  await page.reload();
-  expect(await shown(page)).toEqual(["A", "A"]);
-  // What was had of it is not kept.
-  await expect.poll(() => page.evaluate(async () => (await caches.keys()).filter((k) => k.startsWith("hive-web-")).length)).toBe(1);
+  for (let i = 0; i < 3; i++) {
+    await page.reload();
+    expect(await shown(page)).toEqual(["A", "A"]);
+  }
   served.broken.clear();
+  await page.reload();
+  expect(await shown(page)).toEqual(["A", "A"]);
+  await had(page, "B");
   await page.reload();
   expect(await shown(page)).toEqual(["B", "B"]);
 });
 
-test("a page open as a new one arrives keeps getting the files of its own build, also after its worker was stopped", async () => {
+test("a build still being fetched when an open finds the server back at the one had is kept, whole", async () => {
+  const served: Served = { version: "A", broken: new Set(), slow: new Set(["part.js"]), quiet: false, down: false };
+  const page = await opened(served);
+  served.version = "B";
+  await page.reload();
+  served.version = "A";
+  await page.reload();
+  expect(await shown(page)).toEqual(["A", "A"]);
+  await had(page, "B");
+});
+
+test("a page open as a new build arrives keeps getting the files of its own build, also after its worker was stopped", async () => {
   const served: Served = { version: "A", broken: new Set(), quiet: false, down: false };
   const page = await opened(served);
   served.version = "B";
   const other = await page.context().newPage();
   await other.goto(page.url());
+  await had(other, "B");
+  await other.reload();
   expect(await shown(other)).toEqual(["B", "B"]);
   // The browser stops a worker left idle; what it knew of each page outlives it.
   const devtools = await page.context().newCDPSession(page);
@@ -107,7 +131,7 @@ test("a page open as a new one arrives keeps getting the files of its own build,
   expect(await other.evaluate(() => (window as unknown as { later(): Promise<string> }).later())).toBe("B");
 });
 
-test("with the server gone or not answering, the page opens as last fetched, within a few seconds", async () => {
+test("an open never waits on the server: gone or not answering, the build had opens at once", async () => {
   const served: Served = { version: "A", broken: new Set(), quiet: false, down: false };
   const page = await opened(served);
   served.down = true;
@@ -118,5 +142,5 @@ test("with the server gone or not answering, the page opens as last fetched, wit
   const at = Date.now();
   await page.reload();
   expect(await shown(page)).toEqual(["A", "A"]);
-  expect(Date.now() - at).toBeLessThan(8_000);
+  expect(Date.now() - at).toBeLessThan(1_500);
 });

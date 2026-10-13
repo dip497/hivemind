@@ -343,8 +343,8 @@ when out of place; the ages tick in place. The look is the Android app's (`Theme
 its palette dark and light, Geist and JetBrains Mono, pills, cards with an amber rail, the
 composer, the floating tab bar (Needs you, Agents, Devices; Views waits on views in the browser).
 Installable: `manifest.webmanifest`, icons from the launcher mark, the iOS meta tags, safe areas;
-`sw.js` keeps every file `build.sh` lists in `shell.json`, one cache per page hash; each open asks
-the server for `page.sha256` first (§12.9).
+`sw.js` keeps every file `build.sh` lists in `shell.json`, one cache per page hash, opens the
+newest it has whole and asks the server for `page.sha256` alongside (§12.9).
 
 **The actions, one owner**: the wasm's `Host` now also has `answer(workspace, tile, since, reply)`
 (`{text}`, `{allow}` or `{approve, feedback?}` mapped onto hive-phone's `Reply`), `send`, `stop`
@@ -1263,3 +1263,19 @@ whole opens, and the fetch goes on for the next open. Each open page's cache is 
 Storage, not the worker's memory, since the browser stops an idle worker. A file the page asks
 for later is then of its own build, and its cache is kept while it is open. The first open after
 moving from the old worker still shows the old page, once.
+
+**Then: never on the open path.** On the rig the update worked, but the hash check sat in front of
+every open: one round trip to the server before the first byte, and the Cache Storage lookups with
+it. A/B on this machine (load 5–30), the real page served as `pages.rs` serves it, 40 ms a request,
+reload to the first `[data-screen] button`, median ms of 7 runs, two rounds interleaved:
+
+| Worker | Home 1× | Home 4× | Pairing 1× | Pairing 4× |
+|---|---|---|---|---|
+| 7aad336 (each file from the cache, fetched again behind) | 35, 39 | 112, 105 | 44, 53 | 189, 159 |
+| 21d5771 (hash checked before the open) | 83, 93 | 140, 151 | 94, 95 | 184, 186 |
+| now (open at once, check alongside) | 38, 45 | 115, 118 | 37, 46 | 141, 130 |
+
+Now an open serves the newest build had whole at once, from memory once the worker has worked it
+out. The check runs alongside it. A new build is fetched whole and becomes the newest, so the next
+open runs it. When the check finds nothing new, the builds no open page runs are dropped. Which
+build a page runs is set in memory first and written to Cache Storage behind.
