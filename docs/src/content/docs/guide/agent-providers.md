@@ -267,8 +267,8 @@ item of a list in it (`each`, the items `item` requires), and what it reads ther
 - `tool`: a tool the agent used, its `id` and `name`, and `about`, the first of these fields
   that is text (its first line, at most 120 characters; whole, up to 4,000, on a prompt waiting on
   you), and `asks`, the questions it asks you: `list`, where they are, and in each its
-  `question`, its `options` and each option's `label`, and `many`, whether several may be
-  chosen; and `input`, the field holding its input, which your phone shows whole when you open
+  `question`, its `options`, each option's `label` and `description` (what it means, shown under
+  it), and `many`, whether several may be chosen; and `input`, the field holding its input, which your phone shows whole when you open
   the tool's row (text as it is, anything else as JSON);
 - `result`: what a tool gave back, `of` the use it answers, its `text` (text, or a list whose
   items' `text` are joined a line each, cut to 2,000 characters in the conversation, whole up to
@@ -302,7 +302,7 @@ session:
         name: name
         about: [input.file_path, input.path, input.command, input.pattern, input.url, input.query, input.description]
         input: input
-        asks: { list: input.questions, question: question, options: options, label: label, many: multiSelect }
+        asks: { list: input.questions, question: question, options: options, label: label, description: description, many: multiSelect }
 ```
 
 Hivemind finds the file for the session the agent's tile is in, reads its end, and sends your

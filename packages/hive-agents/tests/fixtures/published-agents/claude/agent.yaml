@@ -132,6 +132,19 @@ detect:
       - containsCS: "\u2191/\u2193 to navigate"
       - contains: Esc to cancel
       - contains: "[use arrows"
+      # Its chooser's selected option, its footer cut (a viewer's repaint shrinks the screen a
+      # row): above it, the person's last message starts with the prompt's mark too.
+      - seq:
+        - run: "❯"
+          min: 1
+          max: 1
+        - run: space
+          min: 1
+          max: 1
+        - run: digit
+          min: 1
+        - lit: "."
+        at: start
     then: question
   - when:
       contains: esc to interrupt
@@ -307,7 +320,7 @@ session:
         about: [input.file_path, input.path, input.command, input.pattern, input.url, input.query, input.description]
         input: input
         # AskUserQuestion's: its questions, each with the options to choose from.
-        asks: { list: input.questions, question: question, options: options, label: label, many: multiSelect }
+        asks: { list: input.questions, question: question, options: options, label: label, description: description, many: multiSelect }
 hooks:
   arg: --settings
   template: '{"hooks":{events}}'
@@ -345,7 +358,7 @@ hooks:
         deny: {hookSpecificOutput: {hookEventName: PermissionRequest, decision: {behavior: deny, message: '{message}'}}}
         # AskUserQuestion's chooser fires it too: the answers go in its input, by question text.
         choose: {hookSpecificOutput: {hookEventName: PermissionRequest, decision: {behavior: allow, updatedInput: '{input}'}}}
-        asks: {list: questions, question: question, options: options, label: label}
+        asks: {list: questions, question: question, options: options, label: label, description: description, many: multiSelect}
         chosen: answers
         # A plan is reviewed by its own hook.
         leave: [ExitPlanMode]

@@ -68,7 +68,7 @@ describe("an entry that answers what it reports", () => {
     expect(() => defFromManifest(manifest({ PermissionRequest: { emit: "input.requested", answer: decides } })), "allow and deny alone").not.toThrow();
   });
 
-  test("refused: on another event or a script, without allow or deny, a print that is no map, choosing without reading the questions, a tool list that is not names, a key it does not know", () => {
+  test("refused: on another event or a script, without allow or deny, a print that is no map, choosing without reading the questions or reading them from no field, a tool list that is not names, a key it does not know", () => {
     const { choose: _c, ...noChoose } = ANSWER;
     const bad: Array<[string, Record<string, unknown>]> = [
       ["another event", { Stop: { emit: "turn.ended", answer: ANSWER } }],
@@ -78,6 +78,8 @@ describe("an entry that answers what it reports", () => {
       ["choose, no asks", { PermissionRequest: { emit: "input.requested", answer: { ...ANSWER, asks: undefined } } }],
       ["choose, nowhere to set it", { PermissionRequest: { emit: "input.requested", answer: { ...ANSWER, chosen: "" } } }],
       ["asks without choose", { PermissionRequest: { emit: "input.requested", answer: noChoose } }],
+      ["an option's description not where it is", { PermissionRequest: { emit: "input.requested", answer: { ...ANSWER, asks: { ...ANSWER.asks, description: 1 } } } }],
+      ["several answers not where it is", { PermissionRequest: { emit: "input.requested", answer: { ...ANSWER, asks: { ...ANSWER.asks, many: true } } } }],
       ["leave", { PermissionRequest: { emit: "input.requested", answer: { ...ANSWER, leave: "ExitPlanMode" } } }],
       ["unknown", { PermissionRequest: { emit: "input.requested", answer: { ...ANSWER, always: ANSWER.allow } } }],
     ];

@@ -373,6 +373,7 @@ fn what_a_device_lists_is_kept_whole_with_what_waits_on_the_person_among_it_and_
     let asks = vec![Asked {
         question: "Which color?".into(),
         options: vec!["Red".into(), "Blue".into()],
+        descriptions: vec![],
         many: false,
     }];
     let question = Need {

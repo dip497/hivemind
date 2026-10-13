@@ -2227,6 +2227,152 @@
     }
    ],
    "working": 0
+  },
+  {
+   "about": "what each option of a question means is shown under it as said (0.10), one for each option; descriptions of another count, or not all text, are left out of the question, not the question from the item",
+   "answers": [
+    {
+     "t": "needs",
+     "needs": [
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "agent": "Notes",
+       "kind": "question",
+       "machine": "desk",
+       "choose": true,
+       "tile": "t1",
+       "since": 1790000000000,
+       "asks": [
+        {
+         "question": "Which line next?",
+         "options": [
+          "Nothing",
+          "A timestamp"
+         ],
+         "descriptions": [
+          "Leave it as it is",
+          "Add today's date"
+         ]
+        }
+       ]
+      },
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "agent": "Notes",
+       "kind": "question",
+       "machine": "desk",
+       "choose": true,
+       "tile": "t2",
+       "since": 1790000001000,
+       "asks": [
+        {
+         "question": "Which line next?",
+         "options": [
+          "Nothing",
+          "A timestamp"
+         ],
+         "descriptions": [
+          "Only one"
+         ]
+        }
+       ]
+      },
+      {
+       "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "name": "api",
+       "agent": "Notes",
+       "kind": "question",
+       "machine": "desk",
+       "choose": true,
+       "tile": "t3",
+       "since": 1790000002000,
+       "asks": [
+        {
+         "question": "Which line next?",
+         "options": [
+          "Nothing",
+          "A timestamp"
+         ],
+         "descriptions": [
+          "Leave it as it is",
+          2
+         ]
+        }
+       ]
+      }
+     ],
+     "working": 0
+    }
+   ],
+   "from": [
+    "d1"
+   ],
+   "needs": [
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "agent": "Notes",
+     "kind": "question",
+     "machine": "desk",
+     "choose": true,
+     "tile": "t1",
+     "since": 1790000000000,
+     "asks": [
+      {
+       "question": "Which line next?",
+       "options": [
+        "Nothing",
+        "A timestamp"
+       ],
+       "descriptions": [
+        "Leave it as it is",
+        "Add today's date"
+       ]
+      }
+     ]
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "agent": "Notes",
+     "kind": "question",
+     "machine": "desk",
+     "choose": true,
+     "tile": "t2",
+     "since": 1790000001000,
+     "asks": [
+      {
+       "question": "Which line next?",
+       "options": [
+        "Nothing",
+        "A timestamp"
+       ]
+      }
+     ]
+    },
+    {
+     "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "name": "api",
+     "agent": "Notes",
+     "kind": "question",
+     "machine": "desk",
+     "choose": true,
+     "tile": "t3",
+     "since": 1790000002000,
+     "asks": [
+      {
+       "question": "Which line next?",
+       "options": [
+        "Nothing",
+        "A timestamp"
+       ]
+      }
+     ]
+    }
+   ],
+   "working": 0
   }
  ]
 }

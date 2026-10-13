@@ -210,12 +210,13 @@ export interface TranscriptRule {
 
 /** Where a tool use's input asks the person questions, each with options to choose from: the list
  *  of questions (a path into the item), and in each question its text, its options' list, each
- *  option's label, and whether several may be chosen. */
+ *  option's label and what it means, and whether several may be chosen. */
 export interface TranscriptAsks {
   list: string;
   question: string;
   options: string;
   label: string;
+  description?: string;
   many?: string;
 }
 

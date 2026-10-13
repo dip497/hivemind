@@ -6,10 +6,12 @@
 import { valueAt } from "./field-path.js";
 import type { AgentTranscript, TranscriptAsks, TranscriptRule } from "./types.js";
 
-/** A question a tool use asks the person, and the options to choose from; `many`: several may be. */
+/** A question a tool use asks the person, and the options to choose from; `descriptions`: what
+ *  each option means, by its place ("" for one that says nothing); `many`: several may be. */
 export interface Asked {
   question: string;
   options: string[];
+  descriptions?: string[];
   many?: true;
 }
 
@@ -50,9 +52,14 @@ export function askedIn(from: unknown, asks: TranscriptAsks): Asked[] | undefine
     const question = valueAt(q, asks.question);
     const options = valueAt(q, asks.options);
     if (!isText(question) || !Array.isArray(options)) return [];
-    const labels = options.slice(0, OPTIONS_MAX).map((o) => valueAt(o, asks.label)).filter(isText).map((l) => l.slice(0, ASKED_TEXT_MAX));
+    const labelled = options.slice(0, OPTIONS_MAX).filter((o) => isText(valueAt(o, asks.label)));
+    const labels = labelled.map((o) => (valueAt(o, asks.label) as string).slice(0, ASKED_TEXT_MAX));
+    const descriptions = labelled.map((o) => {
+      const d = asks.description === undefined ? undefined : valueAt(o, asks.description);
+      return isText(d) ? d.slice(0, ASKED_TEXT_MAX) : "";
+    });
     const many = asks.many !== undefined && valueAt(q, asks.many) === true;
-    return [{ question: question.slice(0, ASKED_TEXT_MAX), options: labels, ...(many ? { many: true as const } : {}) }];
+    return [{ question: question.slice(0, ASKED_TEXT_MAX), options: labels, ...(descriptions.some((d) => d) ? { descriptions } : {}), ...(many ? { many: true as const } : {}) }];
   });
   return asked.length ? asked : undefined;
 }

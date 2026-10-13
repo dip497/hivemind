@@ -37,6 +37,7 @@ const app = {
   conversation: (a) => (window.calls.push(["conversation", a.tile]), () => {}),
   terminal: () => null,
   tool: async () => ({}),
+  answer: async (a, reply) => (window.calls.push(["answer", a.tile, reply]), true),
 };
 const screen = new AgentScreen(app);
 document.getElementById("app").append(screen.el);
@@ -97,4 +98,26 @@ test("an agent that keeps no conversation the phone can read opens in its termin
   await open(page, "t1");
   await expect(page.locator("[data-screen=agent] [data-terminal]")).toBeHidden();
   await expect(flip).toHaveText("Terminal");
+});
+
+test("a question its agent asks shows each option with what it means, chosen by its place, and a line typed for anything else; never Allow or Deny", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await screen();
+  const waiting = { kind: "question", since: 5, choose: true, asks: [{
+    question: "Which line should I add to hello.txt next?",
+    options: ["Nothing", "A timestamp", "\"test passed\""],
+    descriptions: ["Leave hello.txt as it is", "Add today's date and time as a new line", "Add the line \"test passed\""],
+  }] };
+  await show(page, overview(agent("t1", "Phone test", { state: "waiting", waiting })));
+  await open(page, "t1");
+  const card = page.locator("[data-screen=agent] [data-waiting-card]");
+  await expect(card.locator("[data-question]")).toHaveText("Which line should I add to hello.txt next?");
+  const choices = card.locator("[data-choice]");
+  await expect(choices).toHaveCount(3);
+  await expect(choices.nth(1).locator(".label")).toHaveText("A timestamp");
+  await expect(choices.nth(1).locator(".description")).toHaveText("Add today's date and time as a new line");
+  await expect(card.locator("[data-answer=allow], [data-answer=deny]")).toHaveCount(0);
+  await expect(card.locator("[data-reply] textarea")).toHaveAttribute("placeholder", "Type something");
+  await choices.nth(1).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { calls: unknown[] }).calls.filter((c) => (c as string[])[0] === "answer"))).toEqual([["answer", "t1", { choice: 1 }]]);
 });

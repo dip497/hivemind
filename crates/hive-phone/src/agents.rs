@@ -41,18 +41,43 @@ pub struct ToolAsked {
     pub about: Option<String>,
 }
 
-/// A question an agent's tool asks the person, and the options to choose from; `many`: several
-/// may be chosen (spec/needs.md 0.7).
+/// A question an agent's tool asks the person, and the options to choose from; `descriptions`:
+/// what each means, one for each option (0.10); `many`: several may be chosen (spec/needs.md 0.7).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "SaidAsked")]
 pub struct Asked {
     pub question: String,
     pub options: Vec<String>,
-    #[serde(
-        default,
-        deserialize_with = "only_true",
-        skip_serializing_if = "Not::not"
-    )]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub descriptions: Vec<String>,
+    #[serde(skip_serializing_if = "Not::not")]
     pub many: bool,
+}
+
+/// A question as a device says it: descriptions not one for each option are not said.
+#[derive(Deserialize)]
+struct SaidAsked {
+    question: String,
+    options: Vec<String>,
+    #[serde(default, deserialize_with = "or_none")]
+    descriptions: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "only_true")]
+    many: bool,
+}
+
+impl From<SaidAsked> for Asked {
+    fn from(said: SaidAsked) -> Self {
+        let descriptions = said
+            .descriptions
+            .filter(|d| d.len() == said.options.len())
+            .unwrap_or_default();
+        Asked {
+            question: said.question,
+            options: said.options,
+            descriptions,
+            many: said.many,
+        }
+    }
 }
 
 /// What an agent waits for, while it waits.

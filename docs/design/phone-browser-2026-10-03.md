@@ -1279,3 +1279,27 @@ Now an open serves the newest build had whole at once, from memory once the work
 out. The check runs alongside it. A new build is fetched whole and becomes the newest, so the next
 open runs it. When the check finds nothing new, the builds no open page runs are dropped. Which
 build a page runs is set in memory first and written to Cache Storage behind.
+
+### 12.10 Claude's AskUserQuestion on the phone
+
+On the rig the phone showed "permission" with Allow and Deny for an AskUserQuestion chooser, then
+"idle". There were three causes.
+
+- The rig's profile ran a copy of the Claude manifest without the `answer:` block on its
+  `PermissionRequest` hook (the HiveHub one has none either). Without it the hook holds nothing.
+  The session file cannot stand in: Claude 2.1.296 writes the `tool_use` only once the question is
+  answered, so nothing names the tool while it waits. With the manifest in this repo, the hook holds
+  the wait and gives its tool and questions. Each option now carries its `description` too
+  (needs 0.10), and so does `many`, which the hook's `asks` lacked: a multiSelect question was
+  offered as one choice.
+- An option chosen on the phone is answered as hapi and Happy answer it: the hook prints
+  `updatedInput.answers`, the option's label under the question's text (hapi
+  `cli/src/claude/utils/askUserQuestionAnswers.ts:3-21`, happy
+  `happy-cli/src/claude/utils/permissionHandler.ts:141-145,161-163`). No key is typed, so the
+  answer never lands on a chooser that is being redrawn. An agent whose hook does not hold the
+  wait still has its option's digit typed (`choose: ['{n}']`), through the guarded key path.
+- Opening the terminal from the phone repaints it (`terminals.ts` `repaintSoon`: one row shorter,
+  then back). The shorter screen loses the chooser's footer, and the person's last message above it
+  starts with `❯ `, which the idle rule reads as the prompt. One such reading ends a hooked wait
+  (`status-store.ts` fold), and the `question` readings after it do not bring the wait back. Claude's
+  question rule now also reads a selected option, `❯ 1.`, as a chooser.

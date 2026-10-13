@@ -128,11 +128,13 @@ export interface ApprovalWait {
 
 /** One thing said in an agent's conversation (spec/agents.md "Conversation"): by the person, by
  *  the agent (its text, in markdown, or a tool it used), or by a tool (what it gave back). */
-/** A question an agent's tool asks the person, and the options to choose from; `many`: several may
- *  be chosen (spec/agents.md "Conversation", spec/needs.md 0.7). */
+/** A question an agent's tool asks the person, and the options to choose from; `descriptions`: what
+ *  each option means, by its place (0.10); `many`: several may be chosen (spec/agents.md
+ *  "Conversation", spec/needs.md 0.7). */
 export interface Asked {
   question: string;
   options: string[];
+  descriptions?: string[];
   many?: true;
 }
 

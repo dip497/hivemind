@@ -1,4 +1,4 @@
-# Needs you (0.9)
+# Needs you (0.10)
 
 What waits on the person (M5, design §9.2 "Home: Needs you"): each agent waiting on them, in the
 workspaces one of their devices holds, as their phone lists it. The device that runs the agents
@@ -18,7 +18,8 @@ holds is one item:
   "agent": "<what the agent is called>", "kind": "permission", "says": "trust", "since": 1790000000000,
   "plan": "<the plan, in markdown>", "machine": "<what the machine it runs on is called>",
   "decide": true, "tool": { "name": "Bash", "about": "<the command, whole>" },
-  "asks": [{ "question": "Which color?", "options": ["Red", "Blue"], "many": true }], "choose": true }
+  "asks": [{ "question": "Which color?", "options": ["Red", "Blue"], "descriptions": ["Warm", "Cool"], "many": true }],
+  "choose": true }
 ```
 
 - `says` (0.6) is what screen it waits on, when the agent's manifest names it: a detect rule that
@@ -53,7 +54,9 @@ holds is one item:
 - `asks` (0.7) is there when that tool asks the person questions (Claude Code's AskUserQuestion):
   the wait is then a `question`, whatever kind its status says, with each question and the options
   to choose from (`many`: several may be chosen); at most 4 questions of 9 options, each at most
-  300 characters.
+  300 characters. `descriptions` (0.10) says what each option means, one for each option in its
+  order (`""` for one that says nothing), when the tool says it of any; descriptions of another
+  count, or not all text, are left out of the question, not the question from the item.
 - `choose` (0.7) is `true` on a `question` that asks one question, with options, of which one is
   chosen, when the agent's manifest says the keys that choose an option (`choose`, "Answering").
 

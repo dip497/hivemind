@@ -48,8 +48,14 @@ export function answers(tile: string, w: Waiting, answer: (reply: Reply) => Prom
       ...(w.choose ? [] : [h("ul", {}, ...q.options.map((o) => h("li", {}, o)))])));
   }
   if (w.kind === "question" && w.choose && w.asks?.length === 1) {
-    box.append(h("div", { class: "choices" }, ...w.asks[0]!.options.map((o, n) =>
-      pill(o, () => void hold({ choice: n }), "", { "data-choice": String(n) }))));
+    const q = w.asks[0]!;
+    box.append(h("div", { class: "choices" }, ...q.options.map((o, n) => {
+      const said = q.descriptions?.[n];
+      const choice = h("button", { type: "button", class: "choice", "data-choice": String(n) },
+        h("span", { class: "label" }, o), ...(said ? [h("span", { class: "description" }, said)] : []));
+      choice.addEventListener("click", () => void hold({ choice: n }));
+      return choice;
+    })), composer("Type something", async (text) => (await hold({ text })) === true, { "data-reply": "" }));
   } else if (w.kind === "permission" && w.decide) {
     box.append(h("div", { class: "row" },
       pill("Deny", () => void hold({ allow: false }), "", { "data-answer": "deny" }),
