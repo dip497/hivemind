@@ -9,6 +9,8 @@ import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnaps
 import type { AgentAnswer, AgentChange, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, Startable, StatusChange, TileOpened, ToolUse } from "./agents.js";
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
 import type { JoinQuestion, JoinRequests, PersonHere } from "./people.js";
+import type { GuestAnswer } from "@hivemind/workspace-host/connect";
+import type { DeviceCertificate } from "@hivemind/workspace-host/identity";
 import type { ClientGrant, NewGrant } from "./grants.js";
 import type { FrameClose, FrameClosed, FrameOpened, FrameSpec } from "./frames.js";
 import type { ViewFile, ViewListing, ViewScreen } from "./views.js";
@@ -195,6 +197,9 @@ export interface WorkspaceMethods {
   "people.remove": (repo: string, person: string) => void;
   /** A join link; `uses` (0.16): how many people a reusable one lets in at most. */
   "people.invite": (repo: string, role: LinkRole, expiresIn: number, reusable?: boolean, uses?: number) => string;
+  /** Let in the device whose certificate asked the owner's app to connect, answered someone else
+   *  (0.25): where it finds the workspace. */
+  "people.admit": (repo: string, certificate: DeviceCertificate, profile: { name: string; color: string }, role: LinkRole) => GuestAnswer;
   /** `role` (0.16): let them in at this role in place of the link's. */
   "people.answer": (repo: string, req: number, allow: boolean, role?: LinkRole) => { answered: boolean };
   /** The questions about `repo` waiting on its owner now, and how it lets in someone with a valid

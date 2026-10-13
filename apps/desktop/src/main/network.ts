@@ -49,7 +49,10 @@ import { PushNotices, PushSubscriptions, postNotice } from "@hivemind/host/push"
 import { participantAt } from "@hivemind/host/device-sessions";
 import type { TerminalMachine } from "@hivemind/host/terminals";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
-import { forgetShared, handOffTo, leaveShared, machineGrant, openShared, setMachineGrant, sharedLooks, sharedStatus, type SharedStatus } from "./shared-workspaces.js";
+import { elsewhere, forgetShared, handOffTo, leaveShared, machineGrant, openShared, setMachineGrant, sharedLooks, sharedStatus, type SharedStatus } from "./shared-workspaces.js";
+import { Connecting } from "./connecting.js";
+import type { GuestAnswer } from "@hivemind/workspace-host/connect";
+import type { ConnectAnswer } from "../shared/ipc.js";
 import { GRANTS, type Grant } from "@hivemind/host/machine-share";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
@@ -320,10 +323,14 @@ export function network(): Promise<HiveNet> {
         peers.serve(link);
         void vouchFor(link.peer);
       },
-      // A host entering the code this app offers; anyone else asks to join.
-      onPairRequest: async (peer, hello) => ((hello as { pair?: unknown } | null)?.pair
-        ? (offered?.open() ? offered.answer(peer, hello) : { ok: false, error: "expired" })
-        : sharingOf().answer(peer, hello)),
+      // A host entering the code this app offers; a device using its offer to connect; anyone
+      // else asks to join.
+      onPairRequest: async (peer, hello) => {
+        const h = hello as { pair?: unknown; connect?: unknown } | null;
+        if (h?.pair) return offered?.open() ? offered.answer(peer, hello) : { ok: false, error: "expired" };
+        if (h?.connect) return connecting.answer(peer, hello);
+        return sharingOf().answer(peer, hello);
+      },
       onExit: (why) => { current = null; records?.stop(); records = null; console.warn(`[network] ${why}`); },
     });
     hn.admit(accessLists().admitted());
@@ -460,6 +467,30 @@ function joinedStatus(workspace: string): ({ names: { workspace: string; host: s
 /** A code this app offers for one of the person's hosts to enter (Settings → Your devices). */
 let offered: PairingOffer | null = null;
 
+/** The one offer to connect this app makes (Settings → Connect), and the requests made with it. */
+const connecting = new Connecting({
+  me: async () => ({ ...(await pairingMe()), profile: await shownProfile() }),
+  announce: (data) => void network().then((hn) => hn.advertise(data), () => {}),
+  // On a network whose relays admit only who they are told to, the link carries a voucher for the
+  // device using it from elsewhere, for as long as the offer lasts; on an open one, where to register.
+  admission: async (seconds) => {
+    const access = (await networkProfiles().active()).profile.access;
+    if (!access) return undefined;
+    return { access: access.url, voucher: access.policy === "closed" ? await networkProfiles().voucher({ expiresIn: seconds, uses: 1 }) : null };
+  },
+  // Let in by the workspace's host: this app's, or the device of the person's it was moved to.
+  admit: async (repo, request, role) => {
+    const params = [repo, request.certificate, request.profile, role] as const;
+    const there = elsewhere.call("people.admit", params);
+    if (!there) return peopleHere.admit(...params);
+    const answer = await there;
+    if ("error" in answer) throw new Error(answer.error.message);
+    return answer.result as GuestAnswer;
+  },
+  kept: ({ with: other }) => keepPaired({ ...other, pairedAt: Date.now() }),
+  changed: (state) => broadcast("net:connect-changed", state),
+});
+
 /** This app, as pairing needs it: it gives the person it holds, and a phone the network it is on. */
 async function pairingMe(): Promise<PairingDevice> {
   const hn = await network();
@@ -471,6 +502,18 @@ async function pairingMe(): Promise<PairingDevice> {
     ...(on === "local" ? {} : { network: on }),
   };
 }
+
+/** An answer to a device asking to connect, as a window sends it, or null. */
+function answerOf(v: unknown): ConnectAnswer | null {
+  const a = v as { as?: unknown; role?: unknown } | null;
+  if (a?.as === "me" || a?.as === "no") return { as: a.as };
+  if (a?.as === "guest" && (a.role === "view" || a.role === "edit" || a.role === "terminals")) return { as: "guest", role: a.role };
+  return null;
+}
+const answerDetail = (v: unknown): string => {
+  const a = answerOf(v);
+  return a?.as === "guest" ? `guest as ${a.role}` : a?.as ?? "?";
+};
 
 /** A device, as Settings lists it. */
 const summary = (d: PairedDevice) => ({ device: d.device, name: d.name, kind: d.kind, pairedAt: d.pairedAt });
@@ -737,6 +780,20 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     const pair = { device: me.device, addrs: me.addrs, relay: me.relay, code: offer.code, name: me.name, kind: "app" as const, ...(admission ? { admission } : {}) };
     const at = await page;
     return { code: offer.code, link: formatPairLink(pair), ...(at ? { page: pageLink(at, pair) } : {}), expires: offer.expires };
+  });
+
+  // An offer to connect, from the window showing `repo` (none: Home), and the person's answers to
+  // the devices that use it.
+  handleEffect("net:connect-offer", (repo: unknown) => ({ target: typeof repo === "string" ? repo : "home" }), (_e, repo: unknown) => {
+    if (repo !== null && typeof repo !== "string") throw new Error("connect: not a workspace");
+    return connecting.offer(repo);
+  });
+  handleEffect("net:connect-cancel", () => ({}), () => connecting.cancel());
+  handle("net:connect-state", () => connecting.state());
+  handleEffect("net:connect-answer", (_id: unknown, answer: unknown) => ({ detail: answerDetail(answer) }), (_e, id: unknown, answer: unknown) => {
+    const a = answerOf(answer);
+    if (typeof id !== "string" || !a) throw new Error("connect: not an answer");
+    return connecting.decide(id, a);
   });
 
   // The hash of the phone page `page` serves, and of the one this build goes with: whether a

@@ -24,6 +24,32 @@ export interface PairedDeviceSummary {
   pairedAt: number;
 }
 
+/** What the person answers a device asking to connect (spec/pairing.md 0.10). */
+export type ConnectAnswer = { as: "me" } | { as: "guest"; role: "view" | "edit" | "terminals" } | { as: "no" };
+
+/** A device asking to connect, as the prompt shows it. */
+export interface ConnectAsking {
+  id: string;
+  name: string;
+  kind: "app" | "host" | "phone";
+  /** Who it says it is: none from a phone. */
+  profile: { name: string; color: string } | null;
+  /** The words its screen shows too. */
+  words: string[];
+  /** The answers it may be given besides no: it's me, and someone else. */
+  me: boolean;
+  guest: boolean;
+  /** Told it's me, and waiting on its own person to say the words match. */
+  confirming: boolean;
+}
+
+/** The offer to connect this app made, while it can be used; the requests; and how the last ended. */
+export interface ConnectState {
+  offer: { code: string; link: string; page?: string; expires: number } | null;
+  requests: ConnectAsking[];
+  last: { name: string; as: "me" | "guest" | "refused" } | null;
+}
+
 /** A workspace one of the person's other devices holds. */
 export interface DeviceWorkspace { workspace: string; name: string; repo: string }
 
@@ -423,6 +449,14 @@ export interface HiveIpc {
    *  phone, a certificate naming it as yours. `page`: the link inside the address of the phone
    *  page, when the network's server serves one, for a phone to open in its browser. */
   pairOffer(): Promise<{ code: string; link: string; page?: string; expires: number }>;
+  /** Offer to connect (spec/pairing.md 0.10), from the window showing `repo` (null: Home): a code,
+   *  its link and the phone page's address for it. Whoever uses it only asks; the person answers
+   *  each request with `connectAnswer`. A new offer voids the last. */
+  connectOffer(repo: string | null): Promise<NonNullable<ConnectState["offer"]>>;
+  connectCancel(): Promise<void>;
+  connectState(): Promise<ConnectState>;
+  onConnectChanged(cb: (state: ConnectState) => void): () => void;
+  connectAnswer(id: string, answer: ConnectAnswer): Promise<void>;
   /** The hash of the phone page at `page`, worked out from what its server serves, and of the
    *  page this build goes with (null: a build made without one). */
   phonePage(page: string): Promise<{ served: string; shipped: string | null }>;

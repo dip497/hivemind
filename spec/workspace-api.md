@@ -1,4 +1,4 @@
-# Workspace API (0.24)
+# Workspace API (0.25)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -59,7 +59,7 @@ whichever starts first does, and the other says so. Lines of JSON both ways, 1 M
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.24", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.25", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -254,6 +254,7 @@ log.
 | `people.role` | `repo`, `person`, `role` | `null`: their connections close, so they work under the new role at once; *Can drive agents* is given only to someone connected now | target `repo`, detail the person and the role |
 | `people.remove` | `repo`, `person` | `null`: off the list, their connections closed, and the link they came in by lets nobody in again | target `repo`, detail the person |
 | `people.invite` | `repo`, `role` (`view`, `edit` or `terminals`), `expiresIn` (ms), `reusable`?, `uses`? | a join link, `hivemind://join/<host's device id>#…`: where the host is, the workspace's name and its owner's, its key and the network's lookup server, and on a network whose relays admit only whom they are told to a voucher for the guest's device; used once unless `reusable`, then by `uses` people at most when given (0.16) | target `repo`, detail the role |
+| `people.admit` | `repo`, `certificate`, `profile`, `role` (`view`, `edit` or `terminals`) | where the device finds the workspace, `{workspace, host, addrs, relay, role, names, hosting}` (0.25): the device whose `certificate` asked to connect to the owner's app and was answered someone else (`pairing.md` 0.10) is let in as a join lets someone in, its person granted `role` and remembered by `profile` | target `repo`, detail the person and the role |
 | `people.answer` | `repo`, `req`, `allow`, `role`? | `{answered}`: whether this answer to the question `req` (`people.asked`) counted, the first one does; `role` (`view`, `edit` or `terminals`, 0.16) lets them in at it in place of their link's | target `repo`, detail `allow` (`allow as <role>`) or `deny` |
 | `people.requests` | `repo` | `{answering, asking}` (0.16): how the workspace lets in someone with a valid invite (`ask` or `invite`), and the questions about it waiting on its owner now, each `{req, workspace, profile, role}` as `people.asked` tells it | read |
 | `people.answering` | `repo`, `rule` (`ask` or `invite`) | `null` (0.16): `ask`, the default, asks the owner about each person with a valid invite; `invite` lets them in at once at the invite's role | target `repo`, detail the rule |
