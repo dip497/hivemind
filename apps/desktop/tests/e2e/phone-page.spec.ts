@@ -34,7 +34,9 @@ import { Home } from "./js/home.js";
 await init();
 const view = new HomeView(null);
 window.opened = [];
-const app = { open() {}, openTerminal: (...at) => window.opened.push(at), answer: async () => true };
+window.calls = [];
+const app = { open: (t) => window.calls.push(["open", t]), openTerminal: (...at) => window.opened.push(at), answer: async () => true, computer: () => "desk",
+  stop: async (a) => { window.calls.push(["stop", a.tile]); return true; }, close: async (a) => { window.calls.push(["close", a.tile]); return true; } };
 const screen = new Home(app, () => show());
 document.getElementById("app").append(screen.el);
 const show = () => screen.show(view.shown(screen.filter.query, screen.filter.machine ?? undefined, "desk"), view.overview("d", "desk"));
@@ -84,6 +86,20 @@ test("a canvas of 200 tiles opens Home in under 500 ms on a CPU a quarter as fas
   await expect(page.locator("[data-tree] [data-agent]")).toHaveCount(200);
   await expect(page.locator("[data-need]")).toHaveCount(50);
   expect(ms).toBeLessThan(500);
+});
+
+test("Home opens on 200 tiles without moving anything once drawn: no layout shift", async () => {
+  test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
+  const page = await home();
+  const shifted = await page.evaluate(async () => {
+    let sum = 0;
+    new PerformanceObserver((list) => { for (const e of list.getEntries()) sum += (e as unknown as { value: number }).value; }).observe({ type: "layout-shift", buffered: true });
+    (window as unknown as Driven).load(200, 0);
+    await document.fonts.ready;
+    for (let i = 0; i < 30; i++) await new Promise(requestAnimationFrame);
+    return sum;
+  });
+  expect(shifted).toBe(0);
 });
 
 test("among 200 tiles, one tile's new last line redraws its rows alone, and one wait answered removes its card, redraws its row and adds it to Working; nothing else on any list moves", async () => {
@@ -265,4 +281,99 @@ test("a project whose only frame carries its name shows no frame row, its tiles 
   // Opaque, and over the rows passing under it.
   const over = await heading.evaluate((el) => { const r = el.getBoundingClientRect(); return document.elementFromPoint(r.left + 4, r.top + r.height / 2)?.closest("[data-project]") === el; });
   expect(over).toBe(true);
+});
+
+test("a row has no ⋯: a tap opens it, held it offers what can be done to it, swiped left Stop and Close; Start is a 44 px +, the search a borderless --panel field 36 px high", async () => {
+  test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
+  const page = await home();
+  await page.evaluate(() => {
+    const w = window as unknown as Driven;
+    w.load(20, 5);
+    w.change({ t: "changes", layout: { seq: 2, changes: [{ seq: 2, key: "t:w0/i1", row: { of: "tile", workspace: "w0", id: "i1", frameId: "f0", kind: "claude", name: "idle one", agent: "claude", order: 99, state: "idle", since: 1790000000000, machine: "desk", interrupt: true } }] } });
+  });
+  const calls = () => page.evaluate(() => (window as unknown as { calls: unknown[] }).calls);
+  await expect(page.locator("[data-row-more]")).toHaveCount(0);
+  await expect(page.locator(".agent", { hasText: "⋯" })).toHaveCount(0);
+  const row = page.locator('[data-working-row="t0"]');
+  await row.locator(".open").click();
+  expect(await calls()).toEqual([["open", "t0"]]);
+  await expect(page.locator("[data-row-actions]")).toBeHidden();
+  // Held still: what can be done to it, and it is not opened.
+  const at = (await row.locator(".open").boundingBox())!;
+  await page.mouse.move(at.x + 40, at.y + at.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(700);
+  await page.mouse.up();
+  await expect(page.locator("[data-row-actions] [data-row-stop]")).toBeVisible();
+  expect(await calls()).toEqual([["open", "t0"]]);
+  await page.locator("[data-row-actions] [data-row-cancel]").click();
+  // A right click, as Android's own long press: the same.
+  await page.locator('[data-working-row="t1"] .open').click({ button: "right" });
+  await expect(page.locator("[data-row-actions] [data-row-stop]")).toBeVisible();
+  expect(await calls()).toEqual([["open", "t0"]]);
+  await page.locator("[data-row-actions] [data-row-cancel]").click();
+  // Swiped left by touch: Stop and Close come out from under it; acted on, the row goes back.
+  const cdp = await page.context().newCDPSession(page);
+  const swipe = async (r: typeof row, by: number) => {
+    await r.scrollIntoViewIfNeeded();
+    const b = (await r.boundingBox())!;
+    const y = Math.round(b.y + b.height / 2);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 360, y }] });
+    for (let i = 1; i <= 12; i++) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 360 - Math.round((i * by) / 12), y }] });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  };
+  // Seen: what is under the middle of a button is that button, not the row over it.
+  const seen = (b: ReturnType<typeof row.locator>) => b.evaluate((el) => { const r = el.getBoundingClientRect(); return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest("button") === el; });
+  const stop = row.locator("[data-swipe-stop]");
+  await expect(row.locator(".behind")).toHaveCount(0);
+  // Mid-drag, the face covers what it has not yet uncovered.
+  const rb = (await row.boundingBox())!;
+  const ry = Math.round(rb.y + rb.height / 2);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 360, y: ry }] });
+  for (const x of [350, 340, 330, 320]) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: ry }] });
+  expect(await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest(".open"), [300, ry])).toBe(true);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await expect(row.locator(".behind")).toHaveCount(0);
+  await swipe(row, 40);
+  await expect(row.locator(".behind")).toHaveCount(0);
+  await swipe(row, 260);
+  await expect.poll(() => seen(stop)).toBe(true);
+  await expect.poll(() => seen(row.locator("[data-swipe-close]"))).toBe(true);
+  await stop.click();
+  expect(await calls()).toEqual([["open", "t0"], ["stop", "t0"]]);
+  await expect(row.locator(".behind")).toHaveCount(0);
+  // Open, a press on the row shuts it and opens nothing (a mouse's, whose click always comes).
+  const idle = page.locator('[data-tree] [data-row="t:w0/i1"]');
+  await swipe(idle, 260);
+  await expect.poll(() => seen(idle.locator("[data-swipe-close]"))).toBe(true);
+  const ib = (await idle.boundingBox())!;
+  // The tap's click, counted first on its way down, so all it does is done before looking.
+  const clicks = () => page.evaluate(() => (window as unknown as { clicks: number }).clicks);
+  await page.evaluate(() => {
+    const w = window as unknown as { clicks: number };
+    w.clicks = 0;
+    window.addEventListener("click", () => w.clicks++, { capture: true });
+  });
+  await page.mouse.click(ib.x + 100, ib.y + ib.height / 2);
+  await expect.poll(clicks).toBe(1);
+  await expect(idle.locator(".behind")).toHaveCount(0);
+  expect(await calls()).toEqual([["open", "t0"], ["stop", "t0"]]);
+  // One that is not at work has only Close, which asks first.
+  await swipe(idle, 260);
+  await expect.poll(() => seen(idle.locator("[data-swipe-close]"))).toBe(true);
+  await expect(idle.locator("[data-swipe-stop]")).toHaveCount(0);
+  await idle.locator("[data-swipe-close]").click();
+  await expect(page.locator("[data-row-close-ask]")).toBeVisible();
+  await page.locator("[data-row-close-ask] [data-yes]").click();
+  await expect.poll(calls).toEqual([["open", "t0"], ["stop", "t0"], ["close", "i1"]]);
+  // Start: a + of 44 px; the search: no border, --panel, 36 px, corners of 10.
+  const start = page.locator("[data-start]");
+  await expect(start).toHaveAttribute("aria-label", "Start an agent");
+  expect(await start.evaluate((b) => [b.getBoundingClientRect().width, b.getBoundingClientRect().height, b.textContent, !!b.querySelector("svg")])).toEqual([44, 44, "", true]);
+  const search = await page.locator("[data-search]").evaluate((el) => {
+    const c = getComputedStyle(el);
+    const p = document.createElement("p"); p.style.backgroundColor = "var(--panel)"; document.body.append(p);
+    return { border: c.borderTopWidth, bg: c.backgroundColor, panel: getComputedStyle(p).backgroundColor, h: el.getBoundingClientRect().height, radius: c.borderTopLeftRadius };
+  });
+  expect(search).toEqual({ border: "0px", bg: search.panel, panel: search.panel, h: 36, radius: "10px" });
 });

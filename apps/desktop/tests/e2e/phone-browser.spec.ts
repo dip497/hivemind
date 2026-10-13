@@ -286,12 +286,12 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   await say("ask");
   await expect(waiting).toHaveAttribute("data-waiting-card", "question", { timeout: 30_000 });
   await page.locator('[data-screen="agent"] [data-back]').click();
-  await page.locator(`[data-row-more="${talker}"]`).click();
+  await page.locator(`[data-agent="${talker}"] .open`).click({ button: "right" });
   await page.locator("[data-row-actions] [data-row-stop]").click();
   await expect.poll(audit, { timeout: 10_000 }).toContainEqual(expect.objectContaining({ verb: "agent.interrupt", outcome: "ok", actor: expect.objectContaining({ kind: "peer", device: id }) }));
   await expect(page.locator(`[data-agent="${talker}"]`)).not.toHaveAttribute("data-state", "waiting", { timeout: 30_000 });
   await expect(page.locator("[data-row-actions]")).toBeHidden();
-  await page.locator(`[data-row-more="${talker}"]`).click();
+  await page.locator(`[data-agent="${talker}"] .open`).click({ button: "right" });
   await expect(page.locator("[data-row-actions] [data-row-stop]")).toBeHidden();
   await page.locator("[data-row-actions] [data-row-close]").click();
   await expect(page.locator("[data-row-close-ask]")).toHaveText(/^Close .+\? It stops, and its tile closes on .+\./);

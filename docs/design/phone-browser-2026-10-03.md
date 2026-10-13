@@ -1396,3 +1396,13 @@ Before and after at 390×844 are the `ux-*.png` pairs of the rig's scratchpad.
   no frame under it and called as the project is, is no row of its own: its tiles are the
   project's, one level up (`spec/home.md` 0.4, in the core so Android shares it). Home read
   "hivemind", then "hivemind".
+- A row has no ⋯. Held still for 500 ms (hapi's `web/src/hooks/useLongPress.ts:48-111`), or right
+  clicked (Android's own long press), it opens the sheet of what can be done to it; the click
+  that ends the press is swallowed. Dragged left it slides over Stop (while it can be stopped) and
+  Close, staying open past half of them, as Happy's `Swipeable` rows do
+  (`packages/happy-app/sources/components/FlatSessionRow.tsx:259-276`); Close still asks. Both are
+  one set of listeners on Home (`gestures.ts`), and the actions are made only once a row moves:
+  first built as rows that scroll sideways, with their buttons in each, Home opened ~130 ms
+  slower at 4x CPU on 200 tiles; a row now only carries `touch-action: pan-y`. Start is a 44 px
+  +; the search a borderless `--panel` field, 36 px, corners of 10. Home opens without a layout
+  shift.

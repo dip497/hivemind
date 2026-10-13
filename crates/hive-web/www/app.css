@@ -319,6 +319,7 @@ button { cursor: pointer; }
 .device .mono { color: var(--text3); overflow-wrap: anywhere; }
 .label-small { font: 500 11px/14px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3); }
 .title > .pill { margin-left: auto; }
+.title > .icon-button { margin: 0 -11px 0 auto; }
 
 /* A question asked in place, and choices as chips. */
 .ask { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
@@ -384,10 +385,7 @@ button { cursor: pointer; }
 
 /* Home: a search and machine chips; then headed lists; the tree indents by depth. */
 .find { display: flex; flex-direction: column; gap: 10px; padding: 0 16px 8px; }
-.search {
-  min-height: 40px; border: 1px solid var(--line2); border-radius: 12px; padding: 0 14px;
-  background: var(--card); font-size: 16px; outline: 0;
-}
+.search { height: 36px; border: 0; border-radius: 10px; padding: 0 12px; background: var(--panel); font-size: 16px; outline: 0; }
 .section { margin: 0; padding: 20px 20px 2px; font: 500 13px/18px var(--sans); color: var(--text3); text-transform: uppercase; letter-spacing: 0.04em; }
 /* Sticky over its rows (each row draws its own hairline, so it needs a layer above them). */
 .project {
@@ -406,7 +404,14 @@ button { cursor: pointer; }
 .frame { contain-intrinsic-size: auto 32px; }
 .project { contain-intrinsic-size: auto 36px; }
 .agent .open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; padding: 0; border: 0; background: transparent; text-align: left; }
-.agent .more { flex: none; padding: 6px 4px 6px 10px; border: 0; background: transparent; color: var(--text3); font-size: 18px; line-height: 1; }
+/* Swiped left, the row's face slides over Stop and Close (gestures.ts). */
+.agent.swipes { touch-action: pan-y; }
+.agent.swipes > .open { -webkit-touch-callout: none; user-select: none; }
+[data-swiped] { padding-right: 0; }
+[data-swiped] > .open { padding-right: 20px; background: var(--canvas); position: relative; z-index: 1; }
+.behind { position: absolute; top: 0; right: 0; bottom: 0; display: flex; }
+.behind > .pill { width: 76px; min-height: 0; padding: 0; border-radius: 0; }
+.behind > .pill { width: 76px; min-height: 0; padding: 0; border-radius: 0; }
 /* What can be done to one agent: over the list, above the tabs. */
 .sheet {
   position: fixed; left: 12px; right: 12px; bottom: calc(var(--tabs-clear) + 8px); z-index: 5;
