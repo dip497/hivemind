@@ -1,4 +1,3 @@
-import { cn } from "../lib/cn";
 import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
@@ -30,7 +29,7 @@ export function SettingsForm({ fields, values, onChange, compact }: {
                   {f.values.map((v, i) => <SelectItem key={v} value={v}>{f.labels?.[i] ?? v}</SelectItem>)}
                 </SelectContent>
               </Select>
-            : <Input type={f.type === "number" ? "number" : "text"} className={cn("w-28", compact && "h-control-compact")}
+            : <Input type={f.type === "number" ? "number" : "text"} size={compact ? "sm" : "default"} className="w-28"
                 key={String(values[f.id] ?? "")} defaultValue={String(values[f.id] ?? "")}
                 {...(f.type === "number" ? { min: f.min, max: f.max } : { maxLength: f.maxLength })}
                 onBlur={(e) => set(f, f.type === "number" ? Number(e.target.value) : e.target.value)} />}

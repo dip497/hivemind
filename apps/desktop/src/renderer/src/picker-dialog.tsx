@@ -63,7 +63,7 @@ export function PickerDialog({ title, description, rows, extra = [], onPick, onC
         </div>
         {rows.length >= SEARCH_FROM && (
           <div className="px-2 pt-2">
-            <Input value={query} onChange={(e) => { setQuery(e.target.value); setActive(0); }} placeholder="Search" aria-label="Search" className="h-7 text-label" />
+            <Input value={query} onChange={(e) => { setQuery(e.target.value); setActive(0); }} placeholder="Search" aria-label="Search" size="sm" />
           </div>
         )}
         <div className="max-h-[min(420px,60vh)] overflow-y-auto p-1.5" role="listbox" aria-label={title}>

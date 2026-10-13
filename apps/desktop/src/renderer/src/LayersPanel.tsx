@@ -743,7 +743,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       {searching && (
         <div className="px-2 pb-1.5">
           <Input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search tiles" aria-label="Search tiles" data-layers-search
-            onKeyDown={(e) => { if (e.key === "Escape") { setSearching(false); setQuery(""); } e.stopPropagation(); }} className="h-7 text-label" />
+            onKeyDown={(e) => { if (e.key === "Escape") { setSearching(false); setQuery(""); } e.stopPropagation(); }} size="sm" />
         </div>
       )}
       {pane === "tiles" && (

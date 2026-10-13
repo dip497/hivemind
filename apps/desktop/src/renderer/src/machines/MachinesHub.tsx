@@ -290,7 +290,7 @@ function MachineList({ picking, onChoose, onChooseDevice, onEdit, onAdd, usageOf
                   });
                 }}
               >
-                <Input name="pw" type="password" autoFocus data-escape-local="" aria-label={`password for ${m.label}`} placeholder={`password for ${m.target}`} className="h-8" onKeyDown={(e) => { if (e.key === "Escape") setAskPassword(null); }} />
+                <Input name="pw" type="password" autoFocus data-escape-local="" aria-label={`password for ${m.label}`} placeholder={`password for ${m.target}`} onKeyDown={(e) => { if (e.key === "Escape") setAskPassword(null); }} />
                 <Button type="submit">Save</Button>
               </form>
             )}
@@ -595,7 +595,8 @@ function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; 
             onBlur={() => setEditingPath(null)}
             font="mono"
             spellCheck={false}
-            className="h-7 flex-1"
+            size="sm"
+            className="flex-1"
           />
         ) : (
           <div className="flex-1 min-w-0 flex items-center overflow-x-auto font-mono text-[var(--color-fg2)]" onDoubleClick={() => setEditingPath(dir)}>
@@ -624,7 +625,6 @@ function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; 
           value={filter}
           onChange={(e) => { setFilter(e.target.value); setCursor(0); }}
           onKeyDown={onKey}
-          className="h-8"
         />
       </div>
       <div ref={listRef} className="h-[300px] overflow-y-auto p-1.5" role="listbox" aria-label="folders">

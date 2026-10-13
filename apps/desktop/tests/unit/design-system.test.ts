@@ -1,7 +1,7 @@
 // The design system's scales, held for the whole renderer and the tools bundled with it
 // (DESIGN.md): text is set in the named steps, colours are defined once as custom properties,
-// corners come from the radius scale, a choice is the app's Select and focus is drawn by one
-// rule. A literal or a second way in their place is drift, and fails here.
+// corners come from the radius scale, controls stand at the control heights, a choice is the
+// app's Select and focus is drawn by one rule. A literal or a second way in their place is drift, and fails here.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -107,6 +107,60 @@ export function ownFocusRings(text: string, css: boolean, home = false): string[
   return out;
 }
 
+/** The opening tag of each named component, braces and strings skipped so `=>` does not end it. */
+function openingTags(src: string, names: string[]): { name: string; text: string; index: number }[] {
+  const out: { name: string; text: string; index: number }[] = [];
+  for (const m of src.matchAll(new RegExp(`<(${names.join("|")})\\b`, "g"))) {
+    let i = m.index! + m[0].length, depth = 0, quote = "";
+    for (; i < src.length; i++) {
+      const c = src[i]!;
+      if (quote) { if (c === quote && src[i - 1] !== "\\") quote = ""; }
+      else if (c === '"' || c === "'" || c === "`") quote = c;
+      else if (c === "{") depth++;
+      else if (c === "}") depth--;
+      else if (c === ">" && depth === 0) break;
+    }
+    out.push({ name: m[1]!, text: src.slice(m.index!, i + 1), index: m.index! });
+  }
+  return out;
+}
+
+const HEIGHT = /(?<![\w-])(?:min-|max-)?(?:h|size)-(?:\d[\w.]*|\[[^\]]+\]|control(?:-compact)?)(?![\w-])/g;
+
+/** A control given its own height where it is used: its size prop picks one of the control heights. */
+export function setHeights(text: string): string[] {
+  const src = code(text, false), out: string[] = [];
+  for (const t of openingTags(src, ["Button", "Input", "SelectTrigger"]))
+    for (const h of t.text.match(HEIGHT) ?? []) out.push(`${at(src, t.index)}: <${t.name} ${h}`);
+  return out;
+}
+
+/** The heights a control may stand at (DESIGN.md): 32 and 28, and 24, 20, 16 in tile chrome. */
+const CONTROL_HEIGHTS = new Set(["h-control", "h-control-compact", "h-6", "h-5", "h-4", "size-control", "size-control-compact", "size-6", "size-5", "size-4"]);
+
+/** Each size of a control primitive, by the height its classes give it: the `size` variants when
+ *  it has them, else every height in the component's own function. */
+export function controlSizes(text: string, component?: string): string[] {
+  let src = code(text, false);
+  const out: string[] = [];
+  if (component) src = src.slice(src.indexOf(`function ${component}(`)).split(/\n(?=function |export )/)[0]!;
+  const block = /\bsize:\s*\{([^}]*)\}/.exec(src);
+  const entries = block
+    ? [...block[1]!.matchAll(/["']?([\w-]+)["']?\s*:\s*["']([^"']*)["']/g)].map((m) => [m[1]!, m[2]!] as const)
+    : [...src.matchAll(/["'`]([^"'`]*\bh-[^"'`]*)["'`]/g)].map((m) => ["", m[1]!] as const);
+  for (const [name, classes] of entries)
+    for (const c of classes.split(/\s+/).filter((c) => /^(?:h|size)-/.test(c)))
+      if (!CONTROL_HEIGHTS.has(c)) out.push(name ? `${name}: ${c}` : c);
+  return out;
+}
+
+/** The primitives whose height is the control scale, and the component in each that has it. */
+const CONTROLS: Record<string, string | undefined> = {
+  "src/renderer/src/components/ui/button.tsx": undefined,
+  "src/renderer/src/components/ui/input.tsx": "Input",
+  "src/renderer/src/components/ui/select.tsx": "SelectTrigger",
+};
+
 /** Files that are palettes: their colours are data a person picks or a scanner reads, not chrome. */
 const PALETTES: Record<string, string> = {
   "src/renderer/src/frame-color.ts": "the frame colours a person picks",
@@ -136,6 +190,9 @@ test("each check finds what it names, and passes the system's own spelling", () 
   const rules = ":focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }\n.x:focus-visible { outline: none; }\n.y:focus { border-color: red; }\n.z:focus-visible { box-shadow: 0 0 0 2px var(--color-brand); }";
   assert.deepEqual(ownFocusRings(rules, true, true), ["4: .z:focus-visible"]);
   assert.deepEqual(ownFocusRings(rules, true), ["1: :focus-visible", "2: .x:focus-visible", "4: .z:focus-visible"]);
+  assert.deepEqual(setHeights('<Button size="sm" onClick={() => go(a > b)} className="h-7 w-full" />\n<Input className="size-[30px]" />\n<div className="h-7" />'), ["1: <Button h-7", "2: <Input size-[30px]"]);
+  assert.deepEqual(controlSizes('const b = cva("", { variants: { size: { default: "h-control px-2", lg: "h-9 px-6", icon: "size-control [&_svg]:size-3" } } });'), ["lg: h-9"]);
+  assert.deepEqual(controlSizes('function A() { return cn("rounded-md", size === "sm" ? "h-7 px-2" : "h-control px-2.5"); }\nfunction B() { return "h-px"; }', "A"), ["h-7"]);
 });
 
 for (const f of sources()) {
@@ -148,9 +205,13 @@ for (const f of sources()) {
     assert.deepEqual(literalColours(text(), css).filter((h) => !allowed.some((a) => h.endsWith(`: ${a}`))), []);
   });
   test(`${f} rounds corners on the scale`, () => assert.deepEqual(offScaleRadii(text(), css), []));
+  if (!css) test(`${f} lets its controls take their height from their size`, () => assert.deepEqual(setHeights(text()), []));
   test(`${f} offers a choice through the app's Select`, () => assert.deepEqual(nativeSelects(text(), css), []));
   test(`${f} leaves focus to the one ring`, () => assert.deepEqual(ownFocusRings(text(), css, f === FOCUS_HOME), []));
 }
+
+for (const [f, component] of Object.entries(CONTROLS))
+  test(`${f} stands every size at a control height`, () => assert.deepEqual(controlSizes(fs.readFileSync(path.join(APP, f), "utf8"), component), []));
 
 test("the one ring is drawn from the focus token", () => {
   const home = code(fs.readFileSync(path.join(APP, FOCUS_HOME), "utf8"), true);
