@@ -942,6 +942,8 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   // HCP control plane: main forwards a verb only a window can carry out (focus a tile, a view's
   // event). Execute it and reply with the result/error.
   useEffect(() => {
+    const reply = window.hive.hcpResult;
+    if (!reply) return;
     const off = window.hive.onHcpCommand(async (cmd) => {
       try {
         const p = (cmd.params ?? {}) as Record<string, unknown>;
@@ -953,11 +955,11 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
             if (!vh) throw new Error("views are still starting");
             const { event, delivered } = vh.viewEvents.emitCustom(ev.name, ev.data, ev.from, ev.view);
             const reason = delivered ? null : ev.view && ev.view !== active ? "not-active" : "no-listener";
-            await window.hive.hcpResult(cmd.id, true, { ok: true, id: event.id, delivered, view: active, ...(reason ? { reason, buffered: true } : {}) });
+            await reply(cmd.id, true, { ok: true, id: event.id, delivered, view: active, ...(reason ? { reason, buffered: true } : {}) });
             break;
           }
           case "plugin.commands": {
-            await window.hive.hcpResult(cmd.id, true, { plugins: listCommands() });
+            await reply(cmd.id, true, { plugins: listCommands() });
             break;
           }
           case "plugin.open": {
@@ -965,43 +967,43 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
             if (o.kind === "view") {
               if (!getView(o.id)) throw new Error(`no view ${o.id} here: install it (\`hive views install <folder>\`) and switch it on (\`hive plugins enable view:${o.id}\`)`);
               setViewMode(o.id);
-              await window.hive.hcpResult(cmd.id, true, { view: o.id });
+              await reply(cmd.id, true, { view: o.id });
             } else {
               const widget = addBoardRef.current(`widget:${o.id}` as BoardChoice);
               if (!widget) throw new Error(`no widget ${o.id} here: install it (\`hive widgets install <folder>\`) and switch it on (\`hive plugins enable widget:${o.id}\`)`);
-              await window.hive.hcpResult(cmd.id, true, { widget });
+              await reply(cmd.id, true, { widget });
             }
             break;
           }
           case "plugin.call": {
             const c = p as { plugin: string; command: string; args: unknown; tile?: string };
             const result = await callCommand(c.plugin, c.command, c.args, c.tile);
-            await window.hive.hcpResult(cmd.id, true, { result });
+            await reply(cmd.id, true, { result });
             break;
           }
           case "views.rescan": {
             const r = await loadCommunityViews(rootRef.current);
-            await window.hive.hcpResult(cmd.id, true, { registered: r.registered, refused: r.refused });
+            await reply(cmd.id, true, { registered: r.registered, refused: r.refused });
             break;
           }
           case "agents.rescan": {
             // `hive agents install|remove`
             const problems = await syncAgentPlugins(rootRef.current);
-            await window.hive.hcpResult(cmd.id, true, { problems });
+            await reply(cmd.id, true, { problems });
             break;
           }
           case "tile.focus": {
             const id = String(p.tileId ?? "");
             setSelectedTileId(id);
             focusTile(id);
-            await window.hive.hcpResult(cmd.id, true, { ok: true });
+            await reply(cmd.id, true, { ok: true });
             break;
           }
           default:
-            await window.hive.hcpResult(cmd.id, false, undefined, `unknown renderer verb: ${cmd.method}`);
+            await reply(cmd.id, false, undefined, `unknown renderer verb: ${cmd.method}`);
         }
       } catch (e) {
-        await window.hive.hcpResult(cmd.id, false, undefined, (e as Error)?.message ?? "renderer error");
+        await reply(cmd.id, false, undefined, (e as Error)?.message ?? "renderer error");
       }
     });
     return off;

@@ -61,7 +61,7 @@ export function registerFileLinks(
             const target = openTargetForTerminalLink(getCwd(), raw);
             if (target.kind === "browser" && openInBrowser) { openInBrowser(target.url); return; }
             if (target.kind === "editor" && openInEditor) { openInEditor(target.path); return; }
-            void window.hive.openPathInApp(getCwd(), target.kind === "app" ? target.target : raw);
+            void window.hive.openPathInApp?.(getCwd(), target.kind === "app" ? target.target : raw);
           },
         });
       }

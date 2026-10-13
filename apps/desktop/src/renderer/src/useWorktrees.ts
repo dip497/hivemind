@@ -16,6 +16,7 @@ import { defaultSizeForKind, FRAME_PAD, FRAME_HEADER, FRAME_EMPTY_W, FRAME_EMPTY
 import type { FrameState, TileInstance } from "./canvas-persistence";
 import type { TileStatusKind } from "./agent-status-bus";
 import type { WorktreeEntry } from "../../shared/ipc";
+import { chooseFolder } from "./choose-folder";
 
 type Toast = { tileId: string; label: string; status: TileStatusKind };
 
@@ -177,7 +178,7 @@ export function useWorktrees(ctx: WorktreesCtx) {
   // stack so the zone's agents can work issues.
   const bindWorkspace = useCallback(async (frameId: string) => {
     try {
-      const dir = await window.hive.pickProjectFolder();
+      const dir = await chooseFolder();
       if (!dir) return;
       const proj = await window.hive.resolveProject(dir);
       const wsPath = proj.repoPath ?? dir;

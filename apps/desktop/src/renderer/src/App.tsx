@@ -34,6 +34,7 @@ import { useSettingsNav } from "./settings-nav";
 import { getNotificationSettings, setNotificationSettingsCache, subscribeNotificationSettings, saveNotificationSettings } from "./notification-settings";
 import type { NotificationSettings } from "../../shared/ipc";
 import { tellRecentFolders } from "./recent-folders";
+import { chooseFolder, FolderPathDialog } from "./choose-folder";
 const SettingsPages = preloadable(() => import("./settings-panels").then((m) => m.default));
 // Sharing's dialogs load when opened: they are nothing the first frame draws.
 const MakePluginDialog = lazy(() => import("./plugins/MakePlugin").then((m) => ({ default: m.MakePluginDialog })));
@@ -117,7 +118,7 @@ function useUpdateCheck() {
   const upgradingRef = useRef(false);
   const restart = useCallback(() => {
     toast.loading("Restarting into the new version…");
-    window.setTimeout(() => { void window.hive.relaunchApp(); }, 600);
+    window.setTimeout(() => { void window.hive.relaunchApp?.(); }, 600);
   }, []);
   const upgrade = useCallback(() => {
     if (upgradingRef.current || !window.hive?.runUpgrade) return;
@@ -161,7 +162,7 @@ export function App() {
   const [recents, setRecents] = useState<string[]>(() => loadRecents());
   const { data: project, isLoading } = useProject(rootHint);
   async function pickFolder() {
-    const picked = await window.hive.pickProjectFolder();
+    const picked = await chooseFolder();
     if (!picked) return;
     window.localStorage.setItem("hivemind:last-project", picked);
     setRecents(pushRecent(picked));
@@ -404,6 +405,7 @@ export function App() {
           </div>
         </div>
 
+        <FolderPathDialog />
         <RecentProjects
           open={!!recentOpen}
           joining={recentOpen === "join"}
@@ -411,7 +413,7 @@ export function App() {
           current={repoPath}
           onOpen={openRecent}
           onBrowse={() => void pickFolder()}
-          onNewWindow={() => void window.hive.newWindow()}
+          onNewWindow={() => void (window.hive.newWindow ? window.hive.newWindow() : window.open(window.location.href, "_blank"))}
           onClose={() => setRecentOpen(null)}
         />
         <Suspense fallback={null}>
@@ -677,7 +679,7 @@ function SettingsModal({
               GitHub <ExternalLink className="size-3 text-[var(--color-fg2)]" />
             </a>
           </div>
-          <div className="settings-row">
+          {window.hive.checkForUpdate ? <div className="settings-row">
             {upgrading || progress ? (
               <UpdateWork progress={progress} busy={upgrading} onRestart={onRestart} />
             ) : update?.staged ? (
@@ -721,7 +723,7 @@ function SettingsModal({
                 </Button>
               </>
             )}
-          </div>
+          </div> : <p className="settings-note" data-update-elsewhere>Updates are made in the app on the computer it runs on.</p>}
           <div className="settings-row">
             <span className="text-[var(--color-fg2)]">License</span>
             <span className="font-mono text-[var(--color-fg2)]">MIT</span>

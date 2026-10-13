@@ -105,17 +105,19 @@ function AddFromFolder() {
     setBusy(true); setError(null); setNotice(null);
     try { await fn(); } catch (e) { setError(cleanError(e)); } finally { setBusy(false); }
   };
+  // Added from a folder this computer's picker chooses: not from a browser tab.
+  const { previewViewInstall, installWidget, installToolPackage } = window.hive;
   return <>
     <div className="settings-inline" data-add-from-folder>
-      <Button size="sm" variant="outline" disabled={busy} onClick={() => void act(async () => setPreview(await window.hive.previewViewInstall()))}><FolderPlus />Add a view from a folder</Button>
-      <Button size="sm" variant="outline" disabled={busy} data-widget-install onClick={() => void act(async () => {
-        const added = await window.hive.installWidget();
+      {previewViewInstall && <Button size="sm" variant="outline" disabled={busy} onClick={() => void act(async () => setPreview(await previewViewInstall()))}><FolderPlus />Add a view from a folder</Button>}
+      {installWidget && <Button size="sm" variant="outline" disabled={busy} data-widget-install onClick={() => void act(async () => {
+        const added = await installWidget();
         if (added) setNotice(`${added.name} added. Put it in a workspace with + on the toolbar.`);
-      })}><FolderPlus />Add a widget from a folder</Button>
-      <Button size="sm" variant="outline" disabled={busy} data-tool-install onClick={() => void act(async () => {
-        const added = await window.hive.installToolPackage();
+      })}><FolderPlus />Add a widget from a folder</Button>}
+      {installToolPackage && <Button size="sm" variant="outline" disabled={busy} data-tool-install onClick={() => void act(async () => {
+        const added = await installToolPackage();
         if (added) setNotice(`${added.name} added. It is off: switch it on under Tools if you trust who wrote it.`);
-      })}><FolderPlus />Add a tool from a folder</Button>
+      })}><FolderPlus />Add a tool from a folder</Button>}
       <Button variant="ghost" size="icon-sm" aria-label="Refresh plugins" onClick={rescan}><RefreshCw /></Button>
     </div>
     {error && <div role="alert" className="settings-message error">{error}</div>}

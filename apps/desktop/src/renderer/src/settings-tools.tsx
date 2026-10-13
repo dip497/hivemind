@@ -139,11 +139,11 @@ export function ToolPage({ id }: { id: string }) {
 function BrowserControl({ toolOn }: { toolOn: boolean }) {
   const [state, setState] = useState<{ active: boolean; enabled: boolean; port: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { void window.hive.getBrowserSettings().then(setState).catch(() => {}); }, []);
+  useEffect(() => { void window.hive.getBrowserSettings?.().then(setState).catch(() => {}); }, []);
   if (!state) return null;
   const toggle = async () => {
     setBusy(true);
-    try { await window.hive.setBrowserCdpEnabled(!state.enabled); setState({ ...state, enabled: !state.enabled }); }
+    try { await window.hive.setBrowserCdpEnabled?.(!state.enabled); setState({ ...state, enabled: !state.enabled }); }
     finally { setBusy(false); }
   };
   return <section className="plugin-section" aria-label="Browser control">
@@ -156,7 +156,7 @@ function BrowserControl({ toolOn }: { toolOn: boolean }) {
     <p className="settings-note warn">Opens 127.0.0.1:{state.port}. Local processes can also control the app window. Only enable this for agents you trust.</p>
     <div className="settings-row">
       <span className="settings-note">Right now: {state.active ? "active" : "off"}</span>
-      {state.enabled !== state.active && <Button size="sm" variant="outline" onClick={() => void window.hive.relaunchApp()}>Relaunch to apply</Button>}
+      {state.enabled !== state.active && <Button size="sm" variant="outline" onClick={() => void window.hive.relaunchApp?.()}>Relaunch to apply</Button>}
     </div>
   </section>;
 }

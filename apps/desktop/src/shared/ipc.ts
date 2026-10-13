@@ -89,7 +89,7 @@ export type {
   WorktreeEntry,
 } from "@hivemind/workspace-api/git";
 import type { DiffPayload, DiffScope, GitBranchList, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "@hivemind/workspace-api/git";
-import type { Typist } from "@hivemind/workspace-api/terminals";
+import type { TerminalOpts, Typist } from "@hivemind/workspace-api/terminals";
 
 // ── machines (saved ssh hosts, shared with `hive machine`) ────────────────
 /** One remote directory entry for the folder picker / tree. */
@@ -294,7 +294,7 @@ export interface HiveIpc {
   verifyAgent(id: string): Promise<{ path: string | null; version?: string; mismatch?: string; searchedPath?: string }>;
   /** The values each of an agent's options takes, read from its CLI. Cached per binary version. */
   agentOptionChoices(id: string): Promise<Record<string, { values: string[]; from: "help" | "list" | null; error?: string }>>;
-  previewViewInstall(): Promise<{ token: string; package: ViewPackageInfo; replacesVersion: string | null } | null>;
+  previewViewInstall?(): Promise<{ token: string; package: ViewPackageInfo; replacesVersion: string | null } | null>;
   /** The published plugin catalog (hash-pinned agents and views). */
   pluginCatalog(): Promise<CatalogEntry[]>;
   /** A plugin's README: from its folder here (`dir`), or from the catalog for one not installed. */
@@ -302,7 +302,7 @@ export interface HiveIpc {
   /** The widget packages installed on this machine. */
   listWidgets(): Promise<WidgetPackage[]>;
   /** Add a widget package from a folder the person picks; null when they pick none. */
-  installWidget(): Promise<{ id: string; name: string } | null>;
+  installWidget?(): Promise<{ id: string; name: string } | null>;
   removeWidget(id: string): Promise<void>;
   /** An image of the widget package `widget`, as the host of `repo` has it: for a guest without it. */
   widgetAsset(repo: string, widget: string, name: string): Promise<string | null>;
@@ -323,7 +323,7 @@ export interface HiveIpc {
   /** What each host module a tool plugin imports exports, by name (once, before the first loads). */
   toolHostExports(map: Record<string, string[]>): Promise<void>;
   /** Add a tool plugin from a folder the person picks; null when they pick none. */
-  installToolPackage(): Promise<{ id: string; name: string } | null>;
+  installToolPackage?(): Promise<{ id: string; name: string } | null>;
   removeToolPackage(id: string): Promise<void>;
   /** A tool plugin's tile running a program in its folder. */
   toolRun(call: ToolRun): Promise<ToolRunResult>;
@@ -460,12 +460,12 @@ export interface HiveIpc {
   /** Check the latest GitHub release and compare to the running version. Done
    *  in MAIN (renderer CSP blocks the github.com fetch). Never rejects — a
    *  failed check resolves with `latest: null`. */
-  checkForUpdate(): Promise<UpdateStatus>;
+  checkForUpdate?(): Promise<UpdateStatus>;
   /** Run the official installer (the same `install.sh` flow `hivemind upgrade`
    *  uses) and resolve with its exit status. Does NOT quit — the renderer shows
    *  the result and then calls `relaunchApp()` to restart into the new version.
    *  `ok` is true iff the installer exited 0. */
-  runUpgrade(): Promise<{ ok: boolean; code: number | null }>;
+  runUpgrade?(): Promise<{ ok: boolean; code: number | null }>;
   /** Live installer output during `runUpgrade` — the last non-empty line of each
    *  stdout/stderr chunk, so the UI can show real progress instead of a frozen
    *  button. Returns an unsubscribe fn. */
@@ -483,7 +483,7 @@ export interface HiveIpc {
    *  null if the user cancelled. The renderer should then re-invoke
    *  resolveProject(picked) to repoint the canvas + sidebar at the chosen
    *  workspace without restarting the app. */
-  pickProjectFolder(): Promise<string | null>;
+  pickProjectFolder?(): Promise<string | null>;
   /** Create a .hivemind/ workspace in `dir` with the given issue prefix.
    *  Returns the new root path. Renderer should re-resolve afterwards. */
   initWorkspace(dir: string, prefix: string): Promise<{ root: string }>;
@@ -576,7 +576,7 @@ export interface HiveIpc {
   fileWrite(repoPath: string, relPath: string, contents: string): Promise<void>;
   /** Open a path clicked in the terminal with the OS default app (xdg-open).
    *  Resolves relatives against `cwd`; must exist; refuses `.desktop` + remote. */
-  openPathInApp(cwd: string, target: string): Promise<{ ok: boolean; error?: string }>;
+  openPathInApp?(cwd: string, target: string): Promise<{ ok: boolean; error?: string }>;
 
   /** Append one diagnostics line to userData/render-diag.log (auto-rotated).
    *  Used by the terminal render-quality probe so blurry-text reports can be
@@ -606,8 +606,8 @@ export interface HiveIpc {
   onPtyActivity(cb: (levels: Record<string, ActivityLevel>) => void): () => void;
   presenceNow(): Promise<ViewPresence>;
   onPresence(cb: (p: ViewPresence) => void): () => void;
-  viewSharePrepare(png: ArrayBuffer): Promise<SharePrepared>;
-  viewShareCommit(token: string, action: "copy" | "save" | "cancel", suggestedName: string): Promise<ShareOutcome>;
+  viewSharePrepare?(png: ArrayBuffer): Promise<SharePrepared>;
+  viewShareCommit?(token: string, action: "copy" | "save" | "cancel", suggestedName: string): Promise<ShareOutcome>;
   machineRemove(id: string): Promise<void>;
   /** Store a password for a machine; false when the OS keychain is unavailable (kept in memory only). */
   machineSetPassword(id: string, password: string): Promise<boolean>;
@@ -627,25 +627,7 @@ export interface HiveIpc {
   worktreePrune(repoPath: string): Promise<{ removed: string[] }>;
 
   // ── PTY ───────────────────────────────────────────────────
-  ptySpawn(opts: {
-    tileId: string;
-    /** The tile it is the session of: its id is not always `hm:<tile>`. */
-    tile?: string;
-    cwd: string;
-    cmd: string;
-    args?: string[];
-    cols: number;
-    rows: number;
-    env?: Record<string, string>;
-    /** A claude spawn's INITIAL task (▶ Work / spawn-with-work). Delivered as
-     *  claude's positional argv (which auto-submits), NOT typed into the booting
-     *  TUI — see applyInitialPrompt / HIVE_INITIAL_PROMPT. */
-    initialPrompt?: string;
-    /** `tileId` names an existing daemon session to show; never start one. */
-    attachOnly?: boolean;
-    /** With attachOnly: a running session only, not one saved before a reboot. */
-    liveOnly?: boolean;
-  }): Promise<{ pid: number; /** Another window started it: this one only shows it. */ joined?: boolean }>;
+  ptySpawn(opts: TerminalOpts): Promise<{ pid: number; /** Another window started it: this one only shows it. */ joined?: boolean }>;
   /** Install the agentic stack (hive skills + CLAUDE.md section) into a repo so
    *  a spawned agent can actually work issues with `hive`. Idempotent. */
   installAgentic(dir: string): Promise<{ ok: boolean }>;
@@ -681,7 +663,7 @@ export interface HiveIpc {
   // ── notifications ─────────────────────────────────────────
   /** Forward a notable agent-status transition to the main process, which fires
    *  a native OS notification IF the window is unfocused. Fire-and-forget. */
-  notifyAgent(notice: AgentNotice): void;
+  notifyAgent?(notice: AgentNotice): void;
   /** What the Layers panel shows of the workspace in `repo`: its tiles in the order listed, and
    *  the pinned ones (the person's phone's Home lists them so). */
   layersShown(repo: string, shown: { order: string[]; pinned: string[] }): void;
@@ -697,23 +679,23 @@ export interface HiveIpc {
   /** A BrowserTile reports its guest <webview>'s webContents id (plus its frame
    *  and current URL) so the main process can attach the debugger AND write the
    *  discovery file the `hive-browser` skill reads. Called on dom-ready + on nav. */
-  browserRegister(tileId: string, webContentsId: number, frameId: string | null, url: string): void;
+  browserRegister?(tileId: string, webContentsId: number, frameId: string | null, url: string): void;
   /** Send a raw Chrome DevTools Protocol command to the tile's guest page
    *  (auto-attaches on first use). Navigate / click / read DOM / screenshot /
    *  evaluate — the surface an agent uses to "use" the browser. */
-  browserCdp(tileId: string, method: string, params?: Record<string, unknown>): Promise<unknown>;
+  browserCdp?(tileId: string, method: string, params?: Record<string, unknown>): Promise<unknown>;
   /** Agent-browser bridge settings for the in-app toggle. `active` = live this
    *  session; `enabled` = persisted choice (applies on next launch). */
-  getBrowserSettings(): Promise<{ active: boolean; enabled: boolean; port: string }>;
+  getBrowserSettings?(): Promise<{ active: boolean; enabled: boolean; port: string }>;
   /** Persist the agent-browser bridge on/off choice (applies after relaunch). */
-  setBrowserCdpEnabled(enabled: boolean): Promise<{ ok: true }>;
+  setBrowserCdpEnabled?(enabled: boolean): Promise<{ ok: true }>;
   /** Restart the app so a settings change that needs a fresh launch takes hold. */
-  relaunchApp(): Promise<void>;
+  relaunchApp?(): Promise<void>;
 
 
   /** Reply to a main→renderer HCP command (a control-plane verb that needs the
    *  canvas, e.g. plugin.open). `id` correlates with the pushed command. */
-  hcpResult(id: string, ok: boolean, result?: unknown, errorMessage?: string): Promise<void>;
+  hcpResult?(id: string, ok: boolean, result?: unknown, errorMessage?: string): Promise<void>;
 }
 
 /** A control-plane verb main asks the renderer to execute (request-id correlated
@@ -804,9 +786,9 @@ export type HiveApi = HiveIpc & {
     cb: (info: { paths: string[] }) => void
   ) => () => void;
   /** Path passed on the CLI (`hivemind .` / `hivemind /repo`), or null. */
-  getLaunchTarget: () => Promise<string | null>;
+  getLaunchTarget?: () => Promise<string | null>;
   /** Another window, on the workspace this one shows. */
-  newWindow: () => Promise<void>;
+  newWindow?: () => Promise<void>;
   /** A second `hivemind <path>` invocation asks the running window to switch. */
   onOpenProject: (cb: (path: string) => void) => () => void;
   onMenuToggleLayers?: (cb: () => void) => () => void;

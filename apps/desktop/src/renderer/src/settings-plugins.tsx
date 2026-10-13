@@ -12,7 +12,7 @@ import { KIND_LABEL, permissionWords, type PluginKind } from "./plugins/library"
 import { useWidgetPackages } from "./board-objects/widget-runtime";
 import { useSettingsNavigate } from "./settings-panels";
 
-export type Preview = NonNullable<Awaited<ReturnType<typeof window.hive.previewViewInstall>>>;
+export type Preview = NonNullable<Awaited<ReturnType<NonNullable<typeof window.hive.previewViewInstall>>>>;
 
 export const cleanError = (e: unknown): string =>
   e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': Error: /, "") : "The plugin could not be updated.";

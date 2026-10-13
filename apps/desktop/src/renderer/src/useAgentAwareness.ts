@@ -205,7 +205,7 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
       // so the OS-surface pref is honored even when the in-app one is off.
       if (needsHuman || finished || crashed) {
         try {
-          window.hive.notifyAgent({
+          window.hive.notifyAgent?.({
             tileId: e.tileId,
             label: e.label,
             kind,
