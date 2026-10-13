@@ -21,6 +21,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - On the phone, an agent's Terminal no longer shows the waiting card under it, halving it: the terminal shows the chooser itself, and the header still says it waits. Back in Chat the card is there as before.
 - On the phone, an agent whose manifest says no transcript the phone can read (one it maps but never says where to find included) opens in its terminal instead of a chat that stays empty.
 - The phone page updates itself: it opens at once from the newest build it has, fetches a new one alongside, and the next open shows it, never files of two builds together. It never waits on the network to open.
+- On the phone, a chat breathes: 20 px between turns, 8 px between what the agent does within one, and what it says at 16/24.
 - On the phone, scrolled up in a chat, a round button above the message box counts the new messages and takes you back to the newest.
 - On the phone, a line above the message box says an agent is working and for how long ("working · 12s"), with a breathing dot.
 - On the phone, tools an agent used one after another fold into one line, "Read 3 · Edit 2 · Run 1", that opens to the list. Tool lines are quiet sans text without ticks, red only when one failed, and only a command is in monospace.

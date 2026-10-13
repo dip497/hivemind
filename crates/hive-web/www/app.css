@@ -183,13 +183,15 @@ button { cursor: pointer; }
 .menu button { display: block; width: 100%; min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; text-align: left; font: 500 15px/20px var(--sans); color: var(--err); }
 .menu button:active { background: var(--raised); }
 .backbar .sub .dot { width: 6px; height: 6px; }
-.chat { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
+.chat { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+/* A turn begins with the person: 20 px between turns, 8 within one. */
+.chat > .said-person, .chat > .said-person + * { margin-top: 12px; }
 .said-person {
   align-self: flex-end; margin-left: 56px; max-width: calc(100% - 56px);
   background: var(--raised); border-radius: 18px 18px 6px 18px; padding: 9px 14px;
   font-size: 15px; line-height: 22px; white-space: pre-wrap; overflow-wrap: anywhere;
 }
-.said-agent { display: flex; flex-direction: column; gap: 8px; font-size: 15px; line-height: 22px; overflow-wrap: anywhere; }
+.said-agent { display: flex; flex-direction: column; gap: 8px; font-size: 16px; line-height: 24px; overflow-wrap: anywhere; }
 /* What an agent says, drawn from its markdown (markdown.ts). */
 .plan.md { display: flex; flex-direction: column; gap: 8px; }
 .md p, .md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { margin: 0; white-space: pre-wrap; }

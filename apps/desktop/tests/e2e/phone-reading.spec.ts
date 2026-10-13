@@ -326,3 +326,22 @@ test("a long conversation of words and tools, drawn newest first a slice at a ti
   expect(await chat.locator(":scope > [data-entry], :scope > [data-tools]").evaluateAll((rows) => rows.map((r) => (r.hasAttribute("data-tools") ? "tools" : r.getAttribute("data-entry"))).join(" "))).toBe(
     Array.from({ length: 300 }, (_, i) => `e${i * 3} tools`).join(" "));
 });
+
+test("turns are 20 px apart and what the agent does in one 8 px apart; what it says is 16/24", async () => {
+  await unfolding({ entries: [
+    { id: "p1", at: 1, who: "person", text: "Fix it" },
+    { id: "a1", at: 2, who: "agent", text: "Looking." },
+    { id: "t1", at: 3, who: "agent", tool: { id: "u1", name: "Read", about: "a.ts" } },
+    { id: "a2", at: 4, who: "agent", text: "Done." },
+    { id: "p2", at: 5, who: "person", text: "Thanks" },
+    { id: "a3", at: 6, who: "agent", text: "You're welcome." },
+  ], cursor: 6, session: "s" });
+  const gaps = await page.evaluate(() => {
+    const at = (id: string) => document.querySelector(`[data-entry="${id}"]`)!.getBoundingClientRect();
+    const gap = (a: string, b: string) => Math.round(at(b).top - at(a).bottom);
+    return [gap("p1", "a1"), gap("a1", "t1"), gap("t1", "a2"), gap("a2", "p2"), gap("p2", "a3")];
+  });
+  expect(gaps).toEqual([20, 8, 8, 20, 20]);
+  const font = await page.locator('[data-entry="a1"]').evaluate((el) => { const c = getComputedStyle(el); return [c.fontSize, c.lineHeight]; });
+  expect(font).toEqual(["16px", "24px"]);
+});

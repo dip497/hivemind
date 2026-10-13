@@ -1378,3 +1378,6 @@ Before and after at 390×844 are the `ux-*.png` pairs of the rig's scratchpad.
   `web/src/components/AssistantChat/HappyThread.tsx:287-327`). Back within 48 px of the newest the
   count is cleared. The chat owns it (`chat.ts` `newest`); the screen gives it its place and hides
   it over the terminal.
+- Spacing: a turn begins with the person's message; turns are 20 px apart and the agent's rows in
+  one 8 px apart (the chat's gap, with 12 px more round each of the person's messages). What the
+  agent says is 16/24.
