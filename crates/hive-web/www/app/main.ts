@@ -9,7 +9,7 @@ import { h, icon } from "./dom.js";
 import { Home } from "./home.js";
 import { warm } from "./markdown.js";
 import { PairScreen, guessName } from "./pair.js";
-import type { Phone } from "./phone.js";
+import type { Connect, Phone } from "./phone.js";
 import { KEPT as START_KEPT, StartScreen } from "./start.js";
 import { TermScreen } from "./term-screen.js";
 import { ViewScreen, Views } from "./views.js";
@@ -116,7 +116,7 @@ const starting = new StartScreen(app);
 const devices = new Devices(() => void forget());
 const views = new Views(app);
 const viewing = new ViewScreen(app, views);
-const pairing = new PairScreen((link, name) => pairWith(link, name), () => {
+const pairing = new PairScreen((link, name, shown) => pairWith(link, name, shown), () => {
   offered = false;
   pairing.clear();
   route();
@@ -215,10 +215,10 @@ function render(): void {
   else saving = setTimeout(keep, wait);
 }
 
-async function pairWith(link: string, name: string): Promise<void> {
+async function pairWith(link: string, name: string, shown: Connect): Promise<void> {
   if (!phone) throw new Error("Still starting");
   const before = paired;
-  paired = await phone.pair(link, name);
+  paired = phone.read(link)?.connect ? await phone.connectWith(link, name, shown) : await phone.pair(link, name);
   offered = false;
   if (before) {
     void remove("first");
@@ -264,7 +264,8 @@ async function start(): Promise<void> {
   // The link is a secret: out of the address bar and the history once read.
   const address = location.href;
   const linked = new URLSearchParams(location.hash.slice(1));
-  if (linked.has("pair")) history.replaceState(null, "", location.pathname + location.search);
+  const given = linked.has("pair") || linked.has("connect");
+  if (given) history.replaceState(null, "", location.pathname + location.search);
   const [kept, last] = await Promise.all([get<Paired>("paired"), get<First>("first")]);
   paired = kept ?? null;
   if (paired && last) apply(last);
@@ -295,7 +296,7 @@ async function start(): Promise<void> {
   addEventListener("online", () => phone!.retry());
   document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && phone!.retry());
   phone.connect();
-  if (linked.has("pair")) offer(address, linked.get("name") ?? guessName());
+  if (given) offer(address, linked.get("name") ?? guessName());
 }
 
 start().catch((e: unknown) => {

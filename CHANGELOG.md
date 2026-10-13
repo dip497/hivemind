@@ -13,6 +13,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - The full app in a browser tab: Settings → Your devices, "In a browser on this computer", serves it on 127.0.0.1 behind a key that changes each launch. For another device, put it behind `tailscale serve`.
 - Connect: a computer that uses this one's offer to connect (its link, or its six words found nearby) is asked about first. A prompt shows its name and three words that its own screen shows too, with Deny, Someone else (let into this window's workspace, as Can view, Can edit board or Can use terminals) and It's me — the words match. It's me makes it yours only after the person there says the words match as well. Open recent → Join takes an offer's link or words, shows the same three words, and asks before this computer becomes someone else's. A request nobody answers within three minutes is no.
+- The phone page and `hive-phone connect <link> [--sure yes|no]` use a computer's offer to connect: they show the same three words, wait for the person there, and keep the phone as the person's only once the person at the phone says the words match.
 
 ### Changed
 

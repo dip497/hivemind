@@ -3,9 +3,9 @@
 // person at the offering computer answers: it's me makes the other computer theirs, once its own
 // person says the words match there; someone else lets it into the workspace of the window the offer
 // was made in, at the role chosen; deny keeps nothing, and the offer stays for the next. A cancelled
-// offer is used by nobody.
+// offer is used by nobody. A phone (`hive-phone`, the phone's own core) is never someone else.
 import { test, expect, type ElectronApplication, type Page } from "@playwright/test";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { hiveNetBuilt, person } from "./helpers/multiplayer";
@@ -70,6 +70,54 @@ test("a laptop pastes the desktop's offer; both show the same words, and it's me
   await expect(request).toHaveCount(0);
   // Used, the offer is over.
   expect((await desktop.evaluate(() => window.hive.connectState())).offer).toBeNull();
+});
+
+const HIVE_PHONE = path.resolve("../../crates/hive-phone/target/debug/hive-phone");
+
+/** `hive-phone connect <link>` with the phone's keys under `root/phone`, saying `sure` when told it is
+ *  theirs: the words it shows, once shown, and how it ended (its exit code and last line). */
+function phoneConnects(link: string, sure: "yes" | "no") {
+  const run = spawn(HIVE_PHONE, ["connect", link, "--sure", sure, "--identity", path.join(root, "phone"), "--name", "Priya's phone", "--json"]);
+  const lines: string[] = [];
+  let err = "";
+  run.stdout.on("data", (d: Buffer) => lines.push(...d.toString().split("\n").filter(Boolean)));
+  run.stderr.on("data", (d: Buffer) => { err += d.toString(); });
+  const words = expect.poll(() => lines.length, { timeout: 30_000 }).toBeGreaterThan(0).then(() => (JSON.parse(lines[0]!) as { words: string[] }).words);
+  const ended = new Promise<{ code: number | null; last: string }>((resolve) => run.on("close", (code) => resolve({ code, last: code === 0 ? lines.at(-1)! : err.trim() })));
+  return { words, ended };
+}
+
+test("a phone uses the computer's offer: it shows the same words, is never someone else, and is the person's only once it says the words match there", async () => {
+  test.skip(!hiveNetBuilt() || !fs.existsSync(HIVE_PHONE), "build hive-net and hive-phone first: cargo build in crates/hive-net and crates/hive-phone");
+  test.setTimeout(120_000);
+  const api = repo("api");
+  const desktop = await person(root, "desktop", api, apps);
+  await desktop.evaluate(() => window.hive.settingsSet("profile.name", "Priya"));
+  const me = await desktop.evaluate(() => window.hive.identity());
+  const request = desktop.locator(".hm-connect-request");
+
+  // Told it is Priya's, the person at the phone says the words do not match: nothing is kept.
+  const first = await desktop.evaluate((r) => window.hive.connectOffer(r), api);
+  const no = phoneConnects(first.link, "no");
+  await expect(request.locator("[data-connect-request-words]")).toHaveText((await no.words).join(" · "), { timeout: 20_000 });
+  await expect(request).toContainText("A phone");
+  // Offered from a workspace, still: a phone is never someone else.
+  await expect(request.getByRole("button", { name: "Someone else" })).toHaveCount(0);
+  await request.getByRole("button", { name: "It's me — the words match" }).click();
+  expect(await no.ended).toEqual({ code: 1, last: "hive-phone: the words did not match: nothing was kept" });
+  await expect(desktop.locator(".hm-connect-ended")).toContainText("said the words did not match");
+  expect(await desktop.evaluate(() => window.hive.devices())).toEqual([]);
+
+  // Asked again with a new offer, it says they match: it is the person's phone.
+  const second = await desktop.evaluate((r) => window.hive.connectOffer(r), api);
+  const yes = phoneConnects(second.link, "yes");
+  await expect(request.locator("[data-connect-request-words]")).toHaveText((await yes.words).join(" · "), { timeout: 20_000 });
+  await request.getByRole("button", { name: "It's me — the words match" }).click();
+  const { code, last } = await yes.ended;
+  expect(code).toBe(0);
+  expect(JSON.parse(last)).toMatchObject({ device: me.deviceId, kind: "app", person: me.personId, profile: { name: "Priya" } });
+  await expect.poll(async () => (await desktop.evaluate(() => window.hive.devices())).map((d) => [d.name, d.kind])).toEqual([["Priya's phone", "phone"]]);
+  await expect(desktop.locator(".hm-connect-ended", { hasText: "Priya's phone is yours now" })).toBeVisible();
 });
 
 test("denied, a computer is let in by nothing; asking again with the offer's words, it is let in as someone else at the role chosen; a cancelled offer is used by nobody", async () => {

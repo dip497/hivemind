@@ -5,7 +5,7 @@ use hive_net::{
     net::{addr_of, Reach},
 };
 use hive_phone::{
-    agents, control, conversation, devices,
+    agents, connect, control, conversation, devices,
     failure::Failure,
     home,
     identity::DeviceCertificate,
@@ -16,7 +16,7 @@ use hive_phone::{
 };
 use iroh::{
     endpoint::{Connection, ConnectionError, RecvStream, SendStream},
-    Endpoint, RelayUrl, SecretKey,
+    Endpoint, EndpointAddr, RelayUrl, SecretKey, TransportAddr,
 };
 use serde_json::{json, Value};
 use std::{
@@ -188,6 +188,167 @@ pub async fn pair(seed: Vec<u8>, link: String, name: String) -> Result<JsValue, 
         "network": paired.network,
         "admission": admission,
     }))
+}
+
+/// What a link given this page offers (as copied, or inside the phone page's address): a
+/// computer's offer to connect (spec/pairing.md 0.10), `{device, name}`, or null when it is not one.
+#[wasm_bindgen(js_name = readConnectLink)]
+pub fn read_connect_link(text: &str) -> Result<JsValue, JsError> {
+    match connect::parse_link(text) {
+        Some(link) => to_js(&json!({ "device": link.device, "name": link.name })),
+        None => Ok(JsValue::NULL),
+    }
+}
+
+/// How long the computer has to answer an ask, a take or a refuse; and how long the page waits on
+/// the person there, who is answered within 170 s of the ask.
+const CONNECT_ANSWER_WITHIN: std::time::Duration = std::time::Duration::from_secs(60);
+const CONNECT_WAIT_WITHIN: std::time::Duration = std::time::Duration::from_secs(180);
+
+/// An offer to connect this browser asked with (spec/pairing.md 0.10), as the phone does
+/// (hive-phone's `connect`): the words both screens show, then the person at the computer's answer,
+/// then, once the person here says the words match, what it gives. Nothing is kept until then.
+#[wasm_bindgen]
+pub struct Connecting {
+    endpoint: Endpoint,
+    at: EndpointAddr,
+    me: String,
+    asked: connect::Asked,
+    admission: &'static str,
+}
+
+/// Ask with the offer `link` the person copied or opened, as the device `seed` called `name`: onto
+/// the computer's network as the link says, then to it through its relay.
+#[wasm_bindgen(js_name = connectWith)]
+pub async fn connect_with(
+    seed: Vec<u8>,
+    link: String,
+    name: String,
+) -> Result<Connecting, JsError> {
+    let key = key_of(&seed)?;
+    let link = connect::parse_link(&link).ok_or_else(|| {
+        err(Failure::Invalid(
+            "that is not a link to connect with: copy it from Settings → Connect on your computer"
+                .into(),
+        ))
+    })?;
+    let relay = link.relay.clone().ok_or_else(|| {
+        err(Failure::Unreachable(
+            "that computer is on its local network alone, which a browser cannot reach: put it on a network with a relay"
+                .into(),
+        ))
+    })?;
+    let admission = match &link.admission {
+        Some(admission) => network::admit(admission, &key)
+            .await
+            .map_err(|e| err(format!("not let onto the computer's network: {e:#}")))?,
+        None => "none needed",
+    };
+    let endpoint = hive_net::net::endpoint(key, &through(&[relay])?, vec![])
+        .await
+        .map_err(err)?;
+    let asking = async {
+        let me = endpoint.id().to_string();
+        let own = endpoint.addr().addrs.iter().find_map(|a| match a {
+            TransportAddr::Relay(url) => Some(url.to_string()),
+            _ => None,
+        });
+        let nonce = hex_of(&rand::random::<[u8; 16]>());
+        let at = addr_of(&link.device, &[], &link.relay).map_err(err)?;
+        let hello = connect::ask(&me, &name, &[], own.as_deref(), &link, &nonce);
+        let answer = ask_within(&endpoint, &at, CONNECT_ANSWER_WITHIN, &hello).await?;
+        let asked = connect::asked(&me, &link, &nonce, &answer).map_err(err)?;
+        Ok::<_, JsError>((asked, at, me))
+    }
+    .await;
+    match asking {
+        Ok((asked, at, me)) => Ok(Connecting {
+            endpoint,
+            at,
+            me,
+            asked,
+            admission,
+        }),
+        Err(e) => {
+            endpoint.close().await;
+            Err(e)
+        }
+    }
+}
+
+fn hex_of(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// One `hive/pair/1` request to the computer at `at`, answered within `time`.
+async fn ask_within(
+    endpoint: &Endpoint,
+    at: &EndpointAddr,
+    time: std::time::Duration,
+    hello: &Value,
+) -> Result<Value, JsError> {
+    n0_future::time::timeout(time, hive_net::pair::ask(endpoint, at.clone(), hello))
+        .await
+        .map_err(|_| {
+            err(Failure::Unreachable(
+                "the computer did not answer: is it still showing its offer?".into(),
+            ))
+        })?
+        .map_err(err)
+}
+
+impl Connecting {
+    async fn send(&self, time: std::time::Duration, connect: &str) -> Result<Value, JsError> {
+        let hello = json!({ "v": 1, "connect": connect, "request": self.asked.request });
+        ask_within(&self.endpoint, &self.at, time, &hello).await
+    }
+}
+
+#[wasm_bindgen]
+impl Connecting {
+    /// The words both screens show.
+    #[wasm_bindgen(getter)]
+    pub fn words(&self) -> Vec<String> {
+        self.asked.words.clone()
+    }
+
+    /// Wait on the person at the computer: once they say this browser is theirs, who they are,
+    /// `{name, color}` (null when it says nothing that can be shown); a refusal otherwise.
+    pub async fn wait(&self) -> Result<JsValue, JsError> {
+        match connect::told(&self.send(CONNECT_WAIT_WITHIN, "wait").await?).map_err(err)? {
+            Some(person) => to_js(&serde_json::to_value(person).map_err(err)?),
+            None => Ok(JsValue::NULL),
+        }
+    }
+
+    /// The person here says the words match: what the computer gives, `{with, certificate,
+    /// network, admission}` as `pair` gives it, for the page to keep.
+    pub async fn take(self) -> Result<JsValue, JsError> {
+        let taking = async {
+            let answer = self.send(CONNECT_ANSWER_WITHIN, "take").await?;
+            connect::taken(&self.me, &self.asked, &answer).map_err(err)
+        }
+        .await;
+        self.endpoint.close().await;
+        let paired = taking?;
+        to_js(&json!({
+            "with": paired.with,
+            "certificate": paired.certificate,
+            "network": paired.network,
+            "admission": self.admission,
+        }))
+    }
+
+    /// The person here says the words do not match: the computer is told, and nothing is kept.
+    pub async fn refuse(self) {
+        let _ = self.send(CONNECT_ANSWER_WITHIN, "refuse").await;
+        self.endpoint.close().await;
+    }
+
+    /// Stop asking, telling the computer nothing: it answers no once nobody waits.
+    pub async fn close(self) {
+        self.endpoint.close().await;
+    }
 }
 
 /// This browser as a device, reaching the person's others through relays alone.

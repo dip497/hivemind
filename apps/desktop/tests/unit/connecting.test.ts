@@ -15,7 +15,7 @@ import type { ConnectState } from "../../src/shared/ipc.ts";
 
 const GUEST: GuestAnswer = { workspace: "0f".repeat(16), host: "1e".repeat(32), addrs: [], relay: null, role: "view", names: { workspace: "api", host: "Asha" }, hosting: null };
 
-function app(o: { admitFails?: boolean } = {}) {
+function app(o: { admitFails?: boolean; page?: string } = {}) {
   const person = newSeed();
   const key = idOf(newSeed());
   const me = { device: key, name: "Asha's desktop", kind: "app" as const, person, certificate: certifyDevice(person, key), addrs: ["10.0.0.2:4433"], relay: null, profile: { name: "Asha", color: "#336699" } };
@@ -27,6 +27,7 @@ function app(o: { admitFails?: boolean } = {}) {
     me: async () => me,
     announce: (d) => announced.push(d),
     admission: async () => undefined,
+    page: async (l) => (o.page ? `${o.page}#connect=${l.code}` : undefined),
     admit: async (repo, request, role) => {
       if (o.admitFails) throw new Error("people: this workspace does not say whose it is yet");
       admitted.push([repo, request, role]);
@@ -174,6 +175,14 @@ test("a device its workspace's host could not let in is told no, and the offer, 
   assert.deepEqual(await told, { ok: false, error: "declined" });
   assert.deepEqual(a.last(), { offer: null, requests: [], last: null });
   assert.deepEqual(a.announced.at(-1), null);
+});
+
+test("where the network's server serves the phone page, the offer gives the page's address with its own link; elsewhere none", async () => {
+  const a = app({ page: "https://relay.example/phone/" });
+  const offer = await a.connecting.offer(null);
+  assert.equal(offer.page, `https://relay.example/phone/#connect=${offer.code}`);
+  assert.equal(a.last().offer?.page, offer.page);
+  assert.equal((await app().connecting.offer(null)).page, undefined);
 });
 
 test("an offer ends after a day: its code is no longer announced, and those waiting are told it expired", async (t) => {

@@ -2,6 +2,7 @@
 // 2026-10-03.md §10): where it is, and its hash, worked out from what the server serves as
 // crates/hive-web/build.sh works it out from what it built.
 import { createHash } from "node:crypto";
+import { formatConnectLink, type ConnectLink } from "@hivemind/workspace-host/connect";
 import { formatPairLink, type PairLink } from "@hivemind/workspace-host/pairing";
 
 /** The page beside `relay`, when its server serves one (3 s at most to say). */
@@ -20,6 +21,9 @@ export async function phonePageAt(relay: string | null): Promise<string | null> 
  *  the computer through the relay, never at an address, so none is listed, and the QR code stays
  *  one a phone's camera reads. The app's own link keeps them. */
 export const pageLink = (page: string, link: PairLink): string => `${page}#pair=${formatPairLink({ ...link, addrs: [] })}`;
+
+/** The page's address with the offer to connect `link` in its fragment, as `pageLink` carries one. */
+export const connectPageLink = (page: string, link: ConnectLink): string => `${page}#connect=${formatConnectLink({ ...link, addrs: [] })}`;
 
 /** The hash of the page at `page`: each file it runs or keeps (`index.html`, `sw.js` and what its
  *  `shell.json` lists), as `sha256sum` lists them, in name order, hashed. */

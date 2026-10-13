@@ -31,7 +31,7 @@ import { Hosting } from "@hivemind/host/hosting";
 import type { LayersShown } from "@hivemind/host/home";
 import { People } from "@hivemind/host/people";
 import { handle, handleEffect, on } from "./app-ipc.js";
-import { pageHash, pageLink, phonePageAt, SHIPPED_PAGE } from "./phone-page.js";
+import { connectPageLink, pageHash, pageLink, phonePageAt, SHIPPED_PAGE } from "./phone-page.js";
 import { hostIntents } from "./audit.js";
 import { displayName, machineIdentity, takePerson } from "./identity.js";
 import { idOf, revokeDevice, workspaceSeed, type Seed } from "@hivemind/workspace-host/identity";
@@ -500,6 +500,8 @@ const connecting = new Connecting({
     if (!access) return undefined;
     return { access: access.url, voucher: access.policy === "closed" ? await networkProfiles().voucher({ expiresIn: seconds, uses: 1 }) : null };
   },
+  // A phone without hivemind opens the page where the relay's server serves it.
+  page: async (link) => { const at = await phonePageAt(link.relay); return at ? connectPageLink(at, link) : undefined; },
   // Let in by the workspace's host: this app's, or the device of the person's it was moved to.
   admit: async (repo, request, role) => {
     const params = [repo, request.certificate, request.profile, role] as const;

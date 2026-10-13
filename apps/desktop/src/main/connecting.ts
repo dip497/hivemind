@@ -20,6 +20,8 @@ export interface ConnectingOptions {
   announce(data: string | null): void;
   /** How a device elsewhere gets onto this network for `seconds`; none on the local one. */
   admission(seconds: number): Promise<Admission | undefined>;
+  /** The phone page's address carrying `link`, where this network's server serves the page. */
+  page(link: ConnectLink): Promise<string | undefined>;
   /** Let `request`'s device into the workspace `repo` at `role`, where it is hosted. */
   admit(repo: string, request: ConnectRequest, role: LinkRole): Promise<GuestAnswer>;
   /** A device took the person here: keep it as one of theirs. */
@@ -30,7 +32,7 @@ export interface ConnectingOptions {
 
 interface Current {
   offer: ConnectOffer;
-  shown: { code: string; link: string; expires: number };
+  shown: NonNullable<ConnectState["offer"]>;
   /** The workspace of the window it was made in; none from Home. */
   repo: string | null;
   asking: Map<string, { request: ConnectRequest; confirming: boolean; timer: NodeJS.Timeout }>;
@@ -54,7 +56,8 @@ export class Connecting {
     });
     const admission = await this.o.admission((offer.expires - Date.now()) / 1000);
     const link: ConnectLink = { device: me.device, addrs: me.addrs, relay: me.relay, code: offer.code, name: me.name, ...(admission ? { admission } : {}) };
-    const shown = { code: offer.code, link: formatConnectLink(link), expires: offer.expires };
+    const page = await this.o.page(link);
+    const shown = { code: offer.code, link: formatConnectLink(link), ...(page ? { page } : {}), expires: offer.expires };
     const ends = setTimeout(() => { if (this.current?.offer === offer) this.cancel(); }, offer.expires - Date.now());
     ends.unref?.();
     this.current = { offer, shown, repo, asking: new Map(), ends };
