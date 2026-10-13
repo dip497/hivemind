@@ -67,8 +67,6 @@ GitHub Actions builds + publishes. **Do not run it unless explicitly asked.**
 
 ## Gotchas
 
-- The dev-bridge must run under **`tsx` (node), not `bun`** — bun's loader drops
-  `@lydell/node-pty` output on Linux.
 - e2e: `unset ELECTRON_RUN_AS_NODE` before `playwright`, or Electron starts as
   plain node.
 - A persistent PTY daemon survives the window; remote PTYs run in-main (they

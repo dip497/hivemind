@@ -176,7 +176,8 @@ a different product (the phone page) and costs a relay round trip per keystroke.
    port, is sent this cookie when the browser visits it, and so is another local user's. A cookie
    alone would let such a server replay it. So the cookie gates every request and the upgrade, as
    asked, and the socket's first frame must also carry the token, which the page keeps in
-   origin-scoped `sessionStorage` (port-scoped, never sent by the browser on its own). A cookie
+   origin-scoped `localStorage` (port-scoped, never sent by the browser on its own; kept so a reload
+   or a second tab signs in again, cleared when the socket says the token is not this launch's). A cookie
    that leaks to another port opens static files only. The cookie's name carries the port, so two
    apps on one host (the dev app and the installed one) do not overwrite each other.
 3. **The 401 body is the sign-in page.** Every request without the cookie gets 401; for `GET /`
@@ -195,7 +196,7 @@ a different product (the phone page) and costs a relay round trip per keystroke.
 |---|---|---|
 | Another machine on the LAN | Bind 127.0.0.1 only; other devices through `tailscale serve` (TLS, tailnet ACLs) or hive-net serve | unit: server address is 127.0.0.1 |
 | A web page the person visits (CSRF, cross-site WS) | SameSite=Strict cookie (not sent cross-site); Origin must be the page's own (`http(s)://<Host>`) on every POST and the upgrade; `frame-ancestors 'none'` | unit: wrong Origin → 403, upgrade refused |
-| DNS rebinding (`evil.example` → 127.0.0.1) | Host must be `127.0.0.1`, `localhost` or a name the person configured; anything else → 421 | unit: foreign Host → 421 |
+| DNS rebinding (`evil.example` → 127.0.0.1) | Host must be `127.0.0.1`, `localhost` or a name the person configured; anything else → 403 | unit: foreign Host → 403 |
 | Another local user, or a server on another local port | 256-bit token per launch; cookie and the socket's first-frame token (port-scoped storage), §5.2 | unit: cookie without frame token → socket closed |
 | Guessing | 256 bits; compare by SHA-256 then `timingSafeEqual` (equal length, constant time) | unit |
 | Link in history, logs, Referer | token only in the fragment; stripped on arrival; `Referrer-Policy: no-referrer` | e2e reads `location.href` after sign-in |
@@ -229,7 +230,7 @@ Each step is a commit with a test that fails first (test-audit gate, mutation no
 
 1. **The gate and the server** (`main/browser-gate.ts`, `main/browser-server.ts`, Electron-free):
    static files, sign-in, cookie, Host and Origin, upgrade, first-frame token, dispatch to a
-   channel table. Unit: no cookie → 401 with the sign-in page; foreign Host → 421; wrong Origin
+   channel table. Unit: no cookie → 401 with the sign-in page; foreign Host → 403; wrong Origin
    → 403 and no upgrade; right token → cookie HttpOnly SameSite=Strict, then the page; socket
    without the frame token → closed; a channel not served → refused.
 2. **One handler table** (`app-ipc.ts`): `handle`/`on` record each channel; `local` ones are

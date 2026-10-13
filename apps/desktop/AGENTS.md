@@ -18,8 +18,8 @@ src/shared/     types shared main↔renderer
 src/renderer/src/   React app (see "Renderer" below)
 tests/unit/     node:test (pure logic)   tests/e2e/  Playwright
 
-packages/host/src/   the workspace API answered on this machine (R14): what main, the
-                     dev-bridge and the headless `hive host` serve (its tests: tsx --test)
+packages/host/src/   the workspace API answered on this machine (R14): what main and the
+                     headless `hive host` serve (its tests: tsx --test)
   domains.ts · store.ts · terminals.ts · plans.ts · presence.ts · agents.ts
   git-adapter.ts  git ops (simple-git + raw spawn); rawGit() is the low-level seam
   remote/         ssh transport — conn (pool) · fs · exec · git · ssh · targets · catalog
@@ -113,8 +113,9 @@ tile bodies live in the TileHost and are never remounted by a view.
   icon; the sonner toast stack covers the bottom-right corner; tree rows expose
   the file name only as their accessible name) — wait on state, never on time.
 - The harness (`pnpm test:e2e:harness`, `playwright.harness.config.ts`) runs the canvas, terminal,
-  git and issue specs against the renderer in Chromium over the dev-bridge instead of Electron.
-  A spec in it launches through `tests/e2e/helpers/window.ts` and asks only the window
+  git and issue specs in a browser tab on the app: `tests/e2e/helpers/window.ts` launches the app,
+  turns on Settings → Devices, "Open in a browser", and opens its link in Chromium, so the spec
+  drives the renderer over the browser server's socket. A spec in it asks only the window
   (`window.hive`), never Electron's main. Set `HIVE_HARNESS_CHROMIUM` to a Chromium binary when
   Playwright's own is not installed (in the cloud containers: `/opt/pw-browsers/chromium`).
 - Perf: `scripts/perf-canvas-effects.mjs` is the reproducible workload for canvas

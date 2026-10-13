@@ -1,6 +1,6 @@
 // Security hardening regressions: the SessionStart hook command must not be
 // shell-injectable via a renderer-controlled tileId, and a workspace API call
-// (a window's, the dev-bridge's, later a peer's) may not reach outside its repo
+// (a window's, a browser tab's, a peer's) may not reach outside its repo
 // or hand git an option where it takes a file, a revision or a branch.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";

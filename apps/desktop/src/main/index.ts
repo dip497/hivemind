@@ -1169,8 +1169,7 @@ async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ p
   { const d = spawning; if (d) control.agentOf.set(toBareId(opts.tileId), d.id); else control.agentOf.delete(toBareId(opts.tileId)); }
   // Spawn rate-limit: a compromised renderer (XSS via rendered diff/issue
   // content) could fork-bomb the host through ptySpawn. Cap spawns per sliding
-  // window — the dev-bridge already guards the identical call; the IPC path
-  // must too. And reject a non-directory cwd up front (otherwise it surfaces as
+  // window. And reject a non-directory cwd up front (otherwise it surfaces as
   // an opaque node-pty throw later).
   // Showing an existing session starts no process, so it cannot fork-bomb anything.
   if (!("attachOnly" in opts && opts.attachOnly)) await recordPtySpawn();

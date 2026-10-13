@@ -40,11 +40,10 @@ pnpm test:unit        # node:test; add tests here first
 pnpm test:e2e         # when touching canvas/frame/tile/issue behaviour
 ```
 
-Dev loop: `pnpm --filter @hivemind/desktop run dev` (full app) or
-`pnpm --filter @hivemind/desktop run dev:bridge -- /path/to/repo` (renderer-only, fastest); CLI:
-`pnpm --filter @hivemind/cli run dev <cmd>`.
+Dev loop: `pnpm --filter @hivemind/desktop run dev` (the app; Settings → Devices, "Open in a
+browser", serves it to a browser tab too); CLI: `pnpm --filter @hivemind/cli run dev <cmd>`.
 
-Known traps: the dev-bridge runs under tsx (node), not bun; e2e needs
+Known traps: e2e needs
 `unset ELECTRON_RUN_AS_NODE` and xvfb; the e2e suite is a gate with `retries=0`.
 
 ## Conventions

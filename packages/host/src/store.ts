@@ -5,7 +5,7 @@
  * only what that client changed; every other client is told of the change (`store.changed`), the
  * one that made it is not. Undo takes back a client's own board edits. A client says which
  * workspace it shows (`store.shown`), which the control plane asks after. When a client goes, its
- * board history and what it showed go with it. Electron-free: main and the dev-bridge each serve
+ * board history and what it showed go with it. Electron-free: main and `hive host` each serve
  * one over their own store.
  *
  * The store checks the layouts it is given (a TypeError refuses one); what is checked here is

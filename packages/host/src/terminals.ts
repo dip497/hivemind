@@ -4,8 +4,8 @@
  * client to open it, and every client that shows it is sent its output (`terminal.data`) and its
  * exit (`terminal.exit`). A client that goes lets go of the sessions it showed, and a session
  * nobody shows any more is let go of (a daemon keeps it running). How a session runs, in a daemon,
- * in this process or over ssh, is the host's (`SessionBackend`). Electron-free: main and the
- * dev-bridge each build one over their own backend.
+ * in this process or over ssh, is the host's (`SessionBackend`). Electron-free: main and
+ * `hive host` each build one over their own backend.
  *
  * A keystroke, a resize, flow control and whether a client shows a session are notices. Who may
  * type is the terminal's keyboard's (`keyboard.ts`, M2): the host's windows until it is given to
