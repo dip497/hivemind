@@ -14,9 +14,15 @@ type Result = NonNullable<Entry["result"]>;
 
 /** How long one task draws for. */
 const SLICE_MS = 12;
+/** Scrolled this far up from the newest, a button brings it back (hapi
+ *  web/src/components/AssistantChat/HappyThread.tsx:287-327). */
+const AWAY_PX = 200;
 
 export class Chat {
   readonly el = h("div", { class: "chat", "data-chat": "" });
+  /** Back to the newest, counting what came since the person scrolled up; placed by the screen. */
+  readonly newest = h("button", { type: "button", class: "newest", hidden: true, "aria-label": "Newest", "data-newest": "" });
+  private unseen = 0;
   private readonly nothing = h("p", { class: "ended", hidden: true }, "Nothing said yet");
   private ids = new Set<string>();
   private tools = new Map<string, HTMLElement>();
@@ -29,6 +35,11 @@ export class Chat {
   /** `unfold`: a tool use of its, whole; none, a tool shows what it gave back as sent. */
   constructor(private readonly unfold?: (use: string) => Promise<Unfolded>) {
     this.el.append(this.nothing);
+    this.el.addEventListener("scroll", () => this.placed(), { passive: true });
+    this.newest.addEventListener("click", () => {
+      this.el.scrollTop = this.el.scrollHeight;
+      this.placed();
+    });
   }
 
   said(piece: Piece): void {
@@ -66,6 +77,8 @@ export class Chat {
         this.el.append(...rows);
         this.fold();
         if (following) this.el.scrollTop = this.el.scrollHeight;
+        else this.unseen += rows.length;
+        this.placed();
       } else {
         // What the person sees stays where it is as what was said before goes in above it.
         const below = this.el.scrollHeight - this.el.scrollTop;
@@ -78,6 +91,17 @@ export class Chat {
       if (next > 0) setTimeout(slice);
     };
     slice();
+  }
+
+  /** The newest's button: shown while scrolled away, its count what came since. */
+  private placed(): void {
+    const away = this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight;
+    if (away < 48) this.unseen = 0;
+    this.newest.hidden = away <= AWAY_PX;
+    const said = this.unseen > 99 ? "99+" : this.unseen ? String(this.unseen) : "";
+    if (this.newest.textContent === said && this.newest.childElementCount === (said ? 0 : 1)) return;
+    this.newest.replaceChildren(said || icon("down"));
+    this.newest.setAttribute("aria-label", said ? `${said} new, back to the newest` : "Back to the newest");
   }
 
   /** Why the conversation is told no more. */

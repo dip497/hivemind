@@ -36,7 +36,7 @@ import { AgentScreen } from "./js/agent.js";
 window.calls = [];
 const app = {
   back() {}, computer: () => "desk",
-  conversation: (a) => (window.calls.push(["conversation", a.tile]), () => {}),
+  conversation: (a, said) => (window.calls.push(["conversation", a.tile]), window.said = said, () => {}),
   terminal: () => null,
   tool: async () => ({}),
   answer: async (a, reply) => (window.calls.push(["answer", a.tile, reply]), true),
@@ -236,4 +236,44 @@ test("while it works, a line above the message box says so and for how long, wit
   await expect(line).toBeVisible();
   await show(page, overview(agent("t1", "Claude", { state: "idle" })));
   await expect(line).toBeHidden();
+});
+
+test("scrolled 200 px up from the newest, a round button above the message box counts what came since and brings the newest back", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await screen();
+  await show(page, overview(agent("t1", "Claude", { state: "working" })));
+  await open(page, "t1");
+  const say = (from: number, n: number) => page.evaluate(([f, k]) => (window as unknown as { said(p: unknown): void }).said({ session: "s", cursor: f + k,
+    entries: Array.from({ length: k }, (_, i) => ({ id: `e${f + i}`, at: f + i, who: "person", text: `line ${f + i}` })) }), [from, n] as const);
+  await say(0, 60);
+  const chat = page.locator("[data-screen=agent] [data-chat]");
+  const newest = page.locator("[data-screen=agent] [data-newest]");
+  const fromEnd = () => chat.evaluate((c) => c.scrollHeight - c.scrollTop - c.clientHeight);
+  await expect.poll(fromEnd).toBeLessThan(1);
+  await expect(newest).toBeHidden();
+  await chat.evaluate((c) => { c.scrollTop = c.scrollHeight - c.clientHeight - 150; c.dispatchEvent(new Event("scroll")); });
+  await expect(newest).toBeHidden();
+  await chat.evaluate((c) => { c.scrollTop = c.scrollHeight - c.clientHeight - 300; c.dispatchEvent(new Event("scroll")); });
+  await expect(newest).toBeVisible();
+  const box = await newest.boundingBox();
+  expect([Math.round(box!.width), Math.round(box!.height)]).toEqual([36, 36]);
+  expect(await newest.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(await page.evaluate(() => { const p = document.createElement("p"); p.style.backgroundColor = "var(--raised)"; document.body.append(p); return getComputedStyle(p).backgroundColor; }));
+  const message = await page.locator("[data-message]").boundingBox();
+  expect(box!.y + box!.height).toBeLessThanOrEqual(message!.y);
+  await expect(newest).toHaveText("");
+  await say(60, 3);
+  await expect(newest).toHaveText("3");
+  await say(63, 2);
+  await expect(newest).toHaveText("5");
+  await expect.poll(fromEnd).toBeGreaterThan(200);
+  await newest.click();
+  await expect.poll(fromEnd).toBeLessThan(1);
+  await expect(newest).toBeHidden();
+  // Back at the newest, what comes is seen: nothing to count the next time.
+  await say(65, 1);
+  await chat.evaluate((c) => { c.scrollTop = c.scrollHeight - c.clientHeight - 300; c.dispatchEvent(new Event("scroll")); });
+  await expect(newest).toHaveText("");
+  // Over the terminal there is no chat to go back in.
+  await page.locator("[data-view-toggle]").click();
+  await expect(newest).toBeHidden();
 });

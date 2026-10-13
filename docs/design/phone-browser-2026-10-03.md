@@ -1373,3 +1373,8 @@ Before and after at 390×844 are the `ux-*.png` pairs of the rig's scratchpad.
   12s", sans 13 `--text3`, its dot breathing (Happy `packages/happy-app/sources/components/
   AgentInput.tsx:545-580`, a 6 px pulsing dot over the input). It counts once a second only while
   it shows: not at rest, not over the terminal.
+- Scrolled more than 200 px up from the newest, a 36 px `--raised` circle above the dock's right
+  brings it back: it shows how many rows came since (99+ past 99), or a down arrow (hapi
+  `web/src/components/AssistantChat/HappyThread.tsx:287-327`). Back within 48 px of the newest the
+  count is cleared. The chat owns it (`chat.ts` `newest`); the screen gives it its place and hides
+  it over the terminal.

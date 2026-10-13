@@ -18,6 +18,8 @@ export class AgentScreen {
   private readonly closing = new Ask("Close", () => void this.closeIt(), { "data-close-ask": "" });
   private body: HTMLElement = h("div", {});
   private readonly dock = h("div", { class: "dock" });
+  /** Where the chat's button back to its newest sits: over the dock's right. */
+  private readonly newestSlot = h("div", { class: "newest-slot" });
   private readonly waits = h("div", { "data-waits": "" });
   private readonly gone = h("p", { class: "quiet", hidden: true }, NOTICES.notRunning);
   /** While it works, above the box: for how long (Happy's AgentInput.tsx:545-580). */
@@ -62,7 +64,7 @@ export class AgentScreen {
       () => void this.stopIt());
     this.message = message.querySelector("textarea")!;
     this.composing = message;
-    this.dock.append(this.closing.el, this.waits, this.working, message);
+    this.dock.append(this.newestSlot, this.closing.el, this.waits, this.working, message);
   }
 
   /** `tile` was just started from here: until the computer lists it, it is starting, not gone. */
@@ -88,6 +90,8 @@ export class AgentScreen {
     this.chat = new Chat((use) => (this.agent ? this.app.tool(this.agent, use) : Promise.reject(new Error("it is no longer there"))));
     this.terminal = false;
     this.place(this.chat.el);
+    this.newestSlot.replaceChildren(this.chat.newest);
+    this.newestSlot.hidden = false;
     this.composing.hidden = false;
     this.waits.hidden = false;
     this.flipTo(false);
@@ -149,6 +153,7 @@ export class AgentScreen {
     this.flipTo(on);
     this.showWorking();
     this.composing.hidden = on;
+    this.newestSlot.hidden = on;
     // The terminal shows the chooser itself; the header still says it waits.
     this.waits.hidden = on;
     this.place(on ? this.term.el : this.chat.el);

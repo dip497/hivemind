@@ -243,6 +243,14 @@ button { cursor: pointer; }
 }
 /* Under a terminal, with nothing waiting: the key bar is the bottom. */
 .dock:not(:has(> :not([hidden]):not(:empty))) { display: none; }
+.dock { position: relative; }
+.newest-slot { position: absolute; right: 16px; bottom: calc(100% + 8px); }
+.newest {
+  width: 36px; height: 36px; padding: 0; border-radius: 50%; border: 1px solid var(--line2);
+  background: var(--raised); color: var(--text); display: grid; place-items: center;
+  font: 600 13px/1 var(--sans); font-variant-numeric: tabular-nums; box-shadow: 0 4px 16px rgb(0 0 0 / 0.3);
+}
+.newest .icon { width: 18px; height: 18px; }
 .working-line { display: flex; align-items: center; gap: 6px; margin: 0; padding: 0 8px; font: 400 13px/18px var(--sans); color: var(--text3); font-variant-numeric: tabular-nums; }
 .working-line .dot { width: 6px; height: 6px; }
 .waiting { padding: 12px 12px 12px 18px; display: flex; flex-direction: column; gap: 10px; }
