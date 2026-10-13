@@ -15,9 +15,9 @@ test.afterEach(async () => {
 });
 
 /** A terminal view watching a stand-in source; `window.calls` is what it was asked. */
-async function terminal(): Promise<Page> {
+async function terminal(deviceScaleFactor = 1): Promise<Page> {
   browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor, isMobile: true, hasTouch: true });
   page.on("pageerror", (e) => { throw e; });
   await page.route("http://page.test/**", (route) => {
     const name = new URL(route.request().url()).pathname.slice(1);
@@ -28,14 +28,14 @@ import { TerminalView } from "./js/terminal.js";
 window.calls = [];
 const source = {
   held: false,
-  update: () => null,
+  update: () => { const u = window.next ?? null; window.next = null; return u; },
   typeText: (t) => window.calls.push(["type", t]),
   typeKeys: (k) => window.calls.push(["keys", ...k]),
   fit: (c, r) => window.calls.push(["fit", c, r]),
   unfit: () => window.calls.push(["unfit"]),
   size: (c, r) => window.calls.push(["size", c, r]),
 };
-const app = { terminal: () => ({ source, stop: () => {} }) };
+const app = { terminal: (w, t, changed) => (window.changed = changed, { source, stop: () => {} }) };
 const view = new TerminalView();
 view.el.style.flex = "1";
 document.getElementById("app").append(view.el);
@@ -80,4 +80,22 @@ test("a terminal opens fitted to the phone, again as its view changes; Fit gives
   expect((await fits(page)).slice(before)).toEqual([["unfit"]]);
   // The phone's own size is the fit, and only while fitted: none said for typing to take.
   expect((await calls(page)).filter((c) => c[0] === "size")).toEqual([]);
+});
+
+test("fitted, the phone shows every row of the size it asked for, the first included", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await terminal(3);
+  await page.evaluate(() => document.fonts.ready);
+  await expect.poll(async () => (await fits(page)).length).toBeGreaterThan(0);
+  const [, cols, rows] = (await fits(page)).at(-1)! as [string, number, number];
+  expect(cols, "readable on a phone whose pixels are three to a point").toBeLessThan(80);
+  // The program draws a full screen at that size.
+  await page.evaluate(([cols, rows]) => {
+    const w = window as unknown as { next: unknown; changed(): void };
+    w.next = { revision: 1, cols, rows, firstLine: 0, lineCount: rows, cursorLine: rows - 1, cursorCol: 1, cursorVisible: true,
+      lines: Array.from({ length: rows }, (_, i) => ({ index: i, text: `row ${i}`, runs: new Uint8Array(0) })) };
+    w.changed();
+  }, [cols, rows]);
+  const shown = page.locator("[data-term-text] > div");
+  await expect.poll(() => shown.allTextContents()).toEqual(Array.from({ length: rows }, (_, i) => `row ${i}`));
 });
