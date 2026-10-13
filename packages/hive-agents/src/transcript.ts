@@ -6,10 +6,12 @@
 import { valueAt } from "./field-path.js";
 import type { AgentTranscript, TranscriptAsks, TranscriptRule } from "./types.js";
 
-/** A question a tool use asks the person, and the options to choose from; `many`: several may be. */
+/** A question a tool use asks the person, and the options to choose from; `descriptions`: what
+ *  each option means, by its place ("" for one that says nothing); `many`: several may be. */
 export interface Asked {
   question: string;
   options: string[];
+  descriptions?: string[];
   many?: true;
 }
 
@@ -50,9 +52,14 @@ export function askedIn(from: unknown, asks: TranscriptAsks): Asked[] | undefine
     const question = valueAt(q, asks.question);
     const options = valueAt(q, asks.options);
     if (!isText(question) || !Array.isArray(options)) return [];
-    const labels = options.slice(0, OPTIONS_MAX).map((o) => valueAt(o, asks.label)).filter(isText).map((l) => l.slice(0, ASKED_TEXT_MAX));
+    const labelled = options.slice(0, OPTIONS_MAX).filter((o) => isText(valueAt(o, asks.label)));
+    const labels = labelled.map((o) => (valueAt(o, asks.label) as string).slice(0, ASKED_TEXT_MAX));
+    const descriptions = labelled.map((o) => {
+      const d = asks.description === undefined ? undefined : valueAt(o, asks.description);
+      return isText(d) ? d.slice(0, ASKED_TEXT_MAX) : "";
+    });
     const many = asks.many !== undefined && valueAt(q, asks.many) === true;
-    return [{ question: question.slice(0, ASKED_TEXT_MAX), options: labels, ...(many ? { many: true as const } : {}) }];
+    return [{ question: question.slice(0, ASKED_TEXT_MAX), options: labels, ...(descriptions.some((d) => d) ? { descriptions } : {}), ...(many ? { many: true as const } : {}) }];
   });
   return asked.length ? asked : undefined;
 }
@@ -82,6 +89,27 @@ function entryOf(rule: TranscriptRule, from: unknown, id: string, at: number, wh
     return { id, at, who: "tool", result: { of, text: full ? text : text.slice(0, RESULT_MAX), ...(error ? { error: true as const } : {}) } };
   }
   return null;
+}
+
+/** What the tool use `name`, given `input` (as an agent's hook gives a use it waits on, before its
+ *  session file records it), is about, read as `transcript` reads a use it records: whole, as a
+ *  wait shows it; undefined when no rule reads where a use's input is, or it names nothing. */
+export function toolAbout(transcript: AgentTranscript, name: string, input: unknown): string | undefined {
+  for (const rule of transcript.said) {
+    if (!rule.tool?.input || !rule.tool.about) continue;
+    const use: Record<string, unknown> = {};
+    for (const [path, value] of [[rule.tool.id, ""], [rule.tool.name, name], [rule.tool.input, input]] as const) put(use, path, value);
+    const entry = entryOf(rule, use, "", 0, true, false);
+    if (entry && "tool" in entry && entry.tool.about !== undefined) return entry.tool.about;
+  }
+  return undefined;
+}
+
+function put(obj: Record<string, unknown>, path: string, value: unknown): void {
+  const keys = path.split(".");
+  let cur = obj;
+  for (const key of keys.slice(0, -1)) cur = (cur[key] ??= {}) as Record<string, unknown>;
+  cur[keys.at(-1)!] = value;
 }
 
 /** What the records in `lines` say, read as `transcript` maps them, in order. An entry read from

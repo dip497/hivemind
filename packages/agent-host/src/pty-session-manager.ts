@@ -106,6 +106,9 @@ interface Session {
   carry: string;
   serializer: SerializeAddonInstance;
   spec: SpawnSpec;
+  /** What its starter asked for, before the agent's launch made it `spec`: what a restore
+   *  launches from, with the agent's manifest as it is then. Unknown for a snapshot of before. */
+  asked?: SpawnSpec;
   exited: boolean;
   /** Output and exit fan out to every viewer. */
   clients: Set<SessionClient>;
@@ -177,7 +180,7 @@ export interface SessionManagerOptions {
    *  the underlying agent to resume its prior session, so a reboot replay isn't
    *  just a screen image but an actual resume of the agent's task. If unset, the original spec is used verbatim (the user
    *  sees their last screen but the agent forgets prior context). */
-  transformSpecOnRestore?: (spec: SpawnSpec, id: string) => SpawnSpec;
+  transformSpecOnRestore?: (spec: SpawnSpec, id: string, ran?: SpawnSpec) => SpawnSpec;
   /** OPTIONAL — transform the SpawnSpec when spawning a BRAND-NEW session.
    *  Used to bind an agent to a session id so the snapshot remembers the binding
    *  and restore can resume exactly that session.
@@ -201,6 +204,8 @@ export interface SessionManagerOptions {
 export interface SessionSnapshot {
   id: string;
   spec: SpawnSpec;
+  /** What its starter asked for, before the agent's launch (`Session.asked`). */
+  asked?: SpawnSpec;
   /** Output of SerializeAddon.serialize() — a VT-escape string. */
   replay: string;
   /** Last OSC window title (SerializeAddon omits it) so a reboot-restored
@@ -226,7 +231,7 @@ export class SessionManager {
   private readonly onSnapshot?: (id: string, snap: SessionSnapshot) => void | Promise<void>;
   private readonly onSnapshotEvict?: (id: string) => void;
   private readonly snapshotDebounceMs: number;
-  private readonly transformSpecOnRestore?: (spec: SpawnSpec, id: string) => SpawnSpec;
+  private readonly transformSpecOnRestore?: (spec: SpawnSpec, id: string, ran?: SpawnSpec) => SpawnSpec;
   private readonly transformSpecOnSpawn?: (spec: SpawnSpec, id: string) => SpawnSpec;
   private readonly restoreRetryTransform?: (spec: SpawnSpec) => SpawnSpec | null;
   private readonly onOutput?: (id: string) => void;
@@ -308,11 +313,14 @@ export class SessionManager {
     // For RESTORE paths, also run the optional transform so the daemon can
     // add the agent's resume arguments and get a real agent-level resume, not
     // just a screen image with an amnesiac agent underneath.
+    // A restore launches from what was asked, the agent's launch made afresh: its hooks and
+    // paths are the ones installed now. What it ran with says only which session it was in.
+    const asked = frozenSnap ? frozenSnap.asked : spec;
     let effectiveSpec: SpawnSpec = frozenSnap
-      ? { ...frozenSnap.spec, cols: spec.cols, rows: spec.rows }
+      ? { ...(frozenSnap.asked ?? frozenSnap.spec), cols: spec.cols, rows: spec.rows }
       : spec;
     if (frozenSnap && this.transformSpecOnRestore) {
-      effectiveSpec = this.transformSpecOnRestore(effectiveSpec, id);
+      effectiveSpec = this.transformSpecOnRestore(effectiveSpec, id, frozenSnap.asked ? frozenSnap.spec : undefined);
     } else if (!frozenSnap && this.transformSpecOnSpawn) {
       // Brand-new session: inject e.g. `--session-id <uuid>` BEFORE the spec
       // is stored on the session — snapshots persist this so future restores
@@ -340,6 +348,7 @@ export class SessionManager {
       carry: "",
       serializer,
       spec: effectiveSpec,
+      ...(asked ? { asked } : {}),
       exited: false,
       clients: new Set([client]),
       sizes: new Map([[client, { cols: effectiveSpec.cols, rows: effectiveSpec.rows }]]),
@@ -461,16 +470,16 @@ export class SessionManager {
 
   /** Wait for the xterm.js write queue to drain, then serialize. xterm batches
    *  writes via setTimeout(0); calling serialize() before drain returns "". */
-  private serializeDrained(s: Session, tries = 3): Promise<{ replay: string; seq: number }> {
+  private serializeDrained(s: Session, tries = 3, lines = this.scrollback): Promise<{ replay: string; seq: number }> {
     return new Promise((resolve) => {
       // The screen covers output up to `at`; output that arrived while it drained follows it raw.
       const at = s.seq;
       s.term.write("", () => {
-        const screen = s.serializer.serialize({ scrollback: this.scrollback });
+        const screen = s.serializer.serialize({ scrollback: Math.min(lines, this.scrollback) });
         const tail = this.ringSince(s, at);
         if (tail !== null) resolve({ replay: screen + tail, seq: s.seq });
         // ponytail: a flood that outruns the ring between drains ends with a gap after three tries.
-        else if (tries > 1) void this.serializeDrained(s, tries - 1).then(resolve);
+        else if (tries > 1) void this.serializeDrained(s, tries - 1, lines).then(resolve);
         else resolve({ replay: screen, seq: s.seq });
       });
     });
@@ -530,11 +539,12 @@ export class SessionManager {
     this.applySize(s, cols, rows);
   }
 
-  /** The current screen, for a viewer that fell too far behind to be sent every byte. */
-  async snapshot(id: string): Promise<{ replay: string; seq: number; epoch: string } | null> {
+  /** The current screen, for a viewer that fell too far behind to be sent every byte, with at most
+   *  `lines` of its scrollback. */
+  async snapshot(id: string, lines?: number): Promise<{ replay: string; seq: number; epoch: string } | null> {
     const s = this.sessions.get(id);
     if (!s || s.exited) return null;
-    const snap = await this.serializeDrained(s);
+    const snap = await this.serializeDrained(s, 3, lines);
     return { replay: this.withTitle(s, snap.replay), seq: snap.seq, epoch: s.epoch };
   }
 
@@ -586,6 +596,28 @@ export class SessionManager {
   }
 
   /** Resizing is interacting: that viewer's size wins. */
+  /** Its program redraws all of its screen, its size unchanged, so the screen read meanwhile is
+   *  never a row short: its process group is told the size changed. ConPTY has no signals: its
+   *  size steps a row down and back, this screen kept at its size. */
+  repaint(id: string): void {
+    const s = this.sessions.get(id);
+    if (!s || s.exited) return;
+    if (process.platform === "win32") {
+      if (s.spec.rows < 2) return;
+      try {
+        s.pty.resize(s.spec.cols, s.spec.rows - 1);
+        s.pty.resize(s.spec.cols, s.spec.rows);
+      } catch { /* resize on a dying pty */ }
+      return;
+    }
+    for (const to of [-s.pty.pid, s.pty.pid]) {
+      try {
+        process.kill(to, "SIGWINCH");
+        return;
+      } catch { /* not a group of its own, or gone */ }
+    }
+  }
+
   resize(id: string, cols: number, rows: number, client?: SessionClient): void {
     const s = this.sessions.get(id);
     if (!s) return;
@@ -740,13 +772,13 @@ export class SessionManager {
   }
 
   // ── snapshot scheduling ────────────────────────────────────────────────────
-  /** Debounced disk write. Called on every PTY data event; the actual write
-   *  happens snapshotDebounceMs after the LAST event so a chatty session
-   *  doesn't hammer the disk. flushSnapshot bypasses the debounce. */
+  /** Throttled disk write. Called on every PTY data event; the write happens
+   *  snapshotDebounceMs after the FIRST unwritten event, so a chatty session
+   *  neither hammers the disk nor goes unwritten while it keeps printing (a
+   *  daemon killed then would have nothing to restore). flushSnapshot bypasses it. */
   private scheduleSnapshot(s: Session): void {
     if (!this.onSnapshot) return;
-    if (!s.dirty) return;
-    this.cancelSnapshotTimer(s.id);
+    if (!s.dirty || this.snapshotTimers.has(s.id)) return;
     const t = setTimeout(() => {
       this.snapshotTimers.delete(s.id);
       // Fire-and-forget: the debounced path doesn't need an await chain — the
@@ -773,6 +805,7 @@ export class SessionManager {
           r = this.onSnapshot?.(s.id, {
             id: s.id,
             spec: s.spec,
+            ...(s.asked ? { asked: s.asked } : {}),
             replay: s.serializer.serialize({ scrollback: this.scrollback }),
             title: s.lastTitle,
             savedAt: Date.now(),

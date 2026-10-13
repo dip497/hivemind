@@ -36,6 +36,36 @@ test("the watcher reads only sessions with new output, reports changes, and fini
   expect(reports.length).toBe(2);
 });
 
+test("one idle frame between two of a chooser is not the wait's end, for any agent; idle that stays past the window is", () => {
+  let t = 0;
+  let screen = "question";
+  const reports: string[] = [];
+  const w = new ScreenWatcher({
+    read: () => ({ cmd: "agent", screen }),
+    detect: (_cmd, s) => {
+      const [status, says] = s.split(":");
+      return { status: status as ScreenReading["status"], ...(says ? { says } : {}) };
+    },
+    report: (_id, r) => reports.push(r.says ? `${r.status}:${r.says}` : r.status),
+    now: () => t,
+  });
+  w.output("a"); w.tick();
+  // A viewer's repaint cuts the chooser's footer for one frame.
+  screen = "idle"; w.output("a"); t = 1_200; w.tick();
+  screen = "question"; w.output("a"); t = 2_400; w.tick();
+  expect(reports).toEqual(["question"]);
+  // Answered at the desktop: its prompt stays, and the wait ends.
+  screen = "idle"; w.output("a"); t = 3_600; w.tick();
+  expect(reports).toEqual(["question"]);
+  t = 3_600 + SCREEN_WORKING_HOLD_MS + 1; w.tick();
+  expect(reports).toEqual(["question", "idle"]);
+  // A wait held through the blip is still the screen it said it was.
+  screen = "permission:trust"; w.output("a"); t = 10_000; w.tick();
+  screen = "idle"; w.output("a"); t = 11_200; w.tick();
+  screen = "permission:trust"; w.output("a"); t = 12_400; w.tick();
+  expect(reports).toEqual(["question", "idle", "permission:trust"]);
+});
+
 test("a wait the screen says it is reports again when it says another, and saying nothing is no change", () => {
   const screens = new Map<string, ScreenReading>([["a", { status: "permission", says: "trust" }]]);
   const reports: ScreenReading[] = [];

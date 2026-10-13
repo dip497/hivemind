@@ -8,7 +8,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { optionChoices, type AgentProviderDef } from "@hivemind/agents";
-import { findBin } from "@hivemind/agents/discover";
+import { discoverOptions, findBin } from "@hivemind/agents/discover";
 import { isRemote, machineUri, parseDeviceUri, parseMachineUri, type KnownMachines } from "@hivemind/core/remote-uri";
 import type { Folders, PlaceFolder, Places, StartableProgram, StartImage } from "@hivemind/workspace-api/agents";
 import { ApiError, text } from "@hivemind/workspace-api/protocol";
@@ -35,7 +35,13 @@ export interface MachineFs {
   found(bins: string[]): Promise<string[]>;
   /** Keep the photo `data` as `name` there: its path. */
   keep(name: string, data: Buffer): Promise<string>;
+  /** What the command of `def` there lists for each of its options; none: it is not asked. */
+  choices?(def: AgentProviderDef): Promise<Record<string, string[]>>;
 }
+
+/** How long the Start screen waits on an agent's command to list its choices: past it, the
+ *  manifest's alone, and the command's once it answered, next time. */
+const LISTED_WAIT_MS = 1500;
 
 export interface PlacesOptions {
   core(repo: string): CoreLayout | null;
@@ -77,6 +83,10 @@ export function localFs(photos: () => string): MachineFs {
     readdir: async (dir) => (await fs.promises.readdir(dir, { withFileTypes: true }))
       .map((e) => ({ name: e.name, isDir: e.isDirectory(), isSymlink: e.isSymbolicLink() })),
     found: async (bins) => bins.filter((b) => !!findBin(b)),
+    choices: async (def) => {
+      const listed = discoverOptions(def).then((o) => Object.fromEntries(Object.entries(o).map(([id, c]) => [id, c.values])));
+      return Promise.race([listed, new Promise<Record<string, string[]>>((r) => setTimeout(() => r({}), LISTED_WAIT_MS).unref())]);
+    },
     keep: async (name, data) => {
       await fs.promises.mkdir(photos(), { recursive: true, mode: 0o700 });
       const at = path.join(photos(), name);
@@ -86,11 +96,12 @@ export function localFs(photos: () => string): MachineFs {
   };
 }
 
-/** An agent as `agent.startable` lists it: its model and mode choices. */
-export const programOf = (p: AgentProviderDef): StartableProgram => ({
+/** An agent as `agent.startable` lists it: its model and mode choices, those its command `listed`
+ *  and those its manifest names, as the desktop's settings offer them. */
+const programOf = (p: AgentProviderDef, listed: Record<string, string[]>): StartableProgram => ({
   id: p.id,
   label: p.label,
-  options: (p.options ?? []).filter((x) => x.id === "model" || x.id === "mode").map((x) => ({ id: x.id, label: x.label, values: optionChoices(x, []) })),
+  options: (p.options ?? []).filter((x) => x.id === "model" || x.id === "mode").map((x) => ({ id: x.id, label: x.label, values: optionChoices(x, listed[x.id] ?? []) })),
 });
 
 export class StartPlaces {
@@ -123,6 +134,13 @@ export class StartPlaces {
     const agents = this.o.agents();
     const found = new Set(await (await this.files(machine)).found([...new Set(agents.map((a) => a.bin))]));
     return agents.filter((a) => found.has(a.bin));
+  }
+
+  /** `found` (none: the agents found on `machine`), with the choices each command there lists. */
+  async startable(machine: string, found?: AgentProviderDef[]): Promise<StartableProgram[]> {
+    const programs = found ?? (await this.programs(machine));
+    const files = await this.files(machine);
+    return Promise.all(programs.map(async (p) => programOf(p, (await files.choices?.(p)) ?? {})));
   }
 
   /** Whether the command of `def` is found where `folder` is (none: here); true for a folder on a
@@ -162,7 +180,7 @@ export class StartPlaces {
       machines: await Promise.all(ids.map(async (id) => {
         const folders = byMachine.get(id)!;
         try {
-          return { id, name: name(id), programs: (await this.programs(id)).map(programOf), folders };
+          return { id, name: name(id), programs: await this.startable(id), folders };
         } catch (e) {
           return { id, name: name(id), programs: [], folders, unreached: e instanceof Error ? e.message : String(e) };
         }

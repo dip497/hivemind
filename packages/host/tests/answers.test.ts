@@ -25,6 +25,9 @@ import { KEY_GAP_MS } from "@hivemind/agent-host/keys";
 import { answers, ANSWER_MAX, TAKEN_MS } from "../src/answers.ts";
 import { ControlPlane, type ControlPlaneOptions } from "../src/control/plane.ts";
 import { Waits } from "../src/waits.ts";
+import { waitOn } from "../src/needs.ts";
+import { readAgentManifest } from "@hivemind/agents/load";
+import { hookAnswerOf } from "@hivemind/agents/node";
 
 const PRIYA = { person: "p".repeat(64), name: "Priya" };
 const phone: Connection = { actor: { kind: "peer", person: PRIYA.person, device: "d".repeat(64), access: "owner" }, send: () => {}, closed: new AbortController().signal };
@@ -370,6 +373,10 @@ function hooked(answer: Record<string, unknown> | null = ANSWER) {
     answer: { permission: { allow: ["1"], deny: ["escape"] } },
     launch: { hcp: true },
     hooks: { arg: "--settings", events: { PermissionRequest: { emit: "input.requested", kind: "permission", timeout: 3600, ...(answer ? { answer } : {}) } } },
+    session: {
+      resume: { args: ["--resume", "{id}"], exists: "{home}/.acme/{id}.jsonl" },
+      transcript: { id: "uuid", at: "timestamp", said: [{ each: "content", item: { type: "tool_use" }, tool: { id: "id", name: "name", about: ["input.command", "input.file_path"], input: "input" } }] },
+    },
   })]);
   after(() => setCatalog([]));
   // The agent channel needs nothing of a window here.
@@ -403,6 +410,16 @@ test("an Allow for an agent whose hook carries the answer is printed by that hoo
   assert.deepEqual(c.audited(), ["agent.answer t1 allow ok", "agent.answer t1 allow, not answered ok", "agent.answer t1 reply ok", "agent.answer t1 deny ok"]);
 });
 
+test("a wait its hook holds says what the tool use is about as the hook gives it, whole: its session file records the use only once it has run", async () => {
+  const c = hooked();
+  await c.hook("Bash", { command: "rm -rf build \\\n  dist" });
+  assert.equal(c.p.waits.of("t1")?.about, "rm -rf build \\\n  dist");
+  const agent = await c.hook("Agent", { prompt: "look around" });
+  assert.equal(c.p.waits.of("t1")?.about, undefined, "nothing its transcript would name");
+  const need = waitOn("t1", { kind: "permission", since: agent.since }, { decides: () => true, wait: (t) => c.p.waits.of(t) });
+  assert.deepEqual(need.tool, { name: "Agent" }, "about nothing, it still names its tool");
+});
+
 test("a question its tool asks, held by its hook, is answered by the option's label set in the tool's input under its question's text, or by the line typed; never allowed", async () => {
   const c = hooked();
   const color = await c.hook("AskUserQuestion", COLOR);
@@ -415,6 +432,33 @@ test("a question its tool asks, held by its hook, is answered by the option's la
   assert.deepEqual(await c.answer(again.since, { text: "Green" }), { answered: true });
   assert.equal(await again.printed, chosen({ "Which color?": "Green" }));
   assert.deepEqual(c.writes, []);
+});
+
+// What Claude's AskUserQuestion gave its PermissionRequest hook (claude 2.1.296, from a real session).
+const NEXT_LINE = { questions: [{ question: "Which line should I add to hello.txt next?", header: "Next line", multiSelect: false, options: [
+  { label: "Nothing", description: "Leave hello.txt as it is" },
+  { label: "A timestamp", description: "Add today's date and time as a new line" },
+  { label: "\"test passed\"", description: "Add the line \"test passed\"" },
+] }] };
+
+test("Claude's question held by its permission hook is a question with each option and what it means, never a permission; an option is answered as its label under the question", async () => {
+  const claude = (await readAgentManifest(path.join(import.meta.dirname, "../../hive-agents/tests/fixtures/published-agents/claude/agent.yaml"), { source: "user", requireDirMatch: true })).def!;
+  const c = hooked(hookAnswerOf(claude, "PermissionRequest") as unknown as Record<string, unknown>);
+  const asked = await c.hook("AskUserQuestion", NEXT_LINE);
+  const need = waitOn("t1", { kind: "permission", since: asked.since }, { decides: () => true, wait: (t) => c.p.waits.of(t) });
+  assert.deepEqual(need, { kind: "question", choose: true, asks: [{
+    question: "Which line should I add to hello.txt next?",
+    options: ["Nothing", "A timestamp", "\"test passed\""],
+    descriptions: ["Leave hello.txt as it is", "Add today's date and time as a new line", "Add the line \"test passed\""],
+  }] });
+  assert.deepEqual(await c.answer(asked.since, { choice: 1 }), { answered: true });
+  const printed = JSON.parse((await asked.printed)!);
+  assert.deepEqual(printed.hookSpecificOutput.decision.updatedInput.answers, { "Which line should I add to hello.txt next?": "A timestamp" });
+  assert.deepEqual(c.writes, [], "nothing typed: the hook gives the answer");
+  const several = await c.hook("AskUserQuestion", { questions: [{ ...NEXT_LINE.questions[0]!, multiSelect: true }] });
+  const many = waitOn("t1", { kind: "permission", since: several.since }, { decides: () => true, wait: (t) => c.p.waits.of(t) });
+  assert.equal(many.asks?.[0]?.many, true);
+  assert.equal(many.choose, undefined, "several chosen: not one option's");
 });
 
 test("the agent's own prompt answered first, its hook is let go, printing nothing, and an answer after does nothing: a key typed there, Esc, its tool run, its hook gone", async () => {

@@ -343,8 +343,8 @@ when out of place; the ages tick in place. The look is the Android app's (`Theme
 its palette dark and light, Geist and JetBrains Mono, pills, cards with an amber rail, the
 composer, the floating tab bar (Needs you, Agents, Devices; Views waits on views in the browser).
 Installable: `manifest.webmanifest`, icons from the launcher mark, the iOS meta tags, safe areas;
-`sw.js` keeps every file `build.sh` lists in `shell.json` and serves it at once, fetching it again
-behind (the same ETag is not written again).
+`sw.js` keeps every file `build.sh` lists in `shell.json`, one cache per page hash, opens the
+newest it has whole and asks the server for `page.sha256` alongside (§12.9).
 
 **The actions, one owner**: the wasm's `Host` now also has `answer(workspace, tile, since, reply)`
 (`{text}`, `{allow}` or `{approve, feedback?}` mapped onto hive-phone's `Reply`), `send`, `stop`
@@ -1037,3 +1037,373 @@ after at the same throttle.
 
 Out of scope, a separate B6 design: answering from the notification itself (end-to-end encrypted
 Web Push with Allow and Deny actions; on an iPhone only once the page is on the Home Screen).
+
+## 12. Phone fixes from the test rig (2026-10-13)
+
+### 12.1 An agent started from the phone ended at once
+
+Seen: Start, Claude, a prompt; the tile went "exited" in 4 s, with no transcript. Its terminal
+said `exited code=0 signal=1`. The rig's terminal daemon was replaced at that second (systemd
+scope at 01:05:34; Start was 01:05:30). It was replaced every 2–3 minutes, at the second each e2e
+run on the machine ended: the suite's global teardown SIGKILLed every daemon whose socket was
+under the temp dir (`stopDaemons(os.tmpdir())`), and the rig's profile is in `/tmp/hmp`. The
+desktop restarted the daemon and restored each session from its snapshot, so older agents came
+back with `--resume`; the new one had no snapshot, because a snapshot was written only 2 s after
+the last output and a working Claude never stops printing.
+
+Fixed in their owners:
+- the teardown stops only the daemons its own run started, by the run's mark in their
+  environment (`HIVEMIND_E2E_XDG`), wherever their sockets are (`tests/e2e/helpers/daemons.ts`);
+- a session's snapshot is written at most 2 s after its first unsaved output, however busy it
+  stays (`pty-session-manager.ts` `scheduleSnapshot`); Orca checkpoints on a fixed interval too
+  (`orca/src/main/daemon/daemon-pty-runtime-state.ts:149`, 5 s);
+- the status ledger keeps how each process ended: `c` (exit code) and `g` (signal) on an `exited`
+  line, as Orca's daemon keeps both (`orca/src/main/daemon/pty-subprocess/subprocess-handle.ts:54`);
+- the phone's agent screen clears the agent shown before it, and one just started reads
+  "Starting…" until the computer lists it.
+
+Seen, not yet traced: on the rig, an agent started in the second workspace (one the window did
+not show) never ran (`hive ctl agents` listed nothing there); the phone shows "Starting…" for it.
+
+### 12.2 "Waiting on you · permission" while the agent sat at its prompt
+
+Seen: "Phone test" showed "permission · 2 min" with Allow and Deny while its terminal showed
+Claude at its prompt. The rig keeps no record of status changes, so the step that left the chooser
+is not known. Its transcript has no tool use for that turn because Claude records one only once
+it has run (12.3). What is known: the wait was one the hooks reported. A wait the screen held would
+have ended when the screen read the prompt. And Claude draws its chooser while its
+`PermissionRequest` hook holds (claude 2.1.296 in a pty, the hook sleeping 40 s: the
+AskUserQuestion chooser drawn and still up at 25 s and 45 s).
+
+Cause: once an agent's hooks have spoken, `StatusStore` ignored every screen reading except a
+chooser during a working turn. A wait the hooks reported ended only when a hook spoke again or a
+key it reads was typed (a digit, Enter, Esc, Ctrl+C). Anything else that took the chooser away
+(keys it does not read, a click, the agent itself) left the status waiting while the agent sat
+at its prompt. `answers.ts` already treated "the screen moved on to the prompt" as the end of the
+wait (spec/needs.md "Answering"); the status did not.
+
+Fixed in the owner: a wait ends when the screen moves from a chooser to the agent's prompt
+(`status-store.ts` `fold`). The prompt alone ends nothing, because it is what the screen shows in
+the 0.2 s before the chooser is drawn. During a working turn the prompt ends nothing either, since
+it shows between a key answer and the tool running. Orca does the same: its permission status
+stands only while the terminal's tail still shows the prompt
+(`orca/src/main/runtime/orca-runtime-resolve-authoritative-terminal-wait-permission.ts:49`).
+
+### 12.3 The permission card said only "permission"
+
+The phone draws the tool and its command when the computer sends them
+(`answers.ts`, `waiting.tool`). The computer took `about` only from the session file
+(`pendingTool`). But Claude writes the tool use to its file only once the tool has run. With its
+`PermissionRequest` hook holding, the file ends at the prompt: in the pty probe of 12.2 it had no
+AskUserQuestion entry at 80 s, while the chooser was up. So a wait held by the hook had the tool's
+name and nothing else, and a wait whose hook had let go had neither.
+
+Fixed in the owner of the held wait: the hook gives the tool's input (`tool_input`), and
+`toolAbout` (`hive-agents/src/transcript.ts`) reads it through the manifest's own transcript rule
+for tool uses. A wait therefore says what the chat row will say once the use is recorded, whole.
+`Waits.hold` keeps it, and `waitOn` prefers it to the file's word. hapi also takes the tool and
+its input from the hook, not the file (`hapi/cli/src/claude/utils/localPermissionBridge.ts:92-99`).
+
+### 12.4 Home showed Claude's status bar instead of what it said
+
+Seen: rows under their names read "⏵⏵ auto mode on (shift+tab to cycle)", "⏸ plan mode on" and
+similar. A row's line is what the agent last said (`LastSaid`, from its session file); only when
+that is undefined does the screen's last line stand in, and Claude's last line is its status bar.
+The session files were fine, but their last 64 KiB, all `lastSaid` read, held only records Claude
+writes for itself: each of the rig's restores appends `cost-state`, `mode` and
+`permission-mode` lines (92 `cost-state` lines in the last 64 KiB of "Asks permission").
+
+Fixed in `conversation.ts` `lastSaid`: the end is read four times wider each time it says nothing,
+up to 4 MiB. It is read once per change of the file's size, as before; the rig's files take
+14–72 ms. And an agent that keeps a conversation has no screen line standing in for it:
+`LastSaid.line` is "" until it says something, so its row shows its state.
+
+### 12.5 The terminal takes the size of whoever typed last
+
+Asked for: auto-fit on by default; the terminal's size follows whoever typed last, like tmux's
+`window-size latest`. Typing on the phone fits it to the phone; the desktop's first key gives the
+desktop its size back. Allow, Deny and an option are not typing. Fit stays as the manual override.
+
+Before: among the host's windows the last to type sized a session, but only at its next resize,
+never at the key. A phone never said a size, so it could only Fit, which held until it let go.
+
+Now, in `terminals.ts`, the one owner of a session's size:
+- every client's `terminal.resize` is kept as its own size;
+- one of the host's own clients that types sizes the session at once to its own size;
+- a phone's own size counts only once it types, so opening a terminal on the phone changes
+  nothing on the desktop;
+- when the one that typed last goes, the one that typed before it takes the size back, as tmux
+  recalculates on detach (cmux relies on the same mode,
+  `cmux/Sources/RemoteTmuxControlConnection+Sizing.swift:349`).
+
+The page tells the core the columns and rows it reads at (12 px, as Fit uses) when it shows a
+terminal and whenever its view changes size, the keyboard coming up among them. The core sends
+that as `terminal.resize` (`Sent::Size`), again on each connection. Answers go through
+`agent.answer`, not `terminal.write`, so they never size it. A Fit now lasts until another client
+types.
+
+### 12.6 Scrolling the phone's terminal
+
+Asked for: a swipe up shows earlier lines and the view goes back to live output on new output or a
+tap; in a full-screen program a swipe goes to the program, as a desktop terminal sends it.
+
+Found: the core already kept 2,000 lines of scrollback and the page panned through them. The
+terminal that showed nothing was Claude's: Claude Code 2.1.296 draws on the alternate screen
+(`\x1b[?1049h`) with mouse modes 1000/1002/1003/1006 on, and the alternate screen keeps no
+scrollback in any terminal. Its history is Claude's own, scrolled by the wheel reports the desktop's
+xterm sends it.
+
+Now `Screen::scroll` in the core decides what a scroll is, from the emulator's modes, the way xterm
+and alacritty do:
+- a program that takes the mouse (1000/1002/1003) gets wheel reports, buttons 64 and 65, in SGR
+  (1006), UTF-8 (1005) or the old encoding. The old encoding's coordinate is clamped to what fits
+  in one ASCII character, because `terminal.write` carries text;
+- on the alternate screen without the mouse (less, vim), unless the program turned alternate
+  scroll (1007) off, it gets arrows: `ESC O A` / `ESC O B` under application cursor keys (DECCKM),
+  else `ESC [ A` / `ESC [ B`;
+- otherwise the view scrolls its own scrollback.
+
+Orca makes the same split (`orca/mobile/src/terminal/document/mouse-input-encoding.ts:226-268`).
+cmux scrolls on the Mac surface (`TerminalSurface+Mobile.swift:45-54`). Both send a line for each
+line-height of travel, and the page does the same, carrying the remainder. A scroll is input, as
+in tmux, so it sizes the terminal like a key does.
+
+The view follows again only on the person's own input: a key, the key bar, a tap. New output never
+moves a view scrolled back; a "New output ↓" button shows instead and jumps to the newest. cmux
+does the same (`GhosttySurfaceView.swift:4625-4646`: "Passive output never forces this jump"), and
+vibetunnel shows a similar button. A first cut snapped on new output, which left nothing to read
+back while an agent printed.
+
+History comes on demand. The host's daemon keeps 5,000 lines and sent all of them with every
+screen: on joining, and again each time a paced phone fell behind. The core keeps only 2,000. Now:
+- the page opens a terminal with `history: 200` (`FIRST_HISTORY`);
+- scrolled within a screenful of the oldest line it holds, it sends `terminal.history` with four
+  times what it holds, at most 2,000;
+- the host sends that client alone the screen again with that much scrollback (`SessionRelay.again`,
+  the daemon's `screen` request with `lines`), and remembers the cap for the screens it sends later;
+- the core stops asking once an answer brings fewer lines than it asked for, which means the host
+  has no more, or once it holds 2,000;
+- the native apps ask for 2,000 at once, because they have no way to ask for more yet.
+
+A screen sent again is drawn from a reset, so its lines get new numbers. The page tells it from new
+output by the newest line: the same text at the same distance from the end means nothing new came.
+Then the view keeps the same lines in sight, counted from the end. After new output the view keeps
+them by their place. Orca caps the screen sent on
+joining at 1,000 lines and 512 KiB (`orca/src/main/runtime/scrollback-limits.ts:7-8`). cmux sends
+240 lines on a cold attach and fetches more as the phone scrolls, 600 at a time
+(`TerminalController+MobileScrollPrefetch.swift:10-14`).
+
+### 12.7 An agent with no conversation to read opens in its terminal
+
+Asked for: an agent whose manifest has no readable transcript opens in its Terminal, not an empty
+chat; chat stays the default where there is one.
+
+The page already opened the terminal when the agent list said `conversation` was not set, and among
+the bundled agents only Claude Code maps a transcript. The gap was two rules for one fact. The list
+said `conversation` whenever a manifest mapped a transcript (`session.transcript`). The reader
+(`transcriptOf`) also needs to know where the file is (`session.resume.exists`) and reads nothing
+without it. A manifest with the first and not the second, say a HiveHub plugin, opened in a chat
+that stayed empty for good. Both now ask `keepsConversation(def)` in `conversations.ts`.
+
+### 12.8 The Start screen
+
+Asked for: prompt first and focused; one summary line ("Claude · project · this computer") that
+defaults to the last used and opens the choices; mode and model as the desktop offers them,
+collapsed; workspaces told apart; no FOLDER chip; Start always in sight.
+
+**Choices.** The phone listed only what the manifest names: Claude's mode as `bypassPermissions` and
+`yolo`, and its model as an empty text box. The desktop's settings ask the CLI itself
+(`discoverOptions`: `claude --help` lists acceptEdits, auto, bypassPermissions, manual, dontAsk,
+plan), and the frame menu's New agent lists the manifest's alone. Now `StartPlaces.startable` lists
+an agent the way the settings do, for `agent.places` and `agent.startable` alike. It waits 1.5 s at
+most on a command, so a slow CLI never holds the screen. Claude's help lists no models, so the model
+stays typed, as in the settings, with "As set in Settings" in place of an empty box.
+
+**Prior art.** happy's new session keeps the composer above the keyboard
+(`happy-app/sources/app/(app)/new/index.tsx:2342`, `KeyboardAvoidingView`) and keeps a draft of
+what was chosen (`sync/persistence.ts:10`, `new-session-draft-v1`). hapi remembers the last
+machine, recent paths and agent (`web/src/hooks/useRecentPaths.ts:3,51`, `hapi:newSession:agent`)
+and labels a recent path by its last two segments with the full path as its title
+(`NewSession/DirectorySection.tsx:129`).
+
+**The screen.** The prompt first, focused, and "What should it do?" in place of "optional"; then
+one line, "Claude Code · api · this computer", that opens the choices (agent, workspace, machine,
+folder); then mode and model as the desktop offers them: a select whose first entry is "As set in
+Settings", or for an option the command lists no values for, a field with that placeholder. Start
+sits in a bar under the scrolling part, so it stays above the keyboard. The choices open by
+themselves when nothing could start as chosen (a machine that could not be asked). Two workspaces
+or folders of one name each add the last two parts of their path. The folder trail and "Folders
+in web" show only once a folder inside a project is chosen, not the project's name twice.
+
+**Defaults.** A project's heading names the machine and folder. Otherwise the last start from this
+browser (kept in its IndexedDB as `start-last`: workspace, machine, folder, agent) chooses them
+where they still are, a folder inside a project included. The agent is the one last started when
+it is there, else the first, so the screen never opens with nothing chosen.
+
+### 12.9 The page did not update itself
+
+Found on the rig: the server served the new page, and the open page kept running the old `main.js`
+from the service worker's cache through two reloads; only `registration.update()` and a reload
+brought it. The old `sw.js` served each file from its cache and fetched it again behind, so every
+release showed at least one open of the old page. Each file was replaced on its own, so a new
+`main.js` could run with an old wasm when a tab closed half way; the spec shows it (`B` with `A`).
+`sw.js` itself never changed between releases, since it reads `shell.json` at run time, so the
+browser never saw a new worker. Locally a second reload brought the new page; why the rig needed
+more was not found.
+
+Prior art: hapi uses Workbox, whose precache manifest is written into `sw.js`
+(`web/src/sw.ts:32`, `precacheAndRoute(self.__WB_MANIFEST)`), so each release is a new worker that
+fetches the page whole, then `SKIP_WAITING`, `clients.claim` and a reload on `controllerchange`
+(`web/src/hooks/usePwaUpdate.ts:38`). That shows the old page first and reloads under the person.
+
+Now each open asks the server for `page.sha256` (65 bytes, `no-store`, 3 s at most). A hash not
+had is fetched whole, as `shell.json` lists it, into the cache `hive-web-<hash>` (`no-cache`, so an
+unchanged file is a 304), and the open waits on it, up to 20 s; it is marked whole last. A page
+not had whole is never run. No answer, an error, or a page not had in time: the newest page had
+whole opens, and the fetch goes on for the next open. Each open page's cache is recorded in Cache
+Storage, not the worker's memory, since the browser stops an idle worker. A file the page asks
+for later is then of its own build, and its cache is kept while it is open. The first open after
+moving from the old worker still shows the old page, once.
+
+**Then: never on the open path.** On the rig the update worked, but the hash check sat in front of
+every open: one round trip to the server before the first byte, and the Cache Storage lookups with
+it. A/B on this machine (load 5–30), the real page served as `pages.rs` serves it, 40 ms a request,
+reload to the first `[data-screen] button`, median ms of 7 runs, two rounds interleaved:
+
+| Worker | Home 1× | Home 4× | Pairing 1× | Pairing 4× |
+|---|---|---|---|---|
+| 7aad336 (each file from the cache, fetched again behind) | 35, 39 | 112, 105 | 44, 53 | 189, 159 |
+| 21d5771 (hash checked before the open) | 83, 93 | 140, 151 | 94, 95 | 184, 186 |
+| now (open at once, check alongside) | 38, 45 | 115, 118 | 37, 46 | 141, 130 |
+
+Now an open serves the newest build had whole at once, from memory once the worker has worked it
+out. The check runs alongside it. A new build is fetched whole and becomes the newest, so the next
+open runs it. When the check finds nothing new, the builds no open page runs are dropped. Which
+build a page runs is set in memory first and written to Cache Storage behind.
+
+### 12.10 Claude's AskUserQuestion on the phone
+
+On the rig the phone showed "permission" with Allow and Deny for an AskUserQuestion chooser, then
+"idle". There were three causes.
+
+- The rig's profile ran a copy of the Claude manifest without the `answer:` block on its
+  `PermissionRequest` hook (the HiveHub one has none either). Without it the hook holds nothing.
+  The session file cannot stand in: Claude 2.1.296 writes the `tool_use` only once the question is
+  answered, so nothing names the tool while it waits. With the manifest in this repo, the hook holds
+  the wait and gives its tool and questions. Each option now carries its `description` too
+  (needs 0.10), and so does `many`, which the hook's `asks` lacked: a multiSelect question was
+  offered as one choice.
+- An option chosen on the phone is answered as hapi and Happy answer it: the hook prints
+  `updatedInput.answers`, the option's label under the question's text (hapi
+  `cli/src/claude/utils/askUserQuestionAnswers.ts:3-21`, happy
+  `happy-cli/src/claude/utils/permissionHandler.ts:141-145,161-163`). No key is typed, so the
+  answer never lands on a chooser that is being redrawn. An agent whose hook does not hold the
+  wait still has its option's digit typed (`choose: ['{n}']`), through the guarded key path.
+- Opening the terminal from the phone repaints it (`terminals.ts` `repaintSoon`: one row shorter,
+  then back). The shorter screen loses the chooser's footer, and the person's last message above it
+  starts with `❯ `, which the idle rule reads as the prompt. One such reading ends a hooked wait
+  (`status-store.ts` fold), and the `question` readings after it do not bring the wait back. Claude's
+  question rule now also reads a selected option, `❯ 1.`, as a chooser.
+
+### 12.11 Opening the page: every screen at once, then Start not ready
+
+On the rig (4× CPU, opened on `#start`), a frame at about 355 ms showed every screen on top of each
+other: Pair, an agent's header, Home, the tab bar. Start then said "Still starting" with Start
+disabled until about 907 ms.
+
+- `main.ts` appended every screen visible and routed only after reading what the page kept from
+  IndexedDB, a frame or more later. Each screen and the tab bar now start hidden and only the router
+  shows one.
+- Start asked the computer on every open and drew nothing until it answered, and the computer is
+  reached only once the wasm runs. Start now keeps the computer's last answer (the workspaces and the
+  places in each, `start-kept`, dropped when the page pairs again or is unpaired) and draws from it
+  at once, Start enabled. The answer takes its place when it comes, keeping what the person chose
+  meanwhile. Start pressed before the computer is reached waits for it. A question that failed is
+  asked again once it is reached.
+- `index.html` preloaded the 4 MB wasm. It was fetched alongside `main.js` and held the page back:
+  DOMContentLoaded at 470–500 ms with it, 167–187 ms without (4×, the page's own timeline). The wasm
+  is now fetched when `main.ts` imports the core, after the first screen.
+- Peers: none preloads its large asset (hapi `web/index.html:1-109`, its PWA leaving `.wasm` out of
+  the precache, `web/vite.config.ts:198`; vibetunnel `web/src/client/assets/index.html:33,141`).
+  hapi and vibetunnel render only the routed view (hapi `web/src/App.tsx:533`, vibetunnel
+  `web/src/client/app.ts:1771-1790`). Only superset draws from a kept copy of what the server said
+  (`apps/desktop/src/renderer/providers/ElectronTRPCProvider/ElectronTRPCProvider.tsx:70-90`). hapi
+  and vibetunnel disable a new session's Create until the server answers
+  (hapi `web/src/components/NewSession/index.tsx:157-165`, vibetunnel
+  `web/src/client/components/session-create-form.ts:193-200`). Happy and T3 Code were not checked
+  out.
+- Measured: `phone-open.spec.ts`, Start usable, 4× CPU, load 5–7, two rounds of 5 opens each:
+
+  | | round 1 | round 2 |
+  |---|---|---|
+  | wasm preloaded | 449, 810, 673, 869, 446 ms | 742, 818, 716, 597, 702 ms |
+  | not preloaded | 302, 200, 209, 305, 318 ms | 339, 379, 327, 424, 297 ms |
+
+  The wasm is in hand at a median of 366 ms instead of 334. Reopened through the real service
+  worker, the page before was never usable with up to 8 screens in a frame; it is now usable at
+  117 and 129 ms (medians of two rounds of 5). Not measured on the rig.
+- Proved to fail (`phone-open.spec.ts`, `phone-start.spec.ts`): the screens or the tab bar drawn
+  before routing; Start not drawn from what was kept; the answer not kept; Start pressed before
+  reached not waiting; asked again on every reach; a choice made meanwhile dropped by the answer;
+  looking in a folder superseding the answer; the wasm preloaded again (3 of 3 over 500 ms).
+
+### 12.12 Chat first, as clean as GitHub Mobile
+
+The person asked for the phone page to read as cleanly as GitHub Mobile, its chat first. Each change
+keeps the desktop's tokens, Geist and JetBrains Mono, and amber only for what waits on the person.
+Before and after at 390×844 are the `ux-*.png` pairs of the rig's scratchpad.
+
+- One place to type. A question's card drew a "Type something" box under its options, above the
+  message box: two boxes. On the agent's screen the message box now answers: while a wait takes a
+  line its hint is "Or type your own answer" (a question) or "Reply", and what is sent goes through
+  the card's guarded answer, so an answer not confirmed is not offered again. Home's Needs cards,
+  which have no box of their own, keep theirs (`answers.ts`, `boxed`).
+- The header: back, the name at 17/600 and its state in sans 13 `--text3` (amber while it waits),
+  then Terminal as a 44 px icon and a ⋯ whose menu holds Close (asked before it is done). Stop
+  left the header for the message box: while the agent is in a turn and nothing is typed its
+  button is a stop square; typing makes it Send again, so a follow-up never stops the agent (Happy
+  `packages/happy-app/sources/components/agentInputPrimaryAction.ts:19-30`).
+- Tools used one after another, with nothing said between, fold into one line counting each kind,
+  "Read 3 · Edit 2 · Run 1" and "· 1 failed" in `--err` when one failed, which unfolds to them in
+  order (hapi `web/src/chat/toolGroups.ts:270-326`, its labels `components/ToolCard/
+  groupedPresentation.ts:223-239`). One alone stays a line. The fold is kept as the chat is drawn,
+  slices of what was said before included (`chat.ts` `fold`), and a result that comes later is
+  counted in it. A tool's line is sans 14 `--text3` with no tick; a command (`Bash`, shown as
+  "Run") is the only mono.
+- While the agent works, a line right above the message box says so and for how long, "● working ·
+  12s", sans 13 `--text3`, its dot breathing (Happy `packages/happy-app/sources/components/
+  AgentInput.tsx:545-580`, a 6 px pulsing dot over the input). It counts once a second only while
+  it shows: not at rest, not over the terminal.
+- Scrolled more than 200 px up from the newest, a 36 px `--raised` circle above the dock's right
+  brings it back: it shows how many rows came since (99+ past 99), or a down arrow (hapi
+  `web/src/components/AssistantChat/HappyThread.tsx:287-327`). Back within 48 px of the newest the
+  count is cleared. The chat owns it (`chat.ts` `newest`); the screen gives it its place and hides
+  it over the terminal.
+- Spacing: a turn begins with the person's message; turns are 20 px apart and the agent's rows in
+  one 8 px apart (the chat's gap, with 12 px more round each of the person's messages). What the
+  agent says is 16/24.
+- A permission names its tool in sans 14/600 and shows its command in mono 13 on `--panel`, four
+  lines of it until tapped (the room under the fourth is a border, so nothing past it shows).
+  Allow and Deny are full-width 44 px rows, Allow first, as Happy stacks its choices
+  (`packages/happy-app/sources/components/tools/PermissionFooter.tsx:500-592`). Home's Needs cards
+  share it (`answers.ts`).
+- Home's rows: what a row last said is sans 14/20 `--text2` (amber while it waits), code set as
+  code: a waiting command after its tool's name, or what is in backticks. Its time is sans 13
+  `--text3` with tabular digits. A row is at least 56 px (68 with two lines, which its placeholder
+  off screen now matches, so nothing moves as rows scroll in), and a 1 px `--line` hairline over
+  each row that follows another starts where the text does.
+- Home's project heading is sticky, sans 13/600 `--text2` on `--canvas`, above the rows that scroll
+  under it, as hapi's is (`web/src/components/SessionList.tsx:1607`). A project's only frame, with
+  no frame under it and called as the project is, is no row of its own: its tiles are the
+  project's, one level up (`spec/home.md` 0.4, in the core so Android shares it). Home read
+  "hivemind", then "hivemind".
+- A row has no ⋯. Held still for 500 ms (hapi's `web/src/hooks/useLongPress.ts:48-111`), or right
+  clicked (Android's own long press), it opens the sheet of what can be done to it; the click
+  that ends the press is swallowed. Dragged left it slides over Stop (while it can be stopped) and
+  Close, staying open past half of them, as Happy's `Swipeable` rows do
+  (`packages/happy-app/sources/components/FlatSessionRow.tsx:259-276`); Close still asks. Both are
+  one set of listeners on Home (`gestures.ts`), and the actions are made only once a row moves:
+  first built as rows that scroll sideways, with their buttons in each, Home opened ~130 ms
+  slower at 4x CPU on 200 tiles; a row now only carries `touch-action: pan-y`. Start is a 44 px
+  +; the search a borderless `--panel` field, 36 px, corners of 10. Home opens without a layout
+  shift.

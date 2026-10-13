@@ -169,7 +169,7 @@ export function providerFor(cmd: string): AgentProvider | undefined {
  *  in any order. */
 export interface ComposedResume {
   transformSpecOnSpawn: (spec: SpawnSpec, id: string) => SpawnSpec;
-  transformSpecOnRestore: (spec: SpawnSpec, id: string) => SpawnSpec;
+  transformSpecOnRestore: (spec: SpawnSpec, id: string, ran?: SpawnSpec) => SpawnSpec;
   restoreRetryTransform: (spec: SpawnSpec) => SpawnSpec | null;
   restoreRetryMs: number;
 }
@@ -187,8 +187,8 @@ export function composeResumeFrom(providers: readonly AgentProvider[], ctx: Prov
   return {
     transformSpecOnSpawn: (spec, id) =>
       ts.reduce((s, t) => (t.transformSpecOnSpawn ? t.transformSpecOnSpawn(s, id) : s), spec),
-    transformSpecOnRestore: (spec, id) =>
-      ts.reduce((s, t) => (t.transformSpecOnRestore ? t.transformSpecOnRestore(s, id) : s), spec),
+    transformSpecOnRestore: (spec, id, ran) =>
+      ts.reduce((s, t) => (t.transformSpecOnRestore ? t.transformSpecOnRestore(s, id, ran) : s), spec),
     restoreRetryTransform: (spec) => {
       for (const t of ts) {
         const r = t.restoreRetryTransform?.(spec);

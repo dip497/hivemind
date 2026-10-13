@@ -205,7 +205,8 @@ export function manifestRuntime(
 /**
  * The session this agent would resume, in the order a manifest asks for: the live one our
  * tracker hook recorded for this tile (it follows whatever the user did inside the agent),
- * then the id bound when the tile first spawned, then whatever its own store says.
+ * then the id bound when the tile first spawned, then the one it was last resumed in, then
+ * whatever its own store says.
  */
 export function sessionFor(
   def: AgentProviderDef,
@@ -223,7 +224,18 @@ export function sessionFor(
     const bound = i >= 0 ? (spec.args ?? [])[i + 1] : undefined;
     if (bound && !bound.startsWith("-")) return bound;
   }
+  const resumed = (spec.args ?? []).indexOf(resume.args[0] ?? "\0");
+  const named = resumed >= 0 ? (spec.args ?? [])[resumed + 1] : undefined;
+  if (named && !named.startsWith("-") && resume.args[1]?.includes("{id}")) return named;
   return resume.find ? findSession(resume.find, spec.cwd, ctx.sessionRoot) : undefined;
+}
+
+/** `spec` without the argument that hands the agent its hooks document, and that document. */
+function withoutHooks(def: AgentProviderDef, spec: SpawnSpec): SpawnSpec {
+  const flag = def.hooks?.arg;
+  const args = spec.args ?? [];
+  const i = flag ? args.indexOf(flag) : -1;
+  return i < 0 ? spec : { ...spec, args: [...args.slice(0, i), ...args.slice(i + 2)] };
 }
 
 /** Carry out a plan: write what it asks for, then shape the command line. */
@@ -264,10 +276,10 @@ export function transformsFor(
 ): ProviderResumeTransforms {
   const isThisAgent = (spec: SpawnSpec): boolean =>
     path.basename((spec.cmd ?? "").trim().split(/\s+/)[0] ?? "") === def.bin;
-  const run = (spec: SpawnSpec, tileId: string, phase: "spawn" | "restore"): SpawnSpec => {
+  const run = (spec: SpawnSpec, tileId: string, phase: "spawn" | "restore", ran: SpawnSpec = spec): SpawnSpec => {
     if (!isThisAgent(spec) || !runtime.launch) return spec;
     const session = phase === "restore"
-      ? sessionFor(def, spec, { tileId, tileSessionsDir: paths.tileSessionsDir, sessionRoot: opts.sessionRoot })
+      ? sessionFor(def, ran, { tileId, tileSessionsDir: paths.tileSessionsDir, sessionRoot: opts.sessionRoot })
       : undefined;
     // The flag that bound the session at spawn is replaced by the resume, not kept beside it.
     const bound = def.session?.resume?.from?.bound;
@@ -312,10 +324,13 @@ export function transformsFor(
   };
   return {
     transformSpecOnSpawn: (spec, tileId) => run(spec, tileId, "spawn"),
-    transformSpecOnRestore: (spec, tileId) => {
+    transformSpecOnRestore: (spec, tileId, ran) => {
+      // Only what it ran with is known (a snapshot of before): the hooks it was given go, so the
+      // ones of this manifest are put.
+      if (!ran && isThisAgent(spec)) spec = withoutHooks(def, spec);
       const out = (spec.args ?? []).includes(marker ?? "\0")
         ? run(spec, tileId, "spawn") // already resuming: keep its own session, still wire it up
-        : run(spec, tileId, "restore");
+        : run(spec, tileId, "restore", ran);
       // Known to be gone: start fresh under the same id now, rather than fail and retry.
       return vanished(out) ? retry(out) ?? out : out;
     },

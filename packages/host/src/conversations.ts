@@ -4,7 +4,7 @@
  * sent to that caller as it comes, and the next session's from its start once the agent begins
  * another (as Claude Code's `/clear` does), until the caller goes.
  */
-import { agentForCmd, readTrackedSession, sessionFile, sessionFor, type AgentTranscript } from "@hivemind/agents/node";
+import { agentForCmd, readTrackedSession, sessionFile, sessionFor, type AgentProviderDef, type AgentTranscript } from "@hivemind/agents/node";
 import { ApiError, text } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
@@ -23,6 +23,12 @@ export interface Transcript {
 }
 type Kept = Transcript & { file: string };
 
+/** Whether an agent run as `def` keeps a conversation the phone can read: its manifest maps its
+ *  transcript and says where its file is. */
+export function keepsConversation(def: AgentProviderDef | undefined): boolean {
+  return !!def?.session?.transcript && !!def.session.resume?.exists;
+}
+
 /** How often a followed agent is looked at for a session it began since. */
 const SESSION_CHECK_MS = 1000;
 
@@ -35,9 +41,9 @@ export function transcriptOf(held: HeldBoard[], tile: string, tileSessionsDir: s
   const bare = toBareId(tile);
   const record = held.flatMap((h) => h.core?.tiles ?? []).find((t) => t.id === bare) as { cmd?: string; args?: string[] } | undefined;
   const def = agentForCmd(record?.cmd);
-  const exists = def?.session?.resume?.exists;
-  const format = def?.session?.transcript;
-  if (!record || !format || !exists) return null;
+  if (!record || !def || !keepsConversation(def)) return null;
+  const exists = def.session!.resume!.exists!;
+  const format = def.session!.transcript!;
   const spec = { cwd: runsIn(held, bare) ?? "", args: record.args ?? [] };
   const session = readTrackedSession(tileSessionsDir, `hm:${bare}`) ?? readTrackedSession(tileSessionsDir, bare) ?? sessionFor(def, spec);
   return { session: session ?? "", file: session ? sessionFile(exists, session, home) : null, format };
@@ -62,8 +68,8 @@ export class LastSaid {
 
   constructor(private readonly o: { tileSessionsDir: string; home?: string; now?(): number }) {}
 
-  /** What the agent of `tile`, among `held`, last said; undefined when it keeps no conversation
-   *  or has said nothing yet. */
+  /** What the agent of `tile`, among `held`, last said; "" when it keeps a conversation but has
+   *  said nothing there yet, so nothing from its screen stands in; undefined when it keeps none. */
   line(held: HeldBoard[], tile: string): string | undefined {
     const now = this.o.now?.() ?? Date.now();
     let known = this.files.get(tile);
@@ -71,15 +77,16 @@ export class LastSaid {
       known = { t: transcriptOf(held, tile, this.o.tileSessionsDir, this.o.home), at: now };
       this.files.set(tile, known);
     }
-    const file = known.t?.file;
-    if (!file) return undefined;
+    if (!known.t) return undefined;
+    const file = known.t.file;
+    if (!file) return "";
     let size: number;
-    try { size = fs.statSync(file).size; } catch { return undefined; }
+    try { size = fs.statSync(file).size; } catch { return ""; }
     const was = this.said.get(tile);
-    if (was?.file === file && was.size === size) return was.line;
-    const line = lastSaid(file, known.t!.format);
+    if (was?.file === file && was.size === size) return was.line ?? "";
+    const line = lastSaid(file, known.t.format);
     this.said.set(tile, { file, size, line });
-    return line;
+    return line ?? "";
   }
 }
 

@@ -43,6 +43,8 @@ export type ClientMsg =
   | { t: "hello"; caps: string[] }
   | { t: "write"; id: string; data: string; /** A message pasted into the TUI, not keystrokes (see paste.ts). */ paste?: boolean }
   | { t: "resize"; id: string; cols: number; rows: number }
+  /** Its program redraws all of its screen, at the size it has (a viewer was shown a copy). */
+  | { t: "repaint"; id: string }
   | { t: "detach"; id: string }
   | { t: "kill"; id: string }
   /** Flow control (renderer back-pressure): stop reading the child's output
@@ -52,8 +54,9 @@ export type ClientMsg =
   | { t: "resume"; id: string }
   | { t: "list"; reqId: string; detail?: boolean }
   | { t: "ping"; reqId: string }
-  /** The session's screen now, for a viewer about to show it again. */
-  | { t: "screen"; reqId: string; id: string }
+  /** The session's screen now, for a viewer about to show it again: `lines`, at most that much of
+   *  its scrollback. */
+  | { t: "screen"; reqId: string; id: string; lines?: number }
   /** The session's screen as text, line by line, as the daemon reads it: for a starter that skips
    *  a startup screen (agent-start.ts) with no terminal of its own. */
   | { t: "viewport"; reqId: string; id: string }

@@ -108,6 +108,14 @@ test("renderer lines are validated; junk is dropped, not written", () => {
   assert.equal(text.length, 2); // boot + the one valid line
 });
 
+test("an exit keeps its code and signal on disk; on another status they are dropped", () => {
+  const h = harness(at(9));
+  h.ledger.boot();
+  h.ledger.append([{ ...s(at(9), "a", "exited"), c: 0, g: 1 }, { ...s(at(9), "b", "working"), c: 0, g: 1 }, { ...s(at(9), "c", "exited"), c: "x", g: 1.5 }]);
+  const lines = fs.readFileSync(path.join(h.dir, "2026-09-23.jsonl"), "utf8").trim().split("\n").slice(1).map((l) => JSON.parse(l));
+  assert.deepEqual(lines.map((l) => [l.id, l.c, l.g]), [["a", 0, 1], ["b", undefined, undefined], ["c", undefined, undefined]]);
+});
+
 test("presence is stored as day totals only; old files are pruned at boot", () => {
   const h = harness(at(9));
   const old = localDay(at(9) - (RETENTION_DAYS + 2) * 86_400_000);

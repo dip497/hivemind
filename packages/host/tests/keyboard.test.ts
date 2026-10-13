@@ -49,7 +49,7 @@ function host({ machine = false, lentOnceStarted = false } = {}) {
       write: (t, d) => calls.push(`write ${d}`),
       echoes: () => false,
       resize: (t, c, r) => calls.push(`resize ${c}x${r}`),
-      pause: () => {}, resume: () => {}, kill: () => {}, detach: () => {},
+      repaint: () => {}, pause: () => {}, resume: () => {}, kill: () => {}, detach: () => {},
       screen: () => null,
     },
   });

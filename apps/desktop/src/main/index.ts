@@ -45,13 +45,13 @@ import { addMachine, checkMachine, deviceStatus, editMachine, initMachines, inst
 import { deviceSessions } from "@hivemind/host/device-sessions";
 import { remoteTarget } from "@hivemind/host/remote/targets";
 import {
-  spawnRemotePty, writeRemotePty, resizeRemotePty, killRemotePty, hasRemotePty, screenRemotePty, remoteKeepsScreen,
+  spawnRemotePty, writeRemotePty, resizeRemotePty, repaintRemotePty, killRemotePty, hasRemotePty, screenRemotePty, remoteKeepsScreen,
   pauseRemotePty, resumeRemotePty, detachRemotePty, setRemoteEventSink,
 } from "./remote/pty.js";
 import { remoteConns } from "@hivemind/host/remote/conn";
 import { findGitRoot, computeRepoPath, projectDir } from "./workspace-paths.js";
 // Terminal sessions live in a detached daemon and survive the window closing.
-const { spawnPty, writePty, resizePty, killPty, detachPty, hasSession, pausePty, resumePty } = ptyDaemon;
+const { spawnPty, writePty, resizePty, repaintPty, killPty, detachPty, hasSession, pausePty, resumePty } = ptyDaemon;
 const killAllPtys = ptyDaemon.killAll;
 import { dialogStart, rememberPick } from "./dialog-start";
 import { applyShellEnvToProcess, refreshShellEnv } from "@hivemind/agent-host/shell-env";
@@ -1097,11 +1097,12 @@ const onYourDevices = deviceSessions({
   onStatus: (device, state, detail) => deviceStatus(device, state, detail),
 });
 
-/** The host's screen for a session, read in order with its output; null when it keeps none. */
-function screenOf(tileId: string): ReadScreen | null {
-  if (onYourDevices.holds(tileId)) return onYourDevices.screen(tileId);
-  if (hasRemotePty(tileId)) return remoteKeepsScreen(tileId) ? (cb) => screenRemotePty(tileId, cb) : null;
-  return hasSession(tileId) ? (cb) => ptyDaemon.screenPty(tileId, cb) : null;
+/** The host's screen for a session, with at most `lines` of its scrollback, read in order with its
+ *  output; null when it keeps none. */
+function screenOf(tileId: string, lines?: number): ReadScreen | null {
+  if (onYourDevices.holds(tileId)) return onYourDevices.screen(tileId, lines);
+  if (hasRemotePty(tileId)) return remoteKeepsScreen(tileId) ? (cb) => screenRemotePty(tileId, cb, lines) : null;
+  return hasSession(tileId) ? (cb) => ptyDaemon.screenPty(tileId, cb, lines) : null;
 }
 function setPtyPaused(tileId: string, paused: boolean): void {
   if (onYourDevices.holds(tileId)) { if (paused) onYourDevices.pause(tileId); else onYourDevices.resume(tileId); }
@@ -1152,6 +1153,10 @@ const terminals = new Terminals({
     resize: (tileId, cols, rows) => {
       if (onYourDevices.holds(tileId)) onYourDevices.resize(tileId, cols, rows);
       else if (hasRemotePty(tileId)) resizeRemotePty(tileId, cols, rows); else resizePty(tileId, cols, rows);
+    },
+    repaint: (tileId) => {
+      if (onYourDevices.holds(tileId)) onYourDevices.repaint(tileId);
+      else if (hasRemotePty(tileId)) repaintRemotePty(tileId); else repaintPty(tileId);
     },
     pause: (tileId) => setPtyPaused(tileId, true),
     resume: (tileId) => setPtyPaused(tileId, false),

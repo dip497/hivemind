@@ -52,7 +52,7 @@ function device(repo = "/home/p/api") {
   const places = new StartPlaces({
     core: (r) => (r === repo ? core : null), repos: () => [repo, "/home/p/fresh"], machines,
     agents: () => [claude], programs: () => [claude], recent: () => [], photos,
-    files: async (m) => (m === "box1" ? ({ keep: async (name, data) => { onBox.set(`/srv/photos/${name}`, data); return `/srv/photos/${name}`; } } as MachineFs) : localFs(photos)),
+    files: async (m) => (m === "box1" ? ({ keep: async (name, data) => { onBox.set(`/srv/photos/${name}`, data); return `/srv/photos/${name}`; } } as MachineFs) : { ...localFs(photos), choices: async () => ({ mode: ["acceptEdits"] }) }),
   });
   const domain = agentControl({
     programs: async () => [claude],
@@ -82,7 +82,7 @@ test("what may be started: the agents this device starts with their model and mo
   const d = device();
   assert.deepEqual(await d.call("agent.startable", d.repo), {
     programs: [{ id: "claude", label: "Claude Code", options: [
-      { id: "mode", label: "Permission mode", values: ["plan", "default"] },
+      { id: "mode", label: "Permission mode", values: ["acceptEdits", "plan", "default"] },
       { id: "model", label: "Model", values: [] },
     ] }],
     frames: [{ id: "f-api", name: "api", machine: "desk" }, { id: "f-box", name: "on the box", machine: "build-box" }],

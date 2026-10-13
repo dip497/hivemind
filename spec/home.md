@@ -1,4 +1,4 @@
-# Home (0.3)
+# Home (0.4)
 
 What the person's phone shows first (`docs/design/phone-browser-2026-10-03.md` §11.2): every
 workspace the computer holds, its frames and its tiles, as the desktop's Layers panel lists them,
@@ -94,7 +94,9 @@ The phone shows, from top to bottom:
    only when more than one has something to show. On a machine, each workspace by name; its own
    project first, named by the workspace, then each other in the order its first frame comes. In
    a project its top frames in order, a worktree's frame under its own; its heading carries the
-   first of them, `frame` (0.2), where an agent started from the heading runs. In a frame its agents
+   first of them, `frame` (0.2), where an agent started from the heading runs. A project's only
+   top frame, with no frame under it and called as the project is (trimmed, in any case), is no row
+   of its own (0.4): its tiles are the project's, one level up. In a frame its agents
    first, then its other tiles, each in order, one an agent there started under it (unless the
    starters loop). Tiles in no frame, or in one that is gone, after the workspace's own frames
    on the computer.

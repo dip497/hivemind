@@ -17,7 +17,9 @@ use std::{
 use hive_phone::{
     connections::Connections,
     failure::Lost,
+    screen::{FIRST_HISTORY, SCROLLBACK},
     watching::{Ended, Watcher, Watching},
+    workspace::{self, Input},
 };
 use serde_json::json;
 use support::{paired_with, tmp, until, Desk, REFUSED, TILE, WORKSPACE};
@@ -76,6 +78,7 @@ async fn a_watched_terminal_is_drawn_at_its_size_and_typed_into_as_the_person_in
         [Some("Sam".to_string())]
     );
 
+    watching.size(48, 30);
     watching.type_text("ls -la".into());
     watching.fit(Some((48, 30)));
     watching.fit(None);
@@ -89,6 +92,8 @@ async fn a_watched_terminal_is_drawn_at_its_size_and_typed_into_as_the_person_in
     // Paced: it acknowledges the screen it took, in UTF-16 units as the device counts them. Its
     // acknowledgements go out as frames come in, whatever is typed meanwhile.
     assert_eq!(desk.opens.lock().unwrap()[0]["acks"], true);
+    // An app keeps all the scrollback it is sent: it asks for as much as it keeps.
+    assert_eq!(desk.opens.lock().unwrap()[0]["history"], SCROLLBACK);
     let (acks, typed): (Vec<_>, Vec<_>) = desk
         .told
         .lock()
@@ -104,6 +109,7 @@ async fn a_watched_terminal_is_drawn_at_its_size_and_typed_into_as_the_person_in
     assert_eq!(
         typed.iter().map(|(_, n)| n.clone()).collect::<Vec<_>>(),
         [
+            json!({ "method": "terminal.resize", "params": [session, 48, 30] }),
             json!({ "method": "terminal.keyboard.ask", "params": [session] }),
             write("ls -la"),
             json!({ "method": "terminal.fit", "params": [session, 48, 30] }),
@@ -115,7 +121,7 @@ async fn a_watched_terminal_is_drawn_at_its_size_and_typed_into_as_the_person_in
         ]
     );
     // Three gaps of 40 ms between the four keys, give or take how late each one came.
-    assert!(typed[7].0 - typed[4].0 >= Duration::from_millis(60));
+    assert!(typed[8].0 - typed[5].0 >= Duration::from_millis(60));
     // Given to this phone, its keyboard is the person's own.
     assert_eq!(told.keyboards.lock().unwrap().last(), Some(&None));
 }
@@ -234,4 +240,43 @@ async fn a_watch_with_nothing_to_show_ends_at_once_told_why_once() {
         tokio::time::sleep(Duration::from_millis(100)).await;
         assert_eq!(*told.ended.lock().unwrap(), [why]);
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_page_asks_for_some_history_as_it_begins_to_watch_and_more_when_the_person_asks() {
+    let desk = Desk::start(35).await;
+    let phone = paired_with(&tmp("history"), &desk);
+    let connections = Connections::new(phone.clone(), || {});
+    connections.foreground();
+    let connection = connections.kept_for(&desk.id, WORKSPACE).await.unwrap();
+    let (put, mut inputs) = tokio::sync::mpsc::unbounded_channel();
+    let (sent, sending) = tokio::sync::mpsc::channel(64);
+    put.send(Input::History(800)).unwrap();
+    put.send(Input::Text("\x03".into())).unwrap();
+    let watched = workspace::watch(
+        &connection,
+        WORKSPACE,
+        TILE,
+        FIRST_HISTORY,
+        Some(sending),
+        |_| {},
+    );
+    let ended = tokio::select! {
+        ended = watched => ended,
+        never = workspace::pass_on(&mut inputs, sent) => match never {},
+    };
+    assert!(ended.unwrap().is_some());
+    assert_eq!(desk.opens.lock().unwrap()[0]["history"], FIRST_HISTORY);
+    let session = format!("hm:{TILE}");
+    assert_eq!(
+        desk.notices()
+            .into_iter()
+            .filter(|n| n["method"] != "terminal.ack")
+            .collect::<Vec<_>>(),
+        [
+            json!({ "method": "terminal.history", "params": [session, 800] }),
+            json!({ "method": "terminal.keyboard.ask", "params": [session] }),
+            json!({ "method": "terminal.write", "params": [session, "\x03"] }),
+        ]
+    );
 }

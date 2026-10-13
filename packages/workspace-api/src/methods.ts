@@ -250,6 +250,8 @@ export interface WorkspaceNotices {
   "terminal.ack": (tile: string, taken: number) => void;
   /** Size it to the client's screen until the client goes; no size: back to the one it had. */
   "terminal.fit": (tile: string, cols?: number, rows?: number) => void;
+  /** Send the client the screen again, with at most `lines` of its scrollback from now on. */
+  "terminal.history": (tile: string, lines: number) => void;
   /** End the session for good. */
   "terminal.close": (tile: string) => void;
   /** The client shows the terminal no more; a session nobody shows is let go of (a daemon keeps

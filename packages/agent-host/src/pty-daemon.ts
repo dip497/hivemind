@@ -414,7 +414,7 @@ const manager = new SessionManager(factory, {
   // restore re-execs from the persisted spec, so an un-stripped prompt is re-appended
   // as positional argv and the task RUNS AGAIN — for every agent that takes an argv
   // prompt. A property of restore, not of any one agent.
-  transformSpecOnRestore: (spec, id) => resume.transformSpecOnRestore(stripInitialPrompt(spec), id),
+  transformSpecOnRestore: (spec, id, ran) => resume.transformSpecOnRestore(stripInitialPrompt(spec), id, ran),
   restoreRetryMs: resume.restoreRetryMs,
   restoreRetryTransform: (spec) => resume.restoreRetryTransform(spec),
 });
@@ -611,6 +611,9 @@ const server = net.createServer((sock) => {
       case "resize":
         manager.resize(msg.id, msg.cols, msg.rows, viewers.get(msg.id));
         break;
+      case "repaint":
+        manager.repaint(msg.id);
+        break;
       case "detach":
         leave(msg.id);
         break;
@@ -627,10 +630,11 @@ const server = net.createServer((sock) => {
         break;
       case "screen": {
         const { reqId, id } = msg;
+        const lines = Number.isSafeInteger(msg.lines) && msg.lines! >= 0 ? msg.lines : undefined;
         // What is buffered for this viewer is older than the screen: send it first, so the
         // screen is the line between bytes it already covers and bytes that follow it.
         outBuf.flush(id);
-        void manager.snapshot(id).then((snap) => send({ t: "screen", reqId, id, replay: snap?.replay ?? null }));
+        void manager.snapshot(id, lines).then((snap) => send({ t: "screen", reqId, id, replay: snap?.replay ?? null }));
         break;
       }
       case "resume":

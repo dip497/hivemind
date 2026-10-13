@@ -58,9 +58,10 @@ item who started it:
   `client:<grant id>` for a program on the drive socket (`workspace-api.md`, "Drive socket").
 - `interrupt` is `true` when its manifest says which keys interrupt its turn (`interrupt`), so
   `agent.interrupt` stops it; left out otherwise.
-- `conversation` is `true` when its manifest maps its session file's records (`session.transcript`),
-  so `agent.conversation` can say what it and the person said to each other ("Conversation"); left
-  out otherwise (0.4).
+- `conversation` is `true` when its manifest maps its session file's records (`session.transcript`)
+  and says where that file is (`session.resume.exists`), so `agent.conversation` can say what it and
+  the person said to each other ("Conversation"); left out otherwise (0.4). The phone opens an agent
+  without one in its terminal.
 - `session` (0.6) is the session it is in, as its agent last said: `agent.start`'s `resume` goes on
   with it. A new one (the person cleared it, or resumed another) changes the item, so a reader
   following `agent.changed` hears it. Left out until the agent says, and kept once it exits.
@@ -90,7 +91,11 @@ may be started in the workspace, which a peer names as `hive://<its id>`:
 ```
 
 `programs` are the agents this device starts (switched on, their command found here); `options`
-are their `model` and `mode` choices, `values` empty for one taken as typed. `frames` are the
+are their `model` and `mode` choices, as the desktop's settings offer them: those the agent's
+command lists (its `--help`, or its listing command), then those its manifest names; `values` empty
+for one taken as typed. A command that has not answered within 1.5 s adds its own next time.
+`agent.places` lists each machine's agents the same way; a saved machine's command is not asked.
+`frames` are the
 workspace's frames, as the board orders them.
 
 `agent.start(workspace, start)` starts one there, as `hive ctl spawn` does: `start` is `{ program,

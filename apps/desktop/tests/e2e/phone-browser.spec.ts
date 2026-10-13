@@ -223,7 +223,10 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   await expect(page.locator("[data-chat]")).toContainText("run answered y", { timeout: 30_000 });
   await expect(waiting).toHaveCount(0, { timeout: 30_000 });
   // Its row in the chat unfolds to its input whole, asked of the computer.
-  const ran = page.locator("[data-chat] .tool", { hasText: "Bash" });
+  const ran = page.locator(`[data-chat] .tool[data-tool="Bash"]`);
+  // Used next to other tools, it is in their fold, unfolded first.
+  const fold = page.locator("[data-chat] [data-tools]", { has: ran });
+  if (await fold.count()) await fold.locator(":scope > button").click();
   await ran.locator("button").click();
   await expect(ran.locator("[data-input]")).toHaveText(JSON.stringify({ command: "rm -rf build\nmake all" }, null, 2), { timeout: 30_000 });
 
@@ -233,7 +236,8 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   // one that started it.
   await page.locator('[data-screen="agent"] [data-back]').click();
   await page.locator("[data-tree] [data-start-in]").first().click();
-  await expect(page.locator("[data-start-folder]")).toHaveAttribute("data-start-folder", repo, { timeout: 30_000 });
+  await expect(page.locator("[data-start-summary]")).toContainText(` · ${path.basename(repo)} · `, { timeout: 30_000 });
+  await page.locator("[data-start-summary]").click();
   await page.locator("[data-start-look]").click();
   await expect(page.locator("[data-start-inside] .chip")).toHaveText(["web"]);
   await page.locator("[data-start-inside] .chip", { hasText: "web" }).click();
@@ -267,6 +271,7 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
 
   // Closed from the browser, once asked and confirmed: the computer closes it, as that device, and
   // Back leads to the list it was started from.
+  await page.locator('[data-screen="agent"] [data-more]').click();
   await page.locator('[data-screen="agent"] [data-close]').click();
   await expect(page.locator("[data-close-ask]")).toHaveText(/^Close .+\? It stops, and its tile closes on .+\./);
   await page.locator("[data-close-ask] [data-yes]").click();
@@ -281,12 +286,12 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   await say("ask");
   await expect(waiting).toHaveAttribute("data-waiting-card", "question", { timeout: 30_000 });
   await page.locator('[data-screen="agent"] [data-back]').click();
-  await page.locator(`[data-row-more="${talker}"]`).click();
+  await page.locator(`[data-agent="${talker}"] .open`).click({ button: "right" });
   await page.locator("[data-row-actions] [data-row-stop]").click();
   await expect.poll(audit, { timeout: 10_000 }).toContainEqual(expect.objectContaining({ verb: "agent.interrupt", outcome: "ok", actor: expect.objectContaining({ kind: "peer", device: id }) }));
   await expect(page.locator(`[data-agent="${talker}"]`)).not.toHaveAttribute("data-state", "waiting", { timeout: 30_000 });
   await expect(page.locator("[data-row-actions]")).toBeHidden();
-  await page.locator(`[data-row-more="${talker}"]`).click();
+  await page.locator(`[data-agent="${talker}"] .open`).click({ button: "right" });
   await expect(page.locator("[data-row-actions] [data-row-stop]")).toBeHidden();
   await page.locator("[data-row-actions] [data-row-close]").click();
   await expect(page.locator("[data-row-close-ask]")).toHaveText(/^Close .+\? It stops, and its tile closes on .+\./);

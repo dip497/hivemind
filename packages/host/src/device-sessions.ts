@@ -204,13 +204,14 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
     // Its keystrokes echo from the other device.
     echoes: () => false,
     resize: (tile, cols, rows) => on(tile)?.resize(tile, cols, rows),
+    repaint: (tile) => on(tile)?.repaint(tile),
     pause: (tile) => on(tile)?.pause(tile),
     resume: (tile) => on(tile)?.resume(tile),
     kill: (tile) => { on(tile)?.kill(tile); tiles.delete(tile); },
     detach: (tile) => { on(tile)?.detach(tile); tiles.delete(tile); },
-    screen: (tile) => {
+    screen: (tile, lines) => {
       const ep = on(tile);
-      return ep?.has(tile) ? (cb) => { if (!ep.has(tile)) return false; ep.screen(tile, cb); return true; } : null;
+      return ep?.has(tile) ? (cb) => { if (!ep.has(tile)) return false; ep.screen(tile, cb, lines); return true; } : null;
     },
     close: () => {
       for (const key of [...endpoints.keys()]) letGo(key);
@@ -254,10 +255,11 @@ export function onDevices(self: string, here: SessionBackend, devices: DeviceSes
     write: (tile, data, paste) => by(tile).write(tile, data, paste),
     echoes: (tile) => by(tile).echoes(tile),
     resize: (tile, cols, rows) => by(tile).resize(tile, cols, rows),
+    repaint: (tile) => by(tile).repaint(tile),
     pause: (tile) => by(tile).pause(tile),
     resume: (tile) => by(tile).resume(tile),
     kill: (tile) => by(tile).kill(tile),
     detach: (tile) => by(tile).detach(tile),
-    screen: (tile) => by(tile).screen(tile),
+    screen: (tile, lines) => by(tile).screen(tile, lines),
   };
 }

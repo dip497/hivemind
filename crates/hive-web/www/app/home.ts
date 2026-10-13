@@ -5,7 +5,8 @@
 
 import type { App } from "./app.js";
 import { answers } from "./answers.js";
-import { Ask, Keyed, chips, h, pill, say } from "./dom.js";
+import { Ask, Keyed, chips, h, iconButton, pill, say } from "./dom.js";
+import { onHold, onSwipe } from "./gestures.js";
 import type { Agent, HomeEntry, HomeTile, Overview, Shown } from "./types.js";
 import { ago, kindLabel, noneWaiting, stateLabel, where } from "./words.js";
 
@@ -40,11 +41,12 @@ export class Home {
   private readonly sheet = h("div", { class: "card sheet", hidden: true, role: "dialog", "data-row-actions": "" });
   private readonly closing = new Ask("Close", () => void this.act((a) => this.app.close(a)), { "data-row-close-ask": "" });
   private acting: string | null = null;
+  private readonly swipes: { shut(): void };
   readonly filter: Filter = { query: "", machine: null };
 
   /** `changed` is called when the person searches or chooses a machine: show again. */
   constructor(private readonly app: App, private readonly changed: () => void) {
-    const start = pill("Start", () => (location.hash = "start"), "compact", { "data-start": "" });
+    const start = iconButton("plus", "Start an agent", () => (location.hash = "start"), { "data-start": "" });
     this.el.append(
       h("h1", { class: "title" }, "Home", this.count, start),
       h("div", { class: "find" }, this.search, this.machines),
@@ -55,11 +57,17 @@ export class Home {
     );
     this.sheet.append(this.sheetName, h("div", { class: "row" },
       this.sheetStop,
-      pill("Close", () => {
-        const a = this.acted();
-        if (a) this.closing.ask(`Close ${a.agent}? It stops, and its tile closes on ${this.app.computer()}.`);
-      }, "", { "data-row-close": "" }),
+      pill("Close", () => this.askClose(), "", { "data-row-close": "" }),
       pill("Cancel", () => this.putAway(), "", { "data-row-cancel": "" })), this.closing.el);
+    onHold(this.el, (target) => {
+      const row = target.closest<HTMLElement>(".agent.swipes");
+      if (!row) return false;
+      this.acting = row.dataset.row!;
+      this.closing.el.hidden = true;
+      this.showSheet();
+      return true;
+    });
+    this.swipes = onSwipe(this.el, ".agent.swipes", (row) => this.behind(row));
     this.search.addEventListener("input", () => {
       this.filter.query = this.search.value;
       this.changed();
@@ -114,7 +122,7 @@ export class Home {
         h("span", { class: "age mono", "data-since": w.since }, ago(w.since))),
       h("p", { class: "where mono" }, where(a.name, a.machine)),
       h("p", { class: "kind" }, kindLabel(w.kind)),
-      answers(a.tile, w, (reply) => this.app.answer(a, reply)));
+      answers(a.tile, w, (reply) => this.app.answer(a, reply)).el);
     card.addEventListener("click", () => this.app.open(a.tile));
     return card;
   }
@@ -144,8 +152,8 @@ export class Home {
       h("span", { class: "dot", "data-state": t.state ?? "none" }),
       h("span", { class: "col" },
         h("span", { class: "name" }, t.name),
-        h("span", { class: `status mono${t.waiting ? " waits" : ""}`, "data-line": "" }, lineOf(t, e.line))),
-      t.since !== undefined && h("span", { class: "age mono", "data-since": t.since }, ago(t.since)),
+        h("span", { class: `status${t.waiting ? " waits" : ""}`, "data-line": "" }, ...lineOf(t, e.line))),
+      t.since !== undefined && h("span", { class: "age", "data-since": t.since }, ago(t.since)),
     ];
     const row = h("div", {
       class: "agent", style: pad, "data-row": e.key, "data-kind": t.kind,
@@ -163,17 +171,33 @@ export class Home {
       row.append(open);
       return row;
     }
-    // Tapped, it opens; its ⋯, what can be done to it.
+    // Tapped, it opens; held or swiped left, what can be done to it (Home's own listeners).
     const open = h("button", { type: "button", class: "open" }, ...shows);
     open.addEventListener("click", () => this.app.open(t.id));
-    const more = h("button", { type: "button", class: "more", "aria-label": `What to do with ${t.name}`, "data-row-more": t.id }, "⋯");
-    more.addEventListener("click", () => {
-      this.acting = e.key;
-      this.closing.el.hidden = true;
-      this.showSheet();
-    });
-    row.append(open, more);
+    row.classList.add("swipes");
+    if (t.interrupt && (t.state === "working" || t.state === "waiting")) row.setAttribute("data-stoppable", "");
+    row.append(open);
     return row;
+  }
+
+  /** What a row swiped left shows: Stop while its agent can be stopped, and Close. */
+  private behind(row: HTMLElement): HTMLElement {
+    const key = row.dataset.row!;
+    const acting = (then: () => void) => () => {
+      this.swipes.shut();
+      this.acting = key;
+      then();
+    };
+    return h("div", { class: "behind" },
+      row.hasAttribute("data-stoppable") && pill("Stop", acting(() => void this.act((a) => this.app.stop(a))), "", { "data-swipe-stop": "" }),
+      pill("Close", acting(() => this.askClose()), "danger", { "data-swipe-close": "" }));
+  }
+
+  private askClose(): void {
+    const a = this.acted();
+    if (!a) return;
+    this.showSheet();
+    this.closing.ask(`Close ${a.agent}? It stops, and its tile closes on ${this.app.computer()}.`);
   }
 
   /** The agent the sheet is for, as the computer last said; null once it is gone. */
@@ -202,15 +226,16 @@ export class Home {
 }
 
 /** What a tile's row says under its name: what it waits on, else what it last said, else its
- *  state and what runs it. */
-function lineOf(t: HomeTile, line: string | undefined): string {
+ *  state and what runs it. Code in it, a command or what is in backticks, is set as code. */
+function lineOf(t: HomeTile, line: string | undefined): Array<string | HTMLElement> {
   const w = t.waiting;
-  if (w?.tool) return [w.tool.name, w.tool.about?.split("\n")[0]].filter(Boolean).join(": ");
-  if (w?.asks?.[0]) return w.asks[0].question;
-  if (w) return kindLabel(w.kind);
-  if (line) return line;
-  if (t.state) return [stateLabel(t.state), t.program?.label].filter(Boolean).join(" · ");
-  return t.kind;
+  const about = w?.tool?.about?.split("\n")[0];
+  if (w?.tool) return about ? [`${w.tool.name}: `, h("code", {}, about)] : [w.tool.name];
+  if (w?.asks?.[0]) return [w.asks[0].question];
+  if (w) return [kindLabel(w.kind)];
+  if (line) return line.split("`").map((part, i) => (i % 2 ? h("code", {}, part) : part)).filter((p) => p !== "");
+  if (t.state) return [[stateLabel(t.state), t.program?.label].filter(Boolean).join(" · ")];
+  return [t.kind];
 }
 
 /** Working agents past which their dots stop breathing. */

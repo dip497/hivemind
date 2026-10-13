@@ -35,14 +35,14 @@ function tree(root: string, names: string[]): string {
 
 /** A device holding the workspace at `repo`, whose frames `frames` are; the box's files are under
  *  `box` here, its agents `onBox`. */
-function device(o: { frames?: FrameRecord[]; recent?: string[]; onBox?: string[]; boxDown?: boolean } = {}) {
+function device(o: { frames?: FrameRecord[]; recent?: string[]; onBox?: string[]; boxDown?: boolean; agents?: AgentProviderDef[]; listed?: Record<string, Record<string, string[]>> } = {}) {
   const repo = tree(fs.mkdtempSync(path.join(tmp, "api-")), ["src/ui", "docs", ".git", "web/app"]);
   const box = tree(fs.mkdtempSync(path.join(tmp, "box-")), ["srv/api/cmd", "srv/api/pkg", "srv/other"]);
   const core: CoreLayout = { frames: o.frames ?? [{ id: "f-api", title: "api", workspacePath: repo }], tiles: [] } as CoreLayout;
   const opened: FrameRecord[] = [];
   const recent = [...(o.recent ?? [])];
   const photos = path.join(tmp, "photos");
-  const here = localFs(() => photos);
+  const here: MachineFs = { ...localFs(() => photos), ...(o.listed ? { choices: async (def: AgentProviderDef) => o.listed![def.id] ?? {} } : {}) };
   const local = (p: string) => path.join(box, p);
   const boxFs: MachineFs = {
     realpath: async (dir) => path.relative(box, await here.realpath(local(dir))).replace(/^/, "/"),
@@ -54,8 +54,8 @@ function device(o: { frames?: FrameRecord[]; recent?: string[]; onBox?: string[]
     core: (r) => (r === repo ? core : null),
     repos: () => [repo],
     machines: { self: () => ({ device: "d1".repeat(32), name: "desk" }), mine: () => undefined, whose: () => undefined, saved: (id) => ({ [BOX]: "build-box", zed: "Zed" } as Record<string, string>)[id] },
-    agents: () => [claude, codex, talker],
-    programs: () => [claude],
+    agents: () => o.agents ?? [claude, codex, talker],
+    programs: () => (o.agents ?? [claude]).slice(0, 1),
     recent: () => recent,
     files: async (m) => {
       if (m === "") return here;
@@ -94,6 +94,26 @@ test("places: this computer first with its agents, the workspace's own folder th
   ]);
   assert.equal(got.machines[1].unreached, undefined);
   assert.match(got.machines[2].unreached ?? "", /Connection refused/);
+});
+
+test("places: an agent's model and mode choices are those its command lists where it runs, as the desktop's settings offer them, with those its manifest names; only those on a machine that does not say", async () => {
+  const options = [
+    { id: "mode", label: "Permission mode", flag: "--permission-mode", values: { bypassPermissions: ["--dangerously-skip-permissions"] }, unattended: "bypassPermissions" },
+    { id: "model", label: "Model", flag: "--model" },
+    { id: "effort", label: "Effort", flag: "--effort" },
+  ];
+  const withOptions = { ...claude, options } as unknown as AgentProviderDef;
+  const d = device({ agents: [withOptions], onBox: ["claude"], listed: { claude: { mode: ["acceptEdits", "bypassPermissions", "plan"], model: [], effort: ["low"] } } });
+  d.core.frames.push({ id: "f-box", title: "box", workspacePath: `machine://${BOX}/srv/api` });
+  const got = await d.places.places(d.repo);
+  assert.deepEqual(got.machines[0].programs[0].options, [
+    { id: "mode", label: "Permission mode", values: ["acceptEdits", "bypassPermissions", "plan", "yolo"] },
+    { id: "model", label: "Model", values: [] },
+  ]);
+  assert.deepEqual(got.machines[1].programs[0].options, [
+    { id: "mode", label: "Permission mode", values: ["bypassPermissions", "yolo"] },
+    { id: "model", label: "Model", values: [] },
+  ]);
 });
 
 test("places: the agents found on a saved machine are those switched on whose command it finds", async () => {

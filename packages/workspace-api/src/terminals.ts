@@ -23,6 +23,9 @@ export interface TerminalOpts {
   liveOnly?: boolean;
   /** The client acknowledges the output it takes (`terminal.ack`), and is paced by it. */
   acks?: boolean;
+  /** At most this many lines of its scrollback in the screen the client is sent; more it asks for
+   *  (`terminal.history`). */
+  history?: number;
 }
 
 /** How a session ended. */

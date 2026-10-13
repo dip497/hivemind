@@ -41,11 +41,12 @@ export function daemonSessions({ endpoint, pace }: DaemonSessionsOptions): Sessi
     write: (tile, data, paste) => endpoint.write(tile, data, paste),
     echoes: () => true,
     resize: (tile, cols, rows) => endpoint.resize(tile, cols, rows),
+    repaint: (tile) => endpoint.repaint(tile),
     pause: (tile) => endpoint.pause(tile),
     resume: (tile) => endpoint.resume(tile),
     kill: (tile) => endpoint.kill(tile),
     detach: (tile) => endpoint.detach(tile),
     // Asked for when read: false once the daemon no longer holds the session.
-    screen: (tile) => (endpoint.has(tile) ? (cb) => { if (!endpoint.has(tile)) return false; endpoint.screen(tile, cb); return true; } : null),
+    screen: (tile, lines) => (endpoint.has(tile) ? (cb) => { if (!endpoint.has(tile)) return false; endpoint.screen(tile, cb, lines); return true; } : null),
   };
 }

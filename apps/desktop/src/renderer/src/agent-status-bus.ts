@@ -23,6 +23,8 @@ export interface StatusEvent {
   synthetic?: boolean;
   /** Process exit code, on an `exited` status from a PTY exit: a crash (non-zero) vs a close. */
   exitCode?: number;
+  /** The signal that ended the process, on an `exited` status from a PTY exit. */
+  signal?: number;
   /** One-line detail: why an exit or a turn ended the way it did. */
   detail?: string;
 }

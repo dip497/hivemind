@@ -103,6 +103,8 @@ export class ControlPlane {
   constructor(private readonly o: ControlPlaneOptions) {
     this.waits = new Waits({ status: this.status, changed: () => o.waitsChanged?.() });
     this.status.subscribe((change) => o.publish("status.changed", change));
+    // A spawned worker that starts waiting is reported to its parent; no dispatcher yet, no workers.
+    this.status.subscribe((change) => this.made?.onStatus(change.tileId, change.status));
     this.reaper = new SubagentReaper(SUBAGENT_REAP_MS, (tileId) => {
       const left = this.status.get(tileId)?.subagents ?? [];
       for (const agentId of left) this.status.event(tileId, { event: "subagent.stopped", agentId });

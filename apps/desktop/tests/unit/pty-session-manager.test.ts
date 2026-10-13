@@ -118,6 +118,17 @@ test("scrollback cap — old lines past the limit are evicted from replay", asyn
   assert.ok(r.replay.length > 0);
 });
 
+test("a screen read with a cap carries that many lines of scrollback, the newest, and no more", async () => {
+  const { mgr, created, spec } = makeManager();
+  mgr.createOrAttach("repo:t1", spec, { onData: () => {}, onExit: () => {} });
+  created[0]!.emit(Array.from({ length: 100 }, (_, i) => `LINE${i}\r\n`).join(""));
+  // 24 rows show LINE77 to LINE99 and the cursor's empty line; the five above them are LINE72 to LINE76.
+  const capped = (await mgr.snapshot("repo:t1", 5))!.replay;
+  assert.match(capped, /LINE72\b/);
+  assert.doesNotMatch(capped, /LINE71\b/);
+  assert.match((await mgr.snapshot("repo:t1"))!.replay, /LINE0\b/);
+});
+
 test("resize forwards to the pty", async () => {
   const { mgr, created, spec } = makeManager();
   mgr.createOrAttach("repo:t1", spec, { onData: () => {}, onExit: () => {} });
@@ -290,6 +301,24 @@ test("flushAll resolves AFTER every snapshot is written (SIGTERM safety)", async
   await mgr.flushAll();
   // Post-condition: both written by the time flushAll resolved.
   assert.deepEqual(writes.sort(), ["repo:a", "repo:b"]);
+});
+
+test("a session that never goes quiet is still written: a daemon killed mid-turn can restore it", async () => {
+  const writes: number[] = [];
+  const made: FakePty[] = [];
+  const mgr = new SessionManager(
+    (spec) => { const p = new FakePty(spec); made.push(p); return p; },
+    { onSnapshot: () => { writes.push(Date.now()); }, snapshotDebounceMs: 40 },
+  );
+  const spec: SpawnSpec = { cwd: "/r", cmd: "claude", args: [], cols: 80, rows: 24 };
+  await mgr.createOrAttach("repo:busy", spec, { onData: () => {}, onExit: () => {} });
+  // A spinner: output every 10 ms, for ten times the debounce.
+  const until = Date.now() + 400;
+  while (Date.now() < until) {
+    made[0]!.emit("⠋\r");
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  assert.ok(writes.length > 0 && writes[0]! < until, "written while it was still printing");
 });
 
 test("two independent sessions track state separately", async () => {

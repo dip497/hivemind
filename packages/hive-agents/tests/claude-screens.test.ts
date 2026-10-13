@@ -37,3 +37,24 @@ test("each is answered with its own keys, read from the real binary, not a permi
 test("a chooser that is neither is still a question, saying nothing", () => {
   expect(claude().detect!(" Select model\n ❯ 1. Default\n   2. Opus\n Enter to confirm · Esc to cancel")).toEqual({ status: "question" });
 });
+
+// AskUserQuestion's chooser as the daemon reads it while a viewer's repaint shrinks the screen a
+// row: its footer is cut, and the person's last message above starts with the prompt's mark.
+const CHOOSER_CUT = [
+  "✻ Baked for 7s · done 1:06 AM", "",
+  "❯ ask me a question", "  ⎿  1 skill available",
+  "───────────────────────────────────────────────────────────────────────────────",
+  " ☐ Next line ", "", "Which line should I add to hello.txt next?", "",
+  "❯ 1. Nothing", "     Leave hello.txt as it is",
+  "  2. A timestamp", "     Add today's date and time as a new line",
+  "  3. \"test passed\"", "     Add the line \"test passed\"",
+  "  4. Type something.",
+  "───────────────────────────────────────────────────────────────────────────────",
+  "  5. Chat about this", "",
+].join("\n");
+
+test("a numbered option under the mark is a chooser waiting on the person, not its prompt, footer or not", () => {
+  expect(claude().detect!(CHOOSER_CUT)).toEqual({ status: "question" });
+  expect(claude().detect!(CHOOSER_CUT.replace("❯ 1. Nothing", "  1. Nothing").replace("  2. A timestamp", "❯ 2. A timestamp"))).toEqual({ status: "question" });
+  expect(claude().detect!("✻ Baked for 7s\n\n❯ ask me a question\n  ⎿  done\n\n❯ \n")).toEqual({ status: "idle" });
+});

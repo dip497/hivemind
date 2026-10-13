@@ -9,7 +9,7 @@
 import type { InputKind } from "@hivemind/agents";
 import { machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
 import type { AgentItem } from "@hivemind/workspace-api/agents";
-import { askingOf } from "./conversations.js";
+import { askingOf, keepsConversation } from "./conversations.js";
 import { agentOf, answerKeys, folderOf, manifestOf, waitOn, type Decides, type HeldBoard, type WaitingStatus } from "./needs.js";
 import type { ToolAsked } from "@hivemind/workspace-api/agents";
 import type { Wait } from "./waits.js";
@@ -48,7 +48,7 @@ export function manifestFacts(held: HeldBoard[], tileSessionsDir?: string): Agen
     },
     decides: (tile, status) => !!answerKeys(held, tile, status),
     interrupts: (tile) => !!manifestOf(held, tile)?.interrupt,
-    converses: (tile) => !!manifestOf(held, tile)?.session?.transcript,
+    converses: (tile) => keepsConversation(manifestOf(held, tile)),
   };
 }
 

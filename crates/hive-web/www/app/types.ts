@@ -8,7 +8,7 @@ export interface Waiting {
   /** A permission's tool, and the exact command, file or address it is about. */
   tool?: { name: string; about?: string };
   /** A question's questions, each with its options. */
-  asks?: Array<{ question: string; options: string[]; many?: boolean }>;
+  asks?: Array<{ question: string; options: string[]; descriptions?: string[]; many?: boolean }>;
   /** An option of its one question is answered by choosing it. */
   choose?: boolean;
 }

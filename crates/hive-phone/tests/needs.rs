@@ -27,6 +27,8 @@ fn the_answers_of_the_persons_devices_are_shown_as_one_list_the_one_waiting_long
         );
         let expected: Vec<Need> = serde_json::from_value(c["needs"].clone()).unwrap();
         assert_eq!(shown.needs, expected, "{}", c["about"]);
+        // As the page is handed it: nothing said is lost on the way.
+        assert_eq!(serde_json::to_value(&shown.needs).unwrap(), c["needs"], "{}", c["about"]);
         assert_eq!(Some(shown.working), c["working"].as_u64(), "{}", c["about"]);
     }
 }

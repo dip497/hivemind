@@ -1,8 +1,10 @@
 // A live terminal (docs/design/phone-browser-2026-10-03.md §11.4): the screen hive-phone's core
 // keeps of it, its emulator in this page's wasm, drawn on a canvas at the session's own columns,
 // as the Android app draws it (TerminalView.kt): fitted to the width at first, pinched to zoom,
-// dragged to pan, following the newest line until the person scrolls up. What is typed goes to the
-// terminal; a bar under it has the keys a phone's keyboard lacks, and Fit to phone.
+// dragged to pan, following the newest line until the person scrolls up, and again once they type,
+// tap or ask for it; new output meanwhile leaves the view where it is. A program that takes scrolls
+// (the mouse, or the alternate screen) is sent them instead, as a desktop terminal sends them. What is typed goes to the terminal; a bar under it has the keys a
+// phone's keyboard lacks, and Fit to phone.
 
 import type { App } from "./app.js";
 import { h } from "./dom.js";
@@ -28,6 +30,13 @@ export interface TermSource {
   typeKeys(keys: string[]): void;
   fit(cols: number, rows: number): void;
   unfit(): void;
+  /** The size this view reads it at: the terminal takes it once the person types here. */
+  size(cols: number, rows: number): void;
+  /** The person scrolls `lines` (up below 0) at a cell (from 1): sent to the program when it takes
+   *  scrolls; false: the view scrolls itself. 0 lines asks whose a scroll is. */
+  scroll(lines: number, col: number, row: number): boolean;
+  /** The person scrolled to the oldest line kept: more history is asked of the host, if it has it. */
+  earlier(): void;
 }
 
 interface Line {
@@ -98,6 +107,8 @@ export class TerminalView {
   });
   private readonly fitButton: HTMLButtonElement;
   private readonly ended = h("p", { class: "term-ended", role: "status", hidden: true, "data-term-ended": "" });
+  /** While the view is scrolled back and new output came: back to the newest. */
+  private readonly jump = h("button", { type: "button", class: "term-live", hidden: true, "data-term-live": "" }, "New output ↓");
   /** What is watched, until `unwatch`; `stop` once it is. */
   private wanted: { app: App; workspace: string; tile: string } | null = null;
   private stop: (() => void) | null = null;
@@ -106,6 +117,7 @@ export class TerminalView {
 
   private revision = 0;
   private cols = 80;
+  private rows = 24;
   private firstLine = 0;
   private lines: Line[] = [];
   private cursor = { line: -1, col: 0, visible: false };
@@ -117,7 +129,13 @@ export class TerminalView {
   private top = 0;
   private across = 0;
   private following = true;
+  /** New output came while the view did not follow. */
+  private unseen = false;
+  /** A scroll sent to the program, less than a line of it yet. */
+  private owed = 0;
   private fitted = false;
+  /** The size last said to the source (`readSize`). */
+  private said = "";
 
   /** The canvas's size, in device pixels, and the pixel ratio. */
   private width = 0;
@@ -135,10 +153,13 @@ export class TerminalView {
 
   constructor() {
     this.ctx = this.canvas.getContext("2d", { alpha: false })!;
-    this.view.append(this.canvas, this.text, this.input, this.ended);
+    this.view.append(this.canvas, this.text, this.input, this.ended, this.jump);
+    // Its own press: not a drag of the view.
+    this.jump.addEventListener("pointerdown", (e) => e.stopPropagation());
+    this.jump.addEventListener("click", () => this.live());
     const bar = h("div", { class: "term-keys", role: "toolbar", "aria-label": "Keys" });
-    for (const [label, key, name] of BAR) bar.append(this.key(label, name, () => this.source?.typeKeys([key]), { "data-key": key }));
-    bar.append(this.key("⌨", "Keyboard", () => this.input.focus(), { "data-keyboard": "" }));
+    for (const [label, key, name] of BAR) bar.append(this.key(label, name, () => this.typeKeys([key]), { "data-key": key }));
+    bar.append(this.key("⌨", "Keyboard", () => { this.live(); this.input.focus(); }, { "data-keyboard": "" }));
     this.fitButton = this.key("Fit", "Fit to phone", () => this.toggleFit(), { "data-fit": "", "aria-pressed": "false" });
     bar.append(this.fitButton);
     this.el.append(this.view, bar);
@@ -190,6 +211,8 @@ export class TerminalView {
     this.fitted = false;
     this.fitButton.setAttribute("aria-pressed", "false");
     this.drawn = "";
+    this.said = "";
+    this.sayReadSize();
     this.draw();
     this.changed();
   }
@@ -211,9 +234,12 @@ export class TerminalView {
   }
 
   /** What changed since the revision drawn: lines the scrollback let go leave from the front, and
-   *  every other line keeps its place. */
+   *  every other line keeps its place. Anything but new output (more history, the screen drawn
+   *  again) keeps the same lines in sight, counted from the newest. */
   private apply(u: Update): void {
+    const was = { newest: this.lines[this.newest]?.text, below: this.lines.length - this.newest, length: this.lines.length };
     this.revision = u.revision;
+    this.rows = u.rows;
     if (u.cols !== this.cols) {
       this.cols = u.cols;
       this.across = 0;
@@ -221,10 +247,7 @@ export class TerminalView {
     const count = Math.max(0, u.lineCount - u.firstLine);
     const gone = u.firstLine - this.firstLine;
     if (gone < 0 || gone >= this.lines.length) this.lines = [];
-    else if (gone > 0) {
-      this.lines.splice(0, gone);
-      if (!this.following) this.top = Math.max(0, this.top - gone);
-    }
+    else if (gone > 0) this.lines.splice(0, gone);
     this.firstLine = u.firstLine;
     this.lines.length = Math.min(this.lines.length, count);
     while (this.lines.length < count) this.lines.push(BLANK);
@@ -237,6 +260,11 @@ export class TerminalView {
     let written = count - 1;
     while (written >= 0 && this.lines[written]!.text === "") written--;
     this.newest = this.cursor.visible ? Math.max(cursorAt, written) : written;
+    if (this.following) return;
+    if (this.lines[this.newest]?.text !== was.newest || this.lines.length - this.newest !== was.below) {
+      this.top = Math.max(0, this.top - Math.max(0, gone));
+      this.unseen = true;
+    } else this.top += this.lines.length - was.length;
   }
 
   /** A cell's width and a line's height, in device pixels. */
@@ -265,6 +293,8 @@ export class TerminalView {
   }
 
   private draw(): void {
+    if (this.following) this.unseen = false;
+    this.jump.hidden = !this.unseen;
     if (!this.width || !this.height) return;
     this.bounds();
     const ctx = this.ctx;
@@ -344,7 +374,26 @@ export class TerminalView {
     this.canvas.height = this.height;
     this.ctx.font = `400 100px ${FONT}`;
     this.advance = this.ctx.measureText("M").width / 100 || 0.6;
+    this.sayReadSize();
     this.draw();
+  }
+
+  /** The columns and rows this view shows at a readable size; null while it has none. */
+  private readSize(): { cols: number; rows: number } | null {
+    const box = this.view.getBoundingClientRect();
+    if (!box.width || !box.height) return null;
+    return {
+      cols: Math.max(20, Math.floor(box.width / (READABLE * this.advance))),
+      rows: Math.max(5, Math.floor(box.height / Math.ceil(READABLE * LINE))),
+    };
+  }
+
+  /** Tell the source the size this view reads it at, when it changed. */
+  private sayReadSize(): void {
+    const size = this.readSize();
+    if (!this.source || !size || `${size.cols}x${size.rows}` === this.said) return;
+    this.said = `${size.cols}x${size.rows}`;
+    this.source.size(size.cols, size.rows);
   }
 
   /** Size the terminal to this view at a readable size, or give it back the one it had. */
@@ -354,13 +403,12 @@ export class TerminalView {
     this.fitted = !this.fitted;
     this.fitButton.setAttribute("aria-pressed", String(this.fitted));
     if (!this.fitted) return source.unfit();
-    const box = this.view.getBoundingClientRect();
-    const cols = Math.max(20, Math.floor(box.width / (READABLE * this.advance)));
-    const rows = Math.max(5, Math.floor(box.height / Math.ceil(READABLE * LINE)));
+    const size = this.readSize();
+    if (!size) return;
     this.zoom = 1;
     this.across = 0;
     this.following = true;
-    source.fit(cols, rows);
+    source.fit(size.cols, size.rows);
   }
 
   private key(label: string, name: string, press: () => void, props: Record<string, string>): HTMLButtonElement {
@@ -392,7 +440,7 @@ export class TerminalView {
         return;
       }
       this.gesture.moved += Math.abs(dx) + Math.abs(dy);
-      this.pan(dx * this.dpr, dy * this.dpr);
+      this.pan(dx * this.dpr, dy * this.dpr, e);
     });
     const up = (e: PointerEvent) => {
       if (!this.pointers.delete(e.pointerId)) return;
@@ -406,13 +454,16 @@ export class TerminalView {
     v.addEventListener("pointercancel", up);
     // A tap: the keyboard. On its click, as the mousedown a touch makes first would take the focus.
     v.addEventListener("click", () => {
-      if (this.tapped) this.input.focus();
+      if (this.tapped) {
+        this.live();
+        this.input.focus();
+      }
       this.tapped = false;
     });
     v.addEventListener("wheel", (e) => {
       e.preventDefault();
       if (e.ctrlKey) this.zoomBy(Math.exp(-e.deltaY / 200), (e.clientX - v.getBoundingClientRect().left) * this.dpr);
-      else this.pan(-e.deltaX * this.dpr, -e.deltaY * this.dpr);
+      else this.pan(-e.deltaX * this.dpr, -e.deltaY * this.dpr, e);
     }, { passive: false });
 
     const input = this.input;
@@ -421,23 +472,23 @@ export class TerminalView {
       if (!source || e.isComposing || e.metaKey || e.altKey) return;
       if (e.ctrlKey && e.key.length === 1 && /[a-z@[\\\]^_]/i.test(e.key)) {
         e.preventDefault();
-        source.typeText(String.fromCharCode(e.key.toUpperCase().charCodeAt(0) & 31));
+        this.typeText(String.fromCharCode(e.key.toUpperCase().charCodeAt(0) & 31));
         return;
       }
       const key = KEYS[e.key];
       if (!key || e.ctrlKey) return;
       e.preventDefault();
-      source.typeKeys([key]);
+      this.typeKeys([key]);
     });
     input.addEventListener("beforeinput", (e) => {
       const source = this.source;
       if (!source || e.isComposing) return;
       if (e.inputType === "insertLineBreak" || e.inputType === "insertParagraph") {
         e.preventDefault();
-        source.typeKeys(["enter"]);
+        this.typeKeys(["enter"]);
       } else if (e.inputType === "deleteContentBackward" && input.value === "") {
         e.preventDefault();
-        source.typeKeys(["backspace"]);
+        this.typeKeys(["backspace"]);
       }
     });
     input.addEventListener("input", (e) => {
@@ -450,21 +501,62 @@ export class TerminalView {
   private typeWhatIsIn(): void {
     const text = this.input.value;
     this.input.value = "";
-    if (text) this.source?.typeText(text);
+    if (text) this.typeText(text);
   }
 
-  /** Move the view by `dx`, `dy` device pixels: up from the newest stops following it; back down
-   *  to it follows again. */
-  private pan(dx: number, dy: number): void {
+  /** What the person types: the view goes back to the newest. */
+  private typeText(text: string): void {
+    this.live();
+    this.source?.typeText(text);
+  }
+
+  private typeKeys(keys: string[]): void {
+    this.live();
+    this.source?.typeKeys(keys);
+  }
+
+  /** Back to the newest, following it. */
+  private live(): void {
+    this.following = true;
+    this.draw();
+  }
+
+  /** Move the view by `dx`, `dy` device pixels, the pointer `at`: up from the newest stops following
+   *  it; back down to it follows again. A program that takes scrolls is sent `dy` a line at a time. */
+  private pan(dx: number, dy: number, at: { clientX: number; clientY: number }): void {
     const { h: lh } = this.cell();
     this.across -= dx;
+    if (dy !== 0 && this.toProgram(dy, at)) dy = 0;
     if (dy !== 0) {
       this.top -= dy / lh;
       if (dy > 0) this.following = false;
       this.bounds();
       if (!this.following && this.top >= this.rest()) this.following = true;
+      if (!this.following && this.top < this.inView()) this.source?.earlier();
     }
     this.draw();
+  }
+
+  /** Send the program `dy` device pixels of scrolling at `at`, a line a line's height; false when it
+   *  takes none. */
+  private toProgram(dy: number, at: { clientX: number; clientY: number }): boolean {
+    const source = this.source;
+    if (!source) return false;
+    const { w, h: lh } = this.cell();
+    const lines = this.owed - dy / lh;
+    const whole = Math.trunc(lines);
+    const box = this.view.getBoundingClientRect();
+    const x = (at.clientX - box.left) * this.dpr;
+    const y = (at.clientY - box.top) * this.dpr;
+    const col = Math.min(this.cols, Math.max(1, Math.floor((x + this.across) / w) + 1));
+    const line = Math.floor(this.top + y / lh) - (this.lines.length - this.rows);
+    const row = Math.min(this.rows, Math.max(1, line + 1));
+    if (!source.scroll(whole, col, row)) {
+      this.owed = 0;
+      return false;
+    }
+    this.owed = lines - whole;
+    return true;
   }
 
   /** Zoom by `factor`, the point `x` (device pixels across the view) staying where it is. */

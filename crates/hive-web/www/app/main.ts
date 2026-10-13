@@ -10,7 +10,7 @@ import { Home } from "./home.js";
 import { warm } from "./markdown.js";
 import { PairScreen, guessName } from "./pair.js";
 import type { Phone } from "./phone.js";
-import { StartScreen } from "./start.js";
+import { KEPT as START_KEPT, StartScreen } from "./start.js";
 import { TermScreen } from "./term-screen.js";
 import { ViewScreen, Views } from "./views.js";
 import { get, put, remove } from "./store.js";
@@ -44,6 +44,7 @@ const act = async <T extends boolean | null>(done: () => Promise<T>, notLanded: 
 
 /** Called each time the computer is reached. */
 const reaching = new Set<() => void>();
+let live = false;
 
 /** The phone, once its wasm is compiled. */
 const reached = (): Phone => {
@@ -51,8 +52,17 @@ const reached = (): Phone => {
   return phone;
 };
 
+/** The phone once the computer is reached, waited for. */
+const reachedNow = (): Promise<Phone> => phone && live ? Promise.resolve(phone) : new Promise((resolve) => {
+  const off = app.onReach(() => {
+    off();
+    resolve(phone!);
+  });
+});
+
 const app: App = {
-  open(tile) {
+  open(tile, started) {
+    if (started) agent.starting(tile);
     const at = `#agent=${encodeURIComponent(tile)}`;
     // An agent just started takes the place of the screen that started it.
     if (new URLSearchParams(location.hash.slice(1)).has("start")) location.replace(at);
@@ -79,12 +89,12 @@ const app: App = {
     opened = true;
   },
   computer: () => paired?.with.name ?? "your computer",
-  workspaces: () => reached().workspaces(),
-  places: (workspace) => reached().places(workspace),
-  folders: (workspace, folder) => reached().folders(workspace, folder),
+  workspaces: async () => (await reachedNow()).workspaces(),
+  places: async (workspace) => (await reachedNow()).places(workspace),
+  folders: async (workspace, folder) => (await reachedNow()).folders(workspace, folder),
   async start(workspace, start) {
     try {
-      return await reached().start(workspace, start);
+      return await (await reachedNow()).start(workspace, start);
     } catch (e) {
       notify(message(e));
       return null;
@@ -134,6 +144,9 @@ for (const [tab, label] of TABS) {
 }
 const trouble = h("p", { class: "notice problem", hidden: true, role: "status", "data-error": "" });
 const notice = h("p", { class: "notice", hidden: true, role: "status", "data-notice": "" });
+// Shown by the router alone: none is drawn before it has run.
+for (const screen of Object.values(screens)) screen.el.hidden = true;
+tabs.hidden = true;
 document.getElementById("app")!.append(...Object.values(screens).map((s) => s.el), tabs, trouble, notice);
 
 let noticeTimer = 0;
@@ -209,6 +222,7 @@ async function pairWith(link: string, name: string): Promise<void> {
   offered = false;
   if (before) {
     void remove("first");
+    void remove(START_KEPT);
     apply(NOTHING);
   }
   devices.show(phone.id, paired);
@@ -228,6 +242,7 @@ function unpaired(): void {
   paired = null;
   overview = null;
   void remove("first");
+  void remove(START_KEPT);
   apply(NOTHING);
   if (phone) devices.show(phone.id, null);
   trouble.hidden = true;
@@ -260,11 +275,12 @@ async function start(): Promise<void> {
   const { Phone } = await import("./phone.js");
   phone = await Phone.open(paired, {
     home: render,
-    status(live, error) {
-      devices.status(live, error);
-      trouble.hidden = live || error === null;
+    status(now, error) {
+      live = now;
+      devices.status(now, error);
+      trouble.hidden = now || error === null;
       trouble.textContent = error ? `${paired?.with.name ?? "Your computer"} is not reached: ${error}` : "";
-      if (live) for (const r of reaching) r();
+      if (now) for (const r of [...reaching]) r();
     },
     others: (o) => devices.showOthers(o),
     refused(computer) {

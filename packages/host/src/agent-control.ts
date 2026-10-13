@@ -14,7 +14,7 @@ import { ApiError, fields, flag, text, written } from "@hivemind/workspace-api/p
 import type { Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { changesIn, type Changes } from "./agent-diff.js";
-import { imagesOf, programOf, type StartPlaces } from "./start-places.js";
+import { imagesOf, type StartPlaces } from "./start-places.js";
 
 /** What starting an agent asks for. `supervise`: the tools it asks its starter before using
  *  (`true`: the usual ones). `parent`: the program that starts it, which it reports and asks to. */
@@ -129,7 +129,7 @@ export function agentControl(o: AgentControlOptions): Domain<"agent.startable" |
     answers: {
       "agent.startable": async (_from, repo) => {
         const core = board(text(repo, "workspace"));
-        const programs = (await o.programs()).map(programOf);
+        const programs = await o.places.startable("", await o.programs());
         const frames = core.frames.map((f) => ({ id: f.id, name: f.title, machine: machineCalled(f.worktreePath ?? f.workspacePath ?? text(repo, "workspace"), o.machines) }));
         return { programs, frames };
       },

@@ -13,7 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use hive_phone::screen::{Frame, LiveScreen, Screen, SCROLLBACK};
+use hive_phone::screen::{Frame, LiveScreen, Screen, FIRST_HISTORY, SCROLLBACK};
 
 /// A run as §5.3 packs it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -442,4 +442,94 @@ fn a_frame_never_shows_half_a_synchronized_update() {
         assert!(Instant::now() < deadline, "a lapsed update never showed");
         thread::sleep(Duration::from_millis(5));
     }
+}
+
+#[test]
+fn a_scroll_goes_to_a_program_that_takes_the_mouse_or_shows_the_alternate_screen_else_the_view_scrolls(
+) {
+    let at = |output: &[u8], lines: i32, col: u16, row: u16| {
+        let mut screen = Screen::default();
+        screen.feed(output);
+        screen.scroll(lines, col, row)
+    };
+    // A shell: the view scrolls its own scrollback.
+    assert_eq!(at(b"$ ls\r\n", -3, 10, 5), None);
+    // Claude's TUI: the alternate screen, the mouse taken, reported as SGR; up is the wheel up.
+    let claude = b"\x1b[?1049h\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006h";
+    assert_eq!(
+        at(claude, -3, 10, 5).as_deref(),
+        Some("\x1b[<64;10;5M".repeat(3).as_str())
+    );
+    assert_eq!(
+        at(claude, 2, 10, 5).as_deref(),
+        Some("\x1b[<65;10;5M".repeat(2).as_str())
+    );
+    // The mouse taken on the main screen is the program's too.
+    assert_eq!(
+        at(b"\x1b[?1000h\x1b[?1006h", -1, 1, 1).as_deref(),
+        Some("\x1b[<64;1;1M")
+    );
+    // Reported the old way, each a byte past 32; a column past what a byte holds, the last it does.
+    assert_eq!(at(b"\x1b[?1000h", -1, 10, 5).as_deref(), Some("\x1b[M`*%"));
+    assert_eq!(
+        at(b"\x1b[?1000h", 1, 200, 5).as_deref(),
+        Some("\x1b[Ma\x7f%")
+    );
+    // In UTF-8, as far as it holds.
+    assert_eq!(
+        at(b"\x1b[?1000h\x1b[?1005h", -1, 200, 5).as_deref(),
+        Some("\x1b[M`\u{e8}%")
+    );
+    // less or vim: the alternate screen, no mouse; arrows, as the cursor keys are sent then.
+    assert_eq!(
+        at(b"\x1b[?1049h", -2, 1, 1).as_deref(),
+        Some("\x1b[A\x1b[A")
+    );
+    assert_eq!(
+        at(b"\x1b[?1049h\x1b[?1h", 1, 1, 1).as_deref(),
+        Some("\x1bOB")
+    );
+    // A program that turns that off, and one gone back to the main screen: the view scrolls.
+    assert_eq!(at(b"\x1b[?1049h\x1b[?1007l", -1, 1, 1), None);
+    assert_eq!(
+        at(
+            b"\x1b[?1049h\x1b[?1006h\x1b[?1000h\x1b[?1000l\x1b[?1049l",
+            -1,
+            1,
+            1
+        ),
+        None
+    );
+    // Nothing scrolled yet: whose it is, and nothing sent.
+    assert_eq!(at(claude, 0, 1, 1).as_deref(), Some(""));
+    assert_eq!(at(b"$ ls\r\n", 0, 1, 1), None);
+}
+
+#[test]
+fn scrolled_to_the_oldest_line_a_page_asks_for_more_history_until_the_host_has_no_more_or_it_holds_all_it_keeps(
+) {
+    // The screen with `n` lines of scrollback above its 24 rows, as the host sends it.
+    let with = |n: usize| [b"\x1bc".as_slice(), &numbered("line", 0..(n + 23))].concat();
+    let mut screen = Screen::default();
+    // Nothing from the host yet: nothing to ask.
+    assert_eq!(screen.earlier(), None);
+    // Joined with as much as it asked for: four times that, then nothing until it comes.
+    screen.redraw(&with(FIRST_HISTORY));
+    assert_eq!(screen.earlier(), Some(FIRST_HISTORY * 4));
+    assert_eq!(screen.earlier(), None);
+    screen.feed(&with(FIRST_HISTORY * 4));
+    assert_eq!(screen.earlier(), Some(SCROLLBACK));
+    // Fewer than it asked for: the host had no more.
+    screen.feed(&with(1_000));
+    assert_eq!(screen.earlier(), None);
+    // Joined again, with less than it asks for on joining: the host has no more.
+    screen.redraw(&with(50));
+    assert_eq!(screen.earlier(), None);
+    // Grown past what it asked for as output came: it asks for more than it holds.
+    screen.redraw(&with(FIRST_HISTORY));
+    screen.feed(&numbered("more", 0..300));
+    assert_eq!(screen.earlier(), Some(SCROLLBACK));
+    // All it keeps: nothing more to ask.
+    screen.feed(&with(SCROLLBACK + 100));
+    assert_eq!(screen.earlier(), None);
 }

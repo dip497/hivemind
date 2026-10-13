@@ -71,7 +71,7 @@ export function waitOn(tile: string, status: { kind: InputKind; says?: string; s
   const hooked = held?.prompt && held.since === status.since ? held : undefined;
   const read = status.says || (status.kind !== "permission" && status.kind !== "question") ? undefined : facts.asking?.(tile);
   const asking: ToolAsked | undefined = hooked
-    ? { name: hooked.tool ?? "", ...(read?.name === hooked.tool && read?.about ? { about: read.about } : {}), ...(hooked.asks ? { asks: hooked.asks } : {}) }
+    ? { name: hooked.tool ?? "", ...about(hooked, read), ...(hooked.asks ? { asks: hooked.asks } : {}) }
     : read;
   const chooses = hooked ? !!hooked.chooses : !!facts.chooses?.(tile);
   if (asking?.asks) {
@@ -82,6 +82,10 @@ export function waitOn(tile: string, status: { kind: InputKind; says?: string; s
   const tool = asking?.name && status.kind === "permission" ? { tool: { name: asking.name, ...(asking.about ? { about: asking.about } : {}) } } : {};
   return { kind: status.kind, ...tool, ...(hooked || facts.decides(tile, status) ? { decide: true as const } : {}) };
 }
+
+/** What a held wait's tool use is about: its hook's word, else its session file's on that tool. */
+const about = (hooked: Wait, read: ToolAsked | undefined): { about?: string } =>
+  hooked.about ? { about: hooked.about } : read?.name === hooked.tool && read?.about ? { about: read.about } : {};
 
 /** A workspace this device holds: its id, its name, its folder (here, or on the device it was
  *  moved from, M3), and its board as its document has it. */

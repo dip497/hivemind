@@ -24,11 +24,18 @@ const ICONS = {
   send: ["M5,12l7,-7l7,7", "M12,19V5"],
   back: ["M19,12H5", "M12,19l-7,-7l7,-7"],
   chevron: ["M9,18l6,-6l-6,-6"],
+  down: ["M6,9l6,6l6,-6"],
+  chat: ["M21,15a2,2 0,0 1,-2 2H7l-4,4V5a2,2 0,0 1,2 -2h14a2,2 0,0 1,2 2z"],
+  more: ["M11,12a1,1 0,1 0,2 0a1,1 0,1 0,-2 0", "M18,12a1,1 0,1 0,2 0a1,1 0,1 0,-2 0", "M4,12a1,1 0,1 0,2 0a1,1 0,1 0,-2 0"],
+  plus: ["M5,12h14", "M12,5v14"],
+  stop: ["M8,7h8a1,1 0,0 1,1 1v8a1,1 0,0 1,-1 1H8a1,1 0,0 1,-1 -1V8a1,1 0,0 1,1 -1z"],
 };
 
 const SVG = "http://www.w3.org/2000/svg";
 
-export function icon(name: keyof typeof ICONS, extra = ""): SVGSVGElement {
+export type IconName = keyof typeof ICONS;
+
+export function icon(name: IconName, extra = ""): SVGSVGElement {
   const svg = document.createElementNS(SVG, "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("class", `icon ${extra}`.trim());
@@ -112,6 +119,16 @@ export function say(el: Element, text: string): void {
   if (el.textContent !== text) el.textContent = text;
 }
 
+/** A round button of one icon, named for a screen reader by `label`. */
+export function iconButton(name: IconName, label: string, onClick: () => void, props: Props = {}): HTMLButtonElement {
+  const button = h("button", { type: "button", class: "icon-button", "aria-label": label, ...props }, icon(name));
+  button.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onClick();
+  });
+  return button;
+}
+
 /** A pill button, the Android app's HiveButton. */
 export function pill(label: string, onClick: () => void, tone = "", props: Props = {}): HTMLButtonElement {
   const button = h("button", { type: "button", class: `pill ${tone}`.trim(), ...props }, label);
@@ -122,19 +139,38 @@ export function pill(label: string, onClick: () => void, tone = "", props: Props
   return button;
 }
 
+/** A reply box; `stoppable(on)` says whether what it talks to can be stopped now. */
+export type Composer = HTMLFormElement & { stoppable(on: boolean): void };
+
 /**
  * A reply box with a round send button, ready when there is something to send: `send` says whether
- * it went, and the box empties when it did.
+ * it went, and the box empties when it did. With `stop`, while it is stoppable and nothing is typed
+ * the button stops instead (Happy's agentInputPrimaryAction.ts: typing a follow-up takes priority).
  */
-export function composer(hint: string, send: (text: string) => Promise<boolean>, props: Props = {}): HTMLFormElement {
+export function composer(hint: string, send: (text: string) => Promise<boolean>, props: Props = {}, stop?: () => void): Composer {
   const field = h("textarea", { rows: 1, placeholder: hint, "aria-label": hint, enterkeyhint: "send" });
   const button = h("button", { type: "submit", class: "send", "aria-label": "Send", disabled: true }, icon("send"));
-  const form = h("form", { class: "composer", ...props }, field, button);
+  const form = Object.assign(h("form", { class: "composer", ...props }, field, button), { stoppable: (on: boolean) => {
+    canStop = on;
+    ready();
+  } });
+  let canStop = false;
+  let stopping = false;
   const ready = () => {
     const has = field.value.trim() !== "";
-    button.classList.toggle("ready", has);
-    button.disabled = !has;
+    const now = !has && canStop && !!stop;
+    button.classList.toggle("ready", has || now);
+    button.disabled = !has && !now;
+    if (now === stopping) return;
+    stopping = now;
+    button.type = now ? "button" : "submit";
+    button.setAttribute("aria-label", now ? "Stop" : "Send");
+    button.toggleAttribute("data-stop", now);
+    button.replaceChildren(icon(now ? "stop" : "send"));
   };
+  button.addEventListener("click", () => {
+    if (stopping) stop!();
+  });
   const grow = () => {
     field.style.height = "auto";
     field.style.height = `${field.scrollHeight}px`;

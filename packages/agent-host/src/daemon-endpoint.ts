@@ -298,14 +298,16 @@ export class DaemonEndpoint {
   has(tileId: string): boolean { return this.specs.has(tileId); }
   write(tileId: string, data: string, paste?: boolean): void { this.fire({ t: "write", id: tileId, data, ...(paste ? { paste: true } : {}) }); }
   resize(tileId: string, cols: number, rows: number): void { this.fire({ t: "resize", id: tileId, cols, rows }); }
+  repaint(tileId: string): void { this.fire({ t: "repaint", id: tileId }); }
   pause(tileId: string): void { this.fire({ t: "pause", id: tileId }); }
   resume(tileId: string): void { this.fire({ t: "resume", id: tileId }); }
-  /** The session's screen now. `cb` runs synchronously in the message loop, so every data
-   *  callback after it carries bytes the screen does not already show. */
-  screen(tileId: string, cb: (replay: string | null) => void): void {
+  /** The session's screen now, with at most `lines` of its scrollback. `cb` runs synchronously in
+   *  the message loop, so every data callback after it carries bytes the screen does not already
+   *  show. */
+  screen(tileId: string, cb: (replay: string | null) => void, lines?: number): void {
     const reqId = `sc${++this.seq}`;
     this.screens.set(reqId, cb);
-    this.send({ t: "screen", reqId, id: tileId }).catch(() => { this.screens.delete(reqId); cb(null); });
+    this.send({ t: "screen", reqId, id: tileId, lines }).catch(() => { this.screens.delete(reqId); cb(null); });
   }
 
   /** The session's screen as text, line by line, as the daemon reads it; null when it is not

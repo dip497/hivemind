@@ -6,8 +6,8 @@ import type { TermSource } from "./terminal.js";
 import type { Agent, Folders, Held, Offered, Piece, Places, Reply, Screen, Start, Unfolded, ViewFile } from "./types.js";
 
 export interface App {
-  /** Show the agent of `tile`; Back comes back here. */
-  open(tile: string): void;
+  /** Show the agent of `tile`; Back comes back here. `started`: it was just started from here. */
+  open(tile: string, started?: boolean): void;
   back(): void;
   /** Whether it landed; null when the computer did not say. */
   answer(agent: Agent, reply: Reply): Promise<boolean | null>;

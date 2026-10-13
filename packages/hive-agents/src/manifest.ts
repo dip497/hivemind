@@ -307,6 +307,7 @@ function validateHookAnswer(raw: unknown, at: string): void {
   if (chooses) {
     printed("choose");
     req(isObj(a.asks) && ASKS_KEYS.every((k) => typeof (a.asks as Record<string, unknown>)[k] === "string"), `${at}.asks must name ${ASKS_KEYS.join(", ")} in the tool's input`);
+    for (const k of ["description", "many"]) req((a.asks as Record<string, unknown>)[k] === undefined || typeof (a.asks as Record<string, unknown>)[k] === "string", `${at}.asks.${k} must name where it is in the tool's input`);
     req(typeof a.chosen === "string" && a.chosen.length > 0 && a.chosen.length <= 100, `${at}.chosen must name where the answers go in the tool's input`);
   }
   if (a.leave !== undefined) req(Array.isArray(a.leave) && a.leave.length <= 20 && a.leave.every((t) => typeof t === "string" && t.length > 0 && t.length <= 100), `${at}.leave must be a list of tool names`);
@@ -419,6 +420,7 @@ function validateTranscript(raw: unknown): AgentTranscript {
         req(isObj(x.asks), `${at}.tool.asks must be a map`);
         const k = x.asks as Record<string, unknown>;
         rule.tool.asks = { list: path(k.list, `${at}.tool.asks.list`), question: path(k.question, `${at}.tool.asks.question`), options: path(k.options, `${at}.tool.asks.options`), label: path(k.label, `${at}.tool.asks.label`) };
+        if (k.description !== undefined) rule.tool.asks.description = path(k.description, `${at}.tool.asks.description`);
         if (k.many !== undefined) rule.tool.asks.many = path(k.many, `${at}.tool.asks.many`);
       }
     }

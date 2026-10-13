@@ -10,7 +10,7 @@ use hive_phone::{
     home,
     identity::DeviceCertificate,
     markdown, network, pairing, person,
-    screen::Screen,
+    screen::{Screen, FIRST_HISTORY},
     views,
     workspace::{self, Input, Reply, Sent, Watched},
 };
@@ -494,23 +494,33 @@ impl Host {
             let mut inputs = term.inputs.lock().await;
             let (sent, sending) = mpsc::channel(64);
             // A fit lasts as long as the connection it was sent on.
+            if let Some((cols, rows)) = term.sized.get() {
+                let _ = sent.try_send(Sent::Size(cols, rows));
+            }
             if let Some(size) = term.fitted.get() {
                 let _ = sent.try_send(Sent::Fit(Some(size)));
             }
             // Each connection is sent the screen whole first: after the first, in place of what
             // was shown.
             let mut anew = term.watched.replace(true);
-            let watched = workspace::watch(&connection, &workspace, &tile, Some(sending), |w| {
-                match w {
-                    Watched::Output(data) if std::mem::take(&mut anew) => {
-                        term.screen.borrow_mut().redraw(data.as_bytes())
+            let watched = workspace::watch(
+                &connection,
+                &workspace,
+                &tile,
+                FIRST_HISTORY,
+                Some(sending),
+                |w| {
+                    match w {
+                        Watched::Output(data) if std::mem::take(&mut anew) => {
+                            term.screen.borrow_mut().redraw(data.as_bytes())
+                        }
+                        Watched::Output(data) => term.screen.borrow_mut().feed(data.as_bytes()),
+                        Watched::Size(cols, rows) => term.screen.borrow_mut().resize(cols, rows),
+                        Watched::Keyboard(_) => return,
                     }
-                    Watched::Output(data) => term.screen.borrow_mut().feed(data.as_bytes()),
-                    Watched::Size(cols, rows) => term.screen.borrow_mut().resize(cols, rows),
-                    Watched::Keyboard(_) => return,
-                }
-                let _ = changed.call0(&JsValue::NULL);
-            });
+                    let _ = changed.call0(&JsValue::NULL);
+                },
+            );
             let passed = async { match workspace::pass_on(&mut inputs, sent).await {} };
             let stopped = async {
                 let _ = wasm_bindgen_futures::JsFuture::from(until).await;
@@ -683,6 +693,8 @@ struct TermState {
     inputs: Mutex<mpsc::UnboundedReceiver<Input>>,
     /// The size the person fitted it to, sent again on each connection.
     fitted: Cell<Option<(u16, u16)>>,
+    /// The page's own size, sent again on each connection.
+    sized: Cell<Option<(u16, u16)>>,
     /// Whether a connection has shown it before.
     watched: Cell<bool>,
 }
@@ -698,6 +710,7 @@ impl Term {
                 put,
                 inputs: Mutex::new(inputs),
                 fitted: Cell::new(None),
+                sized: Cell::new(None),
                 watched: Cell::new(false),
             }),
         }
@@ -761,10 +774,37 @@ impl Term {
         let _ = self.inner.put.send(Input::Keys(keys));
     }
 
+    /// The person scrolls `lines` (up below 0) at the cell `col`, `row`: sent to the program when
+    /// it takes scrolls, as a desktop terminal sends them; false: the view scrolls itself.
+    pub fn scroll(&self, lines: i32, col: u16, row: u16) -> bool {
+        let Some(sent) = self.inner.screen.borrow().scroll(lines, col, row) else {
+            return false;
+        };
+        if !sent.is_empty() {
+            let _ = self.inner.put.send(Input::Text(sent));
+        }
+        true
+    }
+
+    /// The person scrolled to the oldest line kept: more of the session's scrollback is asked for,
+    /// when the host may have more.
+    pub fn earlier(&self) {
+        if let Some(lines) = self.inner.screen.borrow_mut().earlier() {
+            let _ = self.inner.put.send(Input::History(lines));
+        }
+    }
+
     /// Size the terminal to `cols` × `rows` for this page, until it is watched no more.
     pub fn fit(&self, cols: u16, rows: u16) {
         self.inner.fitted.set(Some((cols, rows)));
         let _ = self.inner.put.send(Input::Fit(Some((cols, rows))));
+    }
+
+    /// The page shows it `cols` × `rows` at its readable size: the terminal takes that size once
+    /// the person types here, until someone else types.
+    pub fn size(&self, cols: u16, rows: u16) {
+        self.inner.sized.set(Some((cols, rows)));
+        let _ = self.inner.put.send(Input::Size(cols, rows));
     }
 
     /// Back to the size it had before it was fitted.

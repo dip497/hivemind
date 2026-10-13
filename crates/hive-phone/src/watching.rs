@@ -13,7 +13,7 @@ use tokio::{sync::mpsc, task::JoinHandle};
 use crate::{
     connections::Connections,
     failure::Lost,
-    screen::{Frame, LiveScreen},
+    screen::{Frame, LiveScreen, SCROLLBACK},
     workspace::{self, Input, Sent, Watched},
 };
 
@@ -45,6 +45,8 @@ pub struct Watching {
     typed: mpsc::UnboundedSender<Input>,
     /// The size the person fitted it to, sent again on each connection.
     fitted: Arc<Mutex<Option<(u16, u16)>>>,
+    /// The phone's own size, sent again on each connection.
+    sized: Arc<Mutex<Option<(u16, u16)>>>,
     watching: JoinHandle<()>,
 }
 
@@ -72,6 +74,8 @@ impl Watching {
         let (workspace, tile, fed) = (workspace.to_string(), tile.to_string(), screen.clone());
         let fitted = Arc::new(Mutex::new(None));
         let fit = fitted.clone();
+        let sized = Arc::new(Mutex::new(None));
+        let size = sized.clone();
         // Everything the watch does is one task: stopped, all of it goes, its streams with it.
         let watching = tokio::spawn(async move {
             let mut again = false;
@@ -86,18 +90,27 @@ impl Watching {
                 // What is typed while no connection takes it goes in on the next.
                 let (keyed, written) = mpsc::channel(64);
                 // A fit lasts as long as the connection it was sent on.
+                if let Some((cols, rows)) = *size.lock().expect("a size") {
+                    let _ = keyed.try_send(Sent::Size(cols, rows));
+                }
                 if let Some(size) = *fit.lock().expect("a fit") {
                     let _ = keyed.try_send(Sent::Fit(Some(size)));
                 }
-                let watched =
-                    workspace::watch(&connection, &workspace, &tile, Some(written), |w| match w {
+                let watched = workspace::watch(
+                    &connection,
+                    &workspace,
+                    &tile,
+                    SCROLLBACK,
+                    Some(written),
+                    |w| match w {
                         Watched::Output(data) if std::mem::take(&mut anew) => {
                             fed.redraw(data.as_bytes())
                         }
                         Watched::Output(data) => fed.output(data.as_bytes()),
                         Watched::Size(cols, rows) => fed.size(cols, rows),
                         Watched::Keyboard(holder) => watcher.keyboard(holder_of(holder, &me)),
-                    });
+                    },
+                );
                 let watched = tokio::select! {
                     watched = watched => watched,
                     never = workspace::pass_on(&mut typing, keyed) => match never {},
@@ -117,6 +130,7 @@ impl Watching {
             screen,
             typed,
             fitted,
+            sized,
             watching,
         }
     }
@@ -141,6 +155,13 @@ impl Watching {
     pub fn fit(&self, size: Option<(u16, u16)>) {
         *self.fitted.lock().expect("a fit") = size;
         let _ = self.typed.send(Input::Fit(size));
+    }
+
+    /// The phone shows it `cols` × `rows` at its readable size: the terminal takes that size
+    /// once the person types on the phone, until someone else types.
+    pub fn size(&self, cols: u16, rows: u16) {
+        *self.sized.lock().expect("a size") = Some((cols, rows));
+        let _ = self.typed.send(Input::Size(cols, rows));
     }
 
     /// Watch no more: the device lets go of the terminal for this phone.

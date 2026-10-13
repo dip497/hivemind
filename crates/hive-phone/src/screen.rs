@@ -30,6 +30,8 @@ pub use live::LiveScreen;
 
 /// Lines of scrollback kept.
 pub const SCROLLBACK: usize = 2_000;
+/// Lines of scrollback a page asks for as it begins to watch: more as the person scrolls to them.
+pub const FIRST_HISTORY: usize = 200;
 /// A watch's size until the session says its own (`terminal.size`).
 const FIRST_SIZE: (u16, u16) = (80, 24);
 /// The largest size taken: no terminal is bigger, and a bigger one would be a phone's memory.
@@ -163,6 +165,8 @@ pub struct Screen {
     reread: bool,
     /// The cursor as the last frame showed it: its line, its column, whether it shows.
     cursor: Option<(u64, u16, bool)>,
+    /// The lines of scrollback last asked of the session's host.
+    asked: usize,
 }
 
 impl Default for Screen {
@@ -186,6 +190,7 @@ impl Default for Screen {
             alternate: false,
             reread: false,
             cursor: None,
+            asked: FIRST_HISTORY,
         }
     }
 }
@@ -221,10 +226,23 @@ impl Screen {
     }
 
     /// The session's screen sent again whole, as each connection that shows it is sent it: drawn
-    /// in place of what was shown, from a reset.
+    /// in place of what was shown, from a reset, with the scrollback a page asks for on joining.
     pub fn redraw(&mut self, bytes: &[u8]) {
+        self.asked = FIRST_HISTORY;
         self.feed(RESET);
         self.feed(bytes);
+    }
+
+    /// The person scrolled to the oldest line kept: how many lines of scrollback to ask the host
+    /// for now. None while it holds less than it last asked for (the host has no more, or has not
+    /// answered yet), or all it keeps.
+    pub fn earlier(&mut self) -> Option<usize> {
+        let held = self.lines.history;
+        if held < self.asked || held >= SCROLLBACK {
+            return None;
+        }
+        self.asked = (held * 4).min(SCROLLBACK);
+        Some(self.asked)
     }
 
     /// The session took a size (`terminal.size`): every line is new to the app.
@@ -251,6 +269,40 @@ impl Screen {
             });
         }
         lines.changed = true;
+    }
+
+    /// What the program is sent for the person scrolling `lines` (up, to earlier, below 0) at the
+    /// cell `col`, `row` (from 1); none when the view scrolls its own scrollback, so 0 lines asks
+    /// whose a scroll is.
+    pub fn scroll(&self, lines: i32, col: u16, row: u16) -> Option<String> {
+        let mode = *self.term.mode();
+        let up = lines < 0;
+        let one = if mode.intersects(TermMode::MOUSE_MODE) {
+            let button = if up { 64 } else { 65 };
+            if mode.contains(TermMode::SGR_MOUSE) {
+                format!("\x1b[<{button};{col};{row}M")
+            } else {
+                // Each a character past 32: one byte, or in UTF-8 two at most.
+                let most = if mode.contains(TermMode::UTF8_MOUSE) {
+                    2_015
+                } else {
+                    95
+                };
+                let at = |n: u16| char::from_u32(32 + u32::from(n.clamp(1, most))).unwrap_or(' ');
+                format!("\x1b[M{}{}{}", char::from(32 + button), at(col), at(row))
+            }
+        } else if mode.contains(TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL) {
+            let key = if up { 'A' } else { 'B' };
+            let lead = if mode.contains(TermMode::APP_CURSOR) {
+                "\x1bO"
+            } else {
+                "\x1b["
+            };
+            format!("{lead}{key}")
+        } else {
+            return None;
+        };
+        Some(one.repeat(lines.unsigned_abs() as usize))
     }
 
     /// While a synchronized update is open: when it lapses, the frame held back until then.
