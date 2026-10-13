@@ -88,9 +88,9 @@ function ViewSwitch({ compact }: { compact: boolean }) {
   const active = views.find((view) => view.id === current);
   if (views.length < 2 || !active) return null;
   return <div ref={root} className="relative ml-1 flex items-center border-l border-[var(--color-border)] pl-1">
-    <Button ref={trigger} variant="ghost" size="lg" onClick={() => setOpen((value) => !value)} aria-label="switch view" aria-expanded={open}
+    <Button ref={trigger} variant="ghost" onClick={() => setOpen((value) => !value)} aria-label="switch view" aria-expanded={open}
       data-view-switch title="Switch view  (⌘E)">
-      <active.icon /><span className="text-[12px]">{active.label}</span><ChevronDown />
+      <active.icon /><span className="text-label">{active.label}</span><ChevronDown />
     </Button>
     {open && <div role="menu" className={`hm-island absolute right-0 z-30 min-w-[180px] rounded-lg p-1 ${compact ? "bottom-full mb-1" : "top-full mt-1"}`}>
       {views.map((view) => <MenuItem key={view.id} variant="muted" data-view-choice={view.id} title={view.hint} role="menuitemradio" aria-checked={view.id === current}
@@ -111,12 +111,12 @@ function AgentAction({ action, labels, agentSel, onAgentChange, onSpawnAgent, co
   const missing = agents.filter((agent) => notReady(presence, agent.id));
   return <div ref={root} className="relative flex items-center">
     <ActionButton action={{ ...action, label: selected.label }} labels={labels} onClick={() => onSpawnAgent(selected)} icon={<AgentIcon id={selected.id} />} />
-    <Button ref={trigger} variant="ghost" size="icon-lg" className="-ml-0.5 w-5" onClick={() => setOpen((value) => !value)} title="Switch agent" aria-label="switch agent" aria-expanded={open}><ChevronDown /></Button>
+    <Button ref={trigger} variant="ghost" size="icon" className="-ml-0.5 w-5" onClick={() => setOpen((value) => !value)} title="Switch agent" aria-label="switch agent" aria-expanded={open}><ChevronDown /></Button>
     {open && <div className={`hm-island absolute left-0 z-30 min-w-[140px] rounded-lg p-1 ${compact ? "bottom-full mb-1" : "top-full mt-1"}`}>
       {ready.map((agent) => <MenuItem key={agent.id} variant="muted" data-agent-choice={agent.id} onClick={() => { onAgentChange(agent.id); setOpen(false); trigger.current?.focus(); }}>
         <agent.icon /><span className="flex-1">{agent.label}</span>{agent.id === selected.id && <Check />}
       </MenuItem>)}
-      {missing.length > 0 && <div className="px-2 pb-0.5 pt-2 text-[10px] uppercase tracking-wide text-[var(--color-fg3)]">Not installed</div>}
+      {missing.length > 0 && <div className="px-2 pb-0.5 pt-2 text-count font-medium text-[var(--color-fg2)]">Not installed</div>}
       {missing.map((agent) => <MenuItem key={agent.id} variant="muted" data-agent-choice={agent.id} data-missing onClick={() => { setOpen(false); openAgentSettings(agent.id); }}
         title={`Get ${agent.label}`}>
         <agent.icon /><span className="flex-1">{agent.label}</span><Download />
@@ -129,8 +129,8 @@ function ActionButton({ action, labels, icon, disabled, onClick }: {
   action: ToolbarAction; labels: boolean; icon: React.ReactNode; disabled?: boolean; onClick: () => void;
 }) {
   return <Button onClick={onClick} disabled={disabled} aria-label={action.label} data-toolbar-action={action.id}
-    variant="ghost" size={labels ? "lg" : "icon-lg"}
+    variant="ghost" size={labels ? "default" : "icon"}
     title={disabled ? `${action.label} — needs a repo` : action.hint ? `${action.label}  (${action.hint})` : action.label}>
-    {icon}{labels && <span data-toolbar-label className="text-[12px]">{action.label}</span>}
+    {icon}{labels && <span data-toolbar-label className="text-label">{action.label}</span>}
   </Button>;
 }

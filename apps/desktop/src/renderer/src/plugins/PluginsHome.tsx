@@ -40,13 +40,13 @@ export function PluginsHome() {
     <div className="plugins-lead">
       <p>{SETTINGS_PAGES.find((p) => p.id === "plugins")!.description}</p>
       {/* Not on HiveHub nor here: an agent makes it. */}
-      <Button size="sm" variant="outline" data-make-plugin-open onClick={() => window.dispatchEvent(new CustomEvent("hivemind:make-plugin", { detail: { kind: kind === "tool" || kind === "view" ? kind : "widget" } }))}><Sparkles />Make your own</Button>
+      <Button variant="outline" data-make-plugin-open onClick={() => window.dispatchEvent(new CustomEvent("hivemind:make-plugin", { detail: { kind: kind === "tool" || kind === "view" ? kind : "widget" } }))}><Sparkles />Make your own</Button>
     </div>
     <div className="plugins-controls" data-plugins-controls>
       <div role="tablist" aria-label="Show" className="plugins-scope">
         {SCOPES.map(([s, label]) => <button key={s} type="button" role="tab" aria-selected={scope === s} data-plugins-scope={s} onClick={() => setScope(s)}>{label}</button>)}
       </div>
-      <Input type="search" placeholder="Search plugins" aria-label="Search plugins" value={query} onChange={(e) => setQuery(e.target.value)} className="h-8 flex-1 min-w-[140px]" />
+      <Input type="search" placeholder="Search plugins" aria-label="Search plugins" value={query} onChange={(e) => setQuery(e.target.value)} className="flex-1 min-w-[140px]" />
       <select aria-label="Kind" value={kind} onChange={(e) => setKind(e.target.value as "all" | PluginKind)}>
         <option value="all">All kinds</option>
         {PLUGIN_KINDS.map((k) => <option key={k} value={k}>{KIND_LABEL[k]}s</option>)}
@@ -95,12 +95,12 @@ function AddFromFolder() {
   const { previewViewInstall, installWidget, installToolPackage } = window.hive;
   return <>
     <div className="plugins-from-folder" data-add-from-folder>
-      {previewViewInstall && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act(async () => setPreview(await previewViewInstall()))}><FolderPlus />Add a view from a folder</Button>}
-      {installWidget && <Button size="sm" variant="ghost" disabled={busy} data-widget-install onClick={() => void act(async () => {
+      {previewViewInstall && <Button variant="ghost" disabled={busy} onClick={() => void act(async () => setPreview(await previewViewInstall()))}><FolderPlus />Add a view from a folder</Button>}
+      {installWidget && <Button variant="ghost" disabled={busy} data-widget-install onClick={() => void act(async () => {
         const added = await installWidget();
         if (added) setNotice(`${added.name} added. Put it in a workspace with + on the toolbar.`);
       })}><FolderPlus />Add a widget from a folder</Button>}
-      {installToolPackage && <Button size="sm" variant="ghost" disabled={busy} data-tool-install onClick={() => void act(async () => {
+      {installToolPackage && <Button variant="ghost" disabled={busy} data-tool-install onClick={() => void act(async () => {
         const added = await installToolPackage();
         if (added) setNotice(`${added.name} added. It is off: open it to switch it on if you trust who wrote it.`);
       })}><FolderPlus />Add a tool from a folder</Button>}
@@ -112,7 +112,7 @@ function AddFromFolder() {
       <p>This view can display workspace names and agent status, and open your existing tools.</p>
       <p>{preview.package.manifest?.permissions.length ? `Additional access: ${preview.package.manifest.permissions.join(", ")}` : "No additional access requested."}</p>
       {preview.replacesVersion && <p className="settings-note">Replaces installed version {preview.replacesVersion}. Your saved layout is kept.</p>}
-      <div className="settings-actions"><Button size="sm" variant="outline" disabled={busy} onClick={() => setPreview(null)}>Cancel</Button><Button size="sm" disabled={busy} onClick={() => void act(async () => {
+      <div className="settings-actions"><Button variant="outline" disabled={busy} onClick={() => setPreview(null)}>Cancel</Button><Button disabled={busy} onClick={() => void act(async () => {
         await window.hive.installViewPackage(preview.token);
         setNotice(`${preview.package.manifest?.name} installed. Choose it under Views when you’re ready.`); setPreview(null); rescan();
       })}>{busy ? "Installing…" : preview.replacesVersion ? "Replace extension" : "Install extension"}</Button></div>

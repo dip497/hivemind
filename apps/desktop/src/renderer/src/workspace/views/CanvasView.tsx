@@ -633,7 +633,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
           edgesFocusable={false}
           proOptions={PRO_OPTIONS}
         >
-          <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="rgba(155,161,173,0.10)" />
+          <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="var(--color-grid-dot)" />
           <FocusOnTile req={focusReq} />
           <FocusMode req={focusModeReq} />
           <PanMomentum req={momentumReq} activeRef={inMomentumRef} onSettle={bumpSnap} />
@@ -692,7 +692,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
               pannable
               zoomable
               className="!bg-[var(--color-bg3)] !border !border-[var(--color-line2)] !rounded-lg"
-              maskColor="rgba(0,0,0,0.55)"
+              maskColor="var(--color-scrim)"
               nodeColor="var(--color-line2)"
             />
           )}

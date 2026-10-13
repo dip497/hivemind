@@ -45,7 +45,7 @@ export function IssueCard({
     >
       <div className="flex items-center gap-1.5">
         <StateIcon state={issue.state} size={11} />
-        <span className="font-mono text-[11px] text-[var(--color-fg2)] tabular-nums">{issue.id}</span>
+        <span className="font-mono text-count text-[var(--color-fg2)] tabular-nums">{issue.id}</span>
         <Button reveal="hidden"
           size="xs"
           className="nodrag ml-auto"
@@ -60,14 +60,14 @@ export function IssueCard({
           work
         </Button>
       </div>
-      <div className="mt-1.5 text-[12px] text-[var(--color-fg)] leading-snug line-clamp-3">{issue.title}</div>
+      <div className="mt-1.5 text-label text-[var(--color-fg)] leading-snug line-clamp-3">{issue.title}</div>
       {(issue.labels.length > 0 || issue.assignee) && (
         <div className="mt-2 flex items-center gap-1 flex-wrap">
           {issue.labels.slice(0, 3).map((l) => (
             <LabelChip key={l} label={l} />
           ))}
           {issue.labels.length > 3 && (
-            <span className="text-[10px] text-[var(--color-fg3)]">+{issue.labels.length - 3}</span>
+            <span className="text-chip text-[var(--color-fg3)]">+{issue.labels.length - 3}</span>
           )}
           {issue.assignee && (
             <span className="ml-auto">
@@ -94,8 +94,8 @@ export function IssueRow({ issue, onWork }: { issue: IssueSummary; onWork: () =>
       className="nodrag group flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-[var(--color-bg3)] border border-transparent hover:border-[var(--color-line2)] cursor-pointer hm-soft"
     >
       <StateIcon state={issue.state} size={12} />
-      <span className="font-mono text-[11px] text-[var(--color-fg3)] tabular-nums w-20 shrink-0">{issue.id}</span>
-      <span className="text-[12px] text-[var(--color-fg)] truncate flex-1 min-w-0">{issue.title}</span>
+      <span className="font-mono text-count text-[var(--color-fg3)] tabular-nums w-20 shrink-0">{issue.id}</span>
+      <span className="text-label text-[var(--color-fg)] truncate flex-1 min-w-0">{issue.title}</span>
       {issue.labels.slice(0, 2).map((l) => (
         <LabelChip key={l} label={l} />
       ))}

@@ -49,7 +49,7 @@ export function MachineDot({ status, enabled = true, size = 7 }: { status: Machi
 export function CopyCommand({ cmd }: { cmd: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <span className="flex min-w-0 items-center gap-1 rounded-md bg-[var(--color-bg)] border border-[var(--color-line2)] pl-2 pr-1 py-1 font-mono text-[11.5px] text-[var(--color-fg)]">
+    <span className="flex min-w-0 items-center gap-1 rounded-md bg-[var(--color-bg)] border border-[var(--color-line2)] pl-2 pr-1 py-1 font-mono text-label text-[var(--color-fg)]">
       <span className="min-w-0 flex-1 truncate select-all" title={cmd}>{cmd}</span>
       <Button
         variant="ghost"
@@ -74,7 +74,7 @@ export function AttentionNote({ target, detail, needsPassword, onSetPassword }: 
 }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5 rounded-lg border border-[color-mix(in_oklab,var(--color-err)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-err)_8%,transparent)] p-2.5">
-      <span className="text-[11.5px] text-[var(--color-fg)]">
+      <span className="text-label text-[var(--color-fg)]">
         ssh can't log in on its own{detail ? <>: <span className="text-[var(--color-fg2)]">{detail}</span></> : "."}{" "}
         {needsPassword
           ? "This machine asks for a password, and connections made for you never stop to ask. Give it the password once, or set up a key instead:"

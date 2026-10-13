@@ -92,8 +92,8 @@ function AppearancePrefs() {
         <div className="settings-row">
           <div><label>Theme file</label></div>
           <div className="settings-inline">
-            <Button type="button" size="sm" variant="outline" onClick={() => void exportTheme()}>Copy JSON</Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}>Import…</Button>
+            <Button type="button" variant="outline" onClick={() => void exportTheme()}>Copy JSON</Button>
+            <Button type="button" variant="outline" onClick={() => fileRef.current?.click()}>Import…</Button>
             <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => void importTheme(e)} />
           </div>
         </div>

@@ -88,7 +88,7 @@ export function groupIssues(issues: IssueSummary[], by: GroupBy, showCancelled: 
   return parents.map((p) => ({
     key: p || "__top",
     label: p || "Top-level",
-    header: p ? <span className="font-mono text-[10.5px]">{p}</span> : <span className="text-[var(--color-fg3)]">Top-level</span>,
+    header: p ? <span className="font-mono text-count">{p}</span> : <span className="text-[var(--color-fg3)]">Top-level</span>,
     items: issues.filter((i) => (i.parent ?? "") === p),
     dropParent: p || null,
   }));

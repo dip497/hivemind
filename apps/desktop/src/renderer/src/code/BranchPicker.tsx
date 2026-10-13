@@ -45,7 +45,7 @@ export function BranchPicker({
   const pick = (v: string | undefined) => { onChange(v); setOpen(false); setQuery(""); };
 
   return (
-    <div className="nodrag relative inline-flex items-center gap-1 text-[10px] font-mono" ref={ref}>
+    <div className="nodrag relative inline-flex items-center gap-1 text-chip font-mono" ref={ref}>
       <span className="text-[var(--color-fg3)]">{label}</span>
       <Button
         variant="outline"
@@ -67,7 +67,7 @@ export function BranchPicker({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="filter branches…"
-              className="w-full bg-transparent text-[10px] font-mono text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg3)]"
+              className="w-full bg-transparent text-chip font-mono text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg3)]"
             />
           </div>
           <div className="max-h-64 overflow-y-auto py-1">
@@ -75,7 +75,7 @@ export function BranchPicker({
               {autoLabel}
             </MenuItem>
             {local.length > 0 && (
-              <div className="px-2 pt-1.5 pb-0.5 text-[8.5px] uppercase tracking-wider text-[var(--color-fg3)]">local</div>
+              <div className="px-2 pt-1.5 pb-0.5 text-count font-medium text-[var(--color-fg2)]">Local</div>
             )}
             {local.map((b) => (
               <MenuItem
@@ -90,7 +90,7 @@ export function BranchPicker({
               </MenuItem>
             ))}
             {remote.length > 0 && (
-              <div className="px-2 pt-1.5 pb-0.5 text-[8.5px] uppercase tracking-wider text-[var(--color-fg3)]">remote</div>
+              <div className="px-2 pt-1.5 pb-0.5 text-count font-medium text-[var(--color-fg2)]">Remote</div>
             )}
             {remote.map((b) => (
               <MenuItem

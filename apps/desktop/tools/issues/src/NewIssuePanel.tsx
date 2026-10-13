@@ -79,7 +79,7 @@ export function NewIssuePanel({ hm, close, openPanel }: PanelProps) {
 
   // Only the native <select> still uses this — the shadcn primitives own the text fields.
   const inputCls =
-    "w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-lg px-3 py-2 text-[13px] text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)]";
+    "w-full bg-[var(--color-bg)] border border-[var(--color-line2)] rounded-lg px-3 py-2 text-body text-[var(--color-fg)] focus:outline-none focus:border-[var(--color-brand)]";
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) close(); }}>
@@ -88,7 +88,7 @@ export function NewIssuePanel({ hm, close, openPanel }: PanelProps) {
           <DialogHeader>
             <DialogTitle>New issue</DialogTitle>
             <DialogDescription>
-              Lives at <code className="font-mono text-[10.5px]">.hivemind/issues/&lt;id&gt;.md</code>
+              Lives at <code className="font-mono text-count">.hivemind/issues/&lt;id&gt;.md</code>
             </DialogDescription>
           </DialogHeader>
 

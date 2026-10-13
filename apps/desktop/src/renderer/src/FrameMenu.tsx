@@ -118,14 +118,14 @@ export function FrameMenu({ frame, at, actions, arrange = false, onClose, onRena
                 {choices.map(({ o, values }) => (
                   <div key={o.id}>
                     <DropdownMenuSeparator />
-                    <div className="px-2 pt-1 pb-0.5 text-[11px] font-medium text-[var(--color-fg2)]">{o.label}</div>
+                    <div className="px-2 pt-1 pb-0.5 text-count font-medium text-[var(--color-fg2)]">{o.label}</div>
                     {values.map((v) => <DropdownMenuItem key={v} onSelect={() => actions.onOpenInFrame(fid, a.id, { [o.id]: v })}>{v}</DropdownMenuItem>)}
                   </div>
                 ))}
               </Sub>
             );
           })}
-          {!ready.length && <div className="px-2 py-1.5 text-[12px] text-[var(--color-fg2)]">No agent is installed here.</div>}
+          {!ready.length && <div className="px-2 py-1.5 text-label text-[var(--color-fg2)]">No agent is installed here.</div>}
         </Sub>
         {/* Every tool and widget, as Add lists them, going into this frame: no shortlist of its own. */}
         <DropdownMenuItem onSelect={() => actions.onAddInFrame(fid)} data-frame-menu-add><AddWidget />Add a tool or widget…</DropdownMenuItem>

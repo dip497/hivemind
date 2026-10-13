@@ -32,12 +32,12 @@ export function ThemePanel() {
       aria-label="Appearance"
       data-theme-panel
       onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); } }}
-      className="theme-panel fixed right-2 top-2 bottom-2 z-[60] w-[380px] max-w-[calc(92vw-1rem)] flex flex-col overflow-hidden rounded-[14px] border border-[var(--color-line)] shadow-2xl outline-none"
+      className="theme-panel fixed right-2 top-2 bottom-2 z-[60] w-[380px] max-w-[calc(92vw-1rem)] flex flex-col overflow-hidden rounded-sheet border border-[var(--color-line)] shadow-2xl outline-none"
     >
       <header className="flex items-center gap-2 px-4 h-12 shrink-0 border-b border-[var(--color-line)]">
         <Palette size={15} className="text-[var(--color-fg3)]" />
-        <h2 className="text-[13.5px] font-semibold text-[var(--color-fg)]">Appearance</h2>
-        <span className="text-[11px] text-[var(--color-fg3)]">changes apply live</span>
+        <h2 className="text-title font-semibold text-[var(--color-fg)]">Appearance</h2>
+        <span className="text-count text-[var(--color-fg3)]">changes apply live</span>
         <Button variant="ghost" size="icon-xs" className="ml-auto" onClick={() => setOpen(false)} aria-label="close appearance"><X /></Button>
       </header>
       <div className="flex-1 overflow-y-auto px-4 py-4 settings-stack">

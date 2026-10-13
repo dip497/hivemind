@@ -79,8 +79,8 @@ export function PluginPage({ kind, id }: { kind: string; id: string }) {
           {p.description && <p className="plugin-page-description">{p.description}</p>}
         </div>
         <div className="settings-actions">
-          {!p.installed && <Button size="sm" onClick={toHub}>Install from HiveHub</Button>}
-          {p.catalog?.homepage && <Button size="sm" variant="ghost" asChild><a href={p.catalog.homepage} target="_blank" rel="noreferrer">Source<ExternalLink /></a></Button>}
+          {!p.installed && <Button onClick={toHub}>Install from HiveHub</Button>}
+          {p.catalog?.homepage && <Button variant="ghost" asChild><a href={p.catalog.homepage} target="_blank" rel="noreferrer">Source<ExternalLink /></a></Button>}
         </div>
       </header>
       {p.problem && <p role="status" className="settings-note error">{p.problem}</p>}
@@ -157,13 +157,13 @@ function RemoveWidget({ id, name }: { id: string; name: string }) {
   const go = useSettingsNavigate();
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (!asking) return <Button variant="destructive" size="sm" className="mt-3" onClick={() => setAsking(true)}><Trash />Remove {name}</Button>;
+  if (!asking) return <Button variant="destructive" className="mt-3" onClick={() => setAsking(true)}><Trash />Remove {name}</Button>;
   return <div className="settings-remove-confirm">
     <p>Remove {name}?</p>
     {error && <p role="alert" className="settings-note error">{error}</p>}
     <div className="settings-actions">
-      <Button size="sm" variant="outline" onClick={() => setAsking(false)}>Keep it</Button>
-      <Button size="sm" variant="destructive" onClick={() => void window.hive.removeWidget(id).then(() => go("plugins"), (e) => setError(cleanError(e)))}>Remove</Button>
+      <Button variant="outline" onClick={() => setAsking(false)}>Keep it</Button>
+      <Button variant="destructive" onClick={() => void window.hive.removeWidget(id).then(() => go("plugins"), (e) => setError(cleanError(e)))}>Remove</Button>
     </div>
   </div>;
 }

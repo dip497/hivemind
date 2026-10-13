@@ -8,7 +8,7 @@ import { cn } from "../../lib/cn"
  * handling — this owns how a row LOOKS, nothing else.
  */
 const menuItemVariants = cva(
-  "flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-md text-left text-[12px] outline-none transition-[background-color,color] duration-[var(--hm-dur-2)] focus-visible:bg-secondary disabled:pointer-events-none disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
+  "flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-md text-left text-label outline-none transition-[background-color,color] duration-[var(--hm-dur-2)] focus-visible:bg-secondary disabled:pointer-events-none disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
   {
     variants: {
       variant: {
@@ -19,7 +19,7 @@ const menuItemVariants = cva(
       size: {
         default: "px-2 py-1.5",
         sm: "px-2 py-1",
-        xs: "px-2 py-1 text-[11px]",
+        xs: "px-2 py-1 text-count",
       },
       selected: {
         true: "bg-secondary text-foreground",

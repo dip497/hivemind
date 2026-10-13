@@ -93,7 +93,7 @@ function IdRow({ label, about, id }: { label: string; about: string; id: string 
     <div className="settings-row" data-identity={label.toLowerCase()} data-id={id ?? ""}>
       <div><label>{label}</label><p>{about}</p></div>
       {id ? (
-        <Button variant="outline" size="sm" title={id}
+        <Button variant="outline" title={id}
           onClick={() => { void navigator.clipboard.writeText(id).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}>
           <code>{`${id.slice(0, 8)}…${id.slice(-8)}`}</code>{copied ? <Check /> : <Copy />}
         </Button>

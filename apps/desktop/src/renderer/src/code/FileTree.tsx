@@ -78,7 +78,7 @@ export function FileTree({
         const r = byPathRef.current.get(item.path.replace(/\/+$/, ""));
         if (!r) return <></>;
         return (
-          <div className="min-w-[180px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md shadow-2xl p-1 text-[12px]">
+          <div className="min-w-[180px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md shadow-2xl p-1 text-label">
             <MenuItem size="sm" onClick={() => { onJumpRef.current(r.id); ctx.close(); }}>Jump to file</MenuItem>
             <MenuItem size="sm" onClick={() => { onToggleRef.current(r.file); ctx.close(); }}>Toggle reviewed</MenuItem>
           </div>

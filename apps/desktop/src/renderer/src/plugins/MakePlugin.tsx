@@ -47,17 +47,17 @@ export function MakePluginDialog({ kind: initial, onStart, onClose }: { kind: Ma
         <div role="radiogroup" aria-label="What to make" className="grid grid-cols-3 gap-1.5">
           {KINDS.map(([id, label, hint]) => (
             <button key={id} type="button" role="radio" aria-checked={kind === id} data-make-kind={id} title={hint} onClick={() => setKind(id)}
-              className={`rounded-md border px-2 py-1.5 text-left text-[12px] ${kind === id ? "border-[var(--color-accent)] bg-[var(--color-bg3)] text-[var(--color-fg)]" : "border-[var(--color-line)] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)]/60"}`}>
+              className={`rounded-md border px-2 py-1.5 text-left text-label ${kind === id ? "border-[var(--color-accent)] bg-[var(--color-bg3)] text-[var(--color-fg)]" : "border-[var(--color-line)] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)]/60"}`}>
               <span className="font-medium">{label}</span>
             </button>
           ))}
         </div>
-        <p className="text-[11.5px] text-[var(--color-fg3)]">{KINDS.find(([id]) => id === kind)![2]}</p>
+        <p className="text-label text-[var(--color-fg3)]">{KINDS.find(([id]) => id === kind)![2]}</p>
         <Textarea autoFocus value={idea} onChange={(e) => setIdea(e.target.value)} rows={3} aria-label="What should it do?" data-make-idea
           placeholder={kind === "widget" ? "Shows how many agents are working, and turns red when one is blocked" : kind === "tool" ? "Lists the open issues assigned to me, and hands one to an agent" : "A kanban of agents: waiting, working, done"} />
         <div className="flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={copy} data-make-copy>{copied ? <Check /> : <Copy />}{copied ? "Copied" : "Copy prompt"}</Button>
-          <Button size="sm" onClick={() => { onClose(); onStart(prompt); }} data-make-start><Sparkles />Start an agent</Button>
+          <Button variant="outline" onClick={copy} data-make-copy>{copied ? <Check /> : <Copy />}{copied ? "Copied" : "Copy prompt"}</Button>
+          <Button onClick={() => { onClose(); onStart(prompt); }} data-make-start><Sparkles />Start an agent</Button>
         </div>
       </DialogContent>
     </Dialog>

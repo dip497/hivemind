@@ -35,7 +35,7 @@ export function ApiAccessPrefs() {
         {grants === undefined ? null : grants === null ? (
           <p className="settings-note">Only the app knows</p>
         ) : grants.length === 0 ? (
-          <p className="text-[12px] text-[var(--color-fg3)]" data-grants-none>
+          <p className="text-label text-[var(--color-fg3)]" data-grants-none>
             None yet. A script or tool with a token, an orchestrator or a dashboard, starts and answers agents here, and cannot push, share the workspace or write files.
           </p>
         ) : (
@@ -61,7 +61,7 @@ function GrantRow({ grant, onGone }: { grant: ClientGrant; onGone: () => void })
           {error && <span className="text-[var(--color-err)]" role="alert"> · {error}</span>}
         </p>
       </div>
-      <Button size="sm" variant="outline" data-grant-revoke onClick={() => void window.hive.grantRevoke(grant.id).then(onGone, (e: unknown) => setError(messageOf(e)))}>
+      <Button variant="outline" data-grant-revoke onClick={() => void window.hive.grantRevoke(grant.id).then(onGone, (e: unknown) => setError(messageOf(e)))}>
         Revoke
       </Button>
     </li>
@@ -96,7 +96,7 @@ function NewGrant({ onMade }: { onMade: () => void }) {
         <Input
           value={name}
           placeholder="What uses it, e.g. my dashboard"
-          className="flex-1 text-[12px]"
+          className="flex-1 text-label"
           data-grant-name
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) void make(); }}
@@ -104,17 +104,17 @@ function NewGrant({ onMade }: { onMade: () => void }) {
         <select value={role} aria-label="What it may do" data-grant-role onChange={(e) => setRole(e.target.value as Role)}>
           {ROLES.map(([r, words]) => <option key={r} value={r}>{words}</option>)}
         </select>
-        <Button size="sm" disabled={!name.trim()} data-grant-create onClick={() => void make()}>Create token</Button>
+        <Button disabled={!name.trim()} data-grant-create onClick={() => void make()}>Create token</Button>
       </div>
       <p className="settings-note">In {folder(repo)}. The script connects to the drive socket with the token and names this folder.</p>
       {token && (
         <div className="flex items-center gap-2" data-grant-token>
-          <code className="flex-1 truncate font-mono text-[12px]">{token}</code>
-          <Button size="sm" variant="outline" onClick={copy}>{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? "Copied" : "Copy"}</Button>
+          <code className="flex-1 truncate font-mono text-label">{token}</code>
+          <Button variant="outline" onClick={copy}>{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? "Copied" : "Copy"}</Button>
         </div>
       )}
       {token && <p className="settings-note">Shown this once: copy it now.</p>}
-      {error && <p className="text-[12px] text-[var(--color-err)]" role="alert">{error}</p>}
+      {error && <p className="text-label text-[var(--color-err)]" role="alert">{error}</p>}
     </div>
   );
 }

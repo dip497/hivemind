@@ -130,23 +130,6 @@ export function AccentPicker({ t }: { t: ThemeState }) {
 
 // ── background ──────────────────────────────────────────────────────────────
 
-/** Static scene swatches — the same palettes styles.css paints, as flat
- *  gradients. Deliberately NOT the live scene: a grid of animated previews
- *  costs a compositor layer each, every frame Settings is open. */
-const WP_SWATCH: Record<WallpaperId, string> = {
-  none: "var(--color-bg3)",
-  aurora: "radial-gradient(circle at 28% 30%, #4f46e5, transparent 58%), radial-gradient(circle at 74% 72%, #14b8a6, transparent 58%), #0a0d18",
-  ember: "radial-gradient(circle at 28% 30%, #f97316, transparent 58%), radial-gradient(circle at 74% 72%, #db2777, transparent 58%), #140a08",
-  ice: "radial-gradient(circle at 28% 30%, #0ea5e9, transparent 58%), radial-gradient(circle at 74% 72%, #22d3ee, transparent 58%), #06121a",
-  mesh: "radial-gradient(circle at 28% 30%, #8b5cf6, transparent 58%), radial-gradient(circle at 74% 72%, #ec4899, transparent 58%), #0b0a14",
-  sunset: "radial-gradient(circle at 28% 30%, #f97316, transparent 58%), radial-gradient(circle at 74% 72%, #ef4444, transparent 58%), #160a0c",
-  forest: "radial-gradient(circle at 28% 30%, #10b981, transparent 58%), radial-gradient(circle at 74% 72%, #84cc16, transparent 58%), #07140d",
-  nebula: "radial-gradient(circle at 28% 30%, #a855f7, transparent 58%), radial-gradient(circle at 74% 72%, #6366f1, transparent 58%), #0a0816",
-  mono: "radial-gradient(circle at 28% 30%, #64748b, transparent 58%), radial-gradient(circle at 74% 72%, #475569, transparent 58%), #0b0d12",
-  image: "linear-gradient(135deg, #334155, #0f172a)",
-  video: "linear-gradient(135deg, #1e293b, #0b1120)",
-};
-
 /** Filename of a picked media URL, for the "currently using" line. */
 function mediaName(src?: string): string | null {
   if (!src) return null;
@@ -180,7 +163,7 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
               : () => setTheme({ wallpaper: w.id });
             return (
               <button key={w.id} type="button" className="settings-wallpaper" role="radio" aria-checked={sel} aria-label={w.label} data-wallpaper-option={w.id} onClick={onClick}>
-                <span className="settings-wallpaper-preview" aria-hidden style={{ background: WP_SWATCH[w.id] }}>
+                <span className="settings-wallpaper-preview" aria-hidden data-scene={w.id}>
                   {w.id === "video" && <Film size={13} />}
                   {w.id === "image" && <ImageIcon size={13} />}
                 </span>
@@ -198,8 +181,8 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
             <p className="settings-path">{name ?? "No file chosen yet."}</p>
           </div>
           <div className="settings-inline">
-            <Button variant="outline" size="sm" onClick={() => void pick()}>{name ? "Change…" : "Choose file…"}</Button>
-            <Button variant="outline" size="sm" title="Dim the media and thicken the panel tint so text stays readable" onClick={() => setTheme(CINEMATIC)}>Cinematic</Button>
+            <Button variant="outline" onClick={() => void pick()}>{name ? "Change…" : "Choose file…"}</Button>
+            <Button variant="outline" title="Dim the media and thicken the panel tint so text stays readable" onClick={() => setTheme(CINEMATIC)}>Cinematic</Button>
           </div>
         </div>
       )}
@@ -272,7 +255,7 @@ function OverlayRow({ layer, index }: { layer: MediaLayer; index: number }) {
         </div>
         <Button
           variant="destructive"
-          size="icon-sm"
+          size="icon"
           aria-label={`Remove overlay ${index + 1}`}
           onClick={() => removeOverlay(layer.id)}
         >
@@ -284,7 +267,7 @@ function OverlayRow({ layer, index }: { layer: MediaLayer; index: number }) {
         <div><label>Fit</label></div>
         <div className="settings-inline" role="radiogroup" aria-label={`Overlay ${index + 1} fit`}>
           {FITS.map((f) => (
-            <Button key={f.id} role="radio" aria-checked={layer.fit === f.id} variant={layer.fit === f.id ? "secondary" : "outline"} size="sm" data-selected={layer.fit === f.id ? "" : undefined} onClick={() => updateOverlay(layer.id, { fit: f.id })}>
+            <Button key={f.id} role="radio" aria-checked={layer.fit === f.id} variant={layer.fit === f.id ? "secondary" : "outline"} data-selected={layer.fit === f.id ? "" : undefined} onClick={() => updateOverlay(layer.id, { fit: f.id })}>
               {f.label}
             </Button>
           ))}
@@ -342,7 +325,7 @@ export function OverlayControls({ t }: { t: ThemeState }) {
       <div className="settings-extension-list">
         {t.overlayMedia.map((layer, i) => <OverlayRow key={layer.id} layer={layer} index={i} />)}
       </div>
-      <Button variant="link" size="sm" className="mt-3" onClick={() => void add()}><Plus />Add overlay</Button>
+      <Button variant="link" className="mt-3" onClick={() => void add()}><Plus />Add overlay</Button>
     </details>
   );
 }
@@ -385,7 +368,7 @@ export function TerminalColors({ t }: { t: ThemeState }) {
         ))}
       </div>
       <div className="settings-actions">
-        <Button variant="outline" size="sm" disabled={!dirty} onClick={() => setTerm({ ...preset.terminal, ansi: [...preset.terminal.ansi] })}>
+        <Button variant="outline" disabled={!dirty} onClick={() => setTerm({ ...preset.terminal, ansi: [...preset.terminal.ansi] })}>
           Reset to {preset.label}
         </Button>
       </div>

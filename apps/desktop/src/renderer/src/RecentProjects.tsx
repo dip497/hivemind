@@ -58,25 +58,25 @@ export function RecentProjects({ open, joining: joinFirst = false, recents, curr
           {others.map((p, i) => (
             <MenuItem key={p} autoFocus={i === 0} data-recent={p} title={p} onClick={() => { onClose(); onOpen(p); }}>
               <span className="flex-1 min-w-0">
-                <span className="block truncate text-[13px] text-[var(--color-fg)]">{base(p)}</span>
-                <span className="block truncate font-mono text-[11px] text-[var(--color-fg3)]">{parent(p)}</span>
+                <span className="block truncate text-body text-[var(--color-fg)]">{base(p)}</span>
+                <span className="block truncate font-mono text-count text-[var(--color-fg3)]">{parent(p)}</span>
               </span>
             </MenuItem>
           ))}
           {others.length === 0 && (
-            <p className="px-2.5 py-2 text-[12px] text-[var(--color-fg3)]">No other project opened yet.</p>
+            <p className="px-2.5 py-2 text-label text-[var(--color-fg3)]">No other project opened yet.</p>
           )}
           {hosts.length > 0 && (
             <>
-              <div className="px-2.5 pb-1 pt-2 text-[11px] font-medium text-[var(--color-fg3)]">On your devices</div>
+              <div className="px-2.5 pb-1 pt-2 text-count font-medium text-[var(--color-fg3)]">On your devices</div>
               {hosts.map((h) => h.workspaces === null ? (
-                <p key={h.device} className="px-2.5 py-1 text-[12px] text-[var(--color-fg3)]" data-host-offline={h.device}>{h.name} does not answer: is it on, with hivemind (or `hive host`) running?</p>
+                <p key={h.device} className="px-2.5 py-1 text-label text-[var(--color-fg3)]" data-host-offline={h.device}>{h.name} does not answer: is it on, with hivemind (or `hive host`) running?</p>
               ) : h.workspaces.filter((w) => `hive://${w.workspace}` !== current).map((w) => (
                 <MenuItem key={w.workspace} data-host-workspace={w.workspace} title={w.repo} onClick={() => openOnHost(h.device, w.workspace, w.name)}>
                   <Server />
                   <span className="flex-1 min-w-0">
-                    <span className="block truncate text-[13px] text-[var(--color-fg)]">{w.name}</span>
-                    <span className="block truncate text-[11px] text-[var(--color-fg3)]">on {h.name}</span>
+                    <span className="block truncate text-body text-[var(--color-fg)]">{w.name}</span>
+                    <span className="block truncate text-count text-[var(--color-fg3)]">on {h.name}</span>
                   </span>
                 </MenuItem>
               )))}
@@ -84,13 +84,13 @@ export function RecentProjects({ open, joining: joinFirst = false, recents, curr
           )}
           {shared.filter((j) => !onHosts.has(j.workspace)).length > 0 && (
             <>
-              <div className="px-2.5 pb-1 pt-2 text-[11px] font-medium text-[var(--color-fg3)]">Shared with you</div>
+              <div className="px-2.5 pb-1 pt-2 text-count font-medium text-[var(--color-fg3)]">Shared with you</div>
               {shared.filter((j) => !onHosts.has(j.workspace)).map((j) => (
                 <MenuItem key={j.workspace} data-shared-workspace={j.workspace} onClick={() => { onClose(); onOpen(`hive://${j.workspace}`); }}>
                   <Users />
                   <span className="flex-1 min-w-0">
-                    <span className="block truncate text-[13px] text-[var(--color-fg)]">{j.names.workspace}</span>
-                    <span className="block truncate text-[11px] text-[var(--color-fg3)]">
+                    <span className="block truncate text-body text-[var(--color-fg)]">{j.names.workspace}</span>
+                    <span className="block truncate text-count text-[var(--color-fg3)]">
                       {j.ended === "left" ? "You left · the last copy" : j.ended === "removed" ? "Removed · the last copy" : `on ${j.names.host}'s machine`}
                     </span>
                   </span>
@@ -101,7 +101,7 @@ export function RecentProjects({ open, joining: joinFirst = false, recents, curr
           <div className="my-1 border-t border-[var(--color-line)]" />
           <MenuItem autoFocus={others.length === 0} onClick={() => { onClose(); onBrowse(); }}>
             <FolderOpen /><span className="flex-1">Open folder…</span>
-            <kbd className="font-mono text-[10.5px] text-[var(--color-fg2)]">Ctrl O</kbd>
+            <kbd className="font-mono text-count text-[var(--color-fg2)]">Ctrl O</kbd>
           </MenuItem>
           <MenuItem data-new-window onClick={() => { onClose(); onNewWindow(); }}>
             <AppWindow /><span className="flex-1">New window</span>

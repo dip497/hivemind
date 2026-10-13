@@ -22,7 +22,7 @@ export function openAdd(frameId?: string): void {
 /** One thing it offers: a tool's tile, a widget, or the board's arrow. */
 interface AddChoice { id: string; name: string; type: "tool" | "widget"; category: PluginCategory; icon: React.ReactNode; disabled?: boolean; pick: () => void }
 const ADD_TABS = [["all", "All"], ["tool", "Tools"], ["widget", "Widgets"]] as const;
-const HEADING = "px-2 pb-0.5 pt-2 text-[12px] font-medium text-[var(--color-fg2)]";
+const HEADING = "px-2 pb-0.5 pt-2 text-label font-medium text-[var(--color-fg2)]";
 
 export function AddDialog({ repoPath, onBoard, onTile, boardItems }: {
   repoPath: string | null;
@@ -80,8 +80,8 @@ export function AddDialog({ repoPath, onBoard, onTile, boardItems }: {
   };
   const side = (id: PluginCategory | "all", label: string, count: number) =>
     <button key={id} type="button" data-add-shelf={id} aria-pressed={shelf === id} onClick={() => { setShelf(id); setActive(0); }}
-      className={`flex w-full items-center rounded-md px-2 py-1 text-left text-[12px] ${shelf === id ? "bg-[var(--color-bg3)] text-[var(--color-fg)]" : "text-[var(--color-fg2)] hover:bg-[var(--color-bg3)]/60"}`}>
-      <span className="flex-1 truncate">{label}</span><span className="tabular-nums text-[11px] text-[var(--color-fg2)]">{count}</span>
+      className={`flex w-full items-center rounded-md px-2 py-1 text-left text-label ${shelf === id ? "bg-[var(--color-bg3)] text-[var(--color-fg)]" : "text-[var(--color-fg2)] hover:bg-[var(--color-bg3)]/60"}`}>
+      <span className="flex-1 truncate">{label}</span><span className="tabular-nums text-count text-[var(--color-fg2)]">{count}</span>
     </button>;
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -92,11 +92,11 @@ export function AddDialog({ repoPath, onBoard, onTile, boardItems }: {
         <div className="flex h-[min(460px,70vh)] flex-col p-2">
           <div className="flex items-center gap-1.5 pb-2">
             <Input autoFocus value={query} onChange={(e) => { setQuery(e.target.value); setActive(0); }}
-              placeholder="Search tools and widgets" aria-label="Search tools and widgets" className="h-8 flex-1 text-[12px]" />
+              placeholder="Search tools and widgets" aria-label="Search tools and widgets" className="h-8 flex-1 text-label" />
             <div role="tablist" aria-label="Show" className="flex gap-0.5 rounded-md bg-[var(--color-bg3)] p-0.5">
               {ADD_TABS.map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} data-add-tab={id}
                 onClick={() => { setTab(id); setActive(0); }}
-                className={`rounded px-2 py-0.5 text-[11px] ${tab === id ? "bg-[var(--color-bg)] text-[var(--color-fg)] shadow-sm" : "text-[var(--color-fg2)] hover:text-[var(--color-fg)]"}`}>
+                className={`rounded px-2 py-0.5 text-count ${tab === id ? "bg-[var(--color-bg)] text-[var(--color-fg)] shadow-sm" : "text-[var(--color-fg2)] hover:text-[var(--color-fg)]"}`}>
                 {label}
               </button>)}
             </div>
@@ -118,7 +118,7 @@ export function AddDialog({ repoPath, onBoard, onTile, boardItems }: {
                   <span className="grid size-4 shrink-0 place-items-center [&>svg]:size-3.5"><MoveUpRight /></span><span className="flex-1">Arrow</span>
                 </MenuItem>
               </>}
-              {order.length === 0 && <p className="px-2 py-3 text-[12px] text-[var(--color-fg2)]">Nothing matches.</p>}
+              {order.length === 0 && <p className="px-2 py-3 text-label text-[var(--color-fg2)]">Nothing matches.</p>}
             </div>
           </div>
           {/* Not here yet: an agent makes it. */}
@@ -126,7 +126,7 @@ export function AddDialog({ repoPath, onBoard, onTile, boardItems }: {
             <MenuItem variant="muted" data-add-make onClick={() => { setOpen(false); window.dispatchEvent(new CustomEvent("hivemind:make-plugin", { detail: { kind: tab === "tool" ? "tool" : "widget" } })); }}>
               <span className="grid size-4 shrink-0 place-items-center [&>svg]:size-3.5"><Sparkles /></span>
               <span className="flex-1">Make your own…</span>
-              <span className="text-[11px] text-[var(--color-fg2)]">an agent builds it</span>
+              <span className="text-count text-[var(--color-fg2)]">an agent builds it</span>
             </MenuItem>
           </div>
         </div>

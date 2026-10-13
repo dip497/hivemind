@@ -24,7 +24,7 @@ export function LinkBanner({ cwd }: { cwd: string }) {
   return (
     <div
       role="status"
-      className="absolute left-2 right-2 top-9 z-10 flex items-center gap-2 rounded-md border border-[var(--color-line2)] bg-[color-mix(in_oklab,var(--color-bg2)_92%,transparent)] px-2.5 py-1.5 text-[11.5px] text-[var(--color-fg)] shadow-lg backdrop-blur-sm"
+      className="absolute left-2 right-2 top-9 z-10 flex items-center gap-2 rounded-md border border-[var(--color-line2)] bg-[color-mix(in_oklab,var(--color-bg2)_92%,transparent)] px-2.5 py-1.5 text-label text-[var(--color-fg)] shadow-lg backdrop-blur-sm"
     >
       <MachineDot status={s} enabled={!off} />
       <span className="flex-1 truncate" title={off ? undefined : s.detail} data-link-banner={off ? "off" : s.state}>

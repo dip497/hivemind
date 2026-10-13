@@ -42,24 +42,23 @@ export function ReviewAnnotation({ comment: c }: { comment: ReviewComment | unde
   return (
     <div
       style={{
-        background: "rgba(245,159,0,0.08)",
-        borderLeft: "3px solid var(--color-warn)",
+        background: "color-mix(in oklab, var(--color-warn) 10%, transparent)",
         padding: "5px 12px 5px 56px",
         fontFamily: "var(--font-sans)",
-        fontSize: 11,
         color: "var(--color-warn)",
       }}
+      className="text-count"
     >
       <span style={{ color: "var(--color-fg)", fontWeight: 600 }}>{c.author}</span>
       {c.startLine !== c.endLine && (
-        <span style={{ marginLeft: 6, color: "var(--color-fg3)", fontSize: 10 }}>L{c.startLine}–{c.endLine}</span>
+        <span className="text-chip" style={{ marginLeft: 6, color: "var(--color-fg3)" }}>L{c.startLine}–{c.endLine}</span>
       )}
-      {c.resolved && <span style={{ marginLeft: 6, color: "var(--color-ok)", fontSize: 10 }}>✓ resolved</span>}
+      {c.resolved && <span className="text-chip" style={{ marginLeft: 6, color: "var(--color-ok)" }}>✓ resolved</span>}
       <span style={{ marginLeft: 8, color: c.resolved ? "var(--color-fg3)" : undefined }}>{c.body}</span>
       {!!c.replies?.length && (
-        <span style={{ marginLeft: 6, color: "var(--color-fg3)", fontSize: 10 }}>💬 {c.replies.length}</span>
+        <span className="text-chip" style={{ marginLeft: 6, color: "var(--color-fg3)" }}>💬 {c.replies.length}</span>
       )}
-      <span style={{ color: "var(--color-fg3)", float: "right", fontSize: 10 }}>{c.at}</span>
+      <span className="text-chip" style={{ color: "var(--color-fg3)", float: "right" }}>{c.at}</span>
     </div>
   );
 }

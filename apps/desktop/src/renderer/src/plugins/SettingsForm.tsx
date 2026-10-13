@@ -10,12 +10,12 @@ export function SettingsForm({ fields, values, onChange, compact }: {
     if (v !== undefined && v !== values[f.id]) onChange(f.id, v);
   };
   return (
-    <form className={`flex flex-col ${compact ? "gap-2 pr-12 text-[12px]" : "gap-3 text-[13px]"}`} onSubmit={(e) => e.preventDefault()} data-settings-form>
+    <form className={`flex flex-col ${compact ? "gap-2 pr-12 text-label" : "gap-3 text-body"}`} onSubmit={(e) => e.preventDefault()} data-settings-form>
       {fields.map((f) => (
         <label key={f.id} className="flex items-center justify-between gap-2" title={f.description} data-setting={f.id}>
           <span className="flex min-w-0 flex-col">
             <span className="truncate text-[var(--color-fg2)]">{f.label}</span>
-            {!compact && f.description && <span className="text-[12px] text-[var(--color-fg3)]">{f.description}</span>}
+            {!compact && f.description && <span className="text-label text-[var(--color-fg3)]">{f.description}</span>}
           </span>
           {f.type === "boolean"
             ? <input type="checkbox" checked={values[f.id] === true} onChange={(e) => set(f, e.target.checked)} />

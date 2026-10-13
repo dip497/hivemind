@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-08T22:28:13.461Z",
+  "generatedAt": "2026-10-13T12:00:00.000Z",
   "title": "Design System: hivemind",
   "extensions": {
     "colorMeta": {
@@ -273,9 +273,19 @@
           "oklch(0.84 0.006 250)",
           "oklch(0.95 0.006 250)"
         ]
+      },
+      "scrim": {
+        "role": "neutral",
+        "displayName": "Scrim",
+        "canonical": "oklch(0 0 0 / 0.55)",
+        "purpose": "Behind a modal dialog or Settings, and the minimap off-screen area."
       }
     },
     "typographyMeta": {
+      "heading": {
+        "displayName": "Heading",
+        "purpose": "A page own name: a Settings page, the empty canvas first line, an open issue."
+      },
       "title": {
         "displayName": "Title",
         "purpose": "The workspace name at the top of the panel."
@@ -325,6 +335,21 @@
         "name": "hm-highlight",
         "value": "inset 0 1px 0 0 oklch(1 0 0 / 0.07)",
         "purpose": "Top light, added to lifted and raised surfaces."
+      },
+      {
+        "name": "hm-shadow-float",
+        "value": "0 8px 22px oklch(0 0 0 / 0.45)",
+        "purpose": "Float: tiles, the tool island and the canvas controls."
+      },
+      {
+        "name": "hm-shadow-glass",
+        "value": "0 10px 36px oklch(0 0 0 / 0.5)",
+        "purpose": "Glass: the floating surfaces under glass, and toasts."
+      },
+      {
+        "name": "hm-highlight-glass",
+        "value": "inset 0 1px 0 0 oklch(1 0 0 / 0.10)",
+        "purpose": "Top light for glass surfaces and toasts."
       }
     ],
     "motion": [
@@ -386,6 +411,50 @@
         "name": "glass-opacity",
         "value": "60%",
         "purpose": "Solid fraction of a frosted surface; panels and menus clamp it to 68–92%."
+      }
+    ],
+    "tints": [
+      {
+        "name": "color-selection",
+        "value": "color-mix(in oklab, var(--color-fg) 20%, transparent)",
+        "purpose": "Selected text in the editor and diff."
+      },
+      {
+        "name": "color-current-line",
+        "value": "color-mix(in oklab, var(--color-fg) 2.5%, transparent)",
+        "purpose": "The editor current line."
+      },
+      {
+        "name": "color-match",
+        "value": "color-mix(in oklab, var(--color-accent) 22%, transparent)",
+        "purpose": "Other matches of the selection."
+      },
+      {
+        "name": "color-bracket-match",
+        "value": "color-mix(in oklab, var(--color-brand) 25%, transparent)",
+        "purpose": "The matching bracket."
+      },
+      {
+        "name": "color-grid-dot",
+        "value": "oklch(0.70 0.012 260 / 0.10)",
+        "purpose": "The canvas dot grid."
+      }
+    ],
+    "controlHeights": [
+      {
+        "name": "control",
+        "value": "32px",
+        "purpose": "Every button, input and select by default; all of Settings and dialogs."
+      },
+      {
+        "name": "control-compact",
+        "value": "28px",
+        "purpose": "Dense rows only: tile chrome, popovers and pickers, the panel."
+      },
+      {
+        "name": "chrome",
+        "value": "24px, 20px, 16px",
+        "purpose": "Tile chrome buttons (xs, 2xs, micro)."
       }
     ]
   },
@@ -485,8 +554,8 @@
         "section": "colors"
       },
       {
-        "name": "The Five Sizes Rule",
-        "body": "The panel, menus, frame header and menu primitive set text only at 15, 14, 12, 11 and 10. A unit test enforces it. A new size there is a defect, not a variant.",
+        "name": "The Named Steps Rule",
+        "body": "Text is set only through the seven named steps (heading 20, title 15, row 14, body 13, label 12, count 11, chip 10), everywhere: the renderer, its CSS and the tools that ship with the app. The panel, menus and frame header use five of them. tests/unit/design-system.test.ts fails on a literal size. A new size is a defect, not a variant.",
         "section": "typography"
       },
       {

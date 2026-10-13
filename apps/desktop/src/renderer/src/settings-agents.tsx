@@ -127,7 +127,7 @@ export function AgentPage({ id }: { id: string }) {
         </div>
         {def?.enabled && card.on && !notReady(presence, card.id) && (card.id === defaultId
           ? <span className="agent-badge">Default</span>
-          : <Button size="sm" variant="outline" onClick={() => patchSettings("agents.defaultAgent", card.id)}>Make default</Button>)}
+          : <Button variant="outline" onClick={() => patchSettings("agents.defaultAgent", card.id)}>Make default</Button>)}
         <Switch aria-label={`Enable ${label}`} checked={card.on}
           disabled={!!card.error} onCheckedChange={() => { void setAgentDisabled(card.id, card.on); }} />
       </header>
@@ -150,13 +150,13 @@ function RemoveAgent({ id, label }: { id: string; label: string }) {
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return <section className="plugin-section" aria-label="Remove">
-    {!confirm ? <Button variant="destructive" size="sm" className="mt-3" onClick={() => setConfirm(true)}><Trash />Remove {label}</Button>
+    {!confirm ? <Button variant="destructive" className="mt-3" onClick={() => setConfirm(true)}><Trash />Remove {label}</Button>
       : <div className="settings-remove-confirm">
         <p>Remove {label}? Hivemind will not add it again on its own. Its CLI stays installed.</p>
         {error && <p role="alert" className="settings-note error">{error}</p>}
         <div className="settings-actions">
-          <Button size="sm" variant="outline" onClick={() => setConfirm(false)}>Keep it</Button>
-          <Button size="sm" variant="destructive" onClick={() => void window.hive.removeAgent(id)
+          <Button variant="outline" onClick={() => setConfirm(false)}>Keep it</Button>
+          <Button variant="destructive" onClick={() => void window.hive.removeAgent(id)
             .then(() => syncAgentPlugins()).then(() => go("plugins"), (e: Error) => setError(e.message))}>Remove</Button>
         </div>
       </div>}
@@ -198,9 +198,9 @@ function Requirement({ def }: { def: AgentProviderDef }) {
           </details>
         )}
         <div className="agent-req-actions">
-          {def.install && <Button asChild size="sm"><a href={def.install.url} target="_blank" rel="noreferrer">Get {def.label}<ExternalLink /></a></Button>}
+          {def.install && <Button asChild><a href={def.install.url} target="_blank" rel="noreferrer">Get {def.label}<ExternalLink /></a></Button>}
           {def.install?.command && <CopyCommand command={def.install.command} />}
-          <Button size="sm" variant="outline" onClick={again}>Check again</Button>
+          <Button variant="outline" onClick={again}>Check again</Button>
         </div>
       </div>
     </div>
@@ -210,7 +210,7 @@ function Requirement({ def }: { def: AgentProviderDef }) {
 function CopyCommand({ command }: { command: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <Button variant="outline" size="sm" className="max-w-full" title="Copy install command"
+    <Button variant="outline" className="max-w-full" title="Copy install command"
       onClick={() => { void navigator.clipboard.writeText(command).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}>
       <code className="agent-req-command">{command}</code>{copied ? <Check /> : <Copy />}
     </Button>

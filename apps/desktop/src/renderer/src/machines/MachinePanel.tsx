@@ -47,12 +47,12 @@ export default function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }
       aria-label="machine"
     >
       <div className="px-2 pt-1.5 pb-1 grid gap-0.5">
-        <span className="flex items-center gap-2 text-[13px] font-medium text-[var(--color-fg)]">
+        <span className="flex items-center gap-2 text-body font-medium text-[var(--color-fg)]">
           <MachineDot status={status} size={8} />
           <span className="truncate">{name}</span>
-          <span className="ml-auto text-[11px] font-normal text-[var(--color-fg2)] tabular-nums">{statusWords(status)}</span>
+          <span className="ml-auto text-count font-normal text-[var(--color-fg2)] tabular-nums">{statusWords(status)}</span>
         </span>
-        <span className="text-[11px] font-mono text-[var(--color-fg3)] truncate" title={uri}>{remotePath(uri)}</span>
+        <span className="text-count font-mono text-[var(--color-fg3)] truncate" title={uri}>{remotePath(uri)}</span>
       </div>
       {status.state === "attention" && target && (
         <div className="px-1">
@@ -65,13 +65,13 @@ export default function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }
         </div>
       )}
       {(status.state === "reconnecting" || status.state === "offline") && (
-        <div className="mx-1 flex items-center gap-2 rounded-md bg-[var(--color-bg)] px-2 py-1.5 text-[11px] text-[var(--color-fg2)]">
+        <div className="mx-1 flex items-center gap-2 rounded-md bg-[var(--color-bg)] px-2 py-1.5 text-count text-[var(--color-fg2)]">
           <span className="flex-1 truncate" title={status.detail}>{status.detail ?? "Waiting for the network…"}</span>
           {hostId && !owner && <Button variant="link" size="xs" onClick={() => void window.hive.machineReconnect(hostId)} className="shrink-0">Retry now</Button>}
         </div>
       )}
       {status.state === "no-hive" && (
-        <p className="mx-1 rounded-md bg-[var(--color-bg)] px-2 py-1.5 text-[11px] text-[var(--color-fg2)]">
+        <p className="mx-1 rounded-md bg-[var(--color-bg)] px-2 py-1.5 text-count text-[var(--color-fg2)]">
           No <span className="font-mono">hive</span> there, so terminals stop when the connection drops. Install it from Machines.
         </p>
       )}
@@ -89,7 +89,7 @@ export default function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }
             Running there
             <Button variant="ghost" size="icon-xs" onClick={() => void loadSessions()} aria-label="refresh sessions" className="ml-auto"><RefreshCw className={loading ? "animate-spin" : ""} /></Button>
           </span>
-          {shown.length === 0 && <span className="px-2 py-1 text-[11.5px] text-[var(--color-fg3)]">Nothing that isn't already on the canvas.</span>}
+          {shown.length === 0 && <span className="px-2 py-1 text-label text-[var(--color-fg3)]">Nothing that isn't already on the canvas.</span>}
           <div className="max-h-[220px] overflow-y-auto overflow-x-hidden grid grid-cols-[minmax(0,1fr)] gap-0.5">
             {shown.map((s) => (
               <MenuItem
@@ -101,14 +101,14 @@ export default function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }
                 <span className="mt-1 size-1.5 shrink-0 rounded-full" style={{ background: s.state === "live" ? "var(--color-ok)" : "var(--color-fg3)" }} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{s.title || [s.cmd, ...s.args].join(" ")}</span>
-                  <span className="block truncate text-[10.5px] font-mono text-[var(--color-fg3)]">{s.id} · {s.cwd}{s.viewers ? ` · ${s.viewers} watching` : ""}</span>
+                  <span className="block truncate text-count font-mono text-[var(--color-fg3)]">{s.id} · {s.cwd}{s.viewers ? ` · ${s.viewers} watching` : ""}</span>
                 </span>
               </MenuItem>
             ))}
           </div>
         </div>
       )}
-      {error && <p className="px-2 text-[11px] text-[var(--color-err)] break-words">{error}</p>}
+      {error && <p className="px-2 text-count text-[var(--color-err)] break-words">{error}</p>}
       <div className="h-px bg-[var(--color-line2)] my-0.5" />
       {machine ? (
         <MenuItem onClick={() => { onClose(); openMachines({ kind: "pick", frameId, machineId: machine.id }); }}>
@@ -144,11 +144,11 @@ function HandOff({ workspace, uri }: { workspace: string; uri: string }) {
         {busy ? <Spinner size={13} className="animate-spin" /> : <GitBranch size={13} />} Hand off its branch to the host
       </MenuItem>
       {state && "landed" in state && (
-        <p className="px-2 text-[11px] text-[var(--color-fg2)] break-words" data-hand-off-landed={state.landed}>
+        <p className="px-2 text-count text-[var(--color-fg2)] break-words" data-hand-off-landed={state.landed}>
           Handed off as <span className="font-mono">{state.landed}</span>: a Diff tile on the board shows it.
         </p>
       )}
-      {state && "error" in state && <p className="px-2 text-[11px] text-[var(--color-err)] break-words" data-hand-off-error>{state.error}</p>}
+      {state && "error" in state && <p className="px-2 text-count text-[var(--color-err)] break-words" data-hand-off-error>{state.error}</p>}
     </>
   );
 }
@@ -185,7 +185,7 @@ function OthersHere({ workspace }: { workspace: string }) {
           {grant === g ? <Check size={13} /> : <span className="inline-block w-[13px]" />} {label}
         </MenuItem>
       ))}
-      {grant && GIVEN[grant] ? <span className="px-2 pb-1 text-[11px] text-muted-foreground">{GIVEN[grant]}</span> : null}
+      {grant && GIVEN[grant] ? <span className="px-2 pb-1 text-count text-muted-foreground">{GIVEN[grant]}</span> : null}
       <div className="h-px bg-[var(--color-line2)] my-0.5" />
     </div>
   );

@@ -30,7 +30,7 @@ export type ToolTileData = {
 /** The bar the app draws on every tool's tile, as on its own: what it is, pin, close; dragged by. */
 function ToolBar({ data }: { data: ToolTileData }) {
   return (
-    <div data-tile-titlebar className="tile-drag-handle h-8 shrink-0 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
+    <div data-tile-titlebar className="tile-drag-handle h-8 shrink-0 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-count font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
       <GripVertical size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
       {data.glyph && <span aria-hidden className="text-[var(--color-fg3)]">{data.glyph}</span>}
       <span className="font-semibold text-[var(--color-fg)] truncate">{data.name}</span>
@@ -45,7 +45,7 @@ function ToolBar({ data }: { data: ToolTileData }) {
 
 export function ToolTile({ data, selected, Draw }: { data: ToolTileData; selected: boolean; Draw: ComponentType<TileProps> }) {
   const props = useContext(WorkspacePropsContext);
-  if (!props) return <div className="p-4 text-[12px] text-[var(--color-fg3)]">This tile is shown outside a workspace.</div>;
+  if (!props) return <div className="p-4 text-label text-[var(--color-fg3)]">This tile is shown outside a workspace.</div>;
   return <LinkedTile data={data} selected={selected} Draw={Draw} props={props} />;
 }
 
@@ -81,7 +81,7 @@ function LinkedTile({ data, selected, Draw, props }: { data: ToolTileData; selec
     <div className="relative flex h-full w-full flex-col overflow-hidden rounded-[inherit] bg-[var(--color-bg2)]" data-tool-plugin={data.pkg.id}>
       <ToolBar data={data} />
       <div ref={root} className="nodrag nowheel relative min-h-0 flex-1 overflow-hidden">
-        {failed ? <div className="p-4 text-[12px] text-[var(--color-err)]">{data.pkg.name} stopped: {failed}</div>
+        {failed ? <div className="p-4 text-label text-[var(--color-err)]">{data.pkg.name} stopped: {failed}</div>
           : hm ? <Draw tile={{ id: data.tileId, kind: data.kind, name: data.name, frameId: data.frameId }} hm={hm} host={host} selected={selected} />
           : <Loading label={`Starting ${data.pkg.name}`} />}
       </div>

@@ -148,7 +148,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
                 setEditing(false);
               }
             }}
-            className="flex-1 bg-transparent border-none outline-none text-[12px] font-semibold text-[var(--color-fg)] focus:bg-[var(--color-bg3)] px-1 rounded"
+            className="flex-1 bg-transparent border-none outline-none text-label font-semibold text-[var(--color-fg)] focus:bg-[var(--color-bg3)] px-1 rounded"
           />
         ) : (
           <button
@@ -156,7 +156,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
               setDraft(data.title);
               setEditing(true);
             }}
-            className="min-w-0 flex-1 text-left text-[12px] font-semibold text-[var(--color-fg)] truncate"
+            className="min-w-0 flex-1 text-left text-label font-semibold text-[var(--color-fg)] truncate"
             title="Double-click to rename"
           >
             {data.title}
@@ -166,7 +166,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             show their own branch · sha pill below instead. */}
         {!isWorktreeChild && repoBranch && (
           <span
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-fg2)] shrink-0"
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-chip font-mono text-[var(--color-fg2)] shrink-0"
             style={{ background: "var(--color-bg3)" }}
             title={`on branch ${repoBranch}`}
           >
@@ -181,7 +181,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             sub-frame — plus the "workspace" bind. */}
         {isWorktreeChild ? (
           <span
-            className="flex items-center gap-1 max-w-[60%] rounded px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-fg)]"
+            className="flex items-center gap-1 max-w-[60%] rounded px-1.5 py-0.5 text-chip font-mono text-[var(--color-fg)]"
             style={{ background: `color-mix(in oklab, ${data.color} 28%, transparent)` }}
             title={`worktree ${data.branch}\n${data.worktreePath}`}
           >
@@ -194,7 +194,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
           <MachineChip uri={data.workspacePath!} frameId={data.id} onUnbind={() => data.actions.onUnbindWorkspace(data.id)} />
         ) : wsBound ? (
           <span
-            className="flex items-center gap-1 max-w-[60%] rounded px-1.5 py-0.5 text-[10px] font-mono"
+            className="flex items-center gap-1 max-w-[60%] rounded px-1.5 py-0.5 text-chip font-mono"
             style={{ background: isRemoteWs ? "color-mix(in oklab, var(--color-brand) 22%, transparent)" : "var(--color-bg3)", color: "var(--color-fg)" }}
             title={isRemoteWs ? `remote ${remoteDisplay(data.workspacePath!, machineName)}` : `workspace ${data.workspacePath}`}
           >

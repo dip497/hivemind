@@ -4,7 +4,7 @@ import { cn } from "../../lib/cn"
 import { Slot } from "@radix-ui/react-slot"
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md text-[13px] font-medium whitespace-nowrap outline-none transition-[background-color,color,opacity,scale] duration-[var(--hm-dur-2)] ease-[var(--hm-ease-out)] active:scale-[0.96] active:duration-[var(--hm-dur-1)] focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
+  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md text-body font-medium whitespace-nowrap outline-none transition-[background-color,color,opacity,scale] duration-[var(--hm-dur-2)] ease-[var(--hm-ease-out)] active:scale-[0.96] active:duration-[var(--hm-dur-1)] focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
   {
     variants: {
       variant: {
@@ -29,19 +29,18 @@ const buttonVariants = cva(
         hidden: "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
       },
       size: {
-        default: "h-8 px-3",
-        xs: "h-6 gap-1 rounded-sm px-2 text-[11px]",
+        /* A control is 32px (DESIGN.md); sm is the compact 28px, for dense rows only. */
+        default: "h-control px-3",
+        xs: "h-6 gap-1 rounded-sm px-2 text-count",
         /* Tile and canvas chrome, where a taller control would move the layout. */
-        "2xs": "h-5 gap-1 rounded-sm px-1.5 text-[11px] [&_svg:not([class*='size-'])]:size-3",
-        micro: "h-4 gap-0.5 rounded-sm px-1 text-[10px] [&_svg:not([class*='size-'])]:size-2.5",
-        sm: "h-7 px-2.5 text-xs",
-        lg: "h-9 px-4",
-        icon: "size-8",
+        "2xs": "h-5 gap-1 rounded-sm px-1.5 text-count [&_svg:not([class*='size-'])]:size-3",
+        micro: "h-4 gap-0.5 rounded-sm px-1 text-chip [&_svg:not([class*='size-'])]:size-2.5",
+        sm: "h-control-compact px-2.5 text-label",
+        icon: "size-control",
         "icon-xs": "size-6 rounded-sm",
         "icon-2xs": "size-5 rounded-sm [&_svg:not([class*='size-'])]:size-3",
         "icon-micro": "size-4 rounded-sm [&_svg:not([class*='size-'])]:size-2.5",
-        "icon-sm": "size-7",
-        "icon-lg": "size-9",
+        "icon-sm": "size-control-compact",
       },
     },
     defaultVariants: {

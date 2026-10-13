@@ -19,7 +19,7 @@ export function Delayed({ children }: { children: ReactNode }) {
  *  once the wait is long enough to notice. */
 export function Loading({ label, className }: { label?: string; className?: string }) {
   return (
-    <div role="status" aria-live="polite" className={cn("flex h-full min-h-16 w-full flex-col items-center justify-center gap-2 text-[11.5px] text-[var(--color-fg3)]", className)}>
+    <div role="status" aria-live="polite" className={cn("flex h-full min-h-16 w-full flex-col items-center justify-center gap-2 text-label text-[var(--color-fg3)]", className)}>
       <Delayed>
         <div data-loading className="contents">
           <Spinner className="size-4 animate-spin" aria-hidden />

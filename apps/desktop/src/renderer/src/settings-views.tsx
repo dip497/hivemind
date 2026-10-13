@@ -69,7 +69,7 @@ export function ViewPage({ id }: { id: string }) {
     <header className="plugin-head">
       <span className="plugin-mark"><view.icon size={22} /></span>
       <div className="plugin-title"><p>{view.hint}<span>·</span>{view.source === "community" ? `Community${pkg?.manifest?.version ? ` · ${pkg.manifest.version}` : ""}` : "Included with Hivemind"}</p></div>
-      {mode === id ? <span className="agent-badge">In use</span> : <Button size="sm" variant="outline" onClick={() => setViewMode(id)}>Use this view</Button>}
+      {mode === id ? <span className="agent-badge">In use</span> : <Button variant="outline" onClick={() => setViewMode(id)}>Use this view</Button>}
       {view.source === "community" && <Switch aria-label={`Enable ${view.label}`} checked={on}
         onCheckedChange={() => { setPluginEnabled("view", id, !on); rescan(); }} />}
     </header>
@@ -110,13 +110,13 @@ export function ViewPage({ id }: { id: string }) {
 function RemoveView({ id, name, onRemoved }: { id: string; name: string; onRemoved: () => void }) {
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (!confirm) return <Button variant="destructive" size="sm" className="mt-3" onClick={() => setConfirm(true)}><Trash />Remove {name}</Button>;
+  if (!confirm) return <Button variant="destructive" className="mt-3" onClick={() => setConfirm(true)}><Trash />Remove {name}</Button>;
   return <div className="settings-remove-confirm">
     <p>Remove {name}? Its saved layout is kept, and your work keeps running.</p>
     {error && <p role="alert" className="settings-note error">{error}</p>}
     <div className="settings-actions">
-      <Button size="sm" variant="outline" onClick={() => setConfirm(false)}>Keep it</Button>
-      <Button size="sm" variant="destructive" onClick={() => void window.hive.removeViewPackage(id).then(() => { rescan(); onRemoved(); }, (e: Error) => setError(e.message))}>Remove</Button>
+      <Button variant="outline" onClick={() => setConfirm(false)}>Keep it</Button>
+      <Button variant="destructive" onClick={() => void window.hive.removeViewPackage(id).then(() => { rescan(); onRemoved(); }, (e: Error) => setError(e.message))}>Remove</Button>
     </div>
   </div>;
 }
@@ -144,7 +144,7 @@ function ToolbarSettings({ mode }: { mode: string }) {
     <p className="settings-note">Choose the buttons and their order. Switch tools on under Plugins.</p>
     <div className="settings-row">
       <label><input type="checkbox" checked={preference?.labels ?? false} onChange={(event) => update({ labels: event.target.checked })} /> Show labels</label>
-      <Button size="sm" variant="outline" onClick={() => {
+      <Button variant="outline" onClick={() => {
         const current = { ...getSettings().views.toolbars };
         delete current[mode];
         patchSettings("views.toolbars", current);
@@ -155,8 +155,8 @@ function ToolbarSettings({ mode }: { mode: string }) {
         const index = selected.indexOf(action.id);
         return <li key={action.id} data-toolbar-setting={action.id}>
           <label><input type="checkbox" checked={index >= 0} onChange={(event) => update({ actions: event.target.checked ? [...selected, action.id] : selected.filter((id) => id !== action.id) })} />{action.label}</label>
-          <Button variant="ghost" size="icon-sm" aria-label={`Move ${action.label} up`} disabled={index <= 0} onClick={() => move(action.id, -1)}><ArrowUp /></Button>
-          <Button variant="ghost" size="icon-sm" aria-label={`Move ${action.label} down`} disabled={index < 0 || index === selected.length - 1} onClick={() => move(action.id, 1)}><ArrowDown /></Button>
+          <Button variant="ghost" size="icon" aria-label={`Move ${action.label} up`} disabled={index <= 0} onClick={() => move(action.id, -1)}><ArrowUp /></Button>
+          <Button variant="ghost" size="icon" aria-label={`Move ${action.label} down`} disabled={index < 0 || index === selected.length - 1} onClick={() => move(action.id, 1)}><ArrowDown /></Button>
         </li>;
       })}
     </ol>

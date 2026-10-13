@@ -32,8 +32,8 @@ function TileEmpty({
     <div className="flex-1 grid place-items-center px-6 text-center">
       <div className="flex flex-col items-center gap-2 max-w-[240px]">
         <div className="text-[var(--color-fg3)]">{icon}</div>
-        <div className="text-[12.5px] font-medium text-[var(--color-fg)]">{title}</div>
-        <p className="text-[11.5px] text-[var(--color-fg2)] leading-relaxed">{hint}</p>
+        <div className="text-body font-medium text-[var(--color-fg)]">{title}</div>
+        <p className="text-label text-[var(--color-fg2)] leading-relaxed">{hint}</p>
         {action && (
           <Button size="sm" className="mt-1" onClick={action.onClick}>
             {action.label}
@@ -46,13 +46,13 @@ function TileEmpty({
 
 function GroupByMenu({ value, onChange }: { value: GroupBy; onChange: (g: GroupBy) => void }) {
   return (
-    <label className="nodrag inline-flex items-center gap-1 text-[11px] text-[var(--color-fg2)]">
+    <label className="nodrag inline-flex items-center gap-1 text-count text-[var(--color-fg2)]">
       <span className="text-[var(--color-fg3)]">Group</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value as GroupBy)}
         aria-label="Group issues by"
-        className="bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md text-[11.5px] text-[var(--color-fg)] px-2 py-1 outline-none cursor-pointer hm-soft focus:border-[var(--color-brand)]"
+        className="bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md text-label text-[var(--color-fg)] px-2 py-1 outline-none cursor-pointer hm-soft focus:border-[var(--color-brand)]"
       >
         {GROUP_BY_ORDER.map((g) => (
           <option key={g} value={g}>
@@ -82,9 +82,9 @@ function SetUpIssues({ hm, status, onReady }: { hm: ViewClient; status: ViewIssu
       <form className="flex flex-col gap-3 w-full max-w-[280px]" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
         <div className="flex flex-col items-center gap-2 text-center">
           <div className="text-[var(--color-fg3)]"><Inbox size={26} strokeWidth={1.5} /></div>
-          <div className="text-[13px] font-medium text-[var(--color-fg)]">Keep issues in {status.folder}</div>
-          <p className="text-[12px] text-[var(--color-fg2)] leading-relaxed">
-            They live in a <code className="font-mono text-[11px]">.hivemind</code> folder there, numbered {prefix || "…"}-1, -2, …, and agents read and update them with <code className="font-mono text-[11px]">hive</code>.
+          <div className="text-body font-medium text-[var(--color-fg)]">Keep issues in {status.folder}</div>
+          <p className="text-label text-[var(--color-fg2)] leading-relaxed">
+            They live in a <code className="font-mono text-count">.hivemind</code> folder there, numbered {prefix || "…"}-1, -2, …, and agents read and update them with <code className="font-mono text-count">hive</code>.
           </p>
         </div>
         <div className="grid gap-1">
@@ -144,7 +144,7 @@ export function IssuesTile({ tile, hm, selected }: TileProps) {
             onChange={setFilters}
             rightSlot={
               <>
-                <span className="text-[11px] text-[var(--color-fg3)] tabular-nums">{issues.length}</span>
+                <span className="text-count text-[var(--color-fg3)] tabular-nums">{issues.length}</span>
                 <GroupByMenu value={groupBy} onChange={setGroupP} />
                 <ViewSwitcher value={view} onChange={setViewP} views={["board", "list"]} />
                 <Button size="sm" className="nodrag" onClick={newIssue}>+ New</Button>

@@ -20,7 +20,14 @@ colors:
   unread-blue: "oklch(0.70 0.14 250)"
   working-white: "oklch(0.91 0.005 250)"
   terminal-ground: "#1A1C1F"
+  scrim: "oklch(0 0 0 / 0.55)"
 typography:
+  heading:
+    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif"
+    fontSize: "20px"
+    fontWeight: 600
+    lineHeight: 1.3
+    letterSpacing: "-0.014em"
   title:
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif"
     fontSize: "15px"
@@ -80,6 +87,8 @@ spacing:
   lg: "16px"
   xl: "24px"
   row: "32px"
+  control: "32px"
+  control-compact: "28px"
 components:
   button-primary:
     backgroundColor: "{colors.chalk-text}"
@@ -201,6 +210,9 @@ Status chips use the status colour as text on a 16% mix of the same colour (`col
 **Character:** the chrome speaks in the platform's own voice, so the app feels at home on Linux, macOS and Windows. Mono is for what a machine said: terminals, paths, branches, commands, ids.
 
 ### Hierarchy
+Each step is a Tailwind token (`text-heading`, `text-title`, `text-row`, `text-body`, `text-label`, `text-count`, `text-chip`; in CSS `var(--text-*)`) carrying its size and tracking. Leading and weight belong to the role and are set where the text is. Tailwind's own sizes (`text-sm`, `text-xs`, …) are switched off.
+
+- **Heading** (600, 20px, tracking -0.014em): a page's own name — a Settings page, the empty canvas's first line, an open issue.
 - **Title** (600, 15px, tracking -0.014em): the workspace name at the top of the panel.
 - **Row** (400, 14px; 500 for frame and section rows): every tile, frame, recent and action row in the panel.
 - **Body** (400, 13px, line-height 1.5): the app default. Buttons, inputs, Settings text.
@@ -211,7 +223,7 @@ Status chips use the status colour as text on a 16% mix of the same colour (`col
 Letter-spacing follows size: -0.014em at 16–23px, -0.005em at 12–15px, +0.01em at 11px and below.
 
 ### Named Rules
-**The Five Sizes Rule.** The panel, menus, frame header and menu primitive set text only at 15, 14, 12, 11 and 10. A unit test enforces it. A new size there is a defect, not a variant.
+**The Named Steps Rule.** Text is set only through the seven named steps, everywhere: the renderer, its CSS and the tools that ship with the app. The panel, menus and frame header use five of them (15, 14, 12, 11, 10); heading and body belong to pages and dialogs. `tests/unit/design-system.test.ts` fails on a literal size, a Tailwind size or an inline `fontSize`. A new size is a defect, not a variant. A tile's content (terminal, editor, diff) follows its own zoom, not the scale.
 
 **The Sentence Case Rule.** No uppercase section labels anywhere. A heading is 12px medium pencil-text in sentence case.
 
@@ -232,6 +244,15 @@ Depth is tonal first: four graphite steps from ground to hover. Soft shadows lif
 - **Lifted** (`box-shadow: 0 4px 12px oklch(0.05 0 0 / 0.38), 0 1px 3px oklch(0.05 0 0 / 0.26)`): the Layers sheet, popovers, menus, a hovered card.
 - **Raised** (`box-shadow: 0 12px 32px oklch(0.05 0 0 / 0.48), 0 4px 12px oklch(0.05 0 0 / 0.32)`): Settings and modal dialogs.
 - **Top light** (`box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 0.07)`): added to lifted and raised surfaces.
+- **Float** (`--hm-shadow-float`, `0 8px 22px oklch(0 0 0 / 0.45)`): what floats on the canvas — tiles, the tool island, the canvas controls.
+- **Glass** (`--hm-shadow-glass`, `0 10px 36px oklch(0 0 0 / 0.5)`, with `--hm-highlight-glass`, a 10% top light): the same surfaces under glass, and toasts, so a translucent slab still reads as lifted.
+
+### Overlays and tints
+- **Scrim** (`--color-scrim`, black at 55%): behind a modal dialog or Settings, and the minimap's off-screen area.
+- **Selection** (`--color-selection`, the text colour at 20%), **current line** (2.5%), **match** (`--color-match`, the info colour at 22%), **bracket match** (the accent at 25%): mixed from the theme's own colours, so a light or custom preset gets them too.
+- **Syntax** (`--color-syntax-*`): the editor's keyword, string, number, function, type, property and tag colours.
+
+A colour is defined once, as a custom property in `styles.css` (a token) or in a palette a person picks from (frame colours, people's colours, wallpaper scenes, note paper). Anything else uses those names; the unit test above fails on a colour literal outside a definition.
 
 ### Named Rules
 **The Inset Sheet Rule.** Side panels and Settings are sheets set 8px in from the window edges, with 14px corners, a hairline edge and the Lifted or Raised shadow. They are never full-bleed slabs.
@@ -240,14 +261,14 @@ Depth is tonal first: four graphite steps from ground to hover. Soft shadows lif
 
 ## Shapes
 
-Corners soften as surfaces grow. Pills (9999px) are for status chips and dots. Keycaps use 5px. Controls and menu items use 6px. Rows and cards use 8px. Menus and popovers use 10px. Floating islands use 12px. Sheets use 14px. Borders are single 1px lines in hairline or control-line. Keycaps draw their edge as an inset 1px ring, not a border. Status marks are 6px dots.
+Corners soften as surfaces grow (Tailwind: `rounded-sm` 4, `rounded-keycap` 5, `rounded-md` 6, `rounded-lg` 8, `rounded-menu` 10, `rounded-xl` 12, `rounded-sheet` 14, `rounded-full`; no other radius is allowed). Pills (9999px) are for status chips and dots. Keycaps use 5px. Controls and menu items use 6px. Rows and cards use 8px. Menus and popovers use 10px. Floating islands use 12px. Sheets use 14px. Borders are single 1px lines in hairline or control-line. Keycaps draw their edge as an inset 1px ring, not a border. Status marks are 6px dots.
 
 ## Components
 
 The components are calm, exact and small. Nothing raises its voice until it needs a person.
 
 ### Buttons
-- **Shape:** gently rounded (6px); 32px tall by default, down to 20px and 16px for tile chrome.
+- **Shape:** gently rounded (6px); 32px tall (`h-control`) by default. Compact, 28px (`h-control-compact`, `size="sm"`), only in dense rows: tile chrome, popovers and pickers, the panel. Settings pages and dialogs use 32px, so a button, an input and a select in one row line up. Tile chrome goes down to 24, 20 and 16px. Nothing is 36px.
 - **Primary:** chalk-text fill with graphite-ground text, 13px medium, 12px side padding. Hover drops it to 90%.
 - **Ghost:** pencil-text on nothing; graphite-card fill and chalk text on hover. Icon buttons are square (32, 28, 24, 20px).
 - **Press:** scales to 0.96 in 100ms. Hover and colour changes take 150ms on the house curve `cubic-bezier(0.32, 0.72, 0, 1)`.
@@ -284,7 +305,7 @@ The workspace's tool bar floats at top centre: graphite-sheet, 12px corners, con
 ## Do's and Don'ts
 
 ### Do:
-- **Do** set panel and menu text at 15, 14, 12, 11 or 10px only (The Five Sizes Rule).
+- **Do** set text only through the named steps; panel and menu text at 15, 14, 12, 11 or 10px (The Named Steps Rule).
 - **Do** show working as a 6px dot and idle as nothing; give a word only to what a person must act on.
 - **Do** reserve Signal Amber and pulsing for blocked, asking and plan review (The One Voice Rule).
 - **Do** mark unread with the 6px unread-blue dot after the name, whatever the accent.
