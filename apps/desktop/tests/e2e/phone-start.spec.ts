@@ -58,18 +58,22 @@ window.calls = [];
 // \`window.reach()\` reaches it, as the page tells each screen.
 const reaching = new Set();
 window.reach = () => { window.unreached = false; for (const r of reaching) r(); };
+// Held back while \`window.holding\`, each answer given by \`window.answer()\`, as it is then.
+let pending = [];
+window.answer = () => { const p = pending; pending = []; for (const r of p) r(); return p.length; };
+const later = (v) => window.holding ? new Promise((r) => pending.push(() => r(v()))) : v();
 const app = {
   back() {}, computer: () => "desk",
   onReach: (r) => (reaching.add(r), () => reaching.delete(r)),
-  workspaces: async () => { if (window.unreached) throw new Error("Still starting"); return window.held ?? [{ workspace: "w0", name: "api" }]; },
-  places: async (w) => (window.calls.push(["places", w]), PLACES),
+  workspaces: async () => { if (window.unreached) throw new Error("Still starting"); return later(() => window.held ?? [{ workspace: "w0", name: "api" }]); },
+  places: async (w) => (window.calls.push(["places", w]), later(() => window.places ?? PLACES)),
   folders: async (w, f) => (window.calls.push(["folders", w, f]), FOLDERS[f]),
   start: async (w, s) => (window.calls.push(["start", w, s]), "t9"),
   open: (t) => window.calls.push(["open", t]),
 };
 const screen = new StartScreen(app);
 document.getElementById("app").append(screen.el);
-window.show = (w, f) => screen.open(w, f);
+window.show = (w, f) => void screen.open(w, f);
 window.photoOf = photoOf;
 window.ready = true;
 </script>` });
@@ -191,6 +195,39 @@ test("opened with nothing named: this computer, its first project and first agen
   await expect(summary).toHaveText(/^Codex · api · this computer/);
   await show(page, "w0", "f-web");
   await expect(summary).toHaveText(/^Claude Code · web · build-box/);
+});
+
+test("before its computer answers, what it was told last shows at once with Start ready; the answer keeps what the person chose meanwhile", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await start();
+  type Holding = { holding: boolean; places: unknown; answer(): number };
+  const summary = page.locator("[data-start-summary]");
+  const go = page.locator("[data-start-go]");
+  await show(page, "w0");
+  await expect(summary).toHaveText(/^Claude Code · api · this computer/);
+  // Opened again by a reload, the computer not answering yet.
+  await expect.poll(() => page.evaluate(() => new Promise((done) => {
+    const db = indexedDB.open("hive-web", 1);
+    db.onsuccess = () => { const got = db.result.transaction("kept").objectStore("kept").get("start-kept"); got.onsuccess = () => (db.result.close(), done(!!got.result)); };
+  }))).toBe(true);
+  await page.reload();
+  await page.waitForFunction(() => (window as unknown as { ready?: boolean }).ready);
+  await page.evaluate(() => { (window as unknown as Holding).holding = true; });
+  await show(page, "w0");
+  await expect(summary).toHaveText(/^Claude Code · api · this computer/);
+  await expect(go).toBeEnabled();
+  await expect(page.locator("[data-start-error]")).toHaveCount(0);
+  await summary.click();
+  await page.locator("[data-start-programs] .chip", { hasText: "Codex" }).click();
+  // The computer answers, with a project more here.
+  await page.evaluate((p) => { (window as unknown as Holding).places = p; }, { machines: [{ ...PLACES.machines[0], folders: [...PLACES.machines[0]!.folders, { path: "/home/p/web", name: "web", kind: "project", frame: "f-w" }] }, ...PLACES.machines.slice(1)] });
+  await expect.poll(async () => {
+    await page.evaluate(() => (window as unknown as Holding).answer());
+    return page.locator("[data-start-folders] .chip").allInnerTexts();
+  }).toEqual(["api · p/api", "web"]);
+  await expect(summary).toHaveText(/^Codex · api · this computer/);
+  await go.click();
+  await expect.poll(async () => (await calls(page)).at(-2)).toEqual(["start", "w0", { program: "codex", folder: "/home/p/api" }]);
 });
 
 test("two workspaces of one name are told apart by where each is; with none named, the one last started from is chosen", async () => {

@@ -1303,3 +1303,45 @@ On the rig the phone showed "permission" with Allow and Deny for an AskUserQuest
   starts with `❯ `, which the idle rule reads as the prompt. One such reading ends a hooked wait
   (`status-store.ts` fold), and the `question` readings after it do not bring the wait back. Claude's
   question rule now also reads a selected option, `❯ 1.`, as a chooser.
+
+### 12.11 Opening the page: every screen at once, then Start not ready
+
+On the rig (4× CPU, opened on `#start`), a frame at about 355 ms showed every screen on top of each
+other: Pair, an agent's header, Home, the tab bar. Start then said "Still starting" with Start
+disabled until about 907 ms.
+
+- `main.ts` appended every screen visible and routed only after reading what the page kept from
+  IndexedDB, a frame or more later. Each screen and the tab bar now start hidden and only the router
+  shows one.
+- Start asked the computer on every open and drew nothing until it answered, and the computer is
+  reached only once the wasm runs. Start now keeps the computer's last answer (the workspaces and the
+  places in each, `start-kept`, dropped when the page pairs again or is unpaired) and draws from it
+  at once, Start enabled. The answer takes its place when it comes, keeping what the person chose
+  meanwhile. Start pressed before the computer is reached waits for it. A question that failed is
+  asked again once it is reached.
+- `index.html` preloaded the 4 MB wasm. It was fetched alongside `main.js` and held the page back:
+  DOMContentLoaded at 470–500 ms with it, 167–187 ms without (4×, the page's own timeline). The wasm
+  is now fetched when `main.ts` imports the core, after the first screen.
+- Peers: none preloads its large asset (hapi `web/index.html:1-109`, its PWA leaving `.wasm` out of
+  the precache, `web/vite.config.ts:198`; vibetunnel `web/src/client/assets/index.html:33,141`).
+  hapi and vibetunnel render only the routed view (hapi `web/src/App.tsx:533`, vibetunnel
+  `web/src/client/app.ts:1771-1790`). Only superset draws from a kept copy of what the server said
+  (`apps/desktop/src/renderer/providers/ElectronTRPCProvider/ElectronTRPCProvider.tsx:70-90`). hapi
+  and vibetunnel disable a new session's Create until the server answers
+  (hapi `web/src/components/NewSession/index.tsx:157-165`, vibetunnel
+  `web/src/client/components/session-create-form.ts:193-200`). Happy and T3 Code were not checked
+  out.
+- Measured: `phone-open.spec.ts`, Start usable, 4× CPU, load 5–7, two rounds of 5 opens each:
+
+  | | round 1 | round 2 |
+  |---|---|---|
+  | wasm preloaded | 449, 810, 673, 869, 446 ms | 742, 818, 716, 597, 702 ms |
+  | not preloaded | 302, 200, 209, 305, 318 ms | 339, 379, 327, 424, 297 ms |
+
+  The wasm is in hand at a median of 366 ms instead of 334. Reopened through the real service
+  worker, the page before was never usable with up to 8 screens in a frame; it is now usable at
+  117 and 129 ms (medians of two rounds of 5). Not measured on the rig.
+- Proved to fail (`phone-open.spec.ts`, `phone-start.spec.ts`): the screens or the tab bar drawn
+  before routing; Start not drawn from what was kept; the answer not kept; Start pressed before
+  reached not waiting; asked again on every reach; a choice made meanwhile dropped by the answer;
+  looking in a folder superseding the answer; the wasm preloaded again (3 of 3 over 500 ms).

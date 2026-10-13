@@ -1,7 +1,8 @@
 // Starting an agent: the prompt first, then one line saying what starts where ("Claude Code · api ·
 // this computer"), the project it was opened from or else what was last started, which opens the
 // choices (agent, workspace, machine, folder); the agent's mode and model as the desktop offers them;
-// and Start, always in sight, which opens the new agent.
+// and Start, always in sight, which opens the new agent. What the computer said last shows at once,
+// its answer taking its place when it comes.
 
 import type { App } from "./app.js";
 import { chips, h, icon, pill } from "./dom.js";
@@ -14,6 +15,9 @@ type Machine = Places["machines"][number];
 /** What was last started from this browser: chosen again the next time, where it still is. */
 interface Last { workspace: string; machine: string; folder: string; program: string }
 const LAST = "start-last";
+/** The workspaces and the places in each, as the computer last said them. */
+interface Kept { held: Held[]; places: Record<string, Places> }
+export const KEPT = "start-kept";
 /** An option left unchosen: the agent starts as the desktop's settings say. */
 const AS_SET = "As set in Settings";
 
@@ -50,12 +54,20 @@ export class StartScreen {
   private photos: Array<Photo & { url: string }> = [];
   private problem: string | null = null;
   private last: Last | undefined;
+  private kept: Kept = { held: [], places: {} };
+  /** Whether the person chose something since it opened: an answer then keeps it. */
+  private picked = false;
+  /** Whether the last question failed, to be asked again once the computer is reached. */
+  private failed = false;
   /** Whether the choices show. */
   private choosing = false;
-  /** Each question asked, so an answer to one superseded is dropped. */
+  /** Each question asked, so an answer to one superseded is dropped; a folder's own count. */
   private asked = 0;
+  private looked = 0;
   /** Where it was last opened for. */
   private at: { workspace?: string | null; frame?: string | null } = {};
+  /** What this browser keeps, read as the page loads, so a page opened on Start shows it at once. */
+  private read: Promise<[Kept | undefined, Last | undefined]> | null = this.reading();
 
   constructor(private readonly app: App) {
     const back = h("button", { type: "button", class: "back", "aria-label": "Back", "data-back": "" }, icon("back"));
@@ -68,13 +80,12 @@ export class StartScreen {
       h("div", { class: "start" }, this.prompt, this.photosRow, this.summary, this.choices, this.settings),
       h("div", { class: "dock" }, this.notes, this.go),
       this.picker);
-    // Opened before the computer was reached (the page reloaded on it): asked again once it is.
-    // Once it answered, what the person chose stays.
-    app.onReach(() => !this.el.hidden && this.held === null && void this.open(this.at.workspace, this.at.frame));
+    // A question that failed (the connection dropped): asked again once the computer is reached.
+    app.onReach(() => !this.el.hidden && this.failed && void this.ask(this.asked, this.at.workspace, this.at.frame));
   }
 
-  /** Shown afresh: what the computer holds, asked again; in `workspace`'s frame `frame` when given,
-   *  else where an agent was last started from here, else the first workspace. */
+  /** Shown afresh, from what the computer said last, then asked again; in `workspace`'s frame
+   *  `frame` when given, else where an agent was last started from here, else the first workspace. */
   async open(workspace?: string | null, frame?: string | null): Promise<void> {
     const n = ++this.asked;
     this.at = { workspace, frame };
@@ -82,36 +93,93 @@ export class StartScreen {
     this.prompt.value = "";
     this.dropPhotos();
     this.choosing = false;
+    this.picked = false;
     this.unchoose(null);
     this.prompt.focus();
+    const [kept, last] = await (this.read ?? this.reading());
+    this.read = null;
+    if (n !== this.asked) return;
+    this.last = last;
+    this.kept = kept ?? { held: [], places: {} };
+    if (this.kept.held.length) this.inWorkspace(this.kept.held, workspace, frame);
+    this.render();
+    await this.ask(n, workspace, frame);
+  }
+
+  private reading(): Promise<[Kept | undefined, Last | undefined]> {
+    return Promise.all([get<Kept>(KEPT).catch(() => undefined), get<Last>(LAST).catch(() => undefined)]);
+  }
+
+  /** What the computer holds now, and the places in the workspace chosen. */
+  private async ask(n: number, workspace?: string | null, frame?: string | null): Promise<void> {
+    this.failed = false;
     try {
-      const [held, last] = await Promise.all([this.app.workspaces(), get<Last>(LAST).catch(() => undefined)]);
+      const held = await this.app.workspaces();
       if (n !== this.asked) return;
-      this.held = held;
-      this.last = last;
-      const named = held.find((w) => w.workspace === workspace);
-      const at = named ?? held.find((w) => w.workspace === last?.workspace) ?? held[0];
-      if (at) return void this.choose(at.workspace, named ? frame : undefined);
+      this.keep({ held, places: Object.fromEntries(held.flatMap((w) => (this.kept.places[w.workspace] ? [[w.workspace, this.kept.places[w.workspace]!]] : []))) });
+      this.inWorkspace(held, workspace, frame);
+      this.render();
+      if (this.workspace) await this.askPlaces(n, this.workspace, frame);
     } catch (e) {
-      if (n === this.asked) this.problem = message(e);
+      if (n === this.asked) this.fail(e);
+    }
+  }
+
+  private async askPlaces(n: number, workspace: string, frame?: string | null): Promise<void> {
+    try {
+      const places = await this.app.places(workspace);
+      if (n !== this.asked) return;
+      this.keep({ ...this.kept, places: { ...this.kept.places, [workspace]: places } });
+      this.inPlaces(places, frame);
+    } catch (e) {
+      if (n === this.asked) this.fail(e);
     }
     this.render();
   }
 
-  private async choose(workspace: string, frame?: string | null): Promise<void> {
+  private fail(e: unknown): void {
+    this.problem = message(e);
+    this.failed = true;
+    this.render();
+  }
+
+  private keep(kept: Kept): void {
+    this.kept = kept;
+    void put(KEPT, kept).catch(() => undefined);
+  }
+
+  /** Among `held`: the workspace chosen while it is there, else `workspace`, else the last started
+   *  from, else the first; in its places as last said, when they were. */
+  private inWorkspace(held: Held[], workspace?: string | null, frame?: string | null): void {
+    this.held = held;
+    const named = held.find((w) => w.workspace === workspace);
+    const at = held.find((w) => w.workspace === this.workspace) ?? named ?? held.find((w) => w.workspace === this.last?.workspace) ?? held[0];
+    if (at?.workspace !== this.workspace) this.unchoose(at?.workspace ?? null);
+    const places = at && this.kept.places[at.workspace];
+    if (places) this.inPlaces(places, named === at ? frame : undefined);
+  }
+
+  /** The person's choice of workspace: its places as last said at once, then as the computer says. */
+  private async choose(workspace: string): Promise<void> {
     const n = ++this.asked;
     this.unchoose(workspace);
-    try {
-      const places = await this.app.places(workspace);
-      if (n !== this.asked) return;
-      this.places = places;
-      const there = frame ? places.machines.find((m) => m.folders.some((f) => f.frame === frame)) : undefined;
-      const was = this.last?.workspace === workspace ? this.last.machine : undefined;
-      this.onMachine(there ?? places.machines.find((m) => m.id === was) ?? places.machines[0] ?? null, there?.folders.find((f) => f.frame === frame));
-    } catch (e) {
-      if (n === this.asked) this.problem = message(e);
-    }
+    const places = this.kept.places[workspace];
+    if (places) this.inPlaces(places);
     this.render();
+    await this.askPlaces(n, workspace);
+  }
+
+  /** In the workspace's `places`: what the person chose while it is still there, else the machine and
+   *  folder of `frame`, else where an agent was last started, else the first. */
+  private inPlaces(places: Places, frame?: string | null): void {
+    const chose: Last | undefined = this.picked && this.machine && this.workspace
+      ? { workspace: this.workspace, machine: this.machine.id, folder: this.trail.at(-1)?.path ?? "", program: this.program?.id ?? "" }
+      : undefined;
+    this.places = places;
+    const there = !chose && frame ? places.machines.find((m) => m.folders.some((f) => f.frame === frame)) : undefined;
+    const prefer = chose ?? this.last;
+    const was = prefer?.workspace === this.workspace ? prefer.machine : undefined;
+    this.onMachine(there ?? places.machines.find((m) => m.id === was) ?? places.machines[0] ?? null, there?.folders.find((f) => f.frame === frame), prefer);
   }
 
   /** In `workspace`, nothing else chosen yet. */
@@ -120,27 +188,27 @@ export class StartScreen {
     this.places = null;
     this.problem = null;
     this.onMachine(null);
-    this.render();
   }
 
-  /** On `machine`: in `folder`, else where an agent was last started there, else its first folder;
-   *  the agent last started when it is there, else its first. */
-  private onMachine(machine: Machine | null, folder?: PlaceFolder): void {
-    const last = this.last;
-    this.machine = machine;
-    this.program = machine?.programs.find((p) => p.id === last?.program) ?? machine?.programs[0] ?? null;
-    this.options.clear();
-    this.inside = null;
-    const was = last?.workspace === this.workspace && last.machine === machine?.id ? last.folder : undefined;
+  /** On `machine`: in `folder`, else where `prefer` started there, else its first folder; the agent
+   *  of `prefer` when it is there, else its first. */
+  private onMachine(machine: Machine | null, folder?: PlaceFolder, prefer = this.last): void {
+    const program = machine?.programs.find((p) => p.id === prefer?.program) ?? machine?.programs[0] ?? null;
+    if (program?.id !== this.program?.id) this.options.clear();
+    this.program = program;
+    const was = prefer?.workspace === this.workspace && prefer.machine === machine?.id ? prefer.folder : undefined;
     const top = folder
       ?? machine?.folders.find((f) => f.path === was)
       ?? machine?.folders.find((f) => f.kind === "project" && was?.startsWith(`${f.path}/`))
       ?? machine?.folders[0];
-    this.trail = top ? [{ name: top.name, path: top.path }] : [];
-    this.project = top?.kind === "project";
-    if (top && this.project && was?.startsWith(`${top.path}/`)) {
-      for (const name of was.slice(top.path.length + 1).split("/")) this.trail.push({ name, path: `${this.trail.at(-1)!.path}/${name}` });
+    const trail = top ? [{ name: top.name, path: top.path }] : [];
+    if (top && top.kind === "project" && was?.startsWith(`${top.path}/`)) {
+      for (const name of was.slice(top.path.length + 1).split("/")) trail.push({ name, path: `${trail.at(-1)!.path}/${name}` });
     }
+    if (machine?.id !== this.machine?.id || trail.at(-1)?.path !== this.trail.at(-1)?.path) this.inside = null;
+    this.machine = machine;
+    this.trail = trail;
+    this.project = top?.kind === "project";
   }
 
   private render(): void {
@@ -178,6 +246,7 @@ export class StartScreen {
     const parts: Node[] = [];
     if (m?.programs.length) {
       parts.push(heading("Agent"), chips(m.programs, (x) => x.label, (x) => x.id === this.program?.id, (x) => this.pick(() => {
+        this.picked = true;
         this.program = x;
         this.options.clear();
       }), { "data-start-programs": "" }));
@@ -188,7 +257,10 @@ export class StartScreen {
     }
     const p = this.places;
     if (p && p.machines.length > 1) {
-      parts.push(heading("Machine"), chips(p.machines, (x) => (x.id === "" ? `${x.name} (this computer)` : x.name), (x) => x.id === m?.id, (x) => this.pick(() => this.onMachine(x)), { "data-start-machines": "" }));
+      parts.push(heading("Machine"), chips(p.machines, (x) => (x.id === "" ? `${x.name} (this computer)` : x.name), (x) => x.id === m?.id, (x) => this.pick(() => {
+        this.picked = true;
+        this.onMachine(x);
+      }), { "data-start-machines": "" }));
     }
     if (m && !m.unreached) parts.push(...this.folderParts(m, heading));
     this.choices.replaceChildren(...parts);
@@ -210,6 +282,7 @@ export class StartScreen {
     const label = apart(m.folders, (f) => f.name, (f) => f.path);
     const of = (kind: PlaceFolder["kind"]) => m.folders.filter((f) => f.kind === kind);
     const choose = (f: PlaceFolder) => this.pick(() => {
+      this.picked = true;
       this.trail = [{ name: f.name, path: f.path }];
       this.project = f.kind === "project";
       this.inside = null;
@@ -239,15 +312,16 @@ export class StartScreen {
   /** In the last of `trail`: the folders inside it, asked. */
   private async look(trail: Array<{ name: string; path: string }>): Promise<void> {
     if (!this.workspace) return;
-    const n = ++this.asked;
+    const n = ++this.looked;
+    this.picked = true;
     this.trail = trail;
     this.problem = null;
     try {
       const inside = await this.app.folders(this.workspace, trail.at(-1)!.path);
-      if (n !== this.asked) return;
+      if (n !== this.looked) return;
       this.inside = inside;
     } catch (e) {
-      if (n === this.asked) this.problem = message(e);
+      if (n === this.looked) this.problem = message(e);
     }
     this.render();
   }
