@@ -251,6 +251,31 @@ test("a phone's fit is its own size: its keys keep the fit, so leaving gives bac
   assert.deepEqual(sizes().slice(7), ["40x20", "120x40", "40x20", "100x30"], "a window typed over the fit: the window's size now, not the one before the fit");
 });
 
+test("the last to fit or type sizes a session; when it lets go or goes, the one before it that still holds a size takes it back", async () => {
+  const h = host();
+  const window = h.client();
+  const phone = () => h.client({ kind: "peer", person: "p".repeat(64), device: "d".repeat(64), access: "owner" });
+  const sizes = () => h.calls.filter((call) => call.startsWith("resize")).map((call) => call.split(" ")[2]);
+  await h.open(window, "hm:t1");
+  h.notice(window, "terminal.resize", "hm:t1", 120, 40);
+  const [a, b] = [phone(), phone()];
+  for (const p of [a, b]) await h.open(p, "hm:t1", { attachOnly: true });
+  h.notice(a, "terminal.fit", "hm:t1", 48, 30);
+  h.notice(b, "terminal.fit", "hm:t1", 50, 20);
+  h.notice(b, "terminal.fit", "hm:t1");
+  assert.deepEqual(sizes(), ["120x40", "48x30", "50x20", "48x30"], "the later phone let go: the earlier one still fits it");
+  b.close();
+  h.notice(window, "terminal.write", "hm:t1", "q");
+  h.notice(a, "terminal.write", "hm:t1", "y");
+  h.notice(a, "terminal.fit", "hm:t1");
+  assert.deepEqual(sizes().slice(4), ["120x40", "48x30", "120x40"], "the window typed, the phone typed, then let go: the window's size");
+  h.notice(a, "terminal.fit", "hm:t1", 48, 30);
+  h.notice(window, "terminal.write", "hm:t1", "q");
+  h.notice(a, "terminal.write", "hm:t1", "y");
+  a.close();
+  assert.deepEqual(sizes().slice(7), ["48x30", "120x40", "48x30", "120x40"], "the same, and the phone went");
+});
+
 test("a client that acknowledges what it takes is paced by it: past its window it is sent nothing until it has taken all, then the host's screen", async () => {
   const h = host({ screen: "SCREEN" });
   await h.open(h.client(), "hm:t1");

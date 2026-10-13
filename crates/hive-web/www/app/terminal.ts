@@ -269,7 +269,12 @@ export class TerminalView {
 
   /** A cell's width and a line's height, in device pixels. */
   private cell(): { w: number; h: number; font: number } {
-    const w = (this.width / Math.max(1, this.cols)) * this.zoom;
+    return this.cellAt(this.cols, this.zoom);
+  }
+
+  /** A cell's width and a line's height, in device pixels, `cols` across the view at `zoom`. */
+  private cellAt(cols: number, zoom: number): { w: number; h: number; font: number } {
+    const w = (this.width / Math.max(1, cols)) * zoom;
     const font = w / this.advance;
     return { w, h: Math.ceil(font * LINE), font };
   }
@@ -378,14 +383,12 @@ export class TerminalView {
     this.draw();
   }
 
-  /** The columns and rows this view shows at a readable size; null while it has none. */
+  /** The columns and rows this view shows at a readable size, drawn as `cell` draws them; null
+   *  while it has none. */
   private readSize(): { cols: number; rows: number } | null {
-    const box = this.view.getBoundingClientRect();
-    if (!box.width || !box.height) return null;
-    return {
-      cols: Math.max(20, Math.floor(box.width / (READABLE * this.advance))),
-      rows: Math.max(5, Math.floor(box.height / Math.ceil(READABLE * LINE))),
-    };
+    if (!this.width || !this.height) return null;
+    const cols = Math.max(20, Math.floor(this.width / (READABLE * this.dpr * this.advance)));
+    return { cols, rows: Math.max(5, Math.floor(this.height / this.cellAt(cols, 1).h)) };
   }
 
   /** While fitted, size the terminal to this view at a readable size, when that changed. */

@@ -45,7 +45,7 @@ test("a shell tile opened on the paired page draws the computer's screen on a la
   const home = path.join(root, "home");
   fs.mkdirSync(home);
   for (const rc of [".bashrc", ".bash_profile"]) fs.writeFileSync(path.join(home, rc), "PS1='$ '\n");
-  const desktop = await person(root, "desktop", repo, apps, { HOME: home, SHELL: "/bin/bash", HIVEMIND_SHELL_ENV: "0" });
+  const desktop = await person(root, "desktop", repo, apps, { HOME: home, SHELL: "/bin/bash", HIVEMIND_SHELL_ENV: "0", HISTFILE: "/dev/null" });
   expect(await desktop.evaluate((l) => window.hive.useNetwork(l), net.link)).toMatchObject({ admission: "enrolled" });
   const me = await desktop.evaluate(() => window.hive.identity());
 
