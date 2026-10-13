@@ -24,7 +24,7 @@ into `~/.local/bin/`, and warns if no agent CLI is on `PATH`. Re-run to upgrade;
 version with `HIVEMIND_VERSION=v2026.9.0`.
 
 Upgrading while the app is open downloads the new version beside the running one — it cannot
-replace a live app — so the last step is yours: Settings ▸ About, or the toolbar, says
+replace a live app — so the last step is yours: Settings ▸ About and updates, or the toolbar, says
 **Restart to finish**. Until you do, the version that runs is the old one, and asking again
 says it is downloaded already rather than fetching it twice.
 
@@ -72,12 +72,15 @@ checklist. Full command list: [CLI](../cli/).
 hivemind .
 ```
 
-- Number keys `1`–`7` spawn: terminal, agent, explorer, diff, issues, frame, browser.
-  `2` spawns the default agent in the selected frame.
-- **▶ Work** on an issue card spawns an agent pre-loaded with that issue and the hive
-  skills.
-- ⌘B toggles the Layers rail (tiles grouped by frame, live agent status).
+- Keys `1` terminal, `2` agent (the default one, in the selected frame), `3` Code, `6` frame,
+  `7` browser. Everything else, Issues included, is in the toolbar's **Add**.
+- **▶ work** on an issue card (shown on hover) spawns an agent pre-loaded with that issue and
+  the hive skills.
+- ⌘B (Ctrl+B outside a terminal) shows or hides the Layers panel: tiles by project, live agent
+  status.
 - ⌘E cycles workspace views; double-click a tile name to rename it.
+- A link in a terminal opens on Ctrl+click (⌘+click on a Mac); a plain click is a click in the
+  terminal.
 
 ## What the agent does
 
@@ -87,11 +90,3 @@ The installed skill drives the agent through the execution contract: load the is
 Each state change is a markdown write; the board tile updates from filesystem events.
 Open the Code tile (`3`) beside the agent and switch it to **Changes** to watch edits land,
 review per-file, and send line comments back to the agent.
-
-## Where to go next
-
-- [Workspaces](../workspaces/) — frames, worktrees, remote SSH, the tracker layout.
-- [Agents](../agents/) — runtimes and what each can do.
-- [Agent workflows](../agent-workflows/) — the contract in full; multi-agent control.
-- [Views](../views/) and [Appearance](../appearance/) — layout and theming.
-- [Troubleshooting](../troubleshooting/) — exit codes and common failures.

@@ -1,5 +1,6 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import mermaid from './src/lib/mermaid.mjs';
 const base = (process.env.SITE_BASE ?? '/hivemind').replace(/\/$/, '');
 export default defineConfig({
   site: process.env.SITE_URL || 'https://hivemind.griiken.com',
@@ -15,9 +16,9 @@ export default defineConfig({
     customCss: ['./src/styles/docs.css'],
     sidebar: [
       { label: 'Start here', items: [{ label: 'Introduction', slug: 'guide' }, { label: 'Getting started', slug: 'guide/getting-started' }] },
-      { label: 'Use Hivemind', items: ['guide/workspaces', 'guide/agents', 'guide/agent-providers', 'guide/views', 'guide/appearance', 'guide/self-hosting'] },
+      { label: 'Use Hivemind', items: ['guide/workspaces', 'guide/agents', 'guide/agent-providers', 'guide/views', 'guide/widgets', 'guide/phone', 'guide/appearance', 'guide/self-hosting'] },
       { label: 'For agents', items: ['guide/agent-workflows', 'guide/cli'] },
-      { label: 'Build with Hivemind', items: ['guide/packages', 'guide/extension-authoring', 'guide/contributing', 'guide/troubleshooting'] },
+      { label: 'Build with Hivemind', items: ['guide/packages', 'guide/extension-authoring', 'guide/tool-plugins', 'guide/contributing', 'guide/troubleshooting'] },
     ],
     head: [
       { tag: 'link', attrs: { rel: 'alternate', type: 'text/markdown', href: `${base}/llms.txt` } },
@@ -27,5 +28,5 @@ export default defineConfig({
       { tag: 'link', attrs: { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: true } },
       { tag: 'link', attrs: { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap' } },
     ],
-  })],
+  }), mermaid()],
 });

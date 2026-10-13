@@ -12,7 +12,8 @@ a restart:
 $XDG_CONFIG_HOME/hivemind/settings.json      # $HIVE_SETTINGS overrides the path
 ```
 
-Full-window Settings opens from the gear.
+Settings opens as a sheet over the workspace: the gear at the toolbar's right end or at the foot
+of the Layers panel, or ⌘, (Ctrl+,).
 
 ## Appearance page
 
@@ -21,7 +22,7 @@ to add images and videos. Glass controls appear only when glass is enabled.
 **Tools in scene views** controls whether docked tools use your theme or an opaque
 background. **Advanced** contains terminal colours, theme import, and Copy JSON.
 
-Wallpapers and overlay videos pause while fullscreen Settings covers the workspace.
+Wallpapers and overlay videos pause while Settings is open.
 Closing Settings resumes them without changing your saved preferences.
 
 Additional settings such as fonts and corner radius are available through the CLI or
@@ -32,60 +33,48 @@ its own background.
 
 ## How Settings is organised
 
-The sidebar has **General** (Appearance, Notifications, Shortcuts, About), then one group
-per kind of plugin — **Agents**, **Views**, **Tools** — each opening on an overview with a
-page for every agent, view and tool, and **Plugins** for browsing and adding more.
+| Group | Pages |
+|---|---|
+| General | Profile, Appearance, Notifications, Shortcuts |
+| Connect | People, Your devices, API access |
+| Plugins | Plugins: agents, views, widgets and tools |
+| Advanced | Servers, About and updates |
 
-## Views
-
-The Views overview picks the active view. Each view's own page configures its toolbar
-under **Display**: Automatic, Top, Bottom, Collapsed, or Off. Collapsed leaves a
-compact handle; Off removes both the toolbar and handle. Custom view controls and
-keyboard shortcuts keep working. The app Settings button remains available to
-restore the toolbar. Other views keep their own preferences.
-
-Open **Customize actions** to choose shortcuts, move them up or down, or show text
-labels. **Reset actions** restores that view's buttons and labels without changing
-Display. An empty selection removes the toolbar and its handle. Hiding a shortcut
-keeps existing panels open and does not disable the tool. Browser appears only when
-switched on under Tools, even if selected in this list.
-
-The CLI uses `hidden` for Collapsed and `off` for Off:
-
-```sh
-hive config set views.chrome.canvas.island '"off"'
-hive config set views.chrome.canvas.island '"top"'
-hive config set views.toolbars.canvas.actions '["agent", "board", "theme"]'
-hive config set views.toolbars.canvas.labels true
-```
+Links to the old page names (Agents, Views, Tools, Browse, Installed) open Plugins.
 
 ## Plugins
 
-**Browse** lists the agents and views published on
-[HiveHub](https://hivehub.griiken.workers.dev), with a checksum for every file. A view is named
-`@owner/name` after the GitHub account that published it; an agent has one name, like `gemini`. Installing downloads the files, checks every checksum, and shows
-what the plugin can do before anything is written; a file that changed after it was
-listed is refused. **Installed** adds a view from a folder (with the same review), and
-lists the views and agents you added, with their load problems.
+One page for every kind. **Yours** lists what you have, **On HiveHub** what is published on
+[HiveHub](https://hivehub.griiken.workers.dev), with one search and a filter by kind. **Add a
+view / widget / tool from a folder** adds your own. Installing from HiveHub checks every file
+against the checksum HiveHub recorded and shows what the plugin can do before anything is
+written. Each plugin has a page with three tabs: **Settings**, **Read me**, **What it can do**.
 
-## Agents
+- **Agents**: point at an agent and **Make default**. Its page says where its CLI was found and
+  which version, or how to get it, and sets its launch options (model, permission mode, and
+  whatever else it declares); see [Add your own agent](../agent-providers/#launch-options).
+- **Views**: **Use** picks the active view. A view's page sets its toolbar under **Display**:
+  Automatic, Top, Bottom, Collapsed or Off. **Customize actions** chooses the toolbar's buttons and
+  labels; **Reset actions** restores them. Browser shows only while the Browser tool is on.
+- **Tools**: a tool you add is off until you switch it on. The Browser's page also holds **Agent
+  browser control**, which lets agents drive Browser tiles.
 
-The overview picks the default agent and shows which agents this machine has: installed,
-not installed, or switched off. Each agent's page says where its CLI was found and which
-version it is — or that it is not installed, with a link to get it — and sets its launch
-options (model, permission mode, and whatever else it declares), read from the agent's own
-CLI; see [Add your own agent](../agent-providers/#launch-options).
+The same from a terminal:
 
-## Tools
-
-Switch on optional tools such as Browser. The Browser page also holds **Agent browser
-control**, which lets agents drive Browser panels.
+```sh
+hive plugins list
+hive plugins enable tool:hivemind/web
+hive plugins set view:@you/board columns all
+hive config set views.chrome.canvas.island '"off"'      # Display: hidden is Collapsed, off is Off
+hive config set views.toolbars.canvas.actions '["agent", "board", "theme"]'
+```
 
 ## Notifications and Shortcuts
 
 Notifications cover agent status transitions while the app is unfocused or another view
-is active. Shortcuts lists every binding (`1`–`7` spawns, ⌘B layers, ⌘E views,
-Shift+Esc undock).
+is active. On the canvas, `1` opens a terminal, `2` an agent, `3` the Code tile, `6` a frame, `7` a browser.
+⌘B (Ctrl+B outside a terminal) shows or hides the Layers panel, ⌘E switches views, Shift+Esc
+undocks.
 
 ## CLI
 

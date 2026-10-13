@@ -378,6 +378,40 @@ h1, .content-panel h1 {
   color: var(--hm-body);
 }
 
+/* ```mermaid blocks, drawn at build by src/lib/mermaid.mjs. The SVG sets --bg and --fg;
+   the rest is mixed from them here, once for every diagram on the page. */
+.sl-markdown-content figure.diagram {
+  padding: 1.25rem;
+  border: 1px solid var(--hm-line);
+  border-radius: 7px;
+  background: var(--hm-sunk);
+  overflow-x: auto;
+}
+.sl-markdown-content figure.diagram svg {
+  width: auto;
+  max-width: 100%;
+  min-width: var(--min, 0);
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  --_text:         var(--fg);
+  --_text-sec:     color-mix(in srgb, var(--fg) 60%, var(--bg));
+  --_text-muted:   color-mix(in srgb, var(--fg) 65%, var(--bg));
+  --_text-faint:   color-mix(in srgb, var(--fg) 25%, var(--bg));
+  --_line:         color-mix(in srgb, var(--fg) 50%, var(--bg));
+  --_arrow:        color-mix(in srgb, var(--fg) 85%, var(--bg));
+  --_node-fill:    var(--hm-surface);
+  --_node-stroke:  color-mix(in srgb, var(--fg) 25%, var(--bg));
+  --_group-fill:   var(--bg);
+  --_group-hdr:    color-mix(in srgb, var(--fg) 5%, var(--bg));
+  --_inner-stroke: color-mix(in srgb, var(--fg) 12%, var(--bg));
+  --_key-badge:    color-mix(in srgb, var(--fg) 10%, var(--bg));
+}
+.sl-markdown-content figure.diagram text { font-family: var(--sl-font); }
+@media (max-width: 50rem) { .sl-markdown-content figure.diagram { padding: .75rem; } }
+.sl-markdown-content figure.diagram .mono { font-family: var(--sl-font-mono); }
+
 /* A status chip means here exactly what the same dot means in the workspace. */
 .st {
   display: inline-flex;

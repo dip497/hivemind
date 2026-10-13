@@ -37,11 +37,15 @@ A session without a final `set-state` leaves the issue stale. Review comments fr
 Code tile's Changes arrive as prompts (`Review comment on src/x.ts:42 …`); record, fix, re-verify,
 and return to `in_review`.
 
-## Control plane
+## Drive other agents
 
-Inside a spawned tile (`$HIVEMIND_TILE` set), an agent can drive the app through the CLI:
+`hive ctl` drives the workspace: in an agent's terminal as that agent, in its workspace; in any
+other terminal as you. An agent finds the socket in `HIVE_DRIVE_SOCK`.
 
 ```bash
+# Who is there, and what each waits on; --watch follows turns, waits and answers
+hive ctl agents --watch
+
 # Start a worker with its default model
 hive ctl spawn --agent pi --prompt "Review the current diff and report concrete bugs."
 
@@ -64,6 +68,14 @@ Practical rules:
   for runtimes that cannot be read deterministically.
 - `hive ctl open-review --file plan.md` opens a review tile and waits for a human
   decision (default ceiling 24 h).
+- A worker that stops on a question or a permission tells the agent that spawned it, with the
+  commands to see and answer it.
+- `hive ctl workflow` runs in the CLI, so you can run one from your own terminal (`--repo`).
+
+A program of your own (an orchestrator, a bot) drives agents the same way with a token of its
+own: `hive grant create <name> -w <folder>` prints it, `--role agents` lets it start, follow and
+answer agents but not push, share the workspace or write files. Settings ▸ API access lists the
+tokens and takes them back. The protocol is `spec/workspace-api.md`.
 
 ## Supervision
 

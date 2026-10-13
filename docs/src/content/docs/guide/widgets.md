@@ -3,18 +3,26 @@ title: Widgets
 description: Small live boxes on the board, drawn from what your code renders.
 ---
 
+**Development preview.** Not in a release yet.
+
 A widget is a small live card whose content your code draws: a counter, a meter of busy agents,
-a reminder. A workspace's widgets float above every view; drag each one where you want it. Where
-they sit is yours alone (it is kept on your machine), and the eye button hides them all. Everyone in the workspace sees them, guests included, without installing anything: your
-code runs in one window of the machine that keeps the workspace, and what it draws is sent live
-to everyone, never saved. Which widgets there are, their order and their state are saved with the
-workspace, so they are there after a restart.
+a reminder. Widgets float above every view; drag each one where you want it. Where they sit is
+yours alone (kept on your machine), and the eye button hides them all. Which widgets there are,
+their order and their state are saved with the workspace.
 
 ## Make one
 
-A widget is a folder holding two files. Add it in **Settings ▸ Plugins ▸ Add a widget from a
-folder** (it is copied into `~/.config/hivemind/widgets`, beside the views, so you can move the
-original). Switch one off there, or with `hive plugins disable widget:<id>`: it is no longer
+```bash
+hive widgets new counter      # ./counter: widget.json, widget.js, hive.d.ts, PROMPT.md
+hive widgets install counter
+```
+
+`PROMPT.md` is a brief a coding agent can build the widget from: write what you want at the top
+and hand it the file. `hive.d.ts` lets an editor check your code against the API.
+
+A widget is a folder holding two files. Add one in **Settings ▸ Plugins ▸ Yours → Add a widget
+from a folder** (it is copied into `~/.config/hivemind/widgets`, so you can move the original).
+Switch one off on its page there, or with `hive plugins disable widget:<id>`: it is no longer
 offered, and the ones placed keep what they hold but do not run.
 
 `widget.json`
@@ -43,8 +51,9 @@ hive.on("action", (a) => {
 });
 ```
 
-Then the toolbar's Add menu (the shapes icon) → **Counter** adds it to the workspace, in any view. Hover a
-widget for its options (the gear) and to remove it.
+Then the toolbar's **Add** → **Counter** adds it to the workspace, in any view (Add lists tools
+and widgets by category, with a search). Hover a widget for its options (the gear) and to remove
+it.
 
 `options` lists what the person may set on each one placed, in the settings vocabulary every
 plugin uses: a `boolean`, a `number` (with `min` and `max`), a `text` (with `maxLength`) or a
@@ -102,7 +111,7 @@ A widget with code can draw these fields too.
 
 ## The workspace
 
-`hive.hm` is the client a view and a tool's tile have ([Views](./views/)): the workspace's frames
+`hive.hm` is the client a view and a tool's tile have ([Extension authoring](../extension-authoring/#permissions)): the workspace's frames
 and tiles, its agents' status and what happens to them, and the commands and requests a view
 has, each held to the permissions its `widget.json` asks for, as a view's are:
 
@@ -122,8 +131,8 @@ await hive.hm.commands.spawnAgent(null, null, { prompt: "run the tests" }); // y
 In a widget every call returns a promise, and one given a callback returns its unsubscribe at
 once. Its values (`hive.hm.hello`, `settings`, `capabilities`, `features`) are there to read.
 
-Settings → Plugins → Widgets shows what each widget may do. A widget without permissions reads
-and points at things, nothing more.
+A widget's page in **Settings ▸ Plugins**, **What it can do**, shows its permissions. A widget
+without permissions reads and points at things, nothing more.
 
 ## What it can draw
 
@@ -139,19 +148,26 @@ and points at things, nothing more.
 
 Images (`.png`, `.gif`, `.webp`, `.jpg`, `.svg`, up to 1 MB each) go in the widget's folder; guests
 get them from the host. `"chrome": "none"` in `widget.json` drops the card, for a pet that walks
-the screen. Buttons and clicks work on the machine that runs the widget; a guest sees the widget
-but its buttons do nothing yet.
+the screen.
 
-## Where they run, and on your phone
+## Where they run
 
-A widget's code runs in one window of yours that has the workspace open: on the machine that hosts
-it, or, for a workspace on a `hive host` with no window, on your laptop or desktop that has it
-open. Nobody else's computer runs it. A press anywhere else, a guest's window or your phone, is
-passed to that window.
+```mermaid title="One window runs a widget; everyone sees it"
+flowchart TB
+  run["The one window that runs widget.js"]
+  seen["Guests' windows, your other windows,<br>your phone"]
+  run -->|what it draws, live| seen
+  seen -.->|a press| run
+```
 
-On your phone, install the Widgets view on the computer that hosts the workspace
-(`hive views install @dip497/widgets`) and open it from the phone: it shows every widget, and its
-buttons work.
+The window that runs it is on the machine that hosts the workspace, or, for a workspace on a
+`hive host` with no window, your own laptop or desktop that has it open. Nobody else's computer
+runs your code, and nobody installs anything to see it. What it draws is never saved. A guest who
+can edit the board can press its buttons; one who can only view cannot.
+
+On your phone, a view that shows widgets draws them and its buttons work, for example
+`hive views install @dip497/widgets` on the computer that hosts the workspace ([Phone and
+browser](../phone/#views)).
 
 ## Share one on HiveHub
 

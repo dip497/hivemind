@@ -10,8 +10,8 @@ One canvas per project. **Frames** are named zones on it, each bound to a direct
 | Binding | Behaviour |
 |---|---|
 | Local repo | Default; tiles run in that directory. |
-| Git worktree | A nested sub-frame scoped to one branch (frame header → **worktree**). Arrange a frame's tiles and worktrees as Columns / Rows / Grid. |
-| Remote SSH | A directory on a saved machine, as `machine://<machine id>/abs/path`: the frame names the machine, and the machine says where it is. Terminals run in `hive` on that machine and keep running when the connection drops or the app closes; the editor and diff work over the same connection. One ssh connection per machine, using your keys, agent and `~/.ssh/config` (or a password kept in the OS keychain). |
+| Git worktree | A nested sub-frame scoped to one branch (a frame's ⋯ → **Worktree ▸**). Arrange a frame's tiles and worktrees as Columns / Rows / Grid. |
+| Remote SSH | A directory on a saved machine, as `machine://<machine id>/abs/path`: the frame names the machine, and the machine says where it is. Terminals run in `hive` on that machine and keep running when the connection drops or the app closes; the Code tile works over the same connection. One ssh connection per machine, using your keys, agent and `~/.ssh/config` (or a password kept in the OS keychain). |
 
 Remote frames are path-keyed: the `machine://` URI is the workspace path, so tiles go
 remote without per-tile changes (`docs/design/remote-frames.md`). A frame on a host no machine is
@@ -21,10 +21,10 @@ ids.
 
 ## The Layers panel
 
-⌘B shows or hides it. A rail down its left edge picks what it shows: **Tiles**, **Recents** or
+⌘B (Ctrl+B outside a terminal), or the button in its header, hides it and brings it back. A rail down its left edge picks what it shows: **Tiles**, **Recents** or
 **Machines**, with **Plugins** and **Settings** at its foot. Its title is this workspace; its menu
 lists every workspace on this computer (with how many agents need you there) to open in this
-window, and opens a folder or a recent one. Its search narrows everything it lists, and its bell
+window, opens a folder or a recent one, joins a shared workspace, and switches views (**Show as**). Its search narrows everything it lists, and its bell
 counts the agents that need you and goes to the next.
 
 - **Tiles**: **New agent** (which one, from the agents installed here), **New project** (a folder,
@@ -44,12 +44,12 @@ right-click) opens its menu, the same one as the **⋯** on its header on the ca
 - **Pin** a tile from its **⋮** menu (or right-click it, then press **P**): it goes to **Pinned**
   at the top, whatever the panel lists below. **R** renames it, **D** closes it. Hover a row to
   see when it was last active and where it runs.
-- A tile that finished something while you looked elsewhere is **unread**: its name is bold until
-  you select it. **U** marks one unread again, or read; the View menu's **Unread** lists only those.
+- A tile that finished something while you looked elsewhere is **unread**: a dot after its name
+  until you select it. **U** marks one unread again, or read; the View menu's **Unread** lists only those.
 - **Snooze** a tile (30 minutes, 1 hour, 2 hours, tomorrow at 9:00) and it leaves the list for
   **Snoozed** until then. It is back early if it needs you, or when you select it; **Wake now**
   brings it back at once.
-- The **View** menu (the sliders) chooses what is listed: **Status** (needs you, working, idle,
+- The **View** menu (the tiles' heading, **By project ⌄**) chooses what is listed: **Status** (needs you, working, idle,
   exited), **Last activity** (past hour, today, this week), **Machines**; how it is grouped
   (**Project**, **Machine**, **Date**, **Status**, **Agent** or none) and ordered (canvas order,
   last activity, name). **Reset to defaults** undoes
@@ -61,7 +61,7 @@ else's panel changes.
 
 ## Machines
 
-Machines live in the Layers rail, one heading per computer — **This computer** first — with
+The Layers panel's **Machines** pane lists one heading per computer — **This computer** first — with
 its link (round trip, or why it is down), how many agents there need you, and its frames under
 it. From a machine's heading:
 
@@ -91,33 +91,11 @@ The list is the same one `hive machine` edits in a terminal.
 An issue moves along one track, and `cancelled` is the way off it. Activity rows are signed by
 the human or the agent that wrote them.
 
-<figure>
-<svg viewBox="0 0 700 118" role="img" aria-label="An issue moves backlog to todo to in_progress to in_review to done; cancelled leaves the track from any state.">
-  <defs>
-    <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
-    </marker>
-  </defs>
-  <g font-family="var(--sl-font-mono)" font-size="11.5" fill="currentColor" stroke="currentColor">
-    <rect x="1" y="16" width="104" height="30" rx="5" fill="none" stroke-opacity=".4"/>
-    <text x="53" y="35" text-anchor="middle" stroke="none" opacity=".7">backlog</text>
-    <rect x="149" y="16" width="104" height="30" rx="5" fill="none" stroke-opacity=".4"/>
-    <text x="201" y="35" text-anchor="middle" stroke="none" opacity=".7">todo</text>
-    <rect x="297" y="16" width="104" height="30" rx="5" fill="none" stroke="var(--hm-working)" stroke-opacity=".8"/>
-    <text x="349" y="35" text-anchor="middle" stroke="none">in_progress</text>
-    <rect x="445" y="16" width="104" height="30" rx="5" fill="none" stroke="var(--hm-attention)" stroke-opacity=".8"/>
-    <text x="497" y="35" text-anchor="middle" stroke="none">in_review</text>
-    <rect x="593" y="16" width="104" height="30" rx="5" fill="none" stroke="var(--hm-done)" stroke-opacity=".8"/>
-    <text x="645" y="35" text-anchor="middle" stroke="none">done</text>
-    <g fill="none" stroke-opacity=".55" marker-end="url(#ar2)">
-      <path d="M107 31 H145"/><path d="M255 31 H293"/><path d="M403 31 H441"/><path d="M551 31 H589"/>
-      <path d="M349 50 V78 H641" stroke-dasharray="4 4"/>
-    </g>
-    <text x="645" y="96" text-anchor="middle" stroke="none" opacity=".7">cancelled</text>
-  </g>
-</svg>
-<figcaption>One track forward; cancelled is the only way off it, from any state</figcaption>
-</figure>
+```mermaid title="One track forward; cancelled is the way off it, from any state"
+flowchart TB
+  backlog --> todo --> in_progress --> in_review --> done
+  in_progress -.-> cancelled
+```
 
 ## Cross-repo work
 
@@ -142,7 +120,7 @@ Link types: `relates`, `blocks`, `blocked-by`, `duplicates`, `parent-of`, `child
 
 ## Parallel agents
 
-Spawn one agent per frame (`2` or the frame's **+**). Typical setups: a worktree per
+Spawn one agent per frame (`2`, or the frame's ⋯ → **New agent ▸**). Typical setups: a worktree per
 branch with an agent in each, or a frame bound to a remote host running agents there.
 Each agent is scoped to its frame's directory and issues.
 
@@ -151,8 +129,9 @@ Each agent is scoped to its frame's directory and issues.
 Local PTYs survive window close via a detached daemon; agent conversations resume after
 daemon restarts or reboots per the runtime's resume capability (claude/kiro resume their
 own session, codex/droid the newest session for the directory, opencode none). Closing a
-tile (`×`) kills it. Layout — frames, positions, viewport, editor tabs — persists per
-repo.
+tile (`×`) kills it. Layout — frames, positions, viewport, open files — persists per
+repo. Deleting a frame that holds tiles asks whether to **Keep them** (loose on the canvas) or
+close them with it.
 
 Limits: a machine without `hive` (Manage machines → Install hive) runs plain ssh
 terminals, which end when the connection drops. Issues and `hive ctl` read this computer's
