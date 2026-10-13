@@ -86,14 +86,14 @@ test("the terminal body is one instance, adopted by each view in turn — never 
   await page.waitForSelector('[data-community-view="windows"][data-community-ready="1"]');
   expect(await page.locator(".react-flow").count()).toBe(0);
   await expect(page.locator(".xterm")).toHaveCount(1);
-  expect(await probe('[data-community-slot] .xterm')).toBe("kept");
+  await expect.poll(() => probe('[data-community-slot] .xterm')).toBe("kept");
   expect(await page.getAttribute("[data-active-view]", "data-active-view")).toBe("windows");
 
   // → Canvas. Same element again, back inside the react-flow node.
   await toView("canvas");
   await page.waitForSelector(".react-flow__node-terminal");
   await expect(page.locator(".xterm")).toHaveCount(1);
-  expect(await probe(".react-flow__node-terminal .xterm")).toBe("kept");
+  await expect.poll(() => probe(".react-flow__node-terminal .xterm")).toBe("kept");
   // No session teardown surfaced: a killed PTY prints its exit banner and the
   // header status flips to "exited".
   await page.waitForTimeout(400);
@@ -172,13 +172,13 @@ test("an unsaved editor buffer survives a view switch (same CodeMirror instance)
   await tabs('[role="tab"]', { hasText: /editor|workbench|notes|code/i }).first().click();
   const tabContent = page.locator('[data-community-slot] .cm-content');
   await expect(tabContent.first()).toContainText(MARK);
-  expect(await probe('[data-community-slot] .cm-content')).toBe("cm");
+  await expect.poll(() => probe('[data-community-slot] .cm-content')).toBe("cm");
   await expect(page.locator(".cm-content")).toHaveCount(1);
 
   await toView("canvas");
   await page.waitForSelector(".react-flow__node-workbench");
   await expect(page.locator(".react-flow__node-workbench .cm-content")).toContainText(MARK);
-  expect(await probe(".react-flow__node-workbench .cm-content")).toBe("cm");
+  await expect.poll(() => probe(".react-flow__node-workbench .cm-content")).toBe("cm");
 });
 
 test("an unknown view id falls back to the canvas instead of blanking the workspace", async () => {
@@ -190,5 +190,5 @@ test("an unknown view id falls back to the canvas instead of blanking the worksp
   await expect(page.locator("[data-view-failure]")).toHaveCount(0);
   // Every body still alive.
   await expect(page.locator(".xterm")).toHaveCount(1);
-  expect(await probe(".react-flow__node-terminal .xterm")).toBe("kept");
+  await expect.poll(() => probe(".react-flow__node-terminal .xterm")).toBe("kept");
 });

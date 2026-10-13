@@ -20,6 +20,9 @@ hive.on("start", draw);
 hive.on("action", (a) => { if (a === "inc") { hive.setState({ n: ((hive.state && hive.state.n) || 0) + 1 }); draw(); } });
 `;
 
+// One app and one tab, carried from test to test: a failure ends the run there.
+test.describe.configure({ mode: "serial" });
+
 let app: AppWindow;
 let browser: Browser;
 let tab: Page;
@@ -134,8 +137,8 @@ test("a view plugin draws in the tab: the Windows view", async () => {
   await tab.locator('[data-view-choice="windows"]').click();
   await tab.waitForSelector('[data-community-view="windows"][data-community-ready="1"]', { timeout: 20_000 });
   await expect(tab.frameLocator('[data-community-view="windows"] iframe').locator(".w-room")).toHaveCount(1);
-  await tab.locator("[data-view-switch]").click();
-  await tab.locator('[data-view-choice="canvas"]').click();
+  // The Windows view has no toolbar, so no view switch: back the way its key would go.
+  await tab.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
   await expect(tab.locator(".react-flow")).toHaveCount(1);
 });
 
