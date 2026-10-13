@@ -71,6 +71,7 @@ export class AgentScreen {
     this.terminal = false;
     this.place(this.chat.el);
     this.composing.hidden = false;
+    this.waits.hidden = false;
     say(this.flip, "Terminal");
     if (o) this.show(o);
   }
@@ -125,6 +126,8 @@ export class AgentScreen {
     this.terminal = on;
     say(this.flip, on ? "Chat" : "Terminal");
     this.composing.hidden = on;
+    // The terminal shows the chooser itself; the header still says it waits.
+    this.waits.hidden = on;
     this.place(on ? this.term.el : this.chat.el);
     if (on) this.term.watch(this.app, a.workspace, a.tile);
     else this.term.unwatch();

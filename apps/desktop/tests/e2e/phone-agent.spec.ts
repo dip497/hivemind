@@ -121,3 +121,27 @@ test("a question its agent asks shows each option with what it means, chosen by 
   await choices.nth(1).click();
   await expect.poll(() => page.evaluate(() => (window as unknown as { calls: unknown[] }).calls.filter((c) => (c as string[])[0] === "answer"))).toEqual([["answer", "t1", { choice: 1 }]]);
 });
+
+test("in its terminal, which shows the chooser itself, a waiting agent's card is put away and its header still says it waits; back in its chat the card is as it was", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await screen();
+  const waiting = { kind: "question", since: 5, choose: true, asks: [{ question: "Which colour?", options: ["Red", "Green", "Blue"] }] };
+  await show(page, overview(agent("t1", "Phone test", { state: "waiting", waiting })));
+  await open(page, "t1");
+  const card = page.locator("[data-screen=agent] [data-waiting-card]");
+  const flip = page.locator("[data-view-toggle]");
+  await expect(card.locator("[data-choice]")).toHaveCount(3);
+  await flip.click();
+  await expect(page.locator("[data-screen=agent] [data-terminal]")).toBeVisible();
+  await expect(card).toBeHidden();
+  await expect(page.locator("[data-screen=agent] .backbar .waits")).toHaveText(/^waiting/i);
+  await flip.click();
+  await expect(card).toBeVisible();
+  await expect(card.locator("[data-choice]")).toHaveText(["Red", "Green", "Blue"]);
+  // Another agent opened from its terminal shows its own card.
+  await flip.click();
+  await expect(card).toBeHidden();
+  await show(page, overview(agent("t1", "Phone test", { state: "waiting", waiting }), agent("t2", "Other", { state: "waiting", waiting })));
+  await open(page, "t2");
+  await expect(card).toBeVisible();
+});
