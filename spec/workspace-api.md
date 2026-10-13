@@ -1,4 +1,4 @@
-# Workspace API (0.24)
+# Workspace API (0.25)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -317,7 +317,7 @@ layout the store cannot hold is `BAD_REQUEST`.
 | `terminal.resize` | `tile`, `cols`, `rows` | the client's own size of it, kept; it sizes it when the client may: the keyboard's holder, while a guest holds it; otherwise, among the host's own clients showing it, the one that typed last, and a window here also before anyone typed. A device of the person's (a phone) sizes it only by typing. When the one that typed last goes, it takes the size of the one that typed before it, as tmux's `window-size latest` does |
 | `terminal.flow` | `tile`, `paused` | stops reading its output while the client catches up; a pause ends on its own after 120 ms unless asked for again |
 | `terminal.ack` | `tile`, `taken` | a client that opened it with `acks` has taken `taken` of its output (`terminal.data`'s text, in UTF-16 units, all it was sent on that connection told). It is sent at most 128 K units ahead of that, the screen sent in place of output not counted; past it, nothing, until it has taken all it was sent, and then the host's screen in place of what it missed. Nothing queues for it, and the session is not held back for it. A client acknowledges each frame of output it takes (0.24) |
-| `terminal.fit` | `tile`, `cols`?, `rows`? | sizes it to the client's screen until the client lets go (no size), goes, or another client types; it then takes back the size it had, unless a client here sized it meanwhile. Where a client may type into it; not a session sized on its machine (0.24) |
+| `terminal.fit` | `tile`, `cols`?, `rows`? | sizes it to the client's screen until the client lets go (no size), goes, or another client types; it then takes back the size it had, unless a client here sized it meanwhile. The fit is also the client's own size (`terminal.resize`) until it lets go: its own typing keeps the fit, and once another client typed, its next key sizes it again (0.25). Where a client may type into it; not a session sized on its machine (0.24) |
 | `terminal.history` | `tile`, `lines` | sends the client the host's screen again, in place of what it shows, with at most `lines` of its scrollback, as each screen it is sent from now on. A phone asks for 200 lines as it opens a terminal and for more as the person scrolls to the oldest it holds |
 | `terminal.close` | `tile` | ends the session for good; recorded (target the tile) unless it had already ended |
 | `terminal.detach` | `tile` | the client shows it no more; a session no client shows is let go of (a daemon keeps it running, one the host runs itself ends) |

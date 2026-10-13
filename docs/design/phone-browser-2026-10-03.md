@@ -866,8 +866,8 @@ row.
 
 **11.4 The terminal, one tap from the chat.** The chat stays the default. Draw the core's screen
 (`crates/hive-phone/src/screen.rs`) in the browser. Never resize the phone's emulator locally:
-render at the PTY's columns and scale or pan to fit; an explicit "Fit to phone" resizes the real
-PTY and restores it when the phone leaves. A late join gets a snapshot of the rendered screen, not
+render at the PTY's columns and scale or pan to fit; "Fit to phone", on from the start, resizes the
+real PTY and restores it when the phone lets go or leaves. A late join gets a snapshot of the rendered screen, not
 a byte tail; output is flow-controlled by acknowledgements, and on overflow a replacing snapshot is
 sent instead of queued bytes. Key bar: Esc, Tab, arrows, Ctrl-C.
 
@@ -899,7 +899,7 @@ byte tail: the daemon's headless xterm, serialized (`SerializeAddon`), on an att
   screen would put the phone behind again at once), and a first batch always goes. Nothing queues
   per phone, and the session is never paused for one (a window's `terminal.flow` still pauses it).
 - **Fit to phone** (`terminal.fit`). Android and iOS draw at the PTY's size and never size it; the
-  browser keeps that, and Fit is an explicit ask that sizes the real PTY to the view at 12 px, until
+  browser fits from the start (2026-10-13; it was an explicit ask), sizing the real PTY to the view at 12 px, until
   the phone lets go or its watch ends (Back, the page gone, the connection dropped); then the size
   it had, unless a window here sized it meanwhile. A phone may now send `terminal.fit` (not
   `terminal.resize`). The core has it for all three (`Watching::fit`, the FFI's `Watch.fit` and
@@ -1316,6 +1316,14 @@ On the rig the phone showed "permission" with Allow and Deny for an AskUserQuest
   per question (`web/src/components/ToolCard/AskUserQuestionFooter.tsx:59-115`) but steps through the
   questions one at a time. One question of one answer is still answered by a tap. An agent whose
   hook does not hold the wait still has its option's digit typed, for one question of one answer only.
+- (2026-10-13) A terminal opened on the phone was drawn at the desktop's size until the person
+  tapped Fit. It now opens fitted (Fit pressed), fits again as the view changes, and Fit lets go;
+  leaving lets go too. A fit is the phone's own size in the host's "whoever typed last" rule
+  (§12.5): its typing keeps the fit, so leaving still gives back the size before it; a window's
+  key takes its size back, and the phone's next key fits it again. Let go, the phone says no size,
+  so its keys no longer size the session: the page no longer sends `terminal.resize`, and the wasm
+  `Term.size` is gone (the Android core keeps `Watching::size`). One owner still: `terminals.ts`,
+  the last to fit holding it (workspace-api 0.25).
 
 ### 12.11 Opening the page: every screen at once, then Start not ready
 

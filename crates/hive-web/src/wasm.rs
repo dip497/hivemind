@@ -512,9 +512,6 @@ impl Host {
             let mut inputs = term.inputs.lock().await;
             let (sent, sending) = mpsc::channel(64);
             // A fit lasts as long as the connection it was sent on.
-            if let Some((cols, rows)) = term.sized.get() {
-                let _ = sent.try_send(Sent::Size(cols, rows));
-            }
             if let Some(size) = term.fitted.get() {
                 let _ = sent.try_send(Sent::Fit(Some(size)));
             }
@@ -711,8 +708,6 @@ struct TermState {
     inputs: Mutex<mpsc::UnboundedReceiver<Input>>,
     /// The size the person fitted it to, sent again on each connection.
     fitted: Cell<Option<(u16, u16)>>,
-    /// The page's own size, sent again on each connection.
-    sized: Cell<Option<(u16, u16)>>,
     /// Whether a connection has shown it before.
     watched: Cell<bool>,
 }
@@ -728,7 +723,6 @@ impl Term {
                 put,
                 inputs: Mutex::new(inputs),
                 fitted: Cell::new(None),
-                sized: Cell::new(None),
                 watched: Cell::new(false),
             }),
         }
@@ -816,13 +810,6 @@ impl Term {
     pub fn fit(&self, cols: u16, rows: u16) {
         self.inner.fitted.set(Some((cols, rows)));
         let _ = self.inner.put.send(Input::Fit(Some((cols, rows))));
-    }
-
-    /// The page shows it `cols` × `rows` at its readable size: the terminal takes that size once
-    /// the person types here, until someone else types.
-    pub fn size(&self, cols: u16, rows: u16) {
-        self.inner.sized.set(Some((cols, rows)));
-        let _ = self.inner.put.send(Input::Size(cols, rows));
     }
 
     /// Back to the size it had before it was fitted.

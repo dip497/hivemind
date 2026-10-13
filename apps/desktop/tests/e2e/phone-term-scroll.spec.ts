@@ -44,7 +44,7 @@ window.feed = (n, from = 0, first = 0) => {
 const source = {
   held: false,
   update: () => { const u = next; next = null; return u; },
-  typeText() {}, typeKeys() {}, fit() {}, unfit() {}, size() {},
+  typeText() {}, typeKeys() {}, fit() {}, unfit() {},
   earlier: () => { window.earlier++; },
   scroll: (lines, col, row) => { if (window.takes && lines) window.scrolls.push([lines, col, row]); return window.takes; },
 };

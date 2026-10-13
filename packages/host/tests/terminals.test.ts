@@ -217,6 +217,40 @@ test("a session takes the size of whoever types, at their first key: a phone's s
   assert.deepEqual(sizes(), ["120x40", "48x30", "120x40", "48x30", "120x40"], "the phone went");
 });
 
+test("a phone's fit is its own size: its keys keep the fit, so leaving gives back the size it had; once a window types, its next key fits it again; let go, its keys size nothing", async () => {
+  const h = host();
+  const window = h.client();
+  const phone = () => h.client({ kind: "peer", person: "p".repeat(64), device: "d".repeat(64), access: "owner" });
+  const sizes = () => h.calls.filter((call) => call.startsWith("resize")).map((call) => call.split(" ")[2]);
+  await h.open(window, "hm:t1");
+  h.notice(window, "terminal.resize", "hm:t1", 120, 40);
+  const a = phone();
+  await h.open(a, "hm:t1", { attachOnly: true });
+  h.notice(a, "terminal.fit", "hm:t1", 48, 30);
+  h.notice(a, "terminal.write", "hm:t1", "y");
+  a.close();
+  assert.deepEqual(sizes(), ["120x40", "48x30", "120x40"], "the phone typed, then went");
+  const b = phone();
+  await h.open(b, "hm:t1", { attachOnly: true });
+  h.notice(b, "terminal.fit", "hm:t1", 50, 20);
+  h.notice(window, "terminal.write", "hm:t1", "q");
+  h.notice(b, "terminal.write", "hm:t1", "z");
+  assert.deepEqual(sizes().slice(3), ["50x20", "120x40", "50x20"], "the window's key, then the phone's");
+  h.notice(window, "terminal.write", "hm:t1", "q");
+  h.notice(b, "terminal.fit", "hm:t1");
+  h.notice(b, "terminal.write", "hm:t1", "z");
+  assert.deepEqual(sizes().slice(6), ["120x40"], "let go, the phone's keys size nothing");
+  b.close();
+  const c = phone();
+  await h.open(c, "hm:t1", { attachOnly: true });
+  h.notice(c, "terminal.fit", "hm:t1", 40, 20);
+  h.notice(window, "terminal.write", "hm:t1", "q");
+  h.notice(c, "terminal.write", "hm:t1", "z");
+  h.notice(window, "terminal.resize", "hm:t1", 100, 30);
+  c.close();
+  assert.deepEqual(sizes().slice(7), ["40x20", "120x40", "40x20", "100x30"], "a window typed over the fit: the window's size now, not the one before the fit");
+});
+
 test("a client that acknowledges what it takes is paced by it: past its window it is sent nothing until it has taken all, then the host's screen", async () => {
   const h = host({ screen: "SCREEN" });
   await h.open(h.client(), "hm:t1");
