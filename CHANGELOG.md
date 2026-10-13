@@ -9,6 +9,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- The full app in a browser tab: Settings → Devices, "Open in a browser", serves it on 127.0.0.1 behind a key that changes each launch. For another device, put it behind `tailscale serve`.
+
 ### Fixed
 
 - An agent busy with its first turn when the terminal service restarts is restored with the rest instead of ending: its screen is saved within 2 seconds even while it keeps printing. The status history keeps each exit's code and signal. Started from the phone, the new agent's screen says "Starting…" until it appears, not the name of the agent shown before.

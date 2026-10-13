@@ -45,8 +45,10 @@ test("the default renderer path stays small, and three.js is gone from the build
   const html = path.join(OUT, "index.html");
   if (!fs.existsSync(html)) { t.skip("no renderer build in out/ — run `pnpm build` first"); return; }
   const index = fs.readFileSync(html, "utf8");
-  const eager = [...index.matchAll(/assets\/([^"']+\.js)/g)].map((m) => m[1]!);
-  const entry = eager.find((f) => f.startsWith("index-"));
+  // The page's own script, beside the vendor chunks it loads first (named for its module, as the
+  // browser tab's entry shares it).
+  const eager = [...index.matchAll(/<script type="module"[^>]*src="\.\/assets\/([^"]+\.js)"/g)].map((m) => m[1]!);
+  const entry = eager.find((f) => !f.startsWith("vendor-"));
   assert.ok(entry, "index.html references an entry chunk");
   const entrySize = fs.statSync(path.join(OUT, "assets", entry)).size;
   assert.ok(entrySize <= ENTRY_BASELINE * (1 + ENTRY_MARGIN), `entry chunk grew to ${entrySize} bytes (baseline ${ENTRY_BASELINE} +${ENTRY_MARGIN * 100}%)`);
