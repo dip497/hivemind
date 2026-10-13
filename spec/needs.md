@@ -1,4 +1,4 @@
-# Needs you (0.10)
+# Needs you (0.11)
 
 What waits on the person (M5, design §9.2 "Home: Needs you"): each agent waiting on them, in the
 workspaces one of their devices holds, as their phone lists it. The device that runs the agents
@@ -57,8 +57,9 @@ holds is one item:
   300 characters. `descriptions` (0.10) says what each option means, one for each option in its
   order (`""` for one that says nothing), when the tool says it of any; descriptions of another
   count, or not all text, are left out of the question, not the question from the item.
-- `choose` (0.7) is `true` on a `question` that asks one question, with options, of which one is
-  chosen, when the agent's manifest says the keys that choose an option (`choose`, "Answering").
+- `choose` (0.7) is `true` on a `question` its answers may be chosen for ("Answering"): any, when
+  the agent's own hook holds it for the answer (0.11); else one question, with options, of which
+  one is chosen, when the agent's manifest says the keys that choose an option (`choose`).
 
 A session is named `hm:<tile>` or by its tile; both are the tile. An agent in no workspace the
 device holds is not listed, nor is one doing anything else (working, done, failed, …).
@@ -89,9 +90,12 @@ and once: an answer for a wait that is over, or one answered already, does nothi
   the screen it `says` it is (0.6), are
   typed into its terminal, the first at once and each next one a moment (40 ms) after the last, so
   its screen takes each one;
-- for a `question` the list says can be chosen from (`choose`), also `{ "choice": <n> }`: option
-  `n` of its question, counting from 0, chosen with the keys its manifest's `choose` gives, `{n}` in
-  them typed as the option's number counting from 1 (Claude Code's: the digit);
+- for a `question` the list says can be chosen from (`choose`), also `{ "answers": [...] }` (0.11):
+  one answer to each of its questions, in their order, each `{ "chosen": [<n>, ...] }`, the options
+  chosen counting from 0, one unless the question says several may be (`many`), none twice, or
+  `{ "text": "<one line>" }`, the person's own answer. Where its manifest's `choose` keys answer it
+  on its screen, it is one question, one option chosen, `{n}` in the keys typed as the option's
+  number counting from 1 (Claude Code's: the digit); a line there is `{ "text" }` alone;
 - for anything else, `{ "text": "<one line>" }`: typed into the agent's terminal, Enter after it.
   It is one line of at most 1000 characters, with no control characters.
 
@@ -100,14 +104,16 @@ and once: an answer for a wait that is over, or one answered already, does nothi
   the program on the drive socket that started the agent; anyone else is `FORBIDDEN`.
 
 Anything else is `BAD_REQUEST`: a decision for an agent that says no keys, or for a wait that is
-neither a plan, a permission nor an approval (a `question` among them), and a choice for a wait not
-chosen from or an option it does not list, among it. One may answer who may drive the workspace's agents, and the
+neither a plan, a permission nor an approval (a `question` among them), and answers for a wait not
+chosen from, or that leave out a question, add one, name an option it does not list, or several of
+a question that takes one, among it. One may answer who may drive the workspace's agents, and the
 person's own devices, a phone among them.
 
 What is typed is typed as the person types it at the agent's tile (0.7), so the agent's status
 hears it: a key that answers its permission sets it working, and Esc or Ctrl+C on its own ends
 its turn, at once, not when the agent next reports. An answer that lands is recorded with what was
-decided (`allow`, `deny`, `choice <n>` with the option's number counting from 1, or `reply` for a
+decided (`allow`, `deny`, `choice ` and each question's options chosen counting from 1, joined
+with `+`, or `reply` for its line, the questions apart by `, `, as `choice 3, 1+3`, or `reply` for a
 line, never its words), one that does not as
 `<decision>, not answered`. Nothing is typed, and it answers `{ "answered": false }`, while
 
@@ -131,9 +137,11 @@ An agent whose manifest says its hook can carry the answer (an `emit: input.requ
 `answer:`, 0.9; Claude Code's `PermissionRequest`) is answered there instead, and nothing is typed:
 its hook holds until the answer, which it prints, filled from the entry. `{ "decision" }` on a
 permission prints its `allow` or `deny`, and `{ "text" }` on a permission denies it with the line as
-the reason (`{message}`). On a question `{ "choice": <n> }` prints its `choose` with option `n`'s
-label, and `{ "text" }` prints it with the line, set in the tool's input (`{input}`) at `chosen`,
-keyed by the question's text. A question with several questions or answers still takes a line.
+the reason (`{message}`). On a question `{ "answers" }` prints its `choose` with each question's
+answer set in the tool's input (`{input}`) at `chosen`, keyed by the question's text: the labels of
+the options chosen, several joined by `, ` as Claude Code joins them, or the line typed; `{ "text" }`
+prints the line as the answer to each. Several questions, and several answers, are chosen from here
+too.
 It answers `{ "answered": true }` once the hook has the answer. The hook holds while the agent's
 status waits with that `since`: answered at the agent's own prompt (a key there, Esc, its tool run
 or refused), or its turn ended, it prints nothing and the answer after is `{ "answered": false }`.

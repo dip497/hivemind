@@ -30,8 +30,6 @@ export interface TermSource {
   typeKeys(keys: string[]): void;
   fit(cols: number, rows: number): void;
   unfit(): void;
-  /** The size this view reads it at: the terminal takes it once the person types here. */
-  size(cols: number, rows: number): void;
   /** The person scrolls `lines` (up below 0) at a cell (from 1): sent to the program when it takes
    *  scrolls; false: the view scrolls itself. 0 lines asks whose a scroll is. */
   scroll(lines: number, col: number, row: number): boolean;
@@ -133,8 +131,9 @@ export class TerminalView {
   private unseen = false;
   /** A scroll sent to the program, less than a line of it yet. */
   private owed = 0;
+  /** Sized to this view (Fit to phone): from the start, until the person lets go or leaves. */
   private fitted = false;
-  /** The size last said to the source (`readSize`). */
+  /** The size last fitted to (`readSize`). */
   private said = "";
 
   /** The canvas's size, in device pixels, and the pixel ratio. */
@@ -190,6 +189,7 @@ export class TerminalView {
 
   /** Watched no more: if it was fitted, it takes back the size it had. */
   unwatch(): void {
+    if (this.fitted) this.source?.unfit();
     const stop = this.stop;
     this.wanted = null;
     this.stop = null;
@@ -208,11 +208,11 @@ export class TerminalView {
     this.following = true;
     this.zoom = 1;
     this.across = 0;
-    this.fitted = false;
-    this.fitButton.setAttribute("aria-pressed", "false");
+    this.fitted = source !== null;
+    this.fitButton.setAttribute("aria-pressed", String(this.fitted));
     this.drawn = "";
     this.said = "";
-    this.sayReadSize();
+    this.fit();
     this.draw();
     this.changed();
   }
@@ -374,7 +374,7 @@ export class TerminalView {
     this.canvas.height = this.height;
     this.ctx.font = `400 100px ${FONT}`;
     this.advance = this.ctx.measureText("M").width / 100 || 0.6;
-    this.sayReadSize();
+    this.fit();
     this.draw();
   }
 
@@ -388,27 +388,26 @@ export class TerminalView {
     };
   }
 
-  /** Tell the source the size this view reads it at, when it changed. */
-  private sayReadSize(): void {
+  /** While fitted, size the terminal to this view at a readable size, when that changed. */
+  private fit(): void {
     const size = this.readSize();
-    if (!this.source || !size || `${size.cols}x${size.rows}` === this.said) return;
+    if (!this.source || !this.fitted || !size || `${size.cols}x${size.rows}` === this.said) return;
     this.said = `${size.cols}x${size.rows}`;
-    this.source.size(size.cols, size.rows);
+    this.source.fit(size.cols, size.rows);
   }
 
-  /** Size the terminal to this view at a readable size, or give it back the one it had. */
+  /** Fit the terminal to this view, or give it back the size it had. */
   private toggleFit(): void {
     const source = this.source;
     if (!source) return;
     this.fitted = !this.fitted;
     this.fitButton.setAttribute("aria-pressed", String(this.fitted));
+    this.said = "";
     if (!this.fitted) return source.unfit();
-    const size = this.readSize();
-    if (!size) return;
     this.zoom = 1;
     this.across = 0;
     this.following = true;
-    source.fit(size.cols, size.rows);
+    this.fit();
   }
 
   private key(label: string, name: string, press: () => void, props: Record<string, string>): HTMLButtonElement {

@@ -23,6 +23,9 @@ export class Chat {
   /** Back to the newest, counting what came since the person scrolled up; placed by the screen. */
   readonly newest = h("button", { type: "button", class: "newest", hidden: true, "aria-label": "Newest", "data-newest": "" });
   private unseen = 0;
+  /** How far above the newest the person reads: kept as the chat's box changes size, the keyboard
+   *  coming up among them. */
+  private away = 0;
   private readonly nothing = h("p", { class: "ended", hidden: true }, "Nothing said yet");
   private ids = new Set<string>();
   private tools = new Map<string, HTMLElement>();
@@ -36,6 +39,7 @@ export class Chat {
   constructor(private readonly unfold?: (use: string) => Promise<Unfolded>) {
     this.el.append(this.nothing);
     this.el.addEventListener("scroll", () => this.placed(), { passive: true });
+    new ResizeObserver(() => (this.el.scrollTop = this.el.scrollHeight - this.el.clientHeight - this.away)).observe(this.el);
     this.newest.addEventListener("click", () => {
       this.el.scrollTop = this.el.scrollHeight;
       this.placed();
@@ -95,7 +99,7 @@ export class Chat {
 
   /** The newest's button: shown while scrolled away, its count what came since. */
   private placed(): void {
-    const away = this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight;
+    const away = (this.away = this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight);
     if (away < 48) this.unseen = 0;
     this.newest.hidden = away <= AWAY_PX;
     const said = this.unseen > 99 ? "99+" : this.unseen ? String(this.unseen) : "";

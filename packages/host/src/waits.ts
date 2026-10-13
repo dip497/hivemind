@@ -12,14 +12,14 @@
  */
 import { randomUUID } from "node:crypto";
 import type { InputKind, StatusInput } from "@hivemind/agents";
-import type { Asked } from "@hivemind/agents/node";
+import type { Asked, QuestionAnswer } from "@hivemind/agents/node";
 import type { Answerer } from "@hivemind/workspace-api/agents";
 
 export type Decision = "allow" | "deny";
 
-/** Gives the agent its answer: `null` when the wait ended without one. `choice`: the option of
- *  the one question it asks. */
-export type Reply = (decision: Decision | null, feedback?: string, choice?: number) => void;
+/** Gives the agent its answer: `null` when the wait ended without one. `answers`: one to each
+ *  question it asks, in order. */
+export type Reply = (decision: Decision | null, feedback?: string, answers?: QuestionAnswer[]) => void;
 
 export interface Wait {
   request: string;
@@ -137,7 +137,7 @@ export class Waits {
   /** Answer the wait of `tile` that began at `since`, as `by`, and for a supervised tool use
    *  `always` its every later use: whether this answer was the one it got, and when it was not,
    *  who answered first. */
-  answer(tile: string, since: number, decision: Decision, o: { feedback?: string; by?: Answerer | null; always?: boolean; choice?: number } = {}): { answered: boolean; by?: Answerer } {
+  answer(tile: string, since: number, decision: Decision, o: { feedback?: string; by?: Answerer | null; always?: boolean; answers?: QuestionAnswer[] } = {}): { answered: boolean; by?: Answerer } {
     const { feedback, by = null } = o;
     const held = this.held.get(tile);
     if (!held || held.wait.since !== since) {
@@ -149,7 +149,7 @@ export class Waits {
     this.answered.set(`${tile}@${since}`, { decision, by });
     if (this.answered.size > ANSWERED_KEPT) this.answered.delete(this.answered.keys().next().value!);
     this.o.status.event(tile, { event: "input.resolved" });
-    held.reply(decision, feedback, o.choice);
+    held.reply(decision, feedback, o.answers);
     this.o.changed?.();
     return { answered: true };
   }

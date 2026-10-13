@@ -76,8 +76,9 @@ export function waitOn(tile: string, status: { kind: InputKind; says?: string; s
   const chooses = hooked ? !!hooked.chooses : !!facts.chooses?.(tile);
   if (asking?.asks) {
     const [only, ...more] = asking.asks;
+    // Keys on its screen choose one option of one question; its own hook sets any answer.
     const one = !!only && more.length === 0 && !only.many && only.options.length > 0;
-    return { kind: "question", asks: asking.asks, ...(one && chooses ? { choose: true as const } : {}) };
+    return { kind: "question", asks: asking.asks, ...(chooses && (hooked || one) ? { choose: true as const } : {}) };
   }
   const tool = asking?.name && status.kind === "permission" ? { tool: { name: asking.name, ...(asking.about ? { about: asking.about } : {}) } } : {};
   return { kind: status.kind, ...tool, ...(hooked || facts.decides(tile, status) ? { decide: true as const } : {}) };

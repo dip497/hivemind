@@ -17,6 +17,7 @@
   --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
   --tabs-clear: calc(112px + env(safe-area-inset-bottom));
   --vh: 100dvh;
+  --vv-top: 0px;
 }
 @media (prefers-color-scheme: light) {
   :root {
@@ -117,6 +118,11 @@ button { cursor: pointer; }
 .choice:active { transform: scale(0.98); }
 .choice .label { font: 500 14px/20px var(--sans); }
 .choice .description { font: 13px/18px var(--sans); color: var(--text2); }
+/* Several questions: each a block, chosen options outlined, one Send under them all. */
+.choice[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--text); }
+.form { display: flex; flex-direction: column; gap: 20px; }
+.form > .pill { width: 100%; min-height: 44px; border-radius: 12px; }
+.form > .pill:disabled { opacity: 0.4; }
 .plan {
   background: var(--panel); border-radius: 10px; padding: 12px;
   max-height: 320px; overflow-y: auto; color: var(--text2);
@@ -181,7 +187,7 @@ button { cursor: pointer; }
 .agent { contain-intrinsic-size: auto 68px; }
 
 /* One agent: a back bar, its chat, and what it waits on above the reply box. */
-.agent-screen { display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; height: var(--vh); }
+.agent-screen { display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; top: var(--vv-top); height: var(--vh); }
 .backbar {
   flex: none; display: flex; align-items: center; gap: 4px; min-height: 56px;
   padding: 0 8px 0 4px; border-bottom: 1px solid var(--line);
@@ -335,7 +341,7 @@ button { cursor: pointer; }
 
 /* Starting an agent. */
 /* The prompt and choices scroll; Start stays above the keyboard. */
-.start-screen { display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; height: var(--vh); }
+.start-screen { display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; top: var(--vv-top); height: var(--vh); }
 .start { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px 20px 16px; max-width: 560px; }
 .start h2 { margin: 10px 0 0; }
 .start .problem, .start .quiet, .start-screen .notes p { margin: 0; padding: 0; }
@@ -368,7 +374,7 @@ button { cursor: pointer; }
 .tabs .tab-dot { position: absolute; top: 5px; left: calc(50% + 8px); width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
 
 /* A view, in its frame on its own origin, filling what the bar above it leaves. */
-.view-screen { display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; height: var(--vh); }
+.view-screen { display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; top: var(--vv-top); height: var(--vh); }
 .view-host { flex: 1; min-height: 0; position: relative; }
 .view-host iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--canvas); }
 .view-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 14px 14px 16px; text-align: left; color: var(--text); font: inherit; }

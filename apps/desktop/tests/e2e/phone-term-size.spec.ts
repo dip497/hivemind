@@ -40,6 +40,7 @@ const view = new TerminalView();
 view.el.style.flex = "1";
 document.getElementById("app").append(view.el);
 view.watch(app, "w0", "t1");
+window.view = view;
 window.ready = true;
 </script>` });
     }
@@ -54,22 +55,29 @@ window.ready = true;
 
 type Call = [string, ...unknown[]];
 const calls = (page: Page) => page.evaluate(() => (window as unknown as { calls: Call[] }).calls);
-const sizes = async (page: Page) => (await calls(page)).filter((c) => c[0] === "size");
+const fits = async (page: Page) => (await calls(page)).filter((c) => c[0] === "fit" || c[0] === "unfit");
 
-test("the phone says the size it reads a terminal at as it shows one, and again as its view changes, never fitting it; Fit still fits it at once", async () => {
+test("a terminal opens fitted to the phone, again as its view changes; Fit gives it back its own size, and so does leaving it", async () => {
   test.skip(!built(), "no page build: run crates/hive-web/build.sh");
   const page = await terminal();
   await page.evaluate(() => document.fonts.ready);
-  await expect.poll(async () => (await sizes(page)).length).toBeGreaterThan(0);
-  const [, cols, rows] = (await sizes(page)).at(-1)!;
+  await expect(page.locator("[data-fit]")).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(async () => (await fits(page)).length).toBeGreaterThan(0);
+  const [, cols, rows] = (await fits(page)).at(-1)!;
   expect(cols).toBeGreaterThanOrEqual(20);
   expect(cols).toBeLessThan(80);
   // The keyboard comes up: fewer rows to read it in.
   await page.setViewportSize({ width: 390, height: 500 });
-  await expect.poll(async () => (await sizes(page)).at(-1)?.[2]).toBeLessThan(rows as number);
-  expect((await sizes(page)).at(-1)?.[1]).toBe(cols);
-  expect((await calls(page)).filter((c) => c[0] === "fit")).toEqual([]);
+  await expect.poll(async () => (await fits(page)).at(-1)?.[2]).toBeLessThan(rows as number);
+  expect((await fits(page)).at(-1)?.[1]).toBe(cols);
   await page.locator("[data-fit]").click();
-  const last = (await sizes(page)).at(-1)!;
-  expect((await calls(page)).filter((c) => c[0] === "fit")).toEqual([["fit", last[1], last[2]]]);
+  await expect(page.locator("[data-fit]")).toHaveAttribute("aria-pressed", "false");
+  expect((await fits(page)).at(-1)).toEqual(["unfit"]);
+  await page.locator("[data-fit]").click();
+  expect((await fits(page)).at(-1)?.[0]).toBe("fit");
+  const before = (await fits(page)).length;
+  await page.evaluate(() => (window as unknown as { view: { unwatch(): void } }).view.unwatch());
+  expect((await fits(page)).slice(before)).toEqual([["unfit"]]);
+  // The phone's own size is the fit, and only while fitted: none said for typing to take.
+  expect((await calls(page)).filter((c) => c[0] === "size")).toEqual([]);
 });

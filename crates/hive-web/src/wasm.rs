@@ -12,7 +12,7 @@ use hive_phone::{
     markdown, network, pairing, person,
     screen::{Screen, FIRST_HISTORY},
     views,
-    workspace::{self, Input, Reply, Sent, Watched},
+    workspace::{self, Answer, Input, Reply, Sent, Watched},
 };
 use iroh::{
     endpoint::{Connection, ConnectionError, RecvStream, SendStream},
@@ -64,27 +64,44 @@ fn from_js(v: &JsValue) -> Result<Value, JsError> {
     serde_json::from_str(&String::from(text)).map_err(err)
 }
 
-/// The person's answer as the page gives it: `{text}`, `{allow}`, `{approve, feedback?}` or `{choice}`.
+/// The person's answer as the page gives it: `{text}`, `{allow}`, `{approve, feedback?}` or
+/// `{answers: [{chosen: [n…]} | {text}…]}`.
 fn reply_of(said: &JsValue) -> Result<Reply, JsError> {
     let said = from_js(said)?;
     let text = |k: &str| said.get(k).and_then(Value::as_str).map(str::to_string);
     let yes = |k: &str| said.get(k).and_then(Value::as_bool);
-    let choice = said
-        .get("choice")
-        .and_then(Value::as_u64)
-        .and_then(|n| u32::try_from(n).ok());
-    match (text("text"), yes("allow"), yes("approve"), choice) {
+    let answers = match said.get("answers") {
+        None => None,
+        Some(list) => Some(
+            list.as_array()
+                .and_then(|l| l.iter().map(answer_of).collect::<Option<Vec<_>>>())
+                .ok_or_else(|| err("each of answers is {chosen: [n…]} or {text}"))?,
+        ),
+    };
+    match (text("text"), yes("allow"), yes("approve"), answers) {
         (Some(text), None, None, None) => Ok(Reply::Text(text)),
         (None, Some(allow), None, None) => Ok(Reply::Decide { allow }),
         (None, None, Some(approve), None) => Ok(Reply::Plan {
             approve,
             feedback: text("feedback"),
         }),
-        (None, None, None, Some(n)) => Ok(Reply::Choose { n }),
+        (None, None, None, Some(answers)) => Ok(Reply::Answers(answers)),
         _ => Err(err(
-            "an answer is {text}, {allow}, {approve, feedback?} or {choice}",
+            "an answer is {text}, {allow}, {approve, feedback?} or {answers}",
         )),
     }
+}
+
+fn answer_of(a: &Value) -> Option<Answer> {
+    if let Some(text) = a.get("text").and_then(Value::as_str) {
+        return Some(Answer::Text(text.to_string()));
+    }
+    let chosen = a.get("chosen")?.as_array()?;
+    chosen
+        .iter()
+        .map(|n| n.as_u64().and_then(|n| u32::try_from(n).ok()))
+        .collect::<Option<Vec<_>>>()
+        .map(Answer::Chosen)
 }
 
 /// The device key whose seed is `seed`: the page keeps it (www/app/store.ts), this crate signs with it.
@@ -495,9 +512,6 @@ impl Host {
             let mut inputs = term.inputs.lock().await;
             let (sent, sending) = mpsc::channel(64);
             // A fit lasts as long as the connection it was sent on.
-            if let Some((cols, rows)) = term.sized.get() {
-                let _ = sent.try_send(Sent::Size(cols, rows));
-            }
             if let Some(size) = term.fitted.get() {
                 let _ = sent.try_send(Sent::Fit(Some(size)));
             }
@@ -694,8 +708,6 @@ struct TermState {
     inputs: Mutex<mpsc::UnboundedReceiver<Input>>,
     /// The size the person fitted it to, sent again on each connection.
     fitted: Cell<Option<(u16, u16)>>,
-    /// The page's own size, sent again on each connection.
-    sized: Cell<Option<(u16, u16)>>,
     /// Whether a connection has shown it before.
     watched: Cell<bool>,
 }
@@ -711,7 +723,6 @@ impl Term {
                 put,
                 inputs: Mutex::new(inputs),
                 fitted: Cell::new(None),
-                sized: Cell::new(None),
                 watched: Cell::new(false),
             }),
         }
@@ -799,13 +810,6 @@ impl Term {
     pub fn fit(&self, cols: u16, rows: u16) {
         self.inner.fitted.set(Some((cols, rows)));
         let _ = self.inner.put.send(Input::Fit(Some((cols, rows))));
-    }
-
-    /// The page shows it `cols` × `rows` at its readable size: the terminal takes that size once
-    /// the person types here, until someone else types.
-    pub fn size(&self, cols: u16, rows: u16) {
-        self.inner.sized.set(Some((cols, rows)));
-        let _ = self.inner.put.send(Input::Size(cols, rows));
     }
 
     /// Back to the size it had before it was fitted.

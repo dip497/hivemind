@@ -2,8 +2,8 @@
 // computer, opened from Home on the paired page, is drawn from the screen hive-phone's core keeps of
 // it in the page's wasm. A full-screen program already running draws as the computer shows it on a
 // late join; what is typed on the phone reaches the shell and its echo comes back; a flood of output
-// ends on the right screen; Fit to phone sizes the real terminal until the phone leaves, and it then
-// takes back the size it had.
+// ends on the right screen; the real terminal is fitted to the phone from the start, Fit gives it
+// back the size it had, and so does the phone leaving.
 import { test, expect, chromium, type Browser, type ElectronApplication, type Page } from "@playwright/test";
 import { execSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -35,7 +35,7 @@ const desktopScreen = (w: Page, tile: string) => w.evaluate((id) =>
 /** The lines the phone's terminal shows, as its text layer reads them to a screen reader. */
 const phoneLines = (p: Page) => p.locator('[data-screen="terminal"] [data-term-text] > div').allTextContents();
 
-test("a shell tile opened on the paired page draws the computer's screen on a late join, takes what is typed there and shows its echo, ends a flood on the right screen, and Fit to phone sizes it until the phone leaves", async ({}, testInfo) => {
+test("a shell tile opened on the paired page draws the computer's screen on a late join, takes what is typed there and shows its echo, ends a flood on the right screen, and is fitted to the phone until it lets go or leaves", async ({}, testInfo) => {
   test.skip(!hiveNetBuilt() || !hiveWebBuilt(), "build hive-net (cargo build in crates/hive-net) and the page (crates/hive-web/build.sh) first");
   test.setTimeout(300_000);
   const net = await ownNetwork(root, procs, "closed", WWW);
@@ -72,14 +72,17 @@ test("a shell tile opened on the paired page draws the computer's screen on a la
   await node.locator(".xterm").click();
   await desktop.keyboard.type("seq -f 'line %g of the file' 1 400 | less\n");
   await expect.poll(() => desktopScreen(desktop, tile), { timeout: 10_000 }).toContain("line 20 of the file");
-  const computer = (await desktopScreen(desktop, tile)).split("\n").map((l) => l.trimEnd());
 
-  // Late: the phone opens it from Home, and draws the screen the computer shows, row for row.
+  // Late: the phone opens it from Home, fitted to it, and draws the screen the computer shows, row for row.
   const row = page.locator(`[data-tree] [data-row][data-kind="shell"]`);
   await expect(row).toHaveCount(1, { timeout: 30_000 });
   await row.click();
   await expect(page.locator('[data-screen="terminal"]')).toBeVisible();
-  await expect.poll(async () => (await phoneLines(page)).slice(-computer.length).map((l) => l.trimEnd()), { timeout: 20_000 }).toEqual(computer);
+  const lines = (s: string) => s.split("\n").map((l) => l.trimEnd());
+  await expect.poll(async () => {
+    const computer = lines(await desktopScreen(desktop, tile));
+    return computer.some((l) => l.includes("of the file")) && (await phoneLines(page)).slice(-computer.length).map((l) => l.trimEnd()).join("\n") === computer.join("\n");
+  }, { timeout: 20_000 }).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("late-join.png") });
 
   // Typed on the phone: less quits, and a command's echo and output come back.
@@ -140,7 +143,7 @@ test("a shell tile opened on the paired page draws the computer's screen on a la
   expect(repaints[15]).toBeLessThan(8);
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
 
-  // Fit to phone: the real terminal takes the phone's size; the phone gone, the one it had.
+  // Fitted to the phone; Fit gives the real terminal back the size it had, and so does leaving.
   let asked = 0;
   /** The terminal's size as the shell in it says, asked from the phone. */
   const sizeOn = async (p: Page) => {
@@ -150,16 +153,24 @@ test("a shell tile opened on the paired page draws the computer's screen on a la
     await expect.poll(async () => (said = (await phoneLines(p)).find((l) => l.startsWith(`${mark} `)) ?? ""), { timeout: 10_000 }).not.toBe("");
     return said.slice(mark.length + 1).trim();
   };
-  const before = await sizeOn(page);
-  await page.locator("[data-fit]").click();
-  await expect(page.locator("[data-fit]")).toHaveAttribute("aria-pressed", "true");
+  const fit = page.locator("[data-fit]");
+  await expect(fit).toHaveAttribute("aria-pressed", "true");
+  const fitted = await sizeOn(page);
+  expect(Number(fitted.split(" ")[1])).toBeLessThan(60);
+  await fit.click();
+  await expect(fit).toHaveAttribute("aria-pressed", "false");
   await page.locator('[data-screen="terminal"] .term-view').tap();
-  await expect.poll(() => sizeOn(page), { timeout: 10_000 }).not.toBe(before);
-  const fitted = (await sizeOn(page)).split(" ").map(Number);
-  expect(fitted[1]).toBeLessThan(60);
+  await expect.poll(() => sizeOn(page), { timeout: 10_000 }).not.toBe(fitted);
+  const own = await sizeOn(page);
+  await fit.click();
+  await page.locator('[data-screen="terminal"] .term-view').tap();
+  await expect.poll(() => sizeOn(page), { timeout: 10_000 }).toBe(fitted);
+  // Gone and back: fitted again, and letting go gives back what it had before, so leaving gave it back.
   await page.locator('[data-screen="terminal"] [data-back]').click();
   await expect(page.locator('[data-screen="home"]')).toBeVisible();
   await row.click();
+  await expect(fit).toHaveAttribute("aria-pressed", "true");
+  await fit.click();
   await page.locator('[data-screen="terminal"] .term-view').tap();
-  await expect.poll(() => sizeOn(page), { timeout: 10_000 }).toBe(before);
+  await expect.poll(() => sizeOn(page), { timeout: 10_000 }).toBe(own);
 });

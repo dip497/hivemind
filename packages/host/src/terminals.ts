@@ -372,13 +372,17 @@ export class Terminals {
   }
 
   /** `from` fits `tile` to its screen; null: back to the size it had. A session sized on another
-   *  machine is sized there. */
+   *  machine is sized there. A fit is also `from`'s own size, which its typing takes. */
   private fit(tile: string, size: { cols: number; rows: number } | null, from: Connection): void {
     if (!size) {
+      this.said.get(tile)?.delete(from);
       if (this.fits.get(tile)?.by === from) this.unfit(tile);
       return;
     }
     if (this.machines.has(tile) || !this.keyboards.mayType(tile, from)) return;
+    let mine = this.said.get(tile);
+    if (!mine) this.said.set(tile, (mine = new Map()));
+    mine.set(from, size);
     const fit = this.fits.get(tile);
     this.fits.set(tile, { by: from, was: fit ? fit.was : this.sizes.get(tile) });
     this.size(tile, size.cols, size.rows);
@@ -394,8 +398,8 @@ export class Terminals {
   private takeSize(tile: string, from: Connection): void {
     const mine = this.said.get(tile)?.get(from);
     if (!mine) return;
-    // Sized by typing: what it had before a fit is not what to give back.
-    this.fits.delete(tile);
+    // Sized by someone else's typing: what it had before a fit is not what to give back.
+    if (this.fits.get(tile)?.by !== from) this.fits.delete(tile);
     this.size(tile, mine.cols, mine.rows);
   }
 

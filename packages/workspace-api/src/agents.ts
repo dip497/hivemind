@@ -49,7 +49,11 @@ export interface Answerer {
  *  its terminal. */
 /** A line typed, or a decision; `always` (0.23): a supervised tool use decided so from now on, for
  *  every use of that tool by that agent. */
-export type AgentAnswer = { text: string } | { decision: "allow" | "deny"; feedback?: string; always?: true };
+export type AgentAnswer = { text: string } | { decision: "allow" | "deny"; feedback?: string; always?: true } | { answers: QuestionAnswer[] };
+
+/** The answer to one question a wait asks (`asks`): the options chosen, by their place from 0
+ *  (one, unless several may be), or a line. */
+export type QuestionAnswer = { chosen: number[] } | { text: string };
 
 /** What may be started in a workspace (M5, spec/agents.md "Starting"): the agents a device starts,
  *  with their model and mode choices (`values` empty: one taken as typed), and the workspace's
