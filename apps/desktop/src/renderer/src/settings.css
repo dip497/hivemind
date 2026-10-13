@@ -313,9 +313,9 @@
   background: color-mix(in oklab, var(--color-fg3) 30%, transparent);
 }
 .hm-update-bar > span {
-  display: block; height: 100%; border-radius: inherit;
+  display: block; height: 100%; border-radius: inherit; transform-origin: left;
   background: var(--color-accent, var(--color-ok));
-  transition: width 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 /* While a step runs, a sheen crosses the filled part: the installer reports steps, not bytes. */
 .hm-update-bar[data-busy="1"] > span::after {
@@ -342,8 +342,8 @@
 .plugins-lead { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .plugins-lead p { font-size: var(--text-label); color: var(--color-fg2); }
 .plugins-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.plugins-scope { display: flex; gap: 2px; padding: 2px; border-radius: 6px; background: var(--color-bg3); }
-.plugins-scope > button { padding: 4px 10px; border-radius: 4px; font-size: var(--text-label); color: var(--color-fg2); }
+.plugins-scope { display: flex; box-sizing: border-box; height: var(--spacing-control); gap: 2px; padding: 2px; border-radius: 6px; background: var(--color-bg3); }
+.plugins-scope > button { padding: 0 10px; border-radius: 4px; font-size: var(--text-label); color: var(--color-fg2); }
 .plugins-scope > button:hover { color: var(--color-fg); }
 .plugins-scope > button[aria-selected=true] { background: var(--color-bg); color: var(--color-fg); box-shadow: var(--hm-shadow-1); }
 .plugins-group { display: flex; flex-direction: column; gap: 8px; }

@@ -202,3 +202,57 @@ that are not a button or a field are justified here; the rest move to the primit
 
 Guard: a unit test that fails on a native `<select>`, a literal font size, a colour literal
 outside the token files and allow-listed palettes, or a control height off the scale.
+
+## After — 2026-10-13
+
+Done in four commits after this report: `77e2318` (scales and tokens), `9b4d8cb` (Select, one
+focus ring, native colours), `e52700c` (the guard holds control heights) and the polish commit
+that adds this section. Re-measured on that tree, renderer + bundled tools.
+
+| Measure | Before | After |
+|---|---|---|
+| Native `<select>` | 16 in 10 files | 0 (one `Select` in `components/ui`) |
+| `text-[Npx]` literals | 405 in 17 sizes | 0; 7 named steps (20, 15, 14, 13, 12, 11, 10) |
+| CSS font sizes by hand | yes | 0 (`var(--text-*)`) |
+| Focus recipes | 3, doubled on primitives | 1 rule, `--color-focus`, ≥3:1 for any accent |
+| `accent-color` / `color-scheme` | 2 rules / none | app-wide, follows the theme |
+| Control heights | 12 Button sizes, 36px `lg`, h-7/h-8 by hand | 32 / 28, and 24, 20, 16 in tile chrome; none set at a call site |
+| Colour literals outside token definitions | 79 TS/TSX, CSS uses | 30 TS/TSX, all in the allow-listed palettes (frame and people colours, QR, issue states) and one xterm value; 0 in CSS |
+| Radii off the scale | 3px ×3 and arbitrary `rounded-[Npx]` | 0 |
+| Raw `<button>` / `<input>` | 55 / 15 | 53 / 13, each justified in the table above |
+
+Detector (`impeccable detect`):
+
+| | Anti-patterns | Advisories |
+|---|---|---|
+| Renderer, before | 4 | 56 (43 colour, 10 font size, 3 radius) |
+| Renderer, after | 2, both the false positives noted above (`BrowserTile.tsx:304` tab underline, the Markdown blockquote rule) | 0 |
+| Tools, before | 0 | 2 (font size) |
+| Tools, after | 0 | 0 |
+
+`review-ui.tsx:46`'s stripe is gone, and the update bar fills with `transform: scaleX`, not
+`width`.
+
+Guard: `apps/desktop/tests/unit/design-system.test.ts`, run by `pnpm test:unit`. It fails on a
+literal or Tailwind-named font size, a colour literal outside a custom-property definition or an
+allow-listed palette, a radius off the scale, a native `<select>`, a focus ring drawn anywhere
+but the one rule, a height set on a Button/Input/SelectTrigger where it is used, and a primitive
+size off the control heights. It fails 139 times on `7fdc199` and passes now.
+
+The e2e specs that drove native selects pick through the Select now; doing that found that
+Escape, closing a Select inside the Appearance panel, also closed the panel. Fixed in
+`ThemePanel.tsx`.
+
+Score after: Accessibility 3, Performance 4, Responsive 2, Theming 3, Implementation Integrity
+3 — **15/20**. Still open:
+
+- **[P2]** Tabs are still drawn three ways; a `Tabs` primitive is the next step.
+- **[P2]** Phone-browser targets (Responsive).
+- **[P3]** `theme-store.ts:153-155` writes `--radius-panel`, `--font-ui-user` and
+  `--font-mono-user`, and no rule reads them, so the radius and font settings do nothing.
+- **[P3]** The UI font is still the bundled Geist.
+
+Screenshots, dark and light, before and after: `ds-before-*.png` and `ds-after-*.png` in the
+session's `webphone` scratchpad (Settings: API access, its focused row and open Select, Plugins,
+People, Your devices, Appearance; the sidebar; the toolbar; the view menu). The "new agent" shot
+shows the Plugins page in both: with no agent installed, New agent opens Plugins.

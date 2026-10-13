@@ -452,7 +452,7 @@ function UpdateWork({ progress, busy, onRestart }: { progress: UpdateProgress | 
         </div>
         <div className="hm-update-bar mt-1.5" data-busy={busy ? "1" : "0"} role="progressbar"
           aria-valuemin={0} aria-valuemax={UPDATE_STEPS.length} aria-valuenow={UPDATE_STEPS.indexOf(p.step) + 1} aria-label={p.label}>
-          <span style={{ width: `${filled}%` }} />
+          <span style={{ transform: `scaleX(${filled / 100})` }} />
         </div>
       </div>
       {ready && <Button onClick={onRestart} size="xs" title="Restart into the new version">Restart</Button>}
