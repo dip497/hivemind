@@ -7,12 +7,13 @@ import * as React from "react";
 import * as jsxRuntime from "react/jsx-runtime";
 import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { parsePatchFiles, type CodeViewItem } from "@pierre/diffs";
-import { CodeView } from "@pierre/diffs/react";
+import { CodeView, WorkerPoolContextProvider } from "@pierre/diffs/react";
 import { TILE_API_VERSION, type HostSdk } from "@hivemind/tile-sdk";
 import type { ViewClient } from "@hivemind/view-sdk";
 import { Button } from "../components/ui/button";
 import { Loading } from "../components/ui/loading";
 import * as ui from "../plugin-ui";
+import { workerHighlighterOptions, workerPoolOptions } from "../pierre-codeview";
 import type { HostModuleName } from "../../../shared/plugin-host";
 
 const MarkdownPreview = lazy(() => import("../markdown-preview").then((m) => ({ default: m.MarkdownPreview })));
@@ -28,8 +29,10 @@ function PatchView({ patch, className }: { patch: string; className?: string }) 
   }, [patch]);
   if (!items.length) return <div className={className}>No changes.</div>;
   return (
-    <CodeView className={className ?? "h-full w-full overflow-y-auto"} items={items}
-      options={{ theme: { dark: "pierre-dark", light: "pierre-light" }, themeType: "dark", overflow: "scroll" }} />
+    <WorkerPoolContextProvider poolOptions={workerPoolOptions} highlighterOptions={workerHighlighterOptions}>
+      <CodeView className={className ?? "h-full w-full overflow-y-auto"} items={items}
+        options={{ theme: { dark: "pierre-dark", light: "pierre-light" }, themeType: "dark", overflow: "scroll" }} />
+    </WorkerPoolContextProvider>
   );
 }
 

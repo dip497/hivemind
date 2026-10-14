@@ -1,11 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { WorkerPoolContextProvider } from "@pierre/diffs/react";
 import { Toaster } from "sonner";
 import { Requests } from "./multiplayer/requests";
 import { TooltipProvider } from "./components/ui/tooltip";
-import { workerFactory } from "./pierre-worker";
 import { App } from "./App";
 // Self-host Geist (UI) and JetBrains Mono (terminal/code/IDs) so glyphs are available
 // immediately and offline — no CDN round-trip, no flash-of-fallback that would
@@ -42,36 +40,31 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <WorkerPoolContextProvider
-        poolOptions={{ workerFactory }}
-        highlighterOptions={{ theme: { dark: "pierre-dark", light: "pierre-light" } }}
-      >
-        <TooltipProvider delayDuration={200} skipDelayDuration={500}>
-          <App />
-          <Requests />
-          <Toaster
-            theme="dark"
-            position="bottom-right"
-            // Same glass family as the agent .hm-toast cards (frosted surface +
-            // token colors + inner-top highlight) so action confirmations and
-            // agent events read as one notification plane. Both are bottom-right
-            // and temporally rare, so they share the corner cleanly.
-            toastOptions={{
-              className: "hm-sonner",
-              style: {
-                background: "color-mix(in srgb, var(--color-bg3) 95%, transparent)",
-                color: "var(--color-fg)",
-                border: "1px solid var(--color-line2)",
-                borderRadius: "12px",
-                boxShadow: "var(--hm-highlight-glass), var(--hm-shadow-glass)",
-                backdropFilter: "blur(10px) saturate(135%)",
-                fontFamily: "var(--font-sans)",
-                fontSize: "var(--text-label)",
-              },
-            }}
-          />
-        </TooltipProvider>
-      </WorkerPoolContextProvider>
+      <TooltipProvider delayDuration={200} skipDelayDuration={500}>
+        <App />
+        <Requests />
+        <Toaster
+          theme="dark"
+          position="bottom-right"
+          // Same glass family as the agent .hm-toast cards (frosted surface +
+          // token colors + inner-top highlight) so action confirmations and
+          // agent events read as one notification plane. Both are bottom-right
+          // and temporally rare, so they share the corner cleanly.
+          toastOptions={{
+            className: "hm-sonner",
+            style: {
+              background: "color-mix(in srgb, var(--color-bg3) 95%, transparent)",
+              color: "var(--color-fg)",
+              border: "1px solid var(--color-line2)",
+              borderRadius: "12px",
+              boxShadow: "var(--hm-highlight-glass), var(--hm-shadow-glass)",
+              backdropFilter: "blur(10px) saturate(135%)",
+              fontFamily: "var(--font-sans)",
+              fontSize: "var(--text-label)",
+            },
+          }}
+        />
+      </TooltipProvider>
     </QueryClientProvider>
   </React.StrictMode>
 );

@@ -136,6 +136,9 @@ export default defineConfig({
           // parse work is distributed across smaller scripts that V8 can
           // code-cache independently across launches.
           manualChunks(id) {
+            // Every part loaded on first use loads through this helper. Left to itself it lands in
+            // a vendor chunk, and that whole chunk then loads at startup with it.
+            if (id.includes("vite/preload-helper")) return "preload-helper";
             if (!id.includes("node_modules")) return;
             // Group ALL react ecosystem chunks together — the previous narrow
             // regex (matching only `/react/<file>`) split react internals
