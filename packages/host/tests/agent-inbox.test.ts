@@ -107,6 +107,17 @@ test("a read on an agent that stops to wait on an answer says so at once, and on
   assert.equal(r.waiting?.kind, "question");
 });
 
+test("a read on an agent that has exited says so at once, rather than wait out its time", async () => {
+  const { p, hook } = plane();
+  const api = await p.api();
+  hook("w", "turn.started");
+  p.exited("hm:w");
+  const started = Date.now();
+  const r = await api.read("w", 10_000);
+  assert.equal(r.finalStatus, "closed");
+  assert.ok(Date.now() - started < 1000, `took ${Date.now() - started} ms`);
+});
+
 test("an inbox read with a wait gets the first message as it comes, not when the wait is over", async () => {
   const { p, hook, turn, inbox } = plane();
   hook("leader", "turn.started");

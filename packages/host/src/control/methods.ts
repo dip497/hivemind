@@ -426,8 +426,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   // Workers whose current wait their parent has been told about.
   const waitTold = new Set<string>();
-  // The `hive ctl read`s waiting on each tile, told when it stops to wait on an answer instead.
-  const readers = new Map<string, Set<() => void>>();
+  // The `hive ctl read`s waiting on each tile, told when it stops to wait on an answer or its
+  // agent exits instead.
+  const readers = new Map<string, Set<(state: "waiting" | "exited") => void>>();
 
   // Drop ALL per-tile HCP state (pid-keyed: turns/recorder/epochs; bare-keyed:
   // pipes/parent/depth/supervision/approvals). Runs on EVERY teardown path — the
@@ -466,10 +467,11 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   const onStatus: Dispatcher["onStatus"] = (tileId, status) => {
     const bare = bareOf(tileId);
+    if (status.state === "exited") for (const told of readers.get(bare) ?? []) told("exited");
     if (status.state !== "waiting") { waitTold.delete(bare); return; }
     // A `hive ctl read` waiting on it is told; then the one that started it need not be.
     const reading = readers.get(bare);
-    if (reading?.size) { for (const told of reading) told(); return; }
+    if (reading?.size) { for (const told of reading) told("waiting"); return; }
     // An approval is the parent's own question: its message went out already.
     if (status.kind === "approval" || waitTold.has(bare)) return;
     const parent = parentOf.get(bare);
@@ -771,15 +773,16 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       if (pending) await Promise.race([pending, new Promise<void>((r) => { const t = setTimeout(r, timeoutMs); t.unref?.(); })]);
       const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
       const bare = bareOf(tile);
-      // It cannot end its turn while it waits on an answer: say so instead of running out of time.
+      // It cannot end its turn while it waits on an answer, or once its agent has exited: say so
+      // instead of running out of time. A turn it already ended comes first.
       const stopped = new AbortController();
-      const waited = new Promise<"waiting">((resolve) => {
-        const told = () => resolve("waiting");
-        if (deps.status.get(bare)?.state === "waiting") return told();
+      const waited = new Promise<"waiting" | "exited">((resolve) => {
+        const now = deps.status.get(bare)?.state;
+        if (now === "waiting" || now === "exited") return resolve(now);
         const set = readers.get(bare) ?? new Set();
-        set.add(told);
+        set.add(resolve);
         readers.set(bare, set);
-        stopped.signal.addEventListener("abort", () => set.delete(told), { once: true });
+        stopped.signal.addEventListener("abort", () => set.delete(resolve), { once: true });
       });
       const rec = await Promise.race([deps.turns.waitForTurn(pid, afterSeq, Math.max(0, deadline - Date.now()), stopped.signal), waited]);
       stopped.abort();
@@ -793,6 +796,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       }
       // A tile that died under us is not "still working" — say so, and keep the read's
       // shape so a caller parsing finalStatus does not have to special-case an error.
+      if (rec === "exited") return { text: null, finalStatus: "closed", truncated: false, note: "its agent exited: no turn will come" };
       if (rec && rec.seq === -1) return { text: null, finalStatus: "closed", truncated: false, note: "tile closed while waiting" };
       // Consume this turn: without advancing the epoch the NEXT read returns the same
       // turn instantly, so a poll loop can never tell a new answer from the old one.
