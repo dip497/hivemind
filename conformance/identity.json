@@ -1,5 +1,5 @@
 {
-  "about": "Cases every identity implementation must pass (spec/identity.md). Made with ed25519-dalek 2 and RustCrypto's hkdf 0.12 (the Ed25519 iroh uses), apart from the TypeScript they test. Seeds are 32-byte Ed25519 secrets in hex; ids are public keys in lowercase hex.",
+  "about": "Cases every identity implementation must pass (spec/identity.md). Made with ed25519-dalek 2 and RustCrypto's hkdf 0.12 (the Ed25519 iroh uses), and the device revocation with OpenSSL 3, apart from the TypeScript they test. Seeds are 32-byte Ed25519 secrets in hex; ids are public keys in lowercase hex.",
   "deviceCertificate": [
     {
       "bytes": "686976652f6465766963652d63657274696669636174652f310ad75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c000001a0c4506c00",
@@ -8,6 +8,16 @@
       "person": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
       "personSeed": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
       "signature": "6b6d44b7891efdf91fdcf01232cf2842941154261830ffe92bbf8a05d98d711f3d19d3284f4845d7b8bfeb881dc23df6d9e052a5faa9d5d78f68a6c04e5dac01"
+    }
+  ],
+  "deviceRevocation": [
+    {
+      "at": 1790000000000,
+      "bytes": "686976652f6465766963652d7265766f636174696f6e2f310ad75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c000001a0c4506c00",
+      "device": "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c",
+      "person": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+      "personSeed": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
+      "signature": "b1f50d001b951074d59bde60c2bf63a28835ac68cb3b589dd6ab507b2d86d957fb8f61587c052eca039dc09b91ebc9390675ce05169110c3c7ad881a5c759a00"
     }
   ],
   "ed25519": [

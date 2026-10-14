@@ -14,7 +14,7 @@ import type { Grant } from "@hivemind/host/machine-share";
 import type { ClientGrant, NewGrant } from "@hivemind/workspace-api/grants";
 export type { Grant };
 
-/** One of the person's other devices, as Settings → Your devices lists it (R14, spec/pairing.md). */
+/** One of the person's other devices, as Settings → Connect lists it (R14, spec/pairing.md). */
 export interface PairedDeviceSummary {
   device: string;
   name: string;
@@ -23,6 +23,55 @@ export interface PairedDeviceSummary {
   kind: "app" | "host" | "phone";
   pairedAt: number;
 }
+
+/** What the person answers a device asking to connect (spec/pairing.md 0.10). */
+export type ConnectAnswer = { as: "me" } | { as: "guest"; role: "view" | "edit" | "terminals" } | { as: "no" };
+
+/** A device asking to connect, as the prompt shows it. */
+export interface ConnectAsking {
+  id: string;
+  name: string;
+  kind: "app" | "host" | "phone";
+  /** Who it says it is: none from a phone. */
+  profile: { name: string; color: string } | null;
+  /** The words its screen shows too. */
+  words: string[];
+  /** The answers it may be given besides no: it's me, and someone else. */
+  me: boolean;
+  guest: boolean;
+  /** Told it's me, and waiting on its own person to say the words match. */
+  confirming: boolean;
+}
+
+/** The offer to connect this app made, while it can be used; the requests; and how the last ended. */
+export interface ConnectState {
+  offer: { code: string; link: string; page?: string; expires: number } | null;
+  requests: ConnectAsking[];
+  last: { name: string; as: "me" | "guest" | "refused" } | null;
+}
+
+/** Using another computer's offer to connect, as this computer's window shows it: that computer's
+ *  name and the words both screens show; and, once it says this computer is its person's, who
+ *  that is, for the person here to say whether the words match. */
+export interface ConnectEntering {
+  name: string;
+  words: string[];
+  theirs: { name: string; color: string } | null;
+}
+
+/** What the join form was given, as `joinPreview` reads it. */
+export type JoinPreview =
+  | { kind: "join"; workspace: string; host: string }
+  | { kind: "connect" | "pair"; name: string }
+  | { kind: "words" }
+  | null;
+
+/** What using an offer came to: this computer is that person's now; or it was let into their
+ *  workspace (its `hive://` name); or the words found a host's code, and it paired as pairEnter. */
+export type ConnectEntered =
+  | { as: "me"; device: PairedDeviceSummary }
+  | { as: "guest"; workspace: string; role: string; names: { workspace: string; host: string } }
+  | { as: "paired"; device: PairedDeviceSummary & { took: boolean } };
 
 /** A workspace one of the person's other devices holds. */
 export interface DeviceWorkspace { workspace: string; name: string; repo: string }
@@ -205,7 +254,7 @@ export interface ViewPackageInfo {
 
 // ── full IPC surface ──────────────────────────────────────────────────────
 
-/** Settings → Your devices, "In a browser on this computer": whether the app is served, at which link, or why not. */
+/** Settings → Advanced → In a browser: whether the app is served, at which link, or why not. */
 export interface BrowserAppStatus { on: boolean; url: string | null; error: string | null }
 
 export interface HiveIpc {
@@ -366,7 +415,9 @@ export interface HiveIpc {
   /** An invite link to the workspace `repo` for `role`, for `expiresIn` ms, used once unless `reusable`. */
   share(repo: string, role: "view" | "edit" | "terminals", expiresIn: number, reusable: boolean): Promise<string>;
   /** What an invite link offers, to show before joining; null when the text is not one. */
-  joinPreview(text: string): Promise<{ workspace: string; host: string } | null>;
+  /** What `text` is, before using it: an invite link (whose workspace), another computer's offer
+   *  to connect or a host's pairing link (the device's name), six words, or nothing to use. */
+  joinPreview(text: string): Promise<JoinPreview>;
   /** Ask the host a link names to let this person in: the role they were given, or why not. */
   join(text: string): Promise<{ ok: true; role: string; workspace: string } | { ok: false; error: string; message?: string }>;
   /** Someone asks to join a workspace of this person's (`repo`: as this window names it): answer
@@ -418,11 +469,20 @@ export interface HiveIpc {
   devices(): Promise<PairedDeviceSummary[]>;
   /** A device was paired with, or forgotten. */
   onDevicesChanged(cb: () => void): () => void;
-  /** A code for another of your devices to enter (a host's `hive host pair <link>`, another
-   *  computer's Settings → Your devices, or a phone scanning its link): it takes your person, or, a
-   *  phone, a certificate naming it as yours. `page`: the link inside the address of the phone
-   *  page, when the network's server serves one, for a phone to open in its browser. */
-  pairOffer(): Promise<{ code: string; link: string; page?: string; expires: number }>;
+  /** Offer to connect (spec/pairing.md 0.10), from the window showing `repo` (null: Home): a code,
+   *  its link and the phone page's address for it. Whoever uses it only asks; the person answers
+   *  each request with `connectAnswer`. A new offer voids the last. */
+  connectOffer(repo: string | null): Promise<NonNullable<ConnectState["offer"]>>;
+  connectCancel(): Promise<void>;
+  connectState(): Promise<ConnectState>;
+  onConnectChanged(cb: (state: ConnectState) => void): () => void;
+  connectAnswer(id: string, answer: ConnectAnswer): Promise<void>;
+  /** Use another computer's offer, its link or its words (the words of a host's code pair with
+   *  it, as pairEnter): `onConnectEntering` says what to show meanwhile, and `connectSure` is the
+   *  person's word that the words match, once that computer says this one is its person's. */
+  connectEnter(text: string): Promise<ConnectEntered>;
+  onConnectEntering(cb: (entering: ConnectEntering | null) => void): () => void;
+  connectSure(yes: boolean): Promise<void>;
   /** The hash of the phone page at `page`, worked out from what its server serves, and of the
    *  page this build goes with (null: a build made without one). */
   phonePage(page: string): Promise<{ served: string; shipped: string | null }>;

@@ -12,7 +12,7 @@ import path from "node:path";
 import { AccessLists, ROLES } from "@hivemind/workspace-host/access";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { Intents } from "@hivemind/workspace-host/intents";
-import { idOf, newSeed, workspaceSeed } from "@hivemind/workspace-host/identity";
+import { certifyDevice, idOf, newSeed, workspaceSeed } from "@hivemind/workspace-host/identity";
 import { parseJoinLink } from "@hivemind/workspace-host/join-link";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
@@ -142,6 +142,28 @@ test("each change is the asker's intent; nobody but the owner may ask", async ()
     for (const role of ROLES) assert.equal(mayCall({ access: role }, method), false, `${role} may not ${method}`);
     assert.equal(mayCall({ access: "owner" }, method), true);
   }
+});
+
+test("a device the owner said yes to as it asked to connect is let in at the role chosen, never driving agents, and told where the workspace is", async () => {
+  const h = host();
+  const noor = newSeed();
+  const phone = idOf(newSeed());
+  const certificate = certifyDevice(noor, phone);
+  const told = await h.call("people.admit", REPO, certificate, { name: "Noor", color: "#00aa00" }, "view");
+  assert.deepEqual(told, {
+    workspace: WS, host: HOST, addrs: ["10.0.0.5:4433"], relay: null, role: "view", names: { workspace: "api", host: "Adarsh" },
+    hosting: { key: idOf(workspaceSeed(h.owner, WS)), lookup: "https://lookup.example" },
+  });
+  const listed = h.lists.people(WS).find((p) => p.person === idOf(noor));
+  assert.deepEqual([listed?.role, listed?.name, listed?.devices], ["view", "Noor", [phone]]);
+  assert.ok(h.lists.admitted().includes(phone));
+  assert.equal(h.admitted(), 1);
+  assert.equal(h.audited().at(-1), `people.admit ${REPO} ${idOf(noor).slice(0, 8)}… as view ok`);
+
+  await assert.rejects(h.call("people.admit", REPO, certifyDevice(newSeed(), idOf(newSeed())), {}, "agents"), /role/);
+  await assert.rejects(h.call("people.admit", REPO, { ...certifyDevice(newSeed(), idOf(newSeed())), device: phone }, {}, "edit"), /not a device certificate/);
+  assert.equal(h.lists.people(WS).length, 3);
+  for (const role of ROLES) assert.equal(mayCall({ access: role }, "people.admit"), false, `${role} may not people.admit`);
 });
 
 const asking = { workspace: WS, repo: REPO, person: "e".repeat(64), device: "f".repeat(64), profile: { name: "Noor", color: "#0a0" }, role: "edit" as const };

@@ -203,7 +203,7 @@ function Dropdown({ label, count, options }: { label: string; count: number; opt
       width={200}
       trigger={
         <span
-          className={`inline-flex items-center gap-1.5 px-2 py-1 text-[11.5px] rounded-md border cursor-pointer hm-soft ${
+          className={`inline-flex items-center gap-1.5 px-2 py-1 text-label rounded-md border cursor-pointer hm-soft ${
             count > 0
               ? "bg-[var(--color-bg4)] border-[var(--color-line2)] text-[var(--color-fg)]"
               : "bg-[var(--color-bg3)] border-[var(--color-line2)] text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
@@ -211,7 +211,7 @@ function Dropdown({ label, count, options }: { label: string; count: number; opt
         >
           {label}
           {count > 0 && (
-            <span className="font-mono tabular-nums text-[10px] text-[var(--color-accent)]">{count}</span>
+            <span className="font-mono tabular-nums text-chip text-[var(--color-accent)]">{count}</span>
           )}
           <svg width="9" height="9" viewBox="0 0 10 10" className="text-[var(--color-fg3)]">
             <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" />
@@ -222,7 +222,7 @@ function Dropdown({ label, count, options }: { label: string; count: number; opt
       {() => (
         <div className="flex flex-col gap-0.5 max-h-[280px] overflow-y-auto">
           {options.length === 0 ? (
-            <div className="px-2 py-1.5 text-[11px] text-[var(--color-fg3)]">No options</div>
+            <div className="px-2 py-1.5 text-count text-[var(--color-fg3)]">No options</div>
           ) : (
             options.map((o) => (
               <MenuItem

@@ -21,7 +21,7 @@ export function ConflictView(props: { repoPath: string; file: string }) {
       : null),
     [data, props.file, props.repoPath],
   );
-  if (conflict.isLoading) return <div className="px-3 py-2 text-[10px]">loading {props.file}…</div>;
+  if (conflict.isLoading) return <div className="px-3 py-2 text-chip">loading {props.file}…</div>;
   if (!file) return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const UF = UnresolvedFile as any;

@@ -4,6 +4,7 @@
 //! app, and is their device from then on (M5).
 
 pub mod agents;
+pub mod connect;
 #[cfg(not(target_family = "wasm"))]
 pub mod connections;
 pub mod control;

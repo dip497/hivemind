@@ -77,7 +77,7 @@ test("a catalog agent whose CLI is on this machine is added, and says so", async
   expect(installed()).toBe(true);
   await page.locator('[aria-label="settings"]').click();
   await page.locator('[data-settings-page="plugins"]').click();
-  await expect(page.locator(`[data-agent-card="${CONTINUE}"]`)).toHaveAttribute("data-state", "on");
+  await expect(page.locator(`[data-plugin-row="agent:${CONTINUE}"]`)).toHaveAttribute("data-state", "on");
 });
 
 test("an agent with a disclosure is added too, and the notice says what it can do", async () => {
@@ -110,7 +110,7 @@ test("an agent you remove is not added back on the next start", async () => {
   const settings = page.locator(".settings-dialog");
   await settings.getByRole("button", { name: "Remove Continue" }).click();
   await settings.getByRole("button", { name: "Remove", exact: true }).click();
-  await expect(page.locator(`[data-agent-card="${CONTINUE}"]`)).toHaveCount(0);
+  await expect(page.locator(`[data-plugin-row="agent:${CONTINUE}"]`)).toHaveCount(0);
   expect(installed()).toBe(false);
   await app!.close(); app = undefined;
   await launch();

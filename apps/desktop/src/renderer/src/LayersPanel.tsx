@@ -139,8 +139,8 @@ const NEEDS_YOU = (s: TileStatusKind | null): boolean =>
 const ICON = 16;
 /** The key that jumps to a row with its number: ⌘ on macOS, Ctrl elsewhere. */
 const MOD = typeof window !== "undefined" && window.hive?.platform === "darwin" ? "⌘" : "Ctrl ";
-const LABEL = "text-[12px] font-medium text-[var(--color-fg2)]";
-const COUNT = "text-[11px] tabular-nums text-[var(--color-fg2)]";
+const LABEL = "text-label font-medium text-[var(--color-fg2)]";
+const COUNT = "text-count tabular-nums text-[var(--color-fg2)]";
 
 /** This person's own for this workspace: pinned tiles (in pin order), the groups they folded, when
  *  they last looked at each tile, and the tiles they snoozed, until when. */
@@ -240,7 +240,7 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
         ...(selected ? { background: "var(--surface-4)", boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--color-fg) 12%, transparent)" } : {}),
       }}
       // `w-[calc(100%-1rem)] min-w-0`: without a width the row shrink-wraps its text and `truncate` never engages.
-      className={`group relative flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 pr-1.5 mx-2 text-left rounded-lg outline-none focus-visible:outline-none cursor-pointer transition-colors ${
+      className={`group relative flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 pr-1.5 mx-2 text-left rounded-lg outline-none cursor-pointer transition-colors ${
         selected ? "text-[var(--color-fg)]" : "text-[var(--color-fg)] hover:bg-[var(--surface-3)]"
       }`}
     >
@@ -263,7 +263,7 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
       <span className="flex-1" />
       {/* While Ctrl/⌘ is held: the number that jumps here, in place of its status. */}
       {jumpKey !== undefined ? (
-        <kbd data-layer-jump={jumpKey} className="grid min-w-[18px] h-[18px] shrink-0 place-items-center rounded-[5px] px-1 font-sans text-[11px] leading-none tabular-nums text-[var(--color-fg2)] shadow-[inset_0_0_0_1px_var(--color-line2)]">
+        <kbd data-layer-jump={jumpKey} className="grid min-w-[18px] h-[18px] shrink-0 place-items-center rounded-keycap px-1 font-sans text-count leading-none tabular-nums text-[var(--color-fg2)] shadow-[inset_0_0_0_1px_var(--color-line2)]">
           {MOD}{jumpKey}
         </kbd>
       ) : until ? (
@@ -272,7 +272,7 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
         <span aria-label="working" title="working" className="shrink-0 size-1.5 rounded-full group-hover:hidden" style={{ background: STATUS_COLOR[st] }} />
       ) : st !== "idle" ? (
         <span
-          className={`shrink-0 text-[10px] font-medium leading-none px-1.5 py-[3px] rounded-full ${NEEDS_YOU(st) ? "animate-pulse" : "group-hover:hidden"}`}
+          className={`shrink-0 text-chip font-medium leading-none px-1.5 py-[3px] rounded-full ${NEEDS_YOU(st) ? "animate-pulse" : "group-hover:hidden"}`}
           style={{ color: STATUS_COLOR[st], background: `color-mix(in srgb, ${STATUS_COLOR[st]} 16%, transparent)` }}
           title={st}
         >
@@ -631,7 +631,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             </div>
           ) : (
             <button onClick={() => onFocusFrame(frame.id)} onDoubleClick={frameActions ? () => setRenaming({ id: gid, draft: frame.title }) : undefined}
-              className="flex-1 flex items-center gap-2.5 min-w-0 text-left text-[14px] font-medium text-[var(--color-fg)]"
+              className="flex-1 flex items-center gap-2.5 min-w-0 text-left text-row font-medium text-[var(--color-fg)]"
               title={isWt ? `Focus worktree ${frame.branch ?? frame.title}` : `Focus ${frame.title}${frameActions ? " · double-click to rename" : ""}`}>
               <WorkspaceIcon color={frame.color} remote={frame.remote && !groupByMachine} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
               <span className="truncate">{frame.title}</span>
@@ -642,7 +642,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
                 {/* A summary of what is hidden: when folded, or when a child needs a person. */}
                 {agg && agg !== "idle" && agg !== "exited" && (isCollapsed || NEEDS_YOU(agg)) && (
                   NEEDS_YOU(agg) ? (
-                    <span className="shrink-0 text-[10px] font-medium leading-none px-1.5 py-[3px] rounded-full animate-pulse"
+                    <span className="shrink-0 text-chip font-medium leading-none px-1.5 py-[3px] rounded-full animate-pulse"
                       style={{ color: STATUS_COLOR[agg], background: `color-mix(in srgb, ${STATUS_COLOR[agg]} 16%, transparent)` }} title={STATUS_LABEL[agg]}>
                       {STATUS_LABEL[agg]}
                     </span>
@@ -714,7 +714,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
 
   return (
     // A sheet set in from the window's edges, its corners round, as the Appearance panel is.
-    <aside className="hm-layers relative m-2 h-[calc(100%-1rem)] shrink-0 flex flex-row bg-[var(--color-bg2)] border border-[var(--color-line)] rounded-[14px] shadow-[var(--hm-shadow-2)] overflow-hidden" style={{ width }} aria-label="Layers">
+    <aside className="hm-layers relative m-2 h-[calc(100%-1rem)] shrink-0 flex flex-row bg-[var(--color-bg2)] border border-[var(--color-line)] rounded-sheet shadow-[var(--hm-shadow-2)] overflow-hidden" style={{ width }} aria-label="Layers">
       {/* The rail picks what the panel shows; what opens elsewhere sits at its foot. */}
       <nav aria-label="Panel" className="w-11 shrink-0 flex flex-col items-center gap-1 py-2.5 border-r border-[var(--color-line)]">
         <RailButton label="Tiles" pane="tiles" active={pane} onPick={pickPane} icon={<LayoutList />} badge={needsYou} />
@@ -734,7 +734,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         <Button variant="ghost" size="icon-xs" className="relative" data-layers-bell onClick={nextNeedsYou}
           aria-label={needsYou ? `${needsYou} need you: go to the next` : "Nothing needs you"} title={needsYou ? `${needsYou} need you: go to the next` : "Nothing needs you"}>
           <Bell size={ICON} className="size-4" />
-          {needsYou > 0 && <span aria-hidden className="absolute -right-1 -top-1 grid min-w-3.5 h-3.5 place-items-center rounded-full px-0.5 text-[10px] font-semibold tabular-nums leading-none text-[var(--color-bg)]" style={{ background: "var(--color-warn)" }}>{needsYou}</span>}
+          {needsYou > 0 && <span aria-hidden className="absolute -right-1 -top-1 grid min-w-3.5 h-3.5 place-items-center rounded-full px-0.5 text-chip font-semibold tabular-nums leading-none text-[var(--color-bg)]" style={{ background: "var(--color-warn)" }}>{needsYou}</span>}
         </Button>
         <Button variant="ghost" size="icon-xs" aria-label="Hide panel" title={`Hide panel (${MOD}B)`} data-layers-close onClick={() => setHidden(true)}>
           <PanelLeftClose size={ICON} className="size-4" />
@@ -743,7 +743,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       {searching && (
         <div className="px-2 pb-1.5">
           <Input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search tiles" aria-label="Search tiles" data-layers-search
-            onKeyDown={(e) => { if (e.key === "Escape") { setSearching(false); setQuery(""); } e.stopPropagation(); }} className="h-7 text-[12px]" />
+            onKeyDown={(e) => { if (e.key === "Escape") { setSearching(false); setQuery(""); } e.stopPropagation(); }} size="sm" />
         </div>
       )}
       {pane === "tiles" && (
@@ -755,9 +755,9 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       )}
 
       {pane === "tiles" && (
-      <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-[14px]" data-layers-pane="tiles">
+      <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-row" data-layers-pane="tiles">
         {tiles.length > 0 && nothing && (
-          <div className="px-4 py-3 text-[12px] text-[var(--color-fg3)]" data-layers-nothing>
+          <div className="px-4 py-3 text-label text-[var(--color-fg3)]" data-layers-nothing>
             Nothing matches.{" "}
             <button type="button" className="underline hover:text-[var(--color-fg)]" onClick={() => { patchSettings("views.layers", { ...DEFAULT_LAYERS_PREFS, recentsBy: prefs.recentsBy }); setQuery(""); }}>Show everything</button>
           </div>
@@ -808,13 +808,13 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         {looseTiles.length > 0 && (
           <div className="mt-1.5">
             <div className="group/loose flex items-center gap-2 h-8 pr-2 mx-2 pl-[26px]" data-layers-loose>
-              <span className="flex-1 flex items-center gap-2.5 min-w-0 text-[14px] font-medium text-[var(--color-fg)]">
+              <span className="flex-1 flex items-center gap-2.5 min-w-0 text-row font-medium text-[var(--color-fg)]">
                 <FolderOpen size={ICON} className="shrink-0 text-[var(--color-fg2)]" />
                 <span className="truncate">Canvas</span>
                 <span className={`ml-auto ${COUNT} group-hover/loose:hidden group-focus-within/loose:hidden`}>{looseTiles.length}</span>
                 {tileActions && (
                   <button type="button" data-layers-close-loose onClick={() => setClosingLoose(true)}
-                    className="ml-auto hidden group-hover/loose:block group-focus-within/loose:block focus-visible:block rounded-md px-1.5 py-0.5 text-[12px] font-medium text-[var(--color-fg2)] hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]">
+                    className="ml-auto hidden group-hover/loose:block group-focus-within/loose:block focus-visible:block rounded-md px-1.5 py-0.5 text-label font-medium text-[var(--color-fg2)] hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]">
                     Close all
                   </button>
                 )}
@@ -826,7 +826,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       </div>
       )}
       {pane === "recents" && (
-      <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-[14px]" data-layers-pane="recents">
+      <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-row" data-layers-pane="recents">
         <div className={`flex h-7 items-center pl-5 pr-2 ${LABEL}`}>
           <span>Recents</span>
           <span className="ml-auto"><RecentsByMenu value={prefs.recentsBy} onChange={(v) => setPref("recentsBy", v)} /></span>
@@ -838,7 +838,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             <section key={g.key} aria-label={g.label || "Recents"} data-layers-recents={g.key} className={g.label ? "mt-1.5" : ""}>
               {g.label && (
                 <button type="button" onClick={() => toggleGroup(`recents:${g.key}`)} aria-expanded={!folded} data-layers-recents-group={g.key}
-                  className="group/sec flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-2 rounded-lg text-left text-[14px] font-medium text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)]">
+                  className="group/sec flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-2 rounded-lg text-left text-row font-medium text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)]">
                   <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">
                     {prefs.recentsBy === "agent" ? <AgentIcon id={g.key} size={ICON - 1} /> : prefs.recentsBy === "project" ? <Folder size={ICON} /> : <History size={ICON} />}
                   </span>
@@ -851,7 +851,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
                 <button key={`${r.agent}:${r.id}`} type="button" data-layers-recent={r.id}
                   onClick={() => onResume(r.agent, frames.find((f) => f.path === r.folder)?.id ?? null, r.id)}
                   title={`Resume ${agentById(r.agent)?.label ?? r.agent}${r.prompt ? `: ${r.prompt}` : ""}`}
-                  className="flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pr-2 rounded-lg text-left text-[14px] text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)]"
+                  className="flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pr-2 rounded-lg text-left text-row text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)]"
                   style={{ paddingLeft: g.label ? 26 : 12 }}>
                   {/* Grouped by agent, the heading carries the logo; a row repeats it only when it says something. */}
                   {prefs.recentsBy !== "agent" && <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]"><AgentIcon id={r.agent} size={ICON - 1} /></span>}
@@ -871,7 +871,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       </div>
       )}
       {pane === "machines" && (
-      <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-[14px]" data-layers-pane="machines">
+      <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-row" data-layers-pane="machines">
         <nav aria-label="Start" className="pb-2">
           <ActionRow primary icon={<Server size={ICON} />} label="New machine" data="machine" onClick={() => openMachines({ kind: "add" })} />
         </nav>
@@ -922,11 +922,11 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
 function ActionRow({ icon, label, hint, data, primary, onClick }: { icon: ReactNode; label: string; hint?: string; data: string; primary?: boolean; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} data-layers-action={data}
-      className={`group/act flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-1.5 rounded-lg text-left text-[14px] transition-colors duration-150 hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)] outline-none focus-visible:bg-[var(--surface-3)] focus-visible:text-[var(--color-fg)] ${primary ? "font-medium text-[var(--color-fg)]" : "text-[var(--color-fg2)]"}`}>
+      className={`group/act flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-1.5 rounded-lg text-left text-row transition-colors duration-150 hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)] outline-none focus-visible:bg-[var(--surface-3)] focus-visible:text-[var(--color-fg)] ${primary ? "font-medium text-[var(--color-fg)]" : "text-[var(--color-fg2)]"}`}>
       <span aria-hidden className={`size-4 shrink-0 grid place-items-center ${primary ? "text-[var(--color-fg)]" : ""}`}>{icon}</span>
       <span className="flex-1 truncate">{label}</span>
       {hint && (
-        <kbd aria-hidden className="grid min-w-[18px] h-[18px] place-items-center rounded-[5px] px-1 font-sans text-[11px] leading-none tabular-nums text-[var(--color-fg2)] shadow-[inset_0_0_0_1px_var(--color-line2)] opacity-0 transition-opacity duration-150 group-hover/act:opacity-100 group-focus-visible/act:opacity-100">
+        <kbd aria-hidden className="grid min-w-[18px] h-[18px] place-items-center rounded-keycap px-1 font-sans text-count leading-none tabular-nums text-[var(--color-fg2)] shadow-[inset_0_0_0_1px_var(--color-line2)] opacity-0 transition-opacity duration-150 group-hover/act:opacity-100 group-focus-visible/act:opacity-100">
           {hint}
         </kbd>
       )}
@@ -977,7 +977,7 @@ function RecentsByMenu({ value, onChange }: { value: LayersPrefs["recentsBy"]; o
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" data-layers-recents-by className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-[var(--color-fg2)] transition-colors duration-150 hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]">
+        <button type="button" data-layers-recents-by className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-count text-[var(--color-fg2)] transition-colors duration-150 hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]">
           {label}<ChevronDown size={12} />
         </button>
       </DropdownMenuTrigger>
@@ -1011,7 +1011,7 @@ function PanelMenu({ title, workspaces, here, onHide }: { title: string; workspa
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <span className="relative inline-flex min-w-0">
         <button type="button" onClick={() => setOpen(true)} aria-expanded={open} data-layers-title
-          className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-[15px] font-semibold tracking-[-0.014em] text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)]">
+          className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-title font-semibold tracking-[-0.014em] text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)]">
           <span className="truncate">{title}</span>
           <ChevronDown size={14} className="shrink-0 text-[var(--color-fg3)]" />
         </button>
@@ -1028,7 +1028,7 @@ function PanelMenu({ title, workspaces, here, onHide }: { title: string; workspa
                   onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:open-workspace", { detail: { repo: w.repo } }))}>
                   {isHere ? <FolderOpen /> : <Folder />}
                   <span className="flex-1 truncate">{w.title}</span>
-                  {w.needsYou > 0 && <span className="shrink-0 text-[10px] font-medium leading-none px-1.5 py-[3px] rounded-full" style={{ color: "var(--color-warn)", background: "color-mix(in srgb, var(--color-warn) 16%, transparent)" }}>{w.needsYou} need you</span>}
+                  {w.needsYou > 0 && <span className="shrink-0 text-chip font-medium leading-none px-1.5 py-[3px] rounded-full" style={{ color: "var(--color-warn)", background: "color-mix(in srgb, var(--color-warn) 16%, transparent)" }}>{w.needsYou} need you</span>}
                   <span className={`shrink-0 ${COUNT}`}>{isHere ? "here" : w.tiles}</span>
                 </DropdownMenuItem>
               );
@@ -1068,7 +1068,7 @@ function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger data-layers-view={key}>
         <span className="flex-1">{label}</span>
-        <span className="text-[11px] text-[var(--color-fg2)]">{choiceLabel(key, prefs[key])}</span>
+        <span className="text-count text-[var(--color-fg2)]">{choiceLabel(key, prefs[key])}</span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="w-[170px]">
         <DropdownMenuRadioGroup value={prefs[key]} onValueChange={(v) => setPref(key, v)}>
@@ -1088,7 +1088,7 @@ function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <span className="relative inline-flex">
-        <Button variant="ghost" size="2xs" aria-label="View options" title="What is listed, grouped and ordered how" data-layers-view-menu aria-expanded={open} className="relative text-[11px] font-medium" onClick={() => setOpen(true)}>
+        <Button variant="ghost" size="2xs" aria-label="View options" title="What is listed, grouped and ordered how" data-layers-view-menu aria-expanded={open} className="relative text-count font-medium" onClick={() => setOpen(true)}>
           {prefs.groupBy === "none" ? "Not grouped" : `By ${choiceLabel("groupBy", prefs.groupBy).toLowerCase()}`}
           {filtered && <span className="text-[var(--color-brand)]">· filtered</span>}
           <ChevronDown size={11} />
@@ -1101,7 +1101,7 @@ function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (
         <DropdownMenuSub>
           <DropdownMenuSubTrigger data-layers-view="machines">
             <span className="flex-1">Machines</span>
-            <span className="text-[11px] text-[var(--color-fg2)]">{chosen.length === 0 ? "All" : `${chosen.length} selected`}</span>
+            <span className="text-count text-[var(--color-fg2)]">{chosen.length === 0 ? "All" : `${chosen.length} selected`}</span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-[200px]">
             <DropdownMenuCheckboxItem checked={chosen.length === 0} onCheckedChange={() => setPref("machines", [])} onSelect={(e) => e.preventDefault()} data-layers-machine="all">All machines</DropdownMenuCheckboxItem>
@@ -1130,9 +1130,9 @@ function HoverCard({ tile, top, left, now, frame, agent }: { tile: ModelTile; to
     // `.hm-popover` brings its own 4px padding; the card's spacing is on the inner box.
     <div role="tooltip" data-layers-card className="hm-popover pointer-events-none fixed z-50 w-[256px] animate-in fade-in-0 slide-in-from-left-1 duration-150 ease-out" style={{ top, left }}>
       <div className="px-3 pt-2.5 pb-3">
-        <p className="truncate text-[14px] font-semibold leading-5 text-[var(--color-fg)]">{tile.name}</p>
-        <p className="mt-1 text-[12px] leading-4 text-[var(--color-fg2)]">{[when, tile.needsYou ? "needs you" : STATUS_LABEL[tile.status]].filter(Boolean).join(" · ")}</p>
-        <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] leading-4 text-[var(--color-fg2)]">
+        <p className="truncate text-row font-semibold leading-5 text-[var(--color-fg)]">{tile.name}</p>
+        <p className="mt-1 text-label leading-4 text-[var(--color-fg2)]">{[when, tile.needsYou ? "needs you" : STATUS_LABEL[tile.status]].filter(Boolean).join(" · ")}</p>
+        <div className="mt-3 flex flex-wrap gap-1.5 text-count leading-4 text-[var(--color-fg2)]">
           <span className="rounded-md bg-[var(--color-bg3)] px-2 py-0.5">{agent}</span>
           {frame && <span className="max-w-full truncate rounded-md bg-[var(--color-bg3)] px-2 py-0.5">{frame.title}</span>}
           {frame?.branch && <span className="max-w-full truncate rounded-md bg-[var(--color-bg3)] px-2 py-0.5 font-mono">{frame.branch}</span>}
@@ -1242,7 +1242,7 @@ function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYo
     <div
       className={`group/mach relative flex items-center pr-2 ${used
         ? `gap-1.5 h-7 pl-5 mt-2 ${LABEL}`
-        : "gap-2.5 h-8 pl-3 mx-2 rounded-lg text-[14px] text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)]"}`}
+        : "gap-2.5 h-8 pl-3 mx-2 rounded-lg text-row text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)]"}`}
       data-machine-header={group.key === "local" ? "local" : group.label}
       title={m ? `${m.target}${s.detail ? ` — ${s.detail}` : ""}` : undefined}
     >
@@ -1251,7 +1251,7 @@ function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYo
       {group.hostId && <MachineDot status={s} enabled={on} size={6} />}
       <span className={`truncate min-w-0 ${on ? "" : "opacity-60"}`}>{group.label}</span>
       {group.hostId && (
-        <span className="shrink-0 font-mono normal-case tracking-normal font-normal text-[11px] tabular-nums" data-machine-state>
+        <span className="shrink-0 font-mono normal-case tracking-normal font-normal text-count tabular-nums" data-machine-state>
           {statusWords(s, on)}
         </span>
       )}
@@ -1289,7 +1289,7 @@ function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYo
       {menu && m && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
-          <div className="hm-popover absolute right-2 top-7 z-20 w-[180px] flex flex-col text-[12px] normal-case tracking-normal font-normal">
+          <div className="hm-popover absolute right-2 top-7 z-20 w-[180px] flex flex-col text-label normal-case tracking-normal font-normal">
             {on && <MenuItem onClick={act(() => openMachines({ kind: "pick", frameId: null, machineId: m.id }))}>Open folder here…</MenuItem>}
             {on && <MenuItem onClick={act(retry)}>Check now</MenuItem>}
             <MenuItem onClick={act(() => window.hive.machineUpdate(m.id, { enabled: !on }))}>{on ? "Turn off" : "Turn on"}</MenuItem>

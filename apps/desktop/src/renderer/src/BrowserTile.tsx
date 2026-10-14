@@ -123,7 +123,7 @@ export function BrowserTile(props: Props) {
 function OpensInATab({ url }: { url?: string }) {
   const href = url ?? DEFAULT_URL;
   return (
-    <div className="tile-drag-handle flex h-full flex-col items-center justify-center gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] p-6 text-center text-[12px]" data-browser-elsewhere>
+    <div className="tile-drag-handle flex h-full flex-col items-center justify-center gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] p-6 text-center text-label" data-browser-elsewhere>
       <p className="text-[var(--color-fg2)]">Pages show here in the app window. In this browser, open it in a tab of its own.</p>
       <a className="nodrag font-mono text-[var(--color-fg)] underline" href={href} target="_blank" rel="noopener noreferrer">{href}</a>
     </div>
@@ -292,7 +292,7 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
   };
 
   return (
-    <div className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]" onKeyDown={onKeyDown}>
+    <div className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[var(--hm-shadow-float)]" onKeyDown={onKeyDown}>
       {/* Tab strip (doubles as the drag handle). */}
       <div className="tile-drag-handle flex items-stretch gap-0.5 px-1.5 pt-1 bg-[var(--color-bg3)] border-b border-[var(--color-line)] cursor-grab active:cursor-grabbing">
         <GripVertical size={13} className="text-[var(--color-fg3)] self-center shrink-0 mr-0.5" />
@@ -301,7 +301,7 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
             <button
               key={t.id}
               onClick={() => setActiveId(t.id)}
-              className={`nodrag group flex items-center gap-1.5 px-2 py-1 rounded-t-md text-[11px] font-mono max-w-[160px] min-w-[90px] border-b-2 ${
+              className={`nodrag group flex items-center gap-1.5 px-2 py-1 rounded-t-md text-count font-mono max-w-[160px] min-w-[90px] border-b-2 ${
                 t.id === activeId
                   ? "bg-[var(--color-bg2)] text-[var(--color-fg)] border-[var(--color-brand)]"
                   : "bg-[var(--color-bg4)] text-[var(--color-fg3)] border-transparent hover:text-[var(--color-fg2)]"
@@ -407,7 +407,7 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
       )}
 
       {cdpMsg && (
-        <div className="px-2 py-1 text-[10px] font-mono bg-[var(--color-bg4)] border-b border-[var(--color-line)] text-[var(--color-fg2)] truncate" title={cdpMsg}>
+        <div className="px-2 py-1 text-chip font-mono bg-[var(--color-bg4)] border-b border-[var(--color-line)] text-[var(--color-fg2)] truncate" title={cdpMsg}>
           🤖 {cdpMsg}
         </div>
       )}

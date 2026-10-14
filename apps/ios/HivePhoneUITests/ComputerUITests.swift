@@ -48,8 +48,12 @@ final class ComputerUITests: XCTestCase {
         field.tap()
         field.typeText(link)
         XCTAssertEqual(field.value as? String, link, "the link went in whole")
-        // The return key pairs, as the Pair button does.
+        // The return key connects, as the button does; once the person at the computer says the
+        // phone is theirs, the words match.
         field.typeText("\n")
+        let yes = app.buttons["connect.yes"]
+        XCTAssertTrue(yes.waitForExistence(timeout: 120), "the computer says the phone is theirs")
+        yes.tap()
         XCTAssertTrue(showing("This phone is \(person)'s.", in: app).waitForExistence(timeout: 120), "paired, as \(person)'s")
         app.buttons["Continue"].tap()
 

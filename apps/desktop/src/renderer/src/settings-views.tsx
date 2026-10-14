@@ -1,9 +1,9 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { isPluginEnabled } from "@hivemind/core/plugin-settings";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ExternalLink, Puzzle, Trash } from "./components/icons";
+import { ArrowDown, ArrowUp, ChevronDown, ExternalLink, Puzzle, Trash } from "./components/icons";
 import { Button } from "./components/ui/button";
-import { RowChoice } from "./plugins/RowChoice";
-import { MenuItem } from "./components/ui/menu-item";
+import { PluginGroup, PluginRow } from "./plugins/PluginList";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch } from "./components/ui/switch";
 import { getSettings, patchSettings, useSettings, setPluginEnabled } from "./settings-store";
 import { getView, resolveChrome, resolveViewId, useViews } from "./workspace/workspace-view";
@@ -15,53 +15,32 @@ import { useSettingsNavigate } from "./settings-panels";
 
 export const rescan = () => { window.dispatchEvent(new CustomEvent("hivemind:reload-views")); };
 
-/** The views on the Plugins page: the one in use, the others to choose from, the ones off. */
+/** The views on the Plugins page: the one in use says so; one off or that cannot load is listed
+ *  from its package, so it can be opened and switched back on. */
 export function ViewsSection({ matches }: { matches: (text: string) => boolean }) {
-  const go = useSettingsNavigate();
   const mode = resolveViewId(useViewMode()) ?? "canvas";
   const report = useCommunityReport();
   useEffect(rescan, []);
   const on = useViews().filter((v) => matches(`${v.label} ${v.id} ${v.hint}`));
-  // A view that is off, or cannot load, is not registered: it is listed from its package, so it
-  // can be opened and switched back on.
   const off = report.packages.filter((p) => report.refused[p.id] && matches(`${p.manifest?.name ?? p.id} ${p.id}`));
-  const row = (id: string, label: string, detail: string, mark: ReactNode, state: "on" | "ready" | "off" | "unavailable") => (
-    <div key={id} className="plugin-row" data-view-row={id} data-state={state}>
-      <MenuItem className="flex-1 min-w-0" data-plugin-open={`view:${id}`} onClick={() => go(`plugin:view:${id}`)}>
-        <span className="plugin-row-mark" aria-hidden="true">{mark}</span>
-        <span className="plugin-row-text">
-          <span className="plugin-row-name">{label}</span>
-          <span className="plugin-row-detail">{detail}</span>
-        </span>
-      </MenuItem>
-      {(state === "on" || state === "ready") && (
-        <RowChoice chosen={mode === id} said="In use" offer="Use" data-view-choice={id}
-          aria-label={mode === id ? `${label} is in use` : `Use ${label}`}
-          onClick={() => setViewMode(id)} />
-      )}
-      <ChevronRight className="plugin-row-go" size={15} />
-    </div>
-  );
-  if (!on.length && !off.length) return null;
-  return <section className="settings-stack plugins-kind" aria-label="Views" data-plugins-kind="view">
-    <h3 className="plugins-kind-heading">Views</h3>
-    {on.length > 0 && <section aria-label="Workspace view">
-      <div className="settings-section-heading"><h3>Workspace view · {on.length}</h3><span>⌘E cycles through them</span></div>
-      <div className="plugin-rows" role="radiogroup" aria-label="Workspace view">
-        {on.map((v) => row(v.id, v.label, v.hint, <v.icon />, mode === v.id ? "on" : "ready"))}
-      </div>
-    </section>}
-    {off.length > 0 && <section aria-label="Off">
-      <div className="settings-section-heading"><h3>Off · {off.length}</h3><span>Open one to switch it back on</span></div>
-      <div className="plugin-rows">
-        {off.map((p) => {
-          const why = report.refused[p.id]!;
-          const switchedOff = why === "disabled in Settings";
-          return row(p.id, p.manifest?.name ?? p.id, switchedOff ? `Off${p.manifest?.version ? ` · ${p.manifest.version}` : ""}` : why, <Puzzle />, switchedOff ? "off" : "unavailable");
-        })}
-      </div>
-    </section>}
-  </section>;
+  const count = on.length + off.length;
+  // A package's own words for what it does, else which one it is.
+  const about = (id: string): string | undefined => {
+    const p = report.packages.find((x) => x.id === id);
+    if (!p) return undefined;
+    return (p.manifest as { description?: string } | null)?.description || (p.source === "app" ? "Comes with the app" : `Version ${p.manifest?.version ?? "unknown"}`);
+  };
+  if (!count) return null;
+  return <PluginGroup kind="view" count={count} foot={<p>⌘E switches between the views that are on.</p>}>
+    {on.map((v) => <PluginRow key={v.id} kind="view" id={v.id} name={v.label} line={about(v.id) ?? v.hint} mark={<v.icon />} badge={mode === v.id ? "In use" : undefined} />)}
+    {off.map((p) => {
+      const why = report.refused[p.id]!;
+      const switchedOff = why === "disabled in Settings";
+      return <PluginRow key={p.id} kind="view" id={p.id} name={p.manifest?.name ?? p.id} mark={<Puzzle />}
+        line={switchedOff ? about(p.id)! : why}
+        state={switchedOff ? "off" : "unavailable"} badge={switchedOff ? "Off" : "Can't load"} />;
+    })}
+  </PluginGroup>;
 }
 
 export function ViewPage({ id }: { id: string }) {
@@ -91,7 +70,7 @@ export function ViewPage({ id }: { id: string }) {
     <header className="plugin-head">
       <span className="plugin-mark"><view.icon size={22} /></span>
       <div className="plugin-title"><p>{view.hint}<span>·</span>{view.source === "community" ? `Community${pkg?.manifest?.version ? ` · ${pkg.manifest.version}` : ""}` : "Included with Hivemind"}</p></div>
-      {mode === id ? <span className="agent-badge">In use</span> : <Button size="sm" variant="outline" onClick={() => setViewMode(id)}>Use this view</Button>}
+      {mode === id ? <span className="agent-badge">In use</span> : <Button variant="outline" onClick={() => setViewMode(id)}>Use this view</Button>}
       {view.source === "community" && <Switch aria-label={`Enable ${view.label}`} checked={on}
         onCheckedChange={() => { setPluginEnabled("view", id, !on); rescan(); }} />}
     </header>
@@ -99,15 +78,18 @@ export function ViewPage({ id }: { id: string }) {
       <h3>Toolbar</h3>
       <div className="settings-row">
         <div><label htmlFor="toolbar-position">Display</label><p>Use the view’s default or choose a position.</p></div>
-        <select id="toolbar-position" value={override ?? "auto"} onChange={(e) => {
+        <Select value={override ?? "auto"} onValueChange={(v) => {
           const chrome = { ...getSettings().views.chrome };
-          if (e.target.value === "auto") delete chrome[id];
-          else chrome[id] = { island: e.target.value as IslandPlacement };
+          if (v === "auto") delete chrome[id];
+          else chrome[id] = { island: v as IslandPlacement };
           patchSettings("views.chrome", chrome);
         }}>
-          <option value="auto">Automatic ({resolveChrome(view).island})</option>
-          <option value="top">Top</option><option value="bottom">Bottom</option><option value="hidden">Collapsed</option><option value="off">Off</option>
-        </select>
+          <SelectTrigger id="toolbar-position" className="min-w-40"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="auto">Automatic ({resolveChrome(view).island})</SelectItem>
+            <SelectItem value="top">Top</SelectItem><SelectItem value="bottom">Bottom</SelectItem><SelectItem value="hidden">Collapsed</SelectItem><SelectItem value="off">Off</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       {override === "hidden" && <p className="settings-note">Show a handle to expand the toolbar.</p>}
       {override === "off" && <p className="settings-note">Shortcuts and custom view controls remain available.</p>}
@@ -132,13 +114,13 @@ export function ViewPage({ id }: { id: string }) {
 function RemoveView({ id, name, onRemoved }: { id: string; name: string; onRemoved: () => void }) {
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (!confirm) return <Button variant="destructive" size="sm" className="mt-3" onClick={() => setConfirm(true)}><Trash />Remove {name}</Button>;
+  if (!confirm) return <Button variant="destructive" className="mt-3" onClick={() => setConfirm(true)}><Trash />Remove {name}</Button>;
   return <div className="settings-remove-confirm">
     <p>Remove {name}? Its saved layout is kept, and your work keeps running.</p>
     {error && <p role="alert" className="settings-note error">{error}</p>}
     <div className="settings-actions">
-      <Button size="sm" variant="outline" onClick={() => setConfirm(false)}>Keep it</Button>
-      <Button size="sm" variant="destructive" onClick={() => void window.hive.removeViewPackage(id).then(() => { rescan(); onRemoved(); }, (e: Error) => setError(e.message))}>Remove</Button>
+      <Button variant="outline" onClick={() => setConfirm(false)}>Keep it</Button>
+      <Button variant="destructive" onClick={() => void window.hive.removeViewPackage(id).then(() => { rescan(); onRemoved(); }, (e: Error) => setError(e.message))}>Remove</Button>
     </div>
   </div>;
 }
@@ -166,7 +148,7 @@ function ToolbarSettings({ mode }: { mode: string }) {
     <p className="settings-note">Choose the buttons and their order. Switch tools on under Plugins.</p>
     <div className="settings-row">
       <label><input type="checkbox" checked={preference?.labels ?? false} onChange={(event) => update({ labels: event.target.checked })} /> Show labels</label>
-      <Button size="sm" variant="outline" onClick={() => {
+      <Button variant="outline" onClick={() => {
         const current = { ...getSettings().views.toolbars };
         delete current[mode];
         patchSettings("views.toolbars", current);
@@ -177,8 +159,8 @@ function ToolbarSettings({ mode }: { mode: string }) {
         const index = selected.indexOf(action.id);
         return <li key={action.id} data-toolbar-setting={action.id}>
           <label><input type="checkbox" checked={index >= 0} onChange={(event) => update({ actions: event.target.checked ? [...selected, action.id] : selected.filter((id) => id !== action.id) })} />{action.label}</label>
-          <Button variant="ghost" size="icon-sm" aria-label={`Move ${action.label} up`} disabled={index <= 0} onClick={() => move(action.id, -1)}><ArrowUp /></Button>
-          <Button variant="ghost" size="icon-sm" aria-label={`Move ${action.label} down`} disabled={index < 0 || index === selected.length - 1} onClick={() => move(action.id, 1)}><ArrowDown /></Button>
+          <Button variant="ghost" size="icon" aria-label={`Move ${action.label} up`} disabled={index <= 0} onClick={() => move(action.id, -1)}><ArrowUp /></Button>
+          <Button variant="ghost" size="icon" aria-label={`Move ${action.label} down`} disabled={index < 0 || index === selected.length - 1} onClick={() => move(action.id, 1)}><ArrowDown /></Button>
         </li>;
       })}
     </ol>

@@ -115,7 +115,7 @@ export function GitCommitModal({
       >
         <div className="flex items-center gap-2">
           <GitCommit size={16} className="text-[var(--color-fg2)]" />
-          <h2 className="text-[15px] font-semibold text-[var(--color-fg)]">Commit</h2>
+          <h2 className="text-title font-semibold text-[var(--color-fg)]">Commit</h2>
           <Button
             variant="ghost"
             size="icon-xs"
@@ -128,7 +128,7 @@ export function GitCommitModal({
         </div>
 
         {/* Status summary — branch, staged/changed counts, ahead/behind. */}
-        <div className="mt-2 flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px] font-mono text-[var(--color-fg3)]">
+        <div className="mt-2 flex items-center flex-wrap gap-x-3 gap-y-1 text-count font-mono text-[var(--color-fg3)]">
           <span className="text-[var(--color-fg2)]">{branch}</span>
           <span title={`${staged.length} staged · ${unstaged.length} unstaged`}>
             <span className="text-[var(--color-ok)]">{staged.length}</span>
@@ -160,7 +160,7 @@ export function GitCommitModal({
         </div>
 
         {/* Stage-all toggle. */}
-        <label className="mt-2 flex items-center gap-2 text-[12px] text-[var(--color-fg2)] select-none cursor-pointer">
+        <label className="mt-2 flex items-center gap-2 text-label text-[var(--color-fg2)] select-none cursor-pointer">
           <input
             type="checkbox"
             checked={stageAll}
@@ -178,7 +178,6 @@ export function GitCommitModal({
         <div className="mt-4 flex items-center gap-2">
           <Button
             variant="outline"
-            size="sm"
             onClick={onPull}
             disabled={!canPull}
             title="Update this branch from upstream (fast-forward only)"
@@ -188,7 +187,6 @@ export function GitCommitModal({
           </Button>
           <Button
             variant="outline"
-            size="sm"
             onClick={onPush}
             disabled={!canPush}
             title={ahead > 0 ? `Push ${ahead} commit(s)` : "Nothing to push yet"}
@@ -200,7 +198,6 @@ export function GitCommitModal({
           <div className="ml-auto flex items-center gap-2">
             <Button
               variant="outline"
-              size="sm"
               onClick={onCommit}
               disabled={!canCommit}
               title="Commit staged changes (⌘↵)"
@@ -209,7 +206,6 @@ export function GitCommitModal({
               Commit
             </Button>
             <Button
-              size="sm"
               onClick={onCommitPush}
               disabled={!canCommit}
               title="Commit, then push"

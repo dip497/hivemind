@@ -8,6 +8,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import type { GuestOf } from "./devices.js";
 import type { Access } from "./access.js";
 import type { Moved } from "./doc-sync.js";
 import type { HiveNet, Where } from "./hive-net.js";
@@ -41,6 +42,13 @@ export class JoinedList {
     } catch {
       return [];
     }
+  }
+
+  /** Where this device is a guest (spec/pairing.md 0.9): each workspace of someone else's it joined
+   *  and was not let go from, on its host. */
+  guestOf(): GuestOf[] {
+    return this.list().filter((j) => j.role !== "owner" && !j.ended)
+      .map((j) => ({ workspace: j.workspace, host: j.host, addrs: j.where.addrs, relay: j.where.relay }));
   }
 
   /** Keep `joined`, in place of any earlier join of the same workspace. */

@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WorkerPoolContextProvider } from "@pierre/diffs/react";
 import { Toaster } from "sonner";
+import { Requests } from "./multiplayer/requests";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { workerFactory } from "./pierre-worker";
 import { App } from "./App";
@@ -35,6 +36,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       >
         <TooltipProvider delayDuration={200} skipDelayDuration={500}>
           <App />
+          <Requests />
           <Toaster
             theme="dark"
             position="bottom-right"
@@ -49,10 +51,10 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                 color: "var(--color-fg)",
                 border: "1px solid var(--color-line2)",
                 borderRadius: "12px",
-                boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.08), 0 10px 36px rgba(0,0,0,0.5)",
+                boxShadow: "var(--hm-highlight-glass), var(--hm-shadow-glass)",
                 backdropFilter: "blur(10px) saturate(135%)",
                 fontFamily: "var(--font-sans)",
-                fontSize: "12px",
+                fontSize: "var(--text-label)",
               },
             }}
           />

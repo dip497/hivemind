@@ -13,7 +13,10 @@
  */
 import path from "node:path";
 import { ANSWERING, LINK_ROLES, ROLES, type AccessLists, type LinkRole, type Person } from "@hivemind/workspace-host/access";
+import type { GuestAnswer } from "@hivemind/workspace-host/connect";
 import type { Ready } from "@hivemind/workspace-host/hive-net";
+import { certificateVerifies } from "@hivemind/workspace-host/identity";
+import { profileOf } from "@hivemind/core/settings-schema";
 import { formatJoinLink } from "@hivemind/workspace-host/join-link";
 import type { NetworkProfiles } from "@hivemind/workspace-host/network-profile";
 import type { JoinRequest } from "@hivemind/workspace-host/sharing";
@@ -52,7 +55,7 @@ export interface PeopleOptions {
   waitsAway: boolean;
 }
 
-type PeopleMethod = "people.list" | "people.role" | "people.remove" | "people.invite" | "people.answer" | "people.requests" | "people.answering";
+type PeopleMethod = "people.list" | "people.role" | "people.remove" | "people.invite" | "people.admit" | "people.answer" | "people.requests" | "people.answering";
 
 /** The owner's clients: a window of this host's own, or one of their devices. */
 const owners = (c: Connection): boolean => c.actor.kind === "person" || (c.actor.kind === "peer" && c.actor.access === "owner");
@@ -64,13 +67,7 @@ export class People {
   private next = 1;
 
   constructor(private readonly o: PeopleOptions) {
-    /** The workspace the repo `repo` here is. */
-    const workspaceAt = (repo: unknown): { repo: string; workspace: string } => {
-      const r = text(repo, "repo");
-      const workspace = o.workspaceOf(r);
-      if (!workspace) throw new Error("people: this workspace does not say whose it is yet; change something in it first");
-      return { repo: r, workspace };
-    };
+    const workspaceAt = (repo: unknown) => this.workspaceAt(repo);
     /** `person` as the list of `workspace` has them. */
     const onList = (workspace: string, person: unknown): Person => {
       const found = o.lists().people(workspace).find((p) => p.person === person);
@@ -132,6 +129,7 @@ export class People {
             names: { workspace: path.basename(r), host: await o.owner() }, admission, hosting,
           });
         },
+        "people.admit": (_, repo, certificate, profile, role) => this.admit(repo, certificate, profile, role),
         // The owner answers someone asking to join `repo`, letting them in at the link's role or
         // at `role`: the first answer counts.
         "people.answer": (_, repo, req, allow, role) => {
@@ -158,9 +156,37 @@ export class People {
         "people.role": (repo, person, role) => ({ target: named(repo), detail: `${String(person).slice(0, 8)}… → ${String(role)}` }),
         "people.remove": (repo, person) => ({ target: named(repo), detail: String(person).slice(0, 8) }),
         "people.invite": (repo, role) => ({ target: named(repo), detail: named(role) }),
+        "people.admit": (repo, certificate, _profile, role) => ({ target: named(repo), detail: `${String((certificate as { person?: unknown } | null)?.person).slice(0, 8)}… as ${String(role)}` }),
         "people.answer": (repo, _req, allow, role) => ({ target: named(repo), detail: allow === true ? `allow${named(role) ? ` as ${String(role)}` : ""}` : "deny" }),
         "people.answering": (repo, rule) => ({ target: named(repo), detail: named(rule) }),
       },
+    };
+  }
+
+  /** The workspace the repo `repo` here is. */
+  private workspaceAt(repo: unknown): { repo: string; workspace: string } {
+    const r = text(repo, "repo");
+    const workspace = this.o.workspaceOf(r);
+    if (!workspace) throw new Error("people: this workspace does not say whose it is yet; change something in it first");
+    return { repo: r, workspace };
+  }
+
+  /** Let in, at `role`, the device whose `certificate` the owner said yes to when it asked to
+   *  connect (spec/pairing.md 0.10, someone else), as a join lets someone in: what it is told of
+   *  where the workspace is. */
+  async admit(repo: unknown, certificate: unknown, profile: unknown, role: unknown): Promise<GuestAnswer> {
+    const { repo: r, workspace } = this.workspaceAt(repo);
+    const given = oneOf(role, "role", LINK_ROLES) as LinkRole;
+    if (!certificateVerifies(certificate)) throw new Error("people: that is not a device certificate");
+    const lists = this.o.lists();
+    lists.grant(workspace, certificate.person, given);
+    lists.remember(workspace, certificate.person, profileOf(profile));
+    lists.addDevice(workspace, certificate);
+    this.o.admit();
+    const { ready } = await this.o.network();
+    return {
+      workspace, host: ready.id, addrs: ready.addrs, relay: ready.relay, role: given,
+      names: { workspace: path.basename(r), host: await this.o.owner() }, hosting: { key: this.o.keyOf(workspace), lookup: ready.lookup },
     };
   }
 

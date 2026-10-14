@@ -15,8 +15,8 @@ export function PromptDialog({ ask, onChoose }: { ask: PromptAsk | null; onChoos
         <DialogDescription>{ask?.where}. The agent acts on it with your files and network. Nothing is sent unless you send it.</DialogDescription>
         {ask && (
           <>
-            <pre className="max-h-[40vh] overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius)] border border-[var(--color-line)] p-3 font-mono text-xs">{ask.text}</pre>
-            <p className="text-xs text-[var(--color-fg-muted)]">{ask.text.length.toLocaleString()} characters</p>
+            <pre className="max-h-[40vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--color-line)] p-3 font-mono text-label">{ask.text}</pre>
+            <p className="text-label text-[var(--color-fg-muted)]">{ask.text.length.toLocaleString()} characters</p>
           </>
         )}
         <DialogFooter>

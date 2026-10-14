@@ -1,7 +1,6 @@
 import * as SettingsDialog from "@radix-ui/react-dialog";
 import { ThemePanel } from "./ThemePanel";
 import { RecentProjects } from "./RecentProjects";
-import { ROLE_LABELS } from "./multiplayer/people";
 import { WorkspaceActions } from "./multiplayer/workspace-actions";
 import { AppControls } from "./workspace/app-controls";
 import { useChromeState } from "./workspace/chrome-store";
@@ -39,7 +38,6 @@ import { chooseFolder, FolderPathDialog } from "./choose-folder";
 const SettingsPages = preloadable(() => import("./settings-panels").then((m) => m.default));
 // Sharing's dialogs load when opened: they are nothing the first frame draws.
 const MakePluginDialog = lazy(() => import("./plugins/MakePlugin").then((m) => ({ default: m.MakePluginDialog })));
-const PeopleDialog = lazy(() => import("./multiplayer/people-dialog").then((m) => ({ default: m.PeopleDialog })));
 
 // Last 8 opened folders, most recent first. Persisted via localStorage —
 // mirrors VSCode's "Open Recent" (Ctrl+R) behavior at workspace granularity.
@@ -205,7 +203,6 @@ export function App() {
   // Ctrl+O / Ctrl+R on the canvas (useCanvasShortcuts): VS Code's Open Folder and Open Recent.
   // Which page of the Recent dialog is open: its list, or joining a workspace shared with you.
   const [recentOpen, setRecentOpen] = useState<"recent" | "join" | null>(null);
-  const [peopleOpen, setPeopleOpen] = useState(false);
   const { islandShown, layersShown } = useChromeState();
   // Make your own plugin (the Add menu, Settings ▸ Plugins): a prompt to copy or hand an agent here.
   const [making, setMaking] = useState<"widget" | "tool" | "view" | null>(null);
@@ -214,37 +211,10 @@ export function App() {
     window.addEventListener("hivemind:make-plugin", open);
     return () => window.removeEventListener("hivemind:make-plugin", open);
   }, []);
-  // Someone asks to join a workspace of the person's, hosted here or on another of their devices:
-  // they let them in, or not. Answered at another window or device, the question goes.
-  const joinAsked = useRef(new Map<string, string | number>());
-  useEffect(() => {
-    const offAsked = window.hive.onJoinRequest((r) => {
-      const key = `${r.repo}#${r.req}`;
-      const answer = (allow: boolean) => {
-        if (!joinAsked.current.delete(key)) return;
-        window.hive.answerJoin(r.repo, r.req, allow);
-      };
-      const who = r.profile.name || "Someone";
-      joinAsked.current.set(key, toast(`${who} wants to join ${r.workspace} as ${ROLE_LABELS[r.role] ?? r.role}`, {
-        duration: Infinity,
-        action: { label: "Allow", onClick: () => answer(true) },
-        cancel: { label: "Deny", onClick: () => answer(false) },
-        onDismiss: () => answer(false),
-        className: "hm-join-request",
-      }));
-    });
-    const offAnswered = window.hive.onJoinAnswered((repo, req) => {
-      const key = `${repo}#${req}`;
-      const id = joinAsked.current.get(key);
-      if (id === undefined) return;
-      joinAsked.current.delete(key);
-      toast.dismiss(id);
-    });
-    return () => { offAsked(); offAnswered(); };
-  }, []);
   useEffect(() => {
     const onFolder = () => void pickFolder();
-    const onRecent = (e: Event) => setRecentOpen((e as CustomEvent<{ join?: boolean }>).detail?.join ? "join" : "recent");
+    // One dialog at a time: Join from Settings → Connect closes Settings.
+    const onRecent = (e: Event) => { setSettingsOpen(false); setRecentOpen((e as CustomEvent<{ join?: boolean }>).detail?.join ? "join" : "recent"); };
     // The Layers panel's Projects: this window shows that workspace instead.
     const onWorkspace = (e: Event) => { const repo = (e as CustomEvent<{ repo?: string }>).detail?.repo; if (repo) openRecent(repo); };
     window.addEventListener("hivemind:open-folder", onFolder);
@@ -266,13 +236,11 @@ export function App() {
     openRecent(path);
     void qc.invalidateQueries({ queryKey: ["project", path] });
   };
-  // Settings → People hands these on: Settings closes for the People panel, and for the moved workspace.
+  // Settings → Connect hands this on: Settings closes for the moved workspace.
   useEffect(() => {
-    const people = () => { setSettingsOpen(false); setPeopleOpen(true); };
     const moved = (event: Event) => { setSettingsOpen(false); openMoved((event as CustomEvent<{ uri: string }>).detail.uri); };
-    window.addEventListener("hivemind:open-people", people);
     window.addEventListener("hivemind:open-moved", moved);
-    return () => { window.removeEventListener("hivemind:open-people", people); window.removeEventListener("hivemind:open-moved", moved); };
+    return () => window.removeEventListener("hivemind:open-moved", moved);
   });
 
   // A plugin set issues up in a folder: the workspace there now has a `.hivemind`, so read it again,
@@ -401,7 +369,7 @@ export function App() {
           />
           <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
             <SharedBanner onMoved={openMoved} />
-            <WorkspaceActions onPeople={() => setPeopleOpen(true)} />
+            <WorkspaceActions onPeople={() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "connect" } }))} />
             {!islandShown && !layersShown && <AppControls corner />}
           </div>
         </div>
@@ -420,7 +388,6 @@ export function App() {
         <Suspense fallback={null}>
           {making && <MakePluginDialog kind={making} onClose={() => setMaking(null)}
             onStart={(prompt) => window.dispatchEvent(new CustomEvent("hivemind:deliver-to-agent", { detail: { text: prompt } }))} />}
-          {repoPath && peopleOpen && <PeopleDialog repo={repoPath} open onClose={() => setPeopleOpen(false)} />}
         </Suspense>
         <ThemePanel />
         <SettingsModal
@@ -451,13 +418,13 @@ function UpdateWork({ progress, busy, onRestart }: { progress: UpdateProgress | 
   return (
     <>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
+        <div className="flex items-center gap-1.5 text-label text-[var(--color-fg)]">
           {busy && <Spinner className="size-3 animate-spin text-[var(--color-fg2)]" />}
           <span className="truncate">{p.label}</span>
         </div>
         <div className="hm-update-bar mt-1.5" data-busy={busy ? "1" : "0"} role="progressbar"
           aria-valuemin={0} aria-valuemax={UPDATE_STEPS.length} aria-valuenow={UPDATE_STEPS.indexOf(p.step) + 1} aria-label={p.label}>
-          <span style={{ width: `${filled}%` }} />
+          <span style={{ transform: `scaleX(${filled / 100})` }} />
         </div>
       </div>
       {ready && <Button onClick={onRestart} size="xs" title="Restart into the new version">Restart</Button>}
@@ -488,7 +455,7 @@ function NotificationPrefs() {
       <div className="settings-row">
         <div className="flex items-center gap-2">
           <Bell size={14} className="text-[var(--color-fg2)]" />
-          <span className="text-[13px] font-medium text-[var(--color-fg)]">Notifications</span>
+          <span className="text-body font-medium text-[var(--color-fg)]">Notifications</span>
         </div>
         <Switch checked={s.enabled} onCheckedChange={(v) => update({ enabled: v })} aria-label="Enable notifications" />
       </div>
@@ -499,7 +466,7 @@ function NotificationPrefs() {
         {kinds.map((k) => (
           <div key={k.key} className="settings-row">
             <div className="min-w-0">
-              <div className="text-[12px] text-[var(--color-fg)]">{k.label}</div>
+              <div className="text-label text-[var(--color-fg)]">{k.label}</div>
               <div className="settings-note">{k.hint}</div>
             </div>
             <Switch
@@ -516,11 +483,11 @@ function NotificationPrefs() {
       <div className="settings-section">
         <div className="settings-subheading">Delivery</div>
         <div className="settings-row">
-          <div className="text-[12px] text-[var(--color-fg)]">In-app toasts</div>
+          <div className="text-label text-[var(--color-fg)]">In-app toasts</div>
           <Switch disabled={dim} checked={s.inApp} onCheckedChange={(v) => update({ inApp: v })} aria-label="In-app toasts" />
         </div>
         <div className="settings-row">
-          <div className="text-[12px] text-[var(--color-fg)]">Native OS popups</div>
+          <div className="text-label text-[var(--color-fg)]">Native OS popups</div>
           <Switch disabled={dim} checked={s.osPopups} onCheckedChange={(v) => update({ osPopups: v })} aria-label="Native OS popups" />
         </div>
       </div>
@@ -529,7 +496,7 @@ function NotificationPrefs() {
       <div className="settings-section">
         <div className="settings-row">
           <div className="min-w-0">
-            <div className="text-[12px] text-[var(--color-fg)]">Do Not Disturb</div>
+            <div className="text-label text-[var(--color-fg)]">Do Not Disturb</div>
             <div className="settings-note">Mutes finished/failed; needs-you still fires</div>
           </div>
           <Switch disabled={dim} checked={s.dnd.enabled} onCheckedChange={(v) => update({ dnd: { ...s.dnd, enabled: v } })} aria-label="Do Not Disturb" />
@@ -544,7 +511,7 @@ function NotificationPrefs() {
               className="w-auto"
               aria-label="DND start"
             />
-            <span className="text-[11px] text-[var(--color-fg2)]">to</span>
+            <span className="text-count text-[var(--color-fg2)]">to</span>
             <Input
               type="time"
               disabled={dim}
@@ -553,7 +520,7 @@ function NotificationPrefs() {
               className="w-auto"
               aria-label="DND end"
             />
-            <span className="text-[10px] text-[var(--color-fg2)] ml-auto">local time</span>
+            <span className="text-chip text-[var(--color-fg2)] ml-auto">local time</span>
           </div>
         )}
       </div>
@@ -675,14 +642,14 @@ function SettingsModal({
         <div className="settings-section">
           <div className="flex items-baseline justify-between gap-2">
             <div className="flex items-baseline gap-2">
-              <span className="text-[14px] font-semibold text-[var(--color-fg)]">hivemind</span>
-              <span className="text-[11px] font-mono text-[var(--color-fg2)]">{version ? `v${version}` : "version…"}</span>
+              <span className="text-row font-semibold text-[var(--color-fg)]">hivemind</span>
+              <span className="text-count font-mono text-[var(--color-fg2)]">{version ? `v${version}` : "version…"}</span>
             </div>
             <a
               href={REPO_URL}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-[11px] text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
+              className="inline-flex items-center gap-1 text-count text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
             >
               GitHub <ExternalLink className="size-3 text-[var(--color-fg2)]" />
             </a>
@@ -692,7 +659,7 @@ function SettingsModal({
               <UpdateWork progress={progress} busy={upgrading} onRestart={onRestart} />
             ) : update?.staged ? (
               <>
-                <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
+                <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg)]">
                   <span className="size-2 rounded-full bg-[var(--color-ok)]" aria-hidden />
                   v{update.staged} is downloaded — restart to finish
                 </span>
@@ -700,7 +667,7 @@ function SettingsModal({
               </>
             ) : update?.updateAvailable ? (
               <>
-                <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
+                <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg)]">
                   <span className="size-2 rounded-full bg-[var(--color-warn)]" aria-hidden />
                   Update available{update.latest ? ` — v${update.latest}` : ""}
                 </span>
@@ -708,14 +675,14 @@ function SettingsModal({
               </>
             ) : update?.off ? (
               <>
-                <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg2)]" data-update-off>
+                <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg2)]" data-update-off>
                   <span className="size-2 rounded-full bg-[var(--color-fg3)]" aria-hidden />
                   The update check is off
                 </span>
               </>
             ) : (
               <>
-                <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg2)]">
+                <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg2)]">
                   <span className="size-2 rounded-full" style={{ background: checking ? "var(--color-fg3)" : "var(--color-ok)" }} aria-hidden />
                   {checking ? "Checking…" : "Up to date"}
                 </span>

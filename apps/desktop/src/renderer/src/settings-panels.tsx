@@ -1,7 +1,7 @@
 import { ProfilePrefs } from "./settings-profile";
-import { PeoplePrefs } from "./multiplayer/share-prefs";
+import { ConnectPrefs } from "./settings-connect";
 import { ServersPrefs } from "./settings-network";
-import { YourDevicesPrefs } from "./settings-devices";
+import { BrowserPrefs } from "./settings-browser";
 import { ApiAccessPrefs } from "./settings-programs";
 import { PluginPage } from "./plugins/PluginPage";
 import { PluginsHome } from "./plugins/PluginsHome";
@@ -20,6 +20,7 @@ import { useRef, useState } from "react";
 import { ChevronDown } from "./components/icons";
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { getSettings, patchSettings } from "./settings-store";
 import { setTheme, useTheme } from "./theme-store";
 import {
@@ -72,14 +73,13 @@ function AppearancePrefs() {
             <label htmlFor="plugin-surfaces">Tools in scene views</label>
             <p>How terminals and editors look inside a view you installed.</p>
           </div>
-          <select
-            id="plugin-surfaces"
-            value={t.pluginSurfaces}
-            onChange={(e) => setTheme({ pluginSurfaces: e.target.value as "theme" | "opaque" })}
-          >
-            <option value="theme">Use my theme</option>
-            <option value="opaque">Opaque</option>
-          </select>
+          <Select value={t.pluginSurfaces} onValueChange={(v) => setTheme({ pluginSurfaces: v as "theme" | "opaque" })}>
+            <SelectTrigger id="plugin-surfaces" className="min-w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="theme">Use my theme</SelectItem>
+              <SelectItem value="opaque">Opaque</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <OverlayControls t={t} />
       </Section>
@@ -92,8 +92,8 @@ function AppearancePrefs() {
         <div className="settings-row">
           <div><label>Theme file</label></div>
           <div className="settings-inline">
-            <Button type="button" size="sm" variant="outline" onClick={() => void exportTheme()}>Copy JSON</Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}>Import…</Button>
+            <Button type="button" variant="outline" onClick={() => void exportTheme()}>Copy JSON</Button>
+            <Button type="button" variant="outline" onClick={() => fileRef.current?.click()}>Import…</Button>
             <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => void importTheme(e)} />
           </div>
         </div>
@@ -169,7 +169,7 @@ const NavigateContext = createContext<(id: string) => void>(() => {});
 export const useSettingsNavigate = (): ((id: string) => void) => useContext(NavigateContext);
 
 /** Must match the registry's `chunk: "lazy"` pages (unit tested); plugin pages (`agent:…`) are always lazy. */
-export const LAZY_SETTINGS_PAGES = ["profile", "appearance", "shortcuts", "people", "your-devices", "api", "plugins", "servers"] as const;
+export const LAZY_SETTINGS_PAGES = ["profile", "appearance", "shortcuts", "connect", "api", "plugins", "browser", "servers"] as const;
 
 export default function SettingsPages({ page, navigate }: { page: string; navigate: (id: string) => void }) {
   return <NavigateContext.Provider value={navigate}>{renderPage(page)}</NavigateContext.Provider>;
@@ -177,8 +177,8 @@ export default function SettingsPages({ page, navigate }: { page: string; naviga
 
 function renderPage(page: string) {
   if (page === "profile") return <ProfilePrefs />;
-  if (page === "people") return <PeoplePrefs />;
-  if (page === "your-devices") return <YourDevicesPrefs />;
+  if (page === "connect") return <ConnectPrefs />;
+  if (page === "browser") return <BrowserPrefs />;
   if (page === "api") return <ApiAccessPrefs />;
   if (page === "servers") return <ServersPrefs />;
   if (page === "appearance") return <AppearancePrefs />;

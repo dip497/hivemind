@@ -3,11 +3,12 @@
  * over `hive/pair/1`. Their device shows its certificate, which must name the device that
  * connected, and the invite's secret; the person at the host allows or declines; on allow the
  * person is granted the invite's role, their device is recorded and the invite is used. The
- * devices the lists admit are then what the network gate lets in.
+ * devices the lists admit are then what the network gate lets in. A device the person unpaired
+ * is let into none of their workspaces here once any device brings their signed word of it.
  */
 import { profileOf, type ProfileSettings } from "@hivemind/core/settings-schema";
 import type { AccessLists, LinkRole } from "./access.js";
-import { certificateVerifies, type DeviceCertificate } from "./identity.js";
+import { certificateVerifies, revocationVerifies, type DeviceCertificate } from "./identity.js";
 
 /** What someone asking to join sends. */
 export interface Hello {
@@ -32,6 +33,9 @@ export type PairReply =
   | { ok: true; role: LinkRole; workspace: string }
   | { ok: false; error: "expired" | "declined" | "not-this-device" | "malformed" };
 
+/** What a revocation is answered (spec/pairing.md 0.9): whether the device was let in here. */
+export type RevokeReply = { ok: true; forgot: boolean } | { ok: false; error: "malformed" };
+
 export class Sharing {
   constructor(
     private readonly lists: AccessLists,
@@ -43,7 +47,14 @@ export class Sharing {
   ) {}
 
   /** The answer to `peer` (the device that connected, as its key proved it), who sent `hello`. */
-  async answer(peer: string, hello: unknown): Promise<PairReply> {
+  async answer(peer: string, hello: unknown): Promise<PairReply | RevokeReply> {
+    // A device the person unpaired, from whichever of their devices brings the word.
+    if (hello && typeof hello === "object" && "revoke" in hello) {
+      if (!revocationVerifies(hello.revoke)) return { ok: false, error: "malformed" };
+      const forgot = this.lists.forgetDevice(hello.revoke);
+      if (forgot) this.admittedChanged(this.lists.admitted());
+      return { ok: true, forgot };
+    }
     const h = hello as Partial<Hello> | null;
     if (!h || h.v !== 1 || typeof h.workspace !== "string" || typeof h.secret !== "string") return { ok: false, error: "malformed" };
     if (!certificateVerifies(h.certificate)) return { ok: false, error: "malformed" };

@@ -2,11 +2,22 @@
 // (hive-phone's core) pairs, signs, reads and acts; this keeps one connection to the computer it
 // paired with, dialled again when it drops, and hands the screens what it is told.
 
-import init, { Device, type Host, HomeView, Term, type ViewSession, deviceId, pair, readLink, readQr } from "../pkg/hive_web.js";
+import init, { Device, type Host, HomeView, Term, type ViewSession, connectWith, deviceId, pair, readConnectLink, readLink, readQr } from "../pkg/hive_web.js";
 import type { Filter } from "./home.js";
 import { deviceKey, get, put, remove } from "./store.js";
 import type { Agent, Folders, Held, Offered, Others, Overview, Paired, Piece, Places, Reply, Screen, Shown, Start, Unfolded, ViewFile } from "./types.js";
 import { message } from "./words.js";
+
+/** What connecting shows, step by step (pair.ts). */
+export interface Connect {
+  /** Asking the computer `name`. */
+  asking(name: string): void;
+  /** The words both screens show, while the person at the computer answers. */
+  words(words: string[]): void;
+  /** The computer says this phone is the person's, `person` by name when it says; whether the
+   *  words match, as the person here says. */
+  match(person: string | null): Promise<boolean>;
+}
 
 export interface Told {
   /** What the computer says of Home changed what this browser holds. */
@@ -70,9 +81,13 @@ export class Phone {
     return this.view.kept();
   }
 
-  /** The computer the pairing link in `text` names, or null when it is not one. */
-  read(text: string): { device: string; name: string } | null {
-    return readLink(text) as { device: string; name: string } | null;
+  /** The computer the link in `text` names, to pair with or, `connect`, to connect to; null when
+   *  it is neither. */
+  read(text: string): { device: string; name: string; connect: boolean } | null {
+    const pairing = readLink(text) as { device: string; name: string } | null;
+    if (pairing) return { ...pairing, connect: false };
+    const offer = readConnectLink(text) as { device: string; name: string } | null;
+    return offer && { ...offer, connect: true };
   }
 
   /** The text of a QR code in a camera's frame, or null when none in it reads. */
@@ -82,7 +97,30 @@ export class Phone {
 
   /** Pair with the computer whose link `text` is, as the page's address carries it or as copied. */
   async pair(text: string, name: string): Promise<Paired> {
-    const given = (await pair(this.seed, text, name)) as Paired;
+    return this.keepPaired((await pair(this.seed, text, name)) as Paired);
+  }
+
+  /** Connect to the computer whose offer `text` is (spec/pairing.md 0.10), showing `shown` each
+   *  step: kept as a pairing is, once the person at the computer and the one here both say yes. */
+  async connectWith(text: string, name: string, shown: Connect): Promise<Paired> {
+    shown.asking(this.read(text)?.name ?? "your computer");
+    const asked = await connectWith(this.seed, text, name);
+    shown.words(asked.words);
+    let person: { name: string } | null;
+    try {
+      person = (await asked.wait()) as { name: string } | null;
+    } catch (e) {
+      await asked.close();
+      throw e;
+    }
+    if (!(await shown.match(person?.name ?? null))) {
+      await asked.refuse();
+      throw new Error("The words did not match: nothing was kept.");
+    }
+    return this.keepPaired((await asked.take()) as Paired);
+  }
+
+  private async keepPaired(given: Paired): Promise<Paired> {
     const before = this.paired;
     await put("paired", given);
     this.paired = given;

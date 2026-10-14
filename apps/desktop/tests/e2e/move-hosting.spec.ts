@@ -15,9 +15,10 @@ import { test, expect, type ElectronApplication, type Page } from "@playwright/t
 import { execFileSync, execSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { HIVE_NET, hiveNetBuilt, join, note, notes, openShare, person, share, tiles } from "./helpers/multiplayer";
+import { HIVE_NET, enterCode, hiveNetBuilt, join, note, notes, openConnect, person, share, tiles } from "./helpers/multiplayer";
 import { guest as windowless } from "./helpers/guest";
 import { stopDaemons } from "./helpers/daemons";
+import { pick } from "./helpers/select";
 
 const HIVE = path.resolve("../cli/dist/hive");
 const hostable = fs.existsSync(HIVE) && `${spawnSync(HIVE, ["host", "--help"], { encoding: "utf8" }).stdout}`.includes("pair");
@@ -98,11 +99,7 @@ async function sharedAndPaired(profile?: string) {
       if (nl >= 0) resolve((JSON.parse(out.slice(0, nl)) as { data: { offer: { link: string } } }).data.offer);
     });
   });
-  await laptop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
-  await laptop.locator("[data-pair-link]").fill(offer.link);
-  await laptop.locator("[data-pair-go]").click();
-  await expect(laptop.locator('[data-pair-result="paired"]')).toBeVisible({ timeout: 20_000 });
-  await laptop.keyboard.press("Escape");
+  await enterCode(laptop, offer.link);
   await expect.poll(() => status()?.devices.length ?? 0, { timeout: 30_000 }).toBe(1);
 
   // A guest is in, on the laptop.
@@ -120,8 +117,9 @@ async function sharedAndPaired(profile?: string) {
 /** Share → move it to the host: the laptop's window opens it from there as its owner, and the
  *  guest follows. */
 async function moveToHost(laptop: Page, guest: Page, hostDevice: string): Promise<void> {
-  await openShare(laptop);
-  await expect(laptop.locator("[data-move-to]")).toHaveValue(hostDevice);
+  await openConnect(laptop);
+  const hostName = await laptop.evaluate((d) => window.hive.devices().then((all) => all.find((x) => x.device === d)?.name), hostDevice);
+  await expect(laptop.locator("[data-move-to]")).toHaveText(hostName!);
   await laptop.locator("[data-move-hosting]").click();
   await expect(laptop.locator('[data-shared-banner][data-state="connected"]')).toHaveAttribute("data-access", "owner", { timeout: 20_000 });
   await expect.poll(async () => ((await guest.evaluate(() => window.hive.joined()))[0] as { host?: string } | undefined)?.host, { timeout: 10_000 }).toBe(hostDevice);
@@ -205,11 +203,13 @@ test("on a network with a lookup server, the laptop shares the workspace at the 
   // At the host it is the laptop's to share still, and not the guest's. Someone asks to join with
   // a link the laptop makes there (a device with no window): the laptop's window is asked, and
   // lets them in.
-  await openShare(guest);
+  await openConnect(guest);
   await expect(guest.locator("[data-share-not-owner]")).toBeVisible();
-  await expect(guest.locator("[data-share-create]")).toHaveCount(0);
+  await expect(guest.locator("[data-people-list]")).toHaveCount(0);
   await guest.keyboard.press("Escape");
-  const link = await share(laptop, "view");
+  // The workspace the laptop's window shows, at the host.
+  const atHost = `hive://${((await guest.evaluate(() => window.hive.joined()))[0] as { workspace: string }).workspace}`;
+  const link = await share(laptop, "view", atHost);
   const newcomer = await windowless(path.join(root, "newcomer"), "Noor", link, async () => {
     const request = laptop.locator(".hm-join-request");
     await expect(request).toContainText("Noor wants to join api as Can view", { timeout: 30_000 });
@@ -219,11 +219,10 @@ test("on a network with a lookup server, the laptop shares the workspace at the 
 
   // In People, the guest is here, and given another role: they work under it at once.
   const guestId = (await guest.evaluate(() => window.hive.identity())).personId;
-  await openShare(laptop);
-  await laptop.locator("[data-share-people]").click();
+  await openConnect(laptop);
   const row = laptop.locator(`[data-shared-person="${guestId}"]`);
   await expect(row).toContainText("Here now", { timeout: 20_000 });
-  await row.locator("[data-person-role]").selectOption("terminals");
+  await pick(row.locator("[data-person-role]"), "Can use terminals");
   await expect(guest.locator('[data-shared-banner][data-state="connected"]')).toHaveAttribute("data-access", "terminals", { timeout: 20_000 });
   await laptop.keyboard.press("Escape");
 

@@ -53,6 +53,7 @@ test("Browser opt-in is shared by Settings, shortcuts, CLI, and view commands; d
 
   await page.locator('[aria-label="settings"]').click();
   await page.locator('[data-settings-page="plugins"]').click();
+  await page.locator('[data-plugin-row="tool:hivemind/web"]').click();
   await page.getByRole("switch", { name: "Enable Browser", exact: true }).click();
   await expect.poll(() => hive("config", "get", "plugins.state").data.data).toEqual({ "tool:hivemind/web": { enabled: true } });
   await page.screenshot({ path: "/tmp/hivemind-browser-plugin-settings.png" });

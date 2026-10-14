@@ -13,7 +13,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { LoroDoc } from "loro-crdt";
 import { readDoc, storedKeys, writeDoc } from "./doc-file.js";
-import { certificateVerifies, idOf, signWith, verifies, type DeviceCertificate, type Seed } from "./identity.js";
+import { certificateVerifies, idOf, revocationVerifies, signWith, verifies, type DeviceCertificate, type Seed } from "./identity.js";
 
 /** Roles (design §6), least to most. The owner is not a role that can be granted. */
 export const ROLES = ["view", "edit", "terminals", "agents"] as const;
@@ -159,11 +159,27 @@ export class AccessLists {
     return true;
   }
 
+  /** Forget, in every workspace here, the device `revocation` names as its person's, as they
+   *  certified it then or before (spec/identity.md). False when it was in none, or the revocation
+   *  is not its person's. */
+  forgetDevice(revocation: unknown): boolean {
+    if (!revocationVerifies(revocation)) return false;
+    const { person, device, at } = revocation;
+    let forgot = false;
+    for (const ws of this.workspaces()) {
+      const cert = this.doc(ws).getMap("devices").get(device) as DeviceCertificate | undefined;
+      if (!cert || cert.person !== person || cert.issuedAt > at) continue;
+      this.edit(ws, (doc) => doc.getMap("devices").delete(device));
+      forgot = true;
+    }
+    return forgot;
+  }
+
   /** Record a device a person has shown its certificate for. Only a certificate that verifies, of
-   *  a person on the list or the owner, is kept; false otherwise. */
+   *  a person on the list, is kept; false otherwise. The owner's devices are known by pairing alone,
+   *  so Unpair is all it takes to let one in no more. */
   addDevice(workspace: string, cert: unknown): boolean {
-    if (!certificateVerifies(cert)) return false;
-    if (cert.person !== this.ownerId && !this.grantOf(workspace, cert.person)) return false;
+    if (!certificateVerifies(cert) || !this.grantOf(workspace, cert.person)) return false;
     const known = this.doc(workspace).getMap("devices").get(cert.device) as DeviceCertificate | undefined;
     if (known && known.person === cert.person && known.signature === cert.signature) return true;
     this.edit(workspace, (doc) => doc.getMap("devices").set(cert.device, cert));
@@ -176,13 +192,12 @@ export class AccessLists {
     return !!cert && certificateVerifies(cert) && cert.person === this.ownerId;
   }
 
-  /** What the device `device` may do in `workspace` now: the owner's devices are the owner; a
-   *  person's are their role until it expires; any other, nothing. */
+  /** What the device `device` may do in `workspace` now: the owner's devices paired here are the
+   *  owner; a person's are their role until it expires; any other, nothing. */
   accessOf(workspace: string, device: string): Access | null {
     if (this.ownersDevice(device)) return "owner";
     const cert = this.doc(workspace).getMap("devices").get(device) as DeviceCertificate | undefined;
     if (!cert || !certificateVerifies(cert) || cert.device !== device) return null;
-    if (cert.person === this.ownerId) return "owner";
     return this.grantOf(workspace, cert.person)?.role ?? null;
   }
 

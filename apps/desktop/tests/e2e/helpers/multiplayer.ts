@@ -6,11 +6,11 @@ import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-/** Settings → People, for the workspace the window shows. */
-export async function openShare(page: Page): Promise<void> {
+/** Settings → Connect, where the people in the window's workspace are listed. */
+export async function openConnect(page: Page): Promise<void> {
   // As the toolbar's and the Layers panel's Settings buttons do: a view may show either, or neither.
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: {} })));
-  await page.locator('[data-settings-page="people"]').click();
+  await page.locator('[data-settings-page="connect"]').click();
 }
 
 export const HIVE_NET = path.resolve("../../crates/hive-net/target/debug/hive-net");
@@ -54,14 +54,21 @@ export async function person(root: string, name: string, cwd: string, apps: Elec
   return page;
 }
 
-/** The host makes an invite link for `role` from Share. */
-export async function share(host: Page, role: "view" | "edit" | "terminals"): Promise<string> {
-  await openShare(host);
-  await host.locator("#share-role").selectOption(role);
-  await host.locator("[data-share-create]").click();
-  const link = (await host.locator("[data-share-link]").textContent())!;
-  await host.keyboard.press("Escape");
-  return link;
+/** An invite link for `role` to the workspace `repo` (the window's folder unless given), made as
+ *  `hive share` makes one: the host's window is asked when someone joins with it. */
+export async function share(host: Page, role: "view" | "edit" | "terminals", repo?: string): Promise<string> {
+  const where = repo ?? (await host.evaluate(() => window.hive.resolveProject())).repoPath!;
+  return host.evaluate(([r, given]) => window.hive.share(r, given, 86_400_000, false), [where, role] as const);
+}
+
+/** `w` enters `text`, a link or the six words another device shows (`hive host pair` on a host),
+ *  under Join, and is connected with that device. */
+export async function enterCode(w: Page, text: string): Promise<void> {
+  await w.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-recent", { detail: { join: true } })));
+  await w.locator("[data-join-link]").fill(text);
+  await w.locator("[data-join-go]").click();
+  await expect(w.locator('[data-join-result="theirs"]')).toBeVisible({ timeout: 20_000 });
+  await w.keyboard.press("Escape");
 }
 
 /** The guest pastes `link` and asks to join; the host allows. The guest is left at "You're in". */

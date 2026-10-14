@@ -656,6 +656,228 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 
 /**
+ * An offer the phone asked with, until it takes what the computer gives or refuses it.
+ */
+public protocol ConnectingProtocol: AnyObject, Sendable {
+    
+    /**
+     * The computer asked, by its name.
+     */
+    func offering()  -> String
+    
+    /**
+     * The person here says the words do not match: the computer is told, and nothing is kept.
+     */
+    func refuse() async throws 
+    
+    /**
+     * The person here says the words match: the phone is that person's from then on, and reaches
+     * their devices anew.
+     */
+    func take() async throws  -> Paired
+    
+    /**
+     * Wait on the person at the computer: whose this phone is, once they say it is theirs (none
+     * when their profile says nothing that can be shown). A no is refused.
+     */
+    func wait() async throws  -> Person?
+    
+    /**
+     * The words both screens show: the person checks the computer shows the same.
+     */
+    func words()  -> [String]
+    
+}
+/**
+ * An offer the phone asked with, until it takes what the computer gives or refuses it.
+ */
+open class Connecting: ConnectingProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_hive_phone_ffi_fn_clone_connecting(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_hive_phone_ffi_fn_free_connecting(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * The computer asked, by its name.
+     */
+open func offering() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_method_connecting_offering(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The person here says the words do not match: the computer is told, and nothing is kept.
+     */
+open func refuse()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_hive_phone_ffi_fn_method_connecting_refuse(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_hive_phone_ffi_rust_future_poll_void,
+            completeFunc: ffi_hive_phone_ffi_rust_future_complete_void,
+            freeFunc: ffi_hive_phone_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypePhoneError_lift
+        )
+}
+    
+    /**
+     * The person here says the words match: the phone is that person's from then on, and reaches
+     * their devices anew.
+     */
+open func take()async throws  -> Paired  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_hive_phone_ffi_fn_method_connecting_take(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_hive_phone_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_hive_phone_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_hive_phone_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePaired_lift,
+            errorHandler: FfiConverterTypePhoneError_lift
+        )
+}
+    
+    /**
+     * Wait on the person at the computer: whose this phone is, once they say it is theirs (none
+     * when their profile says nothing that can be shown). A no is refused.
+     */
+open func wait()async throws  -> Person?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_hive_phone_ffi_fn_method_connecting_wait(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_hive_phone_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_hive_phone_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_hive_phone_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionTypePerson.lift,
+            errorHandler: FfiConverterTypePhoneError_lift
+        )
+}
+    
+    /**
+     * The words both screens show: the person checks the computer shows the same.
+     */
+open func words() -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_method_connecting_words(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConnecting: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = Connecting
+
+    public static func lift(_ handle: UInt64) throws -> Connecting {
+        return Connecting(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: Connecting) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Connecting {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: Connecting, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConnecting_lift(_ handle: UInt64) throws -> Connecting {
+    return try FfiConverterTypeConnecting.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConnecting_lower(_ value: Connecting) -> UInt64 {
+    return FfiConverterTypeConnecting.lower(value)
+}
+
+
+
+
+
+
+/**
  * A conversation followed until stopped.
  */
 public protocol ConversationProtocol: AnyObject, Sendable {
@@ -1418,6 +1640,12 @@ public protocol PhoneProtocol: AnyObject, Sendable {
     func answer(agent: AgentRef, since: UInt64, answer: Answer) async throws  -> Bool
     
     /**
+     * Ask with the offer to connect whose link, the QR code's text, was scanned
+     * (spec/pairing.md 0.10): what to show while the person at the computer decides.
+     */
+    func connect(link: String) async throws  -> Connecting
+    
+    /**
      * `listener` is told each new overview's revision, until it stops.
      */
     func follow(listener: OverviewListener)  -> Following
@@ -1721,6 +1949,26 @@ open func answer(agent: AgentRef, since: UInt64, answer: Answer)async throws  ->
             completeFunc: ffi_hive_phone_ffi_rust_future_complete_i8,
             freeFunc: ffi_hive_phone_ffi_rust_future_free_i8,
             liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypePhoneError_lift
+        )
+}
+    
+    /**
+     * Ask with the offer to connect whose link, the QR code's text, was scanned
+     * (spec/pairing.md 0.10): what to show while the person at the computer decides.
+     */
+open func connect(link: String)async throws  -> Connecting  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_hive_phone_ffi_fn_method_phone_connect(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(link)
+                )
+            },
+            pollFunc: ffi_hive_phone_ffi_rust_future_poll_u64,
+            completeFunc: ffi_hive_phone_ffi_rust_future_complete_u64,
+            freeFunc: ffi_hive_phone_ffi_rust_future_free_u64,
+            liftFunc: FfiConverterTypeConnecting_lift,
             errorHandler: FfiConverterTypePhoneError_lift
         )
 }
@@ -2783,6 +3031,11 @@ public func FfiConverterTypeViewSession_lower(_ value: ViewSession) -> UInt64 {
  */
 public protocol WatchProtocol: AnyObject, Sendable {
     
+    /**
+     * Size the terminal to `cols` × `rows` for this phone, until it is watched no more.
+     */
+    func fit(cols: UInt16, rows: UInt16) 
+    
     func stop() 
     
     /**
@@ -2794,6 +3047,11 @@ public protocol WatchProtocol: AnyObject, Sendable {
      * Typed as it is, as the person.
      */
     func typeText(text: String) 
+    
+    /**
+     * Back to the size it had before it was fitted.
+     */
+    func unfit() 
     
     /**
      * What changed since `since`, the revision the app last drew: every line kept for 0.
@@ -2857,6 +3115,19 @@ open class Watch: WatchProtocol, @unchecked Sendable {
     
 
     
+    /**
+     * Size the terminal to `cols` × `rows` for this phone, until it is watched no more.
+     */
+open func fit(cols: UInt16, rows: UInt16)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_method_watch_fit(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt16.lower(cols),
+        FfiConverterUInt16.lower(rows),uniffiCallStatus
+    )
+}
+}
+    
 open func stop()  {try! rustCall() {
         uniffiCallStatus in
     uniffi_hive_phone_ffi_fn_method_watch_stop(
@@ -2885,6 +3156,17 @@ open func typeText(text: String)  {try! rustCall() {
     uniffi_hive_phone_ffi_fn_method_watch_type_text(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(text),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * Back to the size it had before it was fitted.
+     */
+open func unfit()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_method_watch_unfit(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
 }
@@ -7561,6 +7843,18 @@ public func coreVersion() -> String  {
 })
 }
 /**
+ * The computer a link to connect names, before asking: its id and its name. None when `link`, a
+ * scanned QR code's text, is no offer to connect.
+ */
+public func connectsWith(link: String) -> PairsWith?  {
+    return try!  FfiConverterOptionTypePairsWith.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_func_connects_with(
+        FfiConverterString.lower(link),uniffiCallStatus
+    )
+})
+}
+/**
  * `text`'s blocks, in order.
  */
 public func markdown(text: String) -> [TextBlock]  {
@@ -7641,6 +7935,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_hive_phone_ffi_checksum_func_core_version() != 43642) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_hive_phone_ffi_checksum_func_connects_with() != 64177) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_hive_phone_ffi_checksum_func_markdown() != 608) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7654,6 +7951,21 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_func_view_surfaces() != 6426) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_connecting_offering() != 162) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_connecting_refuse() != 6117) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_connecting_take() != 46573) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_connecting_wait() != 61465) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_connecting_words() != 33811) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_conversation_stop() != 58626) {
@@ -7690,6 +8002,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_phone_answer() != 5893) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_phone_connect() != 7270) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_phone_follow() != 53068) {
@@ -7767,6 +8082,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_hive_phone_ffi_checksum_method_screenlistener_ended() != 19695) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_hive_phone_ffi_checksum_method_watch_fit() != 57702) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_hive_phone_ffi_checksum_method_watch_stop() != 16582) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7774,6 +8092,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_watch_type_text() != 35413) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_watch_unfit() != 29965) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_watch_update() != 57506) {

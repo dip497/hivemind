@@ -85,10 +85,10 @@ test("CLI preferences persist and an empty toolbar has no handle; Settings resto
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
   await settings();
   await expect(page.getByText("No toolbar actions selected.", { exact: false })).toBeVisible();
-  await expect(page.getByLabel("Display", { exact: true })).toHaveValue("hidden");
+  await expect(page.getByLabel("Display", { exact: true })).toHaveText("Collapsed");
   await page.getByRole("button", { name: "Reset actions", exact: true }).click();
   await expect(page.getByRole("checkbox", { name: "Show labels", exact: true })).not.toBeChecked();
-  await expect(page.getByLabel("Display", { exact: true })).toHaveValue("hidden");
+  await expect(page.getByLabel("Display", { exact: true })).toHaveText("Collapsed");
   await close();
   await page.getByRole("button", { name: "show tools", exact: true }).click();
   await expect.poll(order).toEqual(["agent", "frame", "board", "theme"]);
@@ -99,6 +99,7 @@ test("selecting Browser as the only shortcut cannot activate it", async () => {
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
   await page.locator('[data-layers-rail="settings"]').click();
   await page.locator('[data-settings-page="plugins"]').click();
+  await page.locator('[data-plugin-row="tool:hivemind/web"]').click();
   await expect(page.getByRole("switch", { name: "Enable Browser", exact: true })).toHaveAttribute("aria-checked", "false");
   await page.getByRole("switch", { name: "Enable Browser", exact: true }).click();
   await close();

@@ -1,8 +1,15 @@
 //! `hive-phone`: in a terminal, what the phone does (M5).
 //!
 //!   hive-phone id               print this phone's id (its device key's public half)
-//!   hive-phone pair <link>      pair with the app that shows this link (Settings → Your devices on a
-//!                               computer): this phone is that app's person from then on
+//!   hive-phone pair <link>      pair with the host that shows this link (`hive host pair` on a
+//!                               server): this phone is that host's person from then on
+//!   hive-phone connect <link> [--sure yes|no]
+//!                               connect to the computer whose offer this is (Settings → Connect
+//!                               on it): its name (`connecting to <name>`) and the words both
+//!                               screens show (`words: <w1> <w2> <w3>`), then, once the person
+//!                               there says this phone is theirs (`told: this phone is <whose>`),
+//!                               whether the words match, asked here unless --sure says; on yes,
+//!                               paired as `pair` pairs, and said the same way
 //!   hive-phone devices          the person's devices this phone paired with
 //!   hive-phone network          the network it reaches them through: the one the app it paired
 //!                               with is on, or the local network alone
@@ -79,8 +86,8 @@
 //!                               Ctrl+C
 //!
 //! Options: `--identity <dir>` (default: `hivemind-phone/identity` in this user's data folder),
-//! `--name <name>` (pair: what the app lists this phone as; default `Phone`), `--json` (pair,
-//! devices, network, unpair, needs, agents, answer, send, start, stop, close, diff, talk, agent,
+//! `--name <name>` (pair, connect: what the app lists this phone as; default `Phone`), `--json`
+//! (pair, connect: a line a step, `{"connecting", "words"}`, `{"told"}`, then pair's; devices, network, unpair, needs, agents, answer, send, start, stop, close, diff, talk, agent,
 //! push, views, view: as JSON, a notice, a list or a piece of a conversation a line).
 
 use std::{path::PathBuf, process::ExitCode, sync::Arc};
@@ -89,6 +96,7 @@ use anyhow::{bail, Context, Result};
 use hive_net::net;
 use hive_phone::{
     agents::{self, Agent, Listed},
+    connect,
     control::{self, Start},
     conversation::{self, Entry, Piece},
     devices::{self, Unpaired},
@@ -103,7 +111,7 @@ use hive_phone::{
 };
 use serde_json::{json, Value};
 
-const USAGE: &str = "usage: hive-phone id | pair <link> | devices | network | unpair <device> | needs | agents [--follow] | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--allow|--deny|--approve|--changes <what> | send <workspace> <tile> --text <line> | start <workspace> [<agent> [--frame <id>] [--prompt <text>] [--model <m>] [--mode <m>]] | stop <workspace> <tile> | close <workspace> <tile> | diff <workspace> <tile> | talk <workspace> <tile> [--follow] | agent <workspace> <tile> | views <workspace> [<view> <path>] | view <workspace> <view> [--size <w>x<h>] [--surfaces] | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
+const USAGE: &str = "usage: hive-phone id | pair <link> | connect <link> [--sure yes|no] | devices | network | unpair <device> | needs | agents [--follow] | watch <workspace> <tile> [--type] | answer <workspace> <tile> <since> --text <line>|--allow|--deny|--approve|--changes <what> | send <workspace> <tile> --text <line> | start <workspace> [<agent> [--frame <id>] [--prompt <text>] [--model <m>] [--mode <m>]] | stop <workspace> <tile> | close <workspace> <tile> | diff <workspace> <tile> | talk <workspace> <tile> [--follow] | agent <workspace> <tile> | views <workspace> [<view> <path>] | view <workspace> <view> [--size <w>x<h>] [--surfaces] | push --listen <ip:port>  [--identity <dir>] [--name <name>] [--json]";
 
 #[derive(Default)]
 struct Args {
@@ -135,6 +143,8 @@ struct Args {
     /// the view's live surfaces itself.
     size: Option<String>,
     surfaces: bool,
+    /// `connect`'s: whether the words match, said ahead rather than asked.
+    sure: Option<bool>,
 }
 
 fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
@@ -160,12 +170,53 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
             "--mode" => args.mode = Some(argv.next().context("--mode needs a value")?),
             "--size" => args.size = Some(argv.next().context("--size needs a value")?),
             "--surfaces" => args.surfaces = true,
+            "--sure" => args.sure = Some(sure_of(&argv.next().context("--sure needs a value")?)?),
             flag if flag.starts_with("--") => bail!("{flag} is not an option\n{USAGE}"),
             _ if args.command.is_empty() => args.command = arg,
             _ => args.rest.push(arg),
         }
     }
     Ok(args)
+}
+
+/// `--sure`'s value: yes or no.
+fn sure_of(value: &str) -> Result<bool> {
+    match value {
+        "yes" => Ok(true),
+        "no" => Ok(false),
+        _ => bail!("--sure {value}: yes or no"),
+    }
+}
+
+/// Whether the person's `line` says yes.
+fn said_yes(line: &str) -> bool {
+    matches!(line.trim().to_lowercase().as_str(), "y" | "yes")
+}
+
+/// What `pair` and `connect` say once paired.
+fn say_paired(phone: &Identity, paired: &pairing::Paired, admission: &str, json: bool) {
+    let network = phone.network().map(|n| n.profile.name);
+    let person = &paired.certificate.person;
+    let whose = phone.person();
+    if json {
+        let w = &paired.with;
+        println!(
+            "{}",
+            json!({ "device": w.device, "name": w.name, "kind": w.kind, "person": person, "profile": whose, "network": network, "admission": admission })
+        );
+    } else {
+        let whose = whose.map_or_else(
+            || format!("its person's ({}…)", &person[..8]),
+            |p| format!("{}'s", p.name),
+        );
+        println!(
+            "paired with {}: this phone is {whose} from now on",
+            paired.with.name
+        );
+        if let Some(network) = network {
+            println!("on the network {network} ({admission})");
+        }
+    }
 }
 
 /// Where this phone's keys are kept.
@@ -330,33 +381,73 @@ async fn run(args: Args) -> Result<()> {
                 .map(String::as_str)
                 .context("pair: which link?")?;
             let link = pairing::parse_link(text).context(
-                "that is not a pairing link: it is the one under Settings → Your devices on your computer",
+                "that is not a pairing link: it is the one `hive host pair` prints on your host",
             )?;
             let Pairing { paired, admission } = phone
                 .pair_with(args.name.as_deref().unwrap_or("Phone"), &link)
                 .await?;
-            let network = phone.network().map(|n| n.profile.name);
-            let person = &paired.certificate.person;
-            let whose = phone.person();
-            if args.json {
-                let w = &paired.with;
-                println!(
-                    "{}",
-                    json!({ "device": w.device, "name": w.name, "kind": w.kind, "person": person, "profile": whose, "network": network, "admission": admission })
-                );
-            } else {
-                let whose = whose.map_or_else(
-                    || format!("its person's ({}…)", &person[..8]),
-                    |p| format!("{}'s", p.name),
-                );
-                println!(
-                    "paired with {}: this phone is {whose} from now on",
-                    paired.with.name
-                );
-                if let Some(network) = network {
-                    println!("on the network {network} ({admission})");
-                }
+            say_paired(&phone, &paired, admission, args.json);
+        }
+        "connect" => {
+            use std::io::Write;
+            let text = args
+                .rest
+                .first()
+                .map(String::as_str)
+                .context("connect: which link?")?;
+            let link = connect::parse_link(text).context(
+                "that is not a link to connect with: it is the one under Settings → Connect on your computer",
+            )?;
+            if !args.json {
+                println!("connecting to {}", link.name);
             }
+            let connecting = phone
+                .connect_with(args.name.as_deref().unwrap_or("Phone"), &link)
+                .await?;
+            let words = &connecting.asked.words;
+            if args.json {
+                println!("{}", json!({ "connecting": link.name, "words": words }));
+            } else {
+                println!("words: {}", words.join(" "));
+            }
+            std::io::stdout().flush()?;
+            let told = match connecting.wait().await {
+                Ok(told) => told,
+                Err(e) => {
+                    connecting.close().await;
+                    return Err(e);
+                }
+            };
+            if args.json {
+                println!("{}", json!({ "told": told }));
+            } else {
+                let whose = told
+                    .as_ref()
+                    .map_or_else(|| "its person's".into(), |p| format!("{}'s", p.name));
+                println!("told: this phone is {whose}");
+            }
+            std::io::stdout().flush()?;
+            let sure = match args.sure {
+                Some(sure) => sure,
+                None => {
+                    use tokio::io::AsyncBufReadExt;
+                    eprint!("Do the words match? [y/N] ");
+                    let mut stdin = tokio::io::BufReader::new(tokio::io::stdin()).lines();
+                    stdin
+                        .next_line()
+                        .await
+                        .ok()
+                        .flatten()
+                        .is_some_and(|l| said_yes(&l))
+                }
+            };
+            if !sure {
+                connecting.refuse().await;
+                bail!("the words did not match: nothing was kept");
+            }
+            let admission = connecting.admission;
+            let paired = connecting.take(&phone).await?;
+            say_paired(&phone, &paired, admission, args.json);
         }
         "network" => {
             let network = phone.network();
@@ -851,7 +942,7 @@ async fn run(args: Args) -> Result<()> {
                 );
             } else {
                 println!(
-                    "This phone forgot {0}, but {0} is away and still lists this phone: unpair it there too (Settings → Your devices).",
+                    "This phone forgot {0}, but {0} is away and still lists this phone: unpair it there too (Settings → Connect).",
                     device.name
                 );
             }
@@ -1097,6 +1188,30 @@ async fn main() -> ExitCode {
         Err(e) => {
             eprintln!("hive-phone: {e:#}");
             ExitCode::FAILURE
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sure_is_yes_or_no_and_nothing_else() {
+        assert!(sure_of("yes").unwrap());
+        assert!(!sure_of("no").unwrap());
+        for other in ["y", "YES", "", "maybe"] {
+            assert!(sure_of(other).is_err(), "{other}");
+        }
+    }
+
+    #[test]
+    fn the_words_match_only_when_the_person_says_yes() {
+        for yes in ["y", "Y", "yes", " Yes\n"] {
+            assert!(said_yes(yes), "{yes:?}");
+        }
+        for no in ["", "\n", "n", "no", "yess", "ok"] {
+            assert!(!said_yes(no), "{no:?}");
         }
     }
 }

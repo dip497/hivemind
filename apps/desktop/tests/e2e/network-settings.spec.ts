@@ -7,7 +7,7 @@ import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HIVE_NET, hiveNetBuilt, openShare } from "./helpers/multiplayer";
+import { HIVE_NET, hiveNetBuilt, openConnect, share } from "./helpers/multiplayer";
 
 let root: string;
 let app: ElectronApplication | undefined;
@@ -63,22 +63,19 @@ test("a fresh install is on the local network; a network's link is used from the
   const page = await launch();
   /** The relay an invite from here names: where the app's network waits for others. */
   const inviteRelay = async (): Promise<string | null> => {
-    await openShare(page);
-    await page.locator("[data-share-create]").click();
-    const invite = (await page.locator("[data-share-link]").textContent())!;
-    await page.keyboard.press("Escape");
+    const invite = await share(page, "view");
     const r = (JSON.parse(Buffer.from(invite.split("#")[1]!, "base64url").toString("utf8")) as { r: string | null }).r;
     return r ? r.replace(/\/$/, "") : null;
   };
-  // On the local network the app's network runs, and names no server; Share says the link works
-  // here only, and inviting someone elsewhere asks for a way through, which can wait.
+  // On the local network the app's network runs, and names no server; Connect says its code works
+  // here only, and reaching devices elsewhere asks for a way through, which can wait.
   expect(await inviteRelay()).toBeNull();
-  await openShare(page);
-  await expect(page.locator("[data-share-page]")).toContainText("Works for people on this network.");
-  await page.locator("[data-invite-elsewhere]").click();
+  await openConnect(page);
+  await expect(page.locator("[data-connect-reach]")).toContainText("Works on this network only.");
+  await page.locator("[data-connect-elsewhere]").click();
   await expect(page.locator("[data-reach-chooser]")).toBeVisible();
   await page.locator("[data-reach-not-now]").click();
-  await expect(page.locator("[data-share-page]")).toContainText("Stays on this network: the link works only here.");
+  await expect(page.locator("[data-connect-page]")).toContainText("Stays on this network: the code works only here.");
   await page.keyboard.press("Escape");
   await openSettings(page, "servers");
   await expect(page.locator("[data-network-name]")).toHaveText("Local network");

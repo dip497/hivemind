@@ -1136,6 +1136,7 @@ dependencies = [
  "iroh",
  "js-sys",
  "n0-future",
+ "rand",
  "rqrr",
  "serde_json",
  "tokio",

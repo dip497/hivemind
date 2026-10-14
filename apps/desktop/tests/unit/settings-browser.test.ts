@@ -1,16 +1,15 @@
-// Your devices: the browser card is the switch and its link. The port and other names, which most
+// Advanced → In a browser: the page is the switch and its link. The port and other names, which most
 // people never set, are folded under More options, closed, with what they are for.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { YourDevicesPrefs } from "../../src/renderer/src/settings-devices.tsx";
+import { BrowserPrefs } from "../../src/renderer/src/settings-browser.tsx";
 
-const page = renderToStaticMarkup(createElement(YourDevicesPrefs));
-const card = page.slice(page.indexOf('data-connect="browser"'), page.indexOf("</section>", page.indexOf('data-connect="browser"')));
+const card = renderToStaticMarkup(createElement(BrowserPrefs));
 const folded = /<details[^>]*>(?:(?!<\/details>)[\s\S])*<\/details>/.exec(card)?.[0] ?? "";
 
-test("the browser card shows its switch, and folds the port and other names under a closed More options", () => {
+test("the page shows its switch, and folds the port and other names under a closed More options", () => {
   assert.match(card, /role="switch"[^>]*aria-label="Serve the app to a browser"|aria-label="Serve the app to a browser"[^>]*role="switch"/);
   assert.match(folded, /^<details(?![^>]*\bopen\b)[^>]*>/);
   assert.match(folded, /<summary[^>]*>More options/);

@@ -9,7 +9,7 @@ import { execSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { hiveNetBuilt, ownNetwork, person } from "./helpers/multiplayer";
-import { offerPhonePairing } from "./helpers/phone";
+import { connectPage, offerToConnect } from "./helpers/phone";
 import { stopDaemons } from "./helpers/daemons";
 
 const WWW = path.resolve("../../crates/hive-web/www");
@@ -49,9 +49,7 @@ test("a shell tile opened on the paired page draws the computer's screen on a la
   expect(await desktop.evaluate((l) => window.hive.useNetwork(l), net.link)).toMatchObject({ admission: "enrolled" });
   const me = await desktop.evaluate(() => window.hive.identity());
 
-  await offerPhonePairing(desktop);
-  await desktop.locator('[data-pair-browser] [role="switch"]').click();
-  const link = (await desktop.locator("[data-pair-copy]").getAttribute("title"))!;
+  const link = await offerToConnect(desktop, true);
   browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: "dark" });
   const page = await context.newPage();
@@ -59,7 +57,7 @@ test("a shell tile opened on the paired page draws the computer's screen on a la
   let received = 0;
   page.on("websocket", (ws) => ws.on("framereceived", ({ payload }) => { received += typeof payload === "string" ? Buffer.byteLength(payload) : payload.length; }));
   await page.goto(link);
-  await page.locator("[data-pair]").click({ timeout: 30_000 });
+  await connectPage(page, desktop);
   await expect(page.locator("[data-paired]")).toHaveAttribute("data-paired", me.deviceId, { timeout: 30_000 });
   await desktop.keyboard.press("Escape");
 

@@ -1,6 +1,6 @@
-// What the phone specs share (M5): Settings → Your devices → Use on your phone on the person's computer, read
-// as the phone reads it, a camera showing its QR code, and a stand-in agent there that keeps its
-// conversation as Claude Code does.
+// What the phone specs share (M5): Settings → Connect on the person's computer, its offer read as the
+// phone reads it, the person there saying the phone is theirs, a camera showing its QR code, and a
+// stand-in agent there that keeps its conversation as Claude Code does.
 import { expect, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
@@ -24,17 +24,31 @@ export function cameraOn(file: string, text: string): void {
   fs.writeFileSync(file, Buffer.concat([Buffer.from(`YUV4MPEG2 W${W} H${H} F10:1 Ip A1:1 C420jpeg\n`), frame, frame]));
 }
 
-/** Settings → Your devices → Use on your phone on the person's computer `desktop`: a QR code of its link (read
- *  here off its Copy button, as the phone reads it off the code), for hivemind on the phone even
- *  when the network's server serves the phone page. The link. */
-export async function offerPhonePairing(desktop: Page): Promise<string> {
-  await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
-  await desktop.locator("[data-pair-phone]").click();
+/** Settings → Connect on the person's computer `desktop`, left open there: its offer, and the link a
+ *  phone's camera reads off its QR code (here off its Copy button). With `inBrowser`, the phone
+ *  page's address carrying it, where the network's server serves the page. */
+export async function offerToConnect(desktop: Page, inBrowser = false): Promise<string> {
+  await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "connect" } })));
+  await desktop.locator("[data-connect-offer]").click();
   // The offer runs hive-net (a voucher on a closed network): seconds on a loaded machine.
-  await expect(desktop.locator('[data-pair-offered="phone"] [data-pair-qr]')).toBeVisible({ timeout: 20_000 });
-  const link = (await desktop.locator("[data-pair-copy]").getAttribute("title"))!;
-  expect(link).toMatch(/^hivemind:\/\/pair\//);
+  await expect(desktop.locator("[data-connect-qr]")).toBeVisible({ timeout: 20_000 });
+  if (inBrowser) await desktop.locator('[data-connect-browser] [role="switch"]').click();
+  const link = (await desktop.locator("[data-connect-copy]").getAttribute("title"))!;
+  expect(link).toMatch(inBrowser ? /#connect=/ : /^hivemind:\/\/connect\//);
   return link;
+}
+
+/** The person at `desktop` says the device asking with its offer is theirs. */
+export async function itsMe(desktop: Page, timeout = 30_000): Promise<void> {
+  await desktop.locator(".hm-connect-request").getByRole("button", { name: "It's me — the words match" }).click({ timeout });
+}
+
+/** The phone page `page`, opened at an offer from `desktop`: it connects, the person at the computer
+ *  says it is theirs, and the person at the phone that the words match. */
+export async function connectPage(page: Page, desktop: Page): Promise<void> {
+  await page.locator("[data-pair]").click({ timeout: 30_000 });
+  await itsMe(desktop);
+  await page.locator("[data-connect-yes]").click({ timeout: 30_000 });
 }
 
 /** A stand-in agent that keeps its conversation as Claude Code does, installed for the person whose

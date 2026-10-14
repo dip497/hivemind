@@ -94,7 +94,7 @@ test.afterAll(async () => {
   await fs.promises.rm(BIN, { recursive: true, force: true }).catch(() => {});
 });
 
-const card = (id: string) => page.locator(`[data-agent-card="${id}"]`);
+const card = (id: string) => page.locator(`[data-plugin-row="agent:${id}"]`);
 const detail = () => page.locator("[data-agent-detail]");
 /** Plugins → the agent's own page (its Settings tab). */
 async function openAgent(id: string): Promise<void> {
@@ -126,7 +126,7 @@ test("a manifest dropped on disk becomes a real provider in the running app", as
 test("an agent whose CLI is missing says so, links to its install page, and is not offered as ready", async () => {
   await openSettings("plugins");
   await expect(card("ghost")).toHaveAttribute("data-state", "missing");
-  await expect(card("ghost")).toContainText("Not installed");
+  await expect(card("ghost")).toContainText("Needs setup");
   await openAgent("ghost");
   await expect(detail().locator(".agent-req")).toHaveAttribute("data-state", "missing");
   await expect(detail().getByRole("link", { name: /Get Ghost/ })).toHaveAttribute("href", "https://ghost.example.dev/install");
@@ -193,13 +193,16 @@ test("each agent shows its own launch options, and a choice is saved for that ag
   await expect(detail().locator("[data-agent-option-row]")).toHaveCount(2);
   const mode = page.locator("#agent-acme-mode");
   // the stub CLI's --help lists nothing, so the values are the ones the manifest maps specially
-  await expect(mode.locator("option")).toHaveText(["Acme Coder decides", "plan"]);
-  await mode.selectOption("plan");
+  await mode.click();
+  await expect(page.getByRole("option")).toHaveText(["Acme Coder decides", "plan"]);
+  await page.getByRole("option", { name: "plan", exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.hive.settingsGet().then((s) => s.plugins.state))).toEqual({ "agent:acme": { options: { mode: "plan" } } });
 
   // A published agent's own option, mapped to its CLI's flag rather than passed through.
   await openAgent("kiro");
-  await expect(page.locator("#agent-kiro-mode option")).toHaveText(["Kiro decides", "yolo"]);
+  await page.locator("#agent-kiro-mode").click();
+  await expect(page.getByRole("option")).toHaveText(["Kiro decides", "yolo"]);
+  await page.keyboard.press("Escape");
 });
 
 test("switching an agent off in Settings removes it everywhere, and back on restores it", async () => {
@@ -224,7 +227,7 @@ test("a catalog agent can be switched off too, and any launchable agent can be t
   await detail().getByRole("button", { name: "Make default" }).click();
   await expect(detail().locator(".agent-badge")).toHaveText("Default");
   await openSettings("plugins");
-  await expect(page.locator('[data-default-choice="codex"]')).toHaveAttribute("aria-checked", "true");
+  await expect(card("codex").locator("[data-plugin-badge]")).toHaveText("Default");
   await openAgent("codex");
   await detail().getByRole("switch").click();
   await openSettings("plugins");
@@ -234,14 +237,9 @@ test("a catalog agent can be switched off too, and any launchable agent can be t
   await openAgent("codex");
   await detail().getByRole("switch").click();
   await openSettings("plugins");
-  // Another row offers it in words, and only while the row is pointed at.
-  const claude = page.locator('[data-default-choice="claude"]');
-  await page.mouse.move(0, 0);
-  await expect(claude).toHaveText("Make default");
-  await expect(claude).toHaveCSS("opacity", "0");
-  await card("claude").hover();
-  await expect(claude).toHaveCSS("opacity", "1");
-  await claude.click();
-  await expect(claude).toHaveAttribute("aria-checked", "true");
-  await expect(claude).toHaveText("Default");
+  await openAgent("claude");
+  await detail().getByRole("button", { name: "Make default" }).click();
+  await openSettings("plugins");
+  await expect(card("claude").locator("[data-plugin-badge]")).toHaveText("Default");
+  await expect(card("codex").locator("[data-plugin-badge]")).toHaveCount(0);
 });

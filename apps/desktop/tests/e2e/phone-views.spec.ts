@@ -9,7 +9,7 @@ import { execSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { hiveNetBuilt, ownNetwork, person } from "./helpers/multiplayer";
-import { offerPhonePairing } from "./helpers/phone";
+import { connectPage, offerToConnect } from "./helpers/phone";
 import { stopDaemons } from "./helpers/daemons";
 
 const WWW = path.resolve("../../crates/hive-web/www");
@@ -62,9 +62,7 @@ test("the phone page lists the computer's phone views and shows one on its own o
   await expect(desktop.locator('[data-widget-layer] [data-widget="counter"]')).toContainText("presses", { timeout: 10_000 });
   const presses = () => desktop.evaluate((r) => (window.hive.workspaceObjectsSync(r) as Array<{ kind: string; state?: { n?: number } }>).find((o) => o.kind === "widget")?.state?.n ?? 0, repo);
 
-  await offerPhonePairing(desktop);
-  await desktop.locator('[data-pair-browser] [role="switch"]').click();
-  const link = (await desktop.locator("[data-pair-copy]").getAttribute("title"))!;
+  const link = await offerToConnect(desktop, true);
   browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: "dark" });
   const page = await context.newPage();
@@ -73,7 +71,7 @@ test("the phone page lists the computer's phone views and shows one on its own o
   const leaks: string[] = [];
   context.on("request", (r) => { if (r.url().includes("/leak")) leaks.push(r.url()); });
   await page.goto(link);
-  await page.locator("[data-pair]").click({ timeout: 30_000 });
+  await connectPage(page, desktop);
   await expect(page.locator("[data-paired]")).toHaveAttribute("data-paired", me.deviceId, { timeout: 30_000 });
   await desktop.keyboard.press("Escape");
 

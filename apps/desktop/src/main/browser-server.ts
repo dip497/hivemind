@@ -74,13 +74,13 @@ const MIME: Record<string, string> = {
 /** What a request without the cookie is shown: it trades the link's token for one. */
 const SIGN_IN = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>hivemind</title>
 <body style="background:#0d0e12;color:#e7e9ee;font:14px system-ui,sans-serif;padding:24px">
-<p id="m">Open the link the app shows in Settings → Your devices → In a browser on this computer.</p>
+<p id="m">Open the link the app shows in Settings → Advanced → In a browser.</p>
 <script>(async () => {
   const token = new URLSearchParams(location.hash.slice(1)).get("token");
   if (!token) return;
   history.replaceState(null, "", location.pathname);
   const r = await fetch(${JSON.stringify(SESSION_PATH)}, { method: "POST", headers: { "content-type": "text/plain" }, body: token });
-  if (!r.ok) { document.getElementById("m").textContent = "This link is from before the app last started. Open the one Settings → Your devices shows now."; return; }
+  if (!r.ok) { document.getElementById("m").textContent = "This link is from before the app last started. Open the one Settings → Advanced → In a browser shows now."; return; }
   try { localStorage.setItem(${JSON.stringify(TOKEN_KEY)}, token); } catch {}
   location.reload();
 })();</script>`;

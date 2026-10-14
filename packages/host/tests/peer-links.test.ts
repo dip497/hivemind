@@ -149,6 +149,8 @@ function computer() {
   const unpaired: string[] = [];
   const introduced: Array<{ by: string; phones: unknown[] }> = [];
   const forgot: Array<{ by: string; device: string }> = [];
+  /** Where each computer said it is a guest. */
+  const guests: Array<{ by: string; workspaces: unknown[] }> = [];
   /** The owner's devices a phone may reach through this one. */
   const box = idOf(newSeed());
   const host = { device: box, name: "build-box", kind: "host" as const, certificate: certifyDevice(person, box), addrs: ["10.0.0.5:4433"], relay: null };
@@ -224,6 +226,7 @@ function computer() {
     unpair: (device) => unpaired.push(device),
     introduced: (by, phones) => introduced.push({ by, phones }),
     forget: (by, device) => { forgot.push({ by, device }); return device === phone; },
+    guestOf: (by, workspaces) => { guests.push({ by, workspaces }); return true; },
     devices: () => [host],
     profile: async () => ({ name: "Priya", color: "#3b82f6" }),
     shown: (at) => shown.get(at),
@@ -247,7 +250,7 @@ function computer() {
     };
     return { heard, send: (stream: string, m: unknown) => deviceEnd.send(stream, JSON.stringify(m)), open, closed: computerEnd.closed, hangUp: () => deviceEnd.close("done") };
   };
-  return { repo, workspace, phone, laptop, person: idOf(person), daemons, links, shown, lines, watched, typed, answered, sent, keyed, driven, viewed, subscribed, unpaired, introduced, forgot, host, connect, statusChanged, output, another };
+  return { repo, workspace, phone, laptop, person: idOf(person), daemons, links, shown, lines, watched, typed, answered, sent, keyed, driven, viewed, subscribed, unpaired, introduced, forgot, guests, host, connect, statusChanged, output, another };
 }
 const until = async (done: () => boolean) => { for (let t = 0; t < 5_000 && !done(); t += 20) await wait(20); };
 
@@ -499,32 +502,37 @@ test("a phone unpairs itself: it is told so and forgotten once it hangs up, or l
   assert.deepEqual(c.unpaired, [c.phone, c.phone]);
 });
 
-test("the owner's laptop says which phones it paired with, and which it unpaired that paired here, and is answered; a phone asks which of the owner's devices it may reach through this one, and is told, and whose they are; neither is answered the other's question", async () => {
+test("the owner's laptop says which phones it paired with, which it unpaired that paired here, and where it is a guest, and is answered; a phone asks which of the owner's devices it may reach through this one, and is told, and whose they are; neither is answered the other's question", async () => {
   const c = computer();
   const pixel = { device: c.phone, name: "Pixel" };
   const laptop = c.connect(c.laptop);
   laptop.send("device", { t: "phones", phones: [pixel] });
   laptop.send("device", { t: "forget", device: c.phone });
   laptop.send("device", { t: "forget", device: c.laptop });
+  const theirs = { workspace: "ab".repeat(16), host: "cd".repeat(32), addrs: [], relay: null };
+  laptop.send("device", { t: "guest", workspaces: [theirs] });
   laptop.send("device", { t: "devices" });
   laptop.send("device", { t: "workspaces" });
-  await until(() => laptop.heard.get("device")!.length >= 4);
+  await until(() => laptop.heard.get("device")!.length >= 5);
   await wait(100);
   assert.deepEqual(laptop.heard.get("device")!.map((m) => (JSON.parse(m) as { t: string; ok?: boolean })).map(({ t, ok }) => ({ t, ok })), [
-    { t: "phones", ok: true }, { t: "forget", ok: true }, { t: "forget", ok: false }, { t: "workspaces", ok: undefined },
+    { t: "phones", ok: true }, { t: "forget", ok: true }, { t: "forget", ok: false }, { t: "guest", ok: true }, { t: "workspaces", ok: undefined },
   ]);
+  assert.deepEqual(c.guests, [{ by: c.laptop, workspaces: [theirs] }]);
   assert.deepEqual(c.introduced, [{ by: c.laptop, phones: [pixel] }]);
   assert.deepEqual(c.forgot, [{ by: c.laptop, device: c.phone }, { by: c.laptop, device: c.laptop }]);
 
   const phone = c.connect(c.phone);
   phone.send("device", { t: "phones", phones: [] });
   phone.send("device", { t: "forget", device: c.phone });
+  phone.send("device", { t: "guest", workspaces: [] });
   phone.send("device", { t: "devices" });
   await until(() => phone.heard.get("device")!.length >= 1);
   await wait(100);
   assert.deepEqual(phone.heard.get("device")!.map((m) => JSON.parse(m) as unknown), [{ t: "devices", devices: [c.host], profile: { name: "Priya", color: "#3b82f6" } }]);
   assert.deepEqual(c.introduced, [{ by: c.laptop, phones: [pixel] }], "a phone's word is no introduction");
   assert.equal(c.forgot.length, 2, "nor is it unpairing another");
+  assert.equal(c.guests.length, 1, "nor where the person is a guest");
 });
 
 test("the owner's devices follow every agent here: sent the list at once, and again as it changes, the first change at once and those in the next 100 ms together, never the same list twice, until they go; anyone else is cut off", async () => {

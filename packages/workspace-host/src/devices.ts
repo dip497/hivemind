@@ -10,15 +10,33 @@ import path from "node:path";
 import { certificateVerifies } from "./identity.js";
 import type { PairedWith } from "./pairing.js";
 
+/** A workspace one of the person's computers joined as a guest: its host, and where it is reached. */
+export interface GuestOf {
+  workspace: string;
+  host: string;
+  addrs: string[];
+  relay: string | null;
+}
+
 /** One of the person's other devices: who it is, where it was reached, and when it was paired. */
 export interface PairedDevice extends PairedWith {
   pairedAt: number;
   /** The devices that introduced it, a phone paired with them: none when it paired with this one. */
   via?: string[];
+  /** Where it says it is a guest (spec/pairing.md 0.9): the hosts told when it is unpaired. */
+  guestOf?: GuestOf[];
 }
 
 /** The longest name a device is known by. */
 const NAME_MAX = 200;
+
+/** A workspace on a host, as one of the person's computers names it; null for anything else. */
+function guestOfOne(given: unknown): GuestOf | null {
+  const g = given as Partial<GuestOf> | null;
+  if (!g || typeof g.workspace !== "string" || !/^[0-9a-f]{32}$/.test(g.workspace) || typeof g.host !== "string" || !/^[0-9a-f]{64}$/.test(g.host)) return null;
+  if (!Array.isArray(g.addrs) || !g.addrs.every((a) => typeof a === "string") || (g.relay !== null && typeof g.relay !== "string")) return null;
+  return { workspace: g.workspace, host: g.host, addrs: g.addrs, relay: g.relay };
+}
 
 /** A phone of `person`'s, as another of their devices names it; null for anything else. */
 function phoneOf(given: unknown, person: string): PairedWith | null {
@@ -76,6 +94,17 @@ export class Devices {
     for (const phone of listed.values()) kept.push({ ...phone, pairedAt: at, via: [by] });
     if (JSON.stringify(kept) !== JSON.stringify(before)) this.write(kept);
     return forgot;
+  }
+
+  /** Keep where `device` says it is a guest, all of it, in place of what it said before. False
+   *  when it is not kept here. */
+  guestOf(device: string, given: unknown[]): boolean {
+    const all = this.list();
+    const kept = all.find((d) => d.device === device);
+    if (!kept) return false;
+    kept.guestOf = given.map(guestOfOne).filter((g): g is GuestOf => g !== null);
+    this.write(all);
+    return true;
   }
 
   /** Keep `device`, in place of what was kept for it. */

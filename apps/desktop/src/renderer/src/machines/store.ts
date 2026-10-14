@@ -11,7 +11,7 @@ function start(): void {
   if (started || !window.hive?.machinesGet) return;
   started = true;
   const tell = () => { for (const l of listeners) l(); };
-  // Main's snapshot is the machines'; the person's devices come from Settings → Your devices' list.
+  // Main's snapshot is the machines'; the person's devices come from Settings → Connect's list.
   const set = (s: MachinesSnapshot) => { snap = { ...s, ...(snap.devices ? { devices: snap.devices } : {}), ...(snap.self ? { self: snap.self } : {}) }; tell(); };
   const setDevices = (devices: PairedDeviceSummary[]) => { snap = { ...snap, devices }; tell(); };
   window.hive.onMachines(set);

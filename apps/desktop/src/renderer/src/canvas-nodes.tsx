@@ -64,7 +64,7 @@ const RESIZER_PROPS = {
   handleStyle: {
     width: 12,
     height: 12,
-    borderRadius: 3,
+    borderRadius: 4,
     zIndex: 20,
     pointerEvents: "all" as const,
     border: "2px solid var(--color-bg)",

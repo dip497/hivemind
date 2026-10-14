@@ -1,4 +1,4 @@
-// Settings → Your devices, "In a browser on this computer": the app serves itself to a browser tab on 127.0.0.1, and
+// Settings → Advanced → In a browser: the app serves itself to a browser tab on 127.0.0.1, and
 // the tab is the app — its canvas, a shell typed into and its echo, a board's note and a plugin's
 // widget pressed, a view plugin shown — over the link the page shows. Without that link's key the
 // port gives nothing, and a view in the tab reaches neither the tab's cookie nor its socket.
@@ -60,7 +60,7 @@ const counted = (page: Page) => page.evaluate((r) => window.hive.workspaceObject
 
 test("off until the person turns it on, then the page shows its link with the key left out", async () => {
   const desktop = app.page;
-  await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
+  await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "browser" } })));
   const section = desktop.locator("[data-browser-app]");
   await section.locator("[data-browser-app-more] > summary").click();
   await section.locator("#browser-app-port").fill(String(port));
@@ -178,7 +178,7 @@ test("a view in the tab reaches neither the tab's cookie nor its socket, and its
 });
 
 test("turned off, the port closes", async () => {
-  await app.page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
+  await app.page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "browser" } })));
   await app.page.locator("[data-browser-app]").getByRole("switch", { name: "Serve the app to a browser" }).click();
   await expect.poll(() => fetch(`http://127.0.0.1:${port}/`).then(() => "open", () => "closed")).toBe("closed");
 });

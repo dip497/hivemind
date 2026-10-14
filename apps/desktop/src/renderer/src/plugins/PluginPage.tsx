@@ -5,7 +5,8 @@
  * options, the toolbar, browser control) sit in the same tab.
  */
 import { lazy, Suspense, useEffect, useState } from "react";
-import { ArrowLeft, ExternalLink, LayoutGrid } from "../components/icons";
+import { ArrowLeft, ExternalLink, LayoutGrid, Trash } from "../components/icons";
+import { cleanError } from "../settings-plugins";
 import { isPluginEnabled, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
 import { Loading } from "../components/ui/loading";
@@ -67,7 +68,7 @@ export function PluginPage({ kind, id }: { kind: string; id: string }) {
   const toHub = () => { setPluginsScope("hub"); go("plugins"); };
   return (
     <div className="settings-stack plugin-page" data-plugin-page={`${p.kind}:${p.id}`}>
-      <button type="button" className="settings-link plugin-back" onClick={() => go("plugins")}><ArrowLeft size={13} />All plugins</button>
+      <Button variant="link" className="self-start" onClick={() => go("plugins")}><ArrowLeft />All plugins</Button>
       <header className="plugin-page-head">
         <div className="settings-extension-icon" aria-hidden="true"><LayoutGrid size={20} /></div>
         <div className="min-w-0 flex-1">
@@ -78,8 +79,8 @@ export function PluginPage({ kind, id }: { kind: string; id: string }) {
           {p.description && <p className="plugin-page-description">{p.description}</p>}
         </div>
         <div className="settings-actions">
-          {!p.installed && <Button size="sm" onClick={toHub}>Install from HiveHub</Button>}
-          {p.catalog?.homepage && <Button size="sm" variant="ghost" asChild><a href={p.catalog.homepage} target="_blank" rel="noreferrer">Source<ExternalLink /></a></Button>}
+          {!p.installed && <Button onClick={toHub}>Install from HiveHub</Button>}
+          {p.catalog?.homepage && <Button variant="ghost" asChild><a href={p.catalog.homepage} target="_blank" rel="noreferrer">Source<ExternalLink /></a></Button>}
         </div>
       </header>
       {p.problem && <p role="status" className="settings-note error">{p.problem}</p>}
@@ -148,5 +149,21 @@ function WidgetSettings({ id }: { id: string }) {
     {w.options.length > 0
       ? <p className="settings-note">Each one you place has its own {w.options.map((o) => o.label.toLowerCase()).join(", ")}: select it and use the settings button above it.</p>
       : <p className="settings-note">It has nothing to set.</p>}
+    {!w.builtin && <RemoveWidget id={id} name={w.name} />}
+  </div>;
+}
+
+function RemoveWidget({ id, name }: { id: string; name: string }) {
+  const go = useSettingsNavigate();
+  const [asking, setAsking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!asking) return <Button variant="destructive" className="mt-3" onClick={() => setAsking(true)}><Trash />Remove {name}</Button>;
+  return <div className="settings-remove-confirm">
+    <p>Remove {name}?</p>
+    {error && <p role="alert" className="settings-note error">{error}</p>}
+    <div className="settings-actions">
+      <Button variant="outline" onClick={() => setAsking(false)}>Keep it</Button>
+      <Button variant="destructive" onClick={() => void window.hive.removeWidget(id).then(() => go("plugins"), (e) => setError(cleanError(e)))}>Remove</Button>
+    </div>
   </div>;
 }

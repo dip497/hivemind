@@ -9,8 +9,9 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { encode } from "uqr";
-import { formatPairLink, newCode, parsePairLink, type PairLink } from "@hivemind/workspace-host/pairing";
-import { pageHash, pageLink } from "../../src/main/phone-page.js";
+import { newCode } from "@hivemind/workspace-host/pairing";
+import { formatConnectLink, parseConnectLink, type ConnectLink } from "@hivemind/workspace-host/connect";
+import { connectPageLink, pageHash } from "../../src/main/phone-page.js";
 
 const www = fileURLToPath(new URL("../../../../crates/hive-web/www/", import.meta.url));
 const built = fs.existsSync(path.join(www, "page.sha256"));
@@ -54,14 +55,15 @@ test("the link in the page's address leaves out the computer's addresses, which 
     "[2001:db8:85a3::8a2e:370:7334]:41641", "[2001:db8:85a3::8a2e:370:7335]:41641", "[fe80::1c2d:3e4f:5a6b:7c8d]:41641",
     "[fe80::42:acff:fe11:1]:41641", "[fe80::42:acff:fe12:1]:41641",
   ];
-  const link: PairLink = {
-    device: hex("a", 64), addrs, relay: "https://hive.example.org", code: newCode(), name: "Priya's desktop", kind: "app",
+  const link: ConnectLink = {
+    device: hex("a", 64), addrs, relay: "https://hive.example.org", code: newCode(), name: "Priya's desktop",
     admission: { access: "https://hive.example.org/access", voucher: { v: 1, kind: "visit", by: hex("b", 64), device: null, nonce: hex("c", 32), expires: 1_792_000_000, uses: 1, signature: hex("d", 128) } },
   };
   const page = "https://hive.example.org/phone/";
-  const slim = pageLink(page, link);
-  const full = `${page}#pair=${formatPairLink(link)}`;
-  assert.deepEqual(parsePairLink(slim), { ...link, addrs: [] });
+  const slim = connectPageLink(page, link);
+  const full = `${page}#connect=${formatConnectLink(link)}`;
+  assert.ok(slim.startsWith(`${page}#connect=`));
+  assert.deepEqual(parseConnectLink(slim), { ...link, addrs: [] });
   const [before, after] = [encode(full), encode(slim)];
   console.log(`page link: ${full.length} chars, QR ${before.size}×${before.size} (version ${before.version}) with the addresses; ${slim.length} chars, QR ${after.size}×${after.size} (version ${after.version}) without`);
   assert.ok(after.version < before.version);

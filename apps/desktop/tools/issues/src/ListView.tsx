@@ -23,9 +23,9 @@ export function ListView({
     <div className="flex flex-col gap-3 pb-2">
       {groups.map((g) => (
         <div key={g.key}>
-          <div className="flex items-center gap-1.5 px-2 py-1.5 text-[11px] font-semibold text-[var(--color-fg2)] sticky top-0 bg-[var(--color-bg2)]/95 backdrop-blur-sm z-10 rounded-md">
+          <div className="flex items-center gap-1.5 px-2 py-1.5 text-count font-semibold text-[var(--color-fg2)] sticky top-0 bg-[var(--color-bg2)]/95 backdrop-blur-sm z-10 rounded-md">
             {g.header}
-            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-mono tabular-nums bg-[var(--color-bg4)] text-[var(--color-fg3)]">
+            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-chip font-mono tabular-nums bg-[var(--color-bg4)] text-[var(--color-fg3)]">
               {g.items.length}
             </span>
           </div>

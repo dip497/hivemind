@@ -11,15 +11,29 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Added
 
-- The full app in a browser tab: Settings → Your devices, "In a browser on this computer", serves it on 127.0.0.1 behind a key that changes each launch. For another device, put it behind `tailscale serve`.
+- The full app in a browser tab: Settings → Advanced → In a browser serves it on 127.0.0.1 behind a key that changes each launch. For another device, put it behind `tailscale serve`.
+- Connect: a computer that uses this one's offer to connect (its link, or its six words found nearby) is asked about first. A prompt shows its name and three words that its own screen shows too, with Deny, Someone else (let into this window's workspace, as Can view, Can edit board or Can use terminals) and It's me — the words match. It's me makes it yours only after the person there says the words match as well. Open recent → Join takes an offer's link or words, shows the same three words, and asks before this computer becomes someone else's. A request nobody answers within three minutes is no.
+- The phone page and `hive-phone connect <link> [--sure yes|no]` use a computer's offer to connect: they show the same three words, wait for the person there, and keep the phone as the person's only once the person at the phone says the words match.
+- The iOS and Android apps connect with a computer's offer too: scanned or pasted, they show the three words, and the phone becomes the person's only after a yes on each side. They point to Settings → Connect.
 
 ### Changed
 
-- Settings is regrouped by what you do: General, Connect (People, Your devices, API access), Plugins, Advanced (Servers, About and updates), each Connect page with a line saying what it is for. Your devices leads with three ways in: on your phone, another computer, in a browser here; the browser's port and other names, and how pairing works, are folded away until asked for. A browser that pairs is named by what it is ("Chrome on Android"). The update check is switched on About and updates only. Links to the old page names still open the new pages.
+- Text, corners and control heights come from one scale: seven named text sizes (20, 15, 14, 13, 12, 11, 10) in place of seventeen, buttons beside inputs in Settings are both 32px, shadows, scrims and the editor's selection follow the theme, and section headings are sentence case.
+- Every choice from a list is the app's own select: the same height, border and corners as the field beside it, its list drawn like a menu, with keyboard and type-ahead; no operating-system blue or orange anywhere. Keyboard focus is one ring for the whole app, in the selection colour rather than the accent (so never amber), and checkboxes, sliders and scrollbars follow the theme.
+- Settings is regrouped by what you do: General, Connect (Connect, API access), Plugins, Advanced (In a browser, Servers, About and updates), each page with a line saying what it is for. A browser that pairs is named by what it is ("Chrome on Android"). The update check is switched on About and updates only. Links to the old page names still open the new pages. API access is marked with a key, for its tokens.
+- Settings → Plugins is one list: Installed or HiveHub, a search and a kind in one row, then a group per kind with its count. Every plugin's row looks the same and says its state in one badge (Default, In use, Off, Not installed, Installed); making one the default, using a view, switching one off and removing one are on its own page. Adding agents found on this machine sits under the agents. The refresh button is gone: the list is read again when the window comes back.
+- Settings → Plugins: an installed agent whose program is missing says Needs setup, not Not installed; a row whose description only repeats its name shows the name alone; the HiveHub list ends with one line on checksums.
+- Settings → Connect replaces People and Your devices: one Connect button shows a code for another computer, a phone or someone else, and you say who it is when it is used; requests waiting show on the page too. Have a code? Join enters one from elsewhere, also from Home. Below, who is connected: your devices with Unpair, and, for a workspace of yours, the people in it with their roles and where it runs, with Keep it running. QR codes fill their box at whole pixels a module with a four-module white margin and open full size when pressed; Esc closes.
+- **Breaking:** `hive host pair <code>` is gone, with the pairing code the app showed: run `hive host pair` on the host and enter the words it shows under Join on your computer.
+
+### Security
+
+- A computer, phone or browser no longer becomes yours by entering a pairing code first: today's pairing gave the person key to whoever proved the code first, asking nobody. Connect asks you, shows three words on both screens, and the device is yours only after a yes on each side.
 
 ### Fixed
 
 - Terminals in other tabs no longer show scrambled letters after you switch tabs or come back to the window.
+- Settings: a button is as wide as its label on every page, never stretched across it; a field's focus ring is the selection colour, not the theme's accent (Amber read as "waits on you").
 - What a widget keeps (a counter's count) is no longer put back by another window or tab that edited the board before it saw the change.
 - An agent busy with its first turn when the terminal service restarts is restored with the rest instead of ending: its screen is saved within 2 seconds even while it keeps printing. The status history keeps each exit's code and signal. Started from the phone, the new agent's screen says "Starting…" until it appears, not the name of the agent shown before.
 - An agent no longer stays "waiting on you" after it went back to its prompt: a wait ends once its screen moves from the chooser to the prompt, however the chooser was answered.
@@ -346,6 +360,11 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - Fixed: a setting changed just before quitting is written before the app exits, and an app that quit in the middle of a settings write no longer leaves `settings.json.lock` behind. That lock named no owner, so no later writer could clear it, and every `hive config` or `hive theme` change failed with "locked by another writer" until the file was deleted by hand.
 - Fixed: in the Windows view, a tab restored from the Layers rail no longer comes back minimized when the view is switched straight away. The restore happens with the click, and a view that closes before showing its last layout change still saves it.
 - The app now keeps each project's canvas and view layouts itself, in `workspaces/` under its data folder, instead of in the window's browser storage — the first step towards several windows, devices and people sharing one workspace. Each project's layout is one document that records a change as the edits it makes (a tile moved, a frame renamed), so that once several windows or devices edit it, changes to different things merge instead of one replacing the other. Layouts saved by an earlier version are imported the first time a project opens, and nothing newer is overwritten.
+
+### Security
+
+- Unpair takes back the visit to a closed network that this computer vouched the device onto, so an unpaired computer is off that network at once, not for up to 30 days. A certificate of yours kept on a workspace's list no longer lets a device in by itself: your own devices get in only while paired.
+- Unpair lets a computer or `hive host` go from the workspaces other people shared with you that it joined: their computers are told and stop letting it in, and one that is off is told once it is back. Before, it stayed in. Settings → Your devices says under the list what Unpair does, and what it does not: a computer stays paired with your other devices until unpaired on each, and keeps your person key.
 
 ## [2026.10.1] — 2026-10-03
 

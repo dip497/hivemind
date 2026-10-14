@@ -92,17 +92,17 @@ export const pairAnnouncement = (code: string): string => `hive-pair=${pairTag(c
 export const FIND_WITHIN_MS = 10_000;
 
 /**
- * The device on this network offering `code`, from the words alone: the one announcing its tag
- * among the devices `nearby` (hive-net's mDNS) finds, looked for until `withinMs`. None is "not
- * found on this network"; two are refused, since a device that copied the announcement would be
- * one of them.
+ * The device on this network offering a code, from its words alone: the one making one of the
+ * `announced` announcements of it (a pairing's, or an offer to connect's) among the devices
+ * `nearby` (hive-net's mDNS) finds, looked for until `withinMs`, and which one it makes. None is
+ * "not found on this network"; two are refused, since a device that copied the announcement would
+ * be one of them.
  */
-export async function offeringNearby(code: string, nearby: () => Promise<Array<{ id: string; data: string | null }>>, withinMs = FIND_WITHIN_MS): Promise<string> {
-  const announced = pairAnnouncement(code);
+export async function offeringNearby(announced: readonly string[], nearby: () => Promise<Array<{ id: string; data: string | null }>>, withinMs = FIND_WITHIN_MS): Promise<{ id: string; announced: string }> {
   for (const end = Date.now() + withinMs; ; await new Promise((r) => setTimeout(r, 250))) {
-    const offering = (await nearby()).filter((d) => d.data === announced);
+    const offering = (await nearby()).filter((d) => d.data !== null && announced.includes(d.data));
     if (offering.length > 1) throw new PairingFailed("two devices on this network offer that code: ask for a new one");
-    if (offering.length === 1) return offering[0]!.id;
+    if (offering.length === 1) return { id: offering[0]!.id, announced: offering[0]!.data! };
     if (Date.now() >= end) throw new PairingFailed("no device on this network offers that code: check the words, or enter the link");
   }
 }
@@ -114,7 +114,7 @@ export function pairProof(code: string, label: Label, offering: string, entering
   return createHmac("sha256", code).update(`hive/pair/1 ${label}\n${offering}${entering}`).digest("hex");
 }
 
-function sameProof(given: unknown, expected: string): boolean {
+export function sameProof(given: unknown, expected: string): boolean {
   if (typeof given !== "string" || given.length !== expected.length) return false;
   return timingSafeEqual(Buffer.from(given), Buffer.from(expected));
 }
@@ -143,19 +143,19 @@ export function formatPairLink(l: PairLink): string {
   return LINK_PREFIX + Buffer.from(JSON.stringify({ v: 1, ...l })).toString("base64url");
 }
 
-const isKey = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{64}$/.test(v);
+export const isKey = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{64}$/.test(v);
 /** Where a message says its device is reached: a few addresses, and a relay or none. */
-const reachedOf = (m: Record<string, unknown>): Reached => ({
+export const reachedOf = (m: Record<string, unknown>): Reached => ({
   addrs: Array.isArray(m.addrs) ? m.addrs.filter((a): a is string => typeof a === "string" && a.length <= 100).slice(0, 16) : [],
   relay: typeof m.relay === "string" && m.relay.length <= 500 ? m.relay : null,
 });
-const isKind = (v: unknown): v is DeviceKind => v === "app" || v === "host";
+export const isKind = (v: unknown): v is DeviceKind => v === "app" || v === "host";
 const isPairedKind = (v: unknown): v is PairedKind => isKind(v) || v === "phone";
 /** A device's name, as another will list it: text, not too long. */
-const nameOf = (v: unknown): string | null => (typeof v === "string" && v.trim() && v.length <= 200 ? v.trim() : null);
+export const nameOf = (v: unknown): string | null => (typeof v === "string" && v.trim() && v.length <= 200 ? v.trim() : null);
 
 /** What a link says of getting onto its network, when it says it well: nothing otherwise. */
-function admissionOf(v: unknown): { admission?: Admission } {
+export function admissionOf(v: unknown): { admission?: Admission } {
   const a = v as { access?: unknown; voucher?: unknown } | null;
   if (!a || typeof a.access !== "string" || !/^https?:\/\//.test(a.access) || a.access.length > 500) return {};
   const voucher = a.voucher && typeof a.voucher === "object" && !Array.isArray(a.voucher) ? (a.voucher as Record<string, unknown>) : null;
@@ -185,7 +185,7 @@ function linkOf(text: string): PairLink | null {
 }
 
 /** The person key in hex, or null. */
-const seedOf = (v: unknown): Seed | null => (typeof v === "string" && /^[0-9a-f]{64}$/.test(v) ? new Uint8Array(Buffer.from(v, "hex")) : null);
+export const seedOf = (v: unknown): Seed | null => (typeof v === "string" && /^[0-9a-f]{64}$/.test(v) ? new Uint8Array(Buffer.from(v, "hex")) : null);
 const hex = (seed: Seed): string => Buffer.from(seed).toString("hex");
 const fail = (error: PairError) => ({ ok: false as const, error });
 

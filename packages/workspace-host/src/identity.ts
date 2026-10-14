@@ -71,13 +71,19 @@ export interface DeviceCertificate {
 }
 
 const CERT_TAG = new TextEncoder().encode("hive/device-certificate/1\n");
+const REVOKE_TAG = new TextEncoder().encode("hive/device-revocation/1\n");
+
+/** `tag`, the person's key, the device's key, and a time (u64, big-endian ms). */
+function personDeviceBytes(tag: Uint8Array, person: string, device: string, at: number): Uint8Array {
+  const when = Buffer.alloc(8);
+  when.writeBigUInt64BE(BigInt(at));
+  return Buffer.concat([tag, Buffer.from(person, "hex"), Buffer.from(device, "hex"), when]);
+}
 
 /** What a device certificate signs: its tag, the person's key, the device's key, and when (u64,
  *  big-endian ms). */
 export function certificateBytes(person: string, device: string, issuedAt: number): Uint8Array {
-  const when = Buffer.alloc(8);
-  when.writeBigUInt64BE(BigInt(issuedAt));
-  return Buffer.concat([CERT_TAG, Buffer.from(person, "hex"), Buffer.from(device, "hex"), when]);
+  return personDeviceBytes(CERT_TAG, person, device, issuedAt);
 }
 
 /** Certify that `device` is the person's whose key `personSeed` is. */
@@ -96,6 +102,42 @@ export function certificateVerifies(cert: unknown): cert is DeviceCertificate {
   if (typeof c.issuedAt !== "number" || !Number.isSafeInteger(c.issuedAt) || c.issuedAt < 0) return false;
   if (typeof c.signature !== "string" || !/^[0-9a-f]{128}$/.test(c.signature)) return false;
   return verifies(c.person, certificateBytes(c.person, c.device, c.issuedAt), Buffer.from(c.signature, "hex"));
+}
+
+// ── device revocations ──────────────────────────────────────────────────────
+
+/** "Device `device` is person `person`'s no more", from `at`, signed by the person key: a
+ *  certificate of theirs for it issued then or before counts for nothing. */
+export interface DeviceRevocation {
+  v: 1;
+  person: string;
+  device: string;
+  /** When it was signed, ms since the epoch. */
+  at: number;
+  /** Ed25519 over `revocationBytes`, in hex. */
+  signature: string;
+}
+
+export function revocationBytes(person: string, device: string, at: number): Uint8Array {
+  return personDeviceBytes(REVOKE_TAG, person, device, at);
+}
+
+/** Revoke `device` as the person's whose key `personSeed` is. */
+export function revokeDevice(personSeed: Seed, device: string, at: number = Date.now()): DeviceRevocation {
+  if (!isHexKey(device)) throw new TypeError("identity: a device is named by its public key in hex");
+  if (!Number.isSafeInteger(at) || at < 0) throw new TypeError("identity: at is ms since the epoch");
+  const person = idOf(personSeed);
+  return { v: 1, person, device, at, signature: hex(signWith(personSeed, revocationBytes(person, device, at))) };
+}
+
+/** Whether `r` is a revocation its person signed. False for anything malformed. */
+export function revocationVerifies(r: unknown): r is DeviceRevocation {
+  if (typeof r !== "object" || r === null) return false;
+  const c = r as Partial<DeviceRevocation>;
+  if (c.v !== 1 || !isHexKey(c.person) || !isHexKey(c.device)) return false;
+  if (typeof c.at !== "number" || !Number.isSafeInteger(c.at) || c.at < 0) return false;
+  if (typeof c.signature !== "string" || !/^[0-9a-f]{128}$/.test(c.signature)) return false;
+  return verifies(c.person, revocationBytes(c.person, c.device, c.at), Buffer.from(c.signature, "hex"));
 }
 
 // ── workspaces ──────────────────────────────────────────────────────────────

@@ -5,7 +5,8 @@ import { hkdfSync } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  certificateBytes, certificateVerifies, certifyDevice, idOf, newSeed, newWorkspaceId, signWith, verifies, workspaceSeed,
+  certificateBytes, certificateVerifies, certifyDevice, idOf, newSeed, newWorkspaceId, revocationBytes, revocationVerifies, revokeDevice,
+  signWith, verifies, workspaceSeed,
 } from "../src/identity.ts";
 
 interface Vectors {
@@ -13,6 +14,7 @@ interface Vectors {
   hkdfSha256: Array<{ ikm: string; salt: string; info: string; length: number; okm: string }>;
   deviceCertificate: Array<{ personSeed: string; person: string; device: string; issuedAt: number; bytes: string; signature: string }>;
   workspaceKey: Array<{ personSeed: string; workspaceId: string; seed: string; id: string }>;
+  deviceRevocation: Array<{ personSeed: string; person: string; device: string; at: number; bytes: string; signature: string }>;
 }
 const vectors = JSON.parse(fs.readFileSync(path.join(import.meta.dir, "../../../conformance/identity.json"), "utf8")) as Vectors;
 const bytes = (h: string) => new Uint8Array(Buffer.from(h, "hex"));
@@ -53,6 +55,27 @@ test("a device certificate signs the spec's bytes, and verifies; one changed in 
       null, "cert", { ...cert, signature: 7 },
     ];
     for (const c of changed) expect(certificateVerifies(c)).toBe(false);
+  }
+});
+
+test("a device revocation signs the spec's bytes, and verifies; one changed, signed by another, or a certificate's signature, does not", () => {
+  for (const v of vectors.deviceRevocation) {
+    expect(hex(revocationBytes(v.person, v.device, v.at))).toBe(v.bytes);
+    const r = revokeDevice(bytes(v.personSeed), v.device, v.at);
+    expect(r).toEqual({ v: 1, person: v.person, device: v.device, at: v.at, signature: v.signature });
+    expect(revocationVerifies(r)).toBe(true);
+    const cert = certifyDevice(bytes(v.personSeed), v.device, v.at);
+    const changed: unknown[] = [
+      { ...r, device: idOf(newSeed()) },
+      { ...r, at: r.at + 1 },
+      { ...r, v: 2 },
+      { ...revokeDevice(newSeed(), v.device, v.at), person: v.person },
+      // A certificate for the device is not its revocation, nor the other way round.
+      { ...r, signature: cert.signature },
+      null, { ...r, at: "now" },
+    ];
+    for (const c of changed) expect(revocationVerifies(c)).toBe(false);
+    expect(certificateVerifies({ ...cert, signature: r.signature })).toBe(false);
   }
 });
 

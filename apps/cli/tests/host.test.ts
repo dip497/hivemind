@@ -23,7 +23,7 @@ import { cmd, hive, hiveAsync, sealedEnv } from "./helpers.js";
 import { idOf, newSeed, workspaceSeed, type DeviceCertificate } from "@hivemind/workspace-host/identity";
 import { machineKeys } from "@hivemind/workspace-host/keyring";
 import { HiveNet, type Where } from "@hivemind/workspace-host/hive-net";
-import { enterPairing, pairAnnouncement, PairingOffer, parsePairLink, type Pairing } from "@hivemind/workspace-host/pairing";
+import { enterPairing, parsePairLink } from "@hivemind/workspace-host/pairing";
 import { WorkspaceStore, type WorkspaceChange } from "@hivemind/workspace-host/store";
 import { replicate } from "@hivemind/workspace-host/doc-sync";
 import { followList } from "@hivemind/workspace-host/list-sync";
@@ -219,39 +219,6 @@ describe.skipIf(!built)("hive host", () => {
     } finally {
       laptop.stop();
       hive(["host", "stop"], { env });
-    }
-  });
-
-  test("the app shows a code and the host enters its six words: found on this network, the host becomes the app's person", async () => {
-    // A host of its own, with its own data and daemon.
-    const own = { ...env, HIVEMIND_APP_DATA: path.join(dir, "data2"), HIVEMIND_PTY_SOCK: path.join(dir, "d2.sock") };
-    runHost(own);
-    await until(() => status(own)?.running || null, "the host to answer");
-    // The laptop shows a code, and announces it on this network.
-    const identity = path.join(dir, "laptop2", "identity");
-    const keys = machineKeys(identity);
-    let offer: PairingOffer | null = null;
-    const laptop = await HiveNet.start({
-      bin: HIVE_NET, identity, socket: path.join(dir, "l2.sock"),
-      onIncoming: (link) => link.close(), onPairRequest: async (peer, hello) => offer!.answer(peer, hello),
-    });
-    try {
-      const settled: Pairing[] = [];
-      offer = new PairingOffer(
-        { device: keys.deviceId, name: "laptop", kind: "app", certificate: keys.certificate, person: keys.person, addrs: laptop.ready.addrs, relay: laptop.ready.relay },
-        (p) => settled.push(p),
-      );
-      laptop.advertise(pairAnnouncement(offer.code));
-      // The host enters the words, as a person reads them (the laptop answers it from this process).
-      const entered = await hiveAsync(["host", "pair", offer.code.split("-").join(" "), "--json"], { env: own });
-      expect(entered.json).toMatchObject({ ok: true, data: { paired: { device: keys.deviceId, name: "laptop", kind: "app" } } });
-      expect(settled[0]?.with).toMatchObject({ kind: "host", certificate: { person: keys.personId } });
-      const now = await until(() => { const s = status(own); return s?.running && s.person === keys.personId ? s : null; }, "the host to be the laptop's person");
-      expect(now.devices).toEqual([{ device: keys.deviceId, name: "laptop", kind: "app" }]);
-    } finally {
-      laptop.stop();
-      hive(["host", "stop"], { env: own });
-      hive(["daemon", "stop"], { env: own });
     }
   });
 

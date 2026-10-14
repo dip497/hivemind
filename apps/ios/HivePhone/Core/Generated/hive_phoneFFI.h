@@ -339,6 +339,41 @@ typedef struct UniffiVTableCallbackInterfaceScreenListener {
 } UniffiVTableCallbackInterfaceScreenListener;
 
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_CLONE_CONNECTING
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_CLONE_CONNECTING
+uint64_t uniffi_hive_phone_ffi_fn_clone_connecting(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FREE_CONNECTING
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FREE_CONNECTING
+void uniffi_hive_phone_ffi_fn_free_connecting(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_CONNECTING_OFFERING
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_CONNECTING_OFFERING
+RustBuffer uniffi_hive_phone_ffi_fn_method_connecting_offering(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_CONNECTING_REFUSE
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_CONNECTING_REFUSE
+uint64_t uniffi_hive_phone_ffi_fn_method_connecting_refuse(uint64_t ptr
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_CONNECTING_TAKE
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_CONNECTING_TAKE
+uint64_t uniffi_hive_phone_ffi_fn_method_connecting_take(uint64_t ptr
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_CONNECTING_WAIT
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_CONNECTING_WAIT
+uint64_t uniffi_hive_phone_ffi_fn_method_connecting_wait(uint64_t ptr
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_CONNECTING_WORDS
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_CONNECTING_WORDS
+RustBuffer uniffi_hive_phone_ffi_fn_method_connecting_words(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_CLONE_CONVERSATION
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_CLONE_CONVERSATION
 uint64_t uniffi_hive_phone_ffi_fn_clone_conversation(uint64_t handle, RustCallStatus *_Nonnull out_status
@@ -462,6 +497,11 @@ uint64_t uniffi_hive_phone_ffi_fn_method_phone_conversation(uint64_t ptr, RustBu
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_ANSWER
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_ANSWER
 uint64_t uniffi_hive_phone_ffi_fn_method_phone_answer(uint64_t ptr, RustBuffer agent, uint64_t since, RustBuffer answer
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_CONNECT
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_CONNECT
+uint64_t uniffi_hive_phone_ffi_fn_method_phone_connect(uint64_t ptr, RustBuffer link
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_FOLLOW
@@ -639,6 +679,11 @@ uint64_t uniffi_hive_phone_ffi_fn_clone_watch(uint64_t handle, RustCallStatus *_
 void uniffi_hive_phone_ffi_fn_free_watch(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_WATCH_FIT
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_WATCH_FIT
+void uniffi_hive_phone_ffi_fn_method_watch_fit(uint64_t ptr, uint16_t cols, uint16_t rows, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_WATCH_STOP
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_WATCH_STOP
 void uniffi_hive_phone_ffi_fn_method_watch_stop(uint64_t ptr, RustCallStatus *_Nonnull out_status
@@ -654,6 +699,11 @@ void uniffi_hive_phone_ffi_fn_method_watch_type_keys(uint64_t ptr, RustBuffer ke
 void uniffi_hive_phone_ffi_fn_method_watch_type_text(uint64_t ptr, RustBuffer text, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_WATCH_UNFIT
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_WATCH_UNFIT
+void uniffi_hive_phone_ffi_fn_method_watch_unfit(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_WATCH_UPDATE
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_WATCH_UPDATE
 RustBuffer uniffi_hive_phone_ffi_fn_method_watch_update(uint64_t ptr, uint64_t since, RustCallStatus *_Nonnull out_status
@@ -663,6 +713,11 @@ RustBuffer uniffi_hive_phone_ffi_fn_method_watch_update(uint64_t ptr, uint64_t s
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_CORE_VERSION
 RustBuffer uniffi_hive_phone_ffi_fn_func_core_version(RustCallStatus *_Nonnull out_status
     
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_CONNECTS_WITH
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_CONNECTS_WITH
+RustBuffer uniffi_hive_phone_ffi_fn_func_connects_with(RustBuffer link, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_FUNC_MARKDOWN
@@ -957,6 +1012,12 @@ uint16_t uniffi_hive_phone_ffi_checksum_func_core_version(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_CONNECTS_WITH
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_CONNECTS_WITH
+uint16_t uniffi_hive_phone_ffi_checksum_func_connects_with(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_MARKDOWN
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_MARKDOWN
 uint16_t uniffi_hive_phone_ffi_checksum_func_markdown(void
@@ -984,6 +1045,36 @@ uint16_t uniffi_hive_phone_ffi_checksum_func_view_bridge(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_VIEW_SURFACES
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_FUNC_VIEW_SURFACES
 uint16_t uniffi_hive_phone_ffi_checksum_func_view_surfaces(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_CONNECTING_OFFERING
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_CONNECTING_OFFERING
+uint16_t uniffi_hive_phone_ffi_checksum_method_connecting_offering(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_CONNECTING_REFUSE
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_CONNECTING_REFUSE
+uint16_t uniffi_hive_phone_ffi_checksum_method_connecting_refuse(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_CONNECTING_TAKE
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_CONNECTING_TAKE
+uint16_t uniffi_hive_phone_ffi_checksum_method_connecting_take(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_CONNECTING_WAIT
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_CONNECTING_WAIT
+uint16_t uniffi_hive_phone_ffi_checksum_method_connecting_wait(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_CONNECTING_WORDS
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_CONNECTING_WORDS
+uint16_t uniffi_hive_phone_ffi_checksum_method_connecting_words(void
     
 );
 #endif
@@ -1056,6 +1147,12 @@ uint16_t uniffi_hive_phone_ffi_checksum_method_phone_conversation(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_ANSWER
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_ANSWER
 uint16_t uniffi_hive_phone_ffi_checksum_method_phone_answer(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_CONNECT
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_CONNECT
+uint16_t uniffi_hive_phone_ffi_checksum_method_phone_connect(void
     
 );
 #endif
@@ -1209,6 +1306,12 @@ uint16_t uniffi_hive_phone_ffi_checksum_method_screenlistener_ended(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_WATCH_FIT
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_WATCH_FIT
+uint16_t uniffi_hive_phone_ffi_checksum_method_watch_fit(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_WATCH_STOP
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_WATCH_STOP
 uint16_t uniffi_hive_phone_ffi_checksum_method_watch_stop(void
@@ -1224,6 +1327,12 @@ uint16_t uniffi_hive_phone_ffi_checksum_method_watch_type_keys(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_WATCH_TYPE_TEXT
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_WATCH_TYPE_TEXT
 uint16_t uniffi_hive_phone_ffi_checksum_method_watch_type_text(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_WATCH_UNFIT
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_WATCH_UNFIT
+uint16_t uniffi_hive_phone_ffi_checksum_method_watch_unfit(void
     
 );
 #endif

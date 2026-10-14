@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Play, FileQuestion, X } from "@hivemind/app-ui";
-import { Button, Dialog, DialogContent, DialogTitle, Input, Label, MarkdownPreview, MenuItem, Textarea, Loading } from "@hivemind/app-ui";
+import { Button, Dialog, DialogContent, DialogTitle, Input, Label, MarkdownPreview, MenuItem, Textarea, Loading, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@hivemind/app-ui";
 import { useIssue, useIssueList, write, type AcceptanceItem, type Issue, type IssueState } from "./data";
 import type { PanelProps } from "./data";
 import { STATE_COLOR, STATE_LABEL, STATE_ORDER, StateIcon } from "./StateMeta";
@@ -50,10 +50,10 @@ export function IssuePanel({ hm, params, close: onClose, openPanel }: PanelProps
           <div className="grid place-items-center h-[80vh] max-h-[820px] px-6">
             <div className="flex flex-col items-center gap-3 text-center max-w-[320px]">
               <FileQuestion size={28} className="text-[var(--color-fg3)]" />
-              <div className="text-[13px] font-medium text-[var(--color-fg)]">
+              <div className="text-body font-medium text-[var(--color-fg)]">
                 {isError ? "Couldn't load this issue" : "Issue not found"}
               </div>
-              <p className="text-[11.5px] text-[var(--color-fg3)] break-words">
+              <p className="text-label text-[var(--color-fg3)] break-words">
                 {isError
                   ? error
                   : `"${id}" isn't in this workspace — it may belong to a different frame or have been deleted.`}
@@ -66,9 +66,9 @@ export function IssuePanel({ hm, params, close: onClose, openPanel }: PanelProps
         ) : (
           <div className="h-[80vh] max-h-[820px] flex flex-col">
             <header className="flex items-center gap-2 pl-4 pr-12 py-3 border-b border-[var(--color-line)]">
-              <span className="font-mono text-[11px] text-[var(--color-fg3)] tabular-nums">{issue.id}</span>
+              <span className="font-mono text-count text-[var(--color-fg3)] tabular-nums">{issue.id}</span>
               {issue.github != null && (
-                <span className="font-mono text-[11px] text-[var(--color-info)]">#{issue.github}</span>
+                <span className="font-mono text-count text-[var(--color-info)]">#{issue.github}</span>
               )}
               <div className="ml-auto flex items-center gap-1">
                 <Button
@@ -128,9 +128,9 @@ export function IssuePanel({ hm, params, close: onClose, openPanel }: PanelProps
                   {issue.sections.activity.length > 0 && (
                     <ol className="space-y-2 mb-3">
                       {issue.sections.activity.slice().reverse().map((a, i) => (
-                        <li key={i} className="text-[12px] text-[var(--color-fg2)]">
+                        <li key={i} className="text-label text-[var(--color-fg2)]">
                           <div className="flex items-baseline gap-2">
-                            <span className="font-mono text-[10.5px] text-[var(--color-fg2)]">{relTime(a.at)}</span>
+                            <span className="font-mono text-count text-[var(--color-fg2)]">{relTime(a.at)}</span>
                             <span className="font-medium text-[var(--color-fg)]">{a.who}</span>
                           </div>
                           <div className="mt-0.5">{a.message}</div>
@@ -173,14 +173,14 @@ export function IssuePanel({ hm, params, close: onClose, openPanel }: PanelProps
                   />
                 </PropRow>
                 <PropRow label="Created">
-                  <span className="text-[11.5px] text-[var(--color-fg2)]">{relTime(issue.created)}</span>
+                  <span className="text-label text-[var(--color-fg2)]">{relTime(issue.created)}</span>
                 </PropRow>
                 <PropRow label="Updated">
-                  <span className="text-[11.5px] text-[var(--color-fg2)]">{relTime(issue.updated)}</span>
+                  <span className="text-label text-[var(--color-fg2)]">{relTime(issue.updated)}</span>
                 </PropRow>
                 {issue.github != null && (
                   <PropRow label="GitHub">
-                    <span className="font-mono text-[11px] text-[var(--color-info)]">#{issue.github}</span>
+                    <span className="font-mono text-count text-[var(--color-info)]">#{issue.github}</span>
                   </PropRow>
                 )}
               </aside>
@@ -225,7 +225,7 @@ function StateSelect({ value, onChange }: { value: IssueState; onChange: (s: Iss
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="w-full inline-flex items-center gap-1.5 px-2 py-1 text-[11.5px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md hover:border-[var(--color-fg3)] cursor-pointer"
+        className="w-full inline-flex items-center gap-1.5 px-2 py-1 text-label bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md hover:border-[var(--color-fg3)] cursor-pointer"
         style={{ color: STATE_COLOR[value] }}
       >
         <StateIcon state={value} size={12} />
@@ -265,7 +265,7 @@ function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) =
         onDoubleClick={() => setEditing(true)}
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setEditing(true); } }}
         title="Double-click (or Enter) to edit"
-        className="text-[18px] font-semibold text-[var(--color-fg)] tracking-tight leading-tight cursor-text hover:bg-[var(--color-bg3)] focus-visible:bg-[var(--color-bg3)] rounded px-1 -mx-1"
+        className="text-heading font-semibold text-[var(--color-fg)] tracking-tight leading-tight cursor-text hover:bg-[var(--color-bg3)] focus-visible:bg-[var(--color-bg3)] rounded px-1 -mx-1"
       >
         {value}
       </h1>
@@ -287,7 +287,7 @@ function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) =
           setEditing(false);
         }
       }}
-      className="w-full text-[18px] font-semibold tracking-tight leading-tight bg-[var(--color-bg3)] border border-[var(--color-brand)] rounded px-1 -mx-1 text-[var(--color-fg)] focus:outline-none"
+      className="w-full text-heading font-semibold tracking-tight leading-tight bg-[var(--color-bg3)] border border-[var(--color-brand)] rounded px-1 -mx-1 text-[var(--color-fg)]"
     />
   );
 }
@@ -302,7 +302,7 @@ function EditableDescription({ value, onSave }: { value: string; onSave: (v: str
         {value.trim() ? (
           <MarkdownPreview source={value} className="md-preview" />
         ) : (
-          <p className="text-[12px] text-[var(--color-fg2)] italic">No description.</p>
+          <p className="text-label text-[var(--color-fg2)] italic">No description.</p>
         )}
         <Button reveal="hidden"
           variant="outline"
@@ -358,7 +358,7 @@ function AcEditor({
     <>
       <ul className="space-y-1">
         {items.map((c, i) => (
-          <li key={i} className="group flex items-start gap-2 text-[12.5px] text-[var(--color-fg)]">
+          <li key={i} className="group flex items-start gap-2 text-body text-[var(--color-fg)]">
             <button
               role="checkbox"
               aria-checked={c.done}
@@ -480,12 +480,12 @@ function RelationsSection({ issue, onClose, openIssue, hm }: { issue: Issue; onC
       {links.length > 0 ? (
         <ul className="space-y-1">
           {links.map((l) => (
-            <li key={`${l.id}:${l.type}`} className="group flex items-center gap-1.5 text-[12px]">
-              <span className="shrink-0 rounded px-1 py-0.5 text-[9.5px] font-mono uppercase tracking-wide bg-[var(--color-bg3)] text-[var(--color-fg3)]">
+            <li key={`${l.id}:${l.type}`} className="group flex items-center gap-1.5 text-label">
+              <span className="shrink-0 rounded px-1 py-0.5 text-chip font-mono uppercase tracking-wide bg-[var(--color-bg3)] text-[var(--color-fg3)]">
                 {l.type}
               </span>
               <button
-                className="font-mono text-[11.5px] text-[var(--color-info)] hover:underline truncate"
+                className="font-mono text-label text-[var(--color-info)] hover:underline truncate"
                 title={`open ${l.id}`}
                 onClick={() => openIssue(l.id)}
               >
@@ -504,7 +504,7 @@ function RelationsSection({ issue, onClose, openIssue, hm }: { issue: Issue; onC
           ))}
         </ul>
       ) : (
-        <p className="text-[11.5px] text-[var(--color-fg2)] italic">No linked issues.</p>
+        <p className="text-label text-[var(--color-fg2)] italic">No linked issues.</p>
       )}
 
       {linking ? (
@@ -516,16 +516,16 @@ function RelationsSection({ issue, onClose, openIssue, hm }: { issue: Issue; onC
             onKeyDown={(e) => { if (e.key === "Enter") void submitLink(); if (e.key === "Escape") setLinking(false); }}
             placeholder="OTHER-ID"
             font="mono"
+            size="sm"
             className="flex-1"
           />
-          <select
-            value={linkType}
-            onChange={(e) => setLinkType(e.target.value as LinkType)}
-            className="bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-1 py-1 text-[10.5px] text-[var(--color-fg2)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]"
-          >
-            {LINK_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <Button size="xs" onClick={() => void submitLink()} disabled={pending}>Add</Button>
+          <Select value={linkType} onValueChange={(v) => setLinkType(v as LinkType)}>
+            <SelectTrigger size="sm" aria-label="Link type"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {LINK_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button size="sm" onClick={() => void submitLink()} disabled={pending}>Add</Button>
         </div>
       ) : (
         <Button variant="outline" size="xs" onClick={() => setLinking(true)}>+ Link issue</Button>
@@ -533,18 +533,16 @@ function RelationsSection({ issue, onClose, openIssue, hm }: { issue: Issue; onC
 
       {otherWorkspaces.length > 0 && (
         <div className="flex items-center gap-1.5 pt-1">
-          <span className="text-[10.5px] text-[var(--color-fg2)]">Transfer:</span>
-          <select
-            value={dest}
-            onChange={(e) => setDest(e.target.value)}
-            className="bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-1 py-1 text-[10.5px] text-[var(--color-fg2)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]"
-          >
-            <option value="">workspace…</option>
-            {otherWorkspaces.map((w) => <option key={w.prefix} value={w.prefix}>{w.title} ({w.prefix})</option>)}
-          </select>
-          <Button variant="secondary" size="xs" disabled={!dest || pending} onClick={() => void transfer("copy")}
+          <span className="text-count text-[var(--color-fg2)]">Transfer:</span>
+          <Select value={dest} onValueChange={setDest}>
+            <SelectTrigger size="sm" aria-label="Workspace"><SelectValue placeholder="workspace…" /></SelectTrigger>
+            <SelectContent>
+              {otherWorkspaces.map((w) => <SelectItem key={w.prefix} value={w.prefix}>{w.title} ({w.prefix})</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button variant="secondary" size="sm" disabled={!dest || pending} onClick={() => void transfer("copy")}
             title="Copy this issue into the selected workspace (source kept, linked)">Copy</Button>
-          <Button variant="secondary" size="xs" disabled={!dest || pending} onClick={() => void transfer("move")}
+          <Button variant="secondary" size="sm" disabled={!dest || pending} onClick={() => void transfer("move")}
             title="Move this issue into the selected workspace (source deleted)">Move</Button>
         </div>
       )}

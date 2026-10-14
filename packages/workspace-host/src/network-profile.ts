@@ -129,6 +129,11 @@ export class NetworkProfiles {
     await this.run(["access", "vouch", access, JSON.stringify(voucher)]);
   }
 
+  /** Take back, at the access service `access`, the visit this device vouched `device` onto. */
+  async revoke(access: string, device: string): Promise<void> {
+    await this.run(["access", "revoke", access, device, "--identity", this.opts.identity]);
+  }
+
   /** Register this device at the `open-pow` access service `access`. */
   async register(access: string): Promise<void> {
     await this.run(["access", "register", access, "--identity", this.opts.identity]);

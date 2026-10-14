@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { seedAgents } from "./helpers/agents";
+import { pick } from "./helpers/select";
 
 let app: ElectronApplication;
 let page: Page;
@@ -75,13 +76,13 @@ test("Settings' code is fetched while the app is idle, so its first open shows t
 test("settings has a focused dialog, view-specific automatic toolbar, and independent extension management", async () => {
   await settings("view:canvas");
   await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page.getByLabel("Display", { exact: true })).toHaveValue("auto");
-  await page.getByLabel("Display", { exact: true }).selectOption("bottom");
+  await expect(page.getByLabel("Display", { exact: true })).toHaveText(/^Automatic/);
+  await pick(page.getByLabel("Display", { exact: true }), "Bottom");
   await settings("view:windows");
-  await expect(page.getByLabel("Display", { exact: true })).toHaveValue("auto");
+  await expect(page.getByLabel("Display", { exact: true })).toHaveText(/^Automatic/);
   await settings("view:canvas");
-  await expect(page.getByLabel("Display", { exact: true })).toHaveValue("bottom");
-  await page.getByLabel("Display", { exact: true }).selectOption("auto");
+  await expect(page.getByLabel("Display", { exact: true })).toHaveText("Bottom");
+  await pick(page.getByLabel("Display", { exact: true }), /^Automatic/);
   // The file first appears when the change is saved, which is debounced.
   const chrome = () => { try { return JSON.parse(fs.readFileSync(path.join(xdg, "hivemind/settings.json"), "utf8")).views.chrome; } catch { return undefined; } };
   await expect.poll(chrome).toEqual({});
@@ -101,7 +102,7 @@ test("install review, cancellation, invalid packages, replacement, disabling and
   expect(fs.existsSync(path.join(xdg, "hivemind/views/settings-demo"))).toBe(false);
   await choose(source);
   await page.getByRole("button", { name: "Install extension", exact: true }).click();
-  const row = page.locator('[data-view-row="settings-demo"]');
+  const row = page.locator('[data-plugin-row="view:settings-demo"]');
   await expect(row).toBeVisible();
   expect(fs.existsSync(path.join(xdg, "hivemind/views/settings-demo/main.js"))).toBe(true);
 
@@ -111,11 +112,11 @@ test("install review, cancellation, invalid packages, replacement, disabling and
   await expect(page.getByRole("switch", { name: "Enable Settings demo" })).toHaveAttribute("aria-checked", "false");
   await settings("plugins");
   await expect(row).toHaveAttribute("data-state", "off");
-  await expect(page.locator('[data-view-choice="settings-demo"]')).toHaveCount(0);
+  await expect(row.locator("[data-plugin-badge]")).toHaveText("Off");
   await row.locator("[data-plugin-open]").click();
   await page.getByRole("switch", { name: "Enable Settings demo" }).click();
   await settings("plugins");
-  await expect(row).toHaveAttribute("data-state", "ready");
+  await expect(row).toHaveAttribute("data-state", "on");
 
   const manifestFile = path.join(source, "hivemind-view.json");
   const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
@@ -159,22 +160,27 @@ test("Appearance contains the former drawer controls and mounts terminal colours
   await page.screenshot({ path: "/tmp/hivemind-settings-appearance.png" });
 });
 
-test("Tools separates what ships with the app from what you switch on", async () => {
+test("Tools: the ones that ship are on, an optional one is off, and one is switched on its own page", async () => {
   await settings("plugins");
-  const included = page.getByRole("region", { name: "Included tools" });
-  const code = included.locator('[data-tool-plugin="hivemind/code"]');
-  // The regression this guards: a built-in read as OFF because its switch asked whether it was
+  const tool = (id: string) => page.locator(`[data-plugin-row="tool:${id}"]`);
+  // The regression this guards: a built-in read as OFF because its state asked whether it was
   // switched on, which a built-in never needs to be.
-  await expect(code.getByRole("switch")).toHaveAttribute("aria-checked", "true");
-  await expect(included.locator('[data-tool-plugin="hivemind/issues"]').getByRole("switch")).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByRole("region", { name: "Optional tools" }).locator('[data-tool-plugin="hivemind/web"]')).toHaveCount(1);
+  await expect(tool("hivemind/code")).toHaveAttribute("data-state", "on");
+  await expect(tool("hivemind/issues")).toHaveAttribute("data-state", "on");
+  await expect(tool("hivemind/web")).toHaveAttribute("data-state", "off");
 
   // Switching one off switches off its own tools, in its record.
   const state = () => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind/settings.json"), "utf8")).plugins.state["tool:hivemind/code"];
-  await code.getByRole("switch").click();
-  await expect(code.getByRole("switch")).toHaveAttribute("aria-checked", "false");
+  await tool("hivemind/code").click();
+  const on = page.getByRole("switch", { name: "Enable Code", exact: true });
+  await expect(on).toHaveAttribute("aria-checked", "true");
+  await on.click();
+  await expect(on).toHaveAttribute("aria-checked", "false");
   await expect.poll(state).toEqual({ options: { editor: false } });
-  await code.getByRole("switch").click();
+  await settings("plugins");
+  await expect(tool("hivemind/code")).toHaveAttribute("data-state", "off");
+  await tool("hivemind/code").click();
+  await on.click();
   await expect.poll(state).toBeUndefined();
 });
 

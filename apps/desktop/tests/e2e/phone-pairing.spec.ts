@@ -1,6 +1,7 @@
-// A phone pairs (M5, design §9.2, spec/pairing.md 0.3): Settings → Your devices → Use on your phone shows a
-// QR code of this computer's link, and the phone (`hive-phone`: the phone's Rust core, in a
-// terminal) pairs with it over hive/pair/1. The phone is given a certificate naming it as the
+// A phone pairs (M5, design §9.2, spec/pairing.md 0.10): Settings → Connect shows a QR code of this
+// computer's offer, and the phone (`hive-phone`: the phone's Rust core, in a terminal) connects with
+// it over hive/pair/1, the person at the computer saying it is theirs and the one at the phone that
+// the words match. The phone is given a certificate naming it as the
 // person's and never the person key; each lists the other; the phone is never a place to open a
 // workspace on, move one to or run a frame on; let in by the computer as the person's device, it
 // is served what a phone does and nothing more (what it sends to start a terminal there starts
@@ -29,11 +30,11 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { HiveNet } from "@hivemind/workspace-host/hive-net";
-import { parsePairLink } from "@hivemind/workspace-host/pairing";
+import { parseConnectLink } from "@hivemind/workspace-host/connect";
 import { heldWorkspaces } from "@hivemind/host/peer-links";
 import { pluginCsp, withImportMap } from "@hivemind/core/view-files";
 import { HIVE_NET, hiveNetBuilt, ownNetwork, person } from "./helpers/multiplayer";
-import { offerPhonePairing, probeAgent, startProbe, talkerAgent } from "./helpers/phone";
+import { itsMe, offerToConnect, probeAgent, startProbe, talkerAgent } from "./helpers/phone";
 import { stopDaemons } from "./helpers/daemons";
 
 const HIVE_PHONE = path.resolve("../../crates/hive-phone/target/debug/hive-phone");
@@ -61,16 +62,19 @@ async function desktopWith(env: Record<string, string> = {}) {
   execSync("git init -q", { cwd: repo });
   const desktop = await person(root, "desktop", repo, apps, { ...env });
   const me = await desktop.evaluate(() => window.hive.identity());
-  const devices = () => desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "your-devices" } })));
+  const devices = () => desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "connect" } })));
   return { repo, desktop, me, devices };
 }
 
-/** Settings → Your devices → Use on your phone, on `d`: a QR code of the computer's link (read here off its
- *  Copy button, as the phone reads it off the code), which the phone scans, and pairs. */
+/** Settings → Connect on `d`: a QR code of the computer's offer (read here off its Copy button, as the
+ *  phone reads it off the code), which the phone scans; the person there says it is theirs, and the
+ *  one at the phone that the words match. */
 async function pairPhone(d: Awaited<ReturnType<typeof desktopWith>>) {
-  const link = await offerPhonePairing(d.desktop);
+  const link = await offerToConnect(d.desktop);
   const phone = path.join(root, "phone");
-  const paired = JSON.parse((await run(HIVE_PHONE, ["pair", link, "--identity", phone, "--name", "Priya's phone", "--json"], { timeout: 60_000 })).stdout) as Record<string, unknown>;
+  const connecting = run(HIVE_PHONE, ["connect", link, "--sure", "yes", "--identity", phone, "--name", "Priya's phone", "--json"], { timeout: 60_000 });
+  await itsMe(d.desktop);
+  const paired = JSON.parse((await connecting).stdout.trim().split("\n").at(-1)!) as Record<string, unknown>;
   const phoneId = (await run(HIVE_PHONE, ["id", "--identity", phone])).stdout.trim();
   return { link, phone, paired, phoneId };
 }
@@ -165,7 +169,7 @@ test("a phone scans the computer's code and is certified as the person's, by the
 
   // On its own connection to the computer, with its own key: answered which workspaces are there,
   // and what it sends to start a terminal in the computer's daemon starts nothing.
-  const where = parsePairLink(link)!;
+  const where = parseConnectLink(link)!;
   const net = await HiveNet.start({ bin: HIVE_NET, identity: phone, socket: path.join(root, "phone-net.sock"), onIncoming: (l) => l.close(), onPairRequest: async () => ({ ok: false }) });
   try {
     const conn = await net.dial(me.deviceId, { addrs: where.addrs, relay: where.relay });
@@ -621,7 +625,7 @@ for (const [policy, admission] of [["closed", "vouched for by the app"], ["open-
     expect(paired).toMatchObject({ network: "Example Corp", admission });
     // The link said how to get onto the network from elsewhere, and the phone did, as it paired:
     // with the voucher it carried on a closed network.
-    const carried = parsePairLink(link)!.admission!;
+    const carried = parseConnectLink(link)!.admission!;
     expect(carried).toMatchObject({ access: net.access, voucher: policy === "closed" ? expect.objectContaining({ kind: "visit", uses: 1, device: null }) : null });
     if (carried.voucher) {
       const kept = JSON.parse(fs.readFileSync(path.join(net.data, "access.json"), "utf8")) as { redeemed: Record<string, number> };

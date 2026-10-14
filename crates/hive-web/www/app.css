@@ -315,6 +315,7 @@ button { cursor: pointer; }
 .pair .mark { width: 72px; height: 72px; border-radius: 18px; }
 .pair h1 { margin: 0; font: 600 30px/36px var(--sans); letter-spacing: -0.03em; }
 .pair p { margin: 0; color: var(--text2); }
+.pair .words { color: var(--text); font: 600 28px/36px var(--sans); letter-spacing: -0.02em; text-align: center; }
 .field {
   width: 100%; background: var(--card); border: 1px solid var(--line2); border-radius: 14px;
   padding: 12px 14px; outline: 0; resize: vertical;
