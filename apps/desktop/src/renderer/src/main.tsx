@@ -20,6 +20,18 @@ import "@fontsource/jetbrains-mono/600.css";
 import "@fontsource/jetbrains-mono/700.css";
 import "./styles.css";
 
+// A part loaded on first use (a dialog, a panel) that fails to load means the app was rebuilt or
+// upgraded under this window: reload into the new build instead of going blank. Once a minute at
+// most, so a part that is truly missing shows its error rather than reloading forever.
+window.addEventListener("vite:preloadError", (e) => {
+  const KEY = "hivemind:reloaded-for-new-build";
+  let last = 0;
+  try { last = Number(sessionStorage.getItem(KEY)) || 0; } catch { /* no storage: reload anyway */ }
+  if (Date.now() - last < 60_000) return;
+  try { sessionStorage.setItem(KEY, String(Date.now())); } catch { /* reload anyway */ }
+  e.preventDefault();
+  location.reload();
+});
 
 const queryClient = new QueryClient({
   defaultOptions: {

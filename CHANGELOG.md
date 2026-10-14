@@ -32,6 +32,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- A window or browser tab open while the app is rebuilt or upgraded reloads into the new build when it opens a dialog, instead of going blank.
 - A widget that walks or animates, such as the dog, no longer drops the canvas's frame rate: the GPU now moves it and steps its sprite, so the page is no longer laid out and repainted on every frame.
 - Settings → In a browser shows a link to copy for each of Other names, not only the 127.0.0.1 one, and a name may carry the port `tailscale serve` gives it (`box.tail1234.ts.net:8444`).
 - Settings → Servers says what it is for, "Reach your devices from other networks", instead of "Relay and discovery; most people never change this".

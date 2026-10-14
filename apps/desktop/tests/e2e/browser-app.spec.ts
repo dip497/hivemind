@@ -150,6 +150,25 @@ test("a view plugin draws in the tab: the Windows view", async () => {
   await expect(tab.locator(".react-flow")).toHaveCount(1);
 });
 
+test("a tab open while the app is rebuilt reloads into the new build when it opens a dialog, rather than going blank", async () => {
+  const assets = path.join(process.cwd(), "out/renderer/assets");
+  const chunk = path.join(assets, fs.readdirSync(assets).find((f) => /^MachinesHub-.*\.js$/.test(f))!);
+  await tab.evaluate(() => { (window as unknown as { beforeRebuild?: boolean }).beforeRebuild = true; });
+  // The rebuild took away the old build's files the tab loads a dialog from on first use.
+  fs.renameSync(chunk, `${chunk}.old`);
+  try {
+    // The page may already be reloading as the call returns.
+    await tab.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:machines", { detail: { kind: "manage" } }))).catch(() => undefined);
+    await expect.poll(() => tab.evaluate(() => (window as unknown as { beforeRebuild?: boolean }).beforeRebuild ?? false).catch(() => true), { timeout: 15_000 }).toBe(false);
+  } finally {
+    fs.renameSync(`${chunk}.old`, chunk);
+  }
+  await tab.waitForSelector(".react-flow", { timeout: 30_000 });
+  await tab.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:machines", { detail: { kind: "manage" } })));
+  await expect(tab.getByRole("dialog")).toBeVisible({ timeout: 10_000 });
+  await tab.keyboard.press("Escape");
+});
+
 /** The widget viewer, shown in the tab, and its frame. */
 async function widgetViewer(): Promise<Frame> {
   await tab.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "widget-viewer" } })));
