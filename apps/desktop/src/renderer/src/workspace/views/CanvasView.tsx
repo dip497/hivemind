@@ -249,10 +249,8 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
 
   const isEmpty = nodes.length === 0;
 
-  // Motion-aware compositing: while the viewport pans/zooms we add a class that
-  // (a) kills tile pointer-events (no hit-test churn) and (b) clips each tile's
-  // paint via `contain` so the browser composites fewer/cheaper layers. Restored
-  // shortly after motion stops. See styles.css `.canvas-moving`.
+  // While the viewport pans/zooms, a class stops heavy tiles taking the pointer, so a
+  // wheel pan is not caught by a tile sliding under the cursor. See styles.css `.canvas-moving`.
   const flowWrapRef = useRef<HTMLDivElement>(null);
   const moveEndTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Pan momentum: react-flow's pan stops DEAD on release, which reads as
