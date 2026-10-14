@@ -21,6 +21,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
+- Phone page and Android app: one new look, written down in docs/design/phone-look-2026-10-15.md — neutral greys in light and dark, colour only for what waits on you, fails or changes; quiet rows with a trailing status mark; needs-you cards with the command and pill answers; a raised message box whose send becomes Stop; an All machine chip.
 - **Breaking:** the `tile.opened` event no longer carries the tile's `prompt`: the host starts the tile with it, and no client is told what it was asked to do.
 - A machine is paused, not turned off: Pause stops this app connecting to it, and nothing on the machine stops. A machine that is away is grey, not red; one that needs a sign-in says Sign in, and pressing it opens the sign-in.
 - In the Layers panel, an agent's working or unread dot sits on the corner of its icon, as a machine's does, instead of after its name or at the row's end.
