@@ -32,6 +32,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- Layers: with several projects, each is set apart by a rule under a plain heading, as machines are, instead of a heading that looked like one more folder row.
 - The website's `install.sh` and `install.ps1` are the current installers again, and CI fails when they or the site's design tokens fall behind.
 - Settings → Shortcuts lists only keys that work: Diff review (⌘⇧G), New issue (⌘N) and toolbar keys 4 and 5 are gone, ⌘E is under On the canvas, and ⌘⇧F (fit a terminal to the screen) is listed.
 - `hive ctl plugin open tool:…` prints the tile it opened instead of "switched to view undefined"; `hive ctl spawn --help` says it prints `{ tile }`.
