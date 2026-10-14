@@ -20,6 +20,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ### Changed
 
 - A machine is paused, not turned off: Pause stops this app connecting to it, and nothing on the machine stops. A machine that is away is grey, not red; one that needs a sign-in says Sign in, and pressing it opens the sign-in.
+- In the Layers panel, an agent's working or unread dot sits on the corner of its icon, as a machine's does, instead of after its name or at the row's end.
 
 - Text, corners and control heights come from one scale: seven named text sizes (20, 15, 14, 13, 12, 11, 10) in place of seventeen, buttons beside inputs in Settings are both 32px, shadows, scrims and the editor's selection follow the theme, and section headings are sentence case.
 - Every choice from a list is the app's own select: the same height, border and corners as the field beside it, its list drawn like a menu, with keyboard and type-ahead; no operating-system blue or orange anywhere. Keyboard focus is one ring for the whole app, in the selection colour rather than the accent (so never amber), and checkboxes, sliders and scrollbars follow the theme.

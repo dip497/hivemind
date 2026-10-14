@@ -253,13 +253,20 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
           {folded ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
         </button>
       )}
-      <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">
-        {t.kind === AGENT_TILE_KIND ? <AgentIcon id={t.agent} size={ICON - 1} /> : <KindMark kind={t.kind} size={ICON} />}
+      <span className="relative size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">
+        <span aria-hidden className="grid place-items-center">
+          {t.kind === AGENT_TILE_KIND ? <AgentIcon id={t.agent} size={ICON - 1} /> : <KindMark kind={t.kind} size={ICON} />}
+        </span>
+        {/* Working, or done since you last looked: a dot on its mark's corner, as a machine's link is. */}
+        {(st === "working" || unread) && (
+          <span className={`absolute -bottom-0.5 -right-0.5 grid rounded-full p-px ${selected ? "bg-[var(--surface-4)]" : "bg-[var(--color-bg2)] group-hover:bg-[var(--surface-3)]"}`}>
+            {st === "working"
+              ? <span aria-label="working" title="working" className="size-1.5 rounded-full" style={{ background: STATUS_COLOR[st] }} />
+              : <span aria-label="unread" title="Done since you last looked" data-layer-unread className="size-1.5 rounded-full bg-[var(--color-unread)]" />}
+          </span>
+        )}
       </span>
-      {/* Name first, so every row's text starts at the same x. Unread: its name in weight. */}
       <span className="truncate min-w-0">{t.name}</span>
-      {/* Unread: a dot after its name, whatever its status says. */}
-      {unread && <span aria-label="unread" title="Done since you last looked" data-layer-unread className="shrink-0 size-1.5 rounded-full bg-[var(--color-unread)]" />}
       <span className="flex-1" />
       {/* While Ctrl/⌘ is held: the number that jumps here, in place of its status. */}
       {jumpKey !== undefined ? (
@@ -268,9 +275,7 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
         </kbd>
       ) : until ? (
         <span className={`shrink-0 ${COUNT} group-hover:hidden`} data-layer-until>{until}</span>
-      ) : /* A word only for what you must act on; `working` is a dot. Only needs-you pulses. */ st === "working" ? (
-        <span aria-label="working" title="working" className="shrink-0 size-1.5 rounded-full group-hover:hidden" style={{ background: STATUS_COLOR[st] }} />
-      ) : st !== "idle" ? (
+      ) : /* A word only for what you must act on; working is the dot on its mark. Only needs-you pulses. */ st !== "idle" && st !== "working" ? (
         <span
           className={`shrink-0 text-chip font-medium leading-none px-1.5 py-[3px] rounded-full ${NEEDS_YOU(st) ? "animate-pulse" : "group-hover:hidden"}`}
           style={{ color: STATUS_COLOR[st], background: `color-mix(in srgb, ${STATUS_COLOR[st]} 16%, transparent)` }}
