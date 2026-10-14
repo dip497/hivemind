@@ -118,6 +118,15 @@ test("a read on an agent that has exited says so at once, rather than wait out i
   assert.ok(Date.now() - started < 1000, `took ${Date.now() - started} ms`);
 });
 
+test("an agent cannot read another agent's inbox by naming it", async () => {
+  const { p, turn, inbox } = plane();
+  (await p.api()).connect("w", "lead");
+  turn("w", "for lead only");
+  const peek = p.agentChannel("agent.inbox", { callerTile: "hm:lead" }, { actor: { kind: "tile", tile: "other" } });
+  await assert.rejects(peek);
+  assert.deepEqual((await inbox("lead")).messages.map((m) => m.text), ["for lead only"]);
+});
+
 test("an inbox read with a wait gets the first message as it comes, not when the wait is over", async () => {
   const { p, hook, turn, inbox } = plane();
   hook("leader", "turn.started");
