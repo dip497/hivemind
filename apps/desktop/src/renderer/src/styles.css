@@ -526,6 +526,9 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
   background: var(--color-bg4) !important;
   color: var(--color-fg) !important;
 }
+/* A view plugin's frame: the same scheme as the page inside it (the SDK keeps `normal`), or the
+   browser paints the frame's backdrop opaque white over the wallpaper. */
+iframe[name^="hm-view:"] { color-scheme: normal; }
 /* A pipe's travelling dot (canvas-pipe-edge.tsx): placed by its animation's transform. */
 .hm-pipe-dot {
   position: absolute;

@@ -98,6 +98,28 @@ test("an installed view is registered after the app's own: âŒ˜E cycles canvas â†
   expect(hive("views", "list").data.map((v: { id: string; error: string | null }) => [v.id, v.error])).toEqual([["queue", null]]);
 });
 
+test("a view's frame is see-through where no pane covers it: the dark app shows, not white", async () => {
+  await toView("windows");
+  const frame = page.locator('iframe[name="hm-view:windows"]');
+  await expect(frame).toBeVisible();
+  await expect.poll(() => page.frame({ name: "hm-view:windows" })?.locator(".w-pane").count() ?? 0).toBeGreaterThan(0);
+  // The strip right of the panes, the room's padding: what is behind the frame.
+  const box = (await frame.boundingBox())!;
+  const shot = await page.screenshot({ clip: { x: box.x + box.width - 5, y: box.y + box.height / 2, width: 3, height: 3 } });
+  const rgb = await page.evaluate(async (png) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${png}`;
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = img.width; c.height = img.height;
+    const g = c.getContext("2d")!;
+    g.drawImage(img, 0, 0);
+    return Array.from(g.getImageData(0, 0, c.width, c.height).data).filter((_, i) => i % 4 !== 3);
+  }, shot.toString("base64"));
+  expect(Math.max(...rgb)).toBeLessThan(128);
+  await toView("canvas");
+});
+
 test("the plugin runs sandboxed: its own origin, no window.hive, no node, no network", async () => {
   await toView("queue");
   await page.waitForSelector(queueReady, { timeout: 15_000 });
