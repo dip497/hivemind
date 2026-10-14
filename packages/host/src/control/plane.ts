@@ -126,13 +126,15 @@ export class ControlPlane {
       return this.status.get(bare)?.state === "working" && (o.steers?.(bare) ?? false);
     });
     this.inbox = new Inbox((to, wanted, rung) => this.mailbox.deliver(toPtyId(to), DOORBELL, rung, { wanted, atPrompt: true }));
-    // However a turn ends (its Stop hook, an interrupt key, a screen showing its prompt), what
-    // was held for its end goes out: an interrupted turn runs no Stop hook.
+    // However a turn is known to run (its hook, or its screen: a turn already running when this
+    // app started ran its hook before), messages wait for its end; however it ends (its Stop
+    // hook, an interrupt key, a screen showing its prompt), what was held goes out.
     this.status.subscribe(({ tileId, status }) => {
       const now = status.state === "working" || status.state === "waiting";
       const was = this.inTurn.has(tileId);
       if (now) this.inTurn.add(tileId);
       else this.inTurn.delete(tileId);
+      if (now && !was) this.mailbox.setBusy(toPtyId(tileId));
       if (was && !now && status.state !== "exited") this.mailbox.setIdle(toPtyId(tileId));
     });
   }

@@ -62,6 +62,20 @@ test("a message held while an agent works is typed once the person interrupts it
   assert.match(typed("w"), /next task/);
 });
 
+test("a turn known only from the screen (it began before this app did) holds the doorbell, which is not rung once the inbox is read", async () => {
+  const { p, typed, turn, inbox } = plane();
+  p.event("agent.screen", { tileId: "hm:leader", state: "working" });
+  (await p.api()).connect("w", "leader");
+  turn("w", "done");
+  await settle();
+  assert.doesNotMatch(typed("leader"), /hive ctl inbox/, "nothing is typed into a running turn");
+
+  assert.equal((await inbox("leader")).messages.length, 1);
+  p.event("agent.event", { tileId: "hm:leader", event: "turn.ended" });
+  await settle();
+  assert.equal(typed("leader"), "", "nothing is left to tell");
+});
+
 test("a worker's reply waits in its leader's inbox, read once; the leader's terminal is told only that some came", async () => {
   const { p, typed, hook, turn, inbox } = plane();
   hook("leader", "turn.started");
