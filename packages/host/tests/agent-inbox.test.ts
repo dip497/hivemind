@@ -24,6 +24,8 @@ function plane() {
     spawned: () => {},
     windowsUp: () => false,
     write: (to, data) => { writes.push({ to, data }); return true; },
+    // Every agent here reports its turns, as Claude Code does, but the one in tile `codex`.
+    signalsTurns: (bare: string) => bare !== "codex",
     methods: () => ({
       workspaces,
       shownWorkspace: () => null,
@@ -74,6 +76,17 @@ test("a turn known only from the screen (it began before this app did) holds the
   p.event("agent.event", { tileId: "hm:leader", event: "turn.ended" });
   await settle();
   assert.equal(typed("leader"), "", "nothing is left to tell");
+});
+
+test("an agent that reports no turns takes a message while its screen shows it working, as the end of that turn may never show", async () => {
+  const { p, typed } = plane();
+  p.event("agent.screen", { tileId: "hm:codex", state: "working" });
+  p.event("agent.screen", { tileId: "hm:leader", state: "working" });
+  (await p.api()).send("codex", "also add tests");
+  (await p.api()).send("leader", "also add tests");
+  await settle();
+  assert.match(typed("codex"), /also add tests/);
+  assert.equal(typed("leader"), "", "an agent that reports its turns gets it at the end of this one");
 });
 
 test("a worker's reply waits in its leader's inbox, read once; the leader's terminal is told only that some came", async () => {

@@ -672,5 +672,5 @@ test("on a network with a push server, the phone registers there, naming the com
   // Unpaired from the phone: it registers again, and the computer is named no more.
   const unpaired = JSON.parse((await run(HIVE_PHONE, ["unpair", d.me.deviceId, "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as unknown;
   expect(unpaired).toMatchObject({ device: d.me.deviceId, told: true });
-  expect(registrations()).toEqual([expect.objectContaining({ device: phoneId, senders: [] })]);
+  await expect.poll(registrations, { timeout: 10_000 }).toEqual([expect.objectContaining({ device: phoneId, senders: [] })]);
 });

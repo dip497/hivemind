@@ -373,6 +373,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     publish: (event, ...params) => api.publish(event, ...params),
     write: writeTile,
     steers: (bare) => !!manifestOf(heldBoards(store), bare)?.steer,
+    signalsTurns: (bare) => !!manifestOf(heldBoards(store), bare)?.caps.turnSignal,
     // Nobody lays a spawned tile out: the host starts it, once it is in its workspace.
     spawned: (spawn) => {
       queueMicrotask(() => void startSpawned({

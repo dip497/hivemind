@@ -998,6 +998,7 @@ const control: ControlPlane = new ControlPlane({
   // Used by agent.send and pipe forwarding.
   write: writeTile,
   steers: (bare) => !!manifestOf(heldBoards(workspaceStore()), bare)?.steer,
+  signalsTurns: (bare) => !!manifestOf(heldBoards(workspaceStore()), bare)?.caps.turnSignal,
   // The host starts a spawned tile, its task on the agent's command line where it takes one there:
   // a window that shows it joins it, so whichever opens it first, the agent gets its task.
   spawned: (spawn) => queueMicrotask(() => void startSpawned({

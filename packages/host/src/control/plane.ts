@@ -47,6 +47,9 @@ export interface ControlPlaneOptions {
   write(ptyId: string, data: string, paste?: boolean): boolean;
   /** Whether a tile's agent reads a message typed while it works (its file says `steer`). */
   steers?(bareTile: string): boolean;
+  /** Whether a tile's agent reports its turns (its file says `turnSignal`): only then is a turn
+   *  its screen shows one whose end will be known. */
+  signalsTurns?(bareTile: string): boolean;
   /** A tile the control plane spawned, written to its workspace: the embedder starts its session,
    *  with `prompt` its first task. Every client has been told of it, and lays it out. */
   spawned(spawn: { tileId: string; repo: string; prompt?: string; background: boolean }): void;
@@ -124,15 +127,16 @@ export class ControlPlane {
       return this.status.get(bare)?.state === "working" && (o.steers?.(bare) ?? false);
     });
     this.inbox = new Inbox((to, wanted, rung) => this.mailbox.deliver(toPtyId(to), DOORBELL, rung, { wanted, atPrompt: true }));
-    // However a turn is known to run (its hook, or its screen: a turn already running when this
-    // app started ran its hook before), messages wait for its end; however it ends (its Stop
-    // hook, an interrupt key, a screen showing its prompt), what was held goes out.
+    // However a turn is known to run (its hook, or the screen of an agent that reports its turns:
+    // one already running when this app started ran its hook before), messages wait for its end;
+    // however it ends (its Stop hook, an interrupt key, a screen showing its prompt), what was held
+    // goes out. An agent that reports none takes them at once, as a turn's end may never show.
     this.status.subscribe(({ tileId, status }) => {
       const now = status.state === "working" || status.state === "waiting";
       const was = this.inTurn.has(tileId);
       if (now) this.inTurn.add(tileId);
       else this.inTurn.delete(tileId);
-      if (now && !was) this.mailbox.setBusy(toPtyId(tileId));
+      if (now && !was && (o.signalsTurns?.(tileId) ?? false)) this.mailbox.setBusy(toPtyId(tileId));
       if (was && !now && status.state !== "exited") this.mailbox.setIdle(toPtyId(tileId));
     });
   }
