@@ -1,8 +1,8 @@
 /**
  * Turn-aware delivery for agent-to-agent messages.
  *
- * THE BUG THIS EXISTS FOR: every HCP message to an agent (a worker's report, an
- * approval request, an agent.send) is DELIVERED BY TYPING INTO ITS TUI — text, then
+ * THE BUG THIS EXISTS FOR: a message to an agent (an agent.send, the line saying its
+ * inbox has mail) is DELIVERED BY TYPING INTO ITS TUI — text, then
  * Enter. That only works if the agent is sitting at its prompt. Fire it while the
  * agent is mid-turn (running a tool, streaming a reply) and the text lands in the
  * composer unsubmitted: the Enter is swallowed, the message is never read, and
@@ -62,6 +62,15 @@ const CLEARS_DRAFT = new Set(["\r", "\x03", "\x15"]);
 interface Held {
   text: string;
   onSent?: () => void;
+  /** Asked just before it is typed: false drops it. */
+  wanted?: () => boolean;
+}
+
+export interface Delivery {
+  /** Asked just before it is typed: false drops it. */
+  wanted?: () => boolean;
+  /** Only ever at its prompt: never typed into a turn, even for an agent that reads mid-turn. */
+  atPrompt?: boolean;
 }
 
 export class Mailbox {
@@ -134,19 +143,20 @@ export class Mailbox {
    * Returns false only when an immediate send fails (dead + unmanaged tile); a queued
    * message returns true, because it will be delivered.
    */
-  deliver(ptyId: string, text: string, onSent?: () => void): boolean {
+  deliver(ptyId: string, text: string, onSent?: () => void, o: Delivery = {}): boolean {
     // An agent that steers reads it mid-turn: typed now, into the turn that is running.
-    const steer = this.busy.has(ptyId) && !this.queued.get(ptyId)?.length && this.steers(ptyId)
+    const steer = !o.atPrompt && this.busy.has(ptyId) && !this.queued.get(ptyId)?.length && this.steers(ptyId)
       && Date.now() - (this.typedAt.get(ptyId) ?? 0) >= TYPING_QUIET_MS;
     if (steer || (!this.managed.has(ptyId) && !this.draft.has(ptyId))) {
       // Hookless (or not-yet-seen-a-turn) → immediate, matching the pre-mailbox path.
+      if (o.wanted && !o.wanted()) return true;
       const ok = this.send(ptyId, text);
       if (ok) onSent?.();
       return ok;
     }
     const q = this.queued.get(ptyId) ?? [];
     if (q.length >= MAX_QUEUED) q.shift(); // drop the stalest, keep the newest
-    q.push({ text, onSent });
+    q.push({ text, ...(onSent ? { onSent } : {}), ...(o.wanted ? { wanted: o.wanted } : {}) });
     this.queued.set(ptyId, q);
     this.onHeld(ptyId, q.length);
     if (!this.busy.has(ptyId)) this.scheduleRelease(ptyId);
@@ -181,9 +191,11 @@ export class Mailbox {
       this.releaseTimer.delete(ptyId);
       const q = this.queued.get(ptyId);
       if (this.busy.has(ptyId) || this.draft.has(ptyId) || !q?.length) return; // raced back to busy / drained
-      const next = q.shift()!;
+      let next: Held | undefined;
+      do next = q.shift(); while (next?.wanted && !next.wanted());
       if (!q.length) this.queued.delete(ptyId);
       this.onHeld(ptyId, q.length);
+      if (!next) return;
       // A hookless tile reports no turn end to wait for: the rest follow at once.
       if (!this.managed.has(ptyId)) {
         if (this.send(ptyId, next.text)) next.onSent?.();

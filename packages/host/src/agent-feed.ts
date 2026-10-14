@@ -76,6 +76,12 @@ export class AgentFeed {
     return { seq: this.seq, agents: [...this.agents.values()].filter((a) => a.workspace === workspace) };
   }
 
+  /** What the agent of `tile` waits on now. */
+  waitingOf(tile: string): AgentItem["waiting"] {
+    this.settle();
+    return this.agents.get(tile)?.waiting;
+  }
+
   /** What `workspace`'s readers were told after `seq`, or null when the feed no longer keeps all
    *  of it: list again. */
   since(workspace: string, seq: number): { seq: number; changes: AgentChange[]; events: AgentEvent[] } | null {

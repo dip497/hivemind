@@ -82,16 +82,19 @@ export class TurnTracker {
     return woke || reported;
   }
 
-  /** Resolve on the first turn after `afterSeq`, or `null` on timeout. */
-  waitForTurn(tileId: string, afterSeq: number, timeoutMs: number): Promise<TurnRecord | null> {
+  /** Resolve on the first turn after `afterSeq`, or `null` on timeout or once `stop` aborts. */
+  waitForTurn(tileId: string, afterSeq: number, timeoutMs: number, stop?: AbortSignal): Promise<TurnRecord | null> {
     const r = this.get(tileId);
     if (r.seq > afterSeq) return Promise.resolve({ ...r });
     return new Promise((resolve) => {
-      const timer = setTimeout(() => {
+      const giveUp = () => {
+        clearTimeout(timer);
         const ws = this.waiters.get(tileId);
         if (ws) this.waiters.set(tileId, ws.filter((w) => w.resolve !== resolve));
         resolve(null);
-      }, timeoutMs);
+      };
+      const timer = setTimeout(giveUp, timeoutMs);
+      stop?.addEventListener("abort", giveUp, { once: true });
       const ws = this.waiters.get(tileId) ?? [];
       ws.push({ afterSeq, resolve, timer });
       this.waiters.set(tileId, ws);

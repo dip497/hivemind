@@ -54,6 +54,16 @@ function hive(args: string[], env: Record<string, string> = {}) {
 }
 
 /** `hive …` left running, for a call that waits on what the test does next. */
+/** Every message read so far from `tile`'s inbox, read as its agent; each is given once. */
+const inboxRead = new Map<string, string[]>();
+function inboxTexts(tile: string): string[] {
+  const read = inboxRead.get(tile) ?? [];
+  const r = hive(["ctl", "inbox", "--json"], asAgent(tile));
+  read.push(...(r.json?.messages ?? []).map((m: { text: string }) => m.text));
+  inboxRead.set(tile, read);
+  return read;
+}
+
 function hiveLater(args: string[]): Promise<{ code: number | null; json: any }> {
   return new Promise((resolve) => {
     const child = spawn(onPath("bun"), [CLI, ...args], { env: hiveEnv({}) });
@@ -174,11 +184,11 @@ test("a droid worker reports back to the claude orchestrator with `hive ctl repo
   expect(read.code, read.stdout + read.stderr).toBe(0);
   expect(read.json.finalStatus).toBe("turn");
   expect(JSON.parse(read.json.text)).toMatchObject({ delivered: true });
-  // The report is typed into the orchestrator's terminal (mailbox delivery) —
-  // visible on its screen via stream --snapshot.
-  await expect
-    .poll(() => hive(["ctl", "stream", orchestrator, "--lines", "60", "--snapshot"]).stdout, { timeout: 30_000, intervals: [500] })
-    .toContain("droid worker done");
+  // The report waits in the orchestrator's inbox; its terminal is only told to read it.
+  await expect.poll(() => inboxTexts(orchestrator).join("\n"), { timeout: 30_000, intervals: [500] }).toContain("droid worker done");
+  const screen = () => hive(["ctl", "stream", orchestrator, "--lines", "60", "--snapshot"]).stdout;
+  await expect.poll(screen, { timeout: 30_000, intervals: [500] }).toContain("Read them: hive ctl inbox");
+  expect(screen()).not.toContain("droid worker done");
 
   hive(["ctl", "send", worker, "echo second turn from $HIVE_AGENT_ID"]);
   const again = hive(["ctl", "read", worker, "--timeout", "40000", "--json"]);
@@ -266,7 +276,7 @@ test("a worker that stops at a question is reported to its leader, who answers i
   expect(spawn.code, spawn.stderr).toBe(0);
   const worker: string = spawn.json.tile;
   await expect
-    .poll(() => hive(["ctl", "stream", orchestrator, "--lines", "60", "--snapshot"]).stdout, { timeout: 30_000, intervals: [500] })
+    .poll(() => inboxTexts(orchestrator).join("\n"), { timeout: 30_000, intervals: [500] })
     .toContain(`asker (${worker}) is waiting for`);
   hive(["ctl", "keys", worker, "1,Enter"]);
   const read = hive(["ctl", "read", worker, "--timeout", "40000", "--json"]);

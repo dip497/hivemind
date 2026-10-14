@@ -61,15 +61,20 @@ Practical rules:
 - Keep `read --timeout` below your tool's Bash limit (default wait is 100 s, built from
   ≤ 10 s polls, so retrying is safe). A timeout exits 4 with `finalStatus:"timeout"`;
   call `read` again to collect the turn. A worker closed while you wait exits 5 with
-  `finalStatus:"closed"` at once: it is gone, so do not read it again.
+  `finalStatus:"closed"` at once: it is gone, so do not read it again. A worker that stops to
+  wait on an answer exits 8 with `finalStatus:"waiting"` at once, and what it waits on.
+- What other agents send you (replies, reports, waits, approvals) waits in your inbox:
+  `hive ctl inbox` (`--wait 90s` to block for one). Your terminal is only told to read it, at your
+  prompt; nothing an agent wrote is typed into it.
+- `send` waits until the worker's turn ends; `send --interrupt` stops the turn first.
 - `workflow --agent <id>` exits 7 before spawning when that agent has no turn signal;
   `hive agents list` shows which do.
 - `hive ctl stream <tile> --snapshot` shows the last 40 lines a tile printed (ANSI-stripped)
   for runtimes that cannot be read deterministically.
 - `hive ctl open-review --file plan.md` opens a review tile and waits for a human
   decision (default ceiling 24 h).
-- A worker that stops on a question or a permission tells the agent that spawned it, with the
-  commands to see and answer it.
+- A worker that stops on a question or a permission tells the agent that spawned it, in its
+  inbox, with its question, its options and the commands to see and answer it.
 - `hive ctl workflow` runs in the CLI, so you can run one from your own terminal (`--repo`).
 
 A program of your own (an orchestrator, a bot) drives agents the same way with a token of its
@@ -79,10 +84,10 @@ tokens and takes them back. The protocol is `spec/workspace-api.md`.
 
 ## Supervision
 
-`spawn --supervise all` (or a tool list) routes a worker's permission prompts to you:
+`spawn --supervise all` (or a tool list) routes a worker's permission prompts to your inbox:
 
 ```text
-[hive] APPROVAL — worker … wants to run Bash: … reqId
+APPROVAL — worker … wants to run Bash: … reqId
 ```
 
 Answer with `hive ctl approve <reqId> allow|deny|always|never`. `always`/`never` are

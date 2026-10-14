@@ -16,6 +16,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - The phone page and `hive-phone connect <link> [--sure yes|no]` use a computer's offer to connect: they show the same three words, wait for the person there, and keep the phone as the person's only once the person at the phone says the words match.
 - The iOS and Android apps connect with a computer's offer too: scanned or pasted, they show the three words, and the phone becomes the person's only after a yes on each side. They point to Settings → Connect.
 - Each machine shows what kind of computer it is (laptop, desktop, server, virtual machine or container), as it reports when checked, and so does This computer. `hive machine add --json` includes it as `kind`.
+- `hive ctl inbox [--wait 90s]`: what other agents sent an agent (a worker's reply or report, that it waits on an answer, an approval it asks), each given once. `hive ctl send --interrupt` stops a worker's turn before sending.
 
 ### Changed
 
@@ -28,6 +29,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - Settings → Plugins is one list: Installed or HiveHub, a search and a kind in one row, then a group per kind with its count. Every plugin's row looks the same and says its state in one badge (Default, In use, Off, Not installed, Installed); making one the default, using a view, switching one off and removing one are on its own page. Adding agents found on this machine sits under the agents. The refresh button is gone: the list is read again when the window comes back.
 - Settings → Plugins: an installed agent whose program is missing says Needs setup, not Not installed; a row whose description only repeats its name shows the name alone; the HiveHub list ends with one line on checksums.
 - Settings → Connect replaces People and Your devices: one Connect button shows a code for another computer, a phone or someone else, and you say who it is when it is used; requests waiting show on the page too. Have a code? Join enters one from elsewhere, also from Home. Below, who is connected: your devices with Unpair, and, for a workspace of yours, the people in it with their roles and where it runs, with Keep it running. QR codes fill their box at whole pixels a module with a four-module white margin and open full size when pressed; Esc closes.
+- **Breaking:** messages between agents wait in the receiving agent's inbox; its terminal is only told `[hive] Your agents sent you messages. Read them: hive ctl inbox`, at its prompt. Nothing an agent wrote is typed into another's terminal. A reply taken with `hive ctl read` is not also delivered. Workspace API 0.26.
+- **Breaking:** `hive ctl read` returns `finalStatus` `waiting` (exit 8) as soon as the worker stops on a question or a permission, with what it asks, instead of timing out.
+- A worker that waits on a question is reported as a question, with its options, even when its agent's hook calls it a permission.
 - **Breaking:** `hive host pair <code>` is gone, with the pairing code the app showed: run `hive host pair` on the host and enter the words it shows under Join on your computer.
 
 ### Security
@@ -38,6 +42,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - In the Windows view and other views, a thin white line no longer shows around the panes, at their rounded corners and along the window's edges. The view's frame shows the wallpaper behind it again.
 - Over a photo wallpaper, small bright blocks of the photo no longer appear around the canvas while agents work. The dot that travels along a pipe between two agents made the canvas redraw its wires 60 times a second, and on some Linux graphics drivers those redraws left pieces of the undimmed photo behind. The dot now moves without redrawing anything.
+- A worker interrupted with Esc takes messages again: one sent after the interrupt was held until a later turn ended on its own.
 - A window or browser tab open while the app is rebuilt or upgraded reloads into the new build when it opens a dialog, instead of going blank.
 - A widget that walks or animates, such as the dog, no longer drops the canvas's frame rate: the GPU now moves it and steps its sprite, so the page is no longer laid out and repainted on every frame.
 - Settings → In a browser shows a link to copy for each of Other names, not only the 127.0.0.1 one, and a name may carry the port `tailscale serve` gives it (`box.tail1234.ts.net:8444`).

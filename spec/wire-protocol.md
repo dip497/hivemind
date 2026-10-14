@@ -36,13 +36,21 @@ method is `UNKNOWN_METHOD`.
 - `agent.reply {"tileId", "text"}` → `{"ok": true}`: the reply of the turn the agent is ending,
   sent before the `turn.ended` event it belongs to. What `agent.read` answers with.
 - `agent.report {"message"}` → `{"delivered": true, "parent"}`: a message to the agent or program
-  that started this one, typed into its starter's terminal once it is at its prompt (an
-  `agent.event` of kind `reported` for a program). This turn's reply is then not forwarded to it
+  that started this one, put in its starter's inbox (an `agent.event` of kind `reported` for a
+  program). This turn's reply is then not forwarded to it
   as well. `NOT_FOUND` with no starter, or one that is gone.
 - `agent.await_approval {"tool_name", "tool_input"}` → `{"decision": "allow" | "deny" | "ask",
   "reason"?}`: a supervised worker's hook, before a tool runs. Its starter is asked (an
   `approval` wait, answered with `agent.answer`); `ask` when nobody can answer, or nobody did in
   time. The wait ends when the connection that asked closes.
+- `agent.inbox {"wait"?}` → `{"messages": [{"id", "at", "from", "name", "kind", "turn"?, "text"}],
+  "dropped"}`: what other agents have for this one, oldest first, each given once. `kind` is
+  `reply` (a turn of an agent it started or is piped from, unless read with `agent.read`),
+  `report`, `waiting` (one it started waits on an answer) or `approval` (one it supervises asks
+  to use a tool). With none, it waits up to `wait` ms (at most 10 minutes) for the first.
+  `dropped`: how many older ones went unread past 500. Nothing an agent sends is typed into
+  another's terminal: when its inbox gets a message, the agent is told once, at its prompt,
+  `[hive] Your agents sent you messages. Read them: hive ctl inbox`.
 - `review.open {"plan", "cwd"?}` → `{"decision": "allow" | "deny", "feedback"?}`: the agent waits
   on a person's review of its plan (a `plan` wait, answered with `agent.answer`). `TIMEOUT` when
   nobody reviews it, or the caller stops waiting.

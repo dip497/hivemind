@@ -19,6 +19,7 @@ useAuthoredAgents();
 import { startHcpServer } from "@hivemind/host/control/hcp-server";
 import { PipeManager } from "@hivemind/host/control/pipes";
 import { Mailbox } from "@hivemind/host/control/mailbox";
+import { Inbox } from "@hivemind/host/control/inbox";
 import { SUBMIT_DELAY_MS } from "@hivemind/agent-host/agent-io";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { newSeed } from "@hivemind/workspace-host/identity";
@@ -99,6 +100,8 @@ function fakeDeps(over: Partial<Parameters<typeof makeDispatch>[0]> = {}) {
     reloadSettings: async () => ({ ok: true }),
     writeToTile: write,
     deliverToTile: (id: string, data: string, onSent?: () => void) => mailbox.deliver(id, data, onSent),
+    inbox: new Inbox((to, wanted, rung) => mailbox.deliver(`hm:${to}`, "[hive] inbox", rung, { wanted, atPrompt: true })),
+    waitingOf: () => undefined,
     spawnAllowed: () => true,
     // What main resolves from settings + PATH; the fixtures have claude.
     defaultAgentId: async () => "claude",
@@ -198,6 +201,10 @@ function approve(deps: ReturnType<typeof fakeDeps>["deps"], reqId: string, decis
   return deps.waits.answer(wait!.tile, wait!.since, decision, o);
 }
 
+/** The approval `parent` was asked last, from its inbox. */
+const askedOf = (deps: ReturnType<typeof fakeDeps>["deps"], parent: string): string =>
+  deps.inbox.take(parent).messages.filter((m) => m.kind === "approval").at(-1)!.text.match(/hive ctl approve (\S+) /)![1]!;
+
 test("approval: worker awaits, parent approves 'always' → allow + cached (no second round-trip)", async () => {
   const { deps, writes } = fakeDeps();
   const { agentChannel, spawn } = makeDispatch(deps);
@@ -205,17 +212,16 @@ test("approval: worker awaits, parent approves 'always' → allow + cached (no s
   const worker = await spawn({ agent: "claude", parent: "parent", report: false, repo: REPO });
   const pending = agentChannel("agent.await_approval", { callerTile: worker, tool_name: "Bash", tool_input: { command: "rm -rf /tmp/x" } }, PERSON);
   await new Promise((r) => setTimeout(r, 10));
-  // The approval prompt is delivered into the PARENT's pty; pull the reqId out.
-  const banner = writes.find(([id, data]) => id === "hm:parent" && data.includes("hive ctl approve"));
-  assert.ok(banner, "approval banner delivered to parent");
-  const reqId = banner![1].match(/hive ctl approve (\S+) /)![1];
+  // The question waits in the PARENT's inbox; pull the reqId out.
+  const reqId = askedOf(deps, "parent");
   assert.deepEqual(approve(deps, reqId, "allow", { always: true }), { answered: true });
   assert.equal((await pending as { decision: string }).decision, "allow");
-  // Same worker+tool again → resolved from cache, no new banner to the parent.
+  // Same worker+tool again → resolved from cache, nothing new for the parent.
   const before = writes.length;
   const r2 = await agentChannel("agent.await_approval", { callerTile: worker, tool_name: "Bash", tool_input: { command: "echo hi" } }, PERSON);
   assert.deepEqual(r2, { decision: "allow" });
-  assert.equal(writes.length, before, "cached decision delivers no new approval prompt");
+  assert.equal(writes.length, before, "cached decision tells the parent nothing");
+  assert.deepEqual(deps.inbox.take("parent").messages, []);
 });
 
 test("approval: deny carries a reason back to the worker", async () => {
@@ -224,7 +230,7 @@ test("approval: deny carries a reason back to the worker", async () => {
   const worker = await spawn({ agent: "claude", parent: "parent", report: false, repo: REPO });
   const pending = agentChannel("agent.await_approval", { callerTile: worker, tool_name: "Write", tool_input: { file_path: "/etc/passwd" } }, PERSON);
   await new Promise((r) => setTimeout(r, 10));
-  const reqId = writes.find(([id, d]) => id === "hm:parent" && d.includes("hive ctl approve"))![1].match(/hive ctl approve (\S+) /)![1];
+  const reqId = askedOf(deps, "parent");
   approve(deps, reqId, "deny", { feedback: "not that file" });
   assert.deepEqual(await pending, { decision: "deny", reason: "not that file" });
 });

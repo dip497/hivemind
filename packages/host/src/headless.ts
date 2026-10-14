@@ -370,6 +370,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     dir: () => o.dir,
     waitsChanged: () => agentFeed?.changed(),
     lineChanged: () => homeChanged(),
+    waitingOf: (bare) => agentFeed?.waitingOf(bare),
     publish: (event, ...params) => api.publish(event, ...params),
     write: writeTile,
     steers: (bare) => !!manifestOf(heldBoards(store), bare)?.steer,

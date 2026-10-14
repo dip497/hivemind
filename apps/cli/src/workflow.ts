@@ -18,7 +18,7 @@ export async function readTurn(d: Pick<Drive, "call">, tile: string, totalMs: nu
   let last!: AgentRead;
   for (const slice of readSchedule(totalMs)) {
     last = await d.call("agent.read", [tile, slice], slice + READ_SLACK_MS) as AgentRead;
-    if (last.finalStatus === "turn" || last.finalStatus === "closed") return last;
+    if (last.finalStatus !== "timeout") return last;
   }
   return last;
 }
@@ -26,7 +26,7 @@ export async function readTurn(d: Pick<Drive, "call">, tile: string, totalMs: nu
 export interface WorkerResult {
   item: string;
   tile: string | null;
-  status: "turn" | "timeout" | "closed" | "error";
+  status: "turn" | "timeout" | "closed" | "waiting" | "error";
   text: string | null;
 }
 

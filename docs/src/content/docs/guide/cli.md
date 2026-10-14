@@ -80,9 +80,10 @@ hive ctl spawn [--agent claude] [--prompt "…"] [--name "title"]
                                         # → {"tile":…}; workers auto-report by default
 hive ctl sessions [agent] [--cwd dir] [--limit 100]
                                         # past sessions in a folder, to --resume
-hive ctl send <tileId> "text"
+hive ctl send <tileId> "text" [--interrupt]   # after its turn; --interrupt: stop the turn first
 hive ctl keys <tileId> Down,Enter       # Esc, Tab, digits, …
-hive ctl read <tileId> [--timeout 90s] [--poll]   # default wait 100 s; --poll: no wait
+hive ctl read <tileId> [--timeout 90s] [--poll]   # default wait 100 s; --poll: no wait; exit 8: it waits on an answer
+hive ctl inbox [--wait 90s] [--tile id] # what other agents sent you, each once
 hive ctl stream <tileId> [--lines 40] [--timeout 30s]
                        [--snapshot] [--json]        # what it prints, live; --lines: the last N first
 hive ctl focus <tileId>
@@ -132,7 +133,7 @@ hive ctl workflow --shape fanout|pipeline|mapreduce
                   [--max-concurrent 6] [--timeout 10m] [--close] [--repo dir]
                                         # per-worker timeout; blocks until all replies
 hive ctl approve <reqId> allow|deny|always|never [--reason "…"]
-hive ctl report "summary"               # to the tile that spawned you ($HIVEMIND_TILE)
+hive ctl report "summary"               # to the inbox of the tile that spawned you ($HIVEMIND_TILE)
 hive ctl open-review --file plan.md [--cwd dir] [--timeout 30m] [--tile id]
                                         # default ceiling 24 h; --tile from a terminal
 ```

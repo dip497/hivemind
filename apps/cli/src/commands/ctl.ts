@@ -33,6 +33,7 @@ import { UnsupportedError, UsageError, boolFlag, emitArgs, durationFlag, intFlag
 import { readTurn, runWorkflow } from "../workflow.js";
 import { ensureAgentCatalog } from "../agent-catalog.js";
 import { detectWho } from "../who.js";
+import type { InboxMessage } from "@hivemind/workspace-api/agents";
 
 const ISSUE_STATES = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"] as const;
 
@@ -221,9 +222,13 @@ const sessions = sub("sessions", "An agent's past sessions in a folder, newest f
 
 const notFound = (tile: unknown) => new HcpCliError("NOT_FOUND", `no agent runs in tile ${String(tile)}`, EXIT.notFound);
 
-const send = sub("send", "Send text to an agent tile (submits it as a prompt)",
-  { ...tileArg, text: { type: "positional", required: true } },
+const send = sub("send", "Send text to an agent tile (submits it as a prompt; held until its turn ends, or --interrupt it first)",
+  {
+    ...tileArg, text: { type: "positional", required: true },
+    interrupt: { type: "boolean", description: "stop the turn it is in first, with the keys its agent says interrupt it, so this is read now" },
+  },
   (a) => onDrive(async (d) => {
+    if (a.interrupt) await d.call("agent.interrupt", [a.tileId]);
     const r = await d.call("agent.send", [a.tileId, a.text]) as { sent: boolean };
     if (!r.sent) throw notFound(a.tileId);
     return r;
@@ -238,7 +243,7 @@ const keys = sub("keys", "Send key tokens to a tile's TUI (comma-separated, e.g.
 
 const READ_DEFAULT_MS = 100_000; // under Claude Code's 120 s Bash default
 
-const read = sub("read", "Wait for an agent's turn to finish and print its reply (exit 4 on timeout, 5 if it closes)", {
+const read = sub("read", "Wait for an agent's turn to finish and print its reply (exit 4 on timeout, 5 if it closes, 8 if it stops to wait on an answer)", {
   ...tileArg,
   timeout: { type: "string", description: `total wait, e.g. 90s or 5m (default ${READ_DEFAULT_MS / 1000}s); made of short HCP polls, never one long request` },
   poll: { type: "boolean", description: "don't wait: return the current turn state immediately (always exit 0)" },
@@ -247,8 +252,8 @@ const read = sub("read", "Wait for an agent's turn to finish and print its reply
   return onDrive(async (d) => {
     const r = await readTurn(d, String(a.tileId), total);
     if (r.finalStatus === "turn" || a.poll) return r;
-    // Closed while we waited: no turn is coming.
-    return { __exit: r.finalStatus === "closed" ? EXIT.notFound : EXIT.timeout, result: r };
+    // Closed while we waited: no turn is coming. Waiting: none comes until it is answered.
+    return { __exit: r.finalStatus === "closed" ? EXIT.notFound : r.finalStatus === "waiting" ? EXIT.waiting : EXIT.timeout, result: r };
   });
 });
 
@@ -327,6 +332,34 @@ const report = sub("report", "Deliver a message to the tile that spawned you (th
   const callerTile = a.tile || ownTile();
   if (!callerTile) throw new UsageError("not inside a hivemind agent tile ($HIVEMIND_TILE unset) — pass --tile <tileId>");
   return hcpCall("agent.report", { callerTile, message: a.message });
+});
+
+type Inboxed = { messages: InboxMessage[]; dropped: number };
+
+/** What another agent sent, as a block a reader can tell apart from the rest. */
+const inboxBlock = (m: InboxMessage): string =>
+  `── #${m.id} ${m.kind} from ${m.name}${m.turn !== undefined ? `, turn ${m.turn}` : ""} ──\n${m.text}`;
+
+const inbox = defineCommand({
+  meta: { name: "inbox", description: "What your agents sent you (replies, reports, waits, approvals), oldest first; each is read once" },
+  args: {
+    wait: { type: "string", description: "when none has come, wait this long for the first, e.g. 90s or 5m (at most 10m)" },
+    tile: { type: "string", description: "whose inbox, from a terminal (default: $HIVEMIND_TILE — set inside every spawned agent)" },
+    ...JSON_ARG,
+  },
+  async run({ args }) {
+    const json = !!args.json;
+    try {
+      const callerTile = args.tile || ownTile();
+      if (!callerTile) throw new UsageError("not inside a hivemind agent tile ($HIVEMIND_TILE unset) — pass --tile <tileId>");
+      const wait = durationFlag(args.wait, "wait", 0);
+      const r = await hcpCall("agent.inbox", { callerTile, wait }, wait + 30_000) as Inboxed;
+      if (json) return console.log(JSON.stringify(r));
+      const lines = r.messages.map(inboxBlock);
+      if (r.dropped) lines.unshift(`(${r.dropped} older messages were dropped unread)`);
+      console.log(lines.join("\n\n") || "no messages");
+    } catch (e) { fail(e, json); }
+  },
 });
 
 const openReview = sub("open-review", "Wait on a person's review of this agent's plan, opened beside it, and print the decision", {
@@ -540,7 +573,7 @@ const plugin = defineCommand({
 export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/workflow/report) and the issue verbs agents use" },
   subCommands: {
-    agents, frames, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, report, "open-review": openReview,
+    agents, frames, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, report, inbox, "open-review": openReview,
     focus, close, rename, connect, disconnect, view, plugin,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,

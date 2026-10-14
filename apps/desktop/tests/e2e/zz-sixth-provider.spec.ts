@@ -146,7 +146,9 @@ test("lifecycle proof: spawn → working/idle → send → read → report → w
   hive(["ctl", "send", worker, "hive ctl report 'faux done' --json"]);
   const rep = hive(["ctl", "read", worker, "--timeout", "40000", "--json"]);
   expect(JSON.parse(rep.json.text)).toMatchObject({ delivered: true });
-  await expect.poll(() => hive(["ctl", "stream", orchestrator, "--lines", "60", "--snapshot"]).stdout, { timeout: 30_000, intervals: [500] }).toContain("faux done");
+  // It waits in the orchestrator's inbox, given once.
+  const inbox = hive(["ctl", "inbox", "--wait", "30s", "--json"], asAgent(orchestrator));
+  expect(inbox.json.messages.map((m: { kind: string; text: string }) => [m.kind, m.text])).toContainEqual(["report", "faux done"]);
   // workflow gathers from a fleet of the new runtime.
   const wf = hive(["ctl", "workflow", "--shape", "fanout", "--agent", "faux", "--items", "x || y", "--prompt", "echo did {item}", "--timeout", "60000", "--close", "--json"], asAgent(orchestrator));
   expect(wf.code, wf.stdout + wf.stderr).toBe(0);

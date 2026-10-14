@@ -12,8 +12,9 @@ import { ApiError } from "@hivemind/workspace-api/protocol";
 import type { HcpCall } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
+import type { Inbox } from "./inbox.js";
 import { mintId, toPtyId as ptyId, toBareId as bareOf } from "@hivemind/workspace-api/tile-id";
-import type { AgentRead, AgentSessions, TileOpened } from "@hivemind/workspace-api/agents";
+import type { AgentItem, AgentRead, AgentSessions, TileOpened } from "@hivemind/workspace-api/agents";
 import { labelOf as labelIn } from "./names.js";
 import { agentById, agentLaunch, agentOption, cleanName, isSessionId, nextOrdinal, spawnableAgents, workerAgents, type AgentProviderDef, type AgentStatus, type InputKind, type SpawnOptions } from "@hivemind/agents";
 import { hookAnswerOf, hookAsks, printedAnswer, toolAbout, type HookReply } from "@hivemind/agents/node";
@@ -134,6 +135,10 @@ export interface MethodDeps {
    *  text actually reaches the terminal (which is when an approval's answer-clock
    *  should start). Returns false only if the tile's pty is dead. */
   deliverToTile: (ptyId: string, text: string, onSent?: () => void) => boolean;
+  /** What other agents have for an agent (by bare id), until it reads them. */
+  inbox: Pick<Inbox, "post" | "wait" | "given" | "forget">;
+  /** What the agent of a tile waits on, as the person's devices are told it. */
+  waitingOf: (bareTile: string) => AgentItem["waiting"];
   turns: TurnTracker;
   recorder: OutputRecorder;
   /** Sliding-window spawn gate (reuse the ptySpawn rate-limit). false → refuse. */
@@ -200,6 +205,7 @@ const DEFAULT_READ_TIMEOUT = 120_000;
 /** How much of what an agent printed `agent.output` gives when not asked for more. */
 const DEFAULT_OUTPUT_LINES = 40;
 const REVIEW_TIMEOUT = 24 * 60 * 60 * 1000; // human review may take a long time
+const MAX_INBOX_WAIT_MS = 10 * 60 * 1000;
 
 /** The control plane's part of the workspace API (control-api.ts), its params checked there.
  *  None records itself: the API records each effect, as its caller's. `caller`: the agent's
@@ -420,6 +426,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   // Workers whose current wait their parent has been told about.
   const waitTold = new Set<string>();
+  // The `hive ctl read`s waiting on each tile, told when it stops to wait on an answer instead.
+  const readers = new Map<string, Set<() => void>>();
 
   // Drop ALL per-tile HCP state (pid-keyed: turns/recorder/epochs; bare-keyed:
   // pipes/parent/depth/supervision/approvals). Runs on EVERY teardown path — the
@@ -443,20 +451,33 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     deps.setSupervise(bare, null);
     deps.waits.forget(bare);
     waitTold.delete(bare);
+    deps.inbox.forget(bare);
+  };
+
+  /** What `bare` waits on, said to the agent that started it, while it still waits on that. */
+  const waitingNotice = (bare: string, since: number) => (): string | null => {
+    const now = deps.status.get(bare);
+    if (now?.state !== "waiting" || now.since !== since) return null;
+    const on = deps.waitingOf(bare);
+    const asks = (on?.asks ?? []).map((a) => `\n  ${a.question}${a.options.map((o, i) => `\n    ${i + 1}. ${o}`).join("")}`).join("");
+    return `${label(bare)} is waiting for ${WAITING_FOR[on?.kind ?? now.kind ?? "other"]}.${asks}\n` +
+      `See it: hive ctl stream ${bare} --lines 40 --snapshot · answer: hive ctl keys ${bare} Down,Enter or hive ctl send ${bare} "…"`;
   };
 
   const onStatus: Dispatcher["onStatus"] = (tileId, status) => {
     const bare = bareOf(tileId);
     if (status.state !== "waiting") { waitTold.delete(bare); return; }
-    // An approval is the parent's own question: its banner already went out.
+    // A `hive ctl read` waiting on it is told; then the one that started it need not be.
+    const reading = readers.get(bare);
+    if (reading?.size) { for (const told of reading) told(); return; }
+    // An approval is the parent's own question: its message went out already.
     if (status.kind === "approval" || waitTold.has(bare)) return;
     const parent = parentOf.get(bare);
     // A program that started it reads its status itself.
     if (!parent || isClient(parent)) return;
     waitTold.add(bare);
-    deps.deliverToTile(ptyId(parent),
-      `\n[hive] ${label(bare)} is waiting for ${WAITING_FOR[status.kind ?? "other"]}. ` +
-      `See it: hive ctl stream ${bare} --lines 40 --snapshot · answer: hive ctl keys ${bare} Down,Enter or hive ctl send ${bare} "…"\n`);
+    const since = deps.status.get(bare)?.since ?? 0;
+    deps.inbox.post(parent, { from: bare, name: label(bare), kind: "waiting", text: waitingNotice(bare, since) });
   };
 
   // Close a tile, with no window needed: it leaves its workspace and the session it runs ends, but
@@ -561,10 +582,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     switch (method) {
       case "agent.report":
         return effect(call, { verb: method, target: (r) => r.parent }, async () => {
-          // A spawned worker pushes a result back to the agent that spawned it.
-          // The caller passes its OWN tile id (HIVEMIND_TILE); we look up its
-          // parent and deliver the message into the parent's terminal (typed +
-          // Enter, as a send is) so the parent reads it on its next turn.
+          // A spawned worker pushes a result back to the agent that spawned it: kept in that
+          // agent's inbox. The caller is its OWN tile (HIVEMIND_TILE).
           const child = bareOf(String(p.callerTile ?? ""));
           const parent = parentOf.get(child);
           if (!parent) throw new ApiError("NOT_FOUND", "no parent agent to report to");
@@ -576,18 +595,20 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
             deps.turns.markReported(ptyId(child));
             return { delivered: true, parent };
           }
-          const banner = `\n[hive] report from ${label(child)}:\n${message}\n`;
-          // Held if the parent is mid-turn — a report typed into a busy TUI never
-          // gets read, and the worker thinks it delivered.
-          if (!deps.deliverToTile(ptyId(parent), banner)) {
-            throw new ApiError("NOT_FOUND", `parent agent ${parent} is gone — report not delivered`);
-          }
-          // Single-delivery ladder: the worker authored its own summary this turn, so
-          // when its turn ends, DON'T also auto-forward the raw turn (that would be a
-          // second message the parent re-processes). recordTurn reads + clears this.
+          deps.inbox.post(parent, { from: child, name: label(child), kind: "report", text: message });
+          // Its own summary stands for this turn: the turn's reply is not sent as well.
           deps.turns.markReported(ptyId(child));
           return { delivered: true, parent };
         });
+
+      case "agent.inbox": {
+        // What other agents have for the calling agent, oldest first, read now; waiting up to
+        // `wait` ms for the first when none has come.
+        const tile = tileOf(p.callerTile);
+        if (!tile) throw new ApiError("BAD_REQUEST", "an inbox is an agent's: run this in its tile, or pass --tile");
+        const ms = typeof p.wait === "number" && Number.isFinite(p.wait) ? Math.min(Math.max(0, p.wait), MAX_INBOX_WAIT_MS) : 0;
+        return deps.inbox.wait(tile, ms);
+      }
 
       case "agent.reply": {
         // The agent's plugin hands over this turn's reply before it reports the turn end.
@@ -641,10 +662,12 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
             };
             // A program reads the wait in the agent feed, its answer clock running from now.
             if (isClient(parent)) return armAnswerTimeout();
-            const banner =
-              `\n[hive] APPROVAL — worker ${label(worker)} wants to run ${tool}: ${summary}\n` +
-              `Reply: hive ctl approve ${wait.request} allow|deny|always|never  (allow = this call; always = this tool, for this worker)\n`;
-            if (!deps.deliverToTile(ptyId(parent), banner, armAnswerTimeout)) unanswered(); // parent's pty is gone
+            const asks =
+              `${label(worker)} wants to run ${tool}: ${summary}\n` +
+              `Answer: hive ctl approve ${wait.request} allow|deny|always|never  (allow = this call; always = this tool, for this worker)`;
+            const posted = { from: worker, name: label(worker), kind: "approval" as const, text: () => (deps.waits.named(wait.request) ? asks : null) };
+            // Its answer clock starts when the supervisor reads it.
+            if (!deps.inbox.post(parent, posted, armAnswerTimeout)) unanswered(); // parent's pty is gone
           });
         });
       }
@@ -703,7 +726,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       }
 
       default:
-        throw new ApiError("UNKNOWN_METHOD", `unknown method: ${method} (the agent channel carries agent.reply, agent.report, agent.await_approval, agent.await_answer and review.open; drive the rest with \`hive ctl\`)`);
+        throw new ApiError("UNKNOWN_METHOD", `unknown method: ${method} (the agent channel carries agent.reply, agent.report, agent.inbox, agent.await_approval, agent.await_answer and review.open; drive the rest with \`hive ctl\`)`);
     }
   };
 
@@ -747,17 +770,40 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       const pending = pendingSend.get(pid);
       if (pending) await Promise.race([pending, new Promise<void>((r) => { const t = setTimeout(r, timeoutMs); t.unref?.(); })]);
       const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
-      const rec = await deps.turns.waitForTurn(pid, afterSeq, Math.max(0, deadline - Date.now()));
+      const bare = bareOf(tile);
+      // It cannot end its turn while it waits on an answer: say so instead of running out of time.
+      const stopped = new AbortController();
+      const waited = new Promise<"waiting">((resolve) => {
+        const told = () => resolve("waiting");
+        if (deps.status.get(bare)?.state === "waiting") return told();
+        const set = readers.get(bare) ?? new Set();
+        set.add(told);
+        readers.set(bare, set);
+        stopped.signal.addEventListener("abort", () => set.delete(told), { once: true });
+      });
+      const rec = await Promise.race([deps.turns.waitForTurn(pid, afterSeq, Math.max(0, deadline - Date.now()), stopped.signal), waited]);
+      stopped.abort();
+      if (rec === "waiting") {
+        deps.inbox.given(bare, "waiting");
+        const on = deps.waitingOf(bare) ?? { kind: deps.status.get(bare)?.kind ?? "other", since: deps.status.get(bare)?.since ?? 0 };
+        return {
+          text: null, finalStatus: "waiting", truncated: false, waiting: on,
+          note: `waiting for ${WAITING_FOR[on.kind]}: see it with hive ctl stream ${bare} --lines 40 --snapshot, answer with hive ctl keys or hive ctl send`,
+        };
+      }
       // A tile that died under us is not "still working" — say so, and keep the read's
       // shape so a caller parsing finalStatus does not have to special-case an error.
       if (rec && rec.seq === -1) return { text: null, finalStatus: "closed", truncated: false, note: "tile closed while waiting" };
       // Consume this turn: without advancing the epoch the NEXT read returns the same
       // turn instantly, so a poll loop can never tell a new answer from the old one.
-      if (rec) sendSeq.set(pid, rec.seq);
+      if (rec) {
+        sendSeq.set(pid, rec.seq);
+        deps.inbox.given(bare, "reply", rec.seq);
+      }
       if (rec && typeof rec.text === "string" && rec.text.length > 0) return { text: rec.text, finalStatus: "turn", truncated: false };
       if (rec) return { text: null, finalStatus: "turn", truncated: false, note: "turn completed but carried no readable reply" };
       // No completed turn within the timeout: the agent is still working. Spawned with
-      // report:true, it delivers its reply to its starter when done.
+      // report:true, its reply goes to its starter's inbox when done.
       return { text: null, finalStatus: "timeout", truncated: false, note: "agent still working — no completed turn within timeout" };
     },
 

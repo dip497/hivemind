@@ -34,6 +34,8 @@ export const EXIT = {
    *  UNSUPPORTED: the provider lacks the capability (no turn signal, no
    *  permission system) so the verb cannot succeed for it. */
   refused: 7,
+  /** The agent stopped to wait on an answer (a question, a permission): `read` says on what. */
+  waiting: 8,
 } as const;
 
 export class HcpCliError extends Error {

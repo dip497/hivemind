@@ -18,7 +18,9 @@ import { holderOf, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { StatusStore, isSessionStatus, type ScreenState } from "@hivemind/agent-host/status-store";
 import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
+import type { AgentItem } from "@hivemind/workspace-api/agents";
 import { startHcpServer, type HcpServer } from "./hcp-server.js";
+import { Inbox } from "./inbox.js";
 import { Mailbox } from "./mailbox.js";
 import { makeDispatch, type ControlWork, type Dispatcher, type MethodDeps } from "./methods.js";
 import { OutputRecorder } from "./output-recorder.js";
@@ -32,7 +34,7 @@ import { Waits } from "../waits.js";
 export type EmbedderDeps = Omit<
   MethodDeps,
   | "agentOf" | "writeToTile" | "deliverToTile" | "turns" | "recorder" | "spawnAllowed" | "connect" | "disconnect"
-  | "forgetPipes" | "spawnEdge" | "setSupervise" | "waits" | "status" | "announceSpawn"
+  | "forgetPipes" | "spawnEdge" | "setSupervise" | "waits" | "status" | "announceSpawn" | "inbox" | "waitingOf"
 >;
 
 export interface ControlPlaneOptions {
@@ -60,6 +62,8 @@ export interface ControlPlaneOptions {
   waitsChanged?(): void;
   /** A tile's screen showed another last line (`lines`). */
   lineChanged?(): void;
+  /** What the agent of a tile waits on, as the person's devices are told it. */
+  waitingOf?(bareTile: string): AgentItem["waiting"];
 }
 
 /** A lost SubagentStop (the subagent errored, the turn was interrupted, the session compacted)
@@ -69,6 +73,8 @@ const SUBAGENT_REAP_MS = 120_000;
 /** Anti-fork-bomb: at most this many control-plane spawns a minute. */
 const SPAWNS_A_MINUTE = 16;
 const SCREEN_STATES = new Set<ScreenState>(["idle", "working", "permission", "question", "blocked"]);
+/** What an agent's terminal is told when messages wait in its inbox; never what they say. */
+const DOORBELL = "\n[hive] Your agents sent you messages. Read them: hive ctl inbox\n";
 
 export class ControlPlane {
   /** Each session's output, ANSI stripped, by pty id: what `read` and `stream` catch up from. */
@@ -87,6 +93,8 @@ export class ControlPlane {
   readonly supervise = new Map<string, string>();
   /** Messages to an agent, held until it is at its prompt (by pty id). */
   readonly mailbox: Mailbox;
+  /** What other agents have for an agent, until it reads them (by bare id). */
+  readonly inbox: Inbox;
   /** What each tile's screen last showed with text, by bare tile id, as its daemon read it. */
   readonly lines = new Map<string, string>();
   private readonly pipes = new PipeManager();
@@ -99,6 +107,8 @@ export class ControlPlane {
   private readonly typing = new Map<string, Array<() => void>>();
   private made: Dispatcher | null = null;
   private spawnTimes: number[] = [];
+  /** Tiles whose status says a turn is going (working, or waiting within it). */
+  private readonly inTurn = new Set<string>();
 
   constructor(private readonly o: ControlPlaneOptions) {
     this.waits = new Waits({ status: this.status, changed: () => o.waitsChanged?.() });
@@ -114,6 +124,16 @@ export class ControlPlane {
       // Waiting on a prompt of its own, a message typed there would answer it (Enter allows).
       const bare = toBareId(ptyId);
       return this.status.get(bare)?.state === "working" && (o.steers?.(bare) ?? false);
+    });
+    this.inbox = new Inbox((to, wanted, rung) => this.mailbox.deliver(toPtyId(to), DOORBELL, rung, { wanted, atPrompt: true }));
+    // However a turn ends (its Stop hook, an interrupt key, a screen showing its prompt), what
+    // was held for its end goes out: an interrupted turn runs no Stop hook.
+    this.status.subscribe(({ tileId, status }) => {
+      const now = status.state === "working" || status.state === "waiting";
+      const was = this.inTurn.has(tileId);
+      if (now) this.inTurn.add(tileId);
+      else this.inTurn.delete(tileId);
+      if (was && !now && status.state !== "exited") this.mailbox.setIdle(toPtyId(tileId));
     });
   }
 
@@ -169,6 +189,8 @@ export class ControlPlane {
       agentOf: (bare) => this.agentOf.get(bare),
       writeToTile: (ptyId, data) => this.write(ptyId, data),
       deliverToTile: (ptyId, text, onSent) => this.mailbox.deliver(ptyId, text, onSent),
+      inbox: this.inbox,
+      waitingOf: (bare) => o.waitingOf?.(bare),
       turns: this.turns,
       recorder: this.recorder,
       spawnAllowed: () => this.spawnAllowed(),
@@ -261,6 +283,8 @@ export class ControlPlane {
     const bare = toBareId(tileId);
     this.reaper.cancel(bare);
     this.mailbox.forget(toPtyId(tileId));
+    this.inbox.forget(bare);
+    this.inTurn.delete(bare);
     this.status.exited(bare);
     this.made?.forgetTile(tileId);
   }
@@ -303,13 +327,7 @@ export class ControlPlane {
       // what screen it is.
       const r = (params ?? {}) as { tileId?: string; state?: ScreenState; says?: unknown };
       if (!r.tileId || !r.state || !SCREEN_STATES.has(r.state)) return;
-      const bare = toBareId(r.tileId);
-      const was = this.status.get(bare)?.state;
-      this.status.screen(bare, r.state, typeof r.says === "string" ? r.says : undefined);
-      // A hooked turn the screen showed ending (it died on a limit, so no Stop came):
-      // messages held for its end go out now.
-      const now = this.status.get(bare);
-      if (now?.source === "hooks" && now.state === "idle" && was !== "idle") this.mailbox.setIdle(toPtyId(r.tileId));
+      this.status.screen(toBareId(r.tileId), r.state, typeof r.says === "string" ? r.says : undefined);
       return;
     }
     if (method === "agent.reply") {
@@ -335,21 +353,15 @@ export class ControlPlane {
     // release one at its prompt.
     if (evt.event === "turn.started") { this.mailbox.setBusy(pid); return; }
     if (evt.event !== "turn.ended") return;
-    // Single-delivery ladder: true if this reply was already delivered by a more specific channel
-    // — a blocking agent.read (hive ctl read) took it, or the worker authored an explicit
-    // agent.report this turn. Either way the auto-report below stands down, so the parent isn't
-    // handed the same reply twice.
-    const deliveredElsewhere = this.turns.recordTurn(pid);
+    // A reply a waiting `hive ctl read` took, or one the worker reported itself, goes to no inbox.
+    const given = this.turns.recordTurn(pid);
     this.mailbox.setIdle(pid);
-    // Pipe forwarding: feed this agent's reply into any piped destinations.
     const dests = this.pipes.dests(bare);
-    if (dests.length === 0 || deliveredElsewhere) return;
+    if (dests.length === 0 || given) return;
     const reply = (this.turns.lastReply(pid) ?? "").trim();
     if (!reply) return;
-    // Tag the forward with its source so the receiving agent knows which worker reported. The
-    // mailbox holds it until the destination is back at its prompt.
-    const banner = `\n[hive] from ${this.dispatcher.labelOf(bare)}:\n${reply}\n`;
-    for (const dst of dests) this.mailbox.deliver(toPtyId(dst), banner);
+    const sent = { from: bare, name: this.dispatcher.labelOf(bare), kind: "reply" as const, turn: this.turns.currentSeq(pid), text: reply };
+    for (const dst of dests) this.inbox.post(dst, sent);
   }
 
   /**

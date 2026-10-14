@@ -22,20 +22,27 @@ useAuthoredAgents();
 import { Mailbox } from "@hivemind/host/control/mailbox";
 import { TurnTracker } from "@hivemind/host/control/turn-tracker";
 import { OutputRecorder } from "@hivemind/host/control/output-recorder";
+import { Inbox } from "@hivemind/host/control/inbox";
+import type { Delivery } from "@hivemind/host/control/mailbox";
 import { workspaceDeps, PERSON, REPO, fromTile } from "./hcp-workspace.ts";
 
-/** The control plane, its approvals typed through `deliver` (default: a real mailbox whose
- *  writes are kept); `answer` answers one as `hive ctl approve` does (agent.answer). */
-function plane(o: { deliver?: (id: string, text: string, onSent?: () => void) => boolean; reported?: (tile: string, message: string) => void } = {}) {
+/** The control plane, its approvals kept in the supervisor's inbox, which tells its terminal
+ *  through `deliver` (default: a real mailbox whose writes are kept); `answer` answers one as
+ *  `hive ctl approve` does (agent.answer). */
+function plane(o: { deliver?: (id: string, text: string, onSent?: () => void, d?: Delivery) => boolean; reported?: (tile: string, message: string) => void } = {}) {
   const writes: string[] = [];
   const mailbox = new Mailbox((_id, d) => { writes.push(d); return true; }, 1);
+  const deliver = o.deliver ?? ((id: string, t: string, onSent?: () => void, d?: Delivery) => mailbox.deliver(id, t, onSent, d));
+  const inbox = new Inbox((to, wanted, rung) => deliver(`hm:${to}`, "[hive] inbox", rung, { wanted, atPrompt: true }));
   const deps = workspaceDeps();
   const made = makeDispatch({
     turns: new TurnTracker(),
     recorder: new OutputRecorder(),
     callRenderer: async () => { throw new Error("no window"); },
     writeToTile: () => true,
-    deliverToTile: o.deliver ?? ((id: string, t: string, onSent?: () => void) => mailbox.deliver(id, t, onSent)),
+    deliverToTile: deliver,
+    inbox,
+    waitingOf: () => undefined,
     spawnAllowed: () => true,
     connect: () => true,
     disconnect: () => {},
@@ -49,20 +56,23 @@ function plane(o: { deliver?: (id: string, text: string, onSent?: () => void) =>
     const wait = deps.waits.named(reqId);
     return wait ? deps.waits.answer(wait.tile, wait.since, decision, { always }) : { answered: false };
   };
-  /** The question the supervisor was asked last: its id is in what was typed to it. */
-  const asked = async (before: number) => {
-    for (let i = 0; i < 100 && writes.length === before; i++) await new Promise((r) => setTimeout(r, 10));
-    return [...writes.join("").matchAll(/hive ctl approve (\S+) allow/g)].at(-1)![1]!;
+  /** The question `parent` was asked last, read from its inbox: its id. */
+  const asked = async (parent: string) => {
+    for (let i = 0; i < 100; i++) {
+      const last = inbox.take(parent).messages.filter((m) => m.kind === "approval").at(-1);
+      if (last) return /hive ctl approve (\S+) allow/.exec(last.text)![1]!;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    throw new Error(`${parent} was asked nothing`);
   };
   const supervisedBy = (parent: string, agent = "claude") => made.spawn({ agent, repo: REPO, supervise: true, parent });
-  return { ...made, deps, mailbox, writes, answer, asked, supervisedBy };
+  return { ...made, deps, mailbox, inbox, writes, answer, asked, supervisedBy };
 }
 
-test("an approval for a BUSY supervisor is held, then delivered when it hits its prompt", async () => {
-  // The screenshot bug, end to end: the parent was mid-turn, so the approval banner was
-  // typed into its composer where it could never be read, and the worker blocked until
+test("an approval for a BUSY supervisor waits in its inbox; its terminal is told once it is at its prompt, never what is asked", async () => {
+  // A message typed into a mid-turn composer is never read, and the worker blocks until
   // timeout. (Worker is claude here — pi can no longer be supervised at all.)
-  const { agentChannel, mailbox, writes, answer, supervisedBy } = plane();
+  const { agentChannel, mailbox, inbox, writes, answer, supervisedBy } = plane();
   const worker = await supervisedBy("tile-parent");
   mailbox.setBusy("hm:tile-parent"); // parent is mid-turn — its TUI can't take input
 
@@ -74,11 +84,14 @@ test("an approval for a BUSY supervisor is held, then delivered when it hits its
 
   mailbox.setIdle("hm:tile-parent"); // parent finishes its turn
   await new Promise((r) => setTimeout(r, 400));
-  assert.match(writes.join(""), /APPROVAL — worker .*wants to run write/, "now it can actually be read");
+  assert.match(writes.join(""), /\[hive\] inbox/, "now it is told to read its inbox");
+  assert.doesNotMatch(writes.join(""), /x\.java/, "what the worker would do is never typed");
 
-  // The reqId the parent was told to answer with must be the one that resolves it.
-  const reqId = /hive ctl approve (\S+) allow/.exec(writes.join(""))?.[1];
-  assert.ok(reqId, "banner carries a reqId");
+  // The reqId the parent reads is the one that resolves it.
+  const [message] = inbox.take("tile-parent").messages;
+  assert.match(message!.text, /wants to run write: .*\/x\.java/);
+  const reqId = /hive ctl approve (\S+) allow/.exec(message!.text)?.[1];
+  assert.ok(reqId, "it carries a reqId");
   assert.deepEqual(answer(reqId, "allow"), { answered: true });
   assert.deepEqual(await asked, { decision: "allow" });
 });
@@ -93,24 +106,22 @@ test("approval with a dead supervisor resolves instead of hanging the worker", a
 test("a plain allow covers THIS call; only `always` is remembered", async () => {
   // The supervisor's own words decide. Nothing upgrades "allow" into "always" on its
   // behalf — not for a tool that writes files, not for any tool.
-  const { agentChannel, writes, answer, asked, supervisedBy } = plane();
+  const { agentChannel, inbox, answer, asked, supervisedBy } = plane();
   const worker = await supervisedBy("tile-parent");
   const ask = () => agentChannel("agent.await_approval", { callerTile: `hm:${worker}`, tool_name: "Edit", tool_input: { path: "/x.ts" } }, PERSON);
 
   const first = ask();
-  answer(await asked(0), "allow");
+  answer(await asked("tile-parent"), "allow");
   assert.deepEqual(await first, { decision: "allow" });
 
   // Same worker, same tool: it is asked again, because "allow" was about that one call.
-  const before = writes.length;
   const second = ask();
-  answer(await asked(before), "allow", true);
+  answer(await asked("tile-parent"), "allow", true);
   assert.deepEqual(await second, { decision: "allow" });
 
   // Now it is remembered: the third call resolves without troubling the supervisor.
-  const quiet = writes.length;
   assert.deepEqual(await ask(), { decision: "allow" });
-  assert.equal(writes.length, quiet, "nothing was asked");
+  assert.deepEqual(inbox.take("tile-parent").messages, [], "nothing was asked");
 });
 
 test("spawning a pi worker with supervise is REFUSED — never silently ungated", async () => {
@@ -131,7 +142,7 @@ test("a question ends when the worker stops waiting for it, and an answer after 
   const worker = await supervisedBy("tile-lead");
   const hook = new AbortController();
   const question = agentChannel("agent.await_approval", { tool_name: "Bash", tool_input: { command: "make" } }, { ...fromTile(worker), signal: hook.signal });
-  const reqId = await asked(0);
+  const reqId = await asked("tile-lead");
   hook.abort(); // the worker's hook gave up and asked the agent's own prompt
   assert.deepEqual(await question, { decision: "ask" });
   assert.notEqual(deps.status.get(worker)?.state, "waiting", "the worker is no longer shown waiting");
@@ -139,14 +150,14 @@ test("a question ends when the worker stops waiting for it, and an answer after 
 });
 
 test("the hook of an answered question closing does not end the worker's next question", async () => {
-  const { agentChannel, deps, writes, answer, asked, supervisedBy } = plane();
+  const { agentChannel, deps, answer, asked, supervisedBy } = plane();
   const worker = await supervisedBy("tile-lead");
   const firstHook = new AbortController();
   const first = agentChannel("agent.await_approval", { tool_name: "Edit", tool_input: { file_path: "/a.ts" } }, { ...fromTile(worker), signal: firstHook.signal });
-  answer(await asked(0), "allow");
+  answer(await asked("tile-lead"), "allow");
   await first;
   const second = agentChannel("agent.await_approval", { tool_name: "Edit", tool_input: { file_path: "/b.ts" } }, fromTile(worker));
-  const reqId = await asked(writes.length);
+  const reqId = await asked("tile-lead");
   firstHook.abort(); // its hook lets go after its answer, while the next question waits
   assert.equal(deps.status.get(worker)?.state, "waiting", "still shown waiting on the second");
   answer(reqId, "deny");

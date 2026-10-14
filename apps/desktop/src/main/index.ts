@@ -992,6 +992,7 @@ const control: ControlPlane = new ControlPlane({
   dir: () => app.getPath("userData"),
   waitsChanged: () => agentFeed()?.changed(),
   lineChanged: () => homeChanged(),
+  waitingOf: (bare) => agentFeed()?.waitingOf(bare),
   publish: (event, ...params) => workspaceServer.publish(event, ...params),
   // Used by agent.send and pipe forwarding.
   write: writeTile,

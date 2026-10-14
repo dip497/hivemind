@@ -174,12 +174,31 @@ export interface AgentChanges {
 }
 
 /** An agent's reply to the turn after the last message it was sent (0.23): `text` null when the
- *  turn carried none (`note` says why), it is still working (`timeout`), or its tile closed. */
+ *  turn carried none (`note` says why), it is still working (`timeout`), it stopped to wait on an
+ *  answer (`waiting`, what on, 0.26), or its tile closed. */
 export interface AgentRead {
   text: string | null;
-  finalStatus: "turn" | "timeout" | "closed";
+  finalStatus: "turn" | "timeout" | "closed" | "waiting";
   truncated: boolean;
   note?: string;
+  waiting?: NonNullable<AgentItem["waiting"]>;
+}
+
+/** What another agent has for an agent (0.26): a turn's reply, a report, that it waits on an
+ *  answer, or an approval it asks. */
+export type InboxKind = "reply" | "report" | "waiting" | "approval";
+
+/** One message in an agent's inbox, numbered across the machine in the order they came. */
+export interface InboxMessage {
+  id: number;
+  at: number;
+  /** The tile whose agent it is from, and what it is called. */
+  from: string;
+  name: string;
+  kind: InboxKind;
+  /** The turn of `from` it is the reply of. */
+  turn?: number;
+  text: string;
 }
 
 /** The sessions an agent keeps in a folder, newest first (0.23). */

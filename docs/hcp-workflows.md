@@ -138,7 +138,7 @@ to `hive-work`. Triggers on "orchestrate", "fan out", "run N agents in parallel"
 It teaches the patterns Claude's `Workflow` doc describes, re-expressed in hive tools:
 
 - **Fan-out / gather** — `hive_spawn_agent({prompt, report:true})` × N (fire-and-forget;
-  replies auto-land in your terminal as `[hive] report from <tile>`), keep working,
+  replies wait in your inbox, `hive ctl inbox`), keep working,
   collect. Or `hive_workflow({shape:"fanout"})` for the blocking version.
 - **Pipeline** — `hive_connect(a,b)`, `hive_connect(b,c)`; seed `a`; the chain flows.
 - **Map-reduce** — fan out, then spawn a reducer and `hive_send` it the gathered results.

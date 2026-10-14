@@ -13,6 +13,7 @@ import { useAuthoredAgents } from "./authored-agents.ts";
 // Spawn reads the live catalog: load the published fixtures.
 useAuthoredAgents();
 import { Mailbox } from "@hivemind/host/control/mailbox";
+import { Inbox } from "@hivemind/host/control/inbox";
 import { TurnTracker } from "@hivemind/host/control/turn-tracker";
 import { OutputRecorder } from "@hivemind/host/control/output-recorder";
 import type { AuditRecord } from "@hivemind/workspace-host/intents";
@@ -22,6 +23,7 @@ function dispatcher() {
   const writes: string[] = [];
   const write = (_id: string, d: string) => { writes.push(d); return true; };
   const mailbox = new Mailbox(write, 1);
+  const inbox = new Inbox((to, wanted, rung) => mailbox.deliver(`hm:${to}`, "[hive] inbox", rung, { wanted, atPrompt: true }));
   const turns = new TurnTracker();
   const ws = workspaceDeps();
   const made = makeDispatch({
@@ -32,6 +34,8 @@ function dispatcher() {
     toolsSettings: () => ({ enabledPlugins: ["hivemind/web"], disabledTools: [] }),
     writeToTile: write,
     deliverToTile: (id: string, t: string, onSent?: () => void) => mailbox.deliver(id, t, onSent),
+    inbox,
+    waitingOf: () => undefined,
     spawnAllowed: () => true,
     defaultAgentId: async () => "claude",
     connect: () => true,
@@ -44,7 +48,7 @@ function dispatcher() {
   // A line without its time, which the next test checks on its own.
   const lines = () => ws.audited().map(({ at, ...rest }) => { assert.ok(!Number.isNaN(Date.parse(at))); return rest; });
   const worker = (opts: { supervise?: true } = {}) => made.spawn({ agent: "claude", parent: "tile-lead", repo: REPO, ...opts });
-  return { ...made, turns, ws, writes, lines, worker };
+  return { ...made, turns, ws, inbox, writes, lines, worker };
 }
 
 const person = { kind: "person" } as const;
@@ -70,12 +74,12 @@ test("a report, a question and a review are recorded with who asked, of what and
 });
 
 test("a supervised worker's question is recorded; one the worker's standing answer settles is not", async () => {
-  const { agentChannel, ws, writes, lines, worker } = dispatcher();
+  const { agentChannel, ws, lines, worker } = dispatcher();
   const w = await worker({ supervise: true });
   const ask = () => agentChannel("agent.await_approval", { tool_name: "Edit", tool_input: { file_path: "/x.ts" } }, fromTile(w));
 
   const asked = ask();
-  await until(() => /hive ctl approve (\S+) allow/.test(writes.join("")));
+  await until(() => !!ws.waits.of(w));
   const wait = ws.waits.of(w)!;
   ws.waits.answer(w, wait.since, "allow", { always: true });
   assert.deepEqual(await asked, { decision: "allow" });
@@ -88,13 +92,14 @@ test("a supervised worker's question is recorded; one the worker's standing answ
 });
 
 test("a tile that names another as its caller is refused, which is recorded, and nothing happens; a person may act for any tile", async () => {
-  const { agentChannel, ws, writes, lines, worker } = dispatcher();
+  const { agentChannel, ws, inbox, writes, lines, worker } = dispatcher();
   const w = await worker();
   const other = fromTile("tile-other");
   await assert.rejects(agentChannel("agent.report", { callerTile: `hm:${w}`, message: "forged" }, other), { code: "FORBIDDEN" });
   await assert.rejects(agentChannel("review.open", { callerTile: w, plan: "forged" }, other), { code: "FORBIDDEN" });
   assert.equal(ws.waits.of(w), undefined, "nothing waits");
   assert.deepEqual(writes, [], "nothing was typed");
+  assert.deepEqual(inbox.take("tile-lead").messages, [], "nothing was sent");
   // Its own id, however it is spelled, is itself.
   await agentChannel("agent.report", { callerTile: `hm:${w}`, message: "mine" }, fromTile(w));
   await agentChannel("agent.report", { callerTile: w, message: "for it" }, PERSON);
