@@ -45,11 +45,14 @@ type Tab = "settings" | "readme" | "about";
 const TAB_LABEL: Record<Tab, string> = { settings: "Settings", readme: "Read me", about: "What it can do" };
 
 export function PluginPage({ kind, id }: { kind: string; id: string }) {
-  const plugins = usePlugins(useCatalog());
+  const catalog = useCatalog();
+  const plugins = usePlugins(catalog);
   const p = plugins.find((x) => x.kind === kind && x.id === id);
   const readme = useReadme(p);
   const go = useSettingsNavigate();
   const [chosen, setTab] = useState<Tab | null>(null);
+  // One only HiveHub lists is known once its catalog is.
+  if (!p && !catalog) return <Loading label="Loading HiveHub's catalog" />;
   if (!p) return <p className="settings-empty">This plugin is not here any more. <button type="button" className="settings-link" onClick={() => go("plugins")}>All plugins</button></p>;
   const tabs: Tab[] = p.installed ? ["settings", "readme", "about"] : ["readme", "about"];
   const tab = chosen && tabs.includes(chosen) ? chosen : tabs[0]!;

@@ -92,3 +92,39 @@ test("a session file's first lines give its folder and title: the first record t
   const got = Object.fromEntries((await listSessions(d, { home, cwd: "/r" })).map((s) => [s.id, s.title]));
   expect(got).toEqual({ "s-titled": "Fix flaky tests", "s-prompt": "add a flag" });
 });
+
+test("a folder's older sessions, past the newest the store reads at once, are listed when asked again", async () => {
+  const home = mkdtempSync(join(tmpdir(), "list-older-"));
+  const d = def("history", "history", {
+    list: { lines: 30, cwdPath: "cwd" },
+    resume: { args: ["--resume", "{id}"], exists: "{home}/.claude/projects/*/{id}.jsonl" },
+  });
+  // 220 newer sessions elsewhere, then 30 older ones in /r.
+  for (let i = 0; i < 250; i++) {
+    const cwd = i < 220 ? "/x" : "/r";
+    const dir = join(home, ".claude", "projects", cwd === "/r" ? "-r" : "-x");
+    mkdirSync(dir, { recursive: true });
+    const file = join(dir, `s-${i}.jsonl`);
+    writeFileSync(file, JSON.stringify({ type: "user", cwd }) + "\n");
+    utimesSync(file, 1_000_000 - i, 1_000_000 - i);
+  }
+  await listSessions(d, { home, cwd: "/r" });
+  expect((await listSessions(d, { home, cwd: "/r" })).length).toBe(30);
+});
+
+test("a session file that changed is read again: its new title is listed", async () => {
+  const home = mkdtempSync(join(tmpdir(), "list-changed-"));
+  const dir = join(home, ".claude", "projects", "-r");
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, "s-1.jsonl");
+  const d = def("retitled", "retitled", {
+    list: { lines: 30, cwdPath: "cwd", titlePath: "aiTitle" },
+    resume: { args: ["--resume", "{id}"], exists: "{home}/.claude/projects/*/{id}.jsonl" },
+  });
+  writeFileSync(file, JSON.stringify({ cwd: "/r" }) + "\n");
+  utimesSync(file, 100, 100);
+  expect((await listSessions(d, { home, cwd: "/r" }))[0]?.title).toBeUndefined();
+  writeFileSync(file, JSON.stringify({ cwd: "/r" }) + "\n" + JSON.stringify({ aiTitle: "Speed up the panel" }) + "\n");
+  utimesSync(file, 200, 200);
+  expect((await listSessions(d, { home, cwd: "/r" }))[0]?.title).toBe("Speed up the panel");
+});

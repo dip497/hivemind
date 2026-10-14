@@ -117,3 +117,20 @@ test("a file that changed after it was listed is refused", async () => {
   await expect(entry("view", TILED).getByRole("alert")).toContainText("changed after it was listed");
   expect(fs.existsSync(path.join(xdg, "hivemind/views", TILED))).toBe(false);
 });
+
+test("HiveHub opened again lists what it fetched a moment ago, without waiting on the index", async () => {
+  await hub();
+  await expect(entry("view", QUEUE)).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".settings-dialog")).toHaveCount(0);
+  const index = path.join(registry, "index.json");
+  const listed = fs.readFileSync(index);
+  fs.rmSync(index);
+  try {
+    await hub();
+    await expect(entry("view", QUEUE)).toBeVisible();
+    await expect(page.getByText("Could not load the plugin catalog")).toHaveCount(0);
+  } finally {
+    fs.writeFileSync(index, listed);
+  }
+});
