@@ -37,6 +37,15 @@ const queryClient = new QueryClient({
   },
 });
 
+// The faces the first screen is drawn with, loaded before its first layout: laid out while they
+// load, its text is matched against the system's fonts down each font list, one wait on the browser
+// for each family tried.
+const FIRST_SCREEN_FACES = ['400 1em "Geist Sans"', '500 1em "Geist Sans"', '600 1em "Geist Sans"', '400 1em "JetBrains Mono"', '500 1em "JetBrains Mono"'];
+await Promise.race([
+  Promise.all(FIRST_SCREEN_FACES.map((face) => document.fonts.load(face).catch(() => []))),
+  new Promise((resolve) => setTimeout(resolve, 500)),
+]);
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
