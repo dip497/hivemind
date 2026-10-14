@@ -120,7 +120,7 @@ const SHORTCUTS_ANYWHERE: [string, string][] = [
 ];
 const SHORTCUTS_CANVAS: [string, string][] = [
   ["⌘/Ctrl + B", "Show or hide Layers (⌘ works in a terminal too)"],
-  ["⌘/Ctrl + E", "Cycle views"],
+  ["⌘/Ctrl + E", "Switch views, in any view"],
   ["1", "New terminal"],
   ["2", "New agent"],
   ["3", "File tree"],
