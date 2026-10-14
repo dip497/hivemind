@@ -6,10 +6,10 @@
 //
 // Times are main-thread times: what the person waits for while the app's code runs. Under xvfb the
 // GPU is software, so frame rates are not reported here; perf-canvas-effects.mjs owns those.
-// PERF_RUNS (5), PERF_TERMINALS (6), PERF_LINES (20000) size it.
+// PERF_RUNS (5), PERF_TERMINALS (6), PERF_LINES (20000), PERF_SESSIONS (600) size it.
 import { _electron as electron } from "@playwright/test";
 import { execFileSync } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, rmSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -18,7 +18,9 @@ const out = process.argv[2] ?? "/tmp/perf-app.json";
 const RUNS = Number(process.env.PERF_RUNS) || 5;
 const TERMINALS = Number(process.env.PERF_TERMINALS) || 6;
 const LINES = Number(process.env.PERF_LINES) || 20000;
-const MAIN = path.resolve(import.meta.dirname, "../out/main/index.js");
+// PERF_ONLY=screens: startup and screens, no scrolling.
+const ONLY_SCREENS = process.env.PERF_ONLY === "screens";
+const MAIN = path.resolve(process.env.PERF_MAIN ?? path.join(import.meta.dirname, "../out/main/index.js"));
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "hm-perf-app-"));
 const repo = path.join(root, "repo");
@@ -26,7 +28,42 @@ await fs.mkdir(repo);
 execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
 // What each shell runs: its output, then a line saying it ended. Short to type, so no shell mangles it.
 await fs.writeFile(path.join(repo, "print.sh"), 'for i in $(seq 1 "$2"); do echo "term $1 line $i of the output, padded to look like a build log ........"; done; echo "DONE-$1"\n');
-const env = { ...process.env, XDG_CONFIG_HOME: path.join(root, "config"), HIVEMIND_SHELL_ENV: "0" };
+// A home of its own holding a long agent history: SESSIONS Claude Code sessions over 20 folders
+// across two months, every 20th in this repo, each as long at its start as a real one (~200 KB).
+const SESSIONS = Number(process.env.PERF_SESSIONS ?? 600);
+const home = path.join(root, "home");
+{
+  const filler = "x".repeat(6000);
+  for (let i = 0; i < SESSIONS; i++) {
+    const cwd = i % 20 === 0 ? repo : path.join(root, `elsewhere-${i % 19}`);
+    const dir = path.join(home, ".claude", "projects", cwd.replace(/[^a-zA-Z0-9]/g, "-"));
+    await fs.mkdir(dir, { recursive: true });
+    const id = `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
+    const lines = [
+      { type: "permission-mode", permissionMode: "default", sessionId: id },
+      { type: "user", cwd, sessionId: id, message: { role: "user", content: `session ${i}: make the build faster` } },
+      ...Array.from({ length: 34 }, (_, k) => ({ type: "attachment", cwd, sessionId: id, attachment: { n: k, text: filler } })),
+    ];
+    const file = path.join(dir, `${id}.jsonl`);
+    await fs.writeFile(file, lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
+    const at = new Date(Date.now() - (i + 1) * 2.5 * 3600_000);
+    await fs.utimes(file, at, at);
+  }
+}
+// The Claude Code agent, as HiveHub lists it, saying where it keeps those sessions.
+await fs.mkdir(path.join(root, "config", "hivemind", "agents", "claude"), { recursive: true });
+await fs.writeFile(path.join(root, "config", "hivemind", "agents", "claude", "agent.yaml"), `manifestVersion: 2
+id: claude
+label: Claude
+bin: claude
+enabled: true
+caps: { promptDelivery: argv, turnSignal: false, resume: tile, supervise: human, blockedDetection: false }
+session:
+  list: { lines: 30, cwdPath: cwd, titlePath: [aiTitle, message.content], promptPath: message.content }
+  resume: { args: ["--resume", "{id}"], position: before, exists: "{home}/.claude/projects/*/{id}.jsonl" }
+`);
+process.on("exit", cleanUp);
+const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(root, "config"), HIVEMIND_SHELL_ENV: "0" };
 delete env.ELECTRON_RUN_AS_NODE;
 delete env.HIVE_SETTINGS;
 
@@ -54,6 +91,25 @@ const longTasksDone = (page) => page.evaluate(() => {
   const l = window.__perfLong ?? [];
   window.__perfObs?.disconnect();
   return { count: l.length, total: Math.round(l.reduce((a, b) => a + b, 0)), longest: Math.round(Math.max(0, ...l)) };
+});
+
+/** Main-process time its event loop was held past 50 ms (IPC, terminal output and every window
+ *  wait on it), since the last `mainStalls`; the first call starts counting. */
+const mainStalls = (app) => app.evaluate(() => {
+  const g = globalThis;
+  if (!g.__perfStall) {
+    g.__perfStall = { total: 0, longest: 0 };
+    let last = performance.now();
+    setInterval(() => {
+      const now = performance.now();
+      const late = now - last - 20;
+      if (late > 50) { g.__perfStall.total += late; g.__perfStall.longest = Math.max(g.__perfStall.longest, late); }
+      last = now;
+    }, 20).unref();
+  }
+  const s = g.__perfStall;
+  g.__perfStall = { total: 0, longest: 0 };
+  return { total: Math.round(s.total), longest: Math.round(s.longest) };
 });
 
 
@@ -108,6 +164,7 @@ for (let run = 0; run < RUNS; run++) {
   const r = {};
   const { app, page } = await launch();
   const created = await app.evaluate(() => process.getCreationTime());
+  await mainStalls(app);
   // Startup: the process, the page, the board drawn, every terminal's restored output on screen.
   const nav = await page.evaluate(() => {
     const n = performance.getEntriesByType("navigation")[0];
@@ -123,33 +180,100 @@ for (let run = 0; run < RUNS; run++) {
     toBoard: Math.round(board - created),
     toTerminalsShown: Math.round(shown - created),
   };
-  // Let startup's own work settle before timing screens.
+  // Let startup's own work settle before timing screens; what held main meanwhile counts as startup's.
   await page.waitForTimeout(1500);
+  r.startup.mainStalls = (await mainStalls(app)).total;
 
   // Screens: asked for → drawn, the first time this launch and once more.
   const open = async (name, ask, ready, close) => {
     for (const time of ["first", "again"]) {
       await longTasks(page);
+      await mainStalls(app);
       const t0 = await page.evaluate(() => performance.timeOrigin + performance.now());
       await ask();
       const t1 = await whenTrue(page, ready);
       const lt = await longTasksDone(page);
-      (r.screens ??= {})[`${name} ${time}`] = { ms: Math.round(t1 - t0), longTasks: lt.total };
+      (r.screens ??= {})[`${name} ${time}`] = { ms: Math.round(t1 - t0), longTasks: lt.total, mainStalls: (await mainStalls(app)).total };
       await close();
       await page.waitForTimeout(300);
     }
   };
-  await open("settings",
-    () => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "general" } }))),
-    () => (document.querySelector("[data-settings-body]")?.textContent.length ?? 0) > 20 && performance.timeOrigin + performance.now(),
-    () => page.keyboard.press("Escape"));
-  await open("plugins",
-    () => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "plugins" } }))),
+  const now = () => performance.timeOrigin + performance.now();
+  const settings = (pageId) => () => page.evaluate((p) => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: p } })), pageId);
+  /** In the page: the Settings page drawn, with nothing in it still loading. */
+  const settingsDrawn = () => {
+    const body = document.querySelector("[data-settings-body]");
+    return !!body && body.textContent.length > 20 && !body.querySelector("[role=status][aria-live]") && performance.timeOrigin + performance.now();
+  };
+  const escape = () => page.keyboard.press("Escape");
+  await open("settings", settings("general"), settingsDrawn, escape);
+  for (const p of ["profile", "appearance", "shortcuts", "connect", "api", "browser", "servers", "about"]) await open(`settings ${p}`, settings(p), settingsDrawn, escape);
+  await open("plugins", settings("plugins"),
     () => document.querySelectorAll(".plugin-rows > *").length > 3 && performance.timeOrigin + performance.now(),
-    () => page.keyboard.press("Escape"));
+    escape);
+  // HiveHub's catalog, from the Plugins page.
+  await open("hivehub",
+    async () => { await settings("plugins")(); await page.locator("[data-plugins-scope=hub]").click(); },
+    () => document.querySelectorAll("[data-catalog-plugin]").length > 0 && performance.timeOrigin + performance.now(),
+    async () => { await page.locator("[data-plugins-scope=installed]").click(); await escape(); });
+  await open("plugin page", settings("plugin:agent:claude"),
+    () => !!document.querySelector("[data-plugin-page] [role=tabpanel]") && performance.timeOrigin + performance.now(), escape);
+  // A plugin HiveHub lists and this app has not installed: its page and its README.
+  await open("hivehub plugin page", settings("plugin:view:@dip497/queue"),
+    () => {
+      const panel = document.querySelector("[data-plugin-page] [role=tabpanel]");
+      return !!panel && panel.textContent.length > 10 && !panel.querySelector("[role=status][aria-live]") && performance.timeOrigin + performance.now();
+    }, escape);
+  await open("add menu", () => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-add"))),
+    () => document.querySelectorAll("[data-add-menu] [data-board-choice]").length > 0 && performance.timeOrigin + performance.now(), escape);
+  await open("machines", () => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:machines", { detail: { kind: "manage" } }))),
+    () => (document.querySelector("[role=dialog]")?.textContent.length ?? 0) > 40 && performance.timeOrigin + performance.now(), escape);
+  // The Layers panel, hidden then shown again, and each of its panes.
+  const toggleLayers = (shown) => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-layers")))
+    .then(() => whenTrue(page, (want) => !!document.querySelector("aside[aria-label=Layers] [data-layers-pane]") === want && performance.timeOrigin + performance.now(), shown));
+  if (await page.evaluate(() => !!document.querySelector("aside[aria-label=Layers]"))) await toggleLayers(false);
+  await open("layers", () => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-layers"))),
+    () => !!document.querySelector("aside[aria-label=Layers] [data-layers-pane]") && performance.timeOrigin + performance.now(),
+    () => toggleLayers(false));
+  await toggleLayers(true);
+  const pane = (p, ready) => open(`layers ${p}`, () => page.locator(`[data-layers-rail=${p}]`).click(), ready, () => page.locator("[data-layers-rail=tiles]").click());
+  await pane("recents", () => document.querySelectorAll("[data-layers-recent]").length > 0 && performance.timeOrigin + performance.now());
+  await pane("machines", () => !!document.querySelector("[data-layers-pane=machines] [data-machine-group]") && performance.timeOrigin + performance.now());
+  // What Recents reads: this repo's past sessions, asked of main as the panel asks.
+  for (const time of ["first", "again"]) {
+    await mainStalls(app);
+    const ms = await page.evaluate(async (dir) => { const t = performance.now(); await window.hive.viewSessions("claude", dir); return Math.round(performance.now() - t); }, repo);
+    const shown = await page.evaluate((dir) => window.hive.viewSessions("claude", dir).then((l) => l.length), repo);
+    (r.screens ??= {})[`recents read ${time}`] = { ms, sessions: shown, mainStalls: (await mainStalls(app)).total };
+  }
+  // The Windows view, and the canvas again.
+  await open("windows view", () => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "windows" } }))),
+    () => !!document.querySelector("[data-community-view][data-community-ready='1'] [data-community-slot] .xterm") && performance.timeOrigin + performance.now(),
+    async () => {
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
+      await whenTrue(page, (n) => document.querySelectorAll(".react-flow__node-terminal").length === n && performance.timeOrigin + performance.now(), TERMINALS);
+    });
+  // A new terminal: asked for → its shell's prompt on screen; then closed from Layers, so the board stays as it was.
+  for (const time of ["first", "again"]) {
+    await longTasks(page);
+    await mainStalls(app);
+    const before = await page.evaluate(() => [...document.querySelectorAll(".react-flow__node-terminal")].map((n) => n.getAttribute("data-id")));
+    const t0 = await page.evaluate(now);
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
+    const t1 = await whenTrue(page, (had) => {
+      const n = [...document.querySelectorAll(".react-flow__node-terminal")].find((x) => !had.includes(x.getAttribute("data-id")));
+      return !!n && !!(n.querySelector(".xterm")?.parentElement?.__hmScreen?.() ?? "").trim() && performance.timeOrigin + performance.now();
+    }, before);
+    const lt = await longTasksDone(page);
+    r.screens[`new terminal ${time}`] = { ms: Math.round(t1 - t0), longTasks: lt.total, mainStalls: (await mainStalls(app)).total };
+    const added = await page.evaluate((had) => [...document.querySelectorAll(".react-flow__node-terminal")].map((n) => n.getAttribute("data-id")).find((id) => !had.includes(id)), before);
+    await page.locator(`[data-layer-tile="${added}"] [data-layer-tile-menu]`).click({ force: true });
+    await page.getByRole("menuitem", { name: /^Close tile/ }).click();
+    await whenTrue(page, (n) => document.querySelectorAll(".react-flow__node-terminal").length === n && performance.timeOrigin + performance.now(), TERMINALS);
+  }
 
   // Content: a terminal's older output, scrolled back to its start.
-  {
+  if (!ONLY_SCREENS) {
     // The terminal fully inside the window, selected with a click as a person selects it.
     const index = await page.evaluate(() => [...document.querySelectorAll(".react-flow__node-terminal")].findIndex((n) => {
       const r = n.getBoundingClientRect();
@@ -172,7 +296,7 @@ for (let run = 0; run < RUNS; run++) {
   }
 
   // Canvas: wheel-pan across the board.
-  {
+  if (!ONLY_SCREENS) {
     const pane = page.locator(".react-flow__pane");
     const box = await pane.boundingBox();
     await page.mouse.move(box.x + 20, box.y + box.height - 20);
@@ -207,12 +331,15 @@ result.summary = Object.fromEntries([...paths].map(([p, vs]) => {
 }));
 await fs.writeFile(out, JSON.stringify(result, null, 2));
 console.log(JSON.stringify(result.summary, null, 1));
-// The terminal daemons this run's profile started (each serves a socket under `root`), stopped.
-for (const pid of readdirSync("/proc").filter((p) => /^\d+$/.test(p))) {
-  let argv = [];
-  try { argv = readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0"); } catch { continue; }
-  if (argv.some((a) => /pty-daemon\.(js|ts)$/.test(a)) && argv.some((a) => a.startsWith(root + path.sep))) {
-    try { process.kill(Number(pid), "SIGKILL"); } catch { /* gone */ }
+// The terminal daemons this run's profile started (each serves a socket under `root`), stopped,
+// and its files removed: at the end, or when a step fails.
+function cleanUp() {
+  for (const pid of readdirSync("/proc").filter((p) => /^\d+$/.test(p))) {
+    let argv = [];
+    try { argv = readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0"); } catch { continue; }
+    if (argv.some((a) => /pty-daemon\.(js|ts)$/.test(a)) && argv.some((a) => a.startsWith(root + path.sep))) {
+      try { process.kill(Number(pid), "SIGKILL"); } catch { /* gone */ }
+    }
   }
+  rmSync(root, { recursive: true, force: true });
 }
-await fs.rm(root, { recursive: true, force: true }).catch(() => {});
