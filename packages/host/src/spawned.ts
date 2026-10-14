@@ -1,7 +1,7 @@
 /**
- * Tiles the control plane spawns on a host with no window (`hive host`): nobody lays one out and
- * opens it, so the host starts its session itself, in the folder of the frame it went to, and
- * watches it from its first byte (its output is recorded and it runs on whoever shows it). It
+ * Tiles the control plane spawns: the host starts each session itself, in the folder of the frame
+ * it went to, and watches it from its first byte (its output is recorded and it runs on whoever
+ * shows it; a window that shows it joins it, so none can start it without its task). It
  * starts the agent as a window would (agent-start.ts): the first task on its command line where
  * the agent takes one there, else typed once its screen settles, and a startup screen its launch
  * flags already answered skipped.
@@ -59,7 +59,7 @@ export async function startSpawned(o: SpawnedOptions, spawn: { tileId: string; r
       const keys = start.mayDismiss(now) ? start.dismiss(screen, now) : null;
       if (keys) typeKeys((bytes) => o.write(ptyId, bytes), keys);
       if (task && start.settled(dirty, o.status(tile.id), screen)) {
-        start.typeTask((data, paste) => o.write(ptyId, data, paste), task, () => o.status(tile.id));
+        start.typeTask((data, paste) => o.write(ptyId, data, paste), task, async () => ({ status: o.status(tile.id), screen: (await o.screen(ptyId)) ?? "" }));
         task = undefined;
       }
       dirty = false;

@@ -129,6 +129,10 @@ export function screenPty(tileId: string, cb: (replay: string | null) => void, l
   local.screen(tileId, cb, lines);
   return true;
 }
+/** The session's screen as text, line by line; null when this client does not hold it. */
+export function viewportPty(tileId: string): Promise<string | null> {
+  return local.has(tileId) ? local.viewport(tileId) : Promise.resolve(null);
+}
 export function writePty(tileId: string, data: string, paste?: boolean): void {
   local.write(tileId, data, paste);
 }

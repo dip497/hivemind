@@ -47,8 +47,8 @@ export interface ControlPlaneOptions {
   write(ptyId: string, data: string, paste?: boolean): boolean;
   /** Whether a tile's agent reads a message typed while it works (its file says `steer`). */
   steers?(bareTile: string): boolean;
-  /** A tile the control plane spawned, written to its workspace: the embedder lays it out (a
-   *  window) or starts it (a host). Every client has been told of it. */
+  /** A tile the control plane spawned, written to its workspace: the embedder starts its session,
+   *  with `prompt` its first task. Every client has been told of it, and lays it out. */
   spawned(spawn: { tileId: string; repo: string; prompt?: string; background: boolean }): void;
   /** Asked once, when the first verb comes or the socket opens. */
   methods(): EmbedderDeps;
@@ -100,8 +100,6 @@ export class ControlPlane {
   private readonly pipes = new PipeManager();
   /** Spawn wires drawn now (child → parent): what a client that opens late draws. */
   private readonly spawnWires = new Map<string, string>();
-  /** Tiles the control plane spawned whose session nobody has started yet. */
-  private readonly unstarted = new Set<string>();
   private readonly reaper: SubagentReaper;
   /** Terminals an answer's keys are going into, and the writes held until its last is in. */
   private readonly typing = new Map<string, Array<() => void>>();
@@ -208,10 +206,9 @@ export class ControlPlane {
       setSupervise: (id, spec) => { if (spec) this.supervise.set(id, spec); else this.supervise.delete(id); },
       waits: this.waits,
       status: this.status,
-      announceSpawn: (spawn) => {
-        this.unstarted.add(spawn.tileId);
-        o.publish("tile.opened", spawn);
-        o.spawned(spawn);
+      announceSpawn: ({ prompt, ...opened }) => {
+        o.publish("tile.opened", opened);
+        o.spawned({ ...opened, prompt });
       },
     });
     return this.made;
@@ -265,12 +262,6 @@ export class ControlPlane {
     }
   }
 
-  /** Whether starting the session of `bare` is the control plane's doing (it spawned the tile),
-   *  not the opener's; answered once. */
-  takeSpawned(bare: string): boolean {
-    return this.unstarted.delete(bare);
-  }
-
   /** The pipes between agents and the spawn wires drawn now, for a client that opens late. */
   links(): { pipes: Array<{ src: string; dst: string }>; spawns: Array<{ parent: string; child: string }> } {
     return {
@@ -294,7 +285,6 @@ export class ControlPlane {
   /** The tile `tileId` is gone for good: nothing more is asked of its status or its agent. */
   forget(tileId: string): void {
     const bare = toBareId(tileId);
-    this.unstarted.delete(bare);
     this.status.forget(bare);
     this.agentOf.delete(bare);
     this.lines.delete(bare);

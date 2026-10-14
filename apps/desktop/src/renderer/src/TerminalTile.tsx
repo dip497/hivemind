@@ -940,7 +940,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             if (agent && peekWork(tileId) && starting.settled(agentDirty, statusOf(tileId), readScreen())) {
               const work = claimWork(tileId);
               if (work) {
-                starting.typeTask((data, paste) => window.hive.ptyWrite(ptyId, data, paste), work, () => statusOf(tileId));
+                starting.typeTask((data, paste) => window.hive.ptyWrite(ptyId, data, paste), work, async () => ({ status: statusOf(tileId), screen: readScreen() }));
                 void window.hive.diagLog?.(`[work-deliver] tile=${tileId} agent=${agent} settled`);
               }
             }

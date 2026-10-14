@@ -273,6 +273,10 @@ export function screenRemotePty(tileId: string, cb: (replay: string | null) => v
   ep.screen(tileId, cb, lines);
   return true;
 }
+/** A daemon-backed remote session's screen as text, line by line; null for one with no screen kept. */
+export function viewportRemotePty(tileId: string): Promise<string | null> {
+  return daemonTiles.get(tileId)?.viewport(tileId) ?? Promise.resolve(null);
+}
 export function pauseRemotePty(tileId: string): void {
   const ep = daemonTiles.get(tileId);
   if (ep) ep.pause(tileId); else remotePtys.get(tileId)?.pause();

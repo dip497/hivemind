@@ -235,7 +235,6 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   const terminals = new Terminals({
     intents,
     relay: { record: (tile, data) => control.recorder.record(tile, data), screenPrefix: REATTACH_RESET },
-    askedByHost: (bare) => control.takeSpawned(bare),
     publish: (event, ...params) => api.publish(event, ...params),
     who,
     // A terminal on a participant's machine is typed into and sized there, by its person (M4).
@@ -376,7 +375,6 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     steers: (bare) => !!manifestOf(heldBoards(store), bare)?.steer,
     // Nobody lays a spawned tile out: the host starts it, once it is in its workspace.
     spawned: (spawn) => {
-      control.takeSpawned(spawn.tileId);
       queueMicrotask(() => void startSpawned({
         store, terminals, holds,
         write: (ptyId, data, paste) => sessions.write(ptyId, data, paste),

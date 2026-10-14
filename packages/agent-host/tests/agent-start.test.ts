@@ -59,10 +59,13 @@ test("a quiet screen the agent has drawn nothing on is not its prompt: the task 
   expect(blank.settled(false, "idle", "")).toBe(true);
 });
 
+/** What a look at the agent sees: its status, and a composer holding the task. */
+const holding = (status: string | undefined, screen = "❯ fix the\n  tests") => async () => ({ status, screen });
+
 test("a first task's Enter goes again at each look while the agent is idle, until its turn is seen, and never after", async () => {
   const typed: Array<[string, boolean | undefined]> = [];
   const seen: Array<string | undefined> = [undefined, "idle", "working", "idle", "idle"];
-  new AgentStart(undefined, t0).typeTask((data, paste) => typed.push([data, paste]), "fix the tests", () => seen.shift());
+  new AgentStart(undefined, t0).typeTask((data, paste) => typed.push([data, paste]), "fix the tests", () => holding(seen.shift())());
   expect(typed).toEqual([["fix the tests", true]]);
   await wait(SUBMIT_DELAY_MS + 50);
   expect(typed.length).toBe(2);
@@ -74,11 +77,20 @@ test("a first task's Enter goes again at each look while the agent is idle, unti
 test("a first task's Enter is not pressed again once the person types, nor while the agent waits on them", async () => {
   const theirs: string[] = [];
   const start = new AgentStart(undefined, t0);
-  start.typeTask((data) => theirs.push(data), "fix the tests", () => "idle");
+  start.typeTask((data) => theirs.push(data), "fix the tests", holding("idle"));
   start.touch();
   const asking: string[] = [];
-  new AgentStart(undefined, t0).typeTask((data) => asking.push(data), "fix the tests", () => "question");
+  new AgentStart(undefined, t0).typeTask((data) => asking.push(data), "fix the tests", holding("question"));
   await wait(SPAWN_SUBMIT_RETRY_MS * 2 + 100);
   expect(theirs).toEqual(["fix the tests", "\r"]);
   expect(asking).toEqual(["fix the tests", "\r"]);
+}, 15_000);
+
+test("a first task's Enter is not pressed again on a screen that no longer shows the task", async () => {
+  // A trust chooser its status misreads as idle: an Enter there would pick its first option.
+  const chooser = "Trust this folder?\n> 1. Trust this folder\n  2. Exit";
+  const typed: string[] = [];
+  new AgentStart(undefined, t0).typeTask((data) => typed.push(data), "fix the tests", holding("idle", chooser));
+  await wait(SPAWN_SUBMIT_RETRY_MS * 2 + 100);
+  expect(typed).toEqual(["fix the tests", "\r"]);
 }, 15_000);

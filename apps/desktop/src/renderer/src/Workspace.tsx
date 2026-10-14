@@ -25,7 +25,7 @@
  * The work lives in extracted modules/hooks that destructure a `ctx` object —
  * keep it that way (this file was decomposed out of a 3147-LOC god component).
  */
-import { clearWork, queueWork } from "./work-queue";
+import { clearWork } from "./work-queue";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
@@ -810,13 +810,12 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
     setSelectedFrameId, setTiles, setSpawnPick, focusTile, openFileInTile, renameTile,
   });
-  // Tiles the control plane opens: announced before they reach the layout (the prompt to start
-  // each with, and whether to bring it forward), then laid out as they arrive.
+  // Tiles the control plane opens, which its host starts: announced before they reach the layout
+  // (whether to bring each forward), then laid out as they arrive.
   const arrivals = useRef(new Map<string, { background: boolean; near?: string }>());
   useEffect(() => {
-    const off = window.hive.onHcpSpawned(({ tileId, repo, prompt, background, near }) => {
+    const off = window.hive.onHcpSpawned(({ tileId, repo, background, near }) => {
       if (repo !== persistKey) return;
-      if (prompt) queueWork(tileId, prompt);
       if (background) markBackgroundTile(tileId);
       arrivals.current.set(tileId, { background, near });
     });

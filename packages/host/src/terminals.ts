@@ -73,9 +73,6 @@ export interface TerminalsOptions {
   backend: SessionBackend;
   intents: Pick<Intents, "perform">;
   relay: SessionRelayOptions;
-  /** Whether the host asked for this session itself (a control-plane spawn), so starting it is
-   *  not the opener's intent. Asked once per start. */
-  askedByHost?(bareTile: string): boolean;
   /** The terminals whose activity a client wants. */
   watchActivity?(tiles: string[]): void;
   /** An end that failed, which no client is told of. */
@@ -246,7 +243,7 @@ export class Terminals {
     const bare = toBareId(tile);
     const out = this.outputOf(tile);
     const run = () => this.opts.backend.start(opts, out);
-    const start = () => opts.attachOnly || this.opts.askedByHost?.(bare)
+    const start = () => opts.attachOnly
       ? run()
       : this.opts.intents.perform(from.actor, { verb: "terminal.open", target: bare, detail: named(path.basename(opts.cmd)) }, run);
     let opened = this.openers.get(tile);

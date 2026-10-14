@@ -175,9 +175,9 @@ export interface MethodDeps {
   shownWorkspace: () => { repo: string; frame: string | null } | null;
   /** The launch options the user saved for an agent. */
   launchOptions: (agentId: string) => SpawnOptions;
-  /** Tell the windows about a tile the control plane is opening, before it reaches the layout:
-   *  the prompt to start it with, and whether to bring it forward. */
-  announceSpawn: (spawn: TileOpened) => void;
+  /** Tell the windows about a tile the control plane is opening, before it reaches the layout
+   *  (whether to bring it forward), and start it with `prompt`. */
+  announceSpawn: (spawn: TileOpened & { prompt?: string }) => void;
   /** Every session's status, as its host reports it. */
   status: Pick<StatusStore, "get">;
   /** End the session a tile runs (by its pty id), as its window's kill does. */

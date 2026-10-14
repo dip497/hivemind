@@ -347,7 +347,7 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `widget.pressed` | `repo`, `id`, `{action}` or `{click: true}` | to the window that runs the workspace's widgets, a press made elsewhere (0.19) |
 | `link.pipe` | `{src, dst, connected}` (`dst` null: every pipe from `src`) | to every client, as a pipe between agents is connected or cut |
 | `link.spawn` | `{child, parent, connected}` (`parent` null: every wire touching `child`) | to every client, as an agent spawns another, or the tile goes |
-| `tile.opened` | `{tileId, repo, prompt?, background}` | to every client, as the control plane opens a tile, before it reaches the layout: a client showing `repo` starts it |
+| `tile.opened` | `{tileId, repo, background, near?}` | to every client, as the control plane opens a tile, before it reaches the layout: its host starts it, with its first task; a client showing `repo` lays it out |
 | `terminal.data` | `tile`, `data` | to each client that shows the terminal, its output in batches; a screen the host sends in place of what the client shows starts with `ESC c` |
 | `terminal.exit` | `tile`, `{code, signal?}` | to each client that showed it, as its session ends |
 | `terminal.activity` | `{[tile]: 0..3}` | to every client, as watched terminals' output gets busier or quieter |

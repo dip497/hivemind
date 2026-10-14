@@ -29,13 +29,12 @@ export interface SpawnChange {
   connected: boolean;
 }
 
-/** The control plane opened a tile, before it reaches the layout: a client that shows `repo`
- *  starts it with `prompt`, brings it forward unless it is a `background` worker, and lays it out
- *  beside `near`, the agent tile that opened it, when both share a frame. */
+/** The control plane opened a tile, before it reaches the layout, and its host starts it: a client
+ *  that shows `repo` brings it forward unless it is a `background` worker, and lays it out beside
+ *  `near`, the agent tile that opened it, when both share a frame. */
 export interface TileOpened {
   tileId: string;
   repo: string;
-  prompt?: string;
   background: boolean;
   near?: string;
 }

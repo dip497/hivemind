@@ -45,7 +45,7 @@ import { addMachine, checkMachine, deviceStatus, editMachine, initMachines, inst
 import { deviceSessions } from "@hivemind/host/device-sessions";
 import { remoteTarget } from "@hivemind/host/remote/targets";
 import {
-  spawnRemotePty, writeRemotePty, resizeRemotePty, repaintRemotePty, killRemotePty, hasRemotePty, screenRemotePty, remoteKeepsScreen,
+  spawnRemotePty, writeRemotePty, resizeRemotePty, repaintRemotePty, killRemotePty, hasRemotePty, screenRemotePty, remoteKeepsScreen, viewportRemotePty,
   pauseRemotePty, resumeRemotePty, detachRemotePty, setRemoteEventSink,
 } from "./remote/pty.js";
 import { remoteConns } from "@hivemind/host/remote/conn";
@@ -89,6 +89,7 @@ import { HANDED_OFF, handOff } from "@hivemind/host/hand-off";
 import { deviceFolders } from "@hivemind/host/device-files";
 import { agents } from "@hivemind/host/agents";
 import { Terminals, type SessionOutput } from "@hivemind/host/terminals";
+import { startSpawned } from "@hivemind/host/spawned";
 import { Layouts, type Shown } from "@hivemind/host/store";
 import { presence } from "@hivemind/host/presence";
 import { widgets } from "@hivemind/host/widgets";
@@ -997,8 +998,17 @@ const control: ControlPlane = new ControlPlane({
   // Used by agent.send and pipe forwarding.
   write: writeTile,
   steers: (bare) => !!manifestOf(heldBoards(workspaceStore()), bare)?.steer,
-  // A window lays a spawned tile out, and starts its session.
-  spawned: () => {},
+  // The host starts a spawned tile, its task on the agent's command line where it takes one there:
+  // a window that shows it joins it, so whichever opens it first, the agent gets its task.
+  spawned: (spawn) => queueMicrotask(() => void startSpawned({
+    store: workspaceStore(),
+    terminals,
+    holds: (ptyId) => onYourDevices.holds(ptyId) || hasRemotePty(ptyId) || hasSession(ptyId),
+    write: (ptyId, data, paste) => void writeTile(ptyId, data, paste),
+    status: (bare) => { const s = control.status.get(bare); return s && tileStatusOf(s).status; },
+    screen: (ptyId) => (hasRemotePty(ptyId) ? viewportRemotePty(ptyId) : ptyDaemon.viewportPty(ptyId)),
+    onWarn: (m) => console.warn(`[hcp] ${m}`),
+  }, spawn)),
   windowsUp: () => openWindows().length > 0,
   // Every verb routes through the boot scan first: spawn resolves the agent by id and other verbs
   // read its capabilities, so none may run against a half-set catalog.
@@ -1108,7 +1118,6 @@ const terminals = new Terminals({
     // the batching (backgroundThrottling is off: a backgrounded agent must keep streaming).
     hidden: () => !tabsOpen() && BrowserWindow.getAllWindows().every((w) => w.isDestroyed() || w.isMinimized() || !w.isVisible()),
   },
-  askedByHost: (bare) => control.takeSpawned(bare),
   // Who holds each terminal's keyboard, and each session's size, told to every client (M2).
   publish: (event, ...params) => workspaceServer.publish(event, ...params),
   who: whoIs,

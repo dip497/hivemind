@@ -17,14 +17,13 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-terminals-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 let logs = 0;
 
-function host(opts: { askedByHost?: (bare: string) => boolean; hidden?: () => boolean; screen?: string } = {}) {
+function host(opts: { hidden?: () => boolean; screen?: string } = {}) {
   const calls: string[] = [];
   const outputs = new Map<string, SessionOutput>();
   const file = path.join(tmp, `audit-${logs++}.jsonl`);
   const terminals = new Terminals({
     intents: new Intents(new AuditLog({ file })),
     relay: { record: () => {}, screenPrefix: "", hidden: opts.hidden },
-    askedByHost: opts.askedByHost,
     backend: {
       start: async (o, out) => { calls.push(`start ${o.tileId}`); outputs.set(o.tileId, out); return { pid: 7 }; },
       write: (t, d) => calls.push(`write ${t} ${d}`),
@@ -77,14 +76,13 @@ test("a session is started once, by the first client to open it; every client sh
   assert.deepEqual(h.calls, ["start hm:t1"]);
 });
 
-test("starting a session is its opener's intent; showing one the host holds, or one the host asked for, is not", async () => {
-  const h = host({ askedByHost: (bare) => bare === "t3" });
+test("starting a session is its opener's intent; showing one the host holds is not", async () => {
+  const h = host();
   const a = h.client();
   await h.open(a, "hm:t1");
   await h.open(a, "hm:t2", { attachOnly: true });
-  await h.open(a, "hm:t3");
   assert.deepEqual(h.audited(), ["terminal.open t1 ok"]);
-  assert.deepEqual(h.calls, ["start hm:t1", "start hm:t2", "start hm:t3"]);
+  assert.deepEqual(h.calls, ["start hm:t1", "start hm:t2"]);
 });
 
 test("showing a session need not say where or what it runs; opening one to start it must", async () => {

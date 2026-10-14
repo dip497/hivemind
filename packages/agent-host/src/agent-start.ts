@@ -77,24 +77,31 @@ export class AgentStart {
   }
 
   /** Type a first task: pasted, then Enter on its own (a TUI can drop a newline that comes with
-   *  the text). A fresh TUI can drop that Enter too, so while the agent is still idle Enter goes
-   *  again at each look, until its turn is seen: never while it works or waits on the person, nor
-   *  once the person has typed. The text is never typed twice: an agent can hold keys typed while
-   *  it boots. */
-  typeTask(write: (data: string, paste?: boolean) => void, task: string, status: () => string | null | undefined): void {
+   *  the text). A fresh TUI can drop that Enter too, so Enter goes again at each look while the
+   *  agent is idle with the task still in its composer, until its turn is seen: never while it
+   *  works or waits on the person, nor once the person has typed, nor on a screen that no longer
+   *  shows the task (a chooser misread as idle would take that Enter as its answer). The text is
+   *  never typed twice: an agent can hold keys typed while it boots. */
+  typeTask(write: (data: string, paste?: boolean) => void, task: string, look: () => Promise<{ status: string | null | undefined; screen: string }>): void {
     write(task, true);
     setTimeout(() => write("\r"), SUBMIT_DELAY_MS);
+    const shown = composerStart(task);
     let left = SUBMIT_LOOKS;
     let turned = false;
-    const look = (): void => {
+    const again = async (): Promise<void> => {
       if (this.touched || left-- <= 0) return;
-      const now = status();
-      if (now === "exited") return;
-      if (now && now !== "idle") turned = true;
+      const { status, screen } = await look();
+      if (status === "exited" || this.touched) return;
+      if (status && status !== "idle") turned = true;
       else if (turned) return;
-      else write("\r");
-      setTimeout(look, SPAWN_SUBMIT_RETRY_MS).unref?.();
+      else if (oneLine(screen).includes(shown)) write("\r");
+      setTimeout(() => void again(), SPAWN_SUBMIT_RETRY_MS).unref?.();
     };
-    setTimeout(look, SPAWN_SUBMIT_RETRY_MS).unref?.();
+    setTimeout(() => void again(), SPAWN_SUBMIT_RETRY_MS).unref?.();
   }
 }
+
+/** Text with every run of whitespace one space. */
+const oneLine = (text: string): string => text.replace(/\s+/g, " ");
+/** As much of a task as any composer shows on one line: its first words. */
+const composerStart = (task: string): string => oneLine(task).trim().slice(0, 20);
