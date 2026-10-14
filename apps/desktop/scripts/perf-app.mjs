@@ -6,7 +6,9 @@
 //
 // Times are main-thread times: what the person waits for while the app's code runs. Under xvfb the
 // GPU is software, so frame rates are not reported here; perf-canvas-effects.mjs owns those.
-// PERF_RUNS (5), PERF_TERMINALS (6), PERF_LINES (20000), PERF_SESSIONS (600) size it.
+// PERF_RUNS (5), PERF_TERMINALS (6), PERF_LINES (20000), PERF_SESSIONS (600) size it. PERF_OUT names
+// the build folders beside out/ to measure, comma-separated (out-before,out): each run launches every
+// one in turn on the same board, so a busy machine weighs on all alike.
 import { _electron as electron } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, rmSync } from "node:fs";
@@ -18,9 +20,11 @@ const out = process.argv[2] ?? "/tmp/perf-app.json";
 const RUNS = Number(process.env.PERF_RUNS) || 5;
 const TERMINALS = Number(process.env.PERF_TERMINALS) || 6;
 const LINES = Number(process.env.PERF_LINES) || 20000;
-// PERF_ONLY=screens: startup and screens, no scrolling.
+// PERF_ONLY=screens: startup and screens, no scrolling. PERF_ONLY=startup: startup alone.
 const ONLY_SCREENS = process.env.PERF_ONLY === "screens";
-const MAIN = path.resolve(process.env.PERF_MAIN ?? path.join(import.meta.dirname, "../out/main/index.js"));
+const ONLY_STARTUP = process.env.PERF_ONLY === "startup";
+const BUILDS = process.env.PERF_OUT ? process.env.PERF_OUT.split(",") : [null];
+const MAINS = BUILDS.map((b) => path.resolve(b ? path.join(import.meta.dirname, "..", b, "main/index.js") : process.env.PERF_MAIN ?? path.join(import.meta.dirname, "../out/main/index.js")));
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "hm-perf-app-"));
 const repo = path.join(root, "repo");
@@ -67,8 +71,8 @@ const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(root, "conf
 delete env.ELECTRON_RUN_AS_NODE;
 delete env.HIVE_SETTINGS;
 
-const launch = async () => {
-  const app = await electron.launch({ args: [MAIN, "--no-sandbox"], cwd: repo, env });
+const launch = async (main = MAINS[0]) => {
+  const app = await electron.launch({ args: [main, "--no-sandbox"], cwd: repo, env });
   const page = await app.firstWindow();
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1600, 1000));
   return { app, page };
@@ -127,10 +131,38 @@ const visibleDone = () => {
 const screenText = (page) => page.evaluate(() => [...document.querySelectorAll(".xterm")]
   .map((x) => x.parentElement?.__hmScreen?.() ?? "").join("\n"));
 
-// The board: TERMINALS shells, each having printed LINES lines, and a note.
+/** CPU time (ms) the app's processes have used so far, by kind: main (`pid`), its windows'
+ *  renderers, and the GPU process (software GL under xvfb, so not the app's own work). */
+const cpuOf = (pid) => {
+  const stats = new Map();
+  for (const p of readdirSync("/proc").filter((x) => /^\d+$/.test(x))) {
+    try {
+      const stat = readFileSync(`/proc/${p}/stat`, "utf8");
+      const f = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+      const kind = readFileSync(`/proc/${p}/cmdline`, "utf8").match(/--type=([\w-]+)/)?.[1] ?? "main";
+      stats.set(Number(p), { parent: Number(f[1]), ticks: Number(f[11]) + Number(f[12]), kind });
+    } catch { /* gone */ }
+  }
+  const under = (p) => { for (let at = p; at > 1; at = stats.get(at)?.parent ?? 0) if (at === pid) return true; return false; };
+  const ms = { main: 0, renderer: 0, gpu: 0 };
+  for (const [p, st] of stats) {
+    if (!under(p)) continue;
+    const kind = st.kind === "gpu-process" ? "gpu" : st.kind === "renderer" || st.kind === "main" ? st.kind : null;
+    if (kind) ms[kind] += (st.ticks * 1000) / 100;
+  }
+  return ms;
+};
+
+// The board: TERMINALS shells, each having printed LINES lines, and a note. Its launch is the first
+// one: a new profile and no terminal daemon yet.
+let firstLaunch;
 {
   const { app, page } = await launch();
+  const created = await app.evaluate(() => process.getCreationTime());
+  const origin = await page.evaluate(() => performance.timeOrigin);
   await page.waitForSelector(".react-flow", { timeout: 60_000 });
+  const board = await page.evaluate(() => performance.timeOrigin + performance.now());
+  firstLaunch = { toPage: Math.round(origin - created), toEmptyBoard: Math.round(board - created) };
   for (let i = 0; i < TERMINALS; i++) {
     await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
   }
@@ -141,13 +173,9 @@ const screenText = (page) => page.evaluate(() => [...document.querySelectorAll("
   for (const [i, id] of ids.entries()) {
     await page.evaluate(([t, n, k]) => window.hive.ptyWrite(`hm:${t}`, `bash print.sh ${k} ${n}\r`), [id, LINES, i]);
   }
-  await page.waitForFunction(visibleDone, null, { timeout: 180_000, polling: 500 }).catch(async (e) => {
-    console.error(JSON.stringify(await page.evaluate(() => [...document.querySelectorAll(".react-flow__node-terminal")].map((n) => {
-      const r = n.getBoundingClientRect();
-      return { at: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)], tail: (n.querySelector(".xterm")?.parentElement?.__hmScreen?.() ?? "<none>").trim().slice(-400) };
-    })), null, 1));
-    throw e;
-  });
+  // A terminal under another one is sent nothing live either, so its end may not show until the
+  // next launch restores it: past a minute the shells are taken to have printed.
+  await page.waitForFunction(visibleDone, null, { timeout: 60_000, polling: 500 }).catch(() => console.error("setup: not every shown terminal showed its end; going on"));
   // The shells off screen print as fast; give them the time the shown ones took.
   await page.waitForTimeout(5000);
   await app.close();
@@ -157,12 +185,13 @@ const result = {
   at: new Date().toISOString(),
   board: { terminals: TERMINALS, lines: LINES },
   os: { cpu: os.cpus()[0]?.model, cpus: os.cpus().length, load: os.loadavg(), display: process.env.DISPLAY ?? null },
+  firstLaunch,
   runs: [],
 };
 
-for (let run = 0; run < RUNS; run++) {
-  const r = {};
-  const { app, page } = await launch();
+for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
+  const r = BUILDS.length > 1 ? { build: BUILDS[b] } : {};
+  const { app, page } = await launch(main);
   const created = await app.evaluate(() => process.getCreationTime());
   await mainStalls(app);
   // Startup: the process, the page, the board drawn, every terminal's restored output on screen.
@@ -171,7 +200,9 @@ for (let run = 0; run < RUNS; run++) {
     return { origin: performance.timeOrigin, dcl: n?.domContentLoadedEventEnd ?? 0 };
   });
   const board = await whenTrue(page, (n) => document.querySelectorAll(".react-flow__node-terminal").length === n && performance.timeOrigin + performance.now(), TERMINALS);
+  const cpuAtBoard = cpuOf(app.process().pid);
   const shown = await whenTrue(page, visibleDone);
+  const cpu = cpuOf(app.process().pid);
   const fcp = await page.evaluate(() => performance.getEntriesByName("first-contentful-paint")[0]?.startTime ?? null);
   r.startup = {
     toPage: Math.round(nav.origin - created),
@@ -179,10 +210,20 @@ for (let run = 0; run < RUNS; run++) {
     toFirstPaint: fcp === null ? null : Math.round(nav.origin + fcp - created),
     toBoard: Math.round(board - created),
     toTerminalsShown: Math.round(shown - created),
+    cpuMainToBoard: cpuAtBoard.main,
+    cpuRendererToBoard: cpuAtBoard.renderer,
+    cpuMainToTerminalsShown: cpu.main,
+    cpuRendererToTerminalsShown: cpu.renderer,
   };
   // Let startup's own work settle before timing screens; what held main meanwhile counts as startup's.
   await page.waitForTimeout(1500);
   r.startup.mainStalls = (await mainStalls(app)).total;
+  if (ONLY_STARTUP) {
+    result.runs.push(r);
+    console.log(JSON.stringify(r));
+    await app.close();
+    continue;
+  }
 
   // Screens: asked for → drawn, the first time this launch and once more.
   const open = async (name, ask, ready, close) => {
@@ -327,7 +368,8 @@ const walk = (o, at) => {
     else if (v && typeof v === "object") walk(v, p);
   }
 };
-for (const r of result.runs) walk(r, "");
+for (const r of result.runs) walk(r, r.build ?? "");
+console.log(JSON.stringify({ firstLaunch }));
 result.summary = Object.fromEntries([...paths].map(([p, vs]) => {
   const s = [...vs].sort((a, b) => a - b);
   return [p, { median: s[Math.floor(s.length / 2)], min: s[0], max: s[s.length - 1] }];
