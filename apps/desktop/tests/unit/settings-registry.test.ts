@@ -92,7 +92,7 @@ test("the sidebar is four groups, in this order, each page named for what the pe
       ["API access", "Scripts and tools that drive agents"],
     ]],
     ["Plugins", ["Plugins"]],
-    ["Advanced", [["In a browser", "This app in a browser tab here"], ["Servers", "Relay and discovery; most people never change this"], "About and updates"]],
+    ["Advanced", [["In a browser", "This app in a browser tab here"], ["Servers", "Reach your devices from other networks"], "About and updates"]],
   ]);
 });
 
