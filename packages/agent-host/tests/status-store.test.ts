@@ -33,6 +33,18 @@ test("a hook-reported turn showing the agent's own chooser is waiting, until the
   expect(s.get("a")).toMatchObject({ state: "done", source: "hooks" });
 });
 
+test("a turn running before the hooks spoke here (the app started mid-turn) stays working when a hook from inside it comes first", () => {
+  const s = store();
+  s.screen("a", "working");
+  s.event("a", { event: "input.resolved" }); // a tool use finished
+  expect(s.get("a")).toMatchObject({ state: "working", source: "hooks" });
+  s.event("a", { event: "turn.ended", outcome: "done" });
+  expect(s.get("a")?.state).toBe("done");
+  s.screen("b", "idle");
+  s.event("b", { event: "input.resolved" });
+  expect(s.get("b")?.state).toBe("idle");
+});
+
 test("what the screen read before the hooks spoke is dropped: a session start leaves it idle", () => {
   const s = store();
   s.screen("a", "working"); // a busy startup screen

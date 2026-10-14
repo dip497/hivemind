@@ -43,7 +43,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - In the Windows view and other views, a thin white line no longer shows around the panes, at their rounded corners and along the window's edges. The view's frame shows the wallpaper behind it again.
 - Over a photo wallpaper, small bright blocks of the photo no longer appear around the canvas while agents work. The dot that travels along a pipe between two agents made the canvas redraw its wires 60 times a second, and on some Linux graphics drivers those redraws left pieces of the undimmed photo behind. The dot now moves without redrawing anything.
 - A worker interrupted with Esc takes messages again: one sent after the interrupt was held until a later turn ended on its own.
-- A message for an agent whose turn was already running when the app started waits for the turn to end, instead of being typed into it.
+- An agent whose turn was already running when the app started shows as working, not idle, and a message for it waits for the turn to end instead of being typed into it.
 - `hive ctl read` on a worker whose agent has exited says `closed` at once instead of waiting out its timeout as "still working".
 - A window or browser tab open while the app is rebuilt or upgraded reloads into the new build when it opens a dialog, instead of going blank.
 - A widget that walks or animates, such as the dog, no longer drops the canvas's frame rate: the GPU now moves it and steps its sprite, so the page is no longer laid out and repainted on every frame.

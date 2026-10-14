@@ -106,15 +106,18 @@ export class StatusStore {
     return () => { this.screenListeners.delete(fn); };
   }
 
-  /** A hook reported for this session: the hooks are its authority from now on. They report
-   *  from the session's start, so what the screen read before they spoke is not carried over. */
+  /** A hook reported for this session: the hooks are its authority from now on. A session's
+   *  hooks report from its start, so what the screen read before they spoke is not carried over;
+   *  but a first hook from inside a turn says the session began before this store did, and a turn
+   *  the screen saw running still runs. */
   event(tileId: string, input: StatusInput): void {
     if (this.mirrored.has(tileId)) return;
     const cur = this.sessions.get(tileId);
     const fromScreen = cur?.source !== "hooks" && cur?.state !== "exited";
     this.screenHeld.delete(tileId);
     const session = "event" in input && input.sessionId ? { session: input.sessionId } : {};
-    this.apply(tileId, "hooks", (s) => ({ ...foldStatus(fromScreen ? { ...s, ...INITIAL_STATUS, kind: undefined } : s, input), ...session }));
+    const running = cur?.state === "working" && !("event" in input && input.event.startsWith("session.")) ? { state: "working" as const } : {};
+    this.apply(tileId, "hooks", (s) => ({ ...foldStatus(fromScreen ? { ...s, ...INITIAL_STATUS, kind: undefined, ...running } : s, input), ...session }));
   }
 
   /** The screen, read by whoever renders it, and for a wait what screen it says it is: kept as
