@@ -108,20 +108,22 @@ export class Home {
     if (sig === this.machinesSig) return;
     this.machinesSig = sig;
     this.machines.hidden = machines.length === 0;
-    this.machines.replaceChildren(chips(machines, (m) => m, (m) => m === this.filter.machine, (m) => {
-      this.filter.machine = this.filter.machine === m ? null : m;
+    // All first: every machine's, as when none is chosen.
+    this.machines.replaceChildren(chips([null, ...machines], (m) => m ?? "All", (m) => m === this.filter.machine, (m) => {
+      this.filter.machine = m === null || this.filter.machine === m ? null : m;
       this.changed();
     }, { "aria-label": "Machines" }));
   }
 
   private card(a: Agent): HTMLElement {
     const w = a.waiting!;
-    const card = h("article", { class: "card rail need", "data-need": a.tile, "data-kind": w.kind },
+    const card = h("article", { class: "card need", "data-need": a.tile, "data-kind": w.kind },
       h("div", { class: "head" },
+        h("p", { class: "kind" }, h("span", { class: "what" }, kindLabel(w.kind))),
+        h("span", { class: "age", "data-since": w.since }, ago(w.since))),
+      h("div", {},
         h("h3", { class: "name" }, a.agent),
-        h("span", { class: "age mono", "data-since": w.since }, ago(w.since))),
-      h("p", { class: "where mono" }, where(a.name, a.machine)),
-      h("p", { class: "kind" }, kindLabel(w.kind)),
+        h("p", { class: "where" }, where(a.name, a.machine))),
       answers(a.tile, w, (reply) => this.app.answer(a, reply)).el);
     card.addEventListener("click", () => this.app.open(a.tile));
     return card;

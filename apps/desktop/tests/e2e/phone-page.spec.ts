@@ -27,7 +27,9 @@ async function home(): Promise<Page> {
   await page.route("http://page.test/**", (route) => {
     const name = new URL(route.request().url()).pathname.slice(1);
     if (name === "index.html") {
-      return route.fulfill({ contentType: "text/html", body: `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="app.css"><main id="app"></main>
+      // The fonts in hand before the first layout, as index.html has them.
+      const fonts = ["geist-400", "geist-500", "geist-600", "mono-400", "mono-500"].map((f) => `<link rel="preload" href="fonts/${f}.woff2" as="font" type="font/woff2" crossorigin>`).join("");
+      return route.fulfill({ contentType: "text/html", body: `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="app.css">${fonts}<main id="app"></main>
 <script type="module">
 import init, { HomeView } from "./pkg/hive_web.js";
 import { Home } from "./js/home.js";
@@ -61,7 +63,7 @@ window.ready = true;
     }
     const file = path.join(WWW, name);
     if (!fs.existsSync(file)) return route.fulfill({ status: 404 });
-    const type = name.endsWith(".css") ? "text/css" : name.endsWith(".wasm") ? "application/wasm" : "text/javascript";
+    const type = name.endsWith(".css") ? "text/css" : name.endsWith(".wasm") ? "application/wasm" : name.endsWith(".woff2") ? "font/woff2" : "text/javascript";
     return route.fulfill({ contentType: type, body: fs.readFileSync(file) });
   });
   await page.goto("http://page.test/index.html");
@@ -152,7 +154,7 @@ test("of 200 tiles, the rows far below the screen are not rendered until scrolle
   await expect.poll(() => rendered(last)).toBe(true);
 });
 
-test("a working agent's dot breathes, as on Android, while a few work; past 40 working, every dot is still", async () => {
+test("a working agent's spinner turns while a few work; past 40 working, every one is still", async () => {
   test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
   const page = await home();
   const breathing = () => page.locator('[data-tree] [data-agent][data-state="working"] .dot').first().evaluate((el) => el.getAnimations().length);
@@ -162,11 +164,12 @@ test("a working agent's dot breathes, as on Android, while a few work; past 40 w
   expect(await breathing()).toBe(0);
 });
 
-test("searched, Home keeps the tiles whose name holds the words; a machine chosen keeps what is on it; chips show with more than one machine", async () => {
+test("searched, Home keeps the tiles whose name holds the words; a machine chosen keeps what is on it, All every machine's; chips show with more than one machine", async () => {
   test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
   const page = await home();
   await page.evaluate(() => (window as unknown as Driven).load(20, 0));
-  await expect(page.locator("[data-machines] .chip")).toHaveText(["desk", "box"]);
+  await expect(page.locator("[data-machines] .chip")).toHaveText(["All", "desk", "box"]);
+  await expect(page.locator("[data-machines] .chip", { hasText: "All" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("[data-tree] [data-machine]")).toHaveText(["desk", "box"]);
   await page.locator("[data-search]").fill("AGENT 1");
   // Each frame's in order, the computer's first: agent 10 is in frame 0.
@@ -176,7 +179,8 @@ test("searched, Home keeps the tiles whose name holds the words; a machine chose
   await expect(page.locator("[data-tree] [data-machine]")).toHaveCount(0);
   await expect(page.locator("[data-tree] [data-agent] .name")).toHaveText(["agent 15", "agent 16", "agent 17", "agent 18", "agent 19"]);
   await page.locator("[data-search]").fill("");
-  await page.locator("[data-machines] .chip", { hasText: "box" }).click();
+  await page.locator("[data-machines] .chip", { hasText: "All" }).click();
+  await expect(page.locator("[data-machines] .chip", { hasText: "All" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("[data-tree] [data-agent]")).toHaveCount(20);
 });
 
