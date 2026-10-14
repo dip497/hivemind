@@ -119,6 +119,11 @@ test("add a machine: probe, install hive over ssh, save", async () => {
   await expect(header.locator("[data-machine-state]")).not.toHaveText(/offline|off/);
   await expect(header.getByRole("button", { name: "open folder on build-box" })).toBeVisible();
   await expect(page.locator('.hm-layers [data-machine-header="local"]')).toContainText("This computer");
+  // The fixture is this computer over ssh: its probe and this computer's own say the same kind,
+  // and each row draws it.
+  const kindOf = (name: string) => page.locator(`.hm-layers [data-machine-header="${name}"] [data-machine-kind]`).getAttribute("data-machine-kind");
+  await expect.poll(() => kindOf("build-box"), { timeout: 10_000 }).not.toBe("unknown");
+  expect(await kindOf("local")).toBe(await kindOf("build-box"));
 });
 
 test("the folder picker is keyboard-first: type a path, filter, go in and up, cancel", async () => {
@@ -246,16 +251,16 @@ test("the Layers rail groups frames by the computer they run on, in every view",
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
 });
 
-test("turning a machine off disconnects it and keeps its terminals running there; on brings them back", async () => {
+test("pausing a machine disconnects it and keeps its terminals running there; resuming brings them back", async () => {
   test.setTimeout(90_000);
   const header = page.locator('.hm-layers [data-machine-header="build-box"]');
   await header.getByRole("button", { name: "build-box actions" }).click();
-  await page.getByRole("button", { name: "Turn off" }).click();
-  await expect(header.locator("[data-machine-state]")).toHaveText("off");
+  await page.getByRole("button", { name: "Pause" }).click();
+  await expect(header.locator("[data-machine-state]")).toHaveText("paused");
   await expect(page.locator('[data-link-banner="off"]').first()).toBeVisible({ timeout: 10_000 });
   expect(remote(`${rhive()} ps`)).toContain("bash");
   // The tile may sit off-screen on the canvas; the banner's own button is what a user there clicks.
-  await page.locator('[data-link-banner="off"]').first().locator("xpath=..").getByRole("button", { name: "Turn on" }).dispatchEvent("click");
+  await page.locator('[data-link-banner="off"]').first().locator("xpath=..").getByRole("button", { name: "Resume" }).dispatchEvent("click");
   await expect.poll(chipState, { timeout: 60_000 }).toBe("online");
   await expect(page.locator('[data-link-banner="off"]')).toHaveCount(0);
 });

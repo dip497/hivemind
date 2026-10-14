@@ -7,6 +7,7 @@ import type { ActivityLevel, HostMessage, PluginMessage, ShareOutcome, SurfaceRe
 import type { ViewScreen } from "@hivemind/workspace-api/views";
 import type { NotificationSettings } from "./notification-settings.js";
 import type { ReviewComment } from "@hivemind/core/review";
+import type { MachineKind } from "@hivemind/core";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
 import type { NetworkHealth, NetworkProfile } from "@hivemind/workspace-host/network-profile";
@@ -166,12 +167,16 @@ export interface MachineInfo {
   target: string;
   enabled: boolean;
   platform?: string;
+  /** What kind of computer it said it is when last checked. */
+  kind?: MachineKind;
   hivePath?: string;
   /** What its frames' ssh:// uris resolve to. */
   hostId: string;
 }
 export interface MachinesSnapshot {
   machines: MachineInfo[];
+  /** What kind of computer this one is, when it says. */
+  thisComputerKind?: MachineKind;
   /** By host id, including hosts of frames that are not saved machines, and the person's devices
    *  frames run on (`device:<id>`, M3). */
   status: Record<string, MachineStatus>;

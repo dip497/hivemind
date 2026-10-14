@@ -15,7 +15,7 @@ import type { DeviceWorkspace, MachineInfo, PairedDeviceSummary, RemoteDirEntry 
 import { machineUri, posixJoin } from "@hivemind/core/remote-uri";
 import { errText, machineForRequest, statusOf, useMachines, type MachinesRequest } from "./store";
 import { joinedId, useShown } from "../multiplayer/shown";
-import { AttentionNote, MachineDot, statusWords } from "./status";
+import { AttentionNote, MachineDot, MachineIcon, machineFacts, statusWords } from "./status";
 import { tellRecentFolders } from "../recent-folders";
 
 type View = { kind: "list" } | { kind: "add" } | { kind: "edit"; machine: MachineInfo } | { kind: "browse"; machine: MachineInfo } | { kind: "device"; device: PairedDeviceSummary };
@@ -209,13 +209,13 @@ function MachineList({ picking, onChoose, onChooseDevice, onEdit, onAdd, usageOf
                   className={`w-full min-w-0 flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left cursor-pointer transition-colors ${sel ? "bg-[var(--surface-4)]" : "hover:bg-[var(--color-bg3)]"}`}
                   title={picking ? `Open a folder on ${m.label}` : m.target}
                 >
-                  <MachineDot status={s} enabled={m.enabled} size={8} />
+                  <span aria-hidden className="shrink-0 text-[var(--color-fg2)]"><MachineIcon kind={m.kind} size={16} /></span>
                   <span className="flex-1 min-w-0">
                     <span className="block text-body font-medium text-[var(--color-fg)] truncate">{m.label}</span>
                     <span className="block text-count font-mono text-[var(--color-fg3)] truncate">{m.target}</span>
                   </span>
-                  <span className="shrink-0 text-count tabular-nums text-[var(--color-fg2)]">
-                    {busy[m.id] ? <Spinner size={11} className="animate-spin" /> : statusWords(s, m.enabled)}
+                  <span className="shrink-0 flex items-center gap-1.5 text-count tabular-nums text-[var(--color-fg2)]">
+                    {busy[m.id] ? <Spinner size={11} className="animate-spin" /> : <><MachineDot status={s} enabled={m.enabled} size={6} />{statusWords(s, m.enabled)}</>}
                   </span>
                 </button>
               </li>
@@ -240,7 +240,7 @@ function MachineList({ picking, onChoose, onChooseDevice, onEdit, onAdd, usageOf
               <MachineDot status={s} enabled={m.enabled} size={10} />
               <div className="flex-1 min-w-0">
                 <h3 className="text-title font-semibold text-[var(--color-fg)] truncate">{m.label}</h3>
-                <p className="font-mono text-label text-[var(--color-fg3)] truncate">{m.target}{m.platform ? ` · ${m.platform}` : ""}</p>
+                <p className="font-mono text-label text-[var(--color-fg3)] truncate">{[m.target, machineFacts(m.kind, m.platform)].filter(Boolean).join(" · ")}</p>
               </div>
               <Button className="shrink-0" onClick={() => onChoose(m)} disabled={!m.enabled}><Folder /> Open folder…</Button>
             </header>
@@ -272,7 +272,7 @@ function MachineList({ picking, onChoose, onChooseDevice, onEdit, onAdd, usageOf
               <Button variant="secondary" onClick={() => onEdit(m)}>Edit…</Button>
               <Button variant="secondary" onClick={() => setAskPassword(askPassword === m.id ? null : m.id)}>Set password…</Button>
               {s.state !== "no-hive" && <Button variant="secondary" onClick={() => run(m, "installing", () => window.hive.machineInstall(m.id))}>Update hive</Button>}
-              <Button variant="secondary" onClick={() => run(m, "saving", () => window.hive.machineUpdate(m.id, { enabled: !m.enabled }))}>{m.enabled ? "Turn off" : "Turn on"}</Button>
+              <Button variant="secondary" onClick={() => run(m, "saving", () => window.hive.machineUpdate(m.id, { enabled: !m.enabled }))}>{m.enabled ? "Pause" : "Resume"}</Button>
               <Button variant="destructive" className="ml-auto" onClick={() => setRemoving({ id: m.id, end: false })}>Remove…</Button>
             </div>
 

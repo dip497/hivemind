@@ -15,8 +15,11 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - Connect: a computer that uses this one's offer to connect (its link, or its six words found nearby) is asked about first. A prompt shows its name and three words that its own screen shows too, with Deny, Someone else (let into this window's workspace, as Can view, Can edit board or Can use terminals) and It's me — the words match. It's me makes it yours only after the person there says the words match as well. Open recent → Join takes an offer's link or words, shows the same three words, and asks before this computer becomes someone else's. A request nobody answers within three minutes is no.
 - The phone page and `hive-phone connect <link> [--sure yes|no]` use a computer's offer to connect: they show the same three words, wait for the person there, and keep the phone as the person's only once the person at the phone says the words match.
 - The iOS and Android apps connect with a computer's offer too: scanned or pasted, they show the three words, and the phone becomes the person's only after a yes on each side. They point to Settings → Connect.
+- Each machine shows what kind of computer it is (laptop, desktop, server, virtual machine or container), as it reports when checked, and so does This computer. `hive machine add --json` includes it as `kind`.
 
 ### Changed
+
+- A machine is paused, not turned off: Pause stops this app connecting to it, and nothing on the machine stops. A machine that is away is grey, not red; one that needs a sign-in says Sign in, and pressing it opens the sign-in.
 
 - Text, corners and control heights come from one scale: seven named text sizes (20, 15, 14, 13, 12, 11, 10) in place of seventeen, buttons beside inputs in Settings are both 32px, shadows, scrims and the editor's selection follow the theme, and section headings are sentence case.
 - Every choice from a list is the app's own select: the same height, border and corners as the field beside it, its list drawn like a menu, with keyboard and type-ahead; no operating-system blue or orange anywhere. Keyboard focus is one ring for the whole app, in the selection colour rather than the accent (so never amber), and checkboxes, sliders and scrollbars follow the theme.

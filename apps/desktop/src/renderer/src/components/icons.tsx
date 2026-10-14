@@ -7,7 +7,7 @@ import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
   AlarmClockIcon, AlarmClockOffIcon, AlertCircleIcon, AppWindowIcon, ArrowDown02Icon, ArrowLeft02Icon,
   ArrowRight02Icon, ArrowUp02Icon, ArrowUpRight01Icon, BellIcon, BlocksIcon, BotIcon, CheckIcon,
-  ChevronDownIcon, ChevronRightIcon, ChevronUpIcon, CircleCheckIcon, Copy01Icon, Download01Icon, EarthIcon,
+  ChevronDownIcon, ChevronRightIcon, CloudServerIcon, ContainerIcon, ChevronUpIcon, CircleCheckIcon, Copy01Icon, Download01Icon, EarthIcon,
   EllipsisIcon, EllipsisVerticalIcon, ExternalLinkIcon, EyeIcon, EyeOffIcon, FileCodeCornerIcon,
   FileQuestionMarkIcon, Files01Icon, Film01Icon, Folder01Icon, FolderGitIcon, FolderMinusIcon, FolderOpenIcon,
   FolderPlusIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareIcon, GlobeIcon, GripVerticalIcon,
@@ -88,6 +88,8 @@ export const Info = icon("info", InfoIcon);
 export const Key = icon("key", Key01Icon);
 export const Keyboard = icon("keyboard", KeyboardIcon);
 export const Laptop = icon("laptop", LaptopIcon);
+export const CloudServer = icon("cloud-server", CloudServerIcon);
+export const Container = icon("container", ContainerIcon);
 export const LayoutGrid = icon("layout-grid", LayoutGridIcon);
 export const LayoutList = icon("layout-list", LayoutListIcon);
 export const ListTodo = icon("list-todo", ListTodoIcon);

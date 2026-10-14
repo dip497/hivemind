@@ -56,11 +56,12 @@ test("sshDestination turns ssh:// into -p argv and passes aliases through", () =
 describe("parseMachines is strict", () => {
   const doc = (machines: unknown, extra: Record<string, unknown> = {}) => JSON.stringify({ version: 1, machines, ...extra });
   test("round-trips a valid catalog", () => {
-    const a = m({ hivePath: "/home/me/.local/bin/hive", platform: "linux-x86_64" });
+    const a = m({ hivePath: "/home/me/.local/bin/hive", platform: "linux-x86_64", kind: "laptop" });
     expect(parseMachines(doc([a]))).toEqual([a]);
   });
-  test("rejects unknown fields, wrong version, duplicates, relative hivePath, oversize", () => {
+  test("rejects unknown fields, an unknown kind, wrong version, duplicates, relative hivePath, oversize", () => {
     const a = m();
+    expect(code(() => parseMachines(doc([{ ...a, kind: "toaster" }])))).toBe("machines_invalid");
     expect(code(() => parseMachines(doc([{ ...a, password: "x" }])))).toBe("machines_invalid");
     expect(code(() => parseMachines(doc([a], { extra: 1 })))).toBe("machines_invalid");
     expect(code(() => parseMachines(JSON.stringify({ version: 2, machines: [] })))).toBe("machines_invalid");

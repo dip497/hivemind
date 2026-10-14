@@ -12,7 +12,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
   PUBLISHED_PLATFORMS, installCopyCommand, installFetchCommand, localPlatform, machinesPath, newMachineId,
-  releaseAssetUrl, validateLabel, validateTarget, type Machine, type ProbeResult,
+  releaseAssetUrl, validateLabel, validateTarget, KIND_SCRIPT, kindIn, type Machine, type MachineKind, type ProbeResult,
 } from "@hivemind/core";
 import { machineHostId, parseDeviceUri, parseMachineUri, parseRemote, sshUri, type RemoteTarget } from "@hivemind/core/remote-uri";
 import type { MachineAddRequest, MachineAddResult, MachineInfo, MachineProbe, MachineState, MachineStatus, MachinesSnapshot, SessionSummary } from "../../shared/ipc.js";
@@ -41,8 +41,18 @@ let appVersion = "0.0.0";
 const info = (m: Machine): MachineInfo => ({ ...m, hostId: machineHostId(m.target) });
 const targetOf = (m: Machine): RemoteTarget => parseRemote(sshUri(m.target));
 
+// What kind of computer this one is, found the way a machine's probe finds it.
+let thisComputerKind: MachineKind | undefined;
+if (process.platform !== "win32") {
+  run("sh", ["-c", KIND_SCRIPT], { timeout: 10_000 }).then(({ stdout }) => { thisComputerKind = kindIn(stdout); emit(); }, () => { /* unknown: the plain icon */ });
+}
+
 export function snapshot(): MachinesSnapshot {
-  return { machines: catalog.list.map(info), status: Object.fromEntries(status), ...(catalog.error ? { catalogError: catalog.error } : {}) };
+  return {
+    machines: catalog.list.map(info), status: Object.fromEntries(status),
+    ...(thisComputerKind ? { thisComputerKind } : {}),
+    ...(catalog.error ? { catalogError: catalog.error } : {}),
+  };
 }
 
 function emit(): void {
@@ -233,7 +243,7 @@ export async function addMachine(req: MachineAddRequest): Promise<MachineAddResu
     if (!found.daemon) throw new Error(`installed hive ${found.hiveVersion ?? ""} on ${target}, but it cannot run terminal sessions yet (needs a newer release)`);
   }
   const passwordSaved = req.password ? saveHost(t.host, t.port, t.user ?? "", { password: req.password }) : true;
-  const m: Machine = { id: newMachineId(), label, target, enabled: true, platform: found.platform, ...(found.hivePath ? { hivePath: found.hivePath } : {}) };
+  const m: Machine = { id: newMachineId(), label, target, enabled: true, platform: found.platform, ...(found.kind ? { kind: found.kind } : {}), ...(found.hivePath ? { hivePath: found.hivePath } : {}) };
   await mutate((list) => { clashWith(list, target, t.hostId); return [...list, m]; });
   resetHost(t.hostId);
   setStatus(t.hostId, found.daemon ? "online" : "no-hive");
@@ -256,11 +266,11 @@ export async function checkMachine(id: string): Promise<MachineProbe> {
   }
   await mutate((list) => {
     const m0 = list.find((x) => x.id === id);
-    if (!m0 || (m0.hivePath === found.hivePath && m0.platform === found.platform)) return list;
+    if (!m0 || (m0.hivePath === found.hivePath && m0.platform === found.platform && m0.kind === found.kind)) return list;
     return list.map((x) => {
       if (x.id !== id) return x;
-      const { hivePath: _old, ...rest } = x;
-      return { ...rest, platform: found.platform, ...(found.hivePath ? { hivePath: found.hivePath } : {}) };
+      const { hivePath: _old, kind: _was, ...rest } = x;
+      return { ...rest, platform: found.platform, ...(found.kind ? { kind: found.kind } : {}), ...(found.hivePath ? { hivePath: found.hivePath } : {}) };
     });
   }).then(() => {}, () => { /* an unreadable catalog: the check still reports */ });
   if (!live()) setStatus(t.hostId, found.daemon ? "online" : "no-hive");

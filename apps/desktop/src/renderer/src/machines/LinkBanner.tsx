@@ -28,11 +28,11 @@ export function LinkBanner({ cwd }: { cwd: string }) {
     >
       <MachineDot status={s} enabled={!off} />
       <span className="flex-1 truncate" title={off ? undefined : s.detail} data-link-banner={off ? "off" : s.state}>
-        {off ? `${name} is turned off — this terminal keeps running there` : s.state === "attention" ? `${name} needs you to log in again` : `Reconnecting to ${name}…`}
+        {off ? `${name} is paused — this terminal keeps running there` : s.state === "attention" ? `${name} needs you to log in again` : `Reconnecting to ${name}…`}
         {!off && s.detail && <span className="text-[var(--color-fg3)]"> {s.detail}</span>}
       </span>
       {off
-        ? <Button variant="link" size="xs" onClick={() => void window.hive.machineUpdate(machine.id, { enabled: true })} className="shrink-0">Turn on</Button>
+        ? <Button variant="link" size="xs" onClick={() => void window.hive.machineUpdate(machine.id, { enabled: true })} className="shrink-0">Resume</Button>
         : s.state === "attention"
         ? <Button variant="link" size="xs" onClick={() => openMachines({ kind: "manage" })} className="shrink-0">Fix</Button>
         : <Button variant="link" size="xs" onClick={() => void window.hive.machineReconnect(hostId)} className="shrink-0">Retry now</Button>}

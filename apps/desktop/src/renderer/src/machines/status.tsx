@@ -1,15 +1,16 @@
 /** How a machine's connection state looks everywhere it appears: dot, words, colour. */
 import { useState } from "react";
-import { Check, Copy } from "../components/icons";
-import type { MachineStatus } from "../../../shared/ipc";
+import { Check, CloudServer, Container, Copy, Laptop, Monitor, Server } from "../components/icons";
+import type { MachineInfo, MachineStatus } from "../../../shared/ipc";
 import { Button } from "../components/ui/button";
 
 const COLOR: Record<MachineStatus["state"], string> = {
   online: "var(--color-ok)",
   connecting: "var(--color-warn)",
   reconnecting: "var(--color-warn)",
-  offline: "var(--color-err)",
-  attention: "var(--color-err)",
+  // Away is ordinary (a laptop asleep, a box switched off); signing in is the one thing to do.
+  offline: "var(--color-fg3)",
+  attention: "var(--color-warn)",
   "no-hive": "var(--color-warn)",
   idle: "var(--color-fg3)",
 };
@@ -20,7 +21,7 @@ export function statusColor(s: MachineStatus, enabled = true): string {
 
 /** Short words for a chip or row: the round trip when connected, otherwise what is going on. */
 export function statusWords(s: MachineStatus, enabled = true): string {
-  if (!enabled) return "off";
+  if (!enabled) return "paused";
   switch (s.state) {
     case "online": return s.rttMs !== undefined ? `${s.rttMs} ms` : "online";
     case "connecting": return "connecting…";
@@ -88,4 +89,21 @@ export function AttentionNote({ target, detail, needsPassword, onSetPassword }: 
       <CopyCommand cmd={needsPassword ? `ssh-copy-id ${target}` : `ssh ${target}`} />
     </div>
   );
+}
+
+type Kind = NonNullable<MachineInfo["kind"]>;
+const KIND_ICON: Record<Kind, typeof Server> = { laptop: Laptop, desktop: Monitor, server: Server, "virtual-machine": CloudServer, container: Container };
+const KIND_WORDS: Record<Kind, string> = { laptop: "Laptop", desktop: "Desktop", server: "Server", "virtual-machine": "Virtual machine", container: "Container" };
+
+/** The machine's own kind of computer, as it reported it; one that has not said looks like a
+ *  screen when it is this computer and a server when it is elsewhere. */
+export function MachineIcon({ kind, thisComputer = false, size }: { kind?: Kind; thisComputer?: boolean; size?: number }) {
+  const Icon = kind ? KIND_ICON[kind] : thisComputer ? Monitor : Server;
+  return <Icon size={size} data-machine-kind={kind ?? "unknown"} />;
+}
+
+/** "Laptop, Linux arm64": what a machine said about itself. */
+export function machineFacts(kind?: Kind, platform?: string): string {
+  const os = platform?.replace(/^linux-/, "Linux ").replace(/^darwin-/, "macOS ").replace(/^windows-/, "Windows ");
+  return [kind ? KIND_WORDS[kind] : null, os].filter(Boolean).join(", ");
 }

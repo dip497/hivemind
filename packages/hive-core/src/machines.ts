@@ -4,6 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import { randomBytes } from "node:crypto";
 import { HiveError } from "./storage.js";
+import { isMachineKind, type MachineKind } from "./ssh.js";
 
 export interface Machine {
   /** Opaque, never derived from label or host. */
@@ -15,6 +16,8 @@ export interface Machine {
   /** Absolute, because a non-interactive ssh session has a bare PATH. */
   hivePath?: string;
   platform?: string;
+  /** Reported by the machine when it is checked. */
+  kind?: MachineKind;
 }
 
 interface MachinesFile {
@@ -24,7 +27,7 @@ interface MachinesFile {
 
 const VERSION = 1;
 export const MACHINE_LIMITS = { fileBytes: 64 * 1024, machines: 64, labelBytes: 128, targetBytes: 1024 } as const;
-const FIELDS = new Set(["id", "label", "target", "enabled", "hivePath", "platform"]);
+const FIELDS = new Set(["id", "label", "target", "enabled", "hivePath", "platform", "kind"]);
 const ID_RE = /^m_[0-9a-f]{12}$/;
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\x00-\x1f\x7f]/;
@@ -93,6 +96,10 @@ function validateMachine(v: unknown, i: number): Machine {
   const out: Machine = { id: m.id, label: validateLabel(m.label), target: validateTarget(m.target), enabled: m.enabled };
   if (m.hivePath !== undefined) out.hivePath = m.hivePath as string;
   if (m.platform !== undefined) out.platform = m.platform as string;
+  if (m.kind !== undefined) {
+    if (!isMachineKind(m.kind)) throw new HiveError("machines_invalid", `${where}.kind is invalid`);
+    out.kind = m.kind;
+  }
   return out;
 }
 
