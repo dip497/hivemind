@@ -1490,6 +1490,11 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
   // Community view packages: hm-view://<id>/… served to sandboxed iframes.
   registerViewScheme();
   app.whenReady().then(async () => {
+    // A daemon left by an older build is replaced before anything connects to it: each connection
+    // waits for this, the window does not. A failure is shown once, as its hooks may be wrong.
+    ptyDaemon.ensureFreshDaemon().catch((e: unknown) => {
+      pushAppError(`Couldn't refresh the PTY daemon: ${(e as Error).message ?? "unknown error"}`, "pty-daemon");
+    });
     refreshWindowsStartMenuShortcut();
     handleViewProtocol();
     handleToolProtocol();
@@ -1757,16 +1762,6 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
         return null;
       }
     }, { local: true });
-    // Dev rebuild safety: if a daemon from an older build is still running,
-    // replace it BEFORE the renderer attaches tiles, so new sessions carry the
-    // current code (HCP/plan hooks + env injection). No-op in prod / when current.
-    try { await ptyDaemon.ensureFreshDaemon(); }
-    catch (e) {
-      // Best-effort, but a stale daemon means injected hooks may be wrong →
-      // notifications themselves could silently break. Surface it once as a
-      // non-blocking toast instead of swallowing entirely.
-      pushAppError(`Couldn't refresh the PTY daemon: ${(e as Error).message ?? "unknown error"}`, "pty-daemon");
-    }
     void createWindow();
     // Native OS notifications for agents that need you — driven by the renderer's
     // agent-status bus over IPC (multi-agent, transition-deduped). Reads

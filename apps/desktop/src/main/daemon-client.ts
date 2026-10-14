@@ -60,9 +60,15 @@ function currentBuildStamp(): number {
  * connect spawns a fresh one carrying the new code (hooks, env injection, …).
  * Sessions persist via on-disk snapshots, so the new daemon replays + respawns
  * them. No-op when no daemon is running or it's already current. Call ONCE at
- * startup, before the renderer attaches any tiles.
+ * startup; every connection waits for it, so the window need not.
  */
-export async function ensureFreshDaemon(): Promise<void> {
+let freshness: Promise<void> | null = null;
+export function ensureFreshDaemon(): Promise<void> {
+  freshness ??= replaceStaleDaemon();
+  return freshness;
+}
+
+async function replaceStaleDaemon(): Promise<void> {
   const want = currentBuildStamp();
   if (!want) return; // can't stat the script — don't risk disrupting a live daemon
   const sp = socketPath();
@@ -91,6 +97,7 @@ export async function ensureFreshDaemon(): Promise<void> {
 
 /** This computer's daemon, started if it is not running; never keeping quit waiting on it. */
 async function doConnect(): Promise<net.Socket> {
+  await freshness?.catch(() => undefined);
   const sp = socketPath();
   // ELECTRON_RUN_AS_NODE: Electron runs the daemon as plain Node, no Chromium.
   const s = await reachDaemon(sp, [process.execPath, daemonScript(), sp], { env: daemonEnv() });
