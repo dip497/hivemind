@@ -44,6 +44,7 @@ import com.hivemind.phone.core.Screen
 import com.hivemind.phone.core.ViewFile
 import com.hivemind.phone.core.viewBridge
 import com.hivemind.phone.ui.common.LocalPhoneLock
+import com.hivemind.phone.ui.theme.LocalPersonColor
 import com.hivemind.phone.ui.theme.LocalStateColors
 import com.hivemind.phone.ui.theme.viewTheme
 import kotlinx.coroutines.Dispatchers
@@ -68,7 +69,7 @@ fun ViewPage(relay: ViewRelay, site: ViewSite, page: String, name: String, files
     var here by remember { mutableStateOf(WebViewHere.STARTING) }
     LaunchedEffect(Unit) { here = startWebView(context) }
     val background = MaterialTheme.colorScheme.background
-    val theme = viewTheme(MaterialTheme.colorScheme, LocalStateColors.current, isSystemInDarkTheme())
+    val theme = viewTheme(MaterialTheme.colorScheme, LocalStateColors.current, isSystemInDarkTheme(), LocalPersonColor.current)
     val lock = LocalPhoneLock.current
     val lockTitle = stringResource(R.string.lock_view_title)
     val lockSubtitle = stringResource(R.string.lock_view_subtitle, name)

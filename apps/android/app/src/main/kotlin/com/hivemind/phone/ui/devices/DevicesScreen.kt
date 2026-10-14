@@ -1,7 +1,6 @@
 package com.hivemind.phone.ui.devices
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -31,6 +31,8 @@ import com.hivemind.phone.R
 import com.hivemind.phone.core.Device
 import com.hivemind.phone.core.DeviceKind
 import com.hivemind.phone.push.PushState
+import com.hivemind.phone.ui.common.Dot
+import com.hivemind.phone.ui.common.Hairline
 import com.hivemind.phone.ui.common.sinceText
 import com.hivemind.phone.ui.theme.LocalStateColors
 import com.hivemind.phone.ui.theme.personColor
@@ -52,14 +54,14 @@ fun DevicesList(
     modifier: Modifier = Modifier,
 ) {
     var unpairing by rememberSaveable { mutableStateOf<String?>(null) }
-    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
         state.person?.let { person ->
             item(key = "person") {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    personColor(person.color)?.let { Box(Modifier.size(14.dp).background(it, CircleShape)) }
+                Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    personColor(person.color)?.let { Box(Modifier.size(12.dp).background(it, CircleShape)) }
                     Text(
                         stringResource(R.string.devices_whose, person.name),
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.padding(start = 8.dp),
                     )
                 }
@@ -69,12 +71,13 @@ fun DevicesList(
             DeviceRow(device, device.id in busy, now, onUnpair = { unpairing = device.id })
         }
         item(key = "pair") {
-            OutlinedButton(onClick = onPair, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = onPair, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Text(stringResource(R.string.action_pair_another))
             }
         }
         item(key = "push") {
-            PushCard(push, onChoose = onChoosePush, onAgain = onPushAgain, modifier = Modifier.padding(top = 12.dp))
+            Hairline(Modifier.padding(vertical = 8.dp))
+            PushCard(push, onChoose = onChoosePush, onAgain = onPushAgain, modifier = Modifier.padding(16.dp))
         }
     }
     val device = state.devices.firstOrNull { it.id == unpairing }
@@ -97,8 +100,8 @@ fun DevicesList(
 @Composable
 private fun DeviceRow(device: Device, busy: Boolean, now: Long, onUnpair: () -> Unit) {
     val colors = LocalStateColors.current
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(10.dp).background(if (device.reachable) colors.done else colors.quiet, CircleShape))
+    Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Dot(if (device.reachable) colors.done else colors.quiet, filled = device.reachable)
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
             Text(device.name, style = MaterialTheme.typography.bodyLarge)
             val kind = stringResource(if (device.kind == DeviceKind.HOST) R.string.device_host else R.string.device_computer)
@@ -115,6 +118,10 @@ private fun DeviceRow(device: Device, busy: Boolean, now: Long, onUnpair: () -> 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        TextButton(onClick = onUnpair, enabled = !busy) { Text(stringResource(R.string.action_unpair)) }
+        TextButton(
+            onClick = onUnpair,
+            enabled = !busy,
+            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+        ) { Text(stringResource(R.string.action_unpair)) }
     }
 }

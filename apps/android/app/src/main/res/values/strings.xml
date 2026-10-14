@@ -32,6 +32,10 @@
     <string name="wait_plan">plan</string>
     <string name="wait_other">waiting on you</string>
     <string name="waits_for">%1$s · %2$s</string>
+    <string name="asks_permission">Permission requested</string>
+    <string name="asks_question">Question</string>
+    <string name="asks_plan">Plan to approve</string>
+    <string name="asks_other">Waiting on you</string>
 
     <!-- Needs you -->
     <string name="needs_none">Nothing needs you.</string>
@@ -56,6 +60,7 @@
 
     <!-- Agents -->
     <string name="home_search">Search</string>
+    <string name="home_all_machines">All</string>
     <string name="home_working">Working</string>
     <string name="home_pinned">Pinned</string>
     <string name="home_nothing">Nothing open on your computer yet.</string>
@@ -68,6 +73,7 @@
     <!-- An agent -->
     <string name="action_back">Back</string>
     <string name="action_diff">Diff</string>
+    <string name="action_more">More</string>
     <string name="agent_subtitle">%1$s · %2$s · %3$s</string>
     <string name="mode_message">Message</string>
     <string name="mode_type">Type</string>
@@ -111,6 +117,10 @@
     <string name="diff_title">Changes</string>
     <string name="action_refresh">Refresh</string>
     <string name="diff_none">No changes.</string>
+    <plurals name="diff_files">
+        <item quantity="one">%d file</item>
+        <item quantity="other">%d files</item>
+    </plurals>
     <string name="diff_truncated">The diff is cut at 512 KiB.</string>
     <string name="diff_no_patch">No diff to show for this file.</string>
 
@@ -120,7 +130,7 @@
     <string name="start_workspace">Workspace</string>
     <string name="start_folder">Folder</string>
     <string name="start_agent">Agent</string>
-    <string name="start_prompt">Prompt (optional)</string>
+    <string name="start_prompt">What should it do? (optional)</string>
     <string name="action_start">Start</string>
     <string name="start_no_places">None of your devices has told the phone of a workspace yet: open one in hivemind on your computer.</string>
 

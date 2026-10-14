@@ -32,7 +32,7 @@ class ViewLookTest {
     private fun look(accent: Color?): ViewTheme {
         var theme: ViewTheme? = null
         compose.setContent {
-            PhoneTheme(accent) { theme = viewTheme(MaterialTheme.colorScheme, LocalStateColors.current, isSystemInDarkTheme()) }
+            PhoneTheme(accent) { theme = viewTheme(MaterialTheme.colorScheme, LocalStateColors.current, isSystemInDarkTheme(), LocalPersonColor.current) }
         }
         compose.waitForIdle()
         return theme!!

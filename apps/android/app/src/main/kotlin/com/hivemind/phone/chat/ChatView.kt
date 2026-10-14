@@ -33,7 +33,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,6 +45,7 @@ import com.hivemind.phone.core.Said
 import com.hivemind.phone.core.ToolResult
 import com.hivemind.phone.ui.common.FollowTheNewest
 import com.hivemind.phone.ui.common.NewestButton
+import com.hivemind.phone.ui.theme.Mono
 
 /** The ended note's key in the list: a number, which no entry's id (text) equals. */
 private const val ENDED = -1
@@ -127,8 +127,8 @@ private fun EntryRow(entry: Entry, chat: Chat) {
 @Composable
 private fun PersonSaid(text: String) {
     Box(Modifier.fillMaxWidth().padding(start = 48.dp), contentAlignment = Alignment.CenterEnd) {
-        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(16.dp)) {
-            Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(18.dp)) {
+            Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
         }
     }
 }
@@ -144,7 +144,7 @@ private fun ToolRow(name: String, about: String?, result: ToolResult?) {
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.small)
+            .clip(MaterialTheme.shapes.extraSmall)
             .clickable(enabled = result != null, onClickLabel = label) { open = !open }
             .padding(vertical = 4.dp),
     ) {
@@ -164,7 +164,7 @@ private fun ToolRow(name: String, about: String?, result: ToolResult?) {
                     withStyle(SpanStyle(fontWeight = FontWeight.Medium)) { append(name) }
                     if (about != null) {
                         append(" · ")
-                        withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(about) }
+                        withStyle(SpanStyle(fontFamily = Mono)) { append(about) }
                     }
                 },
                 style = MaterialTheme.typography.labelLarge,
@@ -178,7 +178,7 @@ private fun ToolRow(name: String, about: String?, result: ToolResult?) {
             Text(
                 result.text,
                 style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = Mono,
                 color = if (failed) colors.error else colors.onSurface,
                 modifier = Modifier.padding(start = 22.dp, top = 4.dp),
             )

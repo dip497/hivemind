@@ -9,14 +9,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -25,24 +26,34 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hivemind.phone.R
 import com.hivemind.phone.core.AgentRef
 import com.hivemind.phone.core.StartOption
+import com.hivemind.phone.ui.common.GroupLabel
 import com.hivemind.phone.ui.common.LocalPhoneLock
 import com.hivemind.phone.ui.common.Notice
 import com.hivemind.phone.ui.common.NoticeEffect
+import com.hivemind.phone.ui.common.PillChip
+import com.hivemind.phone.ui.common.RaisedCard
 
 /**
- * Device, then workspace, then folder, then agent (with its model and mode, when it has them), then
- * a prompt; Start asks the phone's lock, and opens the new agent's screen (design §6.6).
+ * Device, then workspace, then folder, then agent (with its model and mode, when it has them), as
+ * rows of chips; then a prompt in a raised card with Start; Start asks the phone's lock, and opens
+ * the new agent's screen (design §6.6).
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -54,9 +65,12 @@ fun StartScreen(vm: StartViewModel, onBack: () -> Unit, onStarted: (AgentRef) ->
     val lockTitle = stringResource(R.string.lock_start_title, vm.program?.label.orEmpty())
     val lockSubtitle = stringResource(R.string.lock_subtitle)
 
+    val colors = MaterialTheme.colorScheme
     Scaffold(
+        containerColor = colors.background,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background, scrolledContainerColor = colors.background),
                 title = { Text(stringResource(R.string.start_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -75,7 +89,7 @@ fun StartScreen(vm: StartViewModel, onBack: () -> Unit, onStarted: (AgentRef) ->
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (places.isEmpty()) {
                 Text(stringResource(R.string.start_no_places), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -85,11 +99,7 @@ fun StartScreen(vm: StartViewModel, onBack: () -> Unit, onStarted: (AgentRef) ->
             val device = vm.device
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (place in places.distinctBy { it.device }) {
-                    FilterChip(
-                        selected = place.device == device,
-                        onClick = { vm.chooseDevice(place.device) },
-                        label = { Text(place.deviceName) },
-                    )
+                    PillChip(place.device == device, onClick = { vm.chooseDevice(place.device) }, label = place.deviceName)
                 }
             }
             if (device == null) return@Column
@@ -97,7 +107,7 @@ fun StartScreen(vm: StartViewModel, onBack: () -> Unit, onStarted: (AgentRef) ->
             Heading(stringResource(R.string.start_workspace))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (place in places.filter { it.device == device }) {
-                    FilterChip(selected = place == vm.place, onClick = { vm.choose(place) }, label = { Text(place.workspaceName) })
+                    PillChip(place == vm.place, onClick = { vm.choose(place) }, label = place.workspaceName)
                 }
             }
 
@@ -111,10 +121,10 @@ fun StartScreen(vm: StartViewModel, onBack: () -> Unit, onStarted: (AgentRef) ->
                         Heading(stringResource(R.string.start_folder))
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             for (frame in startable.frames) {
-                                FilterChip(
-                                    selected = vm.frame == frame.id,
+                                PillChip(
+                                    vm.frame == frame.id,
                                     onClick = { vm.frame = frame.id },
-                                    label = { Text(stringResource(R.string.where, frame.name, frame.machine)) },
+                                    label = stringResource(R.string.where, frame.name, frame.machine),
                                 )
                             }
                         }
@@ -122,25 +132,39 @@ fun StartScreen(vm: StartViewModel, onBack: () -> Unit, onStarted: (AgentRef) ->
                     Heading(stringResource(R.string.start_agent))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for (program in startable.programs) {
-                            FilterChip(selected = vm.program?.id == program.id, onClick = { vm.choose(program) }, label = { Text(program.label) })
+                            PillChip(vm.program?.id == program.id, onClick = { vm.choose(program) }, label = program.label)
                         }
                     }
                     vm.program?.options?.forEach { option -> OptionChoice(option, vm.options[option.id]) { vm.options[option.id] = it } }
-                    OutlinedTextField(
-                        value = vm.prompt,
-                        onValueChange = { vm.prompt = it },
-                        label = { Text(stringResource(R.string.start_prompt)) },
-                        minLines = 3,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Button(
-                        onClick = {
-                            val asked = lock.ask(lockTitle, lockSubtitle) { vm.start(onStarted) }
-                            if (!asked) vm.calls.tell(Notice.NoLock)
-                        },
-                        enabled = vm.program != null && vm.calls.busy.isEmpty(),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text(stringResource(R.string.action_start)) }
+                    RaisedCard(Modifier.padding(top = 8.dp)) {
+                        TextField(
+                            value = vm.prompt,
+                            onValueChange = { vm.prompt = it },
+                            placeholder = { Text(stringResource(R.string.start_prompt)) },
+                            minLines = 4,
+                            textStyle = MaterialTheme.typography.bodyLarge,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                focusedPlaceholderColor = colors.tertiary,
+                                unfocusedPlaceholderColor = colors.tertiary,
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Button(
+                            onClick = {
+                                val asked = lock.ask(lockTitle, lockSubtitle) { vm.start(onStarted) }
+                                if (!asked) vm.calls.tell(Notice.NoLock)
+                            },
+                            enabled = vm.program != null && vm.calls.busy.isEmpty(),
+                            modifier = Modifier.align(Alignment.End).padding(12.dp),
+                        ) {
+                            Text(stringResource(R.string.action_start))
+                            Icon(painterResource(R.drawable.ic_send_up), null, modifier = Modifier.padding(start = 6.dp).size(18.dp))
+                        }
+                    }
                 }
             }
         }
@@ -148,9 +172,7 @@ fun StartScreen(vm: StartViewModel, onBack: () -> Unit, onStarted: (AgentRef) ->
 }
 
 @Composable
-private fun Heading(text: String) {
-    Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-}
+private fun Heading(text: String) = GroupLabel(text, Modifier.padding(top = 6.dp))
 
 /** One of a program's options: its values to pick from, or free text when it lists none. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -162,12 +184,13 @@ private fun OptionChoice(option: StartOption, chosen: String?, onChoose: (String
             value = chosen.orEmpty(),
             onValueChange = onChoose,
             singleLine = true,
+            shape = CircleShape,
             modifier = Modifier.fillMaxWidth(),
         )
     } else {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (value in option.values) {
-                FilterChip(selected = chosen == value, onClick = { onChoose(value) }, label = { Text(value) })
+                PillChip(chosen == value, onClick = { onChoose(value) }, label = value)
             }
         }
     }

@@ -5,15 +5,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -29,8 +26,8 @@ import androidx.compose.ui.unit.dp
 import com.hivemind.phone.R
 import com.hivemind.phone.core.Agent
 import com.hivemind.phone.core.AgentRef
-import com.hivemind.phone.core.AgentState
-import com.hivemind.phone.ui.common.color
+import com.hivemind.phone.ui.common.GroupLabel
+import com.hivemind.phone.ui.common.StateMark
 import com.hivemind.phone.ui.common.label
 import com.hivemind.phone.ui.common.sinceText
 import com.hivemind.phone.ui.common.stoppable
@@ -53,18 +50,12 @@ fun LazyListScope.agentsItems(
             Text(
                 if (device.reachable) device.name else stringResource(R.string.agents_device_away, device.name),
                 style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 4.dp),
             )
         }
         for (workspace in device.workspaces) {
             item(key = "workspace:${device.id}/${workspace.id}") {
-                Text(
-                    workspace.name,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                )
+                GroupLabel(workspace.name, Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
             }
             items(workspace.agents, key = { "agent:${it.at.device}/${it.at.workspace}/${it.at.tile}" }) { agent ->
                 AgentRow(agent, agent.at in busy, now, onOpen, onStop, onClose)
@@ -74,8 +65,8 @@ fun LazyListScope.agentsItems(
 }
 
 /**
- * An agent's row: its state, its name, what it [says] (else its state and program), for how long,
- * set in by [depth]. Swiped right it stops its turn (when it works and can be interrupted); left it
+ * An agent's row: its name, under it in grey what it [says] (else its state and program), for how
+ * long, and its state as a small mark at the end, set in by [depth]. Swiped right it stops its turn (when it works and can be interrupted); left it
  * closes.
  */
 @Composable
@@ -109,7 +100,7 @@ fun AgentRow(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(if (toStop) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.errorContainer)
+                    .background(if (toStop) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.errorContainer)
                     .padding(horizontal = 20.dp),
                 contentAlignment = if (toStop) Alignment.CenterStart else Alignment.CenterEnd,
             ) {
@@ -120,19 +111,17 @@ fun AgentRow(
         Row(
             Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface)
+                .background(MaterialTheme.colorScheme.background)
                 .clickable { onOpen(agent.at) }
-                .padding(start = 16.dp + 12.dp * depth, end = 16.dp, top = 12.dp, bottom = 12.dp),
+                .padding(start = 16.dp + 12.dp * depth, end = 16.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(10.dp).background(agent.state.color(), CircleShape))
-            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(agent.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     says ?: listOfNotNull(agent.state.label(), agent.program?.label).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (says == null || agent.state == AgentState.WAITING) agent.state.color() else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -141,9 +130,11 @@ fun AgentRow(
                 Text(
                     sinceText(it, now),
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.padding(start = 12.dp),
                 )
             }
+            Box(Modifier.padding(start = 10.dp).size(12.dp), contentAlignment = Alignment.Center) { StateMark(agent.state) }
         }
     }
 }

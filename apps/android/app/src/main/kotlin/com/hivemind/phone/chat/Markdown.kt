@@ -28,7 +28,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -42,6 +41,7 @@ import com.hivemind.phone.core.ListMarker
 import com.hivemind.phone.core.TextBlock
 import com.hivemind.phone.core.TextRun
 import com.hivemind.phone.core.markdown
+import com.hivemind.phone.ui.theme.Mono
 
 /**
  * What an agent says, which is markdown, as the core reads it (spec/markdown.md) and drawn here:
@@ -106,7 +106,7 @@ private fun Drawn(block: TextBlock, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
     val marks = remember(colors) {
         Marks(
-            code = SpanStyle(fontFamily = FontFamily.Monospace, background = colors.surfaceContainerHighest),
+            code = SpanStyle(fontFamily = Mono, background = colors.surfaceContainerHighest),
             link = TextLinkStyles(SpanStyle(color = colors.primary, textDecoration = TextDecoration.Underline)),
         )
     }
@@ -134,7 +134,7 @@ private fun Drawn(block: TextBlock, modifier: Modifier = Modifier) {
                 Text(
                     kind.text,
                     style = type.bodySmall,
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = Mono,
                     softWrap = false,
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                 )

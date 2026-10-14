@@ -21,12 +21,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,14 +43,17 @@ import com.hivemind.phone.core.HomeEntry
 import com.hivemind.phone.core.HomeTile
 import com.hivemind.phone.ui.agents.AgentRow
 import com.hivemind.phone.ui.agents.agentsItems
-import com.hivemind.phone.ui.common.color
+import com.hivemind.phone.ui.common.GroupLabel
+import com.hivemind.phone.ui.common.PillChip
+import com.hivemind.phone.ui.common.StateMark
 import com.hivemind.phone.ui.common.label
 import com.hivemind.phone.ui.common.sinceText
 import com.hivemind.phone.ui.needs.needsItems
+import com.hivemind.phone.ui.theme.Mono
 
 /**
- * Home, as the desktop's Layers panel lists it (spec/home.md, design B5 §11.2): a search and, with
- * more than one machine, a chip for each; what waits on the person, with its answers; what is at
+ * Home, as the desktop's Layers panel lists it (spec/home.md, design B5 §11.2): a search while
+ * [searching] and, with more than one machine, All and a chip for each; what waits on the person, with its answers; what is at
  * work; the pinned; then each machine's projects, frames and tiles, each tile with what it last
  * said. An agent's row opens it, and swiped stops or closes it; a project's + starts an agent.
  */
@@ -67,37 +70,32 @@ fun HomeList(
     onClose: (Agent) -> Unit,
     onStart: () -> Unit,
     modifier: Modifier = Modifier,
+    searching: Boolean = true,
 ) {
     val machines = state.homes.flatMap { it.machines }.distinct()
     val rows = Rows(state, busy, now, onOpen, onStop, onClose, onStart)
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
-        item(key = "search") {
-            OutlinedTextField(
-                value = state.filter.query,
-                onValueChange = onSearch,
-                placeholder = { Text(stringResource(R.string.home_search)) },
-                leadingIcon = { Icon(Icons.Filled.Search, null) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            )
+        if (searching || state.filter.query.isNotEmpty()) {
+            item(key = "search") { SearchField(state.filter.query, onSearch) }
         }
         if (machines.isNotEmpty()) {
             item(key = "machines") {
+                val chosen = state.filter.machine
                 LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    item(key = "all") {
+                        // The chosen machine, chosen again, shows every machine.
+                        PillChip(chosen == null, onClick = { chosen?.let(onMachine) }, label = stringResource(R.string.home_all_machines))
+                    }
                     items(machines, key = { it }) { machine ->
-                        FilterChip(
-                            selected = machine == state.filter.machine,
-                            onClick = { onMachine(machine) },
-                            label = { Text(machine) },
-                        )
+                        PillChip(machine == chosen, onClick = { onMachine(machine) }, label = machine)
                     }
                 }
             }
         }
-        needsItems(state.needs, busy, now, onOpen, onAnswer)
+        needsItems(state.needs, state.tiles, busy, now, onOpen, onAnswer)
         val working = state.homes.flatMap { home -> home.working.map { home.device to it } }
         if (working.isNotEmpty()) {
             item(key = "working") { Heading(stringResource(R.string.home_working)) }
@@ -145,8 +143,7 @@ private class Rows(
             is HomeEntry.Machine -> Text(
                 entry.name,
                 style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 4.dp),
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 4.dp),
             )
             is HomeEntry.Project -> Row(
                 Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
@@ -155,19 +152,25 @@ private class Rows(
                 Text(
                     entry.name,
                     style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = onStart) {
-                    Icon(Icons.Filled.Add, stringResource(R.string.home_start_in, entry.name))
+                    Icon(
+                        Icons.Filled.Add,
+                        stringResource(R.string.home_start_in, entry.name),
+                        tint = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
             }
             is HomeEntry.Frame -> Row(
                 Modifier.fillMaxWidth().padding(start = 16.dp + 12.dp * entry.depth.toInt(), end = 16.dp, top = 8.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.size(10.dp).background(swatch(entry.color), RoundedCornerShape(3.dp)))
+                Box(Modifier.size(8.dp).background(swatch(entry.color), RoundedCornerShape(2.dp)))
                 Spacer(Modifier.width(10.dp))
                 Text(
                     entry.title,
@@ -179,7 +182,7 @@ private class Rows(
                 )
                 entry.folder?.let {
                     Spacer(Modifier.width(8.dp))
-                    Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline, maxLines = 1)
+                    Text(it, style = MaterialTheme.typography.labelMedium, fontFamily = Mono, color = MaterialTheme.colorScheme.tertiary, maxLines = 1)
                 }
             }
             is HomeEntry.Tile -> Tile(entry.tile, entry.depth.toInt())
@@ -195,11 +198,9 @@ private class Rows(
         }
         // Not an agent the overview lists: what it is, and what it last showed.
         Row(
-            Modifier.fillMaxWidth().padding(start = 16.dp + 12.dp * depth, end = 16.dp, top = 12.dp, bottom = 12.dp),
+            Modifier.fillMaxWidth().padding(start = 16.dp + 12.dp * depth, end = 16.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(10.dp).background(tile.state?.color() ?: MaterialTheme.colorScheme.outlineVariant, CircleShape))
-            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(tile.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
@@ -211,8 +212,14 @@ private class Rows(
                 )
             }
             tile.since?.let {
-                Text(sinceText(it, now), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    sinceText(it, now),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.padding(start = 12.dp),
+                )
             }
+            Box(Modifier.padding(start = 10.dp).size(12.dp), contentAlignment = Alignment.Center) { StateMark(tile.state) }
         }
     }
 }
@@ -227,12 +234,30 @@ private val HomeEntry.key: String
     }
 
 @Composable
-private fun Heading(text: String) = Text(
-    text,
-    style = MaterialTheme.typography.titleSmall,
-    color = MaterialTheme.colorScheme.onSurfaceVariant,
-    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 4.dp),
-)
+private fun Heading(text: String) = GroupLabel(text, Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 2.dp))
+
+/** The search, a pill on a raised ground. */
+@Composable
+private fun SearchField(query: String, onSearch: (String) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    TextField(
+        value = query,
+        onValueChange = onSearch,
+        placeholder = { Text(stringResource(R.string.home_search)) },
+        leadingIcon = { Icon(Icons.Filled.Search, null, tint = colors.tertiary) },
+        singleLine = true,
+        shape = CircleShape,
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = colors.surfaceContainer,
+            unfocusedContainerColor = colors.surfaceContainer,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            unfocusedPlaceholderColor = colors.tertiary,
+            focusedPlaceholderColor = colors.tertiary,
+        ),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+}
 
 /**
  * What a tile's row says under its name: what it waits on (its tool and command, or its question),
@@ -252,4 +277,4 @@ private fun HomeTile.says(): String? {
 /** A frame's colour as the desktop gives it (`#rrggbb`), else the outline's. */
 @Composable
 private fun swatch(color: String): Color =
-    runCatching { Color(color.toColorInt()) }.getOrDefault(MaterialTheme.colorScheme.outline)
+    runCatching { Color(color.toColorInt()) }.getOrDefault(MaterialTheme.colorScheme.tertiary)

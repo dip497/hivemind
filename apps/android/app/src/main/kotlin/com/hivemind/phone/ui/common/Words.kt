@@ -3,13 +3,11 @@ package com.hivemind.phone.ui.common
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import com.hivemind.phone.R
 import com.hivemind.phone.core.Agent
 import com.hivemind.phone.core.AgentState
 import com.hivemind.phone.core.WaitKind
-import com.hivemind.phone.ui.theme.LocalStateColors
 import kotlinx.coroutines.delay
 
 /** The time now, refreshed often enough to say how long ago something was. */
@@ -51,24 +49,23 @@ fun AgentState.label(): String = stringResource(
 )
 
 @Composable
-fun AgentState.color(): Color {
-    val colors = LocalStateColors.current
-    return when (this) {
-        AgentState.WAITING -> colors.waiting
-        AgentState.WORKING -> colors.working
-        AgentState.DONE -> colors.done
-        AgentState.FAILED, AgentState.LIMITED -> colors.failed
-        AgentState.IDLE, AgentState.INTERRUPTED, AgentState.EXITED -> colors.quiet
-    }
-}
-
-@Composable
 fun WaitKind.label(): String = stringResource(
     when (this) {
         WaitKind.PERMISSION -> R.string.wait_permission
         WaitKind.QUESTION -> R.string.wait_question
         WaitKind.PLAN -> R.string.wait_plan
         WaitKind.OTHER -> R.string.wait_other
+    },
+)
+
+/** What an agent waiting on the person asks for, as the card over its answers names it. */
+@Composable
+fun WaitKind.asked(): String = stringResource(
+    when (this) {
+        WaitKind.PERMISSION -> R.string.asks_permission
+        WaitKind.QUESTION -> R.string.asks_question
+        WaitKind.PLAN -> R.string.asks_plan
+        WaitKind.OTHER -> R.string.asks_other
     },
 )
 
