@@ -135,7 +135,8 @@ function WidgetCard({ object, pkg, name, spot, onMove, onRemove, onOption, onEdi
   return (
     <div ref={el} data-widget={object.widget} data-widget-chrome={bare ? "none" : "card"} aria-label={name}
       className={`group pointer-events-auto absolute flex cursor-grab flex-col active:cursor-grabbing ${bare ? "" : "hm-island rounded-xl p-3"}`}
-      style={{ left: spot.x, top: spot.y, ...(bare ? {} : { width: CARD_W }), ...(glide ? { transition: `left ${glide}ms linear, top ${glide}ms linear` } : {}) }}
+      // Moved by transform, so the GPU glides it: a moving left/top lays out and repaints every frame.
+      style={{ left: 0, top: 0, transform: `translate3d(${spot.x}px, ${spot.y}px, 0)`, ...(bare ? {} : { width: CARD_W }), ...(glide ? { transition: `transform ${glide}ms linear` } : {}) }}
       onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
       onDoubleClick={() => { if (!setting) onEdit(); }}>
       <div className={`absolute right-1 top-1 z-10 gap-0.5 ${setting ? "flex" : "hidden group-hover:flex"} ${bare ? "hm-island rounded-md" : ""}`}>

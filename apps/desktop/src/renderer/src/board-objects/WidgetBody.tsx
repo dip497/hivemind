@@ -54,8 +54,9 @@ function ListField({ n }: { n: Record<string, unknown> }) {
 if (typeof document !== "undefined" && !document.getElementById("hm-widget-sprite")) {
   const style = document.createElement("style");
   style.id = "hm-widget-sprite";
-  style.textContent = "@keyframes hm-widget-sprite { to { background-position-x: var(--sprite-end); } }"
-    + " @media (prefers-reduced-motion: reduce) { [data-widget-sprite] { animation: none !important; } }";
+  // A transform, so the GPU steps it: a background-position step repaints the page under it.
+  style.textContent = "@keyframes hm-widget-sprite { to { transform: translateX(-100%); } }"
+    + " @media (prefers-reduced-motion: reduce) { [data-widget-sprite] > * { animation: none !important; } }";
   document.head.appendChild(style);
 }
 
@@ -89,11 +90,15 @@ function Sprite({ n, images }: { n: Record<string, unknown>; images: Images }) {
   // The frame is drawn at the sheet's own size, then scaled (and mirrored) as a whole.
   return <div style={{ width: fw * scale, height: fh * scale }}>
     {url && <div data-widget-sprite role="img" aria-label={str(n.label) || "animation"} style={{
-      width: fw, height: fh, backgroundImage: `url("${url}")`, backgroundRepeat: "no-repeat",
-      backgroundPosition: `0 ${-row * fh}px`, imageRendering: n.pixelated === false ? "auto" : "pixelated",
+      width: fw, height: fh, overflow: "hidden",
       transformOrigin: "0 0", transform: `${n.flip ? `translateX(${fw * scale}px) scaleX(-${scale})` : `scaleX(${scale})`} scaleY(${scale})`,
-      ...(frames > 1 ? { ["--sprite-end" as string]: `${-frames * fw}px`, animation: `hm-widget-sprite ${frames / fps}s steps(${frames}) infinite` } : {}),
-    }} />}
+    }}>
+      <div style={{
+        width: frames * fw, height: fh, backgroundImage: `url("${url}")`, backgroundRepeat: "no-repeat",
+        backgroundPosition: `0 ${-row * fh}px`, imageRendering: n.pixelated === false ? "auto" : "pixelated",
+        ...(frames > 1 ? { animation: `hm-widget-sprite ${frames / fps}s steps(${frames}) infinite` } : {}),
+      }} />
+    </div>}
   </div>;
 }
 
