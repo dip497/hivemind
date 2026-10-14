@@ -17,7 +17,8 @@ function scratch(prefix: string): string {
   return d;
 }
 
-test("a pipe and a spawn wire are drawn from one tile to the other, and go when they end", async () => {
+/** The app on a fresh repo and profile, with two shells and a way to tell the window of links. */
+async function twoShells() {
   const repo = scratch("hm-links-repo-");
   execSync("git init -q -b main && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init", { cwd: repo });
   const ud = scratch("hm-links-ud-");
@@ -40,7 +41,11 @@ test("a pipe and a spawn wire are drawn from one tile to the other, and go when 
   const [a, b] = await terminals.evaluateAll((nodes) => nodes.map((n) => n.getAttribute("data-id")!));
   const send = (event: string, change: object) =>
     app.evaluate(({ BrowserWindow }, [e, c]) => BrowserWindow.getAllWindows()[0]!.webContents.send("workspace:event", { event: e, params: [c] }), [event, change] as const);
+  return { app, page, a, b, send };
+}
 
+test("a pipe and a spawn wire are drawn from one tile to the other, and go when they end", async () => {
+  const { app, page, a, b, send } = await twoShells();
   await send("link.spawn", { parent: a, child: b, connected: true });
   await send("link.pipe", { src: a, dst: b, connected: true });
 
@@ -68,5 +73,34 @@ test("a pipe and a spawn wire are drawn from one tile to the other, and go when 
   await expect(page.locator(".react-flow__edge-spawn")).toHaveCount(1);
   await send("link.spawn", { child: b, connected: false });
   await expect(page.locator(".react-flow__edge-spawn")).toHaveCount(0);
+  await app.close();
+});
+
+test("a pipe's dot travels from one tile to the other without the page painting anything", async () => {
+  const { app, page, a, b, send } = await twoShells();
+  await send("link.pipe", { src: a, dst: b, connected: true });
+  const dot = page.locator("[data-pipe-dot]");
+  await expect(dot).toHaveCount(1);
+
+  // It moves, and stays between the two tiles.
+  const at = () => dot.evaluate((d) => { const r = d.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  const box = async (id: string) => (await page.locator(`.react-flow__node[data-id="${id}"]`).boundingBox())!;
+  const [ra, rb] = [await box(a), await box(b)];
+  const seen = [];
+  for (let i = 0; i < 6; i++) { seen.push(await at()); await page.waitForTimeout(150); }
+  expect(new Set(seen.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`)).size).toBeGreaterThan(3);
+  const left = Math.min(ra.x, rb.x) - 2, right = Math.max(ra.x + ra.width, rb.x + rb.width) + 2;
+  for (const p of seen) expect(p.x >= left && p.x <= right, JSON.stringify({ p, ra, rb })).toBe(true);
+
+  // Over two quiet seconds no layer is painted again: the dot is the compositor's to move.
+  const cdp = await page.context().newCDPSession(page);
+  let layers: { paintCount?: number }[] = [];
+  cdp.on("LayerTree.layerTreeDidChange", (e) => { if (e.layers) layers = e.layers; });
+  await cdp.send("LayerTree.enable");
+  await page.waitForTimeout(1_000);
+  const paints = () => layers.reduce((n, l) => n + (l.paintCount ?? 0), 0);
+  const before = paints();
+  await page.waitForTimeout(2_000);
+  expect(paints() - before).toBeLessThanOrEqual(4);
   await app.close();
 });

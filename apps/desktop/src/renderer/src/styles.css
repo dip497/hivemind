@@ -526,6 +526,16 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
   background: var(--color-bg4) !important;
   color: var(--color-fg) !important;
 }
+/* A pipe's travelling dot (canvas-pipe-edge.tsx): placed by its animation's transform. */
+.hm-pipe-dot {
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-brand);
+}
 
 /* Scrollbar (Webkit) — thin, accent on hover */
 ::-webkit-scrollbar {
