@@ -34,6 +34,25 @@ export interface AgentReview {
   install?: { url: string; command?: string };
 }
 
+/** HiveHub's catalog as last fetched: asked again once it is CATALOG_FRESH_MS old, and asks while
+ *  a fetch is out wait on that one. What review and the update check compare against. */
+const CATALOG_FRESH_MS = 5 * 60_000;
+let catalog: CatalogEntry[] = [];
+let fetchedAt = -Infinity;
+let fetching: Promise<CatalogEntry[]> | null = null;
+/** Each listed plugin's README, fetched once for the catalog that lists it. */
+const readmes = new WeakMap<CatalogEntry, Promise<string | null>>();
+
+function catalogNow(): Promise<CatalogEntry[]> {
+  if (Date.now() - fetchedAt < CATALOG_FRESH_MS) return Promise.resolve(catalog);
+  fetching ??= fetchCatalog().then((list) => {
+    catalog = list;
+    fetchedAt = Date.now();
+    return list;
+  }).finally(() => { fetching = null; });
+  return fetching;
+}
+
 export function installPluginCatalogIpc(): void {
   // A plugin's README, to read before or after installing it: from its folder here, or from the
   // catalog for one not installed. Shown as text, never run.
@@ -47,18 +66,21 @@ export function installPluginCatalogIpc(): void {
       } catch { return null; }
     }
     if (f.catalog && typeof f.catalog.id === "string") {
-      const entry = (await fetchCatalog().catch(() => [] as CatalogEntry[])).find((e) => e.id === f.catalog!.id && e.type === f.catalog!.type);
-      return entry ? fetchReadme(entry) : null;
+      const entry = (await catalogNow().catch(() => [] as CatalogEntry[])).find((e) => e.id === f.catalog!.id && e.type === f.catalog!.type);
+      if (!entry) return null;
+      let readme = readmes.get(entry);
+      if (!readme) {
+        readmes.set(entry, (readme = fetchReadme(entry)));
+        // One that could not be fetched is asked for again next time.
+        void readme.then((text) => { if (text === null) readmes.delete(entry); });
+      }
+      return readme;
     }
     return null;
   });
-  let catalog: CatalogEntry[] = [];
   let pendingAgent: { token: string; dir: string; id: string } | null = null;
   let pendingWidget: { token: string; dir: string; id: string } | null = null;
-  handle("plugins:catalog", async () => {
-    catalog = await fetchCatalog();
-    return catalog;
-  });
+  handle("plugins:catalog", () => catalogNow());
 
   // Which installed agents are no longer what the catalog lists. Agents carry no version of
   // their own, so "is there an update" was unanswerable for them and the button never
@@ -141,7 +163,7 @@ export function installPluginCatalogIpc(): void {
     if (checking) return checking; // a second ask while the first is in flight rides along
     checking = (async () => {
       await applyShellEnvToProcess();
-      const listed = await fetchCatalog();
+      const listed = await catalogNow();
       return { added: await autoInstallDetectedAgents(listed), updated: await autoUpdateCatalogAgents(listed) };
     })();
     try {
@@ -184,7 +206,7 @@ export function installPluginCatalogIpc(): void {
 export async function autoInstallDetectedAgents(listed?: CatalogEntry[]): Promise<Array<{ id: string; label: string; does: string[] }>> {
   const settings = getSettings().agents;
   if (!settings.autoInstall) return [];
-  const entries = (listed ?? await fetchCatalog()).filter((e) => e.type === "agent" && e.bin
+  const entries = (listed ?? await catalogNow()).filter((e) => e.type === "agent" && e.bin
     && !settings.declined.includes(e.id)
     && !existsSync(path.join(userAgentsDir(), e.id))
     // The index names the command; a runtime that runs anything proves nothing about the agent.

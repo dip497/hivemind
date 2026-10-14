@@ -61,7 +61,8 @@ let catalog: Promise<CatalogEntry[]> | null = null;
 export function useCatalog(): CatalogEntry[] | null {
   const [list, setList] = useState<CatalogEntry[] | null>(null);
   useEffect(() => {
-    catalog ??= window.hive.pluginCatalog().catch(() => []);
+    // One that could not be fetched is asked for again by the next screen that shows it.
+    catalog ??= window.hive.pluginCatalog().catch(() => { catalog = null; return []; });
     let live = true;
     void catalog.then((l) => { if (live) setList(l); });
     return () => { live = false; };
