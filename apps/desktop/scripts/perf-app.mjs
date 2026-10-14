@@ -11,7 +11,7 @@
 // one in turn on the same board, so a busy machine weighs on all alike.
 import { _electron as electron } from "@playwright/test";
 import { execFileSync } from "node:child_process";
-import { readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -31,7 +31,7 @@ const repo = path.join(root, "repo");
 await fs.mkdir(repo);
 execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
 // What each shell runs: its output, then a line saying it ended. Short to type, so no shell mangles it.
-await fs.writeFile(path.join(repo, "print.sh"), 'for i in $(seq 1 "$2"); do echo "term $1 line $i of the output, padded to look like a build log ........"; done; echo "DONE-$1"\n');
+await fs.writeFile(path.join(repo, "print.sh"), 'for i in $(seq 1 "$2"); do echo "term $1 line $i of the output, padded to look like a build log ........"; done; echo "DONE-$1"; : > "done-$1"\n');
 // A home of its own holding a long agent history: SESSIONS Claude Code sessions over 20 folders
 // across two months, every 20th in this repo, each as long at its start as a real one (~200 KB).
 const SESSIONS = Number(process.env.PERF_SESSIONS ?? 600);
@@ -117,15 +117,28 @@ const mainStalls = (app) => app.evaluate(() => {
 });
 
 
-/** In the page: when every terminal inside the window shows that its output ended. Terminals off
- *  screen are sent nothing until shown, so they are not waited on. */
+/** In the page: when every terminal shown on the board shows that its output ended. Terminals off
+ *  the board's area (out of the window, or under the panel beside it) are sent nothing until
+ *  shown, so they are not waited on; shown is the app's own measure, 1% of the tile in view. */
 const visibleDone = () => {
+  const board = document.querySelector(".react-flow")?.getBoundingClientRect();
   const xs = [...document.querySelectorAll(".react-flow__node-terminal")].filter((n) => {
     const r = n.getBoundingClientRect();
-    return r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight;
+    const w = Math.min(r.right, board.right, innerWidth) - Math.max(r.left, board.left, 0);
+    const h = Math.min(r.bottom, board.bottom, innerHeight) - Math.max(r.top, board.top, 0);
+    return w > 0 && h > 0 && (w * h) / (r.width * r.height) >= 0.01;
   });
   const done = xs.length > 0 && xs.every((n) => /DONE-\d/.test(n.querySelector(".xterm")?.parentElement?.__hmScreen?.() ?? ""));
   return done && performance.timeOrigin + performance.now();
+};
+
+/** The renderer's main-thread time so far, in ms: every task, and the scripts within them; and the
+ *  CPU time its thread ran (a shared, loaded machine stretches the first, not the second). */
+const mainThread = async (cdp, pid) => {
+  const { metrics } = await cdp.send("Performance.getMetrics");
+  const m = Object.fromEntries(metrics.map((x) => [x.name, x.value]));
+  const cpu = Number(readFileSync(`/proc/${pid}/task/${pid}/schedstat`, "utf8").split(" ")[0]) / 1e6;
+  return { task: m.TaskDuration * 1000, script: m.ScriptDuration * 1000, cpu };
 };
 
 const screenText = (page) => page.evaluate(() => [...document.querySelectorAll(".xterm")]
@@ -173,9 +186,15 @@ let firstLaunch;
   for (const [i, id] of ids.entries()) {
     await page.evaluate(([t, n, k]) => window.hive.ptyWrite(`hm:${t}`, `bash print.sh ${k} ${n}\r`), [id, LINES, i]);
   }
-  // A terminal under another one is sent nothing live either, so its end may not show until the
-  // next launch restores it: past a minute the shells are taken to have printed.
-  await page.waitForFunction(visibleDone, null, { timeout: 60_000, polling: 500 }).catch(() => console.error("setup: not every shown terminal showed its end; going on"));
+  // Every shell has printed its output (its last step writes done-<n>).
+  for (let i = 0; i < 1800 && !ids.every((_, k) => existsSync(path.join(repo, `done-${k}`))); i++) await page.waitForTimeout(100);
+  await page.waitForFunction(visibleDone, null, { timeout: 180_000, polling: 500 }).catch(async (e) => {
+    console.error(JSON.stringify(await page.evaluate(() => [...document.querySelectorAll(".react-flow__node-terminal")].map((n) => {
+      const r = n.getBoundingClientRect();
+      return { at: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)], tail: (n.querySelector(".xterm")?.parentElement?.__hmScreen?.() ?? "<none>").trim().slice(-400) };
+    })), null, 1));
+    throw e;
+  });
   // The shells off screen print as fast; give them the time the shown ones took.
   await page.waitForTimeout(5000);
   await app.close();
@@ -194,6 +213,9 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
   const { app, page } = await launch(main);
   const created = await app.evaluate(() => process.getCreationTime());
   await mainStalls(app);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Performance.enable");
+  const renderer = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getOSProcessId());
   // Startup: the process, the page, the board drawn, every terminal's restored output on screen.
   const nav = await page.evaluate(() => {
     const n = performance.getEntriesByType("navigation")[0];
@@ -204,6 +226,7 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
   const shown = await whenTrue(page, visibleDone);
   const cpu = cpuOf(app.process().pid);
   const fcp = await page.evaluate(() => performance.getEntriesByName("first-contentful-paint")[0]?.startTime ?? null);
+  const startupMain = await mainThread(cdp, renderer);
   r.startup = {
     toPage: Math.round(nav.origin - created),
     toDomReady: Math.round(nav.origin + nav.dcl - created),
@@ -214,6 +237,8 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
     cpuRendererToBoard: cpuAtBoard.renderer,
     cpuMainToTerminalsShown: cpu.main,
     cpuRendererToTerminalsShown: cpu.renderer,
+    mainBusyMs: Math.round(startupMain.task),
+    mainCpuMs: Math.round(startupMain.cpu),
   };
   // Let startup's own work settle before timing screens; what held main meanwhile counts as startup's.
   await page.waitForTimeout(1500);
@@ -331,12 +356,46 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
     // Wheel up through the output: 60 notches, as a person flicks back through it.
     const box = await term.boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    const m0 = await mainThread(cdp, renderer);
     const w0 = await page.evaluate(() => performance.timeOrigin + performance.now());
     for (let i = 0; i < 60; i++) await page.mouse.wheel(0, -400);
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
     const w1 = await page.evaluate(() => performance.timeOrigin + performance.now());
+    const m1 = await mainThread(cdp, renderer);
     const lt = await longTasksDone(page);
-    r.terminalScroll = { wheel60ms: Math.round(w1 - w0), longTasks: lt.total, longest: lt.longest };
+    r.terminalScroll = { wheel60ms: Math.round(w1 - w0), mainBusyMs: Math.round(m1.task - m0.task), mainCpuMs: Math.round(m1.cpu - m0.cpu), scriptMs: Math.round(m1.script - m0.script), longTasks: lt.total, longest: lt.longest };
+
+    // Off screen and back: the terminal prints LINES lines while panned out of the window (sent
+    // nothing then), and is panned back; how long, once the board stops, until it shows the end of
+    // that output.
+    const id = await page.locator(".react-flow__node-terminal").nth(Math.max(0, index)).getAttribute("data-id");
+    const offScreen = () => page.evaluate((t) => {
+      const r = document.querySelector(`.react-flow__node-terminal[data-id="${t}"]`).getBoundingClientRect();
+      return r.right < 0 || r.left > innerWidth || r.bottom < 0 || r.top > innerHeight;
+    }, id);
+    // A spot where the wheel reaches the board itself, not a tile, a panel or a toolbar over it.
+    const spot = await page.evaluate(() => {
+      for (let y = 60; y < innerHeight - 60; y += 40) for (let x = 20; x < innerWidth - 20; x += 40) if (document.elementFromPoint(x, y)?.classList.contains("react-flow__pane")) return [x, y];
+      return null;
+    });
+    await page.mouse.move(spot[0], spot[1]);
+    let pans = 0;
+    while (!(await offScreen()) && pans < 20) { await page.mouse.wheel(2000, 0); pans++; await page.waitForTimeout(100); }
+    await page.waitForTimeout(1500);
+    const mark = 100 + run * MAINS.length + b;
+    await page.evaluate(([t, n, k]) => window.hive.ptyWrite(`hm:${t}`, `bash print.sh ${k} ${n}\r`), [id, LINES, mark]);
+    const doneFile = path.join(repo, `done-${mark}`);
+    for (let i = 0; i < 600 && !existsSync(doneFile); i++) await page.waitForTimeout(100);
+    await page.waitForTimeout(500);
+    const m2 = await mainThread(cdp, renderer);
+    for (let i = 0; i < pans; i++) await page.mouse.wheel(-2000, 0);
+    const c0 = await page.evaluate(() => performance.timeOrigin + performance.now());
+    const c1 = await whenTrue(page, ([t, k]) => {
+      const host = document.querySelector(`.react-flow__node-terminal[data-id="${t}"] .xterm`)?.parentElement;
+      return new RegExp(`DONE-${k}`).test(host?.__hmScreen?.() ?? "") && performance.timeOrigin + performance.now();
+    }, [id, mark]);
+    const m3 = await mainThread(cdp, renderer);
+    r.terminalCatchUp = { ms: Math.round(c1 - c0), mainBusyMs: Math.round(m3.task - m2.task), mainCpuMs: Math.round(m3.cpu - m2.cpu) };
   }
 
   // Canvas: wheel-pan across the board.
