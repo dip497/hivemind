@@ -161,6 +161,19 @@ test("a hookless agent holds for a draft too, and clearing it delivers", async (
   assert.deepEqual(held, [1, 2, 1, 0]);
 });
 
+test("a line sent in one write with its Enter is no draft: a message after it is not held", async () => {
+  const { mb, writes } = harness();
+  mb.typed(PID, "fix the nav\r"); // a pasted line, or a phone's, Enter and all
+  mb.deliver(PID, "ship it");
+  await settle();
+  assert.deepEqual(writes, ["ship it", "\r"]);
+
+  mb.typed(PID, "run them\rand th"); // sent, then the start of another
+  mb.deliver(PID, "report");
+  await settle();
+  assert.deepEqual(writes, ["ship it", "\r"], "held for what is typed after the Enter");
+});
+
 test("keys that are not a draft do not hold: mid-turn answers, terminal reports", async () => {
   const { mb, writes } = harness();
   mb.setBusy(PID);

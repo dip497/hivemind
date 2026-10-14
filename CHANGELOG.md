@@ -42,6 +42,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- A line typed or pasted into an agent's terminal with its Enter in one go (from the phone, a paste, a script) no longer holds every later message as if the person were still writing it: messages from the phone, `hive ctl send` and other agents go in again.
 - A message from the phone or `hive ctl send` to an agent that reports no turns (Codex, OpenCode, a custom agent) is typed at once again. Since a turn seen only on its screen held messages, one whose screen never showed its prompt again kept them forever.
 - In the Windows view and other views, a thin white line no longer shows around the panes, at their rounded corners and along the window's edges. The view's frame shows the wallpaper behind it again.
 - Over a photo wallpaper, small bright blocks of the photo no longer appear around the canvas while agents work. The dot that travels along a pipe between two agents made the canvas redraw its wires 60 times a second, and on some Linux graphics drivers those redraws left pieces of the undimmed photo behind. The dot now moves without redrawing anything.

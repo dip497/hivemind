@@ -56,6 +56,11 @@ const TYPING_QUIET_MS = 5000;
 /** The keys that leave the composer empty: Enter, Ctrl-C, Ctrl-U. */
 const CLEARS_DRAFT = new Set(["\r", "\x03", "\x15"]);
 
+/** Keys the person typed that are words of a message, not a terminal's report or a lone control key. */
+function isDraft(data: string): boolean {
+  return data[0] !== "\x1b" && /[^\x00-\x1f\x7f]/.test(data);
+}
+
 /** A held message + an optional "it actually reached the agent" callback. The callback
  *  lets an approval start its answer-timeout from DELIVERY rather than from arrival — a
  *  request held 8 minutes for a busy parent must not then time out in 1. */
@@ -121,12 +126,17 @@ export class Mailbox {
   typed(ptyId: string, data: string, paste = false, answers = false): void {
     this.typedAt.set(ptyId, Date.now());
     if (answers) return;
-    if (!paste && CLEARS_DRAFT.has(data)) {
-      if (this.draft.delete(ptyId)) this.scheduleRelease(ptyId, SUBMIT_SETTLE_MS);
-      return;
+    // A line and the key that sends it can come in one write (a pasted line, a phone's): only
+    // what follows the last such key is still being written.
+    const cleared = paste ? -1 : Math.max(...[...CLEARS_DRAFT].map((key) => data.lastIndexOf(key)));
+    if (cleared >= 0) {
+      const sent = this.draft.delete(ptyId) || isDraft(data.slice(0, cleared));
+      if (sent) this.scheduleRelease(ptyId, SUBMIT_SETTLE_MS);
+      data = data.slice(cleared + 1);
+      if (!data) return;
     }
     if (this.busy.has(ptyId)) return;
-    if (paste || (data[0] !== "\x1b" && /[^\x00-\x1f\x7f]/.test(data))) this.draft.add(ptyId);
+    if (paste || isDraft(data)) this.draft.add(ptyId);
   }
 
   /** Turn ended (Stop / agent_end). Coalesced: repeated calls before the release fires
