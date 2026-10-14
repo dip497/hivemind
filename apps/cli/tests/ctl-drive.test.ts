@@ -68,6 +68,8 @@ beforeAll(async () => {
     answer("terminal.open", (opts) => ({ pid: (opts as { tileId: string }).tileId === "hm:ghost" ? -1 : 7, joined: true })),
     answer("view.emit", (name) => (name === "ci.build" ? { id: "ev_1", delivered: true, view: "@a/valley" } : { id: "ev_3", delivered: false, view: "canvas", reason: "no-listener", buffered: true })),
     answer("plugin.commands", () => ({ plugins: [{ plugin: "@a/progress", kind: "widget", instance: "w1", label: "Progress", commands: [{ name: "add", description: "Add a step.", args: '{ "text": string }' }] }] })),
+    // As the host answers (control/methods.ts pluginOpen): a tool's tile, else the window's answer.
+    answer("plugin.open", (plugin) => (String(plugin).startsWith("tool:") ? { tile: "t-9" } : { widget: "w-5" })),
     answer("plugin.call", (_p, command, args, tile) => { if (command === "check") throw new ApiError("FAILED", "there is no step 7"); return { result: { echoed: args, tile: tile ?? null } }; }),
   ]);
   server = new WorkspaceServer([{ answers, effects: {} }], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
@@ -241,7 +243,9 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     expect([bad.code, (bad.json as { code: string }).code, calls.length]).toEqual([2, "USAGE", before]);
   });
 
-  test("plugin: commands lists what runs; call sends the JSON argument and prints the answer, or the plugin's error", async () => {
+  test("plugin: commands lists what runs; open says what it opened; call sends the JSON argument and prints the answer, or the plugin's error", async () => {
+    expect((await hive(["ctl", "plugin", "open", "tool:a/b"], { env: env() })).stdout.trim()).toBe("opened tile t-9");
+    expect((await hive(["ctl", "plugin", "open", "widget:@a/progress"], { env: env() })).stdout.trim()).toBe("added widget w-5");
     const list = await hive(["ctl", "plugin", "commands"], { env: env() });
     expect(list.stdout).toContain("@a/progress  (widget Progress, w1)");
     expect(list.stdout).toContain('add                Add a step.  args: { "text": string }');

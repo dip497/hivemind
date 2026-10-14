@@ -32,6 +32,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- The website's `install.sh` and `install.ps1` are the current installers again, and CI fails when they or the site's design tokens fall behind.
+- Settings → Shortcuts lists only keys that work: Diff review (⌘⇧G), New issue (⌘N) and toolbar keys 4 and 5 are gone, ⌘E is under On the canvas, and ⌘⇧F (fit a terminal to the screen) is listed.
+- `hive ctl plugin open tool:…` prints the tile it opened instead of "switched to view undefined"; `hive ctl spawn --help` says it prints `{ tile }`.
 - Terminals in other tabs no longer show scrambled letters after you switch tabs or come back to the window.
 - Settings: a button is as wide as its label on every page, never stretched across it; a field's focus ring is the selection colour, not the theme's accent (Amber read as "waits on you").
 - What a widget keeps (a counter's count) is no longer put back by another window or tab that edited the board before it saw the change.

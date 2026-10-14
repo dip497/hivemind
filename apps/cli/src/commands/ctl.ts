@@ -177,7 +177,7 @@ const openTool = sub("open-tool", "Open an enabled tool plugin", {
   ...repoArg,
 }, (a) => onDrive(async (d) => d.call("tool.open", [await workspaceOf(d, a.repo), { tool: a.tool, ...(a.frame ? { frame: a.frame } : {}), ...(a.url ? { url: a.url } : {}) }])));
 
-const spawn = sub("spawn", "Spawn an agent tile; prints { tileId, … }", {
+const spawn = sub("spawn", "Spawn an agent tile; prints { tile }", {
   // Named, not listed: help is built before the agents on this machine are loaded, so a
   // list here would silently omit every agent you installed. An `--agent` that is wrong is
   // answered with the real list, which is the moment it matters.
@@ -526,8 +526,8 @@ const pluginOpen = defineCommand({
   async run({ args }) {
     const json = !!args.json;
     try {
-      const r = await onDrive((d) => d.call("plugin.open", [String(args.plugin), ...(args.frame ? [String(args.frame)] : [])])) as { tileId?: string; widget?: string; view?: string };
-      console.log(json ? JSON.stringify(r) : r.tileId ? `opened tile ${r.tileId}` : r.widget ? `added widget ${r.widget}` : `switched to view ${r.view}`);
+      const r = await onDrive((d) => d.call("plugin.open", [String(args.plugin), ...(args.frame ? [String(args.frame)] : [])])) as { tile?: string; widget?: string; view?: string };
+      console.log(json ? JSON.stringify(r) : r.tile ? `opened tile ${r.tile}` : r.widget ? `added widget ${r.widget}` : `switched to view ${r.view}`);
     } catch (e) { fail(e, json); }
   },
 });
