@@ -8,8 +8,7 @@
  *   hive host status    whether it runs, as which device, where it is reached, its workspaces
  *   hive host stop      stop serving; the terminals keep running in the daemon
  *   hive host pair      make it one of your devices (spec/pairing.md): print a code, QR and link
- *                       for your app to enter, or `hive host pair <words or link>` to enter one
- *                       it shows
+ *                       for your app to enter
  *   hive host add <dir> serve a folder on this machine as one of its workspaces
  *
  *   hive host install   run it as a service of yours (systemd, Linux): at boot, and again if it stops

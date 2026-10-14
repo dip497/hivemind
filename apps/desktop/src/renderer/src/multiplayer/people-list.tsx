@@ -102,7 +102,7 @@ export function PeopleList({ repo }: { repo: string }) {
           </li>
         ))}
       </ul>
-      {people?.length === 0 && <p className="text-label text-[var(--color-fg3)]" data-people-none>Nobody else yet: invite someone with the link below.</p>}
+      {people?.length === 0 && <p className="text-label text-[var(--color-fg3)]" data-people-none>Nobody else yet: press Connect above, and send them the code.</p>}
       {granting && (
         <div className="flex flex-col gap-2 rounded-md border border-[var(--color-warn)] p-3 text-label" role="alertdialog" data-grant-agents>
           <p>{granting.name || "They"} will be able to run commands on your machine through your agents.</p>

@@ -5,7 +5,7 @@
  * every 50 ms, and every 20 s while nothing does, so the host does not take them for gone; and
  * that they left when it stops showing the workspace. It hears who is there (`presence.changed`).
  * Others' pointers are drawn on the canvas with their names, what they have selected is ringed in
- * their colour, their faces sit by Share, and a community view is told of them (protocol 1.5).
+ * their colour, their faces sit at the top right, and a community view is told of them (protocol 1.5).
  * The person here is never shown to themselves, whichever of their windows they are at.
  */
 import { useEffect, useMemo, useRef, useSyncExternalStore, type RefObject } from "react";
@@ -266,8 +266,8 @@ function SelectionRing({ id, who }: { id: string; who: Participant }) {
   );
 }
 
-/** The faces of everyone else in `repo`, one per person, by Share; `onManage`, when given, opens
- *  the People panel from them. */
+/** The faces of everyone else in `repo`, one per person; `onManage`, when given, opens
+ *  Settings → Connect from them. */
 export function PeopleHere({ repo, onManage, follow }: { repo: string; onManage?: () => void; follow?: boolean }) {
   const persons = useFacesHere(repo);
   const followed = useFollowing(repo);
