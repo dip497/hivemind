@@ -1,11 +1,11 @@
-// Starting an agent: the prompt first, then one line saying what starts where ("Claude Code · api ·
-// this computer"), the project it was opened from or else what was last started, which opens the
-// choices (agent, workspace, machine, folder); the agent's mode and model as the desktop offers them;
-// and Start, always in sight, which opens the new agent. What the computer said last shows at once,
+// Starting an agent: one line on top saying what starts where ("Claude Code · api · this computer"),
+// the project it was opened from or else what was last started, which opens the choices (agent,
+// workspace, machine, folder); the prompt under it, with + for photos and Start, always in sight,
+// which opens the new agent; the agent's mode and model as the desktop offers them. What the computer said last shows at once,
 // its answer taking its place when it comes.
 
 import type { App } from "./app.js";
-import { chips, h, icon, pill } from "./dom.js";
+import { chips, h, icon, iconButton, pill } from "./dom.js";
 import { PHOTOS_MAX, photoOf } from "./photos.js";
 import { get, put } from "./store.js";
 import type { Folders, Held, Photo, PlaceFolder, Places, Program } from "./types.js";
@@ -40,7 +40,8 @@ export class StartScreen {
   private readonly choices = h("div", { class: "choices", hidden: true, "data-start-choices": "" });
   private readonly notes = h("div", { class: "notes" });
   private readonly picker = h("input", { type: "file", accept: "image/*", multiple: true, hidden: true, "data-start-photo-input": "" });
-  private readonly go: HTMLButtonElement;
+  private readonly go = h("button", { type: "button", class: "send ready", "aria-label": "Start", "data-start-go": "" }, icon("send"));
+  private readonly addPhoto: HTMLButtonElement;
   private held: Held[] | null = null;
   private workspace: string | null = null;
   private places: Places | null = null;
@@ -72,13 +73,17 @@ export class StartScreen {
   constructor(private readonly app: App) {
     const back = h("button", { type: "button", class: "back", "aria-label": "Back", "data-back": "" }, icon("back"));
     back.addEventListener("click", () => app.back());
-    this.go = pill("Start", () => void this.run(), "primary", { "data-start-go": "" });
+    this.go.addEventListener("click", () => void this.run());
+    this.addPhoto = iconButton("plus", "Add photos", () => this.picker.click(), { "data-start-add-photo": "" });
     this.summary.addEventListener("click", () => this.pick(() => (this.choosing = !this.choosing)));
     this.picker.addEventListener("change", () => void this.addPhotos());
     this.el.append(
       h("header", { class: "backbar" }, back, h("div", { class: "what" }, h("h1", {}, "New agent"))),
-      h("div", { class: "start" }, this.prompt, this.photosRow, this.summary, this.choices, this.settings),
-      h("div", { class: "dock" }, this.notes, this.go),
+      h("div", { class: "start" },
+        this.summary,
+        h("div", { class: "prompt-card" }, this.prompt, this.photosRow, h("div", { class: "prompt-row" }, this.addPhoto, this.go)),
+        this.choices, this.settings),
+      h("div", { class: "dock" }, this.notes),
       this.picker);
     // A question that failed (the connection dropped): asked again once the computer is reached.
     app.onReach(() => !this.el.hidden && this.failed && void this.ask(this.asked, this.at.workspace, this.at.frame));
@@ -335,7 +340,7 @@ export class StartScreen {
       }));
       return h("span", { class: "photo", "data-start-photo": "" }, h("img", { src: p.url, alt: "" }), remove);
     }));
-    if (this.photos.length < PHOTOS_MAX) this.photosRow.append(pill("Add photos", () => this.picker.click(), "compact", { "data-start-add-photo": "" }));
+    this.addPhoto.hidden = this.photos.length >= PHOTOS_MAX;
   }
 
   private async addPhotos(): Promise<void> {

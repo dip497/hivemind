@@ -5,7 +5,7 @@
 // the agent's own screen, whose message box is where the line is typed. An answer the computer did not confirm is not offered again: it may have
 // landed, and a second would answer whatever the agent asks next.
 
-import { composer, h, pill } from "./dom.js";
+import { composer, h, icon, pill } from "./dom.js";
 import { markdown } from "./markdown.js";
 import { NOTICES } from "./words.js";
 import type { QuestionAnswer, Reply, Waiting } from "./types.js";
@@ -57,7 +57,7 @@ export function answers(tile: string, w: Waiting, answer: (reply: Reply) => Prom
     // Its command, four lines of it until tapped.
     const command = w.tool.about ? h("pre", { class: "mono command" }, w.tool.about) : null;
     command?.addEventListener("click", () => command.toggleAttribute("data-whole"));
-    box.append(h("div", { class: "asked", "data-tool": w.tool.name }, h("p", { class: "tool-name" }, w.tool.name), command));
+    box.append(h("div", { class: "asked", "data-tool": w.tool.name }, h("p", { class: "tool-name" }, icon("agents"), w.tool.name), command));
   }
   const asks = w.kind === "question" && w.choose ? w.asks ?? [] : [];
   if (!asks.length) {

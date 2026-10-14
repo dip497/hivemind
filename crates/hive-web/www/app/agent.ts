@@ -198,10 +198,10 @@ export class AgentScreen {
     this.waitSig = sig;
     this.typed = null;
     if (!w) return this.waits.replaceChildren();
-    const label = h("p", { class: "kind" }, `${kindLabel(w.kind)} · `, h("span", { "data-since": w.since }, ago(w.since)));
+    const label = h("p", { class: "kind" }, h("span", { class: "what" }, kindLabel(w.kind)), " · ", h("span", { "data-since": w.since }, ago(w.since)));
     const given = answers(a.tile, w, (reply) => this.app.answer(a, reply), true);
     this.typed = given.typed;
-    this.waits.replaceChildren(h("div", { class: "card rail waiting", "data-waiting-card": w.kind }, label, given.el));
+    this.waits.replaceChildren(h("div", { class: "card waiting", "data-waiting-card": w.kind }, label, given.el));
   }
 
   private async stopIt(): Promise<void> {

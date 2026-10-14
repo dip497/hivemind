@@ -249,7 +249,7 @@ test("the header is the agent's name and state in plain words, Terminal as an ic
   await expect(button).toBeDisabled();
 });
 
-test("while it works, a line above the message box says so and for how long, with a breathing dot; at rest, or in its terminal, it is gone", async () => {
+test("while it works, a line above the message box says so and for how long, with a spinner; at rest, or in its terminal, it is gone", async () => {
   test.skip(!built(), "no page build: run crates/hive-web/build.sh");
   const T = 1_790_000_000_000;
   const page = await screen(T);
@@ -261,7 +261,7 @@ test("while it works, a line above the message box says so and for how long, wit
   const style = await line.evaluate((el) => { const c = getComputedStyle(el); return [c.fontSize, c.fontFamily.split(",")[0]]; });
   expect(style).toEqual(["13px", "Geist"]);
   expect(await line.evaluate((el) => getComputedStyle(el).color)).toBe(await page.evaluate(() => { const p = document.createElement("p"); p.style.color = "var(--text3)"; document.body.append(p); return getComputedStyle(p).color; }));
-  expect(await line.locator(".dot").evaluate((el) => getComputedStyle(el).animationName)).toBe("breathe");
+  expect(await line.locator(".dot").evaluate((el) => getComputedStyle(el).animationName)).toBe("spin");
   // It sits right above the message box.
   const gap = await page.evaluate(() => document.querySelector("[data-message]")!.getBoundingClientRect().top - document.querySelector("[data-working-line]")!.getBoundingClientRect().bottom);
   expect(gap).toBeGreaterThanOrEqual(0);

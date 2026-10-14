@@ -14,6 +14,7 @@ export class Devices {
   private readonly others = h("div", { class: "list", "data-others": "" });
   private readonly id = h("p", { class: "mono" });
   private readonly reached = h("p", { class: "status mono" });
+  private readonly online = h("span", { class: "online", "aria-hidden": "true" });
   private readonly forgetting: Ask;
   private paired: Paired | null = null;
 
@@ -40,7 +41,7 @@ export class Devices {
     this.computer.dataset.paired = paired.with.device;
     this.computer.replaceChildren(
       h("span", { class: "label-small" }, "Your computer"),
-      h("h3", {}, paired.with.name),
+      h("h3", {}, this.online, paired.with.name),
       h("p", { class: "mono" }, paired.with.device),
       this.reached);
   }
@@ -60,5 +61,6 @@ export class Devices {
   status(live: boolean, error: string | null): void {
     this.reached.textContent = live ? "connected" : error ? `not reached: ${error}` : "connecting…";
     this.reached.classList.toggle("problem", !live && error !== null);
+    this.online.toggleAttribute("data-reached", live);
   }
 }

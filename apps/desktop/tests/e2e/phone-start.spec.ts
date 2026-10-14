@@ -1,7 +1,7 @@
 // Starting an agent on the phone page (docs/design/phone-browser-2026-10-03.md §11.3, §12.8), in a
 // phone-sized Chromium with no computer: the page's built modules (crates/hive-web/build.sh) served
-// from www by route, the computer's answers given by the test. The prompt comes first, then one line
-// saying what starts where, which opens the choices; opened from a project's heading it chooses that
+// from www by route, the computer's answers given by the test. One line on top says what starts
+// where and opens the choices, the prompt under it; opened from a project's heading it chooses that
 // project, else what was last started; a machine that could not be asked says why; a photo too large
 // to send as it is goes as a smaller jpeg.
 import { test, expect, chromium, type Browser, type Page } from "@playwright/test";
@@ -91,7 +91,7 @@ const calls = (page: Page) => page.evaluate(() => (window as unknown as { calls:
 const chosen = (page: Page, group: string) => page.locator(`[${group}] .chip[aria-pressed="true"]`);
 const show = (page: Page, w?: string, f?: string) => page.evaluate(([w, f]) => (window as unknown as { show(w?: string, f?: string): Promise<void> }).show(w, f), [w, f] as const);
 
-test("opened from a project's heading on a saved machine: the prompt first and focused, one line saying that agent, folder and machine, Start in sight; the line opens the choices, a folder inside is asked for, and Start asks the computer for exactly what was chosen, then opens the new agent", async () => {
+test("opened from a project's heading on a saved machine: one line on top saying that agent, folder and machine, the prompt under it and focused, Start in sight; the line opens the choices, a folder inside is asked for, and Start asks the computer for exactly what was chosen, then opens the new agent", async () => {
   test.skip(!built(), "no page build: run crates/hive-web/build.sh");
   // A phone with its keyboard up.
   const page = await start(560);
@@ -101,7 +101,7 @@ test("opened from a project's heading on a saved machine: the prompt first and f
   await show(page, "w0", "f-web");
   await expect(summary).toHaveText(/^Claude Code · web · build-box/);
   await expect(prompt).toBeFocused();
-  expect((await prompt.boundingBox())!.y).toBeLessThan((await summary.boundingBox())!.y);
+  expect((await summary.boundingBox())!.y).toBeLessThan((await prompt.boundingBox())!.y);
   await expect(page.locator("[data-start-choices]")).toBeHidden();
   await expect(go).toBeEnabled();
   await expect(go).toBeInViewport({ ratio: 1 });
