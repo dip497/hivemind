@@ -76,31 +76,57 @@ test("a pipe and a spawn wire are drawn from one tile to the other, and go when 
   await app.close();
 });
 
-test("a pipe's dot travels from one tile to the other without the page painting anything", async () => {
+test("a pipe's dot travels from one tile to the other without the page being painted again", async () => {
   const { app, page, a, b, send } = await twoShells();
+  // What the page paints in two seconds: the same with a pipe as without one, its dot being the
+  // compositor's to move. Without that, the wires are painted again on every frame.
+  const cdp = await page.context().newCDPSession(page);
+  const paintsIn2s = async () => {
+    const events: { name: string }[] = [];
+    const collect = (e: { value: { name: string }[] }) => { events.push(...e.value); };
+    cdp.on("Tracing.dataCollected", collect);
+    const done = new Promise((r) => cdp.once("Tracing.tracingComplete", r));
+    await cdp.send("Tracing.start", { traceConfig: { includedCategories: ["devtools.timeline"] }, transferMode: "ReportEvents" });
+    await page.waitForTimeout(2_000);
+    await cdp.send("Tracing.end");
+    await done;
+    cdp.off("Tracing.dataCollected", collect);
+    return events.filter((e) => e.name === "Paint").length;
+  };
+  // A still scene, so that anything painted is the pipe's.
+  await page.evaluate(async () => {
+    const { appearance } = await window.hive.settingsGet();
+    await window.hive.settingsSet("appearance", { ...appearance, glass: { ...appearance.glass, enabled: false, animate: false }, wallpaper: { ...appearance.wallpaper, kind: "none" } });
+  });
+  await page.mouse.click(5, 5);
+  await page.waitForTimeout(1_500);
+  const without = await paintsIn2s();
   await send("link.pipe", { src: a, dst: b, connected: true });
   const dot = page.locator("[data-pipe-dot]");
   await expect(dot).toHaveCount(1);
+  await page.waitForTimeout(500);
+  const withPipe = await paintsIn2s();
+  expect(withPipe - without, JSON.stringify({ without, withPipe })).toBeLessThanOrEqual(3);
 
-  // It moves, and stays between the two tiles.
-  const at = () => dot.evaluate((d) => { const r = d.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  // It plays for good, from the edge of one tile to the edge of the other.
   const box = async (id: string) => (await page.locator(`.react-flow__node[data-id="${id}"]`).boundingBox())!;
   const [ra, rb] = [await box(a), await box(b)];
-  const seen = [];
-  for (let i = 0; i < 6; i++) { seen.push(await at()); await page.waitForTimeout(150); }
-  expect(new Set(seen.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`)).size).toBeGreaterThan(3);
-  const left = Math.min(ra.x, rb.x) - 2, right = Math.max(ra.x + ra.width, rb.x + rb.width) + 2;
-  for (const p of seen) expect(p.x >= left && p.x <= right, JSON.stringify({ p, ra, rb })).toBe(true);
-
-  // Over two quiet seconds no layer is painted again: the dot is the compositor's to move.
-  const cdp = await page.context().newCDPSession(page);
-  let layers: { paintCount?: number }[] = [];
-  cdp.on("LayerTree.layerTreeDidChange", (e) => { if (e.layers) layers = e.layers; });
-  await cdp.send("LayerTree.enable");
-  await page.waitForTimeout(1_000);
-  const paints = () => layers.reduce((n, l) => n + (l.paintCount ?? 0), 0);
-  const before = paints();
-  await page.waitForTimeout(2_000);
-  expect(paints() - before).toBeLessThanOrEqual(4);
+  const ride = await dot.evaluate((d) => {
+    const run = d.getAnimations()[0];
+    if (!run) return null;
+    const playing = run.playState === "running" && run.effect!.getTiming().iterations === Infinity;
+    const at = (t: number) => { run.currentTime = t; const r = d.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; };
+    const end = Number(run.effect!.getTiming().duration);
+    const points = [at(0), at(end / 2), at(end - 1)];
+    run.play();
+    return { playing, points };
+  });
+  expect(ride?.playing).toBe(true);
+  const onBorder = (r: { x: number; y: number; width: number; height: number }, p: { x: number; y: number }) =>
+    p.x >= r.x - 3 && p.x <= r.x + r.width + 3 && p.y >= r.y - 3 && p.y <= r.y + r.height + 3 &&
+    Math.min(Math.abs(p.x - r.x), Math.abs(p.x - r.x - r.width), Math.abs(p.y - r.y), Math.abs(p.y - r.y - r.height)) < 3;
+  const [start, middle, end] = ride!.points;
+  expect({ start: onBorder(ra, start), end: onBorder(rb, end) }, JSON.stringify({ ride, ra, rb })).toEqual({ start: true, end: true });
+  expect(middle.x > Math.min(start.x, end.x) && middle.x < Math.max(start.x, end.x)).toBe(true);
   await app.close();
 });
