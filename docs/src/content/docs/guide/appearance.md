@@ -36,9 +36,9 @@ its own background.
 | Group | Pages |
 |---|---|
 | General | Profile, Appearance, Notifications, Shortcuts |
-| Connect | People, Your devices, API access |
+| Connect | Connect, API access |
 | Plugins | Plugins: agents, views, widgets and tools |
-| Advanced | Servers, About and updates |
+| Advanced | In a browser, Servers, About and updates |
 
 Links to the old page names (Agents, Views, Tools, Browse, Installed) open Plugins.
 

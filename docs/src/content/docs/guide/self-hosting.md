@@ -106,9 +106,12 @@ On the owner's computer, make an enrolment link and use it in **Settings → Ser
 hive network enrol-link --data ~/hive-net
 ```
 
-The owner then shares the workspace from **Share**. The friend opens that workspace invite link;
-it carries the relay address and the guest's admission to this closed network. The friend needs
-Tailscale access to the server, but does not need the owner's enrolment link.
+The owner then makes an offer from **Settings → Connect** in that workspace's window and sends
+**Copy the link**; the six words do not reach across networks. The friend pastes it under
+**Join**, and the owner answers **Someone else**
+([Connect devices and people](../connect/)). The link carries the relay address and the friend's
+admission to this closed network. The friend needs Tailscale access to the server, but does not
+need the owner's enrolment link.
 
 ## Using it
 
@@ -128,8 +131,8 @@ docker compose -f infra/compose.yml exec hive-net /usr/local/bin/hive-net \
 
 It enrols one device and lasts seven days (`--uses <n>`, and `--expires 12h` for `hive network`,
 `--expires-in <seconds>` for `hive-net`). Once a device
-is on the network, people it invites get in through the invite itself: your device vouches for
-theirs, for as long as their invite lasts.
+is on the network, people it lets in get in through its offer or invite link: your device vouches
+for theirs, for as long as the link lasts.
 
 **Check** under Settings → Servers (or `hive network doctor`) says whether the relay, the lookup
 server and the access service answer, and when the relay turns this computer away, why.
