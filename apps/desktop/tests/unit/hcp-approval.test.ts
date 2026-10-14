@@ -48,7 +48,6 @@ function plane(o: { deliver?: (id: string, text: string, onSent?: () => void, d?
     disconnect: () => {},
     forgetPipes: () => {},
     spawnEdge: () => {},
-    setSupervise: () => {},
     ...(o.reported ? { reported: o.reported } : {}),
     ...deps,
   } as unknown as Parameters<typeof makeDispatch>[0]);

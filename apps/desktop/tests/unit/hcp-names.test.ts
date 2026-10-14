@@ -86,7 +86,6 @@ test("spawn names the tile it opens: it enumerates its params, and a dropped one
     disconnect: () => {},
     forgetPipes: () => {},
     spawnEdge: () => {},
-    setSupervise: () => {},
     ...ws,
   } as unknown as Parameters<typeof makeDispatch>[0]);
 

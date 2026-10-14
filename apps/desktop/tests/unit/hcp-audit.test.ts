@@ -42,7 +42,6 @@ function dispatcher() {
     disconnect: () => {},
     forgetPipes: () => {},
     spawnEdge: () => {},
-    setSupervise: () => {},
     ...ws,
   });
   // A line without its time, which the next test checks on its own.

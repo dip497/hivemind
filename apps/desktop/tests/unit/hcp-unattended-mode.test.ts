@@ -28,7 +28,6 @@ function dispatcher(agentInstalled?: (def: unknown, where: { callerTile?: string
       disconnect: () => {},
       forgetPipes: () => {},
       spawnEdge: () => {},
-      setSupervise: () => {},
       ...ws,
     } as unknown as Parameters<typeof makeDispatch>[0]),
   };

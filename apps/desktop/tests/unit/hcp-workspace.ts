@@ -1,7 +1,7 @@
 /**
  * The workspace side of the control plane's dependencies, for tests of its dispatch
  * (@hivemind/host/control/methods): a real store with one workspace open and shown in the user's
- * window, a real status store and the waits it shows, no saved launch options, a record of every spawn the windows
+ * window, a real status store and the waits it shows, no saved launch options, who started each spawned tile kept in a file there, a record of every spawn the windows
  * would have been told of, and the host's intents writing a real audit log (`audited()` reads
  * it back).
  */
@@ -14,6 +14,7 @@ import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { newSeed } from "@hivemind/workspace-host/identity";
 import { Intents, type AuditRecord } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
+import { SpawnRecords } from "@hivemind/host/control/spawn-records";
 import type { HcpSpawnedEvent } from "../../src/shared/ipc.ts";
 import type { HcpCall } from "@hivemind/host/control/protocol";
 
@@ -34,6 +35,7 @@ export function workspaceDeps() {
     workspaces,
     status,
     waits: new Waits({ status }),
+    spawnRecords: new SpawnRecords(path.join(dir, "spawned-tiles.json")),
     shownWorkspace: () => ({ repo: REPO, frame: null }),
     launchOptions: () => ({}),
     announceSpawn: (spawn: HcpSpawnedEvent) => void announced.push(spawn),

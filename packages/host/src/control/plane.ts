@@ -25,6 +25,7 @@ import { Mailbox } from "./mailbox.js";
 import { makeDispatch, type ControlWork, type Dispatcher, type MethodDeps } from "./methods.js";
 import { OutputRecorder } from "./output-recorder.js";
 import { PipeManager } from "./pipes.js";
+import { SpawnRecords } from "./spawn-records.js";
 import type { HcpCall } from "./protocol.js";
 import { SubagentReaper } from "./subagent-reaper.js";
 import { TurnTracker } from "./turn-tracker.js";
@@ -34,7 +35,7 @@ import { Waits } from "../waits.js";
 export type EmbedderDeps = Omit<
   MethodDeps,
   | "agentOf" | "writeToTile" | "deliverToTile" | "turns" | "recorder" | "spawnAllowed" | "connect" | "disconnect"
-  | "forgetPipes" | "spawnEdge" | "setSupervise" | "waits" | "status" | "announceSpawn" | "inbox" | "waitingOf"
+  | "forgetPipes" | "spawnEdge" | "spawnRecords" | "waits" | "status" | "announceSpawn" | "inbox" | "waitingOf"
 >;
 
 export interface ControlPlaneOptions {
@@ -78,6 +79,8 @@ const SPAWNS_A_MINUTE = 16;
 const SCREEN_STATES = new Set<ScreenState>(["idle", "working", "permission", "question", "blocked"]);
 /** What an agent's terminal is told when messages wait in its inbox; never what they say. */
 const DOORBELL = "\n[hive] Your agents sent you messages. Read them: hive ctl inbox\n";
+/** Where the control plane keeps who started each tile it spawned, in its data folder. */
+const SPAWN_RECORDS_FILE = "spawned-tiles.json";
 
 export class ControlPlane {
   /** Each session's output, ANSI stripped, by pty id: what `read` and `stream` catch up from. */
@@ -91,9 +94,11 @@ export class ControlPlane {
   readonly waits: Waits;
   /** Which agent runs in each tile (bare id → provider id), as it was started. */
   readonly agentOf = new Map<string, string>();
+  /** Who started each spawned tile and on what terms, kept across restarts. */
+  private readonly spawnRecords: SpawnRecords;
   /** Each supervised worker's policy (bare id → "all" or a tool list), injected as HIVE_SUPERVISE
    *  into its environment when its session starts. */
-  readonly supervise = new Map<string, string>();
+  readonly supervise = { get: (bare: string): string | undefined => this.spawnRecords.get(bare)?.supervise };
   /** Messages to an agent, held until it is at its prompt (by pty id). */
   readonly mailbox: Mailbox;
   /** What other agents have for an agent, until it reads them (by bare id). */
@@ -112,6 +117,13 @@ export class ControlPlane {
   private readonly inTurn = new Set<string>();
 
   constructor(private readonly o: ControlPlaneOptions) {
+    this.spawnRecords = new SpawnRecords(path.join(o.dir(), SPAWN_RECORDS_FILE));
+    // The wires and report pipes of the workers this app spawned before it last stopped.
+    for (const [child, r] of this.spawnRecords.entries()) {
+      if (!r.spawner) continue;
+      this.spawnWires.set(child, r.spawner);
+      if (r.reports) this.pipes.connect(child, r.spawner);
+    }
     this.waits = new Waits({ status: this.status, changed: () => o.waitsChanged?.() });
     this.status.subscribe((change) => o.publish("status.changed", change));
     // A spawned worker that starts waiting is reported to its parent; no dispatcher yet, no workers.
@@ -207,7 +219,7 @@ export class ControlPlane {
         else for (const [c, p] of this.spawnWires) if (c === child || p === child) this.spawnWires.delete(c);
         o.publish("link.spawn", { child, parent, connected });
       },
-      setSupervise: (id, spec) => { if (spec) this.supervise.set(id, spec); else this.supervise.delete(id); },
+      spawnRecords: this.spawnRecords,
       waits: this.waits,
       status: this.status,
       announceSpawn: ({ prompt, ...opened }) => {
@@ -283,6 +295,7 @@ export class ControlPlane {
     this.inbox.forget(bare);
     this.inTurn.delete(bare);
     this.status.exited(bare);
+    this.spawnRecords.forget(bare);
     this.made?.forgetTile(tileId);
   }
 

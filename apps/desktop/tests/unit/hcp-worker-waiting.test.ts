@@ -35,7 +35,6 @@ function fleet(waitingOf: (bare: string) => AgentItem["waiting"] = () => undefin
     disconnect: () => {},
     forgetPipes: () => {},
     spawnEdge: () => {},
-    setSupervise: () => {},
     ...deps,
   } as unknown as Parameters<typeof makeDispatch>[0]);
   status.subscribe((c) => made.onStatus(c.tileId, c.status));

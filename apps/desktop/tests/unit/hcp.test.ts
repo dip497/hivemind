@@ -109,7 +109,6 @@ function fakeDeps(over: Partial<Parameters<typeof makeDispatch>[0]> = {}) {
     disconnect: () => {},
     forgetPipes: () => {},
     spawnEdge: () => {},
-    setSupervise: () => {},
     ...workspaceDeps(),
     ...over,
   };
@@ -236,13 +235,12 @@ test("approval: deny carries a reason back to the worker", async () => {
 });
 
 test("spawn supervise: records the broker policy (default set + 'all')", async () => {
-  const supervised: Array<[string, string | null]> = [];
-  const { deps } = fakeDeps({ setSupervise: (id: string, spec: string | null) => { supervised.push([id, spec]); } });
+  const { deps } = fakeDeps();
   const { spawn } = makeDispatch(deps);
   const first = await spawn({ agent: "claude", parent: "parent", supervise: true, report: false, repo: REPO });
-  assert.deepEqual(supervised.at(-1), [first, "Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch"]);
+  assert.equal(deps.spawnRecords.get(first)?.supervise, "Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch");
   const second = await spawn({ agent: "claude", parent: "parent", supervise: "all", report: false, repo: REPO });
-  assert.deepEqual(supervised.at(-1), [second, "all"]);
+  assert.equal(deps.spawnRecords.get(second)?.supervise, "all");
 });
 
 test("the agent channel carries what an agent's plugin and hooks say, and nothing else: the rest is the workspace API's", async () => {

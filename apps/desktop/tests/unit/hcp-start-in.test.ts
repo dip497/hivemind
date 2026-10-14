@@ -26,7 +26,6 @@ function made() {
     disconnect: () => {},
     forgetPipes: () => {},
     spawnEdge: (child: string, parent: string | null, on: boolean) => { if (on) wires.push(`${parent}->${child}`); },
-    setSupervise: () => {},
     ...deps,
   } as unknown as Parameters<typeof makeDispatch>[0]);
   return { deps, dispatch, wires, pipes };

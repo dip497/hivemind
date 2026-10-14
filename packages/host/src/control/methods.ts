@@ -30,6 +30,7 @@ import type { WorkspaceStore } from "@hivemind/workspace-host/store";
 import type { Waits } from "../waits.js";
 import { Refused, type Intent, type Intents } from "@hivemind/workspace-host/intents";
 import type { StatusStore } from "@hivemind/agent-host/status-store";
+import type { SpawnRecords } from "./spawn-records.js";
 
 /** `view.emit` rate: a steady 10 per second, bursts of 30. */
 export const EMIT_RATE = { perSecond: 10, burst: 30 };
@@ -161,10 +162,10 @@ export interface MethodDeps {
    *  drawn on spawn, independent of the report/data pipe. Call with parent=null,
    *  connected=false to drop every spawn link touching `child` (on close). */
   spawnEdge: (child: string, parent: string | null, connected: boolean) => void;
-  /** Record (or clear, with null) a worker's supervision policy. Main injects it
-   *  as HIVE_SUPERVISE into the worker's spawn env so the daemon installs the
+  /** Who started each spawned tile and on what terms, kept across restarts. Main injects a
+   *  worker's supervision as HIVE_SUPERVISE into its spawn env, so the daemon installs the
    *  permission-broker hook. */
-  setSupervise: (tileId: string, spec: string | null) => void;
+  spawnRecords: SpawnRecords;
   /** What agents wait on that an answer ends: a supervised worker's tool use, a plan. */
   waits: Waits;
   /** The workspaces main has open. The canvas verbs read them, and write them as `control`;
@@ -244,7 +245,7 @@ export interface Dispatcher {
   api: ControlWork;
   /** Drop ALL per-tile HCP state for a tile that has gone away, WITHOUT closing it
    *  as `close` does. MUST be called on every pty-exit and
-   *  user-close path — otherwise the maps (parentOf/depthOf/sendSeq/approveCache)
+   *  user-close path — otherwise the records (spawnRecords/sendSeq/approveCache)
    *  and its wait leak, a blocked agent.read/approval on the dead worker hangs
    *  its full timeout instead of resolving, and its UI "awaiting" status lingers.
    *  Idempotent — safe to call twice (e.g. close then the resulting pty-exit). */
@@ -286,17 +287,11 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // pty, recorder, turn-tracker and HIVEMIND_TILE are keyed by the pty id; the
   // control surface uses the bare id.
 
-  // child (bare) → parent (bare): set when a parent spawns a child via
-  // spawn, read by agent.report so a worker can push a result back to
-  // the agent that spawned it (mailbox-style, no polling).
-  const parentOf = new Map<string, string>();
-  // bare tileId → spawn depth (HCP-spawned children only; user-spawned agents
-  // are absent → treated as depth 0). Enforced against MAX_SPAWN_DEPTH.
-  const depthOf = new Map<string, number>();
-  /** bare tileId → provider id, for tiles spawned through HCP (user-spawned
-   *  tiles are resolved by deps.agentOf from their command). */
-  const agentOfTile = new Map<string, string>();
-  const providerOf = (tileId: string): string | undefined => agentOfTile.get(bareOf(tileId)) ?? deps.agentOf?.(bareOf(tileId));
+  // Who started a spawned tile (agent.report and approvals go there), its spawn depth (a tile
+  // the person opened is 0, enforced against MAX_SPAWN_DEPTH) and its agent (a tile the person
+  // opened is resolved by deps.agentOf from its command).
+  const parentOf = (bare: string): string | undefined => deps.spawnRecords.get(bare)?.parent;
+  const providerOf = (tileId: string): string | undefined => deps.spawnRecords.get(bareOf(tileId))?.agent ?? deps.agentOf?.(bareOf(tileId));
   /** Refuse a verb that needs a deterministic turn signal from a provider that
    *  has none — an honest UNSUPPORTED instead of a read that times out. */
   const requireTurnSignal = (tileId: string, verb: string): void => {
@@ -343,7 +338,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   }): Promise<string> => {
     // An agent that starts one is its tile: the child is a level below it, beside it on the board.
     const tile = opts.parent && !isClient(opts.parent) ? opts.parent : undefined;
-    const callerDepth = tile ? (depthOf.get(tile) ?? 0) : 0;
+    const callerDepth = tile ? (deps.spawnRecords.get(tile)?.depth ?? 0) : 0;
     const childDepth = callerDepth + 1;
     if (childDepth > MAX_SPAWN_DEPTH) {
       throw new ApiError("DEPTH_EXCEEDED", `agent spawn depth ${childDepth} exceeds max ${MAX_SPAWN_DEPTH}`);
@@ -406,19 +401,20 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       ...agentLaunch(def, { options, labels: ws.tiles.map((t) => t.label), prompt, resume }),
     }), { name, prompt, background: opts.report === false });
     const res = { tileId };
-    depthOf.set(res.tileId, childDepth);
-    agentOfTile.set(res.tileId, agent);
-    if (opts.parent) {
-      parentOf.set(res.tileId, opts.parent);
-      if (sup) deps.setSupervise(res.tileId, sup);
-    }
-    if (tile && tile !== res.tileId) {
+    const spawner = tile && tile !== res.tileId ? tile : undefined;
+    deps.spawnRecords.add(res.tileId, {
+      agent, depth: childDepth, reports: !!spawner && opts.report !== false,
+      ...(opts.parent ? { parent: opts.parent } : {}),
+      ...(spawner ? { spawner } : {}),
+      ...(opts.parent && sup ? { supervise: sup } : {}),
+    });
+    if (spawner) {
       // The parentage WIRE is drawn ALWAYS — for sub-agents AND background
       // workflow workers (report:false) — so every spawned tile visibly links
       // to the agent that spawned it. The report/data pipe (animated) is still
       // separate and only for report:true.
-      deps.spawnEdge(res.tileId, tile, true);
-      if (opts.report !== false) deps.connect(res.tileId, tile);
+      deps.spawnEdge(res.tileId, spawner, true);
+      if (opts.report !== false) deps.connect(res.tileId, spawner);
     }
     armRead(res.tileId);
     return res.tileId;
@@ -446,10 +442,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     sendSeq.delete(pid);
     sendMark.delete(pid);
     pendingSend.delete(pid);
-    parentOf.delete(bare);
-    for (const [child, parent] of parentOf) if (parent === bare) parentOf.delete(child);
-    depthOf.delete(bare);
-    deps.setSupervise(bare, null);
+    deps.spawnRecords.forget(bare);
     deps.waits.forget(bare);
     waitTold.delete(bare);
     deps.inbox.forget(bare);
@@ -474,7 +467,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     if (reading?.size) { for (const told of reading) told("waiting"); return; }
     // An approval is the parent's own question: its message went out already.
     if (status.kind === "approval" || waitTold.has(bare)) return;
-    const parent = parentOf.get(bare);
+    const parent = parentOf(bare);
     // A program that started it reads its status itself.
     if (!parent || isClient(parent)) return;
     waitTold.add(bare);
@@ -587,7 +580,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           // A spawned worker pushes a result back to the agent that spawned it: kept in that
           // agent's inbox. The caller is its OWN tile (HIVEMIND_TILE).
           const child = bareOf(String(p.callerTile ?? ""));
-          const parent = parentOf.get(child);
+          const parent = parentOf(child);
           if (!parent) throw new ApiError("NOT_FOUND", "no parent agent to report to");
           const message = String(p.message ?? "").trim();
           if (!message) throw new ApiError("BAD_REQUEST", "message required");
@@ -630,7 +623,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         if (!worker || !tool) return { decision: "ask" };
         const ruled = deps.waits.ruled(worker, tool);
         if (ruled) return { decision: ruled };
-        const parent = parentOf.get(worker);
+        const parent = parentOf(worker);
         if (!parent) return { decision: "ask" }; // no supervisor → fall back to human prompt
         // Asking is the effect: the question is typed into the supervisor's terminal, and the
         // worker waits for the answer.
@@ -887,6 +880,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   return {
     agentChannel, api, forgetTile: forgetTileState, labelOf: label, spawn: doSpawn, close: closeTile,
-    parentOf: (bare) => parentOf.get(bare), onStatus,
+    parentOf, onStatus,
   };
 }
