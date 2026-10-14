@@ -182,6 +182,25 @@ test("unfolded, a tool's input, what it is about and what it gave back are each 
   assert.equal(toolUse(small, conformance.mapped.transcript, "c2")!.truncated, undefined);
 });
 
+test("in a long session, read back from its end a piece at a time, each tool use unfolds whole, what it gave back cut across pieces or not", () => {
+  const line = (rid: string, kind: string, payload: unknown) => JSON.stringify({ rid, ts: "2026-10-02T08:00:00.000Z", kind, payload });
+  const lines = Array.from({ length: 24 }, (_, i) => [
+    line(`r${i}a`, "call", { call_id: `c${i}`, name: "shell", args: { cmd: `step ${i}` } }),
+    line(`r${i}b`, "output", { call_id: `c${i}`, output: `${i}`.repeat(TOOL_MAX - 1 + i) + "y".repeat(400_000 + 7919 * i) }),
+  ]).flat();
+  // One used first and answered last, all the others between.
+  const far = [line("rfa", "call", { call_id: "cfar", name: "shell", args: { cmd: "wait" } }), line("rfb", "output", { call_id: "cfar", output: "done" })];
+  const long = sessionFile(`${[far[0], ...lines, far[1]].join("\n")}\n`);
+  assert.ok(fs.statSync(long).size > 10 * 1024 * 1024);
+  for (let i = 0; i < 24; i++) {
+    const alone = sessionFile(`${lines[2 * i]}\n${lines[2 * i + 1]}\n`);
+    assert.deepEqual(toolUse(long, conformance.mapped.transcript, `c${i}`), toolUse(alone, conformance.mapped.transcript, `c${i}`), `c${i}`);
+  }
+  const farAlone = toolUse(sessionFile(`${far.join("\n")}\n`), conformance.mapped.transcript, "cfar");
+  assert.equal(farAlone?.result?.text, "done");
+  assert.deepEqual(toolUse(long, conformance.mapped.transcript, "cfar"), farAlone);
+});
+
 test("asked for a tool use an agent made, the caller is answered it unfolded; one its session does not name, or an agent keeping no conversation, is not found", async () => {
   const c = conformance.unfolded.mapped[0]!;
   const at = sessionFile(`${c.lines.join("\n")}\n`);

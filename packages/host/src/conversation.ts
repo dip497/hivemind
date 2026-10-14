@@ -98,19 +98,53 @@ export function pendingTool(file: string, format: AgentTranscript): ToolAsked | 
 /** The most characters of a tool's input, and of what it gave back, sent unfolded. */
 export const TOOL_MAX = 256 * 1024;
 
-/** The tool use `use` in the session file `file`, read as `format` maps it, unfolded: the records
- *  that name it, read whole; undefined when none says it was used. */
-export function toolUse(file: string, format: AgentTranscript, use: string): ToolUse | undefined {
-  let bytes: Buffer;
-  try { bytes = fs.readFileSync(file); } catch { return undefined; }
-  const named = Buffer.from(JSON.stringify(use));
-  const lines: string[] = [];
-  for (let at = bytes.indexOf(named); at >= 0; ) {
-    const start = bytes.lastIndexOf(0x0a, at) + 1;
-    const end = bytes.indexOf(0x0a, at);
-    lines.push(bytes.subarray(start, end < 0 ? bytes.length : end).toString("utf8"));
-    at = end < 0 ? -1 : bytes.indexOf(named, end);
+/** How much of a session file is read at a time looking for a tool use, from its end. */
+const TOOL_CHUNK = 4 * 1024 * 1024;
+
+/** The lines of `file` that name `named`, read back from its end a chunk at a time, in the file's
+ *  order: from the last chunk back to the first that gives what `enough` asks of them. */
+function linesNaming(file: string, named: Buffer, enough: (lines: string[]) => boolean): string[] {
+  const fd = fs.openSync(file, "r");
+  try {
+    const found: string[] = [];
+    // The start of the line the chunk after this one began inside of.
+    let carry = Buffer.alloc(0);
+    for (let end = fs.fstatSync(fd).size; end > 0; ) {
+      const start = Math.max(0, end - TOOL_CHUNK);
+      const bytes = Buffer.alloc(end - start + carry.length);
+      fs.readSync(fd, bytes, 0, end - start, start);
+      carry.copy(bytes, end - start);
+      end = start;
+      // Read from inside the file, the first line is a piece of one: kept for the chunk before.
+      const from = start === 0 ? 0 : bytes.indexOf(0x0a) + 1;
+      if (from === 0 && start > 0) { carry = bytes; continue; }
+      carry = bytes.subarray(0, from);
+      const here: string[] = [];
+      for (let at = bytes.indexOf(named, from); at >= 0; ) {
+        const lineStart = bytes.lastIndexOf(0x0a, at) + 1;
+        const lineEnd = bytes.indexOf(0x0a, at);
+        here.push(bytes.subarray(lineStart, lineEnd < 0 ? bytes.length : lineEnd).toString("utf8"));
+        at = lineEnd < 0 ? -1 : bytes.indexOf(named, lineEnd);
+      }
+      if (!here.length) continue;
+      found.unshift(...here);
+      if (enough(found)) break;
+    }
+    return found;
+  } finally {
+    fs.closeSync(fd);
   }
+}
+
+/** The tool use `use` in the session file `file`, read as `format` maps it, unfolded: the records
+ *  that name it, read whole, back from the end of the file to the one that says it was used;
+ *  undefined when none says it was. */
+export function toolUse(file: string, format: AgentTranscript, use: string): ToolUse | undefined {
+  const named = Buffer.from(JSON.stringify(use));
+  const usedIn = (lines: string[]) => transcriptEntries(format, lines, { full: true })
+    .find((e): e is Extract<TranscriptEntry, { tool: unknown }> => "tool" in e && e.tool.id === use)?.tool;
+  let lines: string[];
+  try { lines = linesNaming(file, named, (l) => !!usedIn(l)); } catch { return undefined; }
   const entries = transcriptEntries(format, lines, { full: true });
   const tool = entries.find((e): e is Extract<TranscriptEntry, { tool: unknown }> => "tool" in e && e.tool.id === use)?.tool;
   if (!tool) return undefined;
