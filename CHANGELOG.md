@@ -44,6 +44,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- Recents lists a folder's older sessions, and listing them no longer stalls the app on a long agent history.
+- Opening a tool use in an agent's conversation on your phone is instant on long sessions.
+- HiveHub and a listed plugin's page open at once after the first fetch; a listed plugin's page no longer says the plugin is gone while loading.
 - A line typed or pasted into an agent's terminal with its Enter in one go (from the phone, a paste, a script) no longer holds every later message as if the person were still writing it: messages from the phone, `hive ctl send` and other agents go in again.
 - A message from the phone or `hive ctl send` to an agent that reports no turns (Codex, OpenCode, a custom agent) is typed at once again. Since a turn seen only on its screen held messages, one whose screen never showed its prompt again kept them forever.
 - The Android app opens a computer's `hivemind://` link: tapped or opened from another app, it goes straight to pairing with it.
