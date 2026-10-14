@@ -146,6 +146,8 @@ interface Session {
   /** Recent output as chunks ending at `end`, capped at RING_CHARS. */
   ring: { end: number; data: string }[];
   ringChars: number;
+  /** The last screen serialized: the output it covers up to, and its lines of scrollback. */
+  lastScreen?: { at: number; lines: number; text: string };
 }
 
 
@@ -475,7 +477,7 @@ export class SessionManager {
       // The screen covers output up to `at`; output that arrived while it drained follows it raw.
       const at = s.seq;
       s.term.write("", () => {
-        const screen = s.serializer.serialize({ scrollback: Math.min(lines, this.scrollback) });
+        const screen = this.screenText(s, at, Math.min(lines, this.scrollback));
         const tail = this.ringSince(s, at);
         if (tail !== null) resolve({ replay: screen + tail, seq: s.seq });
         // ponytail: a flood that outruns the ring between drains ends with a gap after three tries.
@@ -483,6 +485,17 @@ export class SessionManager {
         else resolve({ replay: screen, seq: s.seq });
       });
     });
+  }
+
+  /** The screen as VT text with `lines` of scrollback, once the term has taken the output up to
+   *  `at`. Serializing walks every cell of the scrollback, so the last one is kept and given again
+   *  while no output or resize has changed the screen since. */
+  private screenText(s: Session, at: number, lines: number): string {
+    const kept = s.lastScreen;
+    if (kept && kept.at === at && kept.lines === lines) return kept.text;
+    const text = s.serializer.serialize({ scrollback: lines });
+    s.lastScreen = { at, lines, text };
+    return text;
   }
 
   /** Output after `seq`, or null when the ring no longer holds all of it. */
@@ -626,6 +639,7 @@ export class SessionManager {
   }
   private applySize(s: Session, cols: number, rows: number): void {
     const changed = cols !== s.spec.cols || rows !== s.spec.rows;
+    if (changed) s.lastScreen = undefined;
     s.spec = { ...s.spec, cols, rows };
     try {
       s.pty.resize(cols, rows);
@@ -795,6 +809,7 @@ export class SessionManager {
     this.cancelSnapshotTimer(s.id);
     s.dirty = false;
     return new Promise<void>((resolve) => {
+      const at = s.seq;
       // Drain the xterm write queue before serializing — without this, the
       // snapshot misses output emitted in the same tick as the flush trigger.
       s.term.write("", () => {
@@ -806,7 +821,7 @@ export class SessionManager {
             id: s.id,
             spec: s.spec,
             ...(s.asked ? { asked: s.asked } : {}),
-            replay: s.serializer.serialize({ scrollback: this.scrollback }),
+            replay: this.screenText(s, at, this.scrollback),
             title: s.lastTitle,
             savedAt: Date.now(),
           });
