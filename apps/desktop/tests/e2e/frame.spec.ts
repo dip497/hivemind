@@ -50,7 +50,7 @@ test("frame header-drag moves it", async () => {
   expect(before).toBeTruthy();
 
   // Drag handle is the colored header bar inside the frame.
-  const header = frame.locator(".tile-drag-handle").first();
+  const header = frame.locator(".frame-drag-handle").first();
   const hb = await header.boundingBox();
   expect(hb).toBeTruthy();
   // Click mid-header to avoid the rename-input + buttons at edges.
@@ -100,4 +100,25 @@ test("frame arrange menu offers Columns / Rows / Grid", async () => {
   await expect(page.getByText("Rows", { exact: true })).toBeVisible();
   await expect(page.getByText("Grid", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
+});
+
+test("over a wallpaper (glass), a frame's name line stays one material with the frame: no bar of its own", async () => {
+  const label = page.locator(".react-flow__node-frame").first().locator("[data-frame-label]");
+  await expect(label).toBeVisible();
+  await page.evaluate(() => document.documentElement.classList.add("content-glass"));
+  try {
+    expect(await label.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
+    // A tile's title bar is still frosted there.
+    const bar = await page.evaluate(() => {
+      const el = document.createElement("div");
+      el.className = "tile-drag-handle";
+      document.body.append(el);
+      const bg = getComputedStyle(el).backgroundColor;
+      el.remove();
+      return bg;
+    });
+    expect(bar).not.toBe("rgba(0, 0, 0, 0)");
+  } finally {
+    await page.evaluate(() => document.documentElement.classList.remove("content-glass"));
+  }
 });

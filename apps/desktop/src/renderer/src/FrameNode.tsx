@@ -124,7 +124,8 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
       {/* The label line is the drag handle; the body passes pan and selection through to the
           pane (pointer-events:none on the wrapper, styles.css) so the tiles inside stay clickable. */}
       <div
-        className="absolute top-0 left-0 right-0 h-7 flex items-center gap-2 pl-3 pr-1.5 tile-drag-handle cursor-grab active:cursor-grabbing"
+        className="absolute top-0 left-0 right-0 h-7 flex items-center gap-2 pl-3 pr-1.5 frame-drag-handle cursor-grab active:cursor-grabbing"
+        data-frame-label
         style={{ pointerEvents: "auto" }}
         onPointerDown={() => data.onBringToFront(data.id)}
       >

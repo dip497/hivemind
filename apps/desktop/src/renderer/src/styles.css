@@ -612,7 +612,7 @@ a {
 .react-flow__node-frame {
   pointer-events: none !important;
 }
-.react-flow__node-frame .tile-drag-handle,
+.react-flow__node-frame .frame-drag-handle,
 .react-flow__node-frame .react-flow__resize-control {
   pointer-events: auto;
 }

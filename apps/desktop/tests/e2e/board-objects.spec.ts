@@ -169,7 +169,7 @@ test("a note added in a frame, or dropped in one, moves with it; an arrow joins 
   const inside = page.locator(`${nodeOf("note")}:has-text("inside")`);
   const frameNode = page.locator(".react-flow__node-frame");
   const [ib, fb0] = [(await inside.boundingBox())!, (await frameNode.boundingBox())!];
-  const header = (await frameNode.locator(".tile-drag-handle").first().boundingBox())!;
+  const header = (await frameNode.locator(".frame-drag-handle").first().boundingBox())!;
   await drag(page, { x: header.x + 30, y: header.y + header.height / 2 }, { x: 160, y: 120 });
   expect(await settled(stored)).toEqual(kept);
   // The frame lands on the grid, at whatever zoom the canvas is: the note moves just as far.

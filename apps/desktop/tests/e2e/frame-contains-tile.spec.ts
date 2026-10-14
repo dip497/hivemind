@@ -101,7 +101,7 @@ test("drag terminal into frame: ends up visually inside but NOT reparented", asy
   console.log("parent attr after drag:", parentInfo);
 
   // 3. Move the frame — if the tile is parented it follows, if not it stays put.
-  const frameHeader = frame.locator(".tile-drag-handle").first();
+  const frameHeader = frame.locator(".frame-drag-handle").first();
   const fhBox = await frameHeader.boundingBox();
   expect(fhBox).toBeTruthy();
   const fsx = fhBox!.x + 30;

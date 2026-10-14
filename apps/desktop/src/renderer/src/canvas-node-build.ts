@@ -147,7 +147,8 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
         actions: frameActions,
         tileIds: frameTiles.get(f.id) ?? NO_TILES,
       } satisfies FrameNodeData,
-      dragHandle: ".tile-drag-handle",
+      // Its own class: a tile's title-bar styles (the frosted bar under glass) are not a frame's.
+      dragHandle: ".frame-drag-handle",
     });
   }
 
