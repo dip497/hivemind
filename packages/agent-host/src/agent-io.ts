@@ -10,13 +10,9 @@ import { agentById } from "@hivemind/agents";
 export const SUBMIT_DELAY_MS = 90;
 
 /**
- * Backstop delay (ms) for the INITIAL spawn prompt only. A freshly-booted agent
- * TUI sometimes drops the first Enter — it arrives before the paste-debounce of
- * the just-rendered input settles, so the prompt is typed but never submitted and
- * the user has to press Enter by hand. We re-send Enter once at this longer delay,
- * but ONLY if the agent is still idle (never submitted) — so a prompt that already
- * went through never gets a stray second Enter. Long enough that a poll tick has
- * run and reflected "working" if the first Enter did land.
+ * How often (ms) the INITIAL spawn prompt's Enter is pressed again while the agent is still idle.
+ * A freshly-booted agent TUI can drop Enters until its input settles, so the prompt sits typed but
+ * never submitted. Long enough that a poll tick has run and reflected "working" if one did land.
  */
 export const SPAWN_SUBMIT_RETRY_MS = 1500;
 

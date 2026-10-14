@@ -9,7 +9,7 @@
 import type { TileRecord } from "@hivemind/workspace-doc/shapes";
 import { agentForCmd } from "@hivemind/agents";
 import { deliversPromptViaArgv } from "@hivemind/agent-host/agent-io";
-import { AgentStart, START_TICK_MS, typeTask } from "@hivemind/agent-host/agent-start";
+import { AgentStart, START_TICK_MS } from "@hivemind/agent-host/agent-start";
 import { typeKeys } from "@hivemind/agent-host/keys";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { toPtyId } from "@hivemind/workspace-api/tile-id";
@@ -55,10 +55,11 @@ export async function startSpawned(o: SpawnedOptions, spawn: { tileId: string; r
     if (!o.holds(ptyId) || (!task && !start.mayDismiss(now))) return stop();
     looking = true;
     try {
-      const keys = start.mayDismiss(now) ? start.dismiss((await o.screen(ptyId)) ?? "", now) : null;
+      const screen = start.mayDismiss(now) || task ? (await o.screen(ptyId)) ?? "" : "";
+      const keys = start.mayDismiss(now) ? start.dismiss(screen, now) : null;
       if (keys) typeKeys((bytes) => o.write(ptyId, bytes), keys);
-      if (task && start.settled(dirty, o.status(tile.id))) {
-        typeTask((data, paste) => o.write(ptyId, data, paste), task, () => o.status(tile.id) === "idle");
+      if (task && start.settled(dirty, o.status(tile.id), screen)) {
+        start.typeTask((data, paste) => o.write(ptyId, data, paste), task, () => o.status(tile.id));
         task = undefined;
       }
       dirty = false;

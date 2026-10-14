@@ -10,10 +10,11 @@
  * agent that gates its own hooks behind a review opens it even when the launch flags say to run
  * them, which makes the answer decorative.
  *
- * A task goes in once the screen has been quiet for a couple of looks (boot output stopped: the
- * agent is at its prompt), or after enough of them that an agent that never goes quiet (a tip, a
- * clock or a spinner ticking in its composer) is not held for ever; never while the screen waits
- * on the person, since a task typed into a chooser picks an option instead.
+ * A task goes in once the agent has drawn its screen and it has been quiet for a couple of looks
+ * (boot output stopped: the agent is at its prompt), or after enough of them that an agent that
+ * never goes quiet (a tip, a clock or a spinner ticking in its composer) is not held for ever;
+ * never while the screen waits on the person, since a task typed into a chooser picks an option
+ * instead. A blank screen is an agent still loading, which drops what is typed into it.
  */
 import type { AgentProviderDef } from "@hivemind/agents";
 import { SPAWN_SUBMIT_RETRY_MS, SUBMIT_DELAY_MS } from "./agent-io.js";
@@ -30,6 +31,10 @@ export const DISMISS_WINDOW_MS = 90_000;
 export const DISMISS_MAX = 2;
 /** The statuses of a screen that waits on the person (tile-status.ts). */
 const WAITING = new Set(["blocked", "permission", "question"]);
+/** How many looks after a first task is typed may press Enter again while the agent is idle. */
+const SUBMIT_LOOKS = 6;
+/** The line the window writes into a terminal before the agent draws anything. */
+const STARTER_LINE = "[hivemind] ";
 
 export class AgentStart {
   private quiet = 0;
@@ -60,21 +65,36 @@ export class AgentStart {
     return hit.keys;
   }
 
-  /** One look while a first task waits: whether output came since the last, and the session's
-   *  status now. True when the task goes in now. */
-  settled(dirty: boolean, status: string | null | undefined): boolean {
+  /** One look while a first task waits: whether output came since the last, the session's status
+   *  now, and its screen as text. True when the task goes in now. */
+  settled(dirty: boolean, status: string | null | undefined, screen: string): boolean {
     const waiting = !!status && WAITING.has(status);
+    const drawn = screen.split("\n").some((line) => line.trim() !== "" && !line.startsWith(STARTER_LINE));
     this.looks++;
-    if (dirty || waiting) this.quiet = 0;
+    if (dirty || waiting || !drawn) this.quiet = 0;
     else this.quiet++;
     return !waiting && (this.quiet >= SETTLE_TICKS || this.looks >= DEADLINE_TICKS);
   }
-}
 
-/** Type a first task: pasted, then Enter on its own (a TUI can drop a newline that comes with the
- *  text), and Enter once more if the agent is still idle, since a fresh TUI can drop the first. */
-export function typeTask(write: (data: string, paste?: boolean) => void, task: string, idle: () => boolean): void {
-  write(task, true);
-  setTimeout(() => write("\r"), SUBMIT_DELAY_MS);
-  setTimeout(() => { if (idle()) write("\r"); }, SPAWN_SUBMIT_RETRY_MS);
+  /** Type a first task: pasted, then Enter on its own (a TUI can drop a newline that comes with
+   *  the text). A fresh TUI can drop that Enter too, so while the agent is still idle Enter goes
+   *  again at each look, until its turn is seen: never while it works or waits on the person, nor
+   *  once the person has typed. The text is never typed twice: an agent can hold keys typed while
+   *  it boots. */
+  typeTask(write: (data: string, paste?: boolean) => void, task: string, status: () => string | null | undefined): void {
+    write(task, true);
+    setTimeout(() => write("\r"), SUBMIT_DELAY_MS);
+    let left = SUBMIT_LOOKS;
+    let turned = false;
+    const look = (): void => {
+      if (this.touched || left-- <= 0) return;
+      const now = status();
+      if (now === "exited") return;
+      if (now && now !== "idle") turned = true;
+      else if (turned) return;
+      else write("\r");
+      setTimeout(look, SPAWN_SUBMIT_RETRY_MS).unref?.();
+    };
+    setTimeout(look, SPAWN_SUBMIT_RETRY_MS).unref?.();
+  }
 }

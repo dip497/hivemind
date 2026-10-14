@@ -19,7 +19,7 @@ import { peekWork, claimWork } from "./work-queue";
 import { publishStatus, clearStatus, setLabel, statusOf, subscribeTileStatus, type TileStatusKind } from "./agent-status-bus";
 import { typeKeys } from "@hivemind/agent-host/keys";
 import { SUBMIT_DELAY_MS, deliversPromptViaArgv } from "@hivemind/agent-host/agent-io";
-import { AgentStart, START_TICK_MS, typeTask } from "@hivemind/agent-host/agent-start";
+import { AgentStart, START_TICK_MS } from "@hivemind/agent-host/agent-start";
 import { Pencil, GripVertical } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -937,12 +937,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             // sit there, and a task typed into a chooser picks an option instead. Only a
             // screen that WAITS holds the task back — a booting agent has no status yet, and
             // its own splash can read as working; neither means a chooser is up.
-            if (agent && peekWork(tileId) && starting.settled(agentDirty, statusOf(tileId))) {
+            if (agent && peekWork(tileId) && starting.settled(agentDirty, statusOf(tileId), readScreen())) {
               const work = claimWork(tileId);
               if (work) {
-                // Pasted, Enter on its own, and once more if the agent is still idle: a fresh
-                // claude TUI can drop that first Enter (the "I had to press Enter" bug).
-                typeTask((data, paste) => window.hive.ptyWrite(ptyId, data, paste), work, () => statusOf(tileId) === "idle");
+                starting.typeTask((data, paste) => window.hive.ptyWrite(ptyId, data, paste), work, () => statusOf(tileId));
                 void window.hive.diagLog?.(`[work-deliver] tile=${tileId} agent=${agent} settled`);
               }
             }
