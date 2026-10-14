@@ -16,7 +16,7 @@ import { MachineDot, MachineIcon, machineFacts, statusWords } from "./machines/s
 import { A_DEVICE, GONE_MACHINE, openMachines, placeOf, statusOf, useMachines } from "./machines/store";
 import type { MachineInfo } from "../../shared/ipc";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { PanelLeftOpen, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, AddWidget, Blocks, History, Mail, MailOpen, AlarmClock, AlarmClockOff, LayoutList, LogIn, Settings, Monitor } from "./components/icons";
+import { PanelLeftOpen, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, AddWidget, Blocks, History, Mail, MailOpen, AlarmClock, AlarmClockOff, LayoutList, LogIn, Settings, Settings2, Monitor } from "./components/icons";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon, agentById, useAgents } from "./agents";
 import { notReady, useAgentPresence } from "./agent-plugins";
@@ -875,6 +875,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-row" data-layers-pane="machines">
         <nav aria-label="Start" className="pb-2">
           <ActionRow primary icon={<Server size={ICON} />} label="New machine" data="machine" onClick={() => openMachines({ kind: "add" })} />
+          <ActionRow icon={<Settings2 size={ICON} />} label="Manage machines…" data="manage-machines" onClick={() => openMachines({ kind: "manage" })} />
         </nav>
         <div className={`mt-2 flex h-7 items-center pl-5 pr-3 ${LABEL}`}>Machines</div>
         {machineGroups.map((g) => (
@@ -882,8 +883,6 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             <MachineHeader group={g} used={false} needsYou={g.frames.reduce((n, f) => n + needsYouIn(f.id), 0)} />
           </section>
         ))}
-        <button type="button" onClick={() => openMachines({ kind: "manage" })} data-layers-manage-machines
-          className={`mt-2 flex h-7 items-center mx-2 pl-3 pr-2 rounded-lg ${LABEL} hover:text-[var(--color-fg)]`}>Manage machines…</button>
       </div>
       )}
       </div>
