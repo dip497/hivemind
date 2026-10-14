@@ -206,6 +206,9 @@ for (let run = 0; run < RUNS; run++) {
     return !!body && body.textContent.length > 20 && !body.querySelector("[role=status][aria-live]") && performance.timeOrigin + performance.now();
   };
   const escape = () => page.keyboard.press("Escape");
+  /** A click on what `selector` finds, once it is there: no waiting for it to hold still, so the
+   *  time is the app's. */
+  const press = (selector) => page.waitForSelector(selector).then((el) => el.evaluate((e) => e.click()));
   await open("settings", settings("general"), settingsDrawn, escape);
   for (const p of ["profile", "appearance", "shortcuts", "connect", "api", "browser", "servers", "about"]) await open(`settings ${p}`, settings(p), settingsDrawn, escape);
   await open("plugins", settings("plugins"),
@@ -213,7 +216,7 @@ for (let run = 0; run < RUNS; run++) {
     escape);
   // HiveHub's catalog, from the Plugins page.
   await open("hivehub",
-    async () => { await settings("plugins")(); await page.locator("[data-plugins-scope=hub]").click(); },
+    async () => { await settings("plugins")(); await press("[data-plugins-scope=hub]"); },
     () => document.querySelectorAll("[data-catalog-plugin]").length > 0 && performance.timeOrigin + performance.now(),
     async () => { await page.locator("[data-plugins-scope=installed]").click(); await escape(); });
   await open("plugin page", settings("plugin:agent:claude"),
@@ -236,7 +239,7 @@ for (let run = 0; run < RUNS; run++) {
     () => !!document.querySelector("aside[aria-label=Layers] [data-layers-pane]") && performance.timeOrigin + performance.now(),
     () => toggleLayers(false));
   await toggleLayers(true);
-  const pane = (p, ready) => open(`layers ${p}`, () => page.locator(`[data-layers-rail=${p}]`).click(), ready, () => page.locator("[data-layers-rail=tiles]").click());
+  const pane = (p, ready) => open(`layers ${p}`, () => press(`[data-layers-rail=${p}]`), ready, () => press("[data-layers-rail=tiles]"));
   await pane("recents", () => document.querySelectorAll("[data-layers-recent]").length > 0 && performance.timeOrigin + performance.now());
   await pane("machines", () => !!document.querySelector("[data-layers-pane=machines] [data-machine-group]") && performance.timeOrigin + performance.now());
   // What Recents reads: this repo's past sessions, asked of main as the panel asks.
@@ -341,5 +344,5 @@ function cleanUp() {
       try { process.kill(Number(pid), "SIGKILL"); } catch { /* gone */ }
     }
   }
-  rmSync(root, { recursive: true, force: true });
+  try { rmSync(root, { recursive: true, force: true, maxRetries: 5 }); } catch { /* a shell still writing there */ }
 }
