@@ -1251,14 +1251,14 @@ function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYo
         ? [m.target, machineFacts(m.kind, m.platform), s.detail].filter(Boolean).join(" — ")
         : group.key === "local" ? machineFacts(snap.thisComputerKind) || undefined : undefined}
     >
-      {/* As a row (the Machines pane): its link in the margin, then what kind of computer it is. */}
+      {/* As a row (the Machines pane): what kind of computer, its link on the icon's corner. */}
       {!used && (
         <>
-          <span className="absolute left-0 top-1/2 -translate-y-1/2 grid" title={group.hostId ? statusWords(s, on) : "online"}>
-            <MachineDot status={group.hostId ? s : { state: "online", at: 0 }} enabled={on} size={6} />
-          </span>
-          <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]">
+          <span className="relative size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]" title={group.hostId ? statusWords(s, on) : "online"}>
             <MachineIcon kind={group.key === "local" ? snap.thisComputerKind : m?.kind} thisComputer={group.key === "local"} size={ICON} />
+            <span className="absolute -bottom-0.5 -right-0.5 grid rounded-full p-px bg-[var(--color-bg2)] group-hover/mach:bg-[var(--surface-3)]">
+              <MachineDot status={group.hostId ? s : { state: "online", at: 0 }} enabled={on} size={6} />
+            </span>
           </span>
         </>
       )}
