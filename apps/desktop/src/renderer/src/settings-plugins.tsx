@@ -37,7 +37,7 @@ function newer(a: string, b: string): boolean {
  * sanitised here because this is where it is drawn. Otherwise a monogram — a column of
  * identical glyphs tells you nothing, and drawing someone's logo for them is worse.
  */
-function CatalogMark({ entry }: { entry: Entry }) {
+export function CatalogMark({ entry }: { entry: Pick<Entry, "id" | "icon"> }) {
   const icon = useMemo(() => {
     try { return entry.icon ? iconFromManifest(entry.icon as Parameters<typeof iconFromManifest>[0]) : null; }
     catch { return null; } // a mark we cannot read is a mark we do not draw

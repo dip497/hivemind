@@ -6,36 +6,24 @@
  */
 import { lazy, Suspense, useEffect, useState } from "react";
 import { ArrowLeft, ExternalLink, LayoutGrid, Trash } from "../components/icons";
-import { cleanError } from "../settings-plugins";
+import { CatalogMark, cleanError } from "../settings-plugins";
 import { isPluginEnabled, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
 import { Loading } from "../components/ui/loading";
 import { Switch } from "../components/ui/switch";
 import { useSettingsNavigate } from "../settings-panels";
 import { setPluginEnabled, setPluginOption, useSettings } from "../settings-store";
-import { AgentPage } from "../settings-agents";
-import { ViewPage } from "../settings-views";
-import { ToolPage } from "../settings-tools";
+import { AgentActions, AgentMark, AgentPage } from "../settings-agents";
+import { ViewActions, ViewMark, ViewPage } from "../settings-views";
+import { ToolActions, ToolIcon, ToolPage } from "../settings-tools";
+import { WidgetIcon } from "./WidgetIcon";
 import { useWidgetPackages } from "../board-objects/widget-runtime";
 import { useCommunityReport } from "../workspace/views/community/registry";
 import { SettingsForm } from "./SettingsForm";
 import { setPluginsScope } from "./scope";
-import { KIND_LABEL, ORIGIN_LABEL, usePlugins, type PluginRecord } from "./library";
+import { KIND_LABEL, ORIGIN_LABEL, useCatalog, usePlugins, type PluginRecord } from "./library";
 
 const MarkdownPreview = lazy(() => import("../markdown-preview").then((m) => ({ default: m.MarkdownPreview })));
-
-/** The catalog, once per Settings visit: what a plugin page and the lists compare against. */
-let catalog: Promise<Awaited<ReturnType<typeof window.hive.pluginCatalog>>> | null = null;
-export function useCatalog(): Awaited<ReturnType<typeof window.hive.pluginCatalog>> | null {
-  const [list, setList] = useState<Awaited<ReturnType<typeof window.hive.pluginCatalog>> | null>(null);
-  useEffect(() => {
-    catalog ??= window.hive.pluginCatalog().catch(() => []);
-    let live = true;
-    void catalog.then((l) => { if (live) setList(l); });
-    return () => { live = false; };
-  }, []);
-  return list;
-}
 
 function useReadme(p: PluginRecord | undefined): { text: string | null; loading: boolean } {
   const [state, setState] = useState<{ text: string | null; loading: boolean }>({ text: null, loading: true });
@@ -70,7 +58,7 @@ export function PluginPage({ kind, id }: { kind: string; id: string }) {
     <div className="settings-stack plugin-page" data-plugin-page={`${p.kind}:${p.id}`}>
       <Button variant="link" className="self-start" onClick={() => go("plugins")}><ArrowLeft />All plugins</Button>
       <header className="plugin-page-head">
-        <div className="settings-extension-icon" aria-hidden="true"><LayoutGrid size={20} /></div>
+        <span className="plugin-mark" aria-hidden="true"><PluginMark p={p} /></span>
         <div className="min-w-0 flex-1">
           <p className="plugin-page-meta">
             <span className="catalog-type">{KIND_LABEL[p.kind]}</span>
@@ -78,9 +66,9 @@ export function PluginPage({ kind, id }: { kind: string; id: string }) {
           </p>
           {p.description && <p className="plugin-page-description">{p.description}</p>}
         </div>
-        <div className="settings-actions">
-          {!p.installed && <Button onClick={toHub}>Install from HiveHub</Button>}
+        <div className="plugin-page-actions">
           {p.catalog?.homepage && <Button variant="ghost" asChild><a href={p.catalog.homepage} target="_blank" rel="noreferrer">Source<ExternalLink /></a></Button>}
+          {p.installed ? <PluginActions p={p} /> : <Button onClick={toHub}>Install from HiveHub</Button>}
         </div>
       </header>
       {p.problem && <p role="status" className="settings-note error">{p.problem}</p>}
@@ -117,6 +105,25 @@ export function PluginPage({ kind, id }: { kind: string; id: string }) {
   );
 }
 
+/** Its own mark, as the rest of the app draws it. */
+function PluginMark({ p }: { p: PluginRecord }) {
+  const widget = useWidgetPackages().find((x) => x.id === p.id);
+  if (!p.installed) return p.kind === "agent" && p.catalog ? <CatalogMark entry={p.catalog} /> : <LayoutGrid size={20} />;
+  if (p.kind === "agent") return <AgentMark id={p.id} />;
+  if (p.kind === "view") return <ViewMark id={p.id} />;
+  if (p.kind === "tool") return <ToolIcon pluginId={p.id} size={20} />;
+  return <WidgetIcon pkg={widget} size={20} />;
+}
+
+/** What is done to it as a whole, on every tab: switching it on or off, making it the one used. */
+function PluginActions({ p }: { p: PluginRecord }) {
+  const on = isPluginEnabled(useSettings().plugins.state, "widget", p.id);
+  if (p.kind === "agent") return <AgentActions id={p.id} />;
+  if (p.kind === "view") return <ViewActions id={p.id} />;
+  if (p.kind === "tool") return <ToolActions id={p.id} />;
+  return <Switch aria-label={`Enable ${p.name}`} checked={on} onCheckedChange={() => setPluginEnabled("widget", p.id, !on)} />;
+}
+
 /** A plugin's Settings tab: its kind's own controls, then the fields it declares. */
 function PluginSettings({ p }: { p: PluginRecord }) {
   if (p.kind === "agent") return <AgentPage id={p.id} />;
@@ -142,10 +149,7 @@ function WidgetSettings({ id }: { id: string }) {
   const on = isPluginEnabled(useSettings().plugins.state, "widget", id);
   if (!w) return null;
   return <div className="plugin-page" data-widget-page={id}>
-    <div className="settings-row">
-      <div className="flex-1"><label>On</label><p>Off, it is not offered to add, and the ones placed keep what they hold but do not run.</p></div>
-      <Switch aria-label={`Enable ${w.name}`} checked={on} onCheckedChange={() => setPluginEnabled("widget", id, !on)} />
-    </div>
+    {!on && <p className="settings-note">Off: it is not offered to add, and the ones placed keep what they hold but do not run.</p>}
     {w.options.length > 0
       ? <p className="settings-note">Each one you place has its own {w.options.map((o) => o.label.toLowerCase()).join(", ")}: select it and use the settings button above it.</p>
       : <p className="settings-note">It has nothing to set.</p>}
@@ -157,7 +161,7 @@ function RemoveWidget({ id, name }: { id: string; name: string }) {
   const go = useSettingsNavigate();
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (!asking) return <Button variant="destructive" className="mt-3" onClick={() => setAsking(true)}><Trash />Remove {name}</Button>;
+  if (!asking) return <Button variant="ghost-destructive" className="mt-3 -ml-3" onClick={() => setAsking(true)}><Trash />Remove {name}</Button>;
   return <div className="settings-remove-confirm">
     <p>Remove {name}?</p>
     {error && <p role="alert" className="settings-note error">{error}</p>}

@@ -3,6 +3,7 @@ import { isPluginEnabled } from "@hivemind/core/plugin-settings";
 import { ArrowDown, ArrowUp, ChevronDown, ExternalLink, Puzzle, Trash } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { PluginGroup, PluginRow } from "./plugins/PluginList";
+import { useHubDescription } from "./plugins/library";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch } from "./components/ui/switch";
 import { getSettings, patchSettings, useSettings, setPluginEnabled } from "./settings-store";
@@ -20,16 +21,13 @@ export const rescan = () => { window.dispatchEvent(new CustomEvent("hivemind:rel
 export function ViewsSection({ matches }: { matches: (text: string) => boolean }) {
   const mode = resolveViewId(useViewMode()) ?? "canvas";
   const report = useCommunityReport();
+  const hub = useHubDescription();
   useEffect(rescan, []);
   const on = useViews().filter((v) => matches(`${v.label} ${v.id} ${v.hint}`));
   const off = report.packages.filter((p) => report.refused[p.id] && matches(`${p.manifest?.name ?? p.id} ${p.id}`));
   const count = on.length + off.length;
-  // A package's own words for what it does, else which one it is.
-  const about = (id: string): string | undefined => {
-    const p = report.packages.find((x) => x.id === id);
-    if (!p) return undefined;
-    return (p.manifest as { description?: string } | null)?.description || (p.source === "app" ? "Comes with the app" : `Version ${p.manifest?.version ?? "unknown"}`);
-  };
+  // A package says what it does only through HiveHub; a built-in view says it in its hint.
+  const about = (id: string): string | undefined => report.packages.some((x) => x.id === id) ? hub("view", id) : undefined;
   if (!count) return null;
   return <PluginGroup kind="view" count={count} foot={<p>⌘E switches between the views that are on.</p>}>
     {on.map((v) => <PluginRow key={v.id} kind="view" id={v.id} name={v.label} line={about(v.id) ?? v.hint} mark={<v.icon />} badge={mode === v.id ? "In use" : undefined} />)}
@@ -37,15 +35,34 @@ export function ViewsSection({ matches }: { matches: (text: string) => boolean }
       const why = report.refused[p.id]!;
       const switchedOff = why === "disabled in Settings";
       return <PluginRow key={p.id} kind="view" id={p.id} name={p.manifest?.name ?? p.id} mark={<Puzzle />}
-        line={switchedOff ? about(p.id)! : why}
+        line={switchedOff ? about(p.id) ?? "" : why}
         state={switchedOff ? "off" : "unavailable"} badge={switchedOff ? "Off" : "Can't load"} />;
     })}
   </PluginGroup>;
 }
 
+/** A view's own mark; one that cannot load yet is a puzzle piece. */
+export function ViewMark({ id, size = 22 }: { id: string; size?: number }) {
+  const Icon = useViews().find((v) => v.id === id)?.icon ?? Puzzle;
+  return <Icon size={size} />;
+}
+
+/** At the top of a view's page: using it, and switching one you added on or off. */
+export function ViewActions({ id }: { id: string }) {
+  const view = useViews().find((v) => v.id === id);
+  const mode = resolveViewId(useViewMode()) ?? "canvas";
+  const on = isPluginEnabled(useSettings().plugins.state, "view", id);
+  const pkg = useCommunityReport().packages.find((p) => p.id === id);
+  const name = view?.label ?? pkg?.manifest?.name ?? id;
+  return <>
+    {view && (mode === id ? <span className="agent-badge">In use</span> : <Button variant="outline" onClick={() => setViewMode(id)}>Use this view</Button>)}
+    {pkg && <Switch aria-label={`Enable ${name}`} checked={on} disabled={!view && !!pkg.error}
+      onCheckedChange={() => { setPluginEnabled("view", id, !on); rescan(); }} />}
+  </>;
+}
+
 export function ViewPage({ id }: { id: string }) {
   const view = getView(id);
-  const mode = resolveViewId(useViewMode()) ?? "canvas";
   const settings = useSettings();
   const report = useCommunityReport();
   const go = useSettingsNavigate();
@@ -56,24 +73,13 @@ export function ViewPage({ id }: { id: string }) {
     const on = isPluginEnabled(settings.plugins.state, "view", id);
     const name = pkg.manifest?.name ?? id;
     return <div className="plugin-page" data-view-page={id}>
-      <div className="settings-row">
-        <div className="flex-1"><label>{on ? "Cannot load" : "Off"}</label><p>{on ? report.refused[id] ?? pkg.error : "Switch it on to choose it as your workspace view."}</p></div>
-        <Switch aria-label={`Enable ${name}`} checked={on} disabled={!!pkg.error} onCheckedChange={() => { setPluginEnabled("view", id, !on); rescan(); }} />
-      </div>
+      <p className={on ? "settings-note error" : "settings-note"}>{on ? report.refused[id] ?? pkg.error : "Switch it on to choose it as your workspace view."}</p>
       {pkg.source === "user" && <RemoveView id={id} name={name} onRemoved={() => go("plugins")} />}
     </div>;
   }
   if (!view) return <p className="settings-empty">There is no view named {id}.</p>;
   const override = settings.views.chrome[id]?.island;
-  const on = isPluginEnabled(settings.plugins.state, "view", id);
   return <div className="plugin-page" data-view-page={id}>
-    <header className="plugin-head">
-      <span className="plugin-mark"><view.icon size={22} /></span>
-      <div className="plugin-title"><p>{view.hint}<span>·</span>{view.source === "community" ? `Community${pkg?.manifest?.version ? ` · ${pkg.manifest.version}` : ""}` : "Included with Hivemind"}</p></div>
-      {mode === id ? <span className="agent-badge">In use</span> : <Button variant="outline" onClick={() => setViewMode(id)}>Use this view</Button>}
-      {view.source === "community" && <Switch aria-label={`Enable ${view.label}`} checked={on}
-        onCheckedChange={() => { setPluginEnabled("view", id, !on); rescan(); }} />}
-    </header>
     <section className="plugin-section" aria-label="Toolbar">
       <h3>Toolbar</h3>
       <div className="settings-row">
@@ -114,7 +120,7 @@ export function ViewPage({ id }: { id: string }) {
 function RemoveView({ id, name, onRemoved }: { id: string; name: string; onRemoved: () => void }) {
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (!confirm) return <Button variant="destructive" className="mt-3" onClick={() => setConfirm(true)}><Trash />Remove {name}</Button>;
+  if (!confirm) return <Button variant="ghost-destructive" className="mt-3 -ml-3" onClick={() => setConfirm(true)}><Trash />Remove {name}</Button>;
   return <div className="settings-remove-confirm">
     <p>Remove {name}? Its saved layout is kept, and your work keeps running.</p>
     {error && <p role="alert" className="settings-note error">{error}</p>}

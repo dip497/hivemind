@@ -16,7 +16,8 @@ export function PluginRow({ kind, id, name, line, mark, state = "on", badge, act
   kind: PluginKind;
   id: string;
   name: string;
-  /** What it does, or what stops it, in plain words; not shown when it only repeats the name. */
+  /** What it does, or what stops it, in plain words; empty when nothing says, and not shown when
+   *  it only repeats the name. */
   line: string;
   mark: ReactNode;
   state?: RowState;

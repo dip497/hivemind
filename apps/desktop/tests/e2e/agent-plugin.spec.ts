@@ -95,12 +95,12 @@ test.afterAll(async () => {
 });
 
 const card = (id: string) => page.locator(`[data-plugin-row="agent:${id}"]`);
-const detail = () => page.locator("[data-agent-detail]");
+const detail = () => page.locator("[data-plugin-page]");
 /** Plugins → the agent's own page (its Settings tab). */
 async function openAgent(id: string): Promise<void> {
   await openSettings("plugins");
   await card(id).click();
-  await expect(detail()).toHaveAttribute("data-agent-detail", id);
+  await expect(detail()).toHaveAttribute("data-plugin-page", `agent:${id}`);
 }
 
 /** The toolbar's agent switcher lists exactly the spawnable catalog. */
@@ -115,8 +115,6 @@ async function switcherHas(id: string): Promise<boolean> {
 test("a manifest dropped on disk becomes a real provider in the running app", async () => {
   await openSettings("plugins");
   await expect(card("acme")).toContainText("Acme Coder");
-  // The row says what it runs, not where it came from.
-  await expect(card("acme")).toContainText("acme");
   await expect(card("claude")).toHaveCount(1);
   // It has its own page, opened from its row like every plugin's.
   await expect(page.locator('[data-plugin-open="agent:acme"]')).toHaveCount(1);

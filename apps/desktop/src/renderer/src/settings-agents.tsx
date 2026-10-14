@@ -8,6 +8,7 @@ import {
 import { patchSettings, useSettings, setPluginOption } from "./settings-store";
 import { Button } from "./components/ui/button";
 import { PluginGroup, PluginRow, type RowState } from "./plugins/PluginList";
+import { useHubDescription } from "./plugins/library";
 import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch } from "./components/ui/switch";
@@ -24,15 +25,9 @@ interface Card {
   source: AgentWireEntry["source"];
   on: boolean;
   error: string | null;
+  /** What it is, from its manifest; empty when it says nothing. */
+  description: string;
 }
-
-// Every agent is a manifest; all this says is which folder it arrived in, which decides
-// whether you can remove it or only switch it off. Shown on an agent's own page, not in the
-// list — there it would be the same fact repeated under a heading that already said it.
-const SOURCE_COPY: Record<string, string> = {
-  user: "You added this",
-  repo: "From this repository",
-};
 
 function defOf(e: AgentWireEntry): AgentProviderDef | undefined {
   try { return defFromManifest(e.manifest); } catch { return undefined; }
@@ -49,7 +44,8 @@ function useCards(): Card[] {
     for (const e of entries) {
       // A broken later entry (a repo refused for a taken id) does not hide the working one.
       if (e.error && byId.get(e.id)?.def) continue;
-      byId.set(e.id, { id: e.id, def: defOf(e), source: e.source, on: !e.disabled && !e.error, error: e.error });
+      const said = (e.manifest as { description?: unknown } | undefined)?.description;
+      byId.set(e.id, { id: e.id, def: defOf(e), source: e.source, on: !e.disabled && !e.error, error: e.error, description: typeof said === "string" ? said : "" });
     }
     return [...byId.values()];
   }, [entries]);
@@ -73,6 +69,7 @@ export function AgentsSection({ matches }: { matches: (text: string) => boolean 
   const all = useCards().filter((c) => c.def?.enabled || c.error);
   const cards = all.filter((c) => matches(`${c.def?.label ?? c.id} ${c.id} ${c.def?.bin ?? ""}`));
   const presence = useAgentPresence();
+  const hub = useHubDescription();
   const { defaultAgent: saved, autoInstall } = useSettings().agents;
   const defaultId = preferredAgent(saved, (d) => !notReady(presence, d.id))?.id;
   const missing = (c: Card) => notReady(presence, c.id);
@@ -85,7 +82,7 @@ export function AgentsSection({ matches }: { matches: (text: string) => boolean 
   const line = (c: Card) => c.error ? c.error
     : presence[c.id]?.mismatch ? "Another program answers to its name"
     : missing(c) ? `Needs the ${c.def?.bin ?? c.id} command`
-    : `Runs the ${c.def?.bin ?? c.id} command`;
+    : c.description || hub("agent", c.id);
   const badge = (c: Card) => ({ on: c.id === defaultId ? "Default" : undefined, missing: "Needs setup", off: "Off", unavailable: "Can't load" })[state(c)];
   // Searching hides it when nothing matches; otherwise its footer stays, even with no agents.
   if (!cards.length && !matches("")) return null;
@@ -111,27 +108,35 @@ export function AgentsSection({ matches }: { matches: (text: string) => boolean 
   );
 }
 
-export function AgentPage({ id }: { id: string }) {
+/** An agent's own mark, as its tile and the switcher draw it. */
+export function AgentMark({ id, size = 22 }: { id: string; size?: number }) {
+  const card = useCards().find((c) => c.id === id);
+  return <SvgMark icon={card?.def?.icon ?? GENERIC_AGENT_ICON} size={size} />;
+}
+
+/** At the top of an agent's page: making it the default, and switching it on or off. */
+export function AgentActions({ id }: { id: string }) {
   const card = useCards().find((c) => c.id === id);
   const presence = useAgentPresence();
-  const { defaultAgent, fromCatalog } = useSettings().agents;
-  const defaultId = preferredAgent(defaultAgent, (d) => !notReady(presence, d.id))?.id;
+  const defaultId = preferredAgent(useSettings().agents.defaultAgent, (d) => !notReady(presence, d.id))?.id;
+  if (!card) return null;
+  const label = card.def?.label ?? card.id;
+  return <>
+    {card.def?.enabled && card.on && !notReady(presence, card.id) && (card.id === defaultId
+      ? <span className="agent-badge">Default</span>
+      : <Button variant="outline" onClick={() => patchSettings("agents.defaultAgent", card.id)}>Make default</Button>)}
+    <Switch aria-label={`Enable ${label}`} checked={card.on}
+      disabled={!!card.error} onCheckedChange={() => { void setAgentDisabled(card.id, card.on); }} />
+  </>;
+}
+
+export function AgentPage({ id }: { id: string }) {
+  const card = useCards().find((c) => c.id === id);
   if (!card) return <p className="settings-empty">There is no agent named {id}.</p>;
   const { def } = card;
   const label = def?.label ?? card.id;
   return (
     <div className="plugin-page" data-agent-detail={card.id}>
-      <header className="plugin-head">
-        <span className="plugin-mark"><SvgMark icon={def?.icon ?? GENERIC_AGENT_ICON} size={26} /></span>
-        <div className="plugin-title">
-          <p>{def && <><code>{def.bin}</code><span>·</span></>}{fromCatalog.includes(card.id) ? "From the plugin catalog" : SOURCE_COPY[card.source] ?? card.source}</p>
-        </div>
-        {def?.enabled && card.on && !notReady(presence, card.id) && (card.id === defaultId
-          ? <span className="agent-badge">Default</span>
-          : <Button variant="outline" onClick={() => patchSettings("agents.defaultAgent", card.id)}>Make default</Button>)}
-        <Switch aria-label={`Enable ${label}`} checked={card.on}
-          disabled={!!card.error} onCheckedChange={() => { void setAgentDisabled(card.id, card.on); }} />
-      </header>
       {card.error && <p role="status" className="settings-note error">{card.error}</p>}
       {def?.enabled && <Requirement def={def} />}
       {def && <Facts def={def} />}
@@ -151,7 +156,7 @@ function RemoveAgent({ id, label }: { id: string; label: string }) {
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return <section className="plugin-section" aria-label="Remove">
-    {!confirm ? <Button variant="destructive" className="mt-3" onClick={() => setConfirm(true)}><Trash />Remove {label}</Button>
+    {!confirm ? <Button variant="ghost-destructive" className="mt-3 -ml-3" onClick={() => setConfirm(true)}><Trash />Remove {label}</Button>
       : <div className="settings-remove-confirm">
         <p>Remove {label}? Hivemind will not add it again on its own. Its CLI stays installed.</p>
         {error && <p role="alert" className="settings-note error">{error}</p>}

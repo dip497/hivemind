@@ -48,6 +48,7 @@ test("from the Add menu's Tools: a tool, the idea in its prompt, copied or hande
 
 test("from Settings ▸ Plugins: a widget by default, a view when chosen", async () => {
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "plugins" } })));
+  await page.locator("[data-add-plugin]").click();
   await page.locator("[data-make-plugin-open]").click();
   const dialog = page.locator("[data-make-plugin]");
   await expect(dialog.locator('[data-make-kind="widget"]')).toHaveAttribute("aria-checked", "true");

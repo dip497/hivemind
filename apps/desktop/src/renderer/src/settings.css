@@ -147,12 +147,11 @@
 
 /* ── Agents ─────────────────────────────────────────────────────────────── */
 /* One row per plugin — agent, view or tool: what it is, what state it is in, and the
-   one thing to do about it. */
-.plugin-rows { border: 1px solid var(--color-line2); border-radius: 6px; overflow: hidden; }
-.plugin-row { display: flex; align-items: center; gap: 8px; padding-right: 10px; border-bottom: 1px solid var(--color-line2); }
-.plugin-row:last-child { border-bottom: 0; }
+   one thing to do about it. A list, not a table: no box, no rules; its marks line up with the heading. */
+.plugin-rows { display: flex; flex-direction: column; margin: 0 -8px; }
+.plugin-row { display: flex; align-items: center; gap: 8px; padding-right: 10px; border-radius: 6px; }
 .plugin-row:hover { background: var(--color-bg2); }
-.plugin-row-mark { display: grid; place-items: center; flex-shrink: 0; color: var(--color-fg2); }
+.plugin-row-mark { display: grid; place-items: center; width: 20px; flex-shrink: 0; color: var(--color-fg2); }
 .plugin-row-text { display: flex; flex-direction: column; min-width: 0; }
 .plugin-row-name { font-weight: 500; color: var(--color-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plugin-row-detail { font-size: var(--text-label); color: var(--color-fg2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -167,10 +166,7 @@
 .agent-options { margin-top: 8px; border-top: 1px solid var(--color-line2); }
 .agent-options .settings-row + .settings-row { border-top: 1px solid var(--color-line2); }
 .agent-options-empty { padding: 12px 0; }
-@media (max-width: 540px) {
-  .plugin-head { flex-wrap: wrap; }
-}
-.agent-req { display: flex; align-items: flex-start; gap: 8px; margin-top: 14px; padding: 10px 12px; border-radius: 6px; font-size: var(--text-label); background: var(--color-bg3); color: var(--color-fg2); }
+.agent-req { display: flex; align-items: flex-start; gap: 8px; margin-top: 4px; padding: 10px 12px; border-radius: 6px; font-size: var(--text-label); background: var(--color-bg3); color: var(--color-fg2); }
 .agent-req > svg { flex-shrink: 0; margin-top: 2px; }
 .agent-req[data-state=ok] { align-items: center; }
 .agent-req[data-state=ok] > svg { color: var(--color-ok); margin-top: 0; }
@@ -200,14 +196,11 @@
 
 /* ── Plugin pages ───────────────────────────────────────────────────────── */
 .plugin-page { display: flex; flex-direction: column; }
-.plugin-head { display: flex; align-items: center; gap: 12px; padding-bottom: 4px; }
 .plugin-mark { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 8px; background: var(--color-bg3); flex-shrink: 0; }
-.plugin-title { flex: 1; min-width: 0; }
-.plugin-title p { font-size: var(--text-label); color: var(--color-fg2); }
-.plugin-title span { margin: 0 7px; }
 .plugin-section { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--color-line2); }
 .plugin-section > h3 { font-size: var(--text-body); font-weight: 600; margin-bottom: 4px; }
 .plugin-section .agent-options { margin-top: 0; border-top: 0; }
+.plugin-page > .plugin-section:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .service-log { margin-top: 8px; max-height: 240px; overflow: auto; padding: 8px 10px; border-radius: 6px; background: var(--color-bg2); font: var(--text-count)/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .settings-link { color: var(--color-fg); text-decoration: underline; text-underline-offset: 3px; }
 .settings-developer-details code + code { padding-top: 0; }
@@ -333,8 +326,9 @@
 }
 
 /* A plugin's own page (plugins/PluginPage.tsx): what it is, then what it may do, its README, its details. */
-.plugin-page-head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.plugin-page-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .plugin-page-meta { display: flex; align-items: center; gap: 8px; color: var(--color-fg3); font-size: var(--text-label); }
+.plugin-page-actions { display: flex; align-items: center; gap: 8px; }
 .plugin-page-description { margin-top: 4px; font-size: var(--text-body); color: var(--color-fg2); max-width: 65ch; }
 .plugin-readme .md-preview { border: 1px solid var(--color-line); border-radius: 10px; padding: 16px 20px; max-width: 80ch; }
 .plugin-details { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: var(--text-body); }
@@ -359,10 +353,6 @@
 .plugins-group-setting label { color: var(--color-fg2); }
 .plugins-group-setting > [role=switch] { margin-left: auto; }
 [data-plugins-home]:has([data-plugins-kind]) .plugins-none { display: none; }
-.plugins-from-folder { display: flex; flex-wrap: wrap; gap: 4px; margin-left: -8px; }
-.plugins-from-folder > button { color: var(--color-fg2); }
-.catalog-item:not(:last-child) { border-bottom: 1px solid var(--color-line2); }
-.catalog-item > .plugin-row { border-bottom: 0; }
 .catalog-item > .settings-install-review, .catalog-item > [role=alert] { margin: 0 12px 12px 40px; }
 .plugin-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--color-line); }
 .plugin-tabs > button { padding: 6px 10px; font-size: var(--text-body); color: var(--color-fg2); border-bottom: 2px solid transparent; margin-bottom: -1px; }

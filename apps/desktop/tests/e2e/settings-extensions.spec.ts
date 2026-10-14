@@ -21,7 +21,8 @@ const choose = async (dir: string) => {
   await app.evaluate(({ dialog }, selected) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selected] });
   }, dir);
-  await page.getByRole("button", { name: "Add a view from a folder" }).click();
+  await page.locator("[data-add-plugin]").click();
+  await page.getByRole("menuitem", { name: "Add a view from a folder" }).click();
 };
 
 test.beforeAll(async () => {
@@ -124,10 +125,10 @@ test("install review, cancellation, invalid packages, replacement, disabling and
   await choose(source);
   await expect(page.getByRole("region", { name: "Review extension" })).toContainText("Replaces installed version 1.0.0");
   await page.getByRole("button", { name: "Replace extension" }).click();
-  await expect(row).toContainText("1.1.0");
   await page.screenshot({ path: "/tmp/hivemind-settings-extensions.png" });
 
   await row.locator("[data-plugin-open]").click();
+  await expect(page.locator('[data-plugin-page="view:settings-demo"] .plugin-page-meta')).toContainText("v1.1.0");
   await page.getByRole("button", { name: "Remove Settings demo", exact: true }).click();
   await page.getByRole("button", { name: "Keep it" }).click();
   await page.getByRole("button", { name: "Remove Settings demo", exact: true }).click();

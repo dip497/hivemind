@@ -51,7 +51,7 @@ function bundledEnabled(pluginId: string, settings: ReturnType<typeof useSetting
   return [enabled, toggle];
 }
 
-const ToolIcon = ({ pluginId, size }: { pluginId: string; size: number }) => {
+export const ToolIcon = ({ pluginId, size }: { pluginId: string; size: number }) => {
   const Icon = pluginId === CODE_PLUGIN_ID ? FileCode : pluginId === ISSUES_PLUGIN_ID ? ListTodo : pluginId === BROWSER_PLUGIN_ID ? Earth : Puzzle;
   return <Icon size={size} />;
 };
@@ -68,7 +68,7 @@ function ToolRow({ pluginId }: { pluginId: string }) {
 function RemoveTool({ pkg }: { pkg: ToolPackage }) {
   const go = useSettingsNavigate();
   const [asking, setAsking] = useState(false);
-  if (!asking) return <Button variant="destructive" className="mt-3" onClick={() => setAsking(true)}><Trash />Remove {pkg.name}</Button>;
+  if (!asking) return <Button variant="ghost-destructive" className="mt-3 -ml-3" onClick={() => setAsking(true)}><Trash />Remove {pkg.name}</Button>;
   return <div className="settings-remove-confirm">
     <p>Remove {pkg.name}? Its panels close.</p>
     <div className="settings-actions">
@@ -91,19 +91,19 @@ export function ToolsSection({ matches }: { matches: (text: string) => boolean }
   </PluginGroup>;
 }
 
-export function ToolPage({ id }: { id: string }) {
+/** At the top of a tool's page: switching it on or off. */
+export function ToolActions({ id }: { id: string }) {
   const [enabled, toggle] = useToolEnabled(id);
+  const added = useAdded(id);
+  return <Switch aria-label={`Enable ${toolLabel(id)}`} checked={enabled} disabled={!!added?.problem} onCheckedChange={toggle} />;
+}
+
+export function ToolPage({ id }: { id: string }) {
+  const [enabled] = useToolEnabled(id);
   const added = useAdded(id);
   const stored = useSettings().plugins.state;
   if (!added && !BUNDLED_TOOL_PLUGINS.some((p) => p.id === id)) return <p className="settings-empty">There is no tool named {id}.</p>;
-  const title = toolLabel(id);
-  const kindOf = added ? "Added by you" : BUNDLED_TOOL_PLUGINS.find((p) => p.id === id)?.builtin ? "Included" : "Optional";
   return <div className="plugin-page" data-tool-page={id}>
-    <header className="plugin-head">
-      <span className="plugin-mark"><ToolIcon pluginId={id} size={22} /></span>
-      <div className="plugin-title"><p>{kindOf} · {enabled ? "On" : "Off"}</p></div>
-      <Switch aria-label={`Enable ${title}`} checked={enabled} disabled={!!added?.problem} onCheckedChange={toggle} />
-    </header>
     {added && <p className="settings-note">It runs inside the app, with the access it has. Switch it on only if you trust who wrote it.</p>}
     {added && added.settings.length > 0 && <section className="plugin-section" aria-label="Its settings" data-plugin-settings={`tool:${id}`}>
       <h3>Its settings</h3>

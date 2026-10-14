@@ -4,7 +4,7 @@
  * meet, with the catalog's for the ones not installed. One record per plugin, so every row, every
  * page and every check reads the same fields the same way.
  */
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { agentDisclosures, defFromManifest } from "@hivemind/agents";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
 import type { CatalogEntry } from "@hivemind/core/plugin-catalog";
@@ -21,9 +21,9 @@ export const PLUGIN_KINDS: readonly PluginKind[] = ["agent", "view", "widget", "
 export const KIND_LABEL: Record<PluginKind, string> = { agent: "Agent", view: "View", widget: "Widget", tool: "Tool" };
 
 /** Where a plugin came from: with the app, added by you, from the repository you have open, or
- *  only listed on HiveHub (not installed). */
+ *  from HiveHub (installed from it, or only listed there). */
 export type PluginOrigin = "app" | "you" | "repo" | "hub";
-export const ORIGIN_LABEL: Record<PluginOrigin, string> = { app: "Comes with the app", you: "You added this", repo: "From this repository", hub: "On HiveHub" };
+export const ORIGIN_LABEL: Record<PluginOrigin, string> = { app: "Comes with the app", you: "You added this", repo: "From this repository", hub: "From HiveHub" };
 
 export interface PluginRecord {
   kind: PluginKind;
@@ -56,6 +56,28 @@ import { permissionWords } from "@hivemind/view-sdk/protocol";
 
 const dirOf = (file: string): string => file.slice(0, Math.max(file.lastIndexOf("/"), file.lastIndexOf("\\")));
 
+/** The catalog, once per Settings visit: what a plugin page and the lists compare against. */
+let catalog: Promise<CatalogEntry[]> | null = null;
+export function useCatalog(): CatalogEntry[] | null {
+  const [list, setList] = useState<CatalogEntry[] | null>(null);
+  useEffect(() => {
+    catalog ??= window.hive.pluginCatalog().catch(() => []);
+    let live = true;
+    void catalog.then((l) => { if (live) setList(l); });
+    return () => { live = false; };
+  }, []);
+  return list;
+}
+
+/** What HiveHub says a plugin does, for one installed without a description of its own. */
+export function useHubDescription(): (kind: PluginKind, id: string) => string {
+  const list = useCatalog();
+  return useMemo(() => {
+    const by = new Map((list ?? []).map((e) => [`${e.type}:${e.id}`, e.description]));
+    return (kind, id) => by.get(`${kind}:${id}`) ?? "";
+  }, [list]);
+}
+
 /** Every plugin: installed ones of each kind, then the catalog's not installed. */
 export function usePlugins(catalog: CatalogEntry[] | null): PluginRecord[] {
   const agents = useAgentEntries();
@@ -63,7 +85,7 @@ export function usePlugins(catalog: CatalogEntry[] | null): PluginRecord[] {
   const views = useViews();
   const widgets = useWidgetPackages();
   const tools = useToolPackages().packages;
-  const state = useSettings().plugins.state;
+  const { plugins: { state }, agents: { fromCatalog } } = useSettings();
   return useMemo(() => {
     const listed = new Map((catalog ?? []).map((e) => [`${e.type}:${e.id}`, e]));
     const out: PluginRecord[] = [];
@@ -73,9 +95,9 @@ export function usePlugins(catalog: CatalogEntry[] | null): PluginRecord[] {
       const m = (e.manifest ?? {}) as { description?: unknown; version?: unknown; author?: unknown };
       out.push({
         kind: "agent", id: e.id, name: def?.label ?? e.id,
-        description: typeof m.description === "string" ? m.description : def?.bin ? `Runs the ${def.bin} command.` : "",
+        description: typeof m.description === "string" ? m.description : listed.get(`agent:${e.id}`)?.description ?? "",
         ...(typeof m.version === "string" ? { version: m.version } : {}), ...(typeof m.author === "string" ? { author: m.author } : {}),
-        origin: e.source === "repo" ? "repo" : "you", installed: true, enabled: !e.disabled,
+        origin: e.source === "repo" ? "repo" : fromCatalog.includes(e.id) ? "hub" : "you", installed: true, enabled: !e.disabled,
         can: def ? agentDisclosures(def) : [], readme: { dir: dirOf(e.file) }, problem: e.error,
         dir: dirOf(e.file), ...(listed.get(`agent:${e.id}`) ? { catalog: listed.get(`agent:${e.id}`)! } : {}),
       });
@@ -86,7 +108,7 @@ export function usePlugins(catalog: CatalogEntry[] | null): PluginRecord[] {
     for (const p of report.packages) {
       const m = p.manifest;
       out.push({
-        kind: "view", id: p.id, name: m?.name ?? p.id, description: (m as { description?: string } | null)?.description ?? "",
+        kind: "view", id: p.id, name: m?.name ?? p.id, description: listed.get(`view:${p.id}`)?.description ?? "",
         ...(m?.version ? { version: m.version } : {}), ...(m?.author ? { author: m.author } : {}),
         origin: p.source === "user" ? "you" : p.source === "app" ? "app" : "repo", installed: true, can: permissionWords(m?.permissions ?? []),
         readme: { dir: p.dir }, problem: p.error ?? (report.refused[p.id] !== "disabled in Settings" ? report.refused[p.id] : null) ?? null, dir: p.dir,
@@ -95,7 +117,7 @@ export function usePlugins(catalog: CatalogEntry[] | null): PluginRecord[] {
     }
     for (const w of widgets) {
       out.push({
-        kind: "widget", id: w.id, name: w.name, description: w.description ?? "", origin: w.builtin ? "app" : "you", installed: true,
+        kind: "widget", id: w.id, name: w.name, description: w.description || (listed.get(`widget:${w.id}`)?.description ?? ""), origin: w.builtin ? "app" : "you", installed: true,
         ...(w.version ? { version: w.version } : {}), ...(listed.get(`widget:${w.id}`) ? { catalog: listed.get(`widget:${w.id}`)! } : {}),
         can: permissionWords(w.permissions), readme: w.readme !== undefined ? { text: w.readme } : w.builtin ? null : { dir: w.dir ?? "" },
         ...(w.dir ? { dir: w.dir } : {}),
@@ -130,5 +152,5 @@ export function usePlugins(catalog: CatalogEntry[] | null): PluginRecord[] {
       });
     }
     return out;
-  }, [agents, report, views, widgets, tools, state, catalog]);
+  }, [agents, report, views, widgets, tools, state, fromCatalog, catalog]);
 }

@@ -1,12 +1,13 @@
 // Settings → Plugins: one row of controls (yours or HiveHub's, a search, a kind), then a group per
 // kind with one heading and its count, rows that all have the same parts with their state in one
-// badge, and what a kind does by itself (adding agents found on this machine) under its list.
+// badge and what HiveHub says the plugin does (or nothing), and what a kind does by itself (adding
+// agents found on this machine) under its list.
 import { test, expect, _electron as electron, type ElectronApplication, type Locator, type Page } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { seedAgents } from "./helpers/agents";
+import { PUBLISHED_AGENTS, seedAgents } from "./helpers/agents";
 import { buildRegistry } from "./helpers/registry";
 
 let app: ElectronApplication;
@@ -20,7 +21,11 @@ test.beforeAll(async () => {
   fs.mkdirSync(bin);
   // Claude's CLI is here, so it is the default; nothing else is, so the rest say so.
   fs.writeFileSync(path.join(bin, "claude"), "#!/bin/sh\n[ \"$1\" = --version ] && { echo '2.0.0 (Claude Code)'; exit 0; }\nexec sleep 60\n", { mode: 0o755 });
+  // Pi is ready too, and HiveHub does not list it: nothing says what it does.
+  fs.writeFileSync(path.join(bin, "pi"), "#!/bin/sh\n[ \"$1\" = --version ] && { echo '1.0.0'; exit 0; }\nexec sleep 60\n", { mode: 0o755 });
   const hub = buildRegistry(path.join(root, "registry"));
+  // HiveHub lists Claude, with what it does; its manifest says nothing.
+  hub.add({ id: "claude", type: "agent", name: "Claude", bin: "claude", files: { "agent.yaml": fs.readFileSync(path.join(PUBLISHED_AGENTS, "claude", "agent.yaml"), "utf8") } });
   execFileSync("git", ["init", "-q", path.join(root, "repo")]);
   const env = {
     ...process.env, XDG_CONFIG_HOME: xdg, PATH: `${bin}${path.delimiter}/usr/bin${path.delimiter}/bin`,
@@ -76,15 +81,20 @@ test("one row of controls: yours or HiveHub's, a search and a kind; no second ba
 
 test("each kind is one heading with its count, and every row has the same parts, its state in one badge", async () => {
   await expect(body().locator('[data-plugin-open="agent:claude"]')).toBeVisible();
+  // The catalog arrives after the list: Claude's line is HiveHub's words once it has.
+  await expect(body().locator('[data-plugin-row="agent:claude"] .plugin-row-detail')).toHaveText("A test agent from the catalog.");
   const kinds = await groups();
   expect(kinds.map((g) => g.heading)).toEqual(kinds.map((g) => [expect.stringMatching(new RegExp(`^(Agents|Views|Widgets|Tools)${g.rows}$`))]));
   expect(kinds.map((g) => g.heading[0]!.replace(/\d+$/, ""))).toEqual(["Agents", "Views", "Widgets", "Tools"]);
 
   const installed = await rows(body());
   for (const r of installed) {
-    expect(r, r.id).toMatchObject({ name: 1, line: 1 });
+    expect(r.name, r.id).toBe(1);
+    expect(r.line, r.id).toBeLessThanOrEqual(1);
+    expect(new Set(r.said).size, r.id).toBe(r.said.length);
     for (const e of r.extra) expect(e, r.id).toMatch(/^badge:/);
   }
+  expect(installed.find((r) => r.id === "agent:pi")?.said).toEqual(["Pi"]);
   const badge = (id: string) => installed.find((r) => r.id === id)?.extra;
   expect(badge("agent:claude")).toEqual(["badge:Default"]);
   // Installed, its program missing: not "Not installed" under Installed.
@@ -100,7 +110,7 @@ test("each kind is one heading with its count, and every row has the same parts,
   for (const r of hub) {
     expect(r.extra, r.id).toEqual([expect.stringMatching(/^badge:Installed$|^button::(Install|Update)$/)]);
     // A description that only repeats the name (the catalog's agents and views here) is not shown.
-    expect(r, r.id).toMatchObject(/^(agent|view):/.test(r.id) ? { name: 1, line: 0 } : { name: 1, line: 1 });
+    expect(r, r.id).toMatchObject(/^(agent|view):/.test(r.id) && r.id !== "agent:claude" ? { name: 1, line: 0 } : { name: 1, line: 1 });
     expect(new Set(r.said).size, r.id).toBe(r.said.length);
   }
   expect(hub.filter((r) => r.line === 0).length).toBeGreaterThan(0);
