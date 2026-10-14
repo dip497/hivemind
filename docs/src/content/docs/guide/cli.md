@@ -229,7 +229,7 @@ its link, which finds it from anywhere; from then on **Open recent → On your d
 workspaces it serves. A workspace opened from there is yours; its terminals and
 agents run on the host and keep running whatever your computer does.
 
-A workspace on your computer moves to the host from **Settings → Connect → Move there**, so it stays open
+A workspace on your computer moves to the host with **Move there** on Settings → Connect, so it stays open
 while your computer sleeps: the board, notes, the people in it and their invite links go to the
 host, whoever is in it follows by themselves, and your computer opens it from the host from then
 on. Terminals and agents in frames on your computer keep running there, reached through the host.
@@ -238,17 +238,17 @@ host is gone, **Host it here** carries on from the board as your computer last s
 network with a lookup server the people in it find it there, and the host, back, hands over what
 changed on it meanwhile.
 
-While the host has it, you manage who is in it from your computer as before: **Share** makes a
-link that brings people to the host, **People** changes roles and takes people off there, and
-someone asking to join is asked about in each of your windows with it open, or, with none open,
-on your phone. Your computer keeps the list as the host has it, so **Host it here** carries it on
+While the host has it, **Settings → Connect** on your computer lists the people in it, changes
+roles and takes people off there. An offer made there lets nobody into it: new people come with
+an invite link from `hive share` on the host. Someone asking to join is asked about in each of
+your windows with it open, or, with none open, on your phone. Your computer keeps the list as the host has it, so **Host it here** carries it on
 with whoever was let in or taken off meanwhile. A link made there names you as the host's profile
 does (`hive config set profile.name '"Your Name"'` on the host), or by the machine's name.
 
 ### Sharing from the host itself
 
 With no window anywhere, share straight from the host's command line. These ask the running
-`hive host`, act as you, and are written to its audit log like the app's **Share** and **People**:
+`hive host`, act as you, and are written to its audit log like the app's Settings → Connect:
 
 ```text
 hive share <workspace> [--role view|edit|terminals] [--uses n] [--expires 7d]

@@ -44,16 +44,20 @@ hive-net serve --all --data /var/lib/hive-net --domain hive.example.com \
 
 ## Pair
 
-1. On the computer: **Settings → Your devices → Use on your phone → Show the code**.
-2. Turn on **Open in the phone's browser**. The switch shows only when your server serves the
-   page. Whoever runs that server could pair as you: turn it on only if that is you.
-3. Scan the code with the phone's camera. The page asks *Pair with ⟨computer⟩?*; tap **Pair**.
+1. On the computer: **Settings → Connect → Connect**.
+2. Turn on **Open in the phone's browser, no app needed**. The switch shows only when your server
+   serves the page. Whoever runs that server is given the code with it: turn it on only if that
+   is you.
+3. Scan the QR code with the phone's camera. The page asks *Connect to ⟨computer⟩?*; tap
+   **Connect**.
+4. Both screens show three words. If they match, press **It's me — the words match** on the
+   computer, then **Yes** on the phone.
 
-The code works once, until the time shown under it. Instead of scanning, **Copy the link** and
-paste it into the page's field.
+Instead of scanning, **Copy the link** and paste it into the page's field. More on the offer and
+the answers: [Connect devices and people](../connect/).
 
-To unpair: **Unpair** on the phone's row under **Paired** on the computer, or **Devices → Forget
-this computer** on the phone.
+To unpair: **Unpair** on the phone's row under **Your devices** on Settings → Connect, or
+**Devices → Forget this computer** on the phone.
 
 Add the page to the home screen. It opens at once with what it last knew, offline too, and
 updates itself: a new build is fetched in the background and runs from the next open.
@@ -137,8 +141,7 @@ A view that shows the board's [widgets](../widgets/) draws them there, and its b
 
 ## The whole app in a browser tab
 
-**Settings → Your devices → In a browser on this computer → Serve the app to a browser** serves
-the full app at `http://127.0.0.1:4483/#token=…`, for this computer only. The key changes each
+**Settings → In a browser → Serve the app to a browser** serves the full app at `http://127.0.0.1:4483/#token=…`, for this computer only. The key changes each
 time the app starts; whoever has the link can use your terminals.
 
 For another device, put it behind `tailscale serve` and add the machine's tailnet name under
