@@ -16,6 +16,7 @@ use hive_phone::{
 
 use crate::{
     connect::Connecting,
+    home::{self, HomeShown},
     on_runtime,
     overview::{Following, OverviewListener, Overviews},
     records::{AgentRef, Answer, JoinRef, Overview, Paired, Person},
@@ -55,6 +56,19 @@ impl Phone {
             connections,
             overviews,
         }))
+    }
+
+    /// Home on each computer the phone reached (spec/home.md), as they are listed: what holds
+    /// `query`, on `machine` when one is chosen. Told as it changes as the overview is.
+    pub fn home(&self, query: String, machine: Option<String>) -> Vec<HomeShown> {
+        let homes = self.connections.homes();
+        homes
+            .iter()
+            .map(|(seen, held)| {
+                let (device, computer) = (&seen.with.device, &seen.with.name);
+                home::shown(device, computer, held, &query, machine.as_deref())
+            })
+            .collect()
     }
 
     /// The phone's id: its device key's public half, in hex.

@@ -1,16 +1,7 @@
 package com.hivemind.phone.ui.agents
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.hivemind.phone.core.Agent
 import com.hivemind.phone.core.Overview
-import com.hivemind.phone.core.Phone
-import com.hivemind.phone.ui.common.CoreCalls
-import com.hivemind.phone.ui.common.Notice
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 
 /** Every agent, by device and then by workspace (design §6.3). */
 data class AgentsState(val devices: List<DeviceAgents>) {
@@ -35,22 +26,5 @@ data class AgentsState(val devices: List<DeviceAgents>) {
                 },
             )
         }
-    }
-}
-
-class AgentsViewModel(private val phone: Phone, overview: StateFlow<Overview>) : ViewModel() {
-    val state: StateFlow<AgentsState> = overview.map(AgentsState::of)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, AgentsState.of(overview.value))
-
-    val calls = CoreCalls(viewModelScope)
-
-    /** Ends [agent]'s turn: the keys its manifest says interrupt it. */
-    fun stop(agent: Agent) = calls.launch(agent.at, { phone.interrupt(agent.at) }) { stopped ->
-        if (!stopped) calls.tell(Notice.NotStopped)
-    }
-
-    /** Ends [agent]'s session and takes its tile off the board. The phone's lock is asked first. */
-    fun close(agent: Agent) = calls.launch(agent.at, { phone.closeAgent(agent.at) }) { closed ->
-        if (!closed) calls.tell(Notice.AlreadyClosed)
     }
 }

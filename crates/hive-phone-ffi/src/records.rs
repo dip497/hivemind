@@ -58,6 +58,23 @@ pub enum AgentState {
     Exited,
 }
 
+impl AgentState {
+    /// A state as a device says it; none for one the phone does not know.
+    pub(crate) fn named(state: &str) -> Option<Self> {
+        Some(match state {
+            "idle" => Self::Idle,
+            "working" => Self::Working,
+            "waiting" => Self::Waiting,
+            "done" => Self::Done,
+            "failed" => Self::Failed,
+            "interrupted" => Self::Interrupted,
+            "limited" => Self::Limited,
+            "exited" => Self::Exited,
+            _ => return None,
+        })
+    }
+}
+
 /// What an agent waits on the person for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum WaitKind {
@@ -65,6 +82,17 @@ pub enum WaitKind {
     Question,
     Plan,
     Other,
+}
+
+impl WaitKind {
+    pub(crate) fn named(kind: &str) -> Self {
+        match kind {
+            "permission" => Self::Permission,
+            "question" => Self::Question,
+            "plan" => Self::Plan,
+            _ => Self::Other,
+        }
+    }
 }
 
 /// An agent's wait: what for, since when (which names the wait), its plan, and whether its device
@@ -253,17 +281,7 @@ pub fn overview(revision: u64, seen: &[Seen], person: Option<person::Person>) ->
 /// its id). What it waits on the agent supervising it for (`approval`) is not the person's to
 /// answer: it waits, on nothing of theirs.
 fn shown(agent: agents::Agent, named: &BTreeMap<&str, &str>) -> Option<Agent> {
-    let state = match agent.state.as_str() {
-        "idle" => AgentState::Idle,
-        "working" => AgentState::Working,
-        "waiting" => AgentState::Waiting,
-        "done" => AgentState::Done,
-        "failed" => AgentState::Failed,
-        "interrupted" => AgentState::Interrupted,
-        "limited" => AgentState::Limited,
-        "exited" => AgentState::Exited,
-        _ => return None,
-    };
+    let state = AgentState::named(&agent.state)?;
     let waiting = agent.waiting.filter(|w| w.kind != "approval");
     let device_name = named
         .get(agent.device.as_str())
@@ -290,12 +308,7 @@ fn shown(agent: agents::Agent, named: &BTreeMap<&str, &str>) -> Option<Agent> {
         state,
         since: Some(agent.since),
         waiting: waiting.map(|waiting| Waiting {
-            kind: match waiting.kind.as_str() {
-                "permission" => WaitKind::Permission,
-                "question" => WaitKind::Question,
-                "plan" => WaitKind::Plan,
-                _ => WaitKind::Other,
-            },
+            kind: WaitKind::named(&waiting.kind),
             since: waiting.since,
             plan: waiting.plan,
             decide: waiting.decide,

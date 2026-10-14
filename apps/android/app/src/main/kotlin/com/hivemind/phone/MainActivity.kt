@@ -33,13 +33,16 @@ import kotlinx.coroutines.flow.receiveAsFlow
 
 /**
  * The one activity: the app's screens, in the person's colour once the phone knows it; opened on an
- * agent's screen by a notification about it.
+ * agent's screen by a notification about it, and on Pair by a computer's `hivemind://` link.
  */
 class MainActivity : FragmentActivity() {
     private var frames: FrameMeter? = null
 
     /** The agents notifications opened the app on, the newest kept until the screens take it. */
     private val opens = Channel<AgentRef>(Channel.CONFLATED)
+
+    /** The `hivemind://` links the app was opened on (a computer's QR code, a link tapped), likewise. */
+    private val links = Channel<String>(Channel.CONFLATED)
 
     @OptIn(ExperimentalComposeUiApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,10 +55,10 @@ class MainActivity : FragmentActivity() {
             is PhoneApp.Opened.Ready -> setContent {
                 val feed = opened.core.feed
                 val colour by remember(feed) { feed.overview.map { it.person?.color }.distinctUntilChanged() }
-                    .collectAsStateWithLifecycle(feed.overview.value.person?.color)
+                    .collectAsStateWithLifecycle(remember(feed) { feed.overview.value.person?.color })
                 PhoneTheme(accent = personColor(colour)) {
                     CompositionLocalProvider(LocalPhoneLock provides lock) {
-                        Surface(tagged.fillMaxSize()) { PhoneNav(opened.core, remember { opens.receiveAsFlow() }) }
+                        Surface(tagged.fillMaxSize()) { PhoneNav(opened.core, remember { opens.receiveAsFlow() }, remember { links.receiveAsFlow() }) }
                     }
                 }
             }
@@ -79,5 +82,6 @@ class MainActivity : FragmentActivity() {
 
     private fun opened(intent: Intent?) {
         openedOn(intent)?.let { opens.trySend(it) }
+        if (intent?.action == Intent.ACTION_VIEW && intent.data?.scheme == "hivemind") links.trySend(intent.dataString!!)
     }
 }

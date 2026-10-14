@@ -197,9 +197,8 @@ networked parts fit together, decided now so every step builds toward it:
 Open (2026-10-02):
 - The e2e specs are typechecked by nothing: a tsconfig over `apps/desktop/tests/e2e` finds 141
   errors, most of them `window.hive` untyped in a page callback.
-- Lint runs in no CI job: the Android app has two lint errors from before P8 (a `StateFlow.value`
-  read in composition, `MainActivity.kt:55` and the starting route in `PhoneNav.kt`); `pnpm lint`
-  has four (three `shadcn/no-restyle`, one `no-raw-colors`).
+- `pnpm lint` runs in no CI job and has four errors (three `shadcn/no-restyle`, one
+  `no-raw-colors`). The Android app's lint is clean and runs in `phone-android.yml` (2026-10-14).
 - A user-data path over about 100 characters gives the app's control socket (`hcp.sock`) a
   truncated name and `EADDRINUSE` (a Unix socket path is at most 108 bytes); found packaging with a
   long scratch path.

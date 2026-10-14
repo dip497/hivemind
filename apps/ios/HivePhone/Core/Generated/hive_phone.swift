@@ -1651,6 +1651,12 @@ public protocol PhoneProtocol: AnyObject, Sendable {
     func follow(listener: OverviewListener)  -> Following
     
     /**
+     * Home on each computer the phone reached (spec/home.md), as they are listed: what holds
+     * `query`, on `machine` when one is chosen. Told as it changes as the overview is.
+     */
+    func home(query: String, machine: String?)  -> [HomeShown]
+    
+    /**
      * The phone's id: its device key's public half, in hex.
      */
     func id()  -> String
@@ -1982,6 +1988,21 @@ open func follow(listener: OverviewListener) -> Following  {
     uniffi_hive_phone_ffi_fn_method_phone_follow(
             self.uniffiCloneHandle(),
         FfiConverterTypeOverviewListener_lower(listener),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Home on each computer the phone reached (spec/home.md), as they are listed: what holds
+     * `query`, on `machine` when one is chosen. Told as it changes as the overview is.
+     */
+open func home(query: String, machine: String?) -> [HomeShown]  {
+    return try!  FfiConverterSequenceTypeHomeShown.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_method_phone_home(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(query),
+        FfiConverterOptionString.lower(machine),uniffiCallStatus
     )
 })
 }
@@ -3738,6 +3759,268 @@ public func FfiConverterTypeFrame_lift(_ buf: RustBuffer) throws -> Frame {
 #endif
 public func FfiConverterTypeFrame_lower(_ value: Frame) -> RustBuffer {
     return FfiConverterTypeFrame.lower(value)
+}
+
+
+/**
+ * Home on one of the person's computers.
+ */
+public struct HomeShown: Equatable, Hashable {
+    /**
+     * The computer's id, and what it is called.
+     */
+    public var device: String
+    public var computer: String
+    /**
+     * What waits on the person, the longest first: each an agent of the overview.
+     */
+    public var needs: [AgentRef]
+    /**
+     * At work, the longest first.
+     */
+    public var working: [HomeEntry]
+    /**
+     * Pinned, in the desktop's order: listed here and nowhere else in the tree.
+     */
+    public var pinned: [HomeEntry]
+    /**
+     * The machines to choose from, when there is more than one.
+     */
+    public var machines: [String]
+    public var tree: [HomeEntry]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The computer's id, and what it is called.
+         */device: String, computer: String, 
+        /**
+         * What waits on the person, the longest first: each an agent of the overview.
+         */needs: [AgentRef], 
+        /**
+         * At work, the longest first.
+         */working: [HomeEntry], 
+        /**
+         * Pinned, in the desktop's order: listed here and nowhere else in the tree.
+         */pinned: [HomeEntry], 
+        /**
+         * The machines to choose from, when there is more than one.
+         */machines: [String], tree: [HomeEntry]) {
+        self.device = device
+        self.computer = computer
+        self.needs = needs
+        self.working = working
+        self.pinned = pinned
+        self.machines = machines
+        self.tree = tree
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension HomeShown: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHomeShown: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HomeShown {
+        return
+            try HomeShown(
+                device: FfiConverterString.read(from: &buf), 
+                computer: FfiConverterString.read(from: &buf), 
+                needs: FfiConverterSequenceTypeAgentRef.read(from: &buf), 
+                working: FfiConverterSequenceTypeHomeEntry.read(from: &buf), 
+                pinned: FfiConverterSequenceTypeHomeEntry.read(from: &buf), 
+                machines: FfiConverterSequenceString.read(from: &buf), 
+                tree: FfiConverterSequenceTypeHomeEntry.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HomeShown, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.device, into: &buf)
+        FfiConverterString.write(value.computer, into: &buf)
+        FfiConverterSequenceTypeAgentRef.write(value.needs, into: &buf)
+        FfiConverterSequenceTypeHomeEntry.write(value.working, into: &buf)
+        FfiConverterSequenceTypeHomeEntry.write(value.pinned, into: &buf)
+        FfiConverterSequenceString.write(value.machines, into: &buf)
+        FfiConverterSequenceTypeHomeEntry.write(value.tree, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHomeShown_lift(_ buf: RustBuffer) throws -> HomeShown {
+    return try FfiConverterTypeHomeShown.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHomeShown_lower(_ value: HomeShown) -> RustBuffer {
+    return FfiConverterTypeHomeShown.lower(value)
+}
+
+
+/**
+ * A tile of a board, and for an agent what the agent list says of it.
+ */
+public struct HomeTile: Equatable, Hashable {
+    public var at: AgentRef
+    public var name: String
+    /**
+     * What it is on the board: `terminal`, `notes`, a widget's kind.
+     */
+    public var kind: String
+    /**
+     * It runs an agent.
+     */
+    public var agent: Bool
+    /**
+     * It runs a terminal, which can be shown and typed into.
+     */
+    public var terminal: Bool
+    public var state: AgentState?
+    /**
+     * When it entered its state.
+     */
+    public var since: UInt64?
+    /**
+     * What it waits on the person for, and its tool and what about (its command, its file), or
+     * its first question.
+     */
+    public var waits: WaitKind?
+    public var tool: String?
+    public var about: String?
+    public var question: String?
+    /**
+     * What it last said, or its screen's last line with text.
+     */
+    public var line: String?
+    /**
+     * The program it is: "Claude Code".
+     */
+    public var program: String?
+    /**
+     * Its turn can be stopped from here.
+     */
+    public var interrupt: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(at: AgentRef, name: String, 
+        /**
+         * What it is on the board: `terminal`, `notes`, a widget's kind.
+         */kind: String, 
+        /**
+         * It runs an agent.
+         */agent: Bool, 
+        /**
+         * It runs a terminal, which can be shown and typed into.
+         */terminal: Bool, state: AgentState?, 
+        /**
+         * When it entered its state.
+         */since: UInt64?, 
+        /**
+         * What it waits on the person for, and its tool and what about (its command, its file), or
+         * its first question.
+         */waits: WaitKind?, tool: String?, about: String?, question: String?, 
+        /**
+         * What it last said, or its screen's last line with text.
+         */line: String?, 
+        /**
+         * The program it is: "Claude Code".
+         */program: String?, 
+        /**
+         * Its turn can be stopped from here.
+         */interrupt: Bool) {
+        self.at = at
+        self.name = name
+        self.kind = kind
+        self.agent = agent
+        self.terminal = terminal
+        self.state = state
+        self.since = since
+        self.waits = waits
+        self.tool = tool
+        self.about = about
+        self.question = question
+        self.line = line
+        self.program = program
+        self.interrupt = interrupt
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension HomeTile: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHomeTile: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HomeTile {
+        return
+            try HomeTile(
+                at: FfiConverterTypeAgentRef.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                kind: FfiConverterString.read(from: &buf), 
+                agent: FfiConverterBool.read(from: &buf), 
+                terminal: FfiConverterBool.read(from: &buf), 
+                state: FfiConverterOptionTypeAgentState.read(from: &buf), 
+                since: FfiConverterOptionUInt64.read(from: &buf), 
+                waits: FfiConverterOptionTypeWaitKind.read(from: &buf), 
+                tool: FfiConverterOptionString.read(from: &buf), 
+                about: FfiConverterOptionString.read(from: &buf), 
+                question: FfiConverterOptionString.read(from: &buf), 
+                line: FfiConverterOptionString.read(from: &buf), 
+                program: FfiConverterOptionString.read(from: &buf), 
+                interrupt: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HomeTile, into buf: inout [UInt8]) {
+        FfiConverterTypeAgentRef.write(value.at, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.kind, into: &buf)
+        FfiConverterBool.write(value.agent, into: &buf)
+        FfiConverterBool.write(value.terminal, into: &buf)
+        FfiConverterOptionTypeAgentState.write(value.state, into: &buf)
+        FfiConverterOptionUInt64.write(value.since, into: &buf)
+        FfiConverterOptionTypeWaitKind.write(value.waits, into: &buf)
+        FfiConverterOptionString.write(value.tool, into: &buf)
+        FfiConverterOptionString.write(value.about, into: &buf)
+        FfiConverterOptionString.write(value.question, into: &buf)
+        FfiConverterOptionString.write(value.line, into: &buf)
+        FfiConverterOptionString.write(value.program, into: &buf)
+        FfiConverterBool.write(value.interrupt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHomeTile_lift(_ buf: RustBuffer) throws -> HomeTile {
+    return try FfiConverterTypeHomeTile.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHomeTile_lower(_ value: HomeTile) -> RustBuffer {
+    return FfiConverterTypeHomeTile.lower(value)
 }
 
 
@@ -6123,6 +6406,117 @@ public func FfiConverterTypeDeviceKind_lower(_ value: DeviceKind) -> RustBuffer 
 
 
 /**
+ * One line of a list Home shows; `key` names it in every list it is in.
+ */
+
+public enum HomeEntry: Equatable, Hashable {
+    
+    case machine(key: String, name: String
+    )
+    /**
+     * `frame`: its first frame, where an agent started from its heading runs.
+     */
+    case project(key: String, name: String, workspace: String, frame: String?
+    )
+    /**
+     * `folder`: the folder it runs in, when not its title.
+     */
+    case frame(key: String, depth: UInt32, title: String, color: String, folder: String?
+    )
+    case tile(key: String, depth: UInt32, tile: HomeTile
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension HomeEntry: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHomeEntry: FfiConverterRustBuffer {
+    typealias SwiftType = HomeEntry
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HomeEntry {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .machine(key: try FfiConverterString.read(from: &buf), name: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .project(key: try FfiConverterString.read(from: &buf), name: try FfiConverterString.read(from: &buf), workspace: try FfiConverterString.read(from: &buf), frame: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 3: return .frame(key: try FfiConverterString.read(from: &buf), depth: try FfiConverterUInt32.read(from: &buf), title: try FfiConverterString.read(from: &buf), color: try FfiConverterString.read(from: &buf), folder: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 4: return .tile(key: try FfiConverterString.read(from: &buf), depth: try FfiConverterUInt32.read(from: &buf), tile: try FfiConverterTypeHomeTile.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: HomeEntry, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .machine(key,name):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(key, into: &buf)
+            FfiConverterString.write(name, into: &buf)
+            
+        
+        case let .project(key,name,workspace,frame):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(key, into: &buf)
+            FfiConverterString.write(name, into: &buf)
+            FfiConverterString.write(workspace, into: &buf)
+            FfiConverterOptionString.write(frame, into: &buf)
+            
+        
+        case let .frame(key,depth,title,color,folder):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(key, into: &buf)
+            FfiConverterUInt32.write(depth, into: &buf)
+            FfiConverterString.write(title, into: &buf)
+            FfiConverterString.write(color, into: &buf)
+            FfiConverterOptionString.write(folder, into: &buf)
+            
+        
+        case let .tile(key,depth,tile):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(key, into: &buf)
+            FfiConverterUInt32.write(depth, into: &buf)
+            FfiConverterTypeHomeTile.write(tile, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHomeEntry_lift(_ buf: RustBuffer) throws -> HomeEntry {
+    return try FfiConverterTypeHomeEntry.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHomeEntry_lower(_ value: HomeEntry) -> RustBuffer {
+    return FfiConverterTypeHomeEntry.lower(value)
+}
+
+
+
+/**
  * What starts a list's item.
  */
 
@@ -7240,6 +7634,30 @@ fileprivate struct FfiConverterOptionTypeWaiting: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeAgentState: FfiConverterRustBuffer {
+    typealias SwiftType = AgentState?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeAgentState.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeAgentState.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeListMarker: FfiConverterRustBuffer {
     typealias SwiftType = ListMarker?
 
@@ -7280,6 +7698,30 @@ fileprivate struct FfiConverterOptionTypeNotice: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeNotice.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeWaitKind: FfiConverterRustBuffer {
+    typealias SwiftType = WaitKind?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeWaitKind.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeWaitKind.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -7354,6 +7796,31 @@ fileprivate struct FfiConverterSequenceTypeAgent: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeAgent.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeAgentRef: FfiConverterRustBuffer {
+    typealias SwiftType = [AgentRef]
+
+    public static func write(_ value: [AgentRef], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeAgentRef.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [AgentRef] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [AgentRef]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeAgentRef.read(from: &buf))
         }
         return seq
     }
@@ -7454,6 +7921,31 @@ fileprivate struct FfiConverterSequenceTypeFrame: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeFrame.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeHomeShown: FfiConverterRustBuffer {
+    typealias SwiftType = [HomeShown]
+
+    public static func write(_ value: [HomeShown], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHomeShown.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HomeShown] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HomeShown]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHomeShown.read(from: &buf))
         }
         return seq
     }
@@ -7704,6 +8196,31 @@ fileprivate struct FfiConverterSequenceTypeColumnAlign: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeColumnAlign.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeHomeEntry: FfiConverterRustBuffer {
+    typealias SwiftType = [HomeEntry]
+
+    public static func write(_ value: [HomeEntry], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHomeEntry.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HomeEntry] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HomeEntry]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHomeEntry.read(from: &buf))
         }
         return seq
     }
@@ -8008,6 +8525,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_phone_follow() != 53068) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_phone_home() != 24196) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_phone_id() != 40747) {

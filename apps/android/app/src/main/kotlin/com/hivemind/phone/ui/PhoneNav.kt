@@ -2,6 +2,7 @@ package com.hivemind.phone.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -33,7 +34,8 @@ sealed interface Route : NavKey {
     data object Home : Route
 
     @Serializable
-    data object Pair : Route
+    /** Pairing; with the link a tapped or scanned `hivemind://` link opened the app on, if one did. */
+    data class Pair(val link: String = "") : Route
 
     @Serializable
     data class Agent(val device: String, val workspace: String, val tile: String) : Route {
@@ -70,12 +72,19 @@ private fun AgentRef.agent() = Route.Agent(device, workspace, tile)
  * [opens], on its screen, over the rest.
  */
 @Composable
-fun PhoneNav(core: PhoneCore, opens: Flow<AgentRef>) {
-    val first: Route = if (core.feed.overview.value.devices.isEmpty()) Route.Pair else Route.Home
+fun PhoneNav(core: PhoneCore, opens: Flow<AgentRef>, links: Flow<String>) {
+    // Where it opens is decided once, from what the phone knew at launch.
+    val first: Route = remember(core) { if (core.feed.overview.value.devices.isEmpty()) Route.Pair() else Route.Home }
     val stack = rememberNavBackStack(first)
     LaunchedEffect(opens) {
         opens.collect { agent ->
             val route = agent.agent()
+            if (stack.lastOrNull() != route) stack.add(route)
+        }
+    }
+    LaunchedEffect(links) {
+        links.collect { link ->
+            val route = Route.Pair(link)
             if (stack.lastOrNull() != route) stack.add(route)
         }
     }
@@ -92,7 +101,7 @@ fun PhoneNav(core: PhoneCore, opens: Flow<AgentRef>) {
                     core,
                     onOpen = { stack.add(it.agent()) },
                     onStart = { stack.add(Route.Start) },
-                    onPair = { stack.add(Route.Pair) },
+                    onPair = { stack.add(Route.Pair()) },
                     onOpenView = { row ->
                         stack.add(
                             Route.View(row.place.device, row.place.deviceName, row.place.workspace, row.view.id, row.view.name, row.view.page),
@@ -100,12 +109,16 @@ fun PhoneNav(core: PhoneCore, opens: Flow<AgentRef>) {
                     },
                 )
             }
-            entry<Route.Pair> {
+            entry<Route.Pair> { route ->
+                val pairing = viewModel { PairViewModel(core.phone) }
+                // A link that opened the app is taken as the camera's code is: once, and only a pairing or an offer.
+                LaunchedEffect(route.link) { if (route.link.isNotEmpty()) pairing.scanned(route.link) }
                 PairScreen(
-                    viewModel { PairViewModel(core.phone) },
+                    pairing,
                     onDone = {
-                        // Paired from Devices: back to it. Paired on first launch: home.
-                        stack.removeLastOrNull()
+                        // Paired from Devices: back to it. Paired on first launch: home. Every Pair
+                        // goes, the one it opened on as well as one a link opened over it.
+                        stack.removeAll { it is Route.Pair }
                         if (stack.isEmpty()) stack.add(Route.Home)
                     },
                 )

@@ -3,8 +3,7 @@
     <string name="app_name">hivemind</string>
 
     <!-- Tabs -->
-    <string name="tab_needs">Needs you</string>
-    <string name="tab_agents">Agents</string>
+    <string name="tab_home">Home</string>
     <string name="tab_devices">Devices</string>
     <string name="tab_views">Views</string>
 
@@ -56,7 +55,12 @@
     <string name="action_send">Send</string>
 
     <!-- Agents -->
-    <string name="agents_none">No agents on your devices yet.</string>
+    <string name="home_search">Search</string>
+    <string name="home_working">Working</string>
+    <string name="home_pinned">Pinned</string>
+    <string name="home_nothing">Nothing open on your computer yet.</string>
+    <string name="home_no_match">Nothing matches.</string>
+    <string name="home_start_in">Start an agent in %s</string>
     <string name="agents_device_away">%s · away</string>
     <string name="action_stop">Stop</string>
     <string name="action_close">Close</string>

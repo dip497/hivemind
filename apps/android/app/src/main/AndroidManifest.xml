@@ -30,6 +30,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- A computer's offer or pairing link, scanned by the camera or tapped: opens Pair with it. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="hivemind" />
+            </intent-filter>
         </activity>
 
         <!-- What the UnifiedPush distributor tells the app, through the connector's receiver. -->

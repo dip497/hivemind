@@ -11,6 +11,7 @@ mod connect;
 mod control;
 mod conversation;
 mod error;
+mod home;
 mod markdown;
 mod overview;
 mod pairing;
@@ -26,6 +27,7 @@ pub use conversation::{
     Conversation, ConversationEnded, ConversationListener, Entry, Said, Tool, ToolResult,
 };
 pub use error::PhoneError;
+pub use home::{HomeEntry, HomeShown, HomeTile};
 pub use markdown::{markdown, BlockKind, ColumnAlign, ListMarker, TextBlock, TextRun};
 pub use overview::{Following, OverviewListener};
 pub use pairing::{pairs_with, PairsWith};

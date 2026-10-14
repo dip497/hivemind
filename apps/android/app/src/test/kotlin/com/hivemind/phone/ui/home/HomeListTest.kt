@@ -1,0 +1,170 @@
+package com.hivemind.phone.ui.home
+
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.hivemind.phone.DESK
+import com.hivemind.phone.MINUTE
+import com.hivemind.phone.agent
+import com.hivemind.phone.core.Agent
+import com.hivemind.phone.core.AgentRef
+import com.hivemind.phone.core.AgentState
+import com.hivemind.phone.core.Answer
+import com.hivemind.phone.core.Decision
+import com.hivemind.phone.core.HomeEntry
+import com.hivemind.phone.core.HomeShown
+import com.hivemind.phone.core.HomeTile
+import com.hivemind.phone.core.Overview
+import com.hivemind.phone.core.WaitKind
+import com.hivemind.phone.device
+import com.hivemind.phone.overview
+import com.hivemind.phone.ui.theme.PhoneTheme
+import com.hivemind.phone.waiting
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/** Home (B5 §11.2), over the core's records: what needs the person, and each computer's tree. */
+@RunWith(AndroidJUnit4::class)
+class HomeListTest {
+    @get:Rule
+    val compose = createComposeRule()
+
+    private val now = 1_790_000_000_000L
+    private val answers = mutableListOf<Pair<Agent, Answer>>()
+    private val opened = mutableListOf<AgentRef>()
+    private val stopped = mutableListOf<String>()
+    private val closed = mutableListOf<String>()
+
+    /** The line saying [text], scrolled to as the person scrolls the list to it. */
+    private fun row(text: String): SemanticsNodeInteraction {
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(text))
+        return compose.onNodeWithText(text)
+    }
+
+    private fun show(overview: Overview, homes: List<HomeShown> = emptyList()) = compose.setContent {
+        PhoneTheme(accent = null) {
+            HomeList(
+                HomeState.of(overview, homes, HomeFilter()),
+                busy = emptySet(),
+                now = now,
+                onSearch = {},
+                onMachine = {},
+                onOpen = { opened += it },
+                onAnswer = { agent, answer -> answers += agent to answer },
+                onStop = { stopped += it.name },
+                onClose = { closed += it.name },
+                onStart = {},
+            )
+        }
+    }
+
+    @Test
+    fun `a permission the device can decide is allowed from its row`() {
+        val asking = agent("t1", name = "fix the login bug", waiting = waiting(WaitKind.PERMISSION, since = now - 5 * MINUTE, decide = true))
+        show(overview(needs = listOf(asking)))
+
+        compose.onNodeWithText("fix the login bug").assertIsDisplayed()
+        compose.onNodeWithText("5 min").assertIsDisplayed()
+        compose.onNodeWithText("Deny").assertIsDisplayed()
+        compose.onNodeWithText("Allow").performClick()
+
+        assertEquals(listOf(asking to Answer.Decide(Decision.ALLOW)), answers)
+    }
+
+    @Test
+    fun `a question is answered with the line typed in its reply box`() {
+        val asking = agent("t2", name = "migrate the db", waiting = waiting(WaitKind.QUESTION, since = now - MINUTE))
+        show(overview(needs = listOf(asking)))
+
+        compose.onNodeWithText("Reply").performTextInput("yes, the staging one")
+        compose.onNodeWithText("Send").performClick()
+
+        assertEquals(listOf(asking to Answer.Text("yes, the staging one")), answers)
+    }
+
+    @Test
+    fun `with nothing waiting it says so and how many agents work, and when an away device was last heard`() {
+        show(
+            overview(
+                working = 4,
+                devices = listOf(device(DESK, "desk", reachable = false, awaySince = now - 2 * MINUTE, heardAt = now - 5 * MINUTE)),
+            ),
+        )
+
+        compose.onNodeWithText("Nothing needs you. 4 agents working.").assertIsDisplayed()
+        compose.onNodeWithText("desk is away · last heard 5 min ago").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a device reached that has not said what waits there is being asked, and nothing is said to wait until it has`() {
+        // It told the workspaces it holds a moment ago, and not yet what waits there.
+        show(overview(working = 0, devices = listOf(device(DESK, "desk", heardAt = now - 1_000, answeredAt = null))))
+
+        compose.onNodeWithText("Asking desk…").assertIsDisplayed()
+        compose.onNodeWithText("Nothing needs you.").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a computer's tree lists its machine, project, frame and tiles, an agent's row saying what it waits on and opening it, a shell's saying its last line`() {
+        val asking = agent("t1", name = "api", state = AgentState.WAITING, waiting = waiting(WaitKind.PERMISSION, since = now - MINUTE))
+        fun tile(id: String, name: String, agent: Boolean, line: String? = null, tool: String? = null, about: String? = null) = HomeEntry.Tile(
+            key = "t:ws-1/$id",
+            depth = 2u,
+            tile = HomeTile(
+                at = AgentRef(DESK, "ws-1", id), name = name, kind = "terminal", agent = agent, terminal = true,
+                state = if (agent) AgentState.WAITING else null, since = null, waits = if (agent) WaitKind.PERMISSION else null,
+                tool = tool, about = about, question = null, line = line, program = null, interrupt = false,
+            ),
+        )
+        val home = HomeShown(
+            device = DESK, computer = "desk", needs = listOf(asking.at), working = emptyList(), pinned = emptyList(), machines = emptyList(),
+            tree = listOf(
+                HomeEntry.Machine("m:desk", "desk"),
+                HomeEntry.Project("p:ws-1", "hivemind", "ws-1", null),
+                HomeEntry.Frame("f:ws-1/f1", 1u, "nav fix", "#3a7bd5", "nav-fix"),
+                tile("t1", "api", agent = true, tool = "Bash", about = "rm -rf build"),
+                tile("t2", "shell", agent = false, line = "$ make"),
+            ),
+        )
+        show(overview(agents = listOf(asking), needs = listOf(asking)), listOf(home))
+
+        row("hivemind").assertIsDisplayed()
+        row("nav fix").assertIsDisplayed()
+        row("nav-fix").assertIsDisplayed()
+        row("Bash: rm -rf build").assertIsDisplayed()
+        row("$ make").assertIsDisplayed()
+        row("Bash: rm -rf build").performClick()
+
+        assertEquals(listOf(asking.at), opened)
+    }
+
+    @Test
+    fun `the agents of a computer whose Home has not come yet are listed by the overview, and swiped right stop a turn, only one there is to stop, and left close`() {
+        val agents = listOf(
+            agent("t1", name = "builder", state = AgentState.WORKING, canInterrupt = true),
+            agent("t2", name = "reviewer", state = AgentState.IDLE, canInterrupt = true),
+            agent("t3", name = "tester", state = AgentState.WORKING, canInterrupt = false),
+            agent("t4", name = "asker", state = AgentState.WAITING, canInterrupt = true),
+        )
+        show(overview(agents = agents))
+
+        for (name in listOf("builder", "reviewer", "tester", "asker")) row(name).performTouchInput { swipeRight() }
+        row("reviewer").performTouchInput { swipeLeft() }
+        compose.waitForIdle()
+
+        assertEquals(listOf("builder", "asker"), stopped)
+        assertEquals(listOf("reviewer"), closed)
+    }
+}

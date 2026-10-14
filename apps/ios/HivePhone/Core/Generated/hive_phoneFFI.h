@@ -509,6 +509,11 @@ uint64_t uniffi_hive_phone_ffi_fn_method_phone_connect(uint64_t ptr, RustBuffer 
 uint64_t uniffi_hive_phone_ffi_fn_method_phone_follow(uint64_t ptr, uint64_t listener, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_HOME
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_HOME
+RustBuffer uniffi_hive_phone_ffi_fn_method_phone_home(uint64_t ptr, RustBuffer query, RustBuffer machine, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_ID
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_ID
 RustBuffer uniffi_hive_phone_ffi_fn_method_phone_id(uint64_t ptr, RustCallStatus *_Nonnull out_status
@@ -1159,6 +1164,12 @@ uint16_t uniffi_hive_phone_ffi_checksum_method_phone_connect(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_FOLLOW
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_FOLLOW
 uint16_t uniffi_hive_phone_ffi_checksum_method_phone_follow(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_HOME
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_PHONE_HOME
+uint16_t uniffi_hive_phone_ffi_checksum_method_phone_home(void
     
 );
 #endif

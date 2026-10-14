@@ -27,6 +27,7 @@ use crate::{
     agents,
     devices::{self, PairedDevice, ANSWER_WITHIN},
     failure::{Failure, Lost},
+    home::{self, Home},
     identity::Identity,
     needs::{self, Heard},
     now_ms,
@@ -60,6 +61,9 @@ struct Shared {
     told: Mutex<BTreeMap<String, Value>>,
     /// One change at a time to what the phone keeps of its devices.
     keeping: Mutex<()>,
+    /// Home as each app this phone reaches sends it (spec/home.md), by the app's id: followed on
+    /// from where it was when the app is reached again.
+    homes: Mutex<BTreeMap<String, Home>>,
 }
 
 /// A device's connection, while there is one, and what keeps dialling it.
@@ -94,6 +98,7 @@ impl Connections {
             changed: Box::new(changed),
             told: Mutex::new(BTreeMap::new()),
             keeping: Mutex::new(()),
+            homes: Mutex::new(BTreeMap::new()),
         }))
     }
 
@@ -300,6 +305,19 @@ impl Connections {
             .collect()
     }
 
+    /// Home as each app the phone reached sent it, by the app's id, in the order the devices are
+    /// listed.
+    pub fn homes(&self) -> Vec<(Seen, Home)> {
+        let homes = lock(&self.0.homes);
+        self.seen()
+            .into_iter()
+            .filter_map(|seen| {
+                let home = homes.get(&seen.with.device)?.clone();
+                Some((seen, home))
+            })
+            .collect()
+    }
+
     /// What `device` is called, or its id when the phone knows it no more.
     fn name(&self, device: &str) -> String {
         let devices = self.0.identity.devices();
@@ -431,6 +449,35 @@ async fn keep_dialling(
 /// has to answer is asked what waits on the person there instead (spec/needs.md); one that does not
 /// answer that either is away.
 async fn hear(shared: Arc<Shared>, paired: PairedDevice, connection: Connection) {
+    if paired.with.kind == "app" {
+        tokio::join!(
+            hear_agents(shared.clone(), paired.clone(), connection.clone()),
+            follow_home(&shared, &paired.with.device, &connection),
+        );
+    } else {
+        hear_agents(shared, paired, connection).await;
+    }
+}
+
+/// Follow Home on the app `device`, from what is held of it: each change it sends is told.
+async fn follow_home(shared: &Shared, device: &str, connection: &Connection) {
+    let at = lock(&shared.homes).get(device).and_then(|home| home.at);
+    let _ = home::follow(connection, at, |text| {
+        let Ok(message) = serde_json::from_str::<Value>(text) else {
+            return;
+        };
+        let changed = lock(&shared.homes)
+            .entry(device.to_string())
+            .or_default()
+            .apply(&message);
+        if changed {
+            (shared.changed)();
+        }
+    })
+    .await;
+}
+
+async fn hear_agents(shared: Arc<Shared>, paired: PairedDevice, connection: Connection) {
     let with = paired.with;
     if with.kind == "app" && paired.via.is_empty() {
         let question = json!({ "t": "devices" });

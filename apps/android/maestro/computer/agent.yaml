@@ -1,5 +1,5 @@
-# The app against a real computer (docs/design/phone-app-2026-10-02.md §7): it pastes the link the
-# computer's Settings → Connect shows, says the words match once the person there says it is theirs,
+# The app against a real computer (docs/design/phone-app-2026-10-02.md §7): it is opened on the link
+# the computer's Settings → Connect shows, says the words match once the person there says it is theirs,
 # and is the person's; finds the computer
 # and its agent among the agents; opens the agent and reads its line in its terminal, then what it
 # and the person said in its chat; and sends it a message from the reply box, which it answers in
@@ -21,12 +21,8 @@ name: Pair with a computer, and drive its agent
     visible:
       id: "pair-link"
     timeout: 60000
-- tapOn:
-    id: "pair-link"
-- inputText: ${PAIR_LINK}
-- hideKeyboard
-- tapOn:
-    id: "pair-button"
+# The link opened as a scanned QR code or a tapped link opens it: the app takes it to Pair.
+- openLink: ${PAIR_LINK}
 # The person at the computer says it is theirs (the spec answers there); the words match.
 - extendedWaitUntil:
     visible:
@@ -39,14 +35,19 @@ name: Pair with a computer, and drive its agent
     timeout: 120000
 - tapOn: "Continue"
 
-# The computer, reachable, and its agent, among the agents.
-- tapOn: "Agents"
+# The computer, among the person's devices.
+- tapOn: "Devices"
 - extendedWaitUntil:
     visible: ${PAIR_COMPUTER}
     timeout: 120000
+# Home, as the computer's Layers panel lists it: its agent, with what it last said.
+- tapOn: "Home"
 - extendedWaitUntil:
     visible: ${PAIR_AGENT}
     timeout: 120000
+- extendedWaitUntil:
+    visible: ${PAIR_SAID}
+    timeout: 60000
 - tapOn: ${PAIR_AGENT}
 
 # Its terminal first: the line the agent printed, as its screen has it.

@@ -3,12 +3,10 @@ package com.hivemind.phone.ui.needs
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -31,57 +29,52 @@ import com.hivemind.phone.ui.common.sinceText
 import com.hivemind.phone.ui.theme.LocalStateColors
 
 /**
- * What waits on the person, the longest first (design §6.2): each with its agent, where it runs,
- * why it waits and for how long, and its answers on the row.
+ * What waits on the person, the longest first (design §6.2), as items of Home's list: each with its
+ * agent, where it runs, why it waits and for how long, and its answers on the row; and the devices
+ * away or still asked, without which that nothing waits is not known.
  */
-@Composable
-fun NeedsList(
+fun LazyListScope.needsItems(
     state: NeedsState,
     busy: Set<Any>,
     now: Long,
     onOpen: (AgentRef) -> Unit,
     onAnswer: (Agent, Answer) -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    LazyColumn(
-        modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        items(state.away, key = { "away:${it.id}" }) { device -> AwayNote(device, now) }
-        items(state.asking, key = { "asking:${it.id}" }) { device -> AskingNote(device) }
-        // Nothing waits only once every device not away has said so.
-        if (state.needs.isEmpty() && state.asking.isEmpty()) {
-            item(key = "none") {
-                Text(
-                    if (state.working == 0) {
-                        stringResource(R.string.needs_none)
-                    } else {
-                        pluralStringResource(R.plurals.needs_none_working, state.working, state.working)
-                    },
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 24.dp),
-                )
-            }
+    val card = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+    items(state.away, key = { "away:${it.id}" }) { device -> AwayNote(device, now, card) }
+    items(state.asking, key = { "asking:${it.id}" }) { device -> AskingNote(device, card) }
+    // Nothing waits only once every device not away has said so.
+    if (state.needs.isEmpty() && state.asking.isEmpty()) {
+        item(key = "none") {
+            Text(
+                if (state.working == 0) {
+                    stringResource(R.string.needs_none)
+                } else {
+                    pluralStringResource(R.plurals.needs_none_working, state.working, state.working)
+                },
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+            )
         }
-        items(state.needs, key = { "${it.at.device}/${it.at.workspace}/${it.at.tile}" }) { agent ->
-            NeedRow(agent, state.lastHeard(agent), agent.at in busy, now, onOpen, onAnswer)
-        }
+    }
+    items(state.needs, key = { "need:${it.at.device}/${it.at.workspace}/${it.at.tile}" }) { agent ->
+        NeedRow(agent, state.lastHeard(agent), agent.at in busy, now, onOpen, onAnswer, card)
     }
 }
 
 @Composable
-private fun AskingNote(device: Device) {
+private fun AskingNote(device: Device, modifier: Modifier) {
     Text(
         stringResource(R.string.needs_asking, device.name),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier,
     )
 }
 
 @Composable
-private fun AwayNote(device: Device, now: Long) {
+private fun AwayNote(device: Device, now: Long, modifier: Modifier) {
     val heard = device.heardAt
     Text(
         if (heard == null) {
@@ -91,6 +84,7 @@ private fun AwayNote(device: Device, now: Long) {
         },
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier,
     )
 }
 
@@ -102,12 +96,13 @@ private fun NeedRow(
     now: Long,
     onOpen: (AgentRef) -> Unit,
     onAnswer: (Agent, Answer) -> Unit,
+    modifier: Modifier,
 ) {
     val waiting = agent.waiting ?: return
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainer,
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxWidth().clickable { onOpen(agent.at) },
+        modifier = modifier.fillMaxWidth().clickable { onOpen(agent.at) },
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

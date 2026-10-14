@@ -3,10 +3,9 @@ package com.hivemind.phone.ui
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,23 +34,21 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hivemind.phone.PhoneCore
 import com.hivemind.phone.R
 import com.hivemind.phone.core.AgentRef
-import com.hivemind.phone.ui.agents.AgentsList
-import com.hivemind.phone.ui.agents.AgentsViewModel
 import com.hivemind.phone.ui.common.LocalPhoneLock
 import com.hivemind.phone.ui.common.Notice
 import com.hivemind.phone.ui.common.NoticeEffect
 import com.hivemind.phone.ui.common.rememberNow
 import com.hivemind.phone.ui.devices.DevicesList
 import com.hivemind.phone.ui.devices.DevicesViewModel
-import com.hivemind.phone.ui.needs.NeedsList
-import com.hivemind.phone.ui.needs.NeedsViewModel
+import com.hivemind.phone.ui.home.HomeList
+import com.hivemind.phone.ui.home.HomeViewModel
 import com.hivemind.phone.ui.views.ViewRow
 import com.hivemind.phone.ui.views.ViewsList
 import com.hivemind.phone.ui.views.ViewsViewModel
 
-private enum class Tab { NEEDS, AGENTS, VIEWS, DEVICES }
+private enum class Tab { HOME, VIEWS, DEVICES }
 
-/** The four tabs: Needs you (home), Agents, Views, Devices (design §6.2, §6.3, §6.9, §6.7). */
+/** The three tabs: Home, the desktop's Layers panel with what needs the person on top (B5 §11.2), Views, Devices (design §6.9, §6.7). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -61,17 +58,15 @@ fun HomeScreen(
     onPair: () -> Unit,
     onOpenView: (ViewRow) -> Unit,
 ) {
-    var tab by rememberSaveable { mutableStateOf(Tab.NEEDS) }
-    val needs = viewModel { NeedsViewModel(core.phone, core.feed.overview) }
-    val agents = viewModel { AgentsViewModel(core.phone, core.feed.overview) }
+    var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
+    val home = viewModel { HomeViewModel(core.phone, core.feed.overview) }
     val devices = viewModel { DevicesViewModel(core.phone, core.feed.overview) }
     val views = viewModel { ViewsViewModel(core.phone, core.feed.overview) }
-    val needsState by needs.state.collectAsStateWithLifecycle()
+    val homeState by home.state.collectAsStateWithLifecycle()
     val now = rememberNow()
     val lock = LocalPhoneLock.current
     val snackbar = remember { SnackbarHostState() }
-    NoticeEffect(needs.calls, snackbar)
-    NoticeEffect(agents.calls, snackbar)
+    NoticeEffect(home.calls, snackbar)
     NoticeEffect(devices.calls, snackbar)
     val resources = LocalResources.current
     LaunchedEffect(tab) { if (tab == Tab.VIEWS) views.again() }
@@ -83,8 +78,7 @@ fun HomeScreen(
                     Text(
                         stringResource(
                             when (tab) {
-                                Tab.NEEDS -> R.string.tab_needs
-                                Tab.AGENTS -> R.string.tab_agents
+                                Tab.HOME -> R.string.tab_home
                                 Tab.VIEWS -> R.string.tab_views
                                 Tab.DEVICES -> R.string.tab_devices
                             },
@@ -96,20 +90,14 @@ fun HomeScreen(
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
-                    selected = tab == Tab.NEEDS,
-                    onClick = { tab = Tab.NEEDS },
+                    selected = tab == Tab.HOME,
+                    onClick = { tab = Tab.HOME },
                     icon = {
-                        BadgedBox(badge = { if (needsState.needs.isNotEmpty()) Badge { Text("${needsState.needs.size}") } }) {
-                            Icon(Icons.Filled.Notifications, null)
+                        BadgedBox(badge = { if (homeState.needs.needs.isNotEmpty()) Badge { Text("${homeState.needs.needs.size}") } }) {
+                            Icon(Icons.Filled.Home, null)
                         }
                     },
-                    label = { Text(stringResource(R.string.tab_needs)) },
-                )
-                NavigationBarItem(
-                    selected = tab == Tab.AGENTS,
-                    onClick = { tab = Tab.AGENTS },
-                    icon = { Icon(Icons.AutoMirrored.Filled.List, null) },
-                    label = { Text(stringResource(R.string.tab_agents)) },
+                    label = { Text(stringResource(R.string.tab_home)) },
                 )
                 NavigationBarItem(
                     selected = tab == Tab.VIEWS,
@@ -126,7 +114,7 @@ fun HomeScreen(
             }
         },
         floatingActionButton = {
-            if (tab == Tab.AGENTS) {
+            if (tab == Tab.HOME) {
                 FloatingActionButton(onClick = onStart) { Icon(Icons.Filled.Add, stringResource(R.string.start_title)) }
             }
         },
@@ -134,25 +122,25 @@ fun HomeScreen(
     ) { padding ->
         val inside = Modifier.padding(padding)
         when (tab) {
-            Tab.NEEDS -> NeedsList(needsState, needs.calls.busy, now, onOpen, needs::answer, inside)
-            Tab.AGENTS -> {
-                val state by agents.state.collectAsStateWithLifecycle()
-                AgentsList(
-                    state,
-                    agents.calls.busy,
-                    now,
-                    onOpen = onOpen,
-                    onStop = agents::stop,
-                    onClose = { agent ->
-                        val asked = lock.ask(
-                            resources.getString(R.string.lock_close_title, agent.name),
-                            resources.getString(R.string.lock_subtitle),
-                        ) { agents.close(agent) }
-                        if (!asked) agents.calls.tell(Notice.NoLock)
-                    },
-                    modifier = inside,
-                )
-            }
+            Tab.HOME -> HomeList(
+                homeState,
+                home.calls.busy,
+                now,
+                onSearch = home::search,
+                onMachine = home::choose,
+                onOpen = onOpen,
+                onAnswer = home::answer,
+                onStop = home::stop,
+                onClose = { agent ->
+                    val asked = lock.ask(
+                        resources.getString(R.string.lock_close_title, agent.name),
+                        resources.getString(R.string.lock_subtitle),
+                    ) { home.close(agent) }
+                    if (!asked) home.calls.tell(Notice.NoLock)
+                },
+                onStart = onStart,
+                modifier = inside,
+            )
             Tab.VIEWS -> {
                 val rows by views.rows.collectAsStateWithLifecycle()
                 ViewsList(rows, views.refreshing, onRefresh = views::refresh, onOpen = onOpenView, modifier = inside)

@@ -69,9 +69,9 @@ jobs:
           # The action's open-source cache (MIT); its default from v6 is a proprietary one.
           cache-provider: basic
 
-      - name: Build (the core through buildCore) and unit tests
+      - name: Build (the core through buildCore), unit tests and lint
         working-directory: apps/android
-        run: ./gradlew assembleDebug testDebugUnitTest
+        run: ./gradlew assembleDebug testDebugUnitTest lintDebug
 
       - uses: actions/upload-artifact@v7
         with:

@@ -839,8 +839,15 @@ panel's personal layout), not in the document.
   else moves.
 - Found on the way: Home asked for an agent's transcript before its session was tracked and kept
   the miss for 5 s, and nothing asked again; a miss is no longer kept.
+- The Android app (2026-10-15): the core follows `home` on each computer it reaches, beside
+  `agents` (`Connections::homes`, facade `Phone.home(query, machine)` → `HomeShown`), held in memory
+  only. Its Home tab replaces Needs you and Agents: the cards that answer, Working, Pinned, the tree,
+  search and machine chips; an agent's row opens it and swipes to stop or close. A computer whose
+  Home has not come yet lists its agents from the overview, as before.
 - Not done: a Working list as long as the board when most agents work (it repeats the tree's rows);
   folding a frame; tapping a terminal row (§11.4 gives it the terminal).
+- Not done on Android: Home kept across launches (it follows from nothing each time); a project's +
+  opens Start without choosing that project; a shell's row opens nothing.
 
 **11.3 Start an agent.** New agent on Home and inside a project: machine, folder, the agents
 installed there, model and permission mode as the desktop offers them, a prompt (photos

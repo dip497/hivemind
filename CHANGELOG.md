@@ -11,6 +11,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Added
 
+- The Android app's first tab is Home, as on the phone page: what needs you on top, then what is working, the pinned, and each project's frames and tiles as your computer's Layers panel lists them, each with what it last said. A search and machine chips filter it. It replaces the Needs you and Agents tabs.
 - The full app in a browser tab: Settings → Advanced → In a browser serves it on 127.0.0.1 behind a key that changes each launch. For another device, put it behind `tailscale serve`.
 - Connect: a computer that uses this one's offer to connect (its link, or its six words found nearby) is asked about first. A prompt shows its name and three words that its own screen shows too, with Deny, Someone else (let into this window's workspace, as Can view, Can edit board or Can use terminals) and It's me — the words match. It's me makes it yours only after the person there says the words match as well. Open recent → Join takes an offer's link or words, shows the same three words, and asks before this computer becomes someone else's. A request nobody answers within three minutes is no.
 - The phone page and `hive-phone connect <link> [--sure yes|no]` use a computer's offer to connect: they show the same three words, wait for the person there, and keep the phone as the person's only once the person at the phone says the words match.
@@ -44,6 +45,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - A line typed or pasted into an agent's terminal with its Enter in one go (from the phone, a paste, a script) no longer holds every later message as if the person were still writing it: messages from the phone, `hive ctl send` and other agents go in again.
 - A message from the phone or `hive ctl send` to an agent that reports no turns (Codex, OpenCode, a custom agent) is typed at once again. Since a turn seen only on its screen held messages, one whose screen never showed its prompt again kept them forever.
+- The Android app opens a computer's `hivemind://` link: tapped or opened from another app, it goes straight to pairing with it.
 - In the Windows view and other views, a thin white line no longer shows around the panes, at their rounded corners and along the window's edges. The view's frame shows the wallpaper behind it again.
 - Over a photo wallpaper, small bright blocks of the photo no longer appear around the canvas while agents work. The dot that travels along a pipe between two agents made the canvas redraw its wires 60 times a second, and on some Linux graphics drivers those redraws left pieces of the undimmed photo behind. The dot now moves without redrawing anything.
 - Restarting the app keeps who started each worker: the Layers panel still nests it under the agent that spawned it, and the canvas still wires them. Its reports and approvals still go to that agent, its spawn depth still counts, and a supervised worker resumed later keeps its supervision. Before, all of it was lost at a restart, so workers showed flat and their replies reached no one.

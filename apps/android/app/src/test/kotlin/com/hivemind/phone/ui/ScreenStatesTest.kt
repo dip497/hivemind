@@ -4,10 +4,13 @@ import com.hivemind.phone.DESK
 import com.hivemind.phone.MINUTE
 import com.hivemind.phone.agent
 import com.hivemind.phone.core.AgentState
+import com.hivemind.phone.core.HomeShown
 import com.hivemind.phone.core.WaitKind
 import com.hivemind.phone.device
 import com.hivemind.phone.overview
 import com.hivemind.phone.ui.agents.AgentsState
+import com.hivemind.phone.ui.home.HomeFilter
+import com.hivemind.phone.ui.home.HomeState
 import com.hivemind.phone.ui.needs.NeedsState
 import com.hivemind.phone.ui.start.Place
 import com.hivemind.phone.ui.start.placesOf
@@ -64,6 +67,20 @@ class ScreenStatesTest {
             listOf(listOf("site" to listOf("zed", "ada"), "hivemind" to listOf("bo")), listOf("hivemind" to listOf("cy"))),
             state.devices.map { device -> device.workspaces.map { it.name to it.agents.map { agent -> agent.name } } },
         )
+    }
+
+    @Test
+    fun `Home lists by the overview only the agents of a device whose Home has not come yet`() {
+        val overview = overview(
+            agents = listOf(agent("t1", name = "api"), agent("t2", name = "docs", device = "laptop-id", deviceName = "laptop")),
+            devices = listOf(device(DESK, "desk"), device("laptop-id", "laptop")),
+        )
+        val desk = HomeShown(DESK, "desk", emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+
+        val state = HomeState.of(overview, listOf(desk), HomeFilter())
+
+        assertEquals(listOf("laptop" to listOf("docs")), state.elsewhere.devices.map { d -> d.name to d.workspaces.flatMap { w -> w.agents.map { it.name } } })
+        assertEquals(setOf("api", "docs"), state.agents.values.map { it.name }.toSet())
     }
 
     @Test
