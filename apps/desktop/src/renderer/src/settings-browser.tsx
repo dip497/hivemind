@@ -23,7 +23,6 @@ export function BrowserPrefs() {
 function BrowserApp() {
   const { browserApp } = useSettings();
   const [status, setStatus] = useState<BrowserAppStatus | null>(null);
-  const [copied, setCopied] = useState(false);
   const [port, setPort] = useState(String(browserApp.port));
   const [names, setNames] = useState(browserApp.names.join(", "));
   useEffect(() => {
@@ -42,24 +41,15 @@ function BrowserApp() {
       <div className="settings-row">
         <div>
           <label>Serve the app to a browser</label>
-          <p>On 127.0.0.1 only. The link carries a key that changes each time the app starts: whoever has it can use your terminals.</p>
+          <p>It listens on this computer only. A link carries a key that changes each time the app starts: whoever has it can use your terminals.</p>
         </div>
         <Switch on={browserApp.enabled} onChange={(v) => patchSettings("browserApp.enabled", v)} label="Serve the app to a browser" />
       </div>
-      {status?.url && (
-        <div className="settings-row">
-          <code className="min-w-0 flex-1 truncate text-label" data-browser-app-url>{status.url.replace(/#token=.*/, "#token=…")}</code>
-          <Button variant="outline" data-browser-app-copy
-            onClick={() => { void navigator.clipboard.writeText(status.url!).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}>
-            Copy the link {copied ? <Check /> : <Copy />}
-          </Button>
-          <Button variant="outline" asChild><a href={status.url} target="_blank" rel="noopener noreferrer" data-browser-app-open>Open</a></Button>
-        </div>
-      )}
+      {status?.url && [status.url, ...status.others].map((url) => <AppLink key={url} url={url} />)}
       {status?.error && <p className="text-label text-[var(--color-err)]" role="alert" data-browser-app-error>{status.error}</p>}
       <details className="settings-disclosure" data-browser-app-more>
         <summary>More options <ChevronDown size={14} /></summary>
-        <p className="text-label text-[var(--color-fg3)]">For another device, put the app behind <code>tailscale serve</code> and add the machine's tailnet name under Other names.</p>
+        <p className="text-label text-[var(--color-fg3)]">For another device, put the app behind <code>tailscale serve</code> and add the address it gives, with its port if it has one, under Other names: its link shows above.</p>
         <div className="settings-row">
           <label htmlFor="browser-app-port">Port</label>
           <Input id="browser-app-port" className="w-28" inputMode="numeric" value={port} onChange={(e) => setPort(e.target.value)} onBlur={savePort}
@@ -67,10 +57,25 @@ function BrowserApp() {
         </div>
         <div className="settings-row">
           <label htmlFor="browser-app-names">Other names</label>
-          <Input id="browser-app-names" className="flex-1" placeholder="box.tail1234.ts.net" spellCheck={false} value={names} onChange={(e) => setNames(e.target.value)} onBlur={saveNames}
+          <Input id="browser-app-names" className="flex-1" placeholder="box.tail1234.ts.net:8444" spellCheck={false} value={names} onChange={(e) => setNames(e.target.value)} onBlur={saveNames}
             onKeyDown={(e) => { if (e.key === "Enter") saveNames(); }} />
         </div>
       </details>
+    </div>
+  );
+}
+
+/** One link that signs a tab in, its key left out, to copy or open. */
+function AppLink({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="settings-row">
+      <code className="min-w-0 flex-1 truncate text-label" data-browser-app-url>{url.replace(/#token=.*/, "#token=…")}</code>
+      <Button variant="outline" data-browser-app-copy
+        onClick={() => { void navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}>
+        Copy the link {copied ? <Check /> : <Copy />}
+      </Button>
+      <Button variant="outline" asChild><a href={url} target="_blank" rel="noopener noreferrer" data-browser-app-open>Open</a></Button>
     </div>
   );
 }

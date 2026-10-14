@@ -14,7 +14,7 @@ import { schemeHandler } from "./schemes.js";
 const token = mintToken();
 let server: BrowserServer | null = null;
 let serving: BrowserAppSettings | null = null;
-let status: BrowserAppStatus = { on: false, url: null, error: null };
+let status: BrowserAppStatus = { on: false, url: null, others: [], error: null };
 let settled: Promise<void> = Promise.resolve();
 
 const same = (a: BrowserAppSettings, b: BrowserAppSettings): boolean =>
@@ -33,7 +33,7 @@ async function follow(root: string, want: BrowserAppSettings): Promise<void> {
     server = null;
     serving = null;
   }
-  if (!want.enabled) return tell({ on: false, url: null, error: null });
+  if (!want.enabled) return tell({ on: false, url: null, others: [], error: null });
   try {
     server = await serveBrowser({
       port: want.port,
@@ -48,10 +48,12 @@ async function follow(root: string, want: BrowserAppSettings): Promise<void> {
       onError: (m) => console.warn(`[browser-app] ${m}`),
     });
     serving = want;
-    tell({ on: true, url: `http://127.0.0.1:${server.port}/#token=${token}`, error: null });
+    // Another name is reached through something serving HTTPS in front of the app (tailscale serve).
+    const others = want.names.map((n) => `https://${n}/#token=${token}`);
+    tell({ on: true, url: `http://127.0.0.1:${server.port}/#token=${token}`, others, error: null });
   } catch (e) {
     const err = e as NodeJS.ErrnoException;
-    tell({ on: false, url: null, error: err.code === "EADDRINUSE" ? `Port ${want.port} is in use by another program` : err.message });
+    tell({ on: false, url: null, others: [], error: err.code === "EADDRINUSE" ? `Port ${want.port} is in use by another program` : err.message });
   }
 }
 

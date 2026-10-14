@@ -71,8 +71,16 @@ test("off until the person turns it on, then the page shows its link with the ke
   await section.getByRole("switch", { name: "Serve the app to a browser" }).click();
   const shown = section.locator("[data-browser-app-url]");
   await expect(shown).toHaveText(`http://127.0.0.1:${port}/#token=…`);
-  link = (await section.locator("[data-browser-app-open]").getAttribute("href"))!;
+  link = (await section.locator("[data-browser-app-open]").first().getAttribute("href"))!;
   expect(link).toMatch(new RegExp(`^http://127\\.0\\.0\\.1:${port}/#token=[A-Za-z0-9_-]{43}$`));
+  // Another name, as tailscale serve gives it, has its link too: the same key, over HTTPS.
+  await section.locator("#browser-app-names").fill("lap.tail1234.ts.net:8444");
+  await section.locator("#browser-app-names").press("Enter");
+  await expect.poll(() => desktop.evaluate(() => window.hive.settingsSync().browserApp.names)).toEqual(["lap.tail1234.ts.net:8444"]);
+  await expect.poll(() => desktop.evaluate(async () => (await window.hive.browserAppStatus()).others)).toHaveLength(1);
+  await expect(shown).toHaveText([`http://127.0.0.1:${port}/#token=…`, "https://lap.tail1234.ts.net:8444/#token=…"]);
+  const there = (await section.locator("[data-browser-app-open]").nth(1).getAttribute("href"))!;
+  expect(there).toBe(link.replace(`http://127.0.0.1:${port}`, "https://lap.tail1234.ts.net:8444"));
   await desktop.keyboard.press("Escape");
 });
 

@@ -333,7 +333,8 @@ export interface BrowserAppSettings {
   enabled: boolean;
   /** 1024–65535. Fixed, so a `tailscale serve` set up for it keeps working. */
   port: number;
-  /** Host names a request may name besides 127.0.0.1 and localhost: the machine's tailnet name. */
+  /** Host names a request may name besides 127.0.0.1 and localhost, each with the port a browser
+   *  uses when it is not 443: the machine's tailnet name as `tailscale serve` gives it. */
   names: string[];
 }
 export interface Settings {
@@ -545,11 +546,17 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
 
 const HOST_NAME_RE = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/;
 
+/** `name` or `name:port`, a port being 1–65535. */
+function isHostAndPort(n: string): boolean {
+  const [, name, port] = /^([^:]*)(?::(\d{1,5}))?$/.exec(n) ?? [];
+  return name !== undefined && HOST_NAME_RE.test(name) && (port === undefined || (Number(port) >= 1 && Number(port) <= 65535));
+}
+
 function browserAppOf(raw: unknown, base: BrowserAppSettings): BrowserAppSettings {
   const p = isObj(raw) ? raw : {};
   const port = typeof p.port === "number" && Number.isInteger(p.port) && p.port >= 1024 && p.port <= 65535 ? p.port : base.port;
   const names = Array.isArray(p.names)
-    ? [...new Set(p.names.filter((n): n is string => typeof n === "string").map((n) => n.trim().toLowerCase()).filter((n) => HOST_NAME_RE.test(n)))].slice(0, 8)
+    ? [...new Set(p.names.filter((n): n is string => typeof n === "string").map((n) => n.trim().toLowerCase()).filter(isHostAndPort))].slice(0, 8)
     : base.names;
   return { enabled: bool(p.enabled, base.enabled), port, names };
 }

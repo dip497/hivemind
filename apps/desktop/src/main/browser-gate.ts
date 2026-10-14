@@ -29,7 +29,7 @@ function hostname(host: string): string {
 export function hostAllowed(host: string | undefined, names: readonly string[]): boolean {
   if (!host) return false;
   const name = hostname(host);
-  return LOOPBACK.includes(name) || names.some((n) => n.toLowerCase() === name);
+  return LOOPBACK.includes(name) || names.some((n) => hostname(n) === name);
 }
 
 /** The page asking is this server's own: its Origin names the host the request was sent to. */

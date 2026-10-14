@@ -255,7 +255,8 @@ export interface ViewPackageInfo {
 // ── full IPC surface ──────────────────────────────────────────────────────
 
 /** Settings → Advanced → In a browser: whether the app is served, at which link, or why not. */
-export interface BrowserAppStatus { on: boolean; url: string | null; error: string | null }
+/** `url` is this computer's link; `others`, the same key at each of the person's other names. */
+export interface BrowserAppStatus { on: boolean; url: string | null; others: string[]; error: string | null }
 
 export interface HiveIpc {
   // ── workspace layout (main owns it; see main/workspace-store-ipc.ts) ──

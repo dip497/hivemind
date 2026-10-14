@@ -32,6 +32,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- Settings → In a browser shows a link to copy for each of Other names, not only the 127.0.0.1 one, and a name may carry the port `tailscale serve` gives it (`box.tail1234.ts.net:8444`).
 - Settings → Servers says what it is for, "Reach your devices from other networks", instead of "Relay and discovery; most people never change this".
 - Over a wallpaper, a frame no longer gets a dark bar behind its name: only tiles' title bars are frosted.
 - Layers: with several projects, each is set apart by a rule under a plain heading, as machines are, instead of a heading that looked like one more folder row.

@@ -19,7 +19,8 @@ const calls: Array<{ ch: string; args: unknown[] }> = [];
 const asked: Array<{ url: string; range: string | null }> = [];
 const server = await serveBrowser({
   port: 0,
-  names: ["box.tail1234.ts.net"],
+  // A name as a browser reaches it: `tailscale serve --https=8444` gives one with its port.
+  names: ["box.tail1234.ts.net", "lap.tail1234.ts.net:8444"],
   token: TOKEN,
   root,
   page: "browser.html",
@@ -86,6 +87,7 @@ test("without the cookie every request is 401, and / is the page that signs in",
 test("a Host that is not this machine's or a configured name is refused, cookie or not", { timeout: 10_000 }, async () => {
   assert.equal((await request({ headers: { host: `rebound.example:${server.port}`, cookie } })).status, 403);
   assert.equal((await request({ headers: { host: "box.tail1234.ts.net", cookie } })).status, 200);
+  assert.equal((await request({ headers: { host: "lap.tail1234.ts.net:8444", cookie } })).status, 200);
   assert.equal((await request({ headers: { host: `localhost:${server.port}`, cookie } })).status, 200);
 });
 

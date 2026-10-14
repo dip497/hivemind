@@ -212,11 +212,11 @@ describe("settings schema", () => {
     expect("extra" in s).toBe(false);
   });
 
-  test("browserApp: off until turned on; a port outside 1024–65535 and a name that is not a host name are dropped", () => {
+  test("browserApp: off until turned on; a port outside 1024–65535 and a name that is not a host name, or not one with a port, are dropped", () => {
     expect(mergeSettings({}).browserApp).toEqual({ enabled: false, port: 4483, names: [] });
-    const on = mergeSettings({ browserApp: { enabled: true, port: 80, names: ["Box.tail1234.ts.net", "*", "evil.example/x", "a b", "box.tail1234.ts.net"] } });
-    expect(on.browserApp).toEqual({ enabled: true, port: 4483, names: ["box.tail1234.ts.net"] });
-    expect(mergeSettings({ browserApp: { enabled: "yes", port: 47000 } }, on).browserApp).toEqual({ enabled: true, port: 47000, names: ["box.tail1234.ts.net"] });
+    const on = mergeSettings({ browserApp: { enabled: true, port: 80, names: ["Box.tail1234.ts.net", "*", "evil.example/x", "a b", "box.tail1234.ts.net", "lap.tail1234.ts.net:8444", "lap.tail1234.ts.net:", "lap.tail1234.ts.net:70000"] } });
+    expect(on.browserApp).toEqual({ enabled: true, port: 4483, names: ["box.tail1234.ts.net", "lap.tail1234.ts.net:8444"] });
+    expect(mergeSettings({ browserApp: { enabled: "yes", port: 47000 } }, on).browserApp).toEqual({ enabled: true, port: 47000, names: ["box.tail1234.ts.net", "lap.tail1234.ts.net:8444"] });
   });
 
   test("network: the update check is on until turned off, and only a yes or a no changes it", () => {
