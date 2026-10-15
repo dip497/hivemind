@@ -21,7 +21,7 @@ import { NOTICES, ago, message } from "./words.js";
 type Tab = "home" | "views" | "devices" | "start";
 /** What Home showed last, kept to show before the wasm is compiled. */
 type First = { shown: Shown; overview: Overview };
-const NOTHING: First = { shown: { needs: [], working: [], pinned: [], machines: [], tree: [] }, overview: { agents: [], needs: [], working: 0 } };
+const NOTHING: First = { shown: { needs: [], working: [], pinned: [], machines: [], tree: [], marks: {} }, overview: { agents: [], needs: [], working: 0 } };
 
 let phone: Phone | null = null;
 let overview: Overview | null = null;

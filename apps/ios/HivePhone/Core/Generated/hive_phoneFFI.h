@@ -511,7 +511,7 @@ uint64_t uniffi_hive_phone_ffi_fn_method_phone_follow(uint64_t ptr, uint64_t lis
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_HOME
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_HOME
-RustBuffer uniffi_hive_phone_ffi_fn_method_phone_home(uint64_t ptr, RustBuffer query, RustBuffer machine, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_hive_phone_ffi_fn_method_phone_home(uint64_t ptr, RustBuffer query, RustBuffer machine, RustBuffer choices, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_PHONE_ID

@@ -191,12 +191,30 @@ export interface HomeFrame {
   project?: string;
 }
 
+/** A project, frame or section's rows one level under it, the state among its tiles that most
+ *  wants a look, and whether the person folded it. */
+interface Folds {
+  count: number;
+  state?: string;
+  folded: boolean;
+}
+
 /** One line of a list Home shows (hive-phone's `home::Entry`). */
 export type HomeEntry =
   | { of: "machine"; key: string; name: string }
-  | { of: "project"; key: string; name: string; workspace: string; frame?: string }
-  | { of: "frame"; key: string; depth: number; frame: HomeFrame }
-  | { of: "tile"; key: string; depth: number; tile: HomeTile; line?: string };
+  | ({ of: "project"; key: string; name: string; workspace: string; frame?: string } & Folds)
+  | ({ of: "frame"; key: string; depth: number; frame: HomeFrame } & Folds)
+  | ({ of: "section"; key: string; label: string } & Folds)
+  | { of: "tile"; key: string; depth: number; tile: HomeTile; line?: string; unread: boolean };
+
+/** An agent's mark (hive-phone's `mark::Mark`): paths of absolute M, L, C, Q and Z in its box. */
+export interface Mark {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  shapes: Array<{ d: string; fill: boolean; even_odd: boolean; stroke: number; round: boolean; opacity: number }>;
+}
 
 /** Home as it shows (hive-phone's `home::Shown`). */
 export interface Shown {
@@ -206,4 +224,6 @@ export interface Shown {
   pinned: HomeEntry[];
   machines: string[];
   tree: HomeEntry[];
+  /** The mark of each agent a tile listed runs, by agent. */
+  marks: Record<string, Mark>;
 }

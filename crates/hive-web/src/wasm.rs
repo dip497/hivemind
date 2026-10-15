@@ -573,7 +573,12 @@ impl Host {
 
     /// The tool use `id` of the agent of `tile`, unfolded: `{name, about?, input?, result?,
     /// truncated?}`.
-    pub async fn tool(&self, workspace: String, tile: String, id: String) -> Result<JsValue, JsError> {
+    pub async fn tool(
+        &self,
+        workspace: String,
+        tile: String,
+        id: String,
+    ) -> Result<JsValue, JsError> {
         let unfolded = conversation::tool(&self.connection, &workspace, &tile, &id)
             .await
             .map_err(err)?;
@@ -812,18 +817,21 @@ impl HomeView {
         to_js(&serde_json::to_value(&*self.home.borrow()).map_err(err)?)
     }
 
-    /// Home as it shows (`home::Shown`): what holds `query`, on `machine` when one is chosen;
-    /// `computer` is what the computer is called.
+    /// Home as it shows (`home::Shown`): what holds `query`, on `machine` when one is chosen, as
+    /// `view` (`home::HomeView`: `{prefs, folded, seen, now, offset}`) chooses; `computer` is what
+    /// the computer is called.
     pub fn shown(
         &self,
         query: &str,
         machine: Option<String>,
         computer: &str,
+        view: JsValue,
     ) -> Result<JsValue, JsError> {
+        let view: home::HomeView = serde_json::from_value(from_js(&view)?).map_err(err)?;
         let shown = self
             .home
             .borrow()
-            .shown(query, machine.as_deref(), computer);
+            .shown(query, machine.as_deref(), computer, &view);
         to_js(&serde_json::to_value(shown).map_err(err)?)
     }
 

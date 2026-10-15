@@ -8,6 +8,7 @@
 import { isRemote } from "@hivemind/core/remote-uri";
 import type { Structure } from "@hivemind/view-host/structure";
 import type { AgentItem } from "@hivemind/workspace-api/agents";
+import { GENERIC_AGENT_ICON, type AgentProviderDef } from "@hivemind/agents";
 import type { HomeMessage, HomeRow, HomeTile } from "@hivemind/workspace-api/home";
 import { isTerminalKind, type CoreLayout } from "@hivemind/workspace-doc/shapes";
 import { KeyedFeed } from "./keyed-feed.js";
@@ -27,6 +28,8 @@ export interface HomeSource {
   structure(core: Pick<CoreLayout, "frames" | "tiles" | "frameOf" | "tileNames">): Structure;
   /** What the window shows of the workspace in `repo`; none: the board's own order, nothing pinned. */
   shown(repo: string): LayersShown | undefined;
+  /** The agent the id `id` names, as its manifest here says. */
+  agent?(id: string): AgentProviderDef | undefined;
 }
 
 const tileKey = (workspace: string, id: string) => `t:${workspace}/${id}`;
@@ -68,6 +71,12 @@ export function homeRows(s: HomeSource): Map<string, HomeRow> {
         } : {}),
       };
       rows.set(tileKey(workspace, t.id), row);
+      // Its agent, once: a manifest here names it, else the generic mark under its id.
+      if (t.agent && !rows.has(`a:${t.agent}`)) {
+        const def = s.agent?.(t.agent);
+        const { viewBox, attrs, shapes } = def?.icon ?? GENERIC_AGENT_ICON;
+        rows.set(`a:${t.agent}`, { of: "agent", id: t.agent, label: def?.label ?? t.agent, icon: { viewBox, ...(attrs ? { attrs } : {}), shapes } });
+      }
     });
   }
   return rows;

@@ -519,6 +519,22 @@ fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterInt32: FfiConverterPrimitive {
+    typealias FfiType = Int32
+    typealias SwiftType = Int32
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Int32 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: Int32, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
     typealias FfiType = UInt64
     typealias SwiftType = UInt64
@@ -1652,9 +1668,10 @@ public protocol PhoneProtocol: AnyObject, Sendable {
     
     /**
      * Home on each computer the phone reached (spec/home.md), as they are listed: what holds
-     * `query`, on `machine` when one is chosen. Told as it changes as the overview is.
+     * `query`, on `machine` when one is chosen, as `choices` say. Told as it changes as the
+     * overview is.
      */
-    func home(query: String, machine: String?)  -> [HomeShown]
+    func home(query: String, machine: String?, choices: HomeChoices)  -> [HomeShown]
     
     /**
      * The phone's id: its device key's public half, in hex.
@@ -1994,15 +2011,17 @@ open func follow(listener: OverviewListener) -> Following  {
     
     /**
      * Home on each computer the phone reached (spec/home.md), as they are listed: what holds
-     * `query`, on `machine` when one is chosen. Told as it changes as the overview is.
+     * `query`, on `machine` when one is chosen, as `choices` say. Told as it changes as the
+     * overview is.
      */
-open func home(query: String, machine: String?) -> [HomeShown]  {
+open func home(query: String, machine: String?, choices: HomeChoices) -> [HomeShown]  {
     return try!  FfiConverterSequenceTypeHomeShown.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_hive_phone_ffi_fn_method_phone_home(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(query),
-        FfiConverterOptionString.lower(machine),uniffiCallStatus
+        FfiConverterOptionString.lower(machine),
+        FfiConverterTypeHomeChoices_lower(choices),uniffiCallStatus
     )
 })
 }
@@ -3364,6 +3383,75 @@ public func FfiConverterTypeAgent_lower(_ value: Agent) -> RustBuffer {
 
 
 /**
+ * An agent's mark, drawn in one colour in the box `x`, `y`, `width`, `height`: its paths in order.
+ */
+public struct AgentMark: Equatable, Hashable {
+    public var x: Double
+    public var y: Double
+    public var width: Double
+    public var height: Double
+    public var shapes: [MarkShape]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(x: Double, y: Double, width: Double, height: Double, shapes: [MarkShape]) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.shapes = shapes
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension AgentMark: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAgentMark: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AgentMark {
+        return
+            try AgentMark(
+                x: FfiConverterDouble.read(from: &buf), 
+                y: FfiConverterDouble.read(from: &buf), 
+                width: FfiConverterDouble.read(from: &buf), 
+                height: FfiConverterDouble.read(from: &buf), 
+                shapes: FfiConverterSequenceTypeMarkShape.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AgentMark, into buf: inout [UInt8]) {
+        FfiConverterDouble.write(value.x, into: &buf)
+        FfiConverterDouble.write(value.y, into: &buf)
+        FfiConverterDouble.write(value.width, into: &buf)
+        FfiConverterDouble.write(value.height, into: &buf)
+        FfiConverterSequenceTypeMarkShape.write(value.shapes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentMark_lift(_ buf: RustBuffer) throws -> AgentMark {
+    return try FfiConverterTypeAgentMark.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentMark_lower(_ value: AgentMark) -> RustBuffer {
+    return FfiConverterTypeAgentMark.lower(value)
+}
+
+
+/**
  * An agent, where it is: the device that runs it, its workspace and its tile.
  */
 public struct AgentRef: Equatable, Hashable {
@@ -3820,6 +3908,87 @@ public func FfiConverterTypeFrame_lower(_ value: Frame) -> RustBuffer {
 
 
 /**
+ * What the person chose to see on Home, as the app keeps it: the View menu's choices (`status`
+ * all, needs-you, unread, working, idle or exited; `activity` all, hour, today or week; `group_by`
+ * group, machine, date, status, agent or none; `sort_by` canvas, activity or name), the keys of
+ * what they folded, when they last opened each tile (ms, by its key), and how many minutes the
+ * phone's clock is ahead of UTC.
+ */
+public struct HomeChoices: Equatable, Hashable {
+    public var status: String
+    public var activity: String
+    public var groupBy: String
+    public var sortBy: String
+    public var folded: [String]
+    public var seen: [String: UInt64]
+    public var offsetMinutes: Int32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(status: String, activity: String, groupBy: String, sortBy: String, folded: [String], seen: [String: UInt64], offsetMinutes: Int32) {
+        self.status = status
+        self.activity = activity
+        self.groupBy = groupBy
+        self.sortBy = sortBy
+        self.folded = folded
+        self.seen = seen
+        self.offsetMinutes = offsetMinutes
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension HomeChoices: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHomeChoices: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HomeChoices {
+        return
+            try HomeChoices(
+                status: FfiConverterString.read(from: &buf), 
+                activity: FfiConverterString.read(from: &buf), 
+                groupBy: FfiConverterString.read(from: &buf), 
+                sortBy: FfiConverterString.read(from: &buf), 
+                folded: FfiConverterSequenceString.read(from: &buf), 
+                seen: FfiConverterDictionaryStringUInt64.read(from: &buf), 
+                offsetMinutes: FfiConverterInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HomeChoices, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.status, into: &buf)
+        FfiConverterString.write(value.activity, into: &buf)
+        FfiConverterString.write(value.groupBy, into: &buf)
+        FfiConverterString.write(value.sortBy, into: &buf)
+        FfiConverterSequenceString.write(value.folded, into: &buf)
+        FfiConverterDictionaryStringUInt64.write(value.seen, into: &buf)
+        FfiConverterInt32.write(value.offsetMinutes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHomeChoices_lift(_ buf: RustBuffer) throws -> HomeChoices {
+    return try FfiConverterTypeHomeChoices.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHomeChoices_lower(_ value: HomeChoices) -> RustBuffer {
+    return FfiConverterTypeHomeChoices.lower(value)
+}
+
+
+/**
  * Home on one of the person's computers.
  */
 public struct HomeShown: Equatable, Hashable {
@@ -3845,6 +4014,10 @@ public struct HomeShown: Equatable, Hashable {
      */
     public var machines: [String]
     public var tree: [HomeEntry]
+    /**
+     * The mark of each agent a tile listed runs, by agent: one path to draw however many run it.
+     */
+    public var marks: [String: AgentMark]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -3863,7 +4036,10 @@ public struct HomeShown: Equatable, Hashable {
          */pinned: [HomeEntry], 
         /**
          * The machines to choose from, when there is more than one.
-         */machines: [String], tree: [HomeEntry]) {
+         */machines: [String], tree: [HomeEntry], 
+        /**
+         * The mark of each agent a tile listed runs, by agent: one path to draw however many run it.
+         */marks: [String: AgentMark]) {
         self.device = device
         self.computer = computer
         self.needs = needs
@@ -3871,6 +4047,7 @@ public struct HomeShown: Equatable, Hashable {
         self.pinned = pinned
         self.machines = machines
         self.tree = tree
+        self.marks = marks
     }
 
     
@@ -3895,7 +4072,8 @@ public struct FfiConverterTypeHomeShown: FfiConverterRustBuffer {
                 working: FfiConverterSequenceTypeHomeEntry.read(from: &buf), 
                 pinned: FfiConverterSequenceTypeHomeEntry.read(from: &buf), 
                 machines: FfiConverterSequenceString.read(from: &buf), 
-                tree: FfiConverterSequenceTypeHomeEntry.read(from: &buf)
+                tree: FfiConverterSequenceTypeHomeEntry.read(from: &buf), 
+                marks: FfiConverterDictionaryStringTypeAgentMark.read(from: &buf)
         )
     }
 
@@ -3907,6 +4085,7 @@ public struct FfiConverterTypeHomeShown: FfiConverterRustBuffer {
         FfiConverterSequenceTypeHomeEntry.write(value.pinned, into: &buf)
         FfiConverterSequenceString.write(value.machines, into: &buf)
         FfiConverterSequenceTypeHomeEntry.write(value.tree, into: &buf)
+        FfiConverterDictionaryStringTypeAgentMark.write(value.marks, into: &buf)
     }
 }
 
@@ -3969,6 +4148,14 @@ public struct HomeTile: Equatable, Hashable {
      * Its turn can be stopped from here.
      */
     public var interrupt: Bool
+    /**
+     * The agent it runs, which names its mark in `HomeShown.marks` when this computer knows it.
+     */
+    public var runs: String?
+    /**
+     * Done since the person last opened it here.
+     */
+    public var unread: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -3997,7 +4184,13 @@ public struct HomeTile: Equatable, Hashable {
          */program: String?, 
         /**
          * Its turn can be stopped from here.
-         */interrupt: Bool) {
+         */interrupt: Bool, 
+        /**
+         * The agent it runs, which names its mark in `HomeShown.marks` when this computer knows it.
+         */runs: String?, 
+        /**
+         * Done since the person last opened it here.
+         */unread: Bool) {
         self.at = at
         self.name = name
         self.kind = kind
@@ -4012,6 +4205,8 @@ public struct HomeTile: Equatable, Hashable {
         self.line = line
         self.program = program
         self.interrupt = interrupt
+        self.runs = runs
+        self.unread = unread
     }
 
     
@@ -4043,7 +4238,9 @@ public struct FfiConverterTypeHomeTile: FfiConverterRustBuffer {
                 question: FfiConverterOptionString.read(from: &buf), 
                 line: FfiConverterOptionString.read(from: &buf), 
                 program: FfiConverterOptionString.read(from: &buf), 
-                interrupt: FfiConverterBool.read(from: &buf)
+                interrupt: FfiConverterBool.read(from: &buf), 
+                runs: FfiConverterOptionString.read(from: &buf), 
+                unread: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -4062,6 +4259,8 @@ public struct FfiConverterTypeHomeTile: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.line, into: &buf)
         FfiConverterOptionString.write(value.program, into: &buf)
         FfiConverterBool.write(value.interrupt, into: &buf)
+        FfiConverterOptionString.write(value.runs, into: &buf)
+        FfiConverterBool.write(value.unread, into: &buf)
     }
 }
 
@@ -4140,6 +4339,81 @@ public func FfiConverterTypeJoinRef_lift(_ buf: RustBuffer) throws -> JoinRef {
 #endif
 public func FfiConverterTypeJoinRef_lower(_ value: JoinRef) -> RustBuffer {
     return FfiConverterTypeJoinRef.lower(value)
+}
+
+
+/**
+ * One path of a mark: `d` holds only absolute `M`, `L`, `C`, `Q` and `Z`. Filled when `fill`
+ * (by the even-odd rule when `even_odd`), outlined `stroke` wide when above 0, round-ended when
+ * `round`, at `opacity`.
+ */
+public struct MarkShape: Equatable, Hashable {
+    public var d: String
+    public var fill: Bool
+    public var evenOdd: Bool
+    public var stroke: Double
+    public var round: Bool
+    public var opacity: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(d: String, fill: Bool, evenOdd: Bool, stroke: Double, round: Bool, opacity: Double) {
+        self.d = d
+        self.fill = fill
+        self.evenOdd = evenOdd
+        self.stroke = stroke
+        self.round = round
+        self.opacity = opacity
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension MarkShape: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMarkShape: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MarkShape {
+        return
+            try MarkShape(
+                d: FfiConverterString.read(from: &buf), 
+                fill: FfiConverterBool.read(from: &buf), 
+                evenOdd: FfiConverterBool.read(from: &buf), 
+                stroke: FfiConverterDouble.read(from: &buf), 
+                round: FfiConverterBool.read(from: &buf), 
+                opacity: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MarkShape, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.d, into: &buf)
+        FfiConverterBool.write(value.fill, into: &buf)
+        FfiConverterBool.write(value.evenOdd, into: &buf)
+        FfiConverterDouble.write(value.stroke, into: &buf)
+        FfiConverterBool.write(value.round, into: &buf)
+        FfiConverterDouble.write(value.opacity, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMarkShape_lift(_ buf: RustBuffer) throws -> MarkShape {
+    return try FfiConverterTypeMarkShape.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMarkShape_lower(_ value: MarkShape) -> RustBuffer {
+    return FfiConverterTypeMarkShape.lower(value)
 }
 
 
@@ -6624,7 +6898,9 @@ public func FfiConverterTypeDeviceKind_lower(_ value: DeviceKind) -> RustBuffer 
 
 
 /**
- * One line of a list Home shows; `key` names it in every list it is in.
+ * One line of a list Home shows; `key` names it in every list it is in. A project and a frame
+ * say how many rows are one level under them, the state among their tiles that most wants a look,
+ * and whether the person folded them.
  */
 
 public enum HomeEntry: Equatable, Hashable {
@@ -6634,12 +6910,18 @@ public enum HomeEntry: Equatable, Hashable {
     /**
      * `frame`: its first frame, where an agent started from its heading runs.
      */
-    case project(key: String, name: String, workspace: String, frame: String?
+    case project(key: String, name: String, workspace: String, frame: String?, count: UInt32, state: AgentState?, folded: Bool
     )
     /**
-     * `folder`: the folder it runs in, when not its title.
+     * `folder`: the folder it runs in, when not its title. `worktree`: it is a branch's own
+     * folder, `branch` when it says which.
      */
-    case frame(key: String, depth: UInt32, title: String, color: String, folder: String?
+    case frame(key: String, depth: UInt32, title: String, color: String, folder: String?, worktree: Bool, branch: String?, count: UInt32, state: AgentState?, folded: Bool
+    )
+    /**
+     * A heading of a grouping that is not the tree; one with no label heads the one list.
+     */
+    case section(key: String, label: String, count: UInt32, state: AgentState?, folded: Bool
     )
     case tile(key: String, depth: UInt32, tile: HomeTile
     )
@@ -6667,13 +6949,16 @@ public struct FfiConverterTypeHomeEntry: FfiConverterRustBuffer {
         case 1: return .machine(key: try FfiConverterString.read(from: &buf), name: try FfiConverterString.read(from: &buf)
         )
         
-        case 2: return .project(key: try FfiConverterString.read(from: &buf), name: try FfiConverterString.read(from: &buf), workspace: try FfiConverterString.read(from: &buf), frame: try FfiConverterOptionString.read(from: &buf)
+        case 2: return .project(key: try FfiConverterString.read(from: &buf), name: try FfiConverterString.read(from: &buf), workspace: try FfiConverterString.read(from: &buf), frame: try FfiConverterOptionString.read(from: &buf), count: try FfiConverterUInt32.read(from: &buf), state: try FfiConverterOptionTypeAgentState.read(from: &buf), folded: try FfiConverterBool.read(from: &buf)
         )
         
-        case 3: return .frame(key: try FfiConverterString.read(from: &buf), depth: try FfiConverterUInt32.read(from: &buf), title: try FfiConverterString.read(from: &buf), color: try FfiConverterString.read(from: &buf), folder: try FfiConverterOptionString.read(from: &buf)
+        case 3: return .frame(key: try FfiConverterString.read(from: &buf), depth: try FfiConverterUInt32.read(from: &buf), title: try FfiConverterString.read(from: &buf), color: try FfiConverterString.read(from: &buf), folder: try FfiConverterOptionString.read(from: &buf), worktree: try FfiConverterBool.read(from: &buf), branch: try FfiConverterOptionString.read(from: &buf), count: try FfiConverterUInt32.read(from: &buf), state: try FfiConverterOptionTypeAgentState.read(from: &buf), folded: try FfiConverterBool.read(from: &buf)
         )
         
-        case 4: return .tile(key: try FfiConverterString.read(from: &buf), depth: try FfiConverterUInt32.read(from: &buf), tile: try FfiConverterTypeHomeTile.read(from: &buf)
+        case 4: return .section(key: try FfiConverterString.read(from: &buf), label: try FfiConverterString.read(from: &buf), count: try FfiConverterUInt32.read(from: &buf), state: try FfiConverterOptionTypeAgentState.read(from: &buf), folded: try FfiConverterBool.read(from: &buf)
+        )
+        
+        case 5: return .tile(key: try FfiConverterString.read(from: &buf), depth: try FfiConverterUInt32.read(from: &buf), tile: try FfiConverterTypeHomeTile.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -6690,25 +6975,42 @@ public struct FfiConverterTypeHomeEntry: FfiConverterRustBuffer {
             FfiConverterString.write(name, into: &buf)
             
         
-        case let .project(key,name,workspace,frame):
+        case let .project(key,name,workspace,frame,count,state,folded):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(key, into: &buf)
             FfiConverterString.write(name, into: &buf)
             FfiConverterString.write(workspace, into: &buf)
             FfiConverterOptionString.write(frame, into: &buf)
+            FfiConverterUInt32.write(count, into: &buf)
+            FfiConverterOptionTypeAgentState.write(state, into: &buf)
+            FfiConverterBool.write(folded, into: &buf)
             
         
-        case let .frame(key,depth,title,color,folder):
+        case let .frame(key,depth,title,color,folder,worktree,branch,count,state,folded):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(key, into: &buf)
             FfiConverterUInt32.write(depth, into: &buf)
             FfiConverterString.write(title, into: &buf)
             FfiConverterString.write(color, into: &buf)
             FfiConverterOptionString.write(folder, into: &buf)
+            FfiConverterBool.write(worktree, into: &buf)
+            FfiConverterOptionString.write(branch, into: &buf)
+            FfiConverterUInt32.write(count, into: &buf)
+            FfiConverterOptionTypeAgentState.write(state, into: &buf)
+            FfiConverterBool.write(folded, into: &buf)
+            
+        
+        case let .section(key,label,count,state,folded):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(key, into: &buf)
+            FfiConverterString.write(label, into: &buf)
+            FfiConverterUInt32.write(count, into: &buf)
+            FfiConverterOptionTypeAgentState.write(state, into: &buf)
+            FfiConverterBool.write(folded, into: &buf)
             
         
         case let .tile(key,depth,tile):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterString.write(key, into: &buf)
             FfiConverterUInt32.write(depth, into: &buf)
             FfiConverterTypeHomeTile.write(tile, into: &buf)
@@ -8321,6 +8623,31 @@ fileprivate struct FfiConverterSequenceTypeHomeShown: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeMarkShape: FfiConverterRustBuffer {
+    typealias SwiftType = [MarkShape]
+
+    public static func write(_ value: [MarkShape], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeMarkShape.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [MarkShape] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [MarkShape]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeMarkShape.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypePushRefused: FfiConverterRustBuffer {
     typealias SwiftType = [PushRefused]
 
@@ -8696,6 +9023,32 @@ fileprivate struct FfiConverterSequenceSequenceSequenceTypeTextRun: FfiConverter
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterDictionaryStringUInt64: FfiConverterRustBuffer {
+    public static func write(_ value: [String: UInt64], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for (key, value) in value {
+            FfiConverterString.write(key, into: &buf)
+            FfiConverterUInt64.write(value, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String: UInt64] {
+        let len: Int32 = try readInt(&buf)
+        var dict = [String: UInt64]()
+        dict.reserveCapacity(Int(len))
+        for _ in 0..<len {
+            let key = try FfiConverterString.read(from: &buf)
+            let value = try FfiConverterUInt64.read(from: &buf)
+            dict[key] = value
+        }
+        return dict
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterDictionaryStringString: FfiConverterRustBuffer {
     public static func write(_ value: [String: String], into buf: inout [UInt8]) {
         let len = Int32(value.count)
@@ -8713,6 +9066,32 @@ fileprivate struct FfiConverterDictionaryStringString: FfiConverterRustBuffer {
         for _ in 0..<len {
             let key = try FfiConverterString.read(from: &buf)
             let value = try FfiConverterString.read(from: &buf)
+            dict[key] = value
+        }
+        return dict
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterDictionaryStringTypeAgentMark: FfiConverterRustBuffer {
+    public static func write(_ value: [String: AgentMark], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for (key, value) in value {
+            FfiConverterString.write(key, into: &buf)
+            FfiConverterTypeAgentMark.write(value, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String: AgentMark] {
+        let len: Int32 = try readInt(&buf)
+        var dict = [String: AgentMark]()
+        dict.reserveCapacity(Int(len))
+        for _ in 0..<len {
+            let key = try FfiConverterString.read(from: &buf)
+            let value = try FfiConverterTypeAgentMark.read(from: &buf)
             dict[key] = value
         }
         return dict
@@ -8944,7 +9323,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_hive_phone_ffi_checksum_method_phone_follow() != 53068) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_hive_phone_ffi_checksum_method_phone_home() != 24196) {
+    if (uniffi_hive_phone_ffi_checksum_method_phone_home() != 9164) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_phone_id() != 40747) {

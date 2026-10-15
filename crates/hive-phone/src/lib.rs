@@ -14,6 +14,8 @@ pub mod failure;
 pub mod home;
 pub mod identity;
 pub mod keys;
+pub mod layers;
+pub mod mark;
 pub mod markdown;
 pub mod needs;
 pub mod network;

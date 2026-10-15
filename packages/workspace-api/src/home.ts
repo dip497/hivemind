@@ -60,7 +60,16 @@ export interface HomeTile {
   conversation?: true;
 }
 
-export type HomeRow = HomeWorkspace | HomeFrame | HomeTile;
+/** An agent a tile of a board runs, by its id (a tile's `agent`): what it is called, and its mark
+ *  as its manifest draws it, in one colour. Keyed `a:<id>`. */
+export interface HomeAgent {
+  of: "agent";
+  id: string;
+  label: string;
+  icon: { viewBox: string; attrs?: Record<string, string>; shapes: Array<Record<string, Record<string, string | number>>> };
+}
+
+export type HomeRow = HomeWorkspace | HomeFrame | HomeTile | HomeAgent;
 
 /** One keyed row that changed (`row`) or went (`gone`), numbered in its sequence. */
 export type KeyedChange<T> = { seq: number; key: string; row: T } | { seq: number; key: string; gone: true };

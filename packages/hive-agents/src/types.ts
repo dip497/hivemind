@@ -53,10 +53,12 @@ export interface AgentCapabilities {
 
 export interface AgentIcon {
   viewBox: string;
-  /** Inner SVG markup. App-owned constants, never user input. */
+  /** Inner SVG markup, drawn from `shapes`: escaped values on allowed shapes, never markup. */
   body: string;
   /** Root <svg> attributes (e.g. fill, stroke, strokeWidth, fillRule). */
   attrs?: Record<string, string>;
+  /** Its shapes, as its manifest gives them: what a device without SVG markup draws. */
+  shapes: Array<Record<string, Record<string, string | number>>>;
 }
 
 /** A launch setting an agent offers. The agent declares the flag; the values

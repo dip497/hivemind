@@ -59,6 +59,7 @@ import { MACHINE_OFFER, grantOf, type Grant } from "./machine-share.js";
 import { serveFiles } from "./device-files.js";
 import { heldBoards, needsOf, workingIn, type HeldBoard, type Need, type WaitingStatus } from "./needs.js";
 import { agentsOf, type AgentFacts, type AgentItem } from "./agent-list.js";
+import { agentById } from "@hivemind/agents";
 import { boardStructure } from "./board-structure.js";
 import type { Links } from "@hivemind/workspace-api/agents";
 import type { ViewFrameMachine } from "@hivemind/view-sdk/protocol";
@@ -453,6 +454,7 @@ export class PeerLinks {
         machines: this.o.machines, ...(this.o.linkState ? { linkState: this.o.linkState } : {}),
       }).structure,
       shown: (repo) => this.o.shown?.(repo),
+      agent: agentById,
     });
   }
 

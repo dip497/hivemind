@@ -139,6 +139,7 @@ export class Home {
       start.addEventListener("click", () => (location.hash = `start&${at}`));
       return h("h3", { class: "project", "data-project": e.key }, h("span", { class: "name" }, e.name), start);
     }
+    if (e.of === "section") return h("h3", { class: "project", "data-section": e.key }, h("span", { class: "name" }, e.label));
     const pad = `--depth:${e.depth}`;
     if (e.of === "frame") {
       const f = e.frame;

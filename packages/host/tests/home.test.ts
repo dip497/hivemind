@@ -14,6 +14,7 @@ import { boardStructure } from "../src/board-structure.ts";
 import type { HeldBoard } from "../src/needs.ts";
 import type { AgentItem } from "@hivemind/workspace-api/agents";
 import type { KnownMachines } from "@hivemind/core/remote-uri";
+import { AGENT_MANIFEST_VERSION, agentById, defFromManifest, setCatalog } from "@hivemind/agents";
 
 const machines: KnownMachines = { self: () => ({ device: "d1", name: "desk" }), mine: () => undefined, whose: () => undefined, saved: (id) => (id === "m1" ? "build box" : undefined) };
 
@@ -88,3 +89,22 @@ for (const c of cases) {
     assert.deepEqual(Object.fromEntries(homeLines(c.held, (t) => c.lines?.[t])), c.said);
   });
 }
+
+test("each agent a tile runs is a row of its own, once, keyed by its id: its name and its mark's shapes as its manifest draws them; a shell runs none", (t) => {
+  const icon = { viewBox: "0 0 24 24", attrs: { fill: "currentColor" }, shapes: [{ circle: { cx: "12", cy: "12", r: "10" } }, { path: { d: "M4 4a8 8 0 0 1 16 0" } }] };
+  setCatalog([defFromManifest({
+    manifestVersion: AGENT_MANIFEST_VERSION, id: "acme", label: "Acme", bin: "acme", icon,
+    caps: { promptDelivery: "typed", turnSignal: false, resume: "none", supervise: "human", blockedDetection: false },
+  })]);
+  t.after(() => setCatalog([]));
+  const held: HeldBoard[] = [{ workspace: "w1", name: "api", repo: "/home/p/api", core: { frames: [], tiles: [
+    { id: "t1", kind: "claude", cmd: "acme", label: "Acme 1" },
+    { id: "t2", kind: "claude", cmd: "acme", label: "Acme 2" },
+    { id: "t3", kind: "shell", label: "Shell" },
+  ] } as never }];
+  const rows = homeRows({ held, agents: [], structure: (core) => boardStructure(core, { title: () => undefined, links: () => ({ pipes: [], spawns: [] }), machines }).structure, shown: () => undefined, agent: agentById });
+  const agentRows = [...rows].filter(([k]) => k.startsWith("a:"));
+  assert.deepEqual(agentRows, [["a:acme", { of: "agent", id: "acme", label: "Acme", icon }]]);
+  assert.equal((rows.get("t:w1/t1") as { agent?: string }).agent, "acme", "its tile names it");
+  assert.equal((rows.get("t:w1/t3") as { agent?: string }).agent, undefined);
+});

@@ -41,7 +41,7 @@ const app = { open: (t) => window.calls.push(["open", t]), openTerminal: (...at)
   stop: async (a) => { window.calls.push(["stop", a.tile]); return true; }, close: async (a) => { window.calls.push(["close", a.tile]); return true; } };
 const screen = new Home(app, () => show());
 document.getElementById("app").append(screen.el);
-const show = () => screen.show(view.shown(screen.filter.query, screen.filter.machine ?? undefined, "desk"), view.overview("d", "desk"));
+const show = () => screen.show(view.shown(screen.filter.query, screen.filter.machine ?? undefined, "desk", { now: Date.now(), offset: 0 }), view.overview("d", "desk"));
 const T = 1790000000000;
 window.snapshot = (n, answered) => {
   const rows = [["w:w0", { of: "workspace", workspace: "w0", name: "api" }]];

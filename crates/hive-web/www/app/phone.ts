@@ -66,9 +66,10 @@ export class Phone {
     return new Phone(deviceId(seed), seed, paired, told, new HomeView(paired ? kept ?? null : null));
   }
 
-  /** Home as it shows, by `filter`. */
-  shown(filter: Filter): Shown {
-    return this.view.shown(filter.query, filter.machine ?? undefined, this.paired?.with.name ?? "your computer") as Shown;
+  /** Home as it shows, by `filter` and the person's View `choices` (hive-phone's `home::HomeView`). */
+  shown(filter: Filter, choices: object = {}): Shown {
+    const view = { ...choices, now: Date.now(), offset: -new Date().getTimezoneOffset() };
+    return this.view.shown(filter.query, filter.machine ?? undefined, this.paired?.with.name ?? "your computer", view) as Shown;
   }
 
   /** The agents on the computer, as the agent screen and the needs show them. */

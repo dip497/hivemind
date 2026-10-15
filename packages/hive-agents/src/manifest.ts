@@ -5,7 +5,6 @@
 import { AGENT_EVENTS, EVENT_HOOK, INPUT_KINDS, TURN_OUTCOMES, isAgentEventName } from "./events.js";
 import type { AgentAsset, AgentCapabilities, AgentHome, AgentHomeFile, AgentHookEntry, AgentHooks, AgentIcon, AgentInstall, AgentLaunch, AgentOption, AgentProviderDef, AgentSession, AgentTranscript, SessionFind, TileStatus, TranscriptRule } from "./types.js";
 import { compileDetect, validateExpr, validateScope, type DetectRules, type Expr, type Scope, type ScreenReading } from "./detect-rules.js";
-import { GENERIC_AGENT_ICON } from "./icon.js";
 import { RESERVED_AGENTS } from "./reserved.js";
 import { MIN_APP_VERSION_RE } from "./catalog.js";
 
@@ -163,8 +162,20 @@ export function iconFromManifest(icon: ManifestIcon): AgentIcon {
       return `<${kind} ${rendered} />`;
     })
     .join("");
-  return { viewBox: icon.viewBox, attrs: icon.attrs, body };
+  return { viewBox: icon.viewBox, ...(icon.attrs ? { attrs: icon.attrs } : {}), body, shapes: icon.shapes as AgentIcon["shapes"] };
 }
+
+/** The generic agent glyph, a small robot, for providers without a brand mark and for unknown ids. */
+export const GENERIC_AGENT_ICON: AgentIcon = iconFromManifest({
+  viewBox: "0 0 16 16",
+  attrs: { fill: "none" },
+  shapes: [
+    { rect: { x: "2.5", y: "4", width: "11", height: "8.5", rx: "2", stroke: "currentColor", "stroke-width": "1.2" } },
+    { circle: { cx: "6", cy: "8", r: "1", fill: "currentColor" } },
+    { circle: { cx: "10", cy: "8", r: "1", fill: "currentColor" } },
+    { path: { d: "M8 4V2M5.5 12.5v1M10.5 12.5v1", stroke: "currentColor", "stroke-width": "1.2", "stroke-linecap": "round" } },
+  ],
+});
 
 const strArray = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
 /** Keys to type, as `hive ctl keys` takes them: one to four tokens. */
