@@ -86,6 +86,18 @@ const launch = async (main = MAINS[0]) => {
 const whenTrue = (page, test, arg) =>
   page.waitForFunction(test, arg ?? null, { polling: "raf", timeout: 60_000 }).then((h) => h.jsonValue());
 
+/** The camera's zoom and how many terminals are on screen: what a frame has to draw. */
+const viewNow = (page) => page.evaluate(() => {
+  const t = document.querySelector(".react-flow__viewport")?.style.transform ?? "";
+  const zoom = Number(/scale\(([\d.]+)\)/.exec(t)?.[1] ?? 0);
+  const pane = document.querySelector(".react-flow")?.getBoundingClientRect();
+  const inView = pane ? [...document.querySelectorAll(".react-flow__node-terminal")].filter((n) => {
+    const r = n.getBoundingClientRect();
+    return Math.min(r.right, pane.right) > Math.max(r.left, pane.left) && Math.min(r.bottom, pane.bottom) > Math.max(r.top, pane.top);
+  }).length : 0;
+  return { zoom: Math.round(zoom * 100) / 100, terminalsInView: inView };
+});
+
 /** On a wait that timed out: where each terminal is and the end of its screen, then the error. */
 const showTerminals = (page) => async (e) => {
   console.error(JSON.stringify(await page.evaluate(() => [...document.querySelectorAll(".react-flow__node-terminal")].map((n) => {
@@ -327,16 +339,7 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
     mainCpuMs: Math.round(startupMain.cpu),
   };
   // What the launch opened on: builds that keep the camera differently draw different boards.
-  r.view = await page.evaluate(() => {
-    const t = document.querySelector(".react-flow__viewport")?.style.transform ?? "";
-    const zoom = Number(/scale\(([\d.]+)\)/.exec(t)?.[1] ?? 0);
-    const pane = document.querySelector(".react-flow")?.getBoundingClientRect();
-    const inView = pane ? [...document.querySelectorAll(".react-flow__node-terminal")].filter((n) => {
-      const r = n.getBoundingClientRect();
-      return Math.min(r.right, pane.right) > Math.max(r.left, pane.left) && Math.min(r.bottom, pane.bottom) > Math.max(r.top, pane.top);
-    }).length : 0;
-    return { zoom: Math.round(zoom * 100) / 100, terminalsInView: inView };
-  });
+  r.view = await viewNow(page);
   // Let startup's own work settle before timing screens; what held main meanwhile counts as startup's.
   await page.waitForTimeout(1500);
   r.startup.mainStalls = (await mainStalls(app)).total;
@@ -464,7 +467,7 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
     const w1 = await page.evaluate(() => performance.timeOrigin + performance.now());
     const m1 = await mainThread(cdp, renderer);
     const lt = await longTasksDone(page);
-    r.terminalScroll = { wheel60ms: Math.round(w1 - w0), mainBusyMs: Math.round(m1.task - m0.task), mainCpuMs: Math.round(m1.cpu - m0.cpu), scriptMs: Math.round(m1.script - m0.script), longTasks: lt.total, longest: lt.longest };
+    r.terminalScroll = { ...(await viewNow(page)), width: Math.round(box.width), height: Math.round(box.height), wheel60ms: Math.round(w1 - w0), mainBusyMs: Math.round(m1.task - m0.task), mainCpuMs: Math.round(m1.cpu - m0.cpu), scriptMs: Math.round(m1.script - m0.script), longTasks: lt.total, longest: lt.longest };
 
     // Off screen and back: the terminal prints LINES lines while panned out of the window (sent
     // nothing then), and is panned back; how long, once the board stops, until it shows the end of
