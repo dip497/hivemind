@@ -114,6 +114,12 @@ const screenText = (page) => page.evaluate(() => [...document.querySelectorAll("
   .map((x) => x.parentElement?.__hmScreen?.() ?? "").join("\n"));
 
 let terminalsOnBoard = TERMINALS;
+let lastShell;
+/** The camera on the last shell, so every launch starts on the same view: tiles added and the pans measured move it. */
+const cameraOnShells = async (page) => {
+  await page.evaluate((id) => window.dispatchEvent(new CustomEvent("hivemind:focus-tile", { detail: id })), lastShell);
+  await page.waitForTimeout(2000);
+};
 // The board: TERMINALS shells, each having printed LINES lines, and a note.
 {
   const { app, page } = await launch();
@@ -150,11 +156,8 @@ let terminalsOnBoard = TERMINALS;
     await page.keyboard.press("Escape");
   }
   if (FRAMES || WIDGETS) await page.waitForTimeout(3000);
-  // The camera back on the shells, where the standard board leaves it.
-  if (FRAMES || WIDGETS) {
-    await page.evaluate((id) => window.dispatchEvent(new CustomEvent("hivemind:focus-tile", { detail: id })), ids.at(-1));
-    await page.waitForTimeout(2000);
-  }
+  lastShell = ids.at(-1);
+  await cameraOnShells(page);
   // A frame's tools can bring a terminal of their own.
   terminalsOnBoard = await page.locator(".react-flow__node-terminal").count();
   await app.close();
@@ -275,6 +278,7 @@ for (let run = 0; run < RUNS; run++) {
   r.heapMB = await page.evaluate(() => Math.round((performance.memory?.usedJSHeapSize ?? 0) / 1e6));
   result.runs.push(r);
   console.log(JSON.stringify(r));
+  await cameraOnShells(page);
   await app.close();
 }
 
