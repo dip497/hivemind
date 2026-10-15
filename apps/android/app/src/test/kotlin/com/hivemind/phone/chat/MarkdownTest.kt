@@ -39,7 +39,7 @@ class MarkdownTest {
     private fun said(markdown: String) {
         val chat = Chat()
         chat.said(listOf(agentSaid("e1", markdown)), anew = true)
-        compose.setContent { ChatView(chat, Modifier.size(360.dp, 640.dp)) }
+        compose.setContent { ChatView(chat, onTool = {}, modifier = Modifier.size(360.dp, 640.dp)) }
     }
 
     private fun SemanticsNodeInteraction.text(): AnnotatedString =

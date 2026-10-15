@@ -80,8 +80,8 @@ stays on their own avatar or dot, never on chrome.
    and an outlined **Deny**. A question's options are outlined pills in the same card.
 5. **Agent screen**: the person's messages in a subtle raised bubble on the right; the agent's text
    plain and full width, no bubble, no avatar; tool calls as one-line grey rows (tool name and what
-   it is about), unfolding where the surface unfolds them. Header: back, the agent's name and its
-   state in a word, the terminal as an icon or a segmented control. **Composer**: a rounded raised
+   it is about), opening the use on its own screen. Header: back, the agent's name and its state in
+   a word, the terminal as an icon. See "Agent screen and Settings" below. **Composer**: a rounded raised
    card pinned at the bottom, + for photos on the left where the surface sends photos, a round ↑
    send on the right that becomes ■ Stop while the agent works.
 6. **Start**: what starts where (agent, folder, machine) on top, a large prompt field ("What should
@@ -90,7 +90,33 @@ stays on their own avatar or dot, never on chrome.
    hunks in mono with line numbers and faint row tints.
 8. **Devices**: rows with an online dot and when each was last seen, where the surface knows it.
    Pairing unchanged.
-9. **Tabs**: the surface's own tabs, in its order, quiet: icon and label, the selected one in the
-   text colour, the others tertiary, no filled indicator.
+9. **No tabs**: Home is the app; a gear in its header opens Settings. See below.
 
 Light and dark are both first-class: every screen is checked in both.
+
+## Agent screen and Settings (2026-10-15)
+
+The person compared the Android app with a mature open-source phone client for coding agents and
+found ours worse. What it does better, and what each phone surface now does:
+
+- **Home is the app; no tabs.** Home keeps its tree (machines, projects, frames, tiles) and its
+  compact needs cards. Its header has search and a gear; the gear opens **Settings**: the person's
+  devices, pairing another and how the devices reach the phone while the app is away, then the
+  community views the devices offer, asked for again on opening and when pulled down.
+- **The agent screen is its chat.** The chat is drawn from the bottom up, the newest at the
+  bottom: a keyboard that opens takes room from the top and leaves what the person reads where it
+  is. It follows new entries only while the person is at the bottom; scrolled up, it stays, with a
+  button back to the newest. An agent whose conversation its device cannot read opens on its
+  terminal instead.
+- **What the agent waits on is the chat's last item**, where it stopped: the same needs card as
+  Home's, not pinned above the chat. Over a terminal it stays above the terminal.
+- **Tool rows are one line**: the tool's name, then what it is about in mono, a long path cut in
+  the middle so its file's name shows; red when the use failed. Tapping one opens the use on its
+  own screen: its input and its output whole, wrapped, selectable. Nothing unfolds inline.
+- **The terminal opens from an icon in the header**, over the whole screen, with Message and Type;
+  back returns to the chat. No Chat / Terminal switch.
+- **Nothing scrolls the page sideways.** Code blocks and tables scroll inside themselves; a diff's
+  open file scrolls across as one block, its line numbers fixed.
+
+iOS and the phone page follow the same rules; on iOS, Views in Settings is still the index of what
+the app offers.

@@ -1,5 +1,6 @@
 package com.hivemind.phone.ui.views
 
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -17,7 +18,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** The Views tab (design §6, screen 9): what the person's computers offer the phone, and how it reads. */
+/** Views, in Settings (design §6, screen 9): what the person's computers offer the phone, and how it reads. */
 @RunWith(AndroidJUnit4::class)
 class ViewsListTest {
     @get:Rule
@@ -58,7 +59,7 @@ class ViewsListTest {
             ViewRow(view("@priya/notes", "Notes"), notes, away = true),
         )
         compose.setContent {
-            PhoneTheme(accent = null) { ViewsList(rows, refreshing = false, onRefresh = {}, onOpen = { opened += it.view.id }) }
+            PhoneTheme(accent = null) { LazyColumn { viewsItems(rows, onOpen = { opened += it.view.id }) } }
         }
 
         compose.onNodeWithText("hivemind · desk").assertIsDisplayed()
@@ -72,7 +73,7 @@ class ViewsListTest {
     @Test
     fun `with nothing offered, it says what would be`() {
         compose.setContent {
-            PhoneTheme(accent = null) { ViewsList(emptyList(), refreshing = false, onRefresh = {}, onOpen = {}) }
+            PhoneTheme(accent = null) { LazyColumn { viewsItems(emptyList(), onOpen = {}) } }
         }
 
         compose.onNodeWithText("No views yet. A community view that works on a phone, installed on your computer, shows here.").assertIsDisplayed()

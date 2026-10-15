@@ -49,30 +49,27 @@ class ChatTest {
     }
 
     @Test
-    fun `why it ended is the last item, and is heard though nothing was said`() {
+    fun `why it ended is heard though nothing was said`() {
         val ended = Chat()
         ended.end(ConversationEnded.Unpaired)
         assertTrue(ended.heard)
-        assertEquals(0, ended.last)
-
-        val chat = Chat()
-        chat.said(listOf(agentSaid("e1", "Done.")), anew = true)
-        chat.end(ConversationEnded.NotHeld)
-        assertEquals(1, chat.last)
     }
 
     @Test
-    fun `it follows the newest entry, and the end, until the person scrolls up`() {
+    fun `it follows the newest entry, and the end, at the bottom, until the person scrolls up`() {
         val chat = Chat()
         chat.said((0 until 30).map { agentSaid("e$it", "$it") }, anew = true)
-        assertEquals(29, chat.follow.list.firstVisibleItemIndex)
+        assertEquals(0, chat.follow.list.firstVisibleItemIndex)
 
+        // Scrolled up, back to older entries.
         chat.follow.on = false
+        chat.follow.list.requestScrollToItem(5)
         chat.said(listOf(agentSaid("e30", "30")), anew = false)
-        assertEquals(29, chat.follow.list.firstVisibleItemIndex)
+        assertEquals(5, chat.follow.list.firstVisibleItemIndex)
 
-        chat.follow.newest(chat.last)
+        chat.follow.newest(0)
+        chat.follow.list.requestScrollToItem(3)
         chat.end(ConversationEnded.NotHeld)
-        assertEquals(31, chat.follow.list.firstVisibleItemIndex)
+        assertEquals(0, chat.follow.list.firstVisibleItemIndex)
     }
 }

@@ -1,6 +1,6 @@
 package com.hivemind.phone.ui.agent
 
-import androidx.annotation.StringRes
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -32,7 +31,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -60,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hivemind.phone.R
 import com.hivemind.phone.chat.ChatView
+import com.hivemind.phone.chat.ToolScreen
 import com.hivemind.phone.core.Agent
 import com.hivemind.phone.core.Answer
 import com.hivemind.phone.core.ScreenEnded
@@ -80,15 +79,9 @@ import com.hivemind.phone.ui.common.stoppable
 import com.hivemind.phone.ui.theme.LocalStateColors
 import com.hivemind.phone.ui.theme.Mono
 
-/** What the screen shows of the agent: what it says, or its terminal. */
-internal enum class Shown(@StringRes val label: Int) {
-    CHAT(R.string.view_chat),
-    TERMINAL(R.string.view_terminal),
-}
-
-/** What may be shown of [agent], as offered: what it and the person say only when it keeps a
- *  conversation its device can read (its manifest maps its session file), and its terminal. */
-internal fun shownOf(agent: Agent?): List<Shown> = if (agent?.hasConversation == true) Shown.entries else listOf(Shown.TERMINAL)
+/** Whether [agent]'s screen opens on what it and the person say: only when it keeps a conversation
+ *  its device can read (its manifest maps its session file). Any other opens on its terminal. */
+internal fun opensOnChat(agent: Agent?): Boolean = agent?.hasConversation == true
 
 /** The keys of the Type row, as shown and as `type_keys` takes them. */
 private val Keys = listOf(
@@ -97,29 +90,40 @@ private val Keys = listOf(
 )
 
 /**
- * One agent (design §6.4): its live terminal, fitted to the width, or what it and the person say to
- * each other as a chat (P7); what it waits on, as a card with its answers; a composer whose send
- * stops the agent's turn while nothing is typed, and Type, which types into its terminal as the
- * person. Diff at the top, Close under More; closing asks the phone's lock.
+ * One agent (design §6.4): what it and the person say to each other as a chat (P7), what it waits
+ * on as the chat's last card, and a composer whose send stops the agent's turn while nothing is
+ * typed. Its terminal opens from the header over the whole screen, fitted to the width, with Type,
+ * which types into it as the person; an agent with no
+ * chat to read opens on it. A tool's row opens that use on its own screen. Diff at the top, Close
+ * under More; closing asks the phone's lock.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onClosed: () -> Unit) {
     val agent by vm.agent.collectAsStateWithLifecycle()
+    val chatFirst = opensOnChat(agent)
+    var terminalOpen by rememberSaveable { mutableStateOf(false) }
+    var toolOpen by rememberSaveable { mutableStateOf<String?>(null) }
+    val tool = toolOpen?.takeIf { chatFirst }
+    if (tool != null) {
+        BackHandler { toolOpen = null }
+        ToolScreen(vm.chat.chat.toolCall(tool), onBack = { toolOpen = null })
+        return
+    }
+    // Over the chat: back returns to it.
+    val overChat = terminalOpen && chatFirst
+    BackHandler(enabled = overChat) { terminalOpen = false }
+    val showingTerminal = overChat || !chatFirst
+
     val lock = LocalPhoneLock.current
     val snackbar = remember { SnackbarHostState() }
     NoticeEffect(vm.calls, snackbar)
-    var shown by rememberSaveable { mutableStateOf(Shown.TERMINAL) }
     var typing by rememberSaveable { mutableStateOf(false) }
     val busy = vm.calls.busy.isNotEmpty()
     val closeTitle = stringResource(R.string.lock_close_title, agent?.name.orEmpty())
     val lockSubtitle = stringResource(R.string.lock_subtitle)
-
-    val offered = shownOf(agent)
-    // As the person chose, when this agent offers it.
-    val showing = shown.takeIf { it in offered } ?: Shown.TERMINAL
     // Typing is into the terminal: the chat only sends messages.
-    val typingShown = typing && showing == Shown.TERMINAL
+    val typingShown = typing && showingTerminal
     val colors = MaterialTheme.colorScheme
 
     Scaffold(
@@ -130,7 +134,10 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
                 title = { AgentTitle(agent) },
                 navigationIcon = {
                     // Tagged for the UI tests: the system's own Back is "Back" too.
-                    IconButton(onClick = onBack, modifier = Modifier.testTag("agent-back")) {
+                    IconButton(
+                        onClick = if (overChat) ({ terminalOpen = false }) else onBack,
+                        modifier = Modifier.testTag(if (overChat) "terminal-back" else "agent-back"),
+                    ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))
                     }
                 },
@@ -139,23 +146,30 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
                     if (typingShown && agent?.stoppable == true) {
                         TextButton(onClick = vm::stop, enabled = !busy) { Text(stringResource(R.string.action_stop)) }
                     }
-                    TextButton(onClick = onDiff, colors = ButtonDefaults.textButtonColors(contentColor = colors.onSurfaceVariant)) {
-                        Text(stringResource(R.string.action_diff))
-                    }
-                    var menu by remember { mutableStateOf(false) }
-                    IconButton(onClick = { menu = true }) {
-                        Icon(Icons.Filled.MoreVert, stringResource(R.string.action_more), tint = colors.onSurfaceVariant)
-                    }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.action_close)) },
-                            enabled = !busy && agent != null,
-                            onClick = {
-                                menu = false
-                                val asked = lock.ask(closeTitle, lockSubtitle) { vm.close(onClosed) }
-                                if (!asked) vm.calls.tell(Notice.NoLock)
-                            },
-                        )
+                    if (!overChat) {
+                        if (chatFirst) {
+                            IconButton(onClick = { terminalOpen = true }, modifier = Modifier.testTag("agent-terminal")) {
+                                Icon(painterResource(R.drawable.ic_terminal), stringResource(R.string.view_terminal), tint = colors.onSurfaceVariant)
+                            }
+                        }
+                        TextButton(onClick = onDiff, colors = ButtonDefaults.textButtonColors(contentColor = colors.onSurfaceVariant)) {
+                            Text(stringResource(R.string.action_diff))
+                        }
+                        var menu by remember { mutableStateOf(false) }
+                        IconButton(onClick = { menu = true }) {
+                            Icon(Icons.Filled.MoreVert, stringResource(R.string.action_more), tint = colors.onSurfaceVariant)
+                        }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.action_close)) },
+                                enabled = !busy && agent != null,
+                                onClick = {
+                                    menu = false
+                                    val asked = lock.ask(closeTitle, lockSubtitle) { vm.close(onClosed) }
+                                    if (!asked) vm.calls.tell(Notice.NoLock)
+                                },
+                            )
+                        }
                     }
                 },
             )
@@ -163,24 +177,27 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
-            if (offered.size > 1) {
-                Segmented(offered, showing, onChoose = { shown = it }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-            }
             // Closed elsewhere, or its device no longer lists it: what its terminal last showed stays.
             if (agent == null) Note(stringResource(R.string.agent_gone))
-            agent?.waiting?.let { WaitingCard(it, busy, vm::answer) }
-            when (showing) {
-                Shown.CHAT -> ChatView(vm.chat.chat, Modifier.weight(1f).fillMaxWidth())
-                Shown.TERMINAL -> {
-                    vm.screen.keyboard?.let { holder ->
-                        Note(stringResource(R.string.keyboard_held, holder))
-                    }
-                    vm.screen.ended?.let { ended -> Note(endedNote(ended, agent?.deviceName)) }
-                    TerminalView(vm.screen.terminal, Modifier.weight(1f).fillMaxWidth())
+            if (showingTerminal) {
+                agent?.waiting?.let { WaitingCard(it, busy, vm::answer, Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
+                vm.screen.keyboard?.let { holder ->
+                    Note(stringResource(R.string.keyboard_held, holder))
                 }
+                vm.screen.ended?.let { ended -> Note(endedNote(ended, agent?.deviceName)) }
+                TerminalView(vm.screen.terminal, Modifier.weight(1f).fillMaxWidth())
+            } else {
+                val waiting = agent?.waiting
+                ChatView(
+                    vm.chat.chat,
+                    onTool = { toolOpen = it },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    endKey = waiting?.since,
+                    end = { if (waiting != null) WaitingCard(waiting, busy, vm::answer) },
+                )
             }
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (showing == Shown.TERMINAL) {
+                if (showingTerminal) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         PillChip(!typing, onClick = { typing = false }, label = stringResource(R.string.mode_message))
                         PillChip(typing, onClick = { typing = true }, label = stringResource(R.string.mode_type))
@@ -195,33 +212,6 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
                         stoppable = agent?.stoppable == true,
                         onSend = vm::send,
                         onStop = vm::stop,
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** Chat or Terminal: what is shown of the agent, as a pill with the shown one filled. */
-@Composable
-private fun Segmented(offered: List<Shown>, showing: Shown, onChoose: (Shown) -> Unit, modifier: Modifier = Modifier) {
-    val colors = MaterialTheme.colorScheme
-    Surface(color = colors.surfaceContainerHigh, shape = CircleShape, modifier = modifier) {
-        Row(Modifier.padding(3.dp)) {
-            for (view in offered) {
-                val chosen = view == showing
-                Surface(
-                    selected = chosen,
-                    onClick = { onChoose(view) },
-                    shape = CircleShape,
-                    color = if (chosen) colors.background else Color.Transparent,
-                    shadowElevation = if (chosen) 1.dp else 0.dp,
-                ) {
-                    Text(
-                        stringResource(view.label),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (chosen) colors.onSurface else colors.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                     )
                 }
             }
@@ -307,11 +297,11 @@ private fun AgentTitle(agent: Agent?) {
     }
 }
 
-/** What the agent waits on, as a card over the conversation, with its answers. */
+/** What the agent waits on, as a card with its answers: the chat's last, or over its terminal. */
 @Composable
-private fun WaitingCard(waiting: Waiting, busy: Boolean, onAnswer: (Answer) -> Unit) {
+private fun WaitingCard(waiting: Waiting, busy: Boolean, onAnswer: (Answer) -> Unit, modifier: Modifier = Modifier) {
     val now = rememberNow()
-    RaisedCard(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+    RaisedCard(modifier) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Dot(LocalStateColors.current.waiting)

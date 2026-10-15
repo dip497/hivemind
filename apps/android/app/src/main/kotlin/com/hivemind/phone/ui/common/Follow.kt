@@ -25,12 +25,15 @@ import com.hivemind.phone.R
  * A list that follows its newest item (design §6.4): until the person scrolls up, and again once
  * they are back at the bottom, by hand or by the newest-item button. Kept by what fills the list,
  * so that what it adds and the scroll that shows it land in one frame. Following, the list rests
- * at an item its owner names, from the top: the chat at its last, which the list's end then
- * brings to the bottom; the terminal at the line that leaves its newest line the last in sight.
+ * at an item its owner names: the chat, drawn from the bottom up ([newestFirst]), at its first;
+ * the terminal at the line that leaves its newest line the last in sight.
  */
 @Stable
-class Follow {
+class Follow(private val newestFirst: Boolean = false) {
     val list = LazyListState()
+
+    /** Whether the list is at its newest end: the bottom of the screen, either way it is drawn. */
+    val atNewest: Boolean get() = if (newestFirst) !list.canScrollBackward else !list.canScrollForward
 
     /** Whether the list keeps its newest item in view. */
     var on by mutableStateOf(true)
@@ -52,10 +55,10 @@ class Follow {
 fun FollowTheNewest(follow: Follow) {
     val dragged by follow.list.interactionSource.collectIsDraggedAsState()
     LaunchedEffect(dragged) {
-        if (dragged) follow.on = false else if (!follow.list.canScrollForward) follow.on = true
+        if (dragged) follow.on = false else if (follow.atNewest) follow.on = true
     }
     LaunchedEffect(follow) {
-        snapshotFlow { follow.list.canScrollForward }.collect { more -> if (!more) follow.on = true }
+        snapshotFlow { follow.atNewest }.collect { newest -> if (newest) follow.on = true }
     }
 }
 

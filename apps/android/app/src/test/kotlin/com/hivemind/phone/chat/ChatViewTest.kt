@@ -2,6 +2,11 @@ package com.hivemind.phone.chat
 
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.SemanticsActions
@@ -10,6 +15,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -31,20 +37,22 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
-/** The chat as drawn (design P7): who said what, each tool on a row of its own, following the newest. */
+/** The chat as drawn (design P7): who said what, each tool on a row of its own, the newest at the bottom, followed. */
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "mdpi")
 class ChatViewTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private fun show(chat: Chat) = compose.setContent { ChatView(chat, Modifier.size(300.dp, 400.dp)) }
+    private fun show(chat: Chat) = compose.setContent { ChatView(chat, onTool = {}, modifier = Modifier.size(300.dp, 400.dp)) }
 
-    private fun SemanticsNodeInteraction.textColor(): Color {
+    private fun SemanticsNodeInteraction.layout(): TextLayoutResult {
         val layouts = mutableListOf<TextLayoutResult>()
         fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
-        return layouts.single().layoutInput.style.color
+        return layouts.single()
     }
+
+    private fun SemanticsNodeInteraction.textColor(): Color = layout().layoutInput.style.color
 
     @Test
     fun `Nothing said yet once the core has told nothing, not before`() {
@@ -69,27 +77,69 @@ class ChatViewTest {
     }
 
     @Test
-    fun `a tool's row unfolds what it gave back, red when it failed`() {
+    fun `a tool's row is one line that opens the use on its own screen, whole, red when it failed`() {
+        val path = "/home/priya/projects/hivemind/apps/android/app/src/main/kotlin/com/hivemind/phone/chat/ChatView.kt"
         val chat = Chat()
         chat.said(
             listOf(
                 toolUse("e1", use = "u1", name = "Bash", about = "make test"),
                 toolResult("e2", use = "u1", text = "2 failed", error = true),
-                toolUse("e3", use = "u2", name = "Read", about = "src/nav.ts"),
+                toolUse("e3", use = "u2", name = "Read", about = path),
                 toolResult("e4", use = "u2", text = "export const nav = []"),
             ),
             anew = true,
         )
-        show(chat)
+        compose.setContent {
+            var open by remember { mutableStateOf<String?>(null) }
+            when (val entry = open) {
+                null -> ChatView(chat, onTool = { open = it }, modifier = Modifier.size(300.dp, 400.dp))
+                else -> ToolScreen(chat.toolCall(entry), onBack = { open = null })
+            }
+        }
         compose.onNodeWithText("2 failed").assertDoesNotExist()
+        // A path too long for the row stays on one line, cut in the middle: its file's name is drawn.
+        val row = compose.onNodeWithText(path, useUnmergedTree = true).layout()
+        assertEquals(1, row.lineCount)
+        assertTrue(row.isLineEllipsized(0))
+        assertTrue(row.getBoundingBox(path.length - 1).width > 0f)
 
-        compose.onNodeWithText("Bash · make test").performClick()
-        compose.onNodeWithText("Read · src/nav.ts").performClick()
+        compose.onNodeWithText("make test").performClick()
 
-        // The text itself, not the row it is merged into for tapping.
         val colors = lightColorScheme()
-        assertEquals(colors.error, compose.onNodeWithText("2 failed", useUnmergedTree = true).textColor())
-        assertEquals(colors.onSurface, compose.onNodeWithText("export const nav = []", useUnmergedTree = true).textColor())
+        assertEquals(colors.error, compose.onNodeWithText("2 failed").textColor())
+        compose.onNodeWithTag("tool-back").performClick()
+        compose.onNodeWithText(path).performClick()
+        compose.onNodeWithText(path).assertIsDisplayed()
+        assertTrue(compose.onNodeWithText(path).layout().lineCount > 1)
+        assertEquals(colors.onSurface, compose.onNodeWithText("export const nav = []").textColor())
+    }
+
+    @Test
+    fun `what the agent waits on is the chat's last item, under what it said last`() {
+        val chat = Chat()
+        chat.said((0 until 40).map { agentSaid("e$it", "line $it") }, anew = true)
+        compose.setContent {
+            ChatView(chat, onTool = {}, modifier = Modifier.size(300.dp, 400.dp), endKey = 1L, end = { Text("Allow make test?") })
+        }
+
+        val card = compose.onNodeWithText("Allow make test?")
+        card.assertIsDisplayed()
+        assertTrue(card.getUnclippedBoundsInRoot().top > compose.onNodeWithText("line 39").getUnclippedBoundsInRoot().bottom)
+    }
+
+    @Test
+    fun `a keyboard that opens leaves the newest where the person reads it, at the bottom`() {
+        val chat = Chat()
+        chat.said((0 until 40).map { agentSaid("e$it", "line $it") }, anew = true)
+        var height by mutableStateOf(400.dp)
+        compose.setContent { ChatView(chat, onTool = {}, modifier = Modifier.size(300.dp, height)) }
+        compose.waitForIdle()
+
+        height = 200.dp
+        compose.waitForIdle()
+
+        compose.onNodeWithText("line 39").assertIsDisplayed()
+        assertTrue(compose.onNodeWithText("line 39").getUnclippedBoundsInRoot().bottom > 180.dp)
     }
 
     @Test
@@ -110,19 +160,20 @@ class ChatViewTest {
         chat.said((0 until 40).map { agentSaid("e$it", "line $it") }, anew = true)
         show(chat)
         compose.waitForIdle()
-        assertEquals(39, chat.follow.list.layoutInfo.visibleItemsInfo.last().index)
+        assertEquals(0, chat.follow.list.firstVisibleItemIndex)
 
         compose.onRoot().performTouchInput { swipeDown() }
         compose.waitForIdle()
         assertFalse(chat.follow.on)
-        val at = chat.follow.list.firstVisibleItemIndex
+        val at = chat.follow.list.layoutInfo.visibleItemsInfo.first().key
         chat.said(listOf(agentSaid("e40", "line 40")), anew = false)
         compose.waitForIdle()
-        assertEquals(at, chat.follow.list.firstVisibleItemIndex)
+        assertEquals(at, chat.follow.list.layoutInfo.visibleItemsInfo.first().key)
 
         compose.onNodeWithContentDescription("To the newest").performClick()
         compose.waitForIdle()
         assertTrue(chat.follow.on)
-        assertEquals(40, chat.follow.list.layoutInfo.visibleItemsInfo.last().index)
+        assertEquals(0, chat.follow.list.firstVisibleItemIndex)
+        compose.onNodeWithText("line 40").assertIsDisplayed()
     }
 }

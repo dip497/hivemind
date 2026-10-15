@@ -32,7 +32,8 @@ class Chat {
     var ended: ConversationEnded? by mutableStateOf(null)
         private set
 
-    val follow = Follow()
+    /** The list, drawn from the bottom up: its first item is the newest. */
+    val follow = Follow(newestFirst = true)
 
     private val results = mutableStateMapOf<String, ToolResult>()
 
@@ -68,15 +69,22 @@ class Chat {
             added += entry
         }
         shown.addAll(added)
-        follow.grew(last)
+        follow.grew(0)
     }
 
     fun end(why: ConversationEnded) {
         heard = true
         ended = why
-        follow.grew(last)
+        follow.grew(0)
     }
 
-    /** The newest item of the list drawn: the note saying why it ended, once it has. */
-    val last: Int get() = shown.size - 1 + if (ended != null) 1 else 0
+    /** The use of a tool that [entry] shows, as its own screen shows it; none when no such entry is shown. */
+    fun toolCall(entry: String): ToolCall? = when (val said = shown.firstOrNull { it.id == entry }?.said) {
+        is Said.ToolUse -> ToolCall(said.tool.name, said.tool.about, results[said.tool.id])
+        is Said.ToolOutput -> ToolCall(null, null, said.result)
+        else -> null
+    }
 }
+
+/** A use of a tool: the tool's name (none for a result whose use was told before what is shown began), what the use is about, and what it gave back, once it has. */
+data class ToolCall(val name: String?, val about: String?, val result: ToolResult?)

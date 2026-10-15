@@ -1,7 +1,9 @@
 package com.hivemind.phone.ui.diff
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -25,15 +27,20 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.hivemind.phone.R
 import com.hivemind.phone.core.DiffFile
@@ -81,6 +88,16 @@ fun DiffScreen(vm: DiffViewModel, onBack: () -> Unit) {
 @Composable
 private fun DiffFiles(state: DiffState.Loaded) {
     var open by rememberSaveable { mutableStateOf<String?>(null) }
+    // The open file's lines, numbered, each as wide as the widest, so that they scroll across together.
+    val patch = remember(open, state.patches) { open?.let { state.patches[it] }?.lines()?.let(::numbered) }
+    val style = MaterialTheme.typography.bodySmall.copy(fontFamily = Mono)
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val width = remember(patch, style, density) {
+        val longest = patch?.maxByOrNull { it.line.length }?.line.orEmpty()
+        with(density) { measurer.measure(longest, style, softWrap = false).size.width.toDp() }
+    }
+    val across = remember(open) { ScrollState(0) }
     LazyColumn(Modifier.fillMaxSize()) {
         if (state.diff.files.isNotEmpty()) {
             item(key = "summary") { Summary(state.diff.files) }
@@ -104,8 +121,7 @@ private fun DiffFiles(state: DiffState.Loaded) {
             }
             if (open == file.path) {
                 // The open file's lines are items of their own: a long patch is laid out as it scrolls.
-                val lines = state.patches[file.path]?.lines()
-                if (lines == null) {
+                if (patch == null) {
                     item(key = "${file.path}:none") {
                         Text(
                             stringResource(R.string.diff_no_patch),
@@ -114,8 +130,7 @@ private fun DiffFiles(state: DiffState.Loaded) {
                         )
                     }
                 } else {
-                    val numbered = numbered(lines)
-                    items(numbered.size, key = { "${file.path}:$it" }) { PatchLine(numbered[it]) }
+                    items(patch.size, key = { "${file.path}:$it" }) { PatchLine(patch[it], style, width, across) }
                 }
             }
         }
@@ -192,8 +207,9 @@ private fun numbered(lines: List<String>): List<Numbered> {
     }
 }
 
+/** A line of a patch, [width] wide as each of its file's lines is, so that they scroll [across] as one. */
 @Composable
-private fun PatchLine(numbered: Numbered) {
+private fun PatchLine(numbered: Numbered, style: TextStyle, width: Dp, across: ScrollState) {
     val colors = LocalStateColors.current
     val line = numbered.line
     val added = line.startsWith("+")
@@ -214,23 +230,19 @@ private fun PatchLine(numbered: Numbered) {
     ) {
         Text(
             numbered.number?.toString().orEmpty(),
-            fontFamily = Mono,
-            style = MaterialTheme.typography.bodySmall,
+            style = style,
             color = MaterialTheme.colorScheme.tertiary,
             textAlign = TextAlign.End,
             modifier = Modifier.width(44.dp).padding(end = 8.dp),
         )
-        Text(
-            line,
-            fontFamily = Mono,
-            style = MaterialTheme.typography.bodySmall,
-            color = when {
-                header -> MaterialTheme.colorScheme.tertiary
-                else -> MaterialTheme.colorScheme.onSurface
-            },
-            maxLines = if (header) 1 else Int.MAX_VALUE,
-            overflow = if (header) TextOverflow.Ellipsis else TextOverflow.Clip,
-            modifier = Modifier.padding(end = 12.dp),
-        )
+        Box(Modifier.weight(1f).horizontalScroll(across)) {
+            Text(
+                line,
+                style = style,
+                color = if (header) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface,
+                softWrap = false,
+                modifier = Modifier.width(width + 12.dp).padding(end = 12.dp),
+            )
+        }
     }
 }

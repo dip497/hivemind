@@ -19,6 +19,7 @@ import com.hivemind.phone.ui.diff.DiffScreen
 import com.hivemind.phone.ui.diff.DiffViewModel
 import com.hivemind.phone.ui.pair.PairScreen
 import com.hivemind.phone.ui.pair.PairViewModel
+import com.hivemind.phone.ui.settings.SettingsScreen
 import com.hivemind.phone.ui.start.StartScreen
 import com.hivemind.phone.ui.start.StartViewModel
 import com.hivemind.phone.ui.views.OpenView
@@ -50,7 +51,11 @@ sealed interface Route : NavKey {
     @Serializable
     data object Start : Route
 
-    /** A community view (§6.1), as Views offered it: its page, from its computer, on a workspace there. */
+    /** The person's devices and pairing, and the community views they offer: opened from Home's gear. */
+    @Serializable
+    data object Settings : Route
+
+    /** A community view (§6.1), as Settings listed it: its page, from its computer, on a workspace there. */
     @Serializable
     data class View(
         val device: String,
@@ -101,6 +106,13 @@ fun PhoneNav(core: PhoneCore, opens: Flow<AgentRef>, links: Flow<String>) {
                     core,
                     onOpen = { stack.add(it.agent()) },
                     onStart = { stack.add(Route.Start) },
+                    onSettings = { stack.add(Route.Settings) },
+                )
+            }
+            entry<Route.Settings> {
+                SettingsScreen(
+                    core,
+                    onBack = { stack.removeLastOrNull() },
                     onPair = { stack.add(Route.Pair()) },
                     onOpenView = { row ->
                         stack.add(
@@ -116,7 +128,7 @@ fun PhoneNav(core: PhoneCore, opens: Flow<AgentRef>, links: Flow<String>) {
                 PairScreen(
                     pairing,
                     onDone = {
-                        // Paired from Devices: back to it. Paired on first launch: home. Every Pair
+                        // Paired from Settings: back to it. Paired on first launch: home. Every Pair
                         // goes, the one it opened on as well as one a link opened over it.
                         stack.removeAll { it is Route.Pair }
                         if (stack.isEmpty()) stack.add(Route.Home)

@@ -2,10 +2,11 @@
 <resources>
     <string name="app_name">hivemind</string>
 
-    <!-- Tabs -->
-    <string name="tab_home">Home</string>
-    <string name="tab_devices">Devices</string>
-    <string name="tab_views">Views</string>
+    <!-- Home, and Settings opened from its gear -->
+    <string name="home_title">Home</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_devices">Devices</string>
+    <string name="settings_views">Views</string>
 
     <!-- How long ago: in lists, beside a wait or a state -->
     <string name="ago_now">now</string>
@@ -91,7 +92,6 @@
     <string name="its_device">its device</string>
     <string name="agent_gone">This agent is no longer on its board.</string>
     <string name="list_newest">To the newest</string>
-    <string name="view_chat">Chat</string>
     <string name="view_terminal">Terminal</string>
 
     <!-- An agent's chat -->
@@ -100,8 +100,10 @@
     <string name="chat_ended_not_held">Not followed any more: its workspace is not on its device now.</string>
     <string name="chat_ended_unpaired">Not followed any more: its device is not one of yours now.</string>
     <string name="chat_result">Result</string>
-    <string name="chat_show_result">Show what it gave back</string>
-    <string name="chat_hide_result">Hide what it gave back</string>
+    <string name="tool_open">Open</string>
+    <string name="tool_input">Input</string>
+    <string name="tool_output">Output</string>
+    <string name="tool_no_output">No output yet.</string>
 
     <!-- The phone's lock, before starting or closing an agent -->
     <string name="lock_start_title">Start %s</string>

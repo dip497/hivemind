@@ -3,7 +3,6 @@ package com.hivemind.phone.chat
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,27 +15,20 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.hivemind.phone.R
 import com.hivemind.phone.core.ConversationEnded
@@ -47,11 +39,12 @@ import com.hivemind.phone.ui.common.FollowTheNewest
 import com.hivemind.phone.ui.common.NewestButton
 import com.hivemind.phone.ui.theme.Mono
 
-/** The ended note's key in the list: a number, which no entry's id (text) equals. */
+/** The ended note's key in the list, and the end's: numbers, which no entry's id (text) equals. */
 private const val ENDED = -1
+private const val END = -2
 
 /** How an entry is drawn, so that the list reuses a row only for one drawn alike. */
-private enum class Kind { TOOL, RESULT, PERSON, AGENT, ENDED }
+private enum class Kind { TOOL, RESULT, PERSON, AGENT, ENDED, END }
 
 private fun kindOf(entry: Entry): Kind = when (entry.said) {
     is Said.ToolUse -> Kind.TOOL
@@ -62,24 +55,34 @@ private fun kindOf(entry: Entry): Kind = when (entry.said) {
 
 /**
  * What an agent and the person say to each other, as a chat (design P7): the person's words in
- * bubbles, the agent's as light markdown, and each tool it used as one row, what the tool gave back
- * folded under it. An append-only list keyed by entry, following the newest until the person
- * scrolls up, as the terminal does.
+ * bubbles, the agent's as light markdown, and each tool it used as one row that opens the use,
+ * [onTool], by its entry's id. The newest is at the bottom, drawn from there up, so a keyboard that
+ * opens takes room from the top and leaves what the person reads where it is; the list follows the
+ * newest until the person scrolls up. [end], while [endKey] is not null, is the last thing in it:
+ * what the agent waits on, where it stopped.
  */
 @Composable
-fun ChatView(chat: Chat, modifier: Modifier = Modifier) {
+fun ChatView(
+    chat: Chat,
+    onTool: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    endKey: Any? = null,
+    end: @Composable () -> Unit = {},
+) {
     val colors = MaterialTheme.colorScheme
 
     FollowTheNewest(chat.follow)
+    LaunchedEffect(endKey) { if (endKey != null) chat.follow.grew(0) }
 
     Box(modifier) {
         LazyColumn(
             state = chat.follow.list,
+            reverseLayout = true,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Bottom),
         ) {
-            items(chat.entries, key = { it.id }, contentType = ::kindOf) { entry -> EntryRow(entry, chat) }
+            if (endKey != null) item(key = END, contentType = Kind.END) { end() }
             chat.ended?.let { why ->
                 item(key = ENDED, contentType = Kind.ENDED) {
                     Text(
@@ -91,6 +94,7 @@ fun ChatView(chat: Chat, modifier: Modifier = Modifier) {
                     )
                 }
             }
+            items(chat.entries.asReversed(), key = { it.id }, contentType = ::kindOf) { entry -> EntryRow(entry, chat, onTool) }
         }
         when {
             !chat.heard -> CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -100,7 +104,7 @@ fun ChatView(chat: Chat, modifier: Modifier = Modifier) {
                 modifier = Modifier.align(Alignment.Center),
             )
         }
-        NewestButton(chat.follow) { chat.last }
+        NewestButton(chat.follow) { 0 }
     }
 }
 
@@ -113,12 +117,12 @@ private fun endedNote(why: ConversationEnded): String = when (why) {
 }
 
 @Composable
-private fun EntryRow(entry: Entry, chat: Chat) {
+private fun EntryRow(entry: Entry, chat: Chat, onTool: (String) -> Unit) {
     when (val said = entry.said) {
         // Its result is read here, by the row alone: when it comes, this row redraws, not the list.
-        is Said.ToolUse -> ToolRow(said.tool.name, said.tool.about, chat.result(said.tool.id))
+        is Said.ToolUse -> ToolRow(said.tool.name, said.tool.about, chat.result(said.tool.id)) { onTool(entry.id) }
         // A result whose use was told before what is shown began.
-        is Said.ToolOutput -> ToolRow(stringResource(R.string.chat_result), null, said.result)
+        is Said.ToolOutput -> ToolRow(stringResource(R.string.chat_result), null, said.result) { onTool(entry.id) }
         is Said.Person -> PersonSaid(said.text)
         is Said.Agent -> Markdown(said.text)
     }
@@ -133,55 +137,38 @@ private fun PersonSaid(text: String) {
     }
 }
 
-/** A tool used: one row, `name · about`; tapped, what it gave back unfolds under it, red when it failed. */
+/** A tool used: one line, its name and what it is about, a long path cut in the middle; red when it failed. */
 @Composable
-private fun ToolRow(name: String, about: String?, result: ToolResult?) {
-    var open by rememberSaveable { mutableStateOf(false) }
+private fun ToolRow(name: String, about: String?, result: ToolResult?, onOpen: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val failed = result?.error == true
-    val tint = if (failed) colors.error else colors.onSurfaceVariant
-    val label = stringResource(if (open) R.string.chat_hide_result else R.string.chat_show_result)
-    Column(
+    val tint = if (result?.error == true) colors.error else colors.onSurfaceVariant
+    Row(
         Modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.extraSmall)
-            .clickable(enabled = result != null, onClickLabel = label) { open = !open }
-            .padding(vertical = 4.dp),
+            .clickable(onClickLabel = stringResource(R.string.tool_open), onClick = onOpen)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (result == null) {
-                Spacer(Modifier.size(18.dp))
-            } else {
-                Icon(
-                    if (open) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = tint,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
+        Text(name, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium, color = tint, maxLines = 1)
+        if (about != null) {
             Text(
-                buildAnnotatedString {
-                    withStyle(SpanStyle(fontWeight = FontWeight.Medium)) { append(name) }
-                    if (about != null) {
-                        append(" · ")
-                        withStyle(SpanStyle(fontFamily = Mono)) { append(about) }
-                    }
-                },
-                style = MaterialTheme.typography.labelLarge,
-                color = tint,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 4.dp),
-            )
-        }
-        if (open && result != null) {
-            Text(
-                result.text,
-                style = MaterialTheme.typography.bodySmall,
+                about,
+                style = MaterialTheme.typography.labelMedium,
                 fontFamily = Mono,
-                color = if (failed) colors.error else colors.onSurface,
-                modifier = Modifier.padding(start = 22.dp, top = 4.dp),
+                color = if (result?.error == true) colors.error else colors.tertiary,
+                maxLines = 1,
+                overflow = TextOverflow.MiddleEllipsis,
+                modifier = Modifier.padding(start = 8.dp).weight(1f),
             )
+        } else {
+            Spacer(Modifier.weight(1f))
         }
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = colors.tertiary,
+            modifier = Modifier.size(18.dp),
+        )
     }
 }
