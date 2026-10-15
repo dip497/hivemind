@@ -22,7 +22,7 @@ struct AgentSection: Identifiable {
     }
 }
 
-/// How an agent's state reads and shows, and what it may be asked.
+/// How an agent's state reads, and what it may be asked; `StateMark` shows it.
 enum AgentLook {
     static func word(_ state: AgentState) -> String {
         switch state {
@@ -34,17 +34,6 @@ enum AgentLook {
         case .interrupted: return "stopped"
         case .limited: return "at its limit"
         case .exited: return "exited"
-        }
-    }
-
-    static func color(_ state: AgentState) -> Color {
-        switch state {
-        case .working: return .green
-        case .waiting: return .orange
-        case .failed: return .red
-        case .limited: return .yellow
-        case .done: return .blue
-        case .idle, .interrupted, .exited: return .gray
         }
     }
 

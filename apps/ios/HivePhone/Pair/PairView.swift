@@ -37,6 +37,7 @@ struct PairView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(20)
         }
+        .background(Look.background)
         .navigationTitle("Pair with hivemind")
         .task(id: model.pendingLink) { takePendingLink() }
     }
@@ -44,52 +45,58 @@ struct PairView: View {
     private var form: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text("On your computer, open Settings → Connect, and scan the code it shows.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Look.secondary)
             if scanning {
                 QRScanner { code in
                     scanning = false
                     pair(code)
                 }
                 .frame(height: 320)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .clipShape(RoundedRectangle(cornerRadius: Look.cardRadius, style: .continuous))
             } else {
                 Button {
                     scanning = true
                 } label: {
                     Label("Scan the code", systemImage: "qrcode.viewfinder")
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(.filledPill)
                 .disabled(busy)
             }
             Text("Or paste the link it shows")
                 .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Look.text)
             HStack(spacing: 10) {
                 TextField("hivemind://connect/…", text: $link)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
+                    .font(.callout.monospaced())
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
                     .submitLabel(.go)
                     .onSubmit { pair(link) }
                     .accessibilityIdentifier("pair.link")
+                    .padding(.horizontal, 14)
+                    .frame(height: 40)
+                    .overlay { Capsule().strokeBorder(Look.outline, lineWidth: 1) }
                 PasteButton(payloadType: String.self) { strings in
                     guard let pasted = strings.first else { return }
                     link = pasted
                     pair(pasted)
                 }
                 .labelStyle(.iconOnly)
+                .buttonBorderShape(.capsule)
+                // The system draws its label white: a dark ground in both looks keeps it readable.
+                .tint(Color(uiColor: Tones.tone(0x171717, 0x3d3d3d)))
             }
             Button("Pair") { pair(link) }
-                .buttonStyle(.bordered)
+                .buttonStyle(.outlinedPill)
                 .disabled(busy || link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             if busy {
                 ProgressView(progress)
             }
             if let failure {
                 Text(failure)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Look.failed)
                     .accessibilityIdentifier("pair.error")
             }
         }
@@ -177,7 +184,7 @@ private struct ConnectingCard: View {
         let computer = connecting.offering()
         VStack(alignment: .leading, spacing: 16) {
             Text("Check that \(computer) shows these words:")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Look.secondary)
             Text(connecting.words().joined(separator: " · "))
                 .font(.largeTitle.weight(.semibold))
                 .accessibilityIdentifier("connect.words")
@@ -186,11 +193,11 @@ private struct ConnectingCard: View {
                 Text("\(computer) says this phone is \(whose.map { "\($0)'s" } ?? "its person's"). Do the words match?")
                     .accessibilityIdentifier("connect.told")
                 Button(whose.map { "Yes, make this phone \($0)'s" } ?? "Yes, the words match") { answer(true) }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.filledPill)
                     .disabled(busy)
                     .accessibilityIdentifier("connect.yes")
                 Button("No") { answer(false) }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.outlinedPill)
                     .disabled(busy)
                     .accessibilityIdentifier("connect.no")
             } else {
@@ -211,14 +218,16 @@ private struct PairedCard: View {
                 .font(.title3.weight(.semibold))
             if let person = paired.person {
                 HStack(spacing: 10) {
-                    Circle()
-                        .fill(Accent.color(person.color) ?? Color.accentColor)
-                        .frame(width: 14, height: 14)
+                    if let color = Accent.color(person.color) {
+                        Circle()
+                            .fill(color)
+                            .frame(width: 14, height: 14)
+                    }
                     Text("This phone is \(person.name)'s.")
                 }
             }
             Button("Continue", action: done)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.filledPill)
         }
     }
 }

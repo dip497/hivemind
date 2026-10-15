@@ -55,9 +55,13 @@ final class ChatView: UIView, UITableViewDataSource, UITableViewDelegate {
         var look = UIButton.Configuration.filled()
         look.image = UIImage(systemName: "arrow.down.to.line")
         look.cornerStyle = .capsule
+        look.baseBackgroundColor = Tones.text
+        look.baseForegroundColor = Tones.onPrimary
         newest = UIButton(configuration: look)
         super.init(frame: .zero)
 
+        backgroundColor = Tones.background
+        list.backgroundColor = Tones.background
         list.dataSource = self
         list.delegate = self
         list.separatorStyle = .none
@@ -68,7 +72,7 @@ final class ChatView: UIView, UITableViewDataSource, UITableViewDelegate {
         addSubview(list)
 
         empty.text = "Nothing said yet"
-        empty.textColor = .secondaryLabel
+        empty.textColor = Tones.tertiary
         empty.font = .preferredFont(forTextStyle: .callout)
         empty.textAlignment = .center
         list.backgroundView = empty

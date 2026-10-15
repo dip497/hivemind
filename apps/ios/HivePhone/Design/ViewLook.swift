@@ -1,9 +1,10 @@
 import UIKit
 
 /// The screen and the look the app gives a community view (design §5.5, §6.1; the view protocol's
-/// `viewport` and `theme`). The look is the app's own: the system's colours its screens are drawn
-/// in, for dark or light and the person's contrast setting; the person's colour as its accent, as
-/// the app is tinted with it (`RootView`); an agent's state as `AgentLook.color` paints it; and the
+/// `viewport` and `theme`). The look is the app's own (`Tones`), for dark or light and the person's
+/// contrast setting: its page, raised cards and chosen chips from bg up to bg4, its text from fg to
+/// fg3, its hairlines; the person's colour as the accent, else the text colour; an agent's state as
+/// the app marks it (what waits on the person amber, what failed red, what is done green); and the
 /// terminal's background (`TerminalPalette`). Each by the tokens the desktop gives views, as
 /// `#rrggbb`: the computer refuses any other colour.
 enum ViewLook {
@@ -13,41 +14,41 @@ enum ViewLook {
             traits.userInterfaceStyle = dark ? .dark : .light
             traits.accessibilityContrast = increasedContrast ? .high : .normal
         }
-        let ground = UIColor.systemBackground.resolvedColor(with: traits)
+        let ground = Tones.background.resolvedColor(with: traits)
         func token(_ color: UIColor) -> String {
             hex(color.resolvedColor(with: traits), over: ground)
         }
-        let tint = colour(accent) ?? token(UIColor.systemBlue)
+        let tint = colour(accent) ?? token(Tones.text)
         let colors = [
-            "bg": token(UIColor.systemBackground),
-            "bg2": token(UIColor.secondarySystemBackground),
-            "bg3": token(UIColor.tertiarySystemBackground),
-            "bg4": token(dark ? UIColor.systemGray4 : UIColor.systemGray5),
-            "fg": token(UIColor.label),
-            "fg2": token(UIColor.secondaryLabel),
-            "fg3": token(UIColor.tertiaryLabel),
-            "line": token(UIColor.opaqueSeparator),
-            "line2": token(UIColor.systemGray2),
+            "bg": token(Tones.background),
+            "bg2": token(Tones.raised),
+            "bg3": token(Tones.selected),
+            "bg4": token(Tones.selected),
+            "fg": token(Tones.text),
+            "fg2": token(Tones.secondary),
+            "fg3": token(Tones.tertiary),
+            "line": token(Tones.hairline),
+            "line2": token(Tones.outline),
             "brand": tint,
             "accent": tint,
-            "ok": token(UIColor.systemGreen),
-            "warn": token(UIColor.systemOrange),
-            "err": token(UIColor.systemRed),
-            "info": token(UIColor.systemBlue),
+            "ok": token(Tones.done),
+            "warn": token(Tones.waiting),
+            "err": token(Tones.failed),
+            "info": tint,
         ]
         let status = [
-            "working": token(UIColor.systemGreen),
-            "attention": token(UIColor.systemOrange),
-            "done": token(UIColor.systemBlue),
-            "idle": token(UIColor.systemGray),
-            "exited": token(UIColor.systemGray),
-            "failed": token(UIColor.systemRed),
+            "working": token(Tones.text),
+            "attention": token(Tones.waiting),
+            "done": token(Tones.done),
+            "idle": token(Tones.tertiary),
+            "exited": token(Tones.tertiary),
+            "failed": token(Tones.failed),
         ]
         return ViewTheme(
             mode: dark ? .dark : .light,
             colors: colors,
             accent: tint,
-            radius: 12,
+            radius: 18,
             fonts: ViewFonts(ui: "-apple-system, system-ui, sans-serif", mono: "ui-monospace, Menlo, monospace"),
             surface: colors["bg2"],
             terminalBackground: token(UIColor(cgColor: TerminalPalette(dark: dark).background)),

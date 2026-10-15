@@ -1,10 +1,10 @@
 import SwiftUI
 
 /// One agent (design §6.4, P7): what it and the person said, as a chat, or its live terminal,
-/// fitted to the width and following the newest line; what it waits on, as a banner with its
-/// answers; a reply box, and Type, which types into its terminal as the person; Stop, its changes,
-/// and Close. The chat and the terminal are both followed while the screen is up, so switching
-/// between them waits on nothing.
+/// fitted to the width and following the newest line; what it waits on, as a card with its
+/// answers; a composer whose send stops the agent's turn while nothing is typed, and Type, which
+/// types into its terminal as the person; its changes, and Close under More. The chat and the
+/// terminal are both followed while the screen is up, so switching between them waits on nothing.
 @MainActor
 struct AgentScreen: View {
     enum Showing {
@@ -48,7 +48,7 @@ struct AgentScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             if let agent, let waiting = agent.waiting {
-                WaitBanner(model: model, agent: agent, waiting: waiting) {
+                WaitCard(model: model, agent: agent, waiting: waiting) {
                     composing = Composing(agent: agent, waiting: waiting)
                 } type: {
                     typeIntoTerminal()
@@ -60,16 +60,16 @@ struct AgentScreen: View {
                     Text("Terminal").tag(Showing.terminal)
                 }
                 .pickerStyle(.segmented)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 4)
             }
             if shown == .terminal, let note {
                 Text(note)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Look.secondary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
-                    .background(.bar)
+                    .background(Look.raised)
             }
             ZStack {
                 ChatScreen(session: chat, shown: shown == .chat)
@@ -77,34 +77,34 @@ struct AgentScreen: View {
                 TerminalScreen(session: session, shown: shown == .terminal)
                     .accessibilityHidden(shown != .terminal)
             }
-            replyBar
+            composer
         }
+        .background(Look.background)
         .navigationTitle(agent?.name ?? "Agent")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                title
+            }
             ToolbarItemGroup(placement: .topBarTrailing) {
-                if let agent, AgentLook.offersStop(agent) {
-                    Button {
-                        model.act { _ = try await model.phone.interrupt(agent: ref) }
-                    } label: {
-                        Image(systemName: "stop.circle")
-                    }
-                    .accessibilityLabel("Stop")
-                }
                 Button {
                     showingDiff = true
                 } label: {
                     Image(systemName: "plus.forwardslash.minus")
                 }
                 .accessibilityLabel("What it changed")
-                Button(role: .destructive) {
-                    Task {
-                        if await model.close(ref, named: agent?.name ?? "this agent") { dismiss() }
+                Menu {
+                    Button(role: .destructive) {
+                        Task {
+                            if await model.close(ref, named: agent?.name ?? "this agent") { dismiss() }
+                        }
+                    } label: {
+                        Label("Close", systemImage: "xmark.circle")
                     }
                 } label: {
-                    Image(systemName: "xmark.circle")
+                    Image(systemName: "ellipsis.circle")
                 }
-                .accessibilityLabel("Close")
+                .accessibilityLabel("More")
             }
         }
         .navigationDestination(isPresented: $showingDiff) {
@@ -121,6 +121,24 @@ struct AgentScreen: View {
             session.stop()
             chat.stop()
         }
+    }
+
+    /// Its name, and under it its state, workspace and machine.
+    private var title: some View {
+        VStack(spacing: 1) {
+            Text(agent?.name ?? "Agent")
+                .font(.headline)
+                .tracking(-0.34)
+                .foregroundStyle(Look.text)
+                .lineLimit(1)
+            if let agent {
+                Text("\(AgentLook.word(agent.state)) · \(agent.workspaceName) · \(agent.machine)")
+                    .font(.caption)
+                    .foregroundStyle(Look.tertiary)
+                    .lineLimit(1)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 
     /// What stands between the person and the terminal, if anything.
@@ -152,31 +170,56 @@ struct AgentScreen: View {
         Task { session.beginTyping() }
     }
 
-    private var replyBar: some View {
-        HStack(spacing: 10) {
+    /// A raised card pinned under the conversation: Type on the left, the message, and a round send
+    /// on the right, which stops the agent's turn while nothing is typed and it can be stopped.
+    private var composer: some View {
+        HStack(spacing: 8) {
             Button {
                 typeIntoTerminal()
             } label: {
                 Image(systemName: "keyboard")
+                    .foregroundStyle(Look.secondary)
+                    .frame(width: 36, height: 36)
             }
             .accessibilityLabel("Type into its terminal")
             .disabled(session.holder != nil || session.end != nil)
             TextField("Message \(agent?.name ?? "it")", text: $reply)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
+                .foregroundStyle(Look.text)
                 .submitLabel(.send)
                 .onSubmit(send)
                 .accessibilityIdentifier("agent.reply")
-            Button(action: send) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.title2)
+            if reply.isEmpty, let agent, AgentLook.offersStop(agent) {
+                Button {
+                    model.act { _ = try await model.phone.interrupt(agent: ref) }
+                } label: {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Look.onPrimary)
+                        .frame(width: 34, height: 34)
+                        .background(Look.text, in: Circle())
+                }
+                .accessibilityLabel("Stop")
+            } else {
+                let empty = reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                Button(action: send) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Look.onPrimary)
+                        .frame(width: 34, height: 34)
+                        .background(Look.text.opacity(empty ? 0.25 : 1), in: Circle())
+                }
+                .accessibilityLabel("Send")
+                .accessibilityIdentifier("agent.send")
+                .disabled(empty)
             }
-            .accessibilityLabel("Send")
-            .accessibilityIdentifier("agent.send")
-            .disabled(reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
+        .padding(.leading, 6)
+        .padding(.trailing, 8)
+        .padding(.vertical, 6)
+        .raisedCard(floating: true)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.bar)
     }
 
     /// A message to the agent (`send`), as the person; kept in the box if it does not go.
@@ -200,10 +243,10 @@ struct AgentScreen: View {
     }
 }
 
-/// What the agent waits on, with the answers it allows; what the phone cannot answer in a tap is
-/// answered in its terminal.
+/// What the agent waits on, as a card over the conversation, with the answers it allows; what the
+/// phone cannot answer in a tap is answered in its terminal.
 @MainActor
-struct WaitBanner: View {
+struct WaitCard: View {
     let model: PhoneModel
     let agent: Agent
     let waiting: Waiting
@@ -211,18 +254,26 @@ struct WaitBanner: View {
     let type: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(NeedsSummary.why(waiting.kind))
-                .font(.subheadline.weight(.semibold))
-            if Answers(waiting) == .terminal {
-                Button("Answer in its terminal", action: type)
-                    .buttonStyle(.bordered)
-            } else {
-                AnswerButtons(model: model, agent: agent, waiting: waiting, compose: compose)
+        TimelineView(.everyMinute) { context in
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Dot(color: Look.waiting)
+                    Text("\(NeedsSummary.asked(waiting.kind)) · \(Ago.span(since: waiting.since, now: context.date))")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(Look.secondary)
+                }
+                if Answers(waiting) == .terminal {
+                    Button("Answer in its terminal", action: type)
+                        .buttonStyle(.outlinedPill)
+                } else {
+                    AnswerButtons(model: model, agent: agent, waiting: waiting, compose: compose)
+                }
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .raisedCard()
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.12))
     }
 }

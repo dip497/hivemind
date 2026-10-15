@@ -35,13 +35,13 @@ enum NeedsSummary {
         return "\(device.name) is away · last heard \(Ago.span(since: heard, now: now)) ago"
     }
 
-    /// Why an agent waits, said as its row and its banner say it.
-    static func why(_ kind: WaitKind) -> String {
+    /// What an agent waiting on the person asks for, as the card over its answers names it.
+    static func asked(_ kind: WaitKind) -> String {
         switch kind {
-        case .permission: return "Asks for a permission"
-        case .question: return "Asks a question"
-        case .plan: return "Has a plan for you to approve"
-        case .other: return "Waits on you"
+        case .permission: return "Permission requested"
+        case .question: return "Question"
+        case .plan: return "Plan to approve"
+        case .other: return "Waiting on you"
         }
     }
 }

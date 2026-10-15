@@ -13,22 +13,32 @@ struct DevicesTab: View {
         NavigationStack {
             TimelineView(.everyMinute) { context in
                 List {
-                    Section("This phone") {
+                    Section {
                         if let person = model.overview.person {
                             HStack(spacing: 10) {
-                                Circle()
-                                    .fill(Accent.color(person.color) ?? Color.accentColor)
-                                    .frame(width: 12, height: 12)
+                                if let color = Accent.color(person.color) {
+                                    Circle()
+                                        .fill(color)
+                                        .frame(width: 12, height: 12)
+                                }
                                 Text("\(person.name)'s")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(Look.text)
                             }
+                            .pageRow()
                         } else {
                             Text("Whose it is comes with the first device it pairs with.")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Look.secondary)
+                                .pageRow()
                         }
+                    } header: {
+                        GroupLabel("This phone")
+                            .textCase(nil)
                     }
-                    Section("Devices") {
+                    Section {
                         ForEach(model.overview.devices, id: \.id) { device in
                             DeviceRow(device: device, now: context.date)
+                                .pageRow()
                                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                     Button("Unpair", role: .destructive) {
                                         unpairing = device
@@ -36,11 +46,19 @@ struct DevicesTab: View {
                                     }
                                 }
                         }
+                    } header: {
+                        GroupLabel("Devices")
+                            .textCase(nil)
                     }
                     Section {
                         Button("Pair another device", action: pairAnother)
+                            .buttonStyle(.outlinedPill)
+                            .listRowBackground(Look.background)
+                            .listRowSeparator(.hidden)
                     }
                 }
+                .listStyle(.plain)
+                .pageGround()
             }
             .navigationTitle("Devices")
             .confirmationDialog(
@@ -63,23 +81,29 @@ struct DevicesTab: View {
     }
 }
 
-/// A device: its name, what it is, and whether the phone reaches it now.
+/// A device: a dot, filled while the phone reaches it and hollow when not; its name, whether the
+/// phone reaches it now or when it was last heard, and what it is.
 struct DeviceRow: View {
     let device: Device
     let now: Date
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .foregroundStyle(device.reachable ? Color.green : Color.secondary)
-                .frame(width: 24)
+            Dot(color: device.reachable ? Look.done : Look.tertiary, filled: device.reachable)
             VStack(alignment: .leading, spacing: 2) {
                 Text(device.name)
+                    .foregroundStyle(Look.text)
+                    .lineLimit(1)
                 Text(state)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.footnote)
+                    .foregroundStyle(Look.tertiary)
+                    .lineLimit(1)
             }
+            Spacer(minLength: 8)
+            Image(systemName: icon)
+                .foregroundStyle(Look.tertiary)
         }
+        .padding(.vertical, 2)
     }
 
     private var icon: String {

@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The home tab (design §6.2): what waits on the person, the longest-waiting first, with the
-/// answers each wait allows on its row; a device away, and what it last said.
+/// The home tab (design §6.2): what waits on the person, the longest-waiting first, each a card
+/// with the answers its wait allows; a device away, and what it last said.
 @MainActor
 struct NeedsTab: View {
     let model: PhoneModel
@@ -11,31 +11,35 @@ struct NeedsTab: View {
     var body: some View {
         NavigationStack(path: $path) {
             TimelineView(.everyMinute) { context in
-                List {
-                    ForEach(NeedsSummary.away(model.overview.devices), id: \.id) { device in
-                        Label(NeedsSummary.awayLine(device, now: context.date), systemImage: "wifi.slash")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                    let asking = NeedsSummary.asking(model.overview.devices)
-                    ForEach(asking, id: \.id) { device in
-                        Label(NeedsSummary.askingLine(device), systemImage: "ellipsis")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                    if model.overview.needs.isEmpty,
-                       let nothing = NeedsSummary.nothing(working: model.overview.working, asking: asking) {
-                        Text(nothing)
-                            .foregroundStyle(.secondary)
-                    }
-                    ForEach(model.overview.needs, id: \.at) { agent in
-                        NavigationLink(value: agent.at) {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        ForEach(NeedsSummary.away(model.overview.devices), id: \.id) { device in
+                            Label(NeedsSummary.awayLine(device, now: context.date), systemImage: "wifi.slash")
+                                .font(.footnote)
+                                .foregroundStyle(Look.tertiary)
+                        }
+                        let asking = NeedsSummary.asking(model.overview.devices)
+                        ForEach(asking, id: \.id) { device in
+                            Label(NeedsSummary.askingLine(device), systemImage: "ellipsis")
+                                .font(.footnote)
+                                .foregroundStyle(Look.tertiary)
+                        }
+                        if model.overview.needs.isEmpty,
+                           let nothing = NeedsSummary.nothing(working: model.overview.working, asking: asking) {
+                            Text(nothing)
+                                .font(.subheadline)
+                                .foregroundStyle(Look.secondary)
+                        }
+                        ForEach(model.overview.needs, id: \.at) { agent in
                             NeedRow(model: model, agent: agent, now: context.date) { waiting in
                                 composing = Composing(agent: agent, waiting: waiting)
                             }
                         }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
                 }
+                .background(Look.background)
             }
             .navigationTitle("Needs you")
             .navigationDestination(for: AgentRef.self) { ref in
@@ -55,8 +59,8 @@ struct Composing: Identifiable {
     var id: AgentRef { agent.at }
 }
 
-/// One wait (design §6.2): the agent, its workspace and machine, why it waits and for how long, and
-/// the answers that fit on its row.
+/// One wait (design §6.2), as a raised card: what it asks and for how long, the agent with its
+/// workspace and machine, which open the agent; and the answers that fit on the card.
 @MainActor
 struct NeedRow: View {
     let model: PhoneModel
@@ -65,35 +69,49 @@ struct NeedRow: View {
     let compose: (Waiting) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(agent.name)
-                    .font(.headline)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                if let waiting = agent.waiting {
-                    Text(Ago.span(since: waiting.since, now: now))
-                        .monospacedDigit()
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            NavigationLink(value: agent.at) {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let waiting = agent.waiting {
+                        HStack(spacing: 8) {
+                            Dot(color: Look.waiting)
+                            Text(NeedsSummary.asked(waiting.kind))
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(Look.secondary)
+                            Spacer(minLength: 8)
+                            Text(Ago.span(since: waiting.since, now: now))
+                                .monospacedDigit()
+                                .font(.footnote)
+                                .foregroundStyle(Look.tertiary)
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(agent.name)
+                            .font(.headline)
+                            .tracking(-0.34)
+                            .foregroundStyle(Look.text)
+                            .lineLimit(1)
+                        Text("\(agent.workspaceName) · \(agent.machine)")
+                            .font(.footnote)
+                            .foregroundStyle(Look.tertiary)
+                            .lineLimit(1)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            Text("\(agent.workspaceName) · \(agent.machine)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            .buttonStyle(.plain)
             if let waiting = agent.waiting {
-                Text(NeedsSummary.why(waiting.kind))
-                    .font(.subheadline)
                 AnswerButtons(model: model, agent: agent, waiting: waiting) { compose(waiting) }
             }
         }
-        .padding(.vertical, 4)
+        .padding(16)
+        .raisedCard()
     }
 }
 
-/// The answers a wait allows, as buttons (design §6.2): Allow and Deny at once; a plan or a question
-/// opens to its sheet.
+/// The answers a wait allows (design §6.2), as full-width pills, the first filled: Allow over Deny
+/// at once; a plan or a question opens to its sheet.
 @MainActor
 struct AnswerButtons: View {
     let model: PhoneModel
@@ -104,18 +122,18 @@ struct AnswerButtons: View {
     var body: some View {
         switch Answers(waiting) {
         case .decide:
-            HStack(spacing: 12) {
+            VStack(spacing: 8) {
                 Button("Allow") { model.answer(agent, waiting, with: .decide(decision: .allow)) }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.filledPill)
                 Button("Deny", role: .destructive) { model.answer(agent, waiting, with: .decide(decision: .deny)) }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.outlinedPill)
             }
         case .plan:
             Button("Review the plan", action: compose)
-                .buttonStyle(.bordered)
+                .buttonStyle(.outlinedPill)
         case .reply:
             Button("Reply", action: compose)
-                .buttonStyle(.bordered)
+                .buttonStyle(.outlinedPill)
         case .terminal:
             EmptyView()
         }

@@ -21,17 +21,22 @@ struct ViewsTab: View {
                     NavigationLink(value: row.view) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(row.view.info.name)
+                                .foregroundStyle(Look.text)
                                 .lineLimit(1)
                             Text(row.place)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(.footnote)
+                                .foregroundStyle(Look.tertiary)
                                 .lineLimit(1)
                         }
+                        .padding(.vertical, 2)
                     }
                     .disabled(row.away)
                     .opacity(row.away ? 0.5 : 1)
+                    .pageRow()
                 }
             }
+            .listStyle(.plain)
+            .pageGround()
             .overlay {
                 if rows.isEmpty {
                     if asked {

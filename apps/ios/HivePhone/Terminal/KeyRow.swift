@@ -17,6 +17,7 @@ final class KeyRow: UIInputView {
         for key in Self.keys {
             var look = UIButton.Configuration.gray()
             look.title = key.title
+            look.baseForegroundColor = Tones.text
             look.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 2, bottom: 4, trailing: 2)
             let token = key.token
             let button = UIButton(configuration: look, primaryAction: UIAction { _ in press([token]) })
@@ -25,6 +26,7 @@ final class KeyRow: UIInputView {
         }
         var hideLook = UIButton.Configuration.plain()
         hideLook.image = UIImage(systemName: "keyboard.chevron.compact.down")
+        hideLook.baseForegroundColor = Tones.secondary
         let hideButton = UIButton(configuration: hideLook, primaryAction: UIAction { _ in hide() })
         hideButton.accessibilityLabel = "Hide the keyboard"
         row.addArrangedSubview(hideButton)

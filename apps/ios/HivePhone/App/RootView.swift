@@ -21,7 +21,7 @@ struct RootView: View {
                 MainTabs(model: model)
             }
         }
-        .tint(Accent.color(model.overview.person?.color))
+        .tint(Look.text)
         .onOpenURL { url in model.pendingLink = url.absoluteString }
         .onChange(of: phase, initial: true) { _, phase in
             switch phase {

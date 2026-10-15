@@ -14,7 +14,7 @@ struct ChatRowView: View {
         case .note(let why):
             Label(why, systemImage: "info.circle")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Look.tertiary)
                 .frame(maxWidth: .infinity)
         }
     }
@@ -26,12 +26,14 @@ struct ChatRowView: View {
             HStack {
                 Spacer(minLength: 48)
                 Text(text)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.accentColor.opacity(0.16), in: RoundedRectangle(cornerRadius: 16))
+                    .foregroundStyle(Look.text)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Look.selected, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
         case .agent(let pieces):
             MarkdownView(pieces: pieces)
+                .foregroundStyle(Look.text)
         case .tool(let tool, let result):
             ToolRow(tool: tool, result: result, open: open)
         case .result(let result):
@@ -55,9 +57,9 @@ private struct MarkdownView: View {
                     AnyView(MarkdownView(pieces: inner))
                         .padding(.leading, 13)
                         .overlay(alignment: .leading) {
-                            Rectangle().fill(.quaternary).frame(width: 3)
+                            Rectangle().fill(Look.hairline).frame(width: 3)
                         }
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Look.secondary)
                 }
             }
         }
@@ -105,7 +107,7 @@ private struct BlockView: View {
                 if let language {
                     Text(language)
                         .font(.caption2.monospaced())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Look.tertiary)
                 }
                 // As written: its lines are not wrapped, it scrolls across instead.
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -116,9 +118,9 @@ private struct BlockView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(10)
-            .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+            .background(Look.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         case .rule:
-            Divider()
+            Rectangle().fill(Look.hairline).frame(height: 1)
         case .table(let align, let head, let rows):
             ScrollView(.horizontal, showsIndicators: false) {
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 4) {
@@ -163,17 +165,17 @@ private struct ToolRow: View {
             HStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.caption)
-                    .foregroundStyle(failed ? Color.red : Color.secondary)
+                    .foregroundStyle(failed ? Look.failed : Look.tertiary)
                 Text(line)
                     .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Look.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 4)
                 if result != nil {
                     Image(systemName: open ? "chevron.down" : "chevron.right")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Look.tertiary)
                 }
             }
             if open, let result {
@@ -204,10 +206,10 @@ private struct ResultText: View {
     var body: some View {
         Text(result.text)
             .font(.caption.monospaced())
-            .foregroundStyle(result.error ? Color.red : Color.secondary)
+            .foregroundStyle(result.error ? Look.failed : Look.secondary)
             .lineLimit(24)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(8)
-            .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+            .background(Look.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }

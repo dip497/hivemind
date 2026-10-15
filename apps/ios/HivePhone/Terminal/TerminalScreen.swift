@@ -37,6 +37,8 @@ final class TerminalContainer: UIView {
         var look = UIButton.Configuration.filled()
         look.image = UIImage(systemName: "arrow.down.to.line")
         look.cornerStyle = .capsule
+        look.baseBackgroundColor = Tones.text
+        look.baseForegroundColor = Tones.onPrimary
         newest = UIButton(configuration: look)
         super.init(frame: .zero)
         addSubview(terminal)

@@ -10,6 +10,7 @@ struct HivePhoneApp: App {
 
     init() {
         _launch = State(initialValue: Launch.open())
+        Tones.styleBars()
     }
 
     var body: some Scene {
