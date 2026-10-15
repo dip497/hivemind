@@ -12,12 +12,10 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
-import org.robolectric.annotation.GraphicsMode
 
 /** The box a message is typed in, as a phone shows it. */
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "mdpi")
-@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ReplyBoxTest {
     @get:Rule
     val compose = createComposeRule()

@@ -27,13 +27,11 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
-import org.robolectric.annotation.GraphicsMode
 
 /** What an agent says, as the chat draws it (spec/markdown.md): read by the core, drawn natively, its
  *  text laid out as on a phone. */
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w360dp-h640dp-mdpi")
-@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class MarkdownTest {
     @get:Rule
     val compose = createComposeRule()

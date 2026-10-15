@@ -91,6 +91,9 @@ tasks.withType<Test>().configureEach {
     // The core built for this machine (scripts/phone/build-android.sh), which JNA loads in the
     // tests that run it, as it loads the app's own on a phone.
     systemProperty("jna.library.path", core.dir("host").asFile.path)
+    // One Robolectric sandbox for every test: the core is loaded once per process and its
+    // listeners call back into the sandbox that loaded it last.
+    systemProperty("robolectric.graphicsMode", "NATIVE")
 }
 
 dependencies {

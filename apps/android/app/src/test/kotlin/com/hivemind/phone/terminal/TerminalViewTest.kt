@@ -31,7 +31,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
-import org.robolectric.annotation.GraphicsMode
 
 /**
  * The terminal as drawn: each run at its column times the cell width (design §5.3), following the
@@ -39,7 +38,6 @@ import org.robolectric.annotation.GraphicsMode
  * written, kept the last in sight.
  */
 @RunWith(AndroidJUnit4::class)
-@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "mdpi")
 class TerminalViewTest {
     @get:Rule
