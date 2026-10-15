@@ -840,14 +840,15 @@ handleEffect(
 );
 // ── cross-repo: registry + transfer + links ─────────────────────────────
 handle("listWorkspaces", wrap(async () => listWorkspaces({ persistPrune: true })));
-// The Layers panel's Projects: every workspace here, with what runs in it now.
-handle("workspaceSummaries", wrap(async () => (await listWorkspaces({ persistPrune: false })).map((w): WorkspaceSummary => {
-  const statuses = (workspaceStore().getCore(w.repo)?.tiles ?? []).map((t) => {
+// The Layers panel's Projects: every workspace this computer holds, as a phone's Home lists them,
+// with what runs in it now.
+handle("workspaceSummaries", wrap(async () => heldBoards(workspaceStore()).map((h): WorkspaceSummary => {
+  const statuses = (h.core?.tiles ?? []).map((t) => {
     const s = control.status.get(t.id);
     return s ? tileStatusOf(s).status : null;
   });
-  return { repo: w.repo, title: w.title, ...workspaceCounts(statuses) };
-})));
+  return { repo: h.repo, title: h.name, ...workspaceCounts(statuses) };
+}).sort((a, b) => a.title.localeCompare(b.title))));
 handle(
   "resolveIssueRoot",
   wrap(async (_e, id: string) => ({ root: await resolveRootForIssue(id) })),
