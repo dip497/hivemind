@@ -196,6 +196,8 @@ struct HomeScreen: View {
             }
             ForEach(shown.filter { !$0.tree.isEmpty }, id: \.device) { home in
                 GroupLabel(home.computer)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                     .padding(.top, 16)
                     .padding(.bottom, 2)
                 ForEach(Listed.of("tree", [home]) { $0.tree }) { listed in entry(listed, now: now) }

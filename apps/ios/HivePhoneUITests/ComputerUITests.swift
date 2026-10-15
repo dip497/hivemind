@@ -2,14 +2,15 @@ import XCTest
 
 /// The app against a real computer (design §7): it pastes the link the computer's Settings → Your devices
 /// → Use on your phone shows, pairs, and is the person's; finds the computer and its agent on Home,
-/// and keeps a picture of Home, light and dark;
+/// and keeps a picture of Home;
 /// opens the agent on its chat, reads its line in its terminal (opened from the header, fitted to
 /// the phone), then what it and the person said in its chat; and sends it a message from the reply
 /// box, which it answers in the chat and in its terminal, still followed. Then, from Home's gear,
 /// the community view the computer offers the phone (P8): its page,
 /// served by the computer, shows the computer's agent; what the view may do at once (selecting a
 /// tile) the computer answers; what would start an agent waits for the phone's lock, whose prompt
-/// (a simulator always has a passcode) is cancelled, so nothing starts. Run by
+/// (a simulator always has a passcode) is cancelled, so nothing starts. Launched again, Home lists
+/// the agent once more, pictured dark. Run by
 /// apps/desktop/tests/e2e/phone-app.spec.ts (PHONE_APP=ios), which hands it the link and what to find
 /// there: xcodebuild gives the test runner each `TEST_RUNNER_<NAME>` it was given as `<NAME>`.
 /// Without a link it skips itself, so the app's own UI test run is unchanged. A computer's network,
@@ -66,9 +67,6 @@ final class ComputerUITests: XCTestCase {
         let row = showing(agent, in: app)
         XCTAssertTrue(row.waitForExistence(timeout: 120), "\(agent) is among the agents")
         keepHome("Home, light", app)
-        XCUIDevice.shared.appearance = .dark
-        keepHome("Home, dark", app)
-        XCUIDevice.shared.appearance = .light
         row.tap()
 
         // Its terminal, from the header: fitted to the phone, and the line the agent printed, as its
@@ -148,13 +146,19 @@ final class ComputerUITests: XCTestCase {
         XCTAssertTrue(cancel.waitForExistence(timeout: 10), "the passcode screen can be cancelled")
         cancel.tap()
         XCTAssertEqual(gone(why), .completed, "the lock's prompt went")
+
+        // Launched again, the phone reaches its computer and Home lists its agent; drawn dark this
+        // time for the picture (a test run's device appearance is not the app's under xcodebuild).
+        app.terminate()
+        app.launchArguments = ["-AppleInterfaceStyle", "Dark"]
+        app.launch()
+        XCTAssertTrue(showing(agent, in: app).waitForExistence(timeout: 120), "\(agent) is on Home after a launch")
+        keepHome("Home, dark", app)
     }
 
     /// Home as the phone drew it, kept with the run for a person to look at (phone-ios.yml uploads it).
     @MainActor
     private func keepHome(_ name: String, _ app: XCUIApplication) {
-        // A moment for an appearance change to be drawn.
-        _ = XCTWaiter.wait(for: [XCTestExpectation(description: "drawn")], timeout: 1)
         let shot = XCTAttachment(screenshot: app.screenshot())
         shot.name = name
         shot.lifetime = .keepAlways
