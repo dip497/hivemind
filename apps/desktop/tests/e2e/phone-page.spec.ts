@@ -2,7 +2,7 @@
 // with no computer and no network: its built modules and wasm (crates/hive-web/build.sh) served
 // from www by route. A 200-tile canvas opens in budget; an update touches only what changed; rows
 // away from the screen are skipped; past a few working agents, their dots stop breathing; a search
-// and a machine chosen narrow it.
+// and a machine chosen narrow it; the View menu regroups it; a fold is kept; each agent has its mark.
 import { test, expect, chromium, type Browser, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
@@ -41,10 +41,11 @@ const app = { open: (t) => window.calls.push(["open", t]), openTerminal: (...at)
   stop: async (a) => { window.calls.push(["stop", a.tile]); return true; }, close: async (a) => { window.calls.push(["close", a.tile]); return true; } };
 const screen = new Home(app, () => show());
 document.getElementById("app").append(screen.el);
-const show = () => screen.show(view.shown(screen.filter.query, screen.filter.machine ?? undefined, "desk", { now: Date.now(), offset: 0 }), view.overview("d", "desk"));
+const show = () => screen.show(view.shown(screen.filter.query, screen.filter.machine ?? undefined, "desk", { ...screen.choices.view(), now: Date.now(), offset: 0 }), view.overview("d", "desk"));
 const T = 1790000000000;
 window.snapshot = (n, answered) => {
-  const rows = [["w:w0", { of: "workspace", workspace: "w0", name: "api" }]];
+  const rows = [["w:w0", { of: "workspace", workspace: "w0", name: "api" }],
+    ["a:claude", { of: "agent", id: "claude", label: "Claude", icon: { viewBox: "0 0 24 24", shapes: [{ path: { d: "m4 4h16v16h-16z" } }, { circle: { cx: 12, cy: 12, r: 3, fill: "none", stroke: "currentColor", "stroke-width": "2" } }] } }]];
   for (let f = 0; f < 10; f++) rows.push(["f:w0/f" + f, { of: "frame", workspace: "w0", id: "f" + f, title: "frame " + f, color: "#336699", order: f, ...(f >= 5 ? { machine: { name: "box" } } : {}) }]);
   const lines = [];
   for (let i = 0; i < n; i++) {
@@ -262,7 +263,7 @@ test("a project whose only frame carries its name shows no frame row, its tiles 
     rows.push(tile("b0", "f1", 30), tile("c0", "f2", 31));
     (window as unknown as Driven).change({ t: "home", layout: { seq: 1, rows }, lines: { seq: 1, rows: [] } });
   });
-  await expect(page.locator("[data-tree] [data-project]")).toHaveText(["api+", "web+"]);
+  await expect(page.locator("[data-tree] [data-project] .name")).toHaveText(["api", "web"]);
   // "api" then "API" no more; a project of two frames keeps both.
   await expect(page.locator("[data-tree] [data-frame] .name")).toHaveText(["web", "fix"]);
   expect(await page.locator('[data-tree] [data-row="t:w0/a0"]').getAttribute("style")).toBe("--depth:0");
@@ -380,4 +381,88 @@ test("a row has no ⋯: a tap opens it, held it offers what can be done to it, s
     return { border: c.borderTopWidth, bg: c.backgroundColor, panel: getComputedStyle(p).backgroundColor, h: el.getBoundingClientRect().height, radius: c.borderTopLeftRadius };
   });
   expect(search).toEqual({ border: "0px", bg: search.panel, panel: search.panel, h: 36, radius: "10px" });
+});
+
+test("the View menu changes what Home lists: grouped by status, a heading for each with how many under it; the View button carries a dot while a choice is not its first", async () => {
+  test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
+  const page = await home();
+  await page.evaluate(() => (window as unknown as Driven).load(20, 0));
+  const chosen = page.locator("[data-view-open] [data-view-chosen]");
+  await expect(page.locator("[data-tree] [data-section]")).toHaveCount(0);
+  await expect(chosen).toBeHidden();
+  await page.locator("[data-view-open]").click();
+  const sheet = page.locator("[data-view-sheet]");
+  await expect(sheet.locator("[data-view] .label-small")).toHaveText(["Status", "Activity", "Group by", "Sort by"]);
+  await expect(sheet.locator('[data-view="groupBy"] .chip')).toHaveText(["Project", "Machine", "Date", "Status", "Agent", "None"]);
+  await sheet.locator('[data-view="groupBy"] .chip', { hasText: "Status" }).click();
+  await expect(sheet.locator('[data-view="groupBy"] .chip', { hasText: "Status" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("[data-tree] [data-section] .name")).toHaveText(["Needs you", "Working"]);
+  await expect(page.locator("[data-tree] [data-section] [data-rows]")).toHaveText(["5", "15"]);
+  await expect(page.locator("[data-tree] [data-machine], [data-tree] [data-project], [data-tree] [data-frame]")).toHaveCount(0);
+  await expect(page.locator("[data-tree] [data-agent]")).toHaveCount(20);
+  await page.locator("[data-view-done]").click();
+  await expect(sheet).toBeHidden();
+  await expect(chosen).toBeVisible();
+  // Needs you alone: the five waiting, under their one heading.
+  await page.locator("[data-view-open]").click();
+  await sheet.locator('[data-view="status"] .chip', { hasText: "Needs you" }).click();
+  await expect(page.locator("[data-tree] [data-section] .name")).toHaveText(["Needs you"]);
+  await expect(page.locator("[data-tree] [data-agent] .name")).toHaveText(["agent 0", "agent 4", "agent 8", "agent 12", "agent 16"]);
+  await sheet.locator('[data-view="status"] .chip', { hasText: "All" }).click();
+  await sheet.locator('[data-view="groupBy"] .chip', { hasText: "Project" }).click();
+  await expect(page.locator("[data-tree] [data-section]")).toHaveCount(0);
+  await expect(page.locator("[data-tree] [data-machine]")).toHaveText(["desk", "box"]);
+  await expect(chosen).toBeHidden();
+});
+
+test("a frame tapped folds its tiles away and says how many it holds; folded, it stays so when the page opens again", async () => {
+  test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
+  const page = await home();
+  await page.evaluate(() => (window as unknown as Driven).load(20, 0));
+  const frame = page.locator('[data-tree] [data-frame="f:w0/f0"]');
+  const tiles = page.locator('[data-tree] [data-row="t:w0/t0"], [data-tree] [data-row="t:w0/t10"]');
+  await expect(tiles).toHaveCount(2);
+  await expect(frame.locator("[data-rows]")).toHaveText("2");
+  // Waiting under it: its heading says so.
+  await expect(frame.locator(".needs-you")).toHaveText("Needs you");
+  await frame.locator("[data-fold]").click();
+  await expect(frame.locator("[data-fold]")).toHaveAttribute("aria-expanded", "false");
+  await expect(tiles).toHaveCount(0);
+  await expect(frame.locator("[data-rows]")).toHaveText("2");
+  await expect(page.locator('[data-tree] [data-row="t:w0/t1"]')).toHaveCount(1);
+  await page.reload();
+  await page.waitForFunction(() => (window as unknown as { ready?: boolean }).ready);
+  await page.evaluate(() => (window as unknown as Driven).load(20, 0));
+  await expect(page.locator('[data-tree] [data-frame="f:w0/f0"] [data-fold]')).toHaveAttribute("aria-expanded", "false");
+  await expect(tiles).toHaveCount(0);
+  await expect(page.locator('[data-tree] [data-row="t:w0/t1"]')).toHaveCount(1);
+  // Tapped again, its tiles are back.
+  await page.locator('[data-tree] [data-frame="f:w0/f0"] [data-fold]').click();
+  await expect(tiles).toHaveCount(2);
+});
+
+test("a tile's row draws its agent's own mark, as the computer gives it; a shell's a terminal, any other kind's a window", async () => {
+  test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
+  const page = await home();
+  await page.evaluate(() => {
+    const w = window as unknown as Driven;
+    w.load(2, 1);
+    const tile = (id: string, kind: string, more: object) => ({ seq: 2, key: `t:w0/${id}`, row: { of: "tile", workspace: "w0", id, frameId: "f0", kind, name: id, order: 9, ...more } });
+    w.change({ t: "changes", layout: { seq: 3, changes: [tile("s1", "shell", { terminal: true }), { ...tile("n1", "note", {}), seq: 3 }] } });
+  });
+  const drawn = await page.locator('[data-tree] [data-row="t:w0/t1"] .avatar svg').evaluate((svg) => ({
+    box: svg.getAttribute("viewBox"),
+    paths: [...svg.querySelectorAll("path")].map((p) => [p.getAttribute("d"), p.getAttribute("fill"), p.getAttribute("stroke")]),
+    color: getComputedStyle(svg).color,
+    text: (() => { const p = document.createElement("p"); p.style.color = "var(--text)"; document.body.append(p); return getComputedStyle(p).color; })(),
+  }));
+  expect(drawn.box).toBe("0 0 24 24");
+  expect(drawn.paths).toHaveLength(2);
+  expect(drawn.paths[0]![1]).toBe("currentColor");
+  expect(drawn.paths[0]![0]).toMatch(/^M\s*4[ ,]4/);
+  expect(drawn.paths[1]!.slice(1)).toEqual(["none", "currentColor"]);
+  expect(drawn.color).toBe(drawn.text);
+  await expect(page.locator('[data-tree] [data-row="t:w0/t1"] .avatar')).toHaveAttribute("data-mark", "claude");
+  await expect(page.locator('[data-tree] [data-row="t:w0/s1"] .avatar')).toHaveAttribute("data-mark", "terminal");
+  await expect(page.locator('[data-tree] [data-row="t:w0/n1"] .avatar')).toHaveAttribute("data-mark", "window");
 });

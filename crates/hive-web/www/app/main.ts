@@ -158,6 +158,13 @@ function notify(text: string): void {
   noticeTimer = setTimeout(() => (notice.hidden = true), 4000);
 }
 
+/** The tile the agent or terminal shown is, by key. */
+let lookedAt: string | null = null;
+const tileKey = (tile: string) => {
+  const a = overview?.agents.find((x) => x.tile === tile);
+  return a ? `t:${a.workspace}/${tile}` : null;
+};
+
 /** The screen the address names: a tab, `start`, `agent=<tile>` or `terminal=<tile>&in=<workspace>`;
  *  pairing while paired with nothing or offered a link. */
 let shownBefore = "";
@@ -175,6 +182,14 @@ function route(): void {
   if (shown === "view") void viewing.open(asked.get("in") ?? "", view!);
   else viewing.close();
   if (shown !== "pair") pairing.stopScan();
+  // What an agent or terminal said is read on opening it, and on leaving it.
+  const looking = tile ? tileKey(tile) : term ? `t:${asked.get("in") ?? ""}/${term}` : null;
+  if (looking) home.choices.saw(looking);
+  if (lookedAt && lookedAt !== looking) {
+    home.choices.saw(lookedAt);
+    render();
+  }
+  lookedAt = looking;
   shownBefore = shown;
   for (const button of tabs.querySelectorAll<HTMLElement>("[data-tab]")) {
     if (button.dataset.tab === shown) button.setAttribute("aria-current", "page");
@@ -200,7 +215,7 @@ function apply(first: First): void {
 function render(): void {
   if (!phone || !paired) return;
   const p = phone;
-  const first = { shown: p.shown(home.filter), overview: p.overview() };
+  const first = { shown: p.shown(home.filter, home.choices.view()), overview: p.overview() };
   apply(first);
   // Kept at once, then at most every 500 ms, what is held then: a busy board changes faster.
   if (saving) return;
@@ -209,7 +224,7 @@ function render(): void {
     if (phone !== p || !paired) return;
     savedAt = Date.now();
     void put("home", p.kept());
-    void put("first", { shown: p.shown({ query: "", machine: null }), overview: p.overview() });
+    void put("first", { shown: p.shown({ query: "", machine: null }, home.choices.view()), overview: p.overview() });
   };
   const wait = 500 - (Date.now() - savedAt);
   if (wait <= 0) keep();

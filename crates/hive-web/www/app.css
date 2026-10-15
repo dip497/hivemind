@@ -12,7 +12,7 @@
   --canvas: #ffffff; --panel: #f7f7f7; --card: #f7f7f7; --raised: #ededed;
   --line: #e5e5e5; --line2: #d9d9d9;
   --text: #171717; --text2: #5d5d5d; --text3: #8f8f8f; --on-text: #ffffff;
-  --accent: #171717; --warn: #b26a00; --ok: #258b20; --err: #d73a49;
+  --accent: #171717; --warn: #b26a00; --ok: #258b20; --err: #d73a49; --unread: oklch(0.58 0.15 250);
   --float: 0 8px 28px rgb(0 0 0 / 0.08), 0 1px 3px rgb(0 0 0 / 0.04);
   --sans: Geist, system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
@@ -25,7 +25,7 @@
     --canvas: #191919; --panel: #212121; --card: #212121; --raised: #2b2b2b;
     --line: #2e2e2e; --line2: #3a3a3a;
     --text: #f4f4f4; --text2: #a3a3a3; --text3: #6e6e6e; --on-text: #171717;
-    --accent: #f4f4f4; --warn: #e8a64a; --ok: #5fbf57; --err: #f0707b;
+    --accent: #f4f4f4; --warn: #e8a64a; --ok: #5fbf57; --err: #f0707b; --unread: oklch(0.70 0.14 250);
     --float: 0 8px 28px rgb(0 0 0 / 0.45);
   }
 }
@@ -163,25 +163,42 @@ button { cursor: pointer; }
 /* Rows: the name and its last line, the time, and a small mark at the end for what needs a look. */
 .machine { margin: 0; padding: 22px 20px 4px; font: 600 15px/20px var(--sans); letter-spacing: -0.01em; }
 .workspace { margin: 0; padding: 4px 20px 2px; color: var(--text3); }
+/* A tile: its mark in a circle, a state dot on the circle's corner; its name, a pill while it
+   needs the person and how long ago on one line; what it last said under them. */
 .agent {
   position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px;
   padding: 10px 20px; border: 0; background: transparent; text-align: left;
 }
-.agent .status { font: 400 14px/20px var(--sans); color: var(--text2); }
+.agent .avatar {
+  position: relative; flex: none; width: 38px; height: 38px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--raised); color: var(--text);
+}
+.agent .avatar .agent-mark { width: 20px; height: 20px; }
+.agent .avatar .icon { width: 18px; height: 18px; color: var(--text2); }
+.agent .avatar .dot { position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px; box-shadow: 0 0 0 2px var(--canvas); }
+.agent .avatar .dot[data-state="working"] { background: var(--canvas); }
+.agent .top, .agent .under { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.agent .top .name { font: 600 16px/22px var(--sans); letter-spacing: -0.01em; }
+.agent .status { flex: 1; min-width: 0; font: 400 14px/20px var(--sans); color: var(--text2); }
 .agent .status.waits { color: var(--warn); }
 .agent code { font: 400 13px/20px var(--mono); }
-.agent .age { flex: none; order: 2; font: 400 13px/18px var(--sans); color: var(--text3); font-variant-numeric: tabular-nums; }
-.agent .dot { order: 3; }
+.agent .age { flex: none; margin-left: auto; font: 400 13px/18px var(--sans); color: var(--text3); font-variant-numeric: tabular-nums; }
+.unread { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--unread); }
+/* What needs the person, said in a word: the one pill a row carries. */
+.needs-you {
+  flex: none; padding: 2px 7px; border-radius: 999px; font: 500 11px/16px var(--sans);
+  color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
 /* Only a working, waiting or failed agent carries a mark. */
 .agent .dot:not([data-state="working"], [data-state="waiting"], [data-state="failed"], [data-state="limited"]) { display: none; }
 /* A hairline between two rows, from where the text starts. */
 .agent + .agent::before {
   content: ""; position: absolute; top: 0; right: 0; height: 1px; background: var(--line);
-  left: calc(20px + var(--depth, 0) * 16px);
+  left: calc(70px + var(--depth, 0) * 16px);
 }
 .agent:active { background: var(--panel); }
 .agent .col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.agent .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status { color: var(--text3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status.waits { color: var(--warn); }
 .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--text3); }
@@ -204,7 +221,7 @@ button { cursor: pointer; }
 .need { contain-intrinsic-size: auto 210px; }
 .machine { contain-intrinsic-size: auto 46px; }
 .workspace { contain-intrinsic-size: auto 22px; }
-.agent { contain-intrinsic-size: auto 64px; }
+.agent { contain-intrinsic-size: auto 62px; }
 
 /* One agent: a back bar, its chat, and what it waits on above the reply box. */
 .agent-screen { display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; top: var(--vv-top); height: var(--vh); }
@@ -429,26 +446,54 @@ button { cursor: pointer; }
 
 /* Home: a search and machine chips; then headed lists; the tree indents by depth. */
 .find { display: flex; flex-direction: column; gap: 10px; padding: 0 16px 8px; }
+.find-row { display: flex; align-items: center; gap: 4px; }
+.find-row .search { flex: 1; min-width: 0; }
+.view-open { position: relative; margin-right: -8px; }
+.view-open .icon { width: 20px; height: 20px; }
+/* Some View choice is not its first. */
+.chosen-dot { position: absolute; top: 9px; right: 9px; width: 8px; height: 8px; border-radius: 50%; background: var(--text); box-shadow: 0 0 0 2px var(--canvas); }
 .search { height: 36px; border: 0; border-radius: 10px; padding: 0 12px; background: var(--panel); font-size: 16px; outline: 0; }
 .search::placeholder { color: var(--text3); }
 .find .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
 .section { margin: 0; padding: 22px 20px 4px; font: 600 13px/18px var(--sans); color: var(--text3); }
-/* Sticky over its rows (each row draws its own hairline, so it needs a layer above them). */
-.project {
-  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 1; margin: 0; padding: 14px 8px 2px 20px;
+/* Headings: a project's and a section's sticky over their rows (each row draws its own hairline,
+   so they need a layer above them); a frame's indented by depth. Each folds what is under it. */
+.project, .group-head {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 1; margin: 0; height: 44px; padding: 12px 4px 0 16px;
   background: var(--canvas); color: var(--text2); font: 600 13px/18px var(--sans); display: flex; align-items: center;
 }
-.project .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.frame {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 20px 4px calc(20px + var(--depth, 0) * 16px); color: var(--text2);
+.group-head { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+.fold {
+  flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; gap: 8px;
+  padding: 0 12px 0 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left;
+  text-transform: inherit; letter-spacing: inherit;
 }
-.frame .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.frame .swatch { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.fold .chev { flex: none; width: 16px; height: 16px; color: var(--text3); stroke-width: 2; transition: transform 120ms ease-out; }
+.fold[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.fold .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fold .gap { flex: 1; }
+.fold .rows { flex: none; min-width: 16px; text-align: right; font: 500 12px/16px var(--sans); color: var(--text3); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.fold .dot { width: 6px; height: 6px; }
+.fold .dot[data-state="working"] { width: 10px; height: 10px; }
+.fold .dot:not([data-state="working"], [data-state="failed"], [data-state="limited"]) { display: none; }
+.frame {
+  display: flex; align-items: center; height: 40px;
+  padding: 0 4px 0 calc(16px + var(--depth, 0) * 16px); color: var(--text);
+  font: 500 15px/20px var(--sans);
+}
+.frame .folder-mark { flex: none; width: 18px; height: 18px; }
+.frame .folder { flex: 0 1 auto; min-width: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text3); }
+/* Under a frame, a rail down the indent its arrow sits in. */
+[data-tree] .agent, [data-tree] .frame {
+  background: linear-gradient(var(--line2), var(--line2)) no-repeat;
+  background-size: calc(min(var(--depth, 0), 1) * 1px) 100%;
+  background-position: calc(var(--depth, 0) * 16px + 8px) 0;
+}
+[data-tree] .agent:active { background: var(--panel); }
 [data-tree] .agent, [data-pinned] .agent { padding-left: calc(20px + var(--depth, 0) * 16px); }
-.frame, .project { content-visibility: auto; }
-.frame { contain-intrinsic-size: auto 32px; }
-.project { contain-intrinsic-size: auto 36px; }
+.frame, .project, .group-head { content-visibility: auto; }
+.frame { contain-intrinsic-size: auto 40px; }
+.project, .group-head { contain-intrinsic-size: auto 44px; }
 .agent .open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 0; border: 0; background: transparent; text-align: left; }
 /* Swiped left, the row's face slides over Stop and Close (gestures.ts). */
 .agent.swipes { touch-action: pan-y; }
@@ -466,7 +511,14 @@ button { cursor: pointer; }
 .sheet .name { margin: 0; font: 600 16px/22px var(--sans); letter-spacing: -0.01em; }
 .sheet .row { display: flex; gap: 8px; }
 .sheet .row > .pill { flex: 1; }
-.project .more { flex: none; padding: 2px 12px; border: 0; background: transparent; color: var(--text3); font-size: 20px; line-height: 1; }
+.project .more { flex: none; width: 40px; height: 32px; padding: 0; border: 0; background: transparent; color: var(--text3); display: grid; place-items: center; }
+.project .more .icon { width: 18px; height: 18px; }
+/* The View menu: four groups of choices, over the list. */
+.scrim { position: fixed; inset: 0; z-index: 4; background: rgb(0 0 0 / 0.24); }
+.view-sheet { gap: 16px; max-height: calc(var(--vh) - var(--tabs-clear) - 64px); overflow-y: auto; }
+.view-group { display: flex; flex-direction: column; gap: 8px; }
+.view-group .label-small { margin: 0; }
+.view-sheet > .pill { width: 100%; }
 .start .row { display: flex; align-items: center; gap: 8px; }
 .start .trail { flex: 1; min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--text2); }
 .photos { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

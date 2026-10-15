@@ -1,6 +1,8 @@
 // The page's kit: elements made directly, lists kept by key so that only what changed is touched,
 // and the Android app's components (Kit.kt) as DOM: pills, the composer, icons.
 
+import type { Mark } from "./types.js";
+
 type Child = Node | string | null | undefined | false;
 type Props = Record<string, string | number | boolean | null | undefined>;
 
@@ -29,6 +31,12 @@ const ICONS = {
   more: ["M11,12a1,1 0,1 0,2 0a1,1 0,1 0,-2 0", "M18,12a1,1 0,1 0,2 0a1,1 0,1 0,-2 0", "M4,12a1,1 0,1 0,2 0a1,1 0,1 0,-2 0"],
   plus: ["M5,12h14", "M12,5v14"],
   stop: ["M8,7h8a1,1 0,0 1,1 1v8a1,1 0,0 1,-1 1H8a1,1 0,0 1,-1 -1V8a1,1 0,0 1,1 -1z"],
+  folder: ["M20,20a2,2 0,0 0,2 -2V8a2,2 0,0 0,-2 -2h-7.9a2,2 0,0 1,-1.69 -0.9L9.6,3.9A2,2 0,0 0,7.93 3H4a2,2 0,0 0,-2 2v13a2,2 0,0 0,2 2z"],
+  folderOpen: ["M6,14l1.5,-2.9A2,2 0,0 1,9.24 10H20a2,2 0,0 1,1.94 2.5l-1.54,6a2,2 0,0 1,-1.95 1.5H4a2,2 0,0 1,-2 -2V5a2,2 0,0 1,2 -2h3.9a2,2 0,0 1,1.69 0.9l0.81,1.2a2,2 0,0 0,1.67 0.9H18a2,2 0,0 1,2 2v2"],
+  branch: ["M6,3v12", "M15,6a3,3 0,1 0,6 0a3,3 0,1 0,-6 0", "M3,18a3,3 0,1 0,6 0a3,3 0,1 0,-6 0", "M18,9a9,9 0,0 1,-9 9"],
+  terminal: ["M4,17l6,-6l-6,-6", "M12,19h8"],
+  window: ["M4,4h16a2,2 0,0 1,2 2v12a2,2 0,0 1,-2 2H4a2,2 0,0 1,-2 -2V6a2,2 0,0 1,2 -2z", "M10,4v4", "M2,8h20", "M6,4v4"],
+  view: ["M20,7h-9", "M14,17H5", "M14,17a3,3 0,1 0,6 0a3,3 0,1 0,-6 0", "M4,7a3,3 0,1 0,6 0a3,3 0,1 0,-6 0"],
 };
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -43,6 +51,31 @@ export function icon(name: IconName, extra = ""): SVGSVGElement {
   for (const d of ICONS[name]) {
     const path = document.createElementNS(SVG, "path");
     path.setAttribute("d", d);
+    svg.append(path);
+  }
+  return svg;
+}
+
+/** An agent's mark as the core gives it: its paths in the text colour, in their box. */
+export function agentMark(m: Mark): SVGSVGElement {
+  const svg = document.createElementNS(SVG, "svg");
+  svg.setAttribute("viewBox", `${m.x} ${m.y} ${m.width} ${m.height}`);
+  svg.setAttribute("class", "agent-mark");
+  svg.setAttribute("aria-hidden", "true");
+  for (const s of m.shapes) {
+    const path = document.createElementNS(SVG, "path");
+    path.setAttribute("d", s.d);
+    path.setAttribute("fill", s.fill ? "currentColor" : "none");
+    if (s.even_odd) path.setAttribute("fill-rule", "evenodd");
+    if (s.stroke > 0) {
+      path.setAttribute("stroke", "currentColor");
+      path.setAttribute("stroke-width", String(s.stroke));
+    }
+    if (s.round) {
+      path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-linejoin", "round");
+    }
+    if (s.opacity < 1) path.setAttribute("opacity", String(s.opacity));
     svg.append(path);
   }
   return svg;
