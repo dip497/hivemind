@@ -163,7 +163,7 @@ jobs:
           pnpm exec playwright test phone-app.spec.ts --retries=0 --reporter=list | tee "$RUNNER_TEMP/phone-app.txt"
           grep -q "1 passed" "$RUNNER_TEMP/phone-app.txt"
 
-      # The pictures of Home the paired run keeps (ComputerUITests), light and dark, for a person to look at.
+      # The picture of Home the paired run keeps (ComputerUITests), for a person to look at.
       - name: Home as the phone drew it
         if: always()
         run: |
