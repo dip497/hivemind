@@ -114,7 +114,11 @@ found ours worse. What it does better, and what each phone surface now does:
   the middle so its file's name shows; red when the use failed. Tapping one opens the use on its
   own screen: its input and its output whole, wrapped, selectable. Nothing unfolds inline.
 - **The terminal opens from an icon in the header**, over the whole screen, with Message and Type;
-  back returns to the chat. No Chat / Terminal switch.
+  back returns to the chat. No Chat / Terminal switch. It opens **fitted**: the session is sized to
+  the columns and rows the screen shows at a readable 12 px mono text, each row as tall as the
+  screen then draws it, and fitted again when that changes (the keyboard, a turn); leaving the
+  terminal gives the session back its size (the host's rule: the last to fit or type holds it).
+  **Fit** in its header, on by default, lets go and takes it again; a pinch still zooms to read.
 - **Nothing scrolls the page sideways.** Code blocks and tables scroll inside themselves; a diff's
   open file scrolls across as one block, its line numbers fixed.
 

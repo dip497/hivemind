@@ -18,10 +18,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -40,20 +42,39 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.sp
 import com.hivemind.phone.ui.common.FollowTheNewest
 import com.hivemind.phone.ui.common.NewestButton
+import kotlin.math.roundToInt
 
 private const val MAX_ZOOM = 6f
+
+/** The text size a terminal fitted to the phone reads at. */
+private val READABLE = 12.sp
+
+/** The columns and rows a terminal fitted to a view reads at: at least 20 across and 5 down. */
+data class TermSize(val cols: Int, val rows: Int)
+
+/**
+ * The size that fills a view [width] × [height] pixels at [readable] pixels of text, each row as
+ * tall as the view then draws it, so that it shows every row the terminal has.
+ */
+internal fun readableSize(painter: TerminalPainter, width: Float, height: Int, readable: Float): TermSize {
+    val cols = (width / painter.cellWidth(readable)).toInt().coerceAtLeast(20)
+    val line = painter.cells(width / cols).height.roundToInt().coerceAtLeast(1)
+    return TermSize(cols, (height / line).coerceAtLeast(5))
+}
 
 /**
  * An agent's live terminal: fitted to the width at first, pinched to zoom, following the newest
  * line until the person scrolls up (design §6.4: the cursor's line or the last line written, kept
  * the last in sight, also as the view is made shorter). Lines are drawn one by one, in a lazy
  * list keyed by their index, so a line that changes redraws alone and one that scrolls keeps its
- * place.
+ * place. [onReadableSize] is told the size that fills the view at a readable text size, and again
+ * when the view's size changes.
  */
 @Composable
-fun TerminalView(terminal: Terminal, modifier: Modifier = Modifier) {
+fun TerminalView(terminal: Terminal, modifier: Modifier = Modifier, onReadableSize: (TermSize) -> Unit = {}) {
     val palette = TermPalette.SIGNAL
     val fonts = LocalFontFamilyResolver.current
     val painter = remember(fonts) {
@@ -98,6 +119,10 @@ fun TerminalView(terminal: Terminal, modifier: Modifier = Modifier) {
         // the newest line is the last of them, and rests there again once the view is shorter.
         val inView = constraints.maxHeight / with(density) { lineHeight.roundToPx() }.coerceAtLeast(1)
         SideEffect { terminal.fit(inView) }
+        val readable = with(density) { READABLE.toPx() }
+        val size = remember(painter, viewport, constraints.maxHeight, readable) { readableSize(painter, viewport, constraints.maxHeight, readable) }
+        val tell by rememberUpdatedState(onReadableSize)
+        LaunchedEffect(size) { tell(size) }
         Box(Modifier.fillMaxSize().horizontalScroll(across)) {
             LazyColumn(state = terminal.follow.list, modifier = Modifier.width(width).fillMaxHeight()) {
                 items(count = terminal.lineCount, key = { terminal.firstLine + it }) { position ->

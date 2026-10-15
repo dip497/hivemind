@@ -93,6 +93,7 @@
     <string name="agent_gone">This agent is no longer on its board.</string>
     <string name="list_newest">To the newest</string>
     <string name="view_terminal">Terminal</string>
+    <string name="terminal_fit">Fit</string>
 
     <!-- An agent's chat -->
     <string name="chat_nothing">Nothing said yet</string>

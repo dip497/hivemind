@@ -38,6 +38,8 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,6 +65,7 @@ import com.hivemind.phone.core.Agent
 import com.hivemind.phone.core.Answer
 import com.hivemind.phone.core.ScreenEnded
 import com.hivemind.phone.core.Waiting
+import com.hivemind.phone.terminal.TermSize
 import com.hivemind.phone.terminal.TerminalView
 import com.hivemind.phone.ui.common.AnswerControls
 import com.hivemind.phone.ui.common.Dot
@@ -92,8 +95,8 @@ private val Keys = listOf(
 /**
  * One agent (design §6.4): what it and the person say to each other as a chat (P7), what it waits
  * on as the chat's last card, and a composer whose send stops the agent's turn while nothing is
- * typed. Its terminal opens from the header over the whole screen, fitted to the width, with Type,
- * which types into it as the person; an agent with no
+ * typed. Its terminal opens from the header over the whole screen, sized to the phone until Fit is
+ * let go, with Type, which types into it as the person; an agent with no
  * chat to read opens on it. A tool's row opens that use on its own screen. Diff at the top, Close
  * under More; closing asks the phone's lock.
  */
@@ -119,6 +122,7 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
     val snackbar = remember { SnackbarHostState() }
     NoticeEffect(vm.calls, snackbar)
     var typing by rememberSaveable { mutableStateOf(false) }
+    var fit by rememberSaveable { mutableStateOf(true) }
     val busy = vm.calls.busy.isNotEmpty()
     val closeTitle = stringResource(R.string.lock_close_title, agent?.name.orEmpty())
     val lockSubtitle = stringResource(R.string.lock_subtitle)
@@ -145,6 +149,9 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
                     // Stop is the composer's while it sends messages; the Type box has no room for it.
                     if (typingShown && agent?.stoppable == true) {
                         TextButton(onClick = vm::stop, enabled = !busy) { Text(stringResource(R.string.action_stop)) }
+                    }
+                    if (showingTerminal) {
+                        PillChip(fit, onClick = { fit = !fit }, label = stringResource(R.string.terminal_fit), modifier = Modifier.testTag("terminal-fit"))
                     }
                     if (!overChat) {
                         if (chatFirst) {
@@ -185,7 +192,14 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
                     Note(stringResource(R.string.keyboard_held, holder))
                 }
                 vm.screen.ended?.let { ended -> Note(endedNote(ended, agent?.deviceName)) }
-                TerminalView(vm.screen.terminal, Modifier.weight(1f).fillMaxWidth())
+                // Fitted to the phone while Fit is on; the size it had, given back once it is off or the terminal is left.
+                var readable by remember { mutableStateOf<TermSize?>(null) }
+                LaunchedEffect(fit, readable) {
+                    val size = readable
+                    if (!fit) vm.screen.unfit() else if (size != null) vm.screen.fit(size)
+                }
+                DisposableEffect(vm.screen) { onDispose { vm.screen.unfit() } }
+                TerminalView(vm.screen.terminal, Modifier.weight(1f).fillMaxWidth(), onReadableSize = { readable = it })
             } else {
                 val waiting = agent?.waiting
                 ChatView(

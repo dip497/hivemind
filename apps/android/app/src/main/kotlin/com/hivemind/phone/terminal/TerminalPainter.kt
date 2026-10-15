@@ -41,6 +41,9 @@ class TerminalPainter(private val typefaces: List<Typeface>, private val palette
         return Cells(textSize, width, ceil(textSize * (ascent + descent)), textSize * ascent)
     }
 
+    /** How wide a cell is with the text [textSize] pixels high. */
+    fun cellWidth(textSize: Float): Float = textSize * advance
+
     /** Draws [line] from the canvas's origin, with the cursor on cell [cursor] (none when -1). */
     fun draw(canvas: Canvas, line: TermLine, cursor: Int, cells: Cells) {
         val runs = line.runs

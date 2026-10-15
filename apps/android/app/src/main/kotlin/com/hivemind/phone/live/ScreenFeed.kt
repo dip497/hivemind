@@ -10,6 +10,7 @@ import com.hivemind.phone.core.Phone
 import com.hivemind.phone.core.ScreenEnded
 import com.hivemind.phone.core.ScreenListener
 import com.hivemind.phone.core.Watch
+import com.hivemind.phone.terminal.TermSize
 import com.hivemind.phone.terminal.Terminal
 
 /**
@@ -63,6 +64,23 @@ class ScreenFeed(phone: Phone, agent: AgentRef) {
 
     /** Presses [keys], tokens as `hive ctl keys` takes them: `enter`, `escape`, `ctrl-c`, … */
     fun typeKeys(keys: List<String>) = watch.typeKeys(keys)
+
+    // The size the phone fitted the session to, while it holds one.
+    private var fitted: TermSize? = null
+
+    /** Sizes the session to [size] for this phone, by the host's rule: the last to fit or type holds the size. */
+    fun fit(size: TermSize) {
+        if (size == fitted) return
+        fitted = size
+        watch.fit(size.cols.toUShort(), size.rows.toUShort())
+    }
+
+    /** Gives the session back the size it had, if the phone fitted it. */
+    fun unfit() {
+        if (fitted == null) return
+        fitted = null
+        watch.unfit()
+    }
 
     fun stop() {
         pull.stop()
