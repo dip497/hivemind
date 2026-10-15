@@ -1,11 +1,10 @@
 import SwiftUI
 import UIKit
 
-/// The terminal, for SwiftUI. It stays mounted while the chat is shown, hidden (a hidden view draws
-/// nothing), so that switching back finds it as it was, zoom and all.
+/// The terminal, for SwiftUI: on screen only while it is shown, so that the session is fitted to the
+/// phone while it is and gets its size back when it goes.
 struct TerminalScreen: UIViewRepresentable {
     let session: TerminalSession
-    let shown: Bool
 
     func makeUIView(context: Context) -> TerminalContainer {
         let container = TerminalContainer()
@@ -14,14 +13,10 @@ struct TerminalScreen: UIViewRepresentable {
         return container
     }
 
-    func updateUIView(_ container: TerminalContainer, context: Context) {
-        container.isHidden = !shown
-        if !shown {
-            _ = container.terminal.resignFirstResponder()
-        }
-    }
+    func updateUIView(_ container: TerminalContainer, context: Context) {}
 
     static func dismantleUIView(_ container: TerminalContainer, coordinator: ()) {
+        _ = container.terminal.resignFirstResponder()
         if container.terminal.session?.view === container.terminal {
             container.terminal.session?.view = nil
         }

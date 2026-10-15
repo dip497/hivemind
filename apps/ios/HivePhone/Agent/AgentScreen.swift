@@ -1,20 +1,22 @@
 import SwiftUI
 
-/// One agent (design §6.4, P7): what it and the person said, as a chat, or its live terminal,
-/// fitted to the width and following the newest line; what it waits on, as a card with its
-/// answers; a composer whose send stops the agent's turn while nothing is typed, and Type, which
+/// One agent (design §6.4, P7): what it and the person said, as a chat, newest at the bottom, with
+/// what it waits on as its last row; a tool's row opens the use on its own screen. Its terminal opens
+/// from an icon in the header over the whole screen, sized to the phone while Fit is on, with what
+/// it waits on above it; back returns to the chat. An agent with no chat to read opens on its
+/// terminal. A composer whose send stops the agent's turn while nothing is typed, and Type, which
 /// types into its terminal as the person; its changes, and Close under More. The chat and the
-/// terminal are both followed while the screen is up, so switching between them waits on nothing.
+/// terminal are both followed while the screen is up, so opening the terminal waits on nothing.
 @MainActor
 struct AgentScreen: View {
     enum Showing {
         case chat
         case terminal
 
-        /// What may be shown of `agent`, as offered: the chat only when it keeps a conversation
-        /// its device can read (its manifest maps its session file), and its terminal.
-        static func offered(for agent: Agent?) -> [Showing] {
-            agent?.hasConversation == true ? [.chat, .terminal] : [.terminal]
+        /// What the screen opens on: the chat when `agent` keeps a conversation its device can read
+        /// (its manifest maps its session file), else its terminal.
+        static func first(for agent: Agent?) -> Showing {
+            agent?.hasConversation == true ? .chat : .terminal
         }
     }
 
@@ -22,10 +24,11 @@ struct AgentScreen: View {
     let ref: AgentRef
     @State private var session: TerminalSession
     @State private var chat: ChatSession
-    @State private var showing = Showing.chat
+    @State private var terminalOpen = false
     @State private var reply = ""
     @State private var composing: Composing? = nil
     @State private var showingDiff = false
+    @State private var openedTool: ToolUse? = nil
     @Environment(\.dismiss) private var dismiss
 
     init(model: PhoneModel, ref: AgentRef) {
@@ -40,75 +43,103 @@ struct AgentScreen: View {
         model.overview.agents.first { $0.at == ref }
     }
 
-    /// What is shown: as the person chose, when this agent offers it; else its terminal.
-    private var shown: Showing {
-        Showing.offered(for: agent).contains(showing) ? showing : .terminal
+    private var hasChat: Bool {
+        Showing.first(for: agent) == .chat
+    }
+
+    /// The terminal is on screen: opened from the header, or the agent has no chat.
+    private var terminalShown: Bool {
+        terminalOpen || !hasChat
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            if let agent, let waiting = agent.waiting {
-                WaitCard(model: model, agent: agent, waiting: waiting) {
-                    composing = Composing(agent: agent, waiting: waiting)
-                } type: {
-                    typeIntoTerminal()
+            if terminalShown {
+                if let agent, let waiting = agent.waiting {
+                    waitCard(agent, waiting)
                 }
-            }
-            if Showing.offered(for: agent).count > 1 {
-                Picker("Show", selection: $showing) {
-                    Text("Chat").tag(Showing.chat)
-                    Text("Terminal").tag(Showing.terminal)
+                if let note {
+                    Text(note)
+                        .font(.footnote)
+                        .foregroundStyle(Look.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background(Look.raised)
                 }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 4)
-            }
-            if shown == .terminal, let note {
-                Text(note)
-                    .font(.footnote)
-                    .foregroundStyle(Look.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                    .background(Look.raised)
             }
             ZStack {
-                ChatScreen(session: chat, shown: shown == .chat)
-                    .accessibilityHidden(shown != .chat)
-                TerminalScreen(session: session, shown: shown == .terminal)
-                    .accessibilityHidden(shown != .terminal)
+                if hasChat {
+                    ChatScreen(session: chat, shown: !terminalShown, wait: chatWait) { use in
+                        openedTool = use
+                    }
+                    .accessibilityHidden(terminalShown)
+                }
+                if terminalShown {
+                    TerminalScreen(session: session)
+                }
             }
             composer
         }
         .background(Look.background)
         .navigationTitle(agent?.name ?? "Agent")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(terminalOpen)
         .toolbar {
+            if terminalOpen {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        terminalOpen = false
+                    } label: {
+                        Image(systemName: "chevron.backward")
+                            .fontWeight(.semibold)
+                    }
+                    .accessibilityLabel("Back to its chat")
+                    .accessibilityIdentifier("terminal.close")
+                }
+            }
             ToolbarItem(placement: .principal) {
                 title
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button {
-                    showingDiff = true
-                } label: {
-                    Image(systemName: "plus.forwardslash.minus")
+                if terminalShown {
+                    fitButton
                 }
-                .accessibilityLabel("What it changed")
-                Menu {
-                    Button(role: .destructive) {
-                        Task {
-                            if await model.close(ref, named: agent?.name ?? "this agent") { dismiss() }
+                if !terminalOpen {
+                    if hasChat {
+                        Button {
+                            terminalOpen = true
+                        } label: {
+                            Image(systemName: "terminal")
+                        }
+                        .accessibilityLabel("Its terminal")
+                        .accessibilityIdentifier("agent.terminal.open")
+                    }
+                    Button {
+                        showingDiff = true
+                    } label: {
+                        Image(systemName: "plus.forwardslash.minus")
+                    }
+                    .accessibilityLabel("What it changed")
+                    Menu {
+                        Button(role: .destructive) {
+                            Task {
+                                if await model.close(ref, named: agent?.name ?? "this agent") { dismiss() }
+                            }
+                        } label: {
+                            Label("Close", systemImage: "xmark.circle")
                         }
                     } label: {
-                        Label("Close", systemImage: "xmark.circle")
+                        Image(systemName: "ellipsis.circle")
                     }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
+                    .accessibilityLabel("More")
                 }
-                .accessibilityLabel("More")
             }
         }
         .navigationDestination(isPresented: $showingDiff) {
             DiffScreen(model: model, agent: ref)
+        }
+        .navigationDestination(item: $openedTool) { use in
+            ToolScreen(use: use)
         }
         .sheet(item: $composing) { item in
             AnswerSheet(model: model, agent: item.agent, waiting: item.waiting)
@@ -120,6 +151,39 @@ struct AgentScreen: View {
         .onDisappear {
             session.stop()
             chat.stop()
+        }
+    }
+
+    /// Fit: on, the terminal is sized to the phone; off, it keeps the size it had.
+    private var fitButton: some View {
+        Button {
+            session.toggleFitting()
+        } label: {
+            Text("Fit")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(session.fitting ? Look.text : Look.secondary)
+                .padding(.horizontal, 12)
+                .frame(height: 30)
+                .background(session.fitting ? Look.selected : Look.background, in: Capsule())
+                .overlay { Capsule().strokeBorder(session.fitting ? Look.selected : Look.hairline, lineWidth: 1) }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Fit to the phone")
+        .accessibilityAddTraits(session.fitting ? .isSelected : [])
+        .accessibilityIdentifier("terminal.fit")
+    }
+
+    /// What the agent waits on, as the chat's last row.
+    private var chatWait: ChatWait? {
+        guard let agent, let waiting = agent.waiting else { return nil }
+        return ChatWait(waiting: waiting, card: AnyView(waitCard(agent, waiting, inset: 0)))
+    }
+
+    private func waitCard(_ agent: Agent, _ waiting: Waiting, inset: CGFloat = 12) -> some View {
+        WaitCard(model: model, agent: agent, waiting: waiting, inset: inset) {
+            composing = Composing(agent: agent, waiting: waiting)
+        } type: {
+            typeIntoTerminal()
         }
     }
 
@@ -164,10 +228,10 @@ struct AgentScreen: View {
         return nil
     }
 
-    /// Type goes to the terminal: shown first, then the keyboard, once SwiftUI has shown it.
+    /// Type goes to the terminal: shown first, then the keyboard, once it is on screen.
     private func typeIntoTerminal() {
-        showing = .terminal
-        Task { session.beginTyping() }
+        if hasChat { terminalOpen = true }
+        session.beginTyping()
     }
 
     /// A raised card pinned under the conversation: Type on the left, the message, and a round send
@@ -243,13 +307,15 @@ struct AgentScreen: View {
     }
 }
 
-/// What the agent waits on, as a card over the conversation, with the answers it allows; what the
-/// phone cannot answer in a tap is answered in its terminal.
+/// What the agent waits on, as a card with the answers it allows: the chat's last row, or above the
+/// terminal; what the phone cannot answer in a tap is answered in its terminal.
 @MainActor
 struct WaitCard: View {
     let model: PhoneModel
     let agent: Agent
     let waiting: Waiting
+    /// The room either side of the card.
+    var inset: CGFloat = 12
     let compose: () -> Void
     let type: () -> Void
 
@@ -273,8 +339,8 @@ struct WaitCard: View {
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .raisedCard()
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.horizontal, inset)
+            .padding(.vertical, inset == 0 ? 0 : 6)
         }
     }
 }

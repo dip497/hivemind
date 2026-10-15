@@ -1,7 +1,7 @@
 import XCTest
 @testable import HivePhone
 
-/// The Agents tab (design §6.3), from records built here.
+/// Home's agents and the agent's screen (design §6.3, §6.4), from records built here.
 final class AgentListTests: XCTestCase {
     func testSectionsCutWhereTheDeviceOrTheWorkspaceChanges() {
         let agents = [
@@ -26,10 +26,10 @@ final class AgentListTests: XCTestCase {
     }
 
     @MainActor
-    func testTheChatIsOfferedOnlyForAnAgentThatKeepsAConversationAndItsTerminalAlways() {
-        XCTAssertEqual(AgentScreen.Showing.offered(for: anAgent(hasConversation: true)), [.chat, .terminal])
-        XCTAssertEqual(AgentScreen.Showing.offered(for: anAgent()), [.terminal])
+    func testAnAgentOpensOnItsChatOnlyWhenItKeepsAConversationElseOnItsTerminal() {
+        XCTAssertEqual(AgentScreen.Showing.first(for: anAgent(hasConversation: true)), .chat)
+        XCTAssertEqual(AgentScreen.Showing.first(for: anAgent()), .terminal)
         // Not listed yet, a moment after it was started: its terminal.
-        XCTAssertEqual(AgentScreen.Showing.offered(for: nil), [.terminal])
+        XCTAssertEqual(AgentScreen.Showing.first(for: nil), .terminal)
     }
 }

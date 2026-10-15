@@ -45,6 +45,20 @@ struct TerminalMetrics {
     /// A cell's width for each point of font size, to fit a session's columns to a width.
     static let widthPerPoint: CGFloat = advance(of: .monospacedSystemFont(ofSize: 100, weight: .regular)) / 100
 
+    /// The font size a terminal fitted to the phone reads at.
+    static let readable: CGFloat = 12
+
+    /// The columns and rows a view `width` × `height` points shows at the readable size: as many
+    /// columns as fit at it, at least 20; then as many rows, at least 5, each as tall as the view
+    /// draws a line once those columns fill its width.
+    static func readableSize(width: CGFloat, height: CGFloat) -> TerminalSize? {
+        guard width > 0, height > 0 else { return nil }
+        let cols = max(20, Int((width / (readable * widthPerPoint)).rounded(.down)))
+        let line = TerminalMetrics(size: width / (CGFloat(cols) * widthPerPoint)).lineHeight
+        let rows = max(5, Int((height / max(1, line)).rounded(.down)))
+        return TerminalSize(cols: cols, rows: rows)
+    }
+
     /// The font's advance, measured once per size on one character: every character of a monospace
     /// font has it.
     private static func advance(of font: UIFont) -> CGFloat {
@@ -57,4 +71,10 @@ struct TerminalMetrics {
         guard let descriptor = font.fontDescriptor.withSymbolicTraits(traits) else { return font }
         return UIFont(descriptor: descriptor, size: font.pointSize)
     }
+}
+
+/// A terminal's size in cells.
+struct TerminalSize: Equatable {
+    let cols: Int
+    let rows: Int
 }

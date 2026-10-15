@@ -4,8 +4,8 @@ import UIKit
 /// its row × the line height and each run at its column × the cell width, so nothing is measured per
 /// frame. An update draws again only the lines it changed; the others move. It keeps the lines it
 /// was sent, follows the newest until the person scrolls up, fits the session's columns to its
-/// width (the phone never reflows a terminal, §3.6), zooms with a pinch, and types into the session
-/// as the person.
+/// width (the phone never reflows a terminal, §3.6), tells the session the columns and rows it shows
+/// at a readable size, zooms with a pinch, and types into the session as the person.
 final class TerminalView: UIScrollView, UIScrollViewDelegate, UIKeyInput {
     /// Where typing goes.
     weak var session: TerminalSession?
@@ -36,6 +36,8 @@ final class TerminalView: UIScrollView, UIScrollViewDelegate, UIKeyInput {
         didSet { if following != oldValue { followingChanged?(following) } }
     }
     private var laidOutHeight: CGFloat = 0
+    /// The size the session was last told it shows at a readable size.
+    private var toldSize = CGSize.zero
     private var pinching = false
     private var pinchAnchor = CGPoint.zero
     private var pinchFinger = CGPoint.zero
@@ -126,11 +128,18 @@ final class TerminalView: UIScrollView, UIScrollViewDelegate, UIKeyInput {
             if following { scrollToNewest() }
         }
         tile()
+        if bounds.size != toldSize, let size = TerminalMetrics.readableSize(width: bounds.width, height: bounds.height) {
+            toldSize = bounds.size
+            session?.readableSizeChanged(size)
+        }
     }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        if window != nil { restyle() }
+        if window != nil {
+            restyle()
+            session?.viewShown()
+        }
     }
 
     /// Sizes the font so that the session's columns fill the width, times the person's zoom.

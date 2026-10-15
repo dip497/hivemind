@@ -1,7 +1,6 @@
 import Foundation
 
-/// One row of the chat: what one entry said, or a tool the agent used with what it gave back folded
-/// under it.
+/// One row of the chat: what one entry said, or a tool the agent used with what it gave back.
 struct ChatRow: Equatable {
     enum Said: Equatable {
         case person(String)
@@ -17,10 +16,16 @@ struct ChatRow: Equatable {
     let at: UInt64
     var said: Said
 
-    /// A tool's use with what it gave back, to unfold.
-    var folds: Bool {
-        if case .tool(_, let result) = said { return result != nil }
-        return false
+    /// A tool's use, or what one gave back, to open on its own screen.
+    var tool: ToolUse? {
+        switch said {
+        case .tool(let tool, let result):
+            return ToolUse(name: tool.name, input: tool.about, result: result)
+        case .result(let result):
+            return ToolUse(name: "Output", input: nil, result: result)
+        case .person, .agent:
+            return nil
+        }
     }
 }
 

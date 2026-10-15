@@ -2,15 +2,17 @@ import SwiftUI
 import UIKit
 
 /// One place in the chat, as SwiftUI draws it: the person's words on the right; the agent's
-/// markdown, as the core read it; a tool it used, name · about, with what it gave back folded
-/// under it, red when it failed; or the note of why the chat is told no more.
+/// markdown, as the core read it; a tool it used on one line, red when it failed; the note of why
+/// the chat is told no more; or what the agent waits on.
 struct ChatRowView: View {
     let item: ChatItem
 
     var body: some View {
         switch item {
-        case .row(let row, let open):
-            said(row.said, open: open)
+        case .row(let row):
+            said(row.said)
+        case .wait(let card):
+            card
         case .note(let why):
             Label(why, systemImage: "info.circle")
                 .font(.footnote)
@@ -20,7 +22,7 @@ struct ChatRowView: View {
     }
 
     @ViewBuilder
-    private func said(_ said: ChatRow.Said, open: Bool) -> some View {
+    private func said(_ said: ChatRow.Said) -> some View {
         switch said {
         case .person(let text):
             HStack {
@@ -35,9 +37,9 @@ struct ChatRowView: View {
             MarkdownView(pieces: pieces)
                 .foregroundStyle(Look.text)
         case .tool(let tool, let result):
-            ToolRow(tool: tool, result: result, open: open)
+            ToolRow(name: tool.name, about: tool.about, failed: result?.error ?? false)
         case .result(let result):
-            ResultText(result: result)
+            ToolRow(name: "Output", about: result.text, failed: result.error)
         }
     }
 }
@@ -154,62 +156,35 @@ private struct BlockView: View {
     }
 }
 
-/// A tool the agent used, on one line: name · about; what it gave back under it, once unfolded.
+/// A tool the agent used, on one line: its name, then what it is about in mono, a long path cut in
+/// the middle so that its file's name shows; red when the use failed. It opens the use.
 private struct ToolRow: View {
-    let tool: Tool
-    let result: ToolResult?
-    let open: Bool
+    let name: String
+    let about: String?
+    let failed: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.caption)
+        HStack(spacing: 8) {
+            Text(name)
+                .font(.subheadline)
+                .foregroundStyle(failed ? Look.failed : Look.secondary)
+                .lineLimit(1)
+                .layoutPriority(1)
+            if let about, !about.isEmpty {
+                Text(ToolUse.firstLine(of: about))
+                    .font(.footnote.monospaced())
                     .foregroundStyle(failed ? Look.failed : Look.tertiary)
-                Text(line)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(Look.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Spacer(minLength: 4)
-                if result != nil {
-                    Image(systemName: open ? "chevron.down" : "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(Look.tertiary)
-                }
             }
-            if open, let result {
-                ResultText(result: result)
-            }
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.right")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Look.tertiary)
         }
-    }
-
-    private var line: String {
-        guard let about = tool.about, !about.isEmpty else { return tool.name }
-        return "\(tool.name) · \(about)"
-    }
-
-    private var failed: Bool {
-        result?.error ?? false
-    }
-
-    private var icon: String {
-        guard let result else { return "ellipsis" }
-        return result.error ? "xmark.circle" : "checkmark.circle"
-    }
-}
-
-/// What a tool gave back: monospace, red when it failed, cut at a screenful.
-private struct ResultText: View {
-    let result: ToolResult
-
-    var body: some View {
-        Text(result.text)
-            .font(.caption.monospaced())
-            .foregroundStyle(result.error ? Look.failed : Look.secondary)
-            .lineLimit(24)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(8)
-            .background(Look.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
     }
 }
