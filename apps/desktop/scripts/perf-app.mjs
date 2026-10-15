@@ -205,6 +205,7 @@ const cpuOf = (pid) => {
 };
 
 let terminalsOnBoard = TERMINALS;
+let boardFiles;
 let lastShell;
 /** The camera on the last shell, so every launch starts on the same view: tiles added and the pans measured move it. */
 const cameraOnShells = async (page) => {
@@ -273,7 +274,9 @@ let firstLaunch;
   await cameraOnShells(page);
   // A frame's tools can bring a terminal of their own.
   terminalsOnBoard = await page.locator(".react-flow__node-terminal").count();
+  boardFiles = path.join(await app.evaluate(({ app }) => app.getPath("userData")), "workspaces");
   await app.close();
+  await fs.cp(boardFiles, path.join(root, "board-as-set-up"), { recursive: true });
 }
 
 const result = {
@@ -286,6 +289,10 @@ const result = {
 
 for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
   const r = BUILDS.length > 1 ? { build: BUILDS[b] } : {};
+  // Every launch opens the board as set up, camera too: builds that keep the camera differently
+  // would otherwise open on different boards, and draw different work.
+  await fs.rm(boardFiles, { recursive: true, force: true });
+  await fs.cp(path.join(root, "board-as-set-up"), boardFiles, { recursive: true });
   const daemonBefore = daemonCpu();
   const { app, page } = await launch(main);
   const created = await app.evaluate(() => process.getCreationTime());
@@ -319,6 +326,17 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
     mainBusyMs: Math.round(startupMain.task),
     mainCpuMs: Math.round(startupMain.cpu),
   };
+  // What the launch opened on: builds that keep the camera differently draw different boards.
+  r.view = await page.evaluate(() => {
+    const t = document.querySelector(".react-flow__viewport")?.style.transform ?? "";
+    const zoom = Number(/scale\(([\d.]+)\)/.exec(t)?.[1] ?? 0);
+    const pane = document.querySelector(".react-flow")?.getBoundingClientRect();
+    const inView = pane ? [...document.querySelectorAll(".react-flow__node-terminal")].filter((n) => {
+      const r = n.getBoundingClientRect();
+      return Math.min(r.right, pane.right) > Math.max(r.left, pane.left) && Math.min(r.bottom, pane.bottom) > Math.max(r.top, pane.top);
+    }).length : 0;
+    return { zoom: Math.round(zoom * 100) / 100, terminalsInView: inView };
+  });
   // Let startup's own work settle before timing screens; what held main meanwhile counts as startup's.
   await page.waitForTimeout(1500);
   r.startup.mainStalls = (await mainStalls(app)).total;
