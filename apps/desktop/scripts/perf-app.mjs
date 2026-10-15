@@ -343,12 +343,16 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
 
   // Content: a terminal's older output, scrolled back to its start.
   if (!ONLY_SCREENS) {
-    // The terminal fully inside the window, selected with a click as a person selects it.
-    const index = await page.evaluate(() => [...document.querySelectorAll(".react-flow__node-terminal")].findIndex((n) => {
-      const r = n.getBoundingClientRect();
-      return r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight;
-    }));
-    const term = page.locator(".react-flow__node-terminal .xterm").nth(Math.max(0, index));
+    // The first terminal brought into view (the screens above leave the board panned elsewhere),
+    // then selected with a click as a person selects it.
+    const first = await page.locator(".react-flow__node-terminal").first().getAttribute("data-id");
+    await page.evaluate((t) => window.dispatchEvent(new CustomEvent("hivemind:focus-tile", { detail: t })), first);
+    await whenTrue(page, (t) => {
+      const r = document.querySelector(`.react-flow__node-terminal[data-id="${t}"]`).getBoundingClientRect();
+      return r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight && performance.timeOrigin + performance.now();
+    }, first);
+    await page.waitForTimeout(500);
+    const term = page.locator(`.react-flow__node-terminal[data-id="${first}"] .xterm`);
     const tb = await term.boundingBox();
     await page.mouse.click(tb.x + tb.width / 2, tb.y + tb.height / 2);
     await page.mouse.click(tb.x + tb.width / 2, tb.y + tb.height / 2);
@@ -367,20 +371,28 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
 
     // Off screen and back: the terminal prints LINES lines while panned out of the window (sent
     // nothing then), and is panned back; how long, once the board stops, until it shows the end of
-    // that output.
-    const id = await page.locator(".react-flow__node-terminal").nth(Math.max(0, index)).getAttribute("data-id");
+    // that output, from the first notch back (a few ms of panning included).
+    const id = first;
     const offScreen = () => page.evaluate((t) => {
       const r = document.querySelector(`.react-flow__node-terminal[data-id="${t}"]`).getBoundingClientRect();
       return r.right < 0 || r.left > innerWidth || r.bottom < 0 || r.top > innerHeight;
     }, id);
-    // A spot where the wheel reaches the board itself, not a tile, a panel or a toolbar over it.
-    const spot = await page.evaluate(() => {
-      for (let y = 60; y < innerHeight - 60; y += 40) for (let x = 20; x < innerWidth - 20; x += 40) if (document.elementFromPoint(x, y)?.classList.contains("react-flow__pane")) return [x, y];
-      return null;
-    });
-    await page.mouse.move(spot[0], spot[1]);
+    const inView = () => page.evaluate((t) => {
+      const r = document.querySelector(`.react-flow__node-terminal[data-id="${t}"]`).getBoundingClientRect();
+      return r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight;
+    }, id);
+    // One wheel notch on the board itself, at a spot no tile, panel or toolbar covers (tiles move
+    // under any one spot as the board pans).
+    const pan = async (dx) => {
+      const spot = await page.evaluate(() => {
+        for (let y = 60; y < innerHeight - 60; y += 40) for (let x = 20; x < innerWidth - 20; x += 40) if (document.elementFromPoint(x, y)?.classList.contains("react-flow__pane")) return [x, y];
+        return null;
+      });
+      await page.mouse.move(spot[0], spot[1]);
+      await page.mouse.wheel(dx, 0);
+    };
     let pans = 0;
-    while (!(await offScreen()) && pans < 20) { await page.mouse.wheel(2000, 0); pans++; await page.waitForTimeout(100); }
+    while (pans < 60 && !(await offScreen())) { await pan(2000); pans++; }
     await page.waitForTimeout(1500);
     const mark = 100 + run * MAINS.length + b;
     await page.evaluate(([t, n, k]) => window.hive.ptyWrite(`hm:${t}`, `bash print.sh ${k} ${n}\r`), [id, LINES, mark]);
@@ -388,14 +400,14 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
     for (let i = 0; i < 600 && !existsSync(doneFile); i++) await page.waitForTimeout(100);
     await page.waitForTimeout(500);
     const m2 = await mainThread(cdp, renderer);
-    for (let i = 0; i < pans; i++) await page.mouse.wheel(-2000, 0);
     const c0 = await page.evaluate(() => performance.timeOrigin + performance.now());
+    for (let i = 0; i < 60 && !(await inView()); i++) await pan(-2000);
     const c1 = await whenTrue(page, ([t, k]) => {
       const host = document.querySelector(`.react-flow__node-terminal[data-id="${t}"] .xterm`)?.parentElement;
       return new RegExp(`DONE-${k}`).test(host?.__hmScreen?.() ?? "") && performance.timeOrigin + performance.now();
     }, [id, mark]);
     const m3 = await mainThread(cdp, renderer);
-    r.terminalCatchUp = { ms: Math.round(c1 - c0), mainBusyMs: Math.round(m3.task - m2.task), mainCpuMs: Math.round(m3.cpu - m2.cpu) };
+    r.terminalCatchUp = { ms: Math.round(c1 - c0), pans, mainBusyMs: Math.round(m3.task - m2.task), mainCpuMs: Math.round(m3.cpu - m2.cpu) };
   }
 
   // Canvas: wheel-pan across the board.
