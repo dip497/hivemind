@@ -516,6 +516,21 @@ test("the agent's own prompt answered first, its hook is let go, printing nothin
   assert.deepEqual(c.writes, ['hm:t1:"1"', 'hm:t1:"\\u001b"'], "only the person's keys");
 });
 
+test("a question whose hook let go before an answer is still what its prompt asks: its options are shown and one chosen is typed with its keys; once its prompt moves on, it is forgotten", async () => {
+  const claude = (await readAgentManifest(path.join(import.meta.dirname, "../../hive-agents/tests/fixtures/published-agents/claude/agent.yaml"), { source: "user", requireDirMatch: true })).def!;
+  const c = hooked(hookAnswerOf(claude, "PermissionRequest") as unknown as Record<string, unknown>);
+  const gone = new AbortController();
+  const asked = await c.hook("AskUserQuestion", NEXT_LINE, {}, gone.signal);
+  gone.abort();
+  assert.equal(await asked.printed, undefined);
+  const need = waitOn("t1", { kind: "permission", since: asked.since }, { decides: () => false, asked: (t) => c.p.waits.asked(t) });
+  assert.deepEqual(need.asks?.map((q) => q.options), [["Nothing", "A timestamp", "\"test passed\""]]);
+  assert.equal(need.kind, "question");
+  assert.deepEqual(await c.answer(asked.since, { answers: [{ chosen: [1] }] }), { answered: true });
+  assert.deepEqual(c.writes, ['hm:t1:"2"'], "typed at its prompt: its hook is gone");
+  assert.equal(c.p.waits.asked("t1"), undefined, "its prompt answered, it asks nothing");
+});
+
 test("not held, the agent's own prompt deciding: a subagent's, a tool its entry leaves to it, and any for an agent whose hook does not carry the answer", async () => {
   for (const [why, answer, tool, more] of [
     ["a subagent's", ANSWER, "Bash", { agentId: "a1" }],

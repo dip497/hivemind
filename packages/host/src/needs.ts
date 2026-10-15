@@ -56,6 +56,8 @@ export interface WaitFacts {
   decides: Decides;
   wait?(tile: string): Wait | undefined;
   asking?(tile: string): ToolAsked | undefined;
+  /** What its own hook said its tool use asks, after the hook let go. */
+  asked?(tile: string): ToolAsked | undefined;
   chooses?(tile: string): boolean;
 }
 
@@ -69,7 +71,7 @@ export interface WaitFacts {
 export function waitOn(tile: string, status: { kind: InputKind; says?: string; since: number }, facts: WaitFacts): Pick<Need, "kind" | "decide" | "tool" | "asks" | "choose"> {
   const held = facts.wait?.(tile);
   const hooked = held?.prompt && held.since === status.since ? held : undefined;
-  const read = status.says || (status.kind !== "permission" && status.kind !== "question") ? undefined : facts.asking?.(tile);
+  const read = status.says || (status.kind !== "permission" && status.kind !== "question") ? undefined : (facts.asked?.(tile) ?? facts.asking?.(tile));
   const asking: ToolAsked | undefined = hooked
     ? { name: hooked.tool ?? "", ...about(hooked, read), ...(hooked.asks ? { asks: hooked.asks } : {}) }
     : read;

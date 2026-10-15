@@ -483,7 +483,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     // What waits on the person here, for their devices to ask (M5), on which machine, and which
     // permissions their phone may allow or deny.
     statuses: () => control.status.all(),
-    facts: (held) => ({ ...manifestFacts(held, path.join(o.dir, TILE_SESSIONS_DIR)), parent: (bare) => control.parentOf(bare), wait: (bare) => control.waits.of(bare) }),
+    facts: (held) => ({ ...manifestFacts(held, path.join(o.dir, TILE_SESSIONS_DIR)), parent: (bare) => control.parentOf(bare), wait: (bare) => control.waits.of(bare), asked: (bare) => control.waits.asked(bare) }),
     machines,
     // Home's rows: the links between agents, and what each tile last said or showed.
     links: () => control.links(),

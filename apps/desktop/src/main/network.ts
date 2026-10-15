@@ -607,7 +607,7 @@ export interface NetworkSources {
   /** Who started each agent: the control plane's. */
   workers?: Pick<AgentFacts, "parent">;
   /** The plans and supervised tool uses agents wait on, and how each was answered. */
-  waits?: Pick<Waits, "of" | "answerOf">;
+  waits?: Pick<Waits, "of" | "answerOf" | "asked">;
   /** For Home (spec/home.md): the links between agents, how a remote frame's machine is linked,
    *  what the window's Layers panel shows of a workspace, and what a tile last said or showed. */
   home?: Pick<PeerLinksOptions, "links" | "linkState" | "line">;
@@ -664,7 +664,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
   peers = new PeerLinks({
     store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), granted,
     phone: (device) => pairedDevices().list().some((d) => d.device === device && d.kind === "phone"),
-    statuses, facts: (held) => ({ ...manifestFacts(held, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)), ...workers, wait: (tile) => waits?.of(tile) }),
+    statuses, facts: (held) => ({ ...manifestFacts(held, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)), ...workers, wait: (tile) => waits?.of(tile), asked: (tile) => waits?.asked(tile) }),
     machines: knownMachines,
     subscribe: (device, sub) => pushSubscriptions().set(device, sub),
     // A phone unpairing itself, recorded as that phone.

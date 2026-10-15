@@ -154,7 +154,7 @@ export function answers(o: AnswersOptions): Domain<"agent.answer"> {
         const status = plane.status.get(bare);
         // Waits on the person no more, or on another wait, or answered already: nothing.
         if (!status || !waitsOnThePerson(status) || status.since !== since || answered.has(`${bare}@${since}`)) return { answered: false };
-        const on = waitOn(bare, { kind: status.kind!, says: status.says, since }, { decides: () => false, asking: o.asking, chooses: (t) => !!o.chooseKeys(t) });
+        const on = waitOn(bare, { kind: status.kind!, says: status.says, since }, { decides: () => false, asked: (t) => plane.waits.asked(t), asking: o.asking, chooses: (t) => !!o.chooseKeys(t) });
         let parts: string[];
         if (a.answers !== undefined) {
           // Its keys choose one option of its one question; a line is typed as {text}.

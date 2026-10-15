@@ -13,7 +13,7 @@
 import { randomUUID } from "node:crypto";
 import type { InputKind, StatusInput } from "@hivemind/agents";
 import type { Asked, QuestionAnswer } from "@hivemind/agents/node";
-import type { Answerer } from "@hivemind/workspace-api/agents";
+import type { Answerer, ToolAsked } from "@hivemind/workspace-api/agents";
 
 export type Decision = "allow" | "deny";
 
@@ -65,12 +65,17 @@ export class Waits {
   private readonly answered = new Map<string, { decision: Decision; by: Answerer | null }>();
   /** What an agent's every use of a tool is decided, by `tile:tool`. */
   private readonly rules = new Map<string, Decision>();
+  /** A wait on its own prompt whose hook let go before an answer, by tile: what it asks is still
+   *  what the agent's prompt asks, while it waits on it. */
+  private readonly letGo = new Map<string, Wait>();
 
   constructor(private readonly o: WaitsOptions) {
     // Its own prompt answered, or its turn over: a hook that holds for the answer is let go.
     o.status.subscribe?.(({ tileId, status }) => {
       const held = this.held.get(tileId)?.wait;
       if (held?.prompt && !(status.state === "waiting" && status.since === held.since)) this.end(tileId, null);
+      const left = this.letGo.get(tileId);
+      if (left && !(status.state === "waiting" && status.since === left.since)) this.letGo.delete(tileId);
     });
   }
 
@@ -82,6 +87,7 @@ export class Waits {
     // A plan or a supervised tool use it waits on is answered by its own hook.
     if (status?.state !== "waiting" || (before && !before.prompt)) return undefined;
     this.end(tile, null);
+    this.letGo.delete(tile);
     const made: Wait = { ...wait, request: randomUUID(), tile, since: status.since, kind: status.kind ?? "other", prompt: true };
     this.held.set(tile, { wait: made, reply });
     this.o.changed?.();
@@ -162,7 +168,18 @@ export class Waits {
   /** The agent stopped waiting on `request` before an answer: it ends unanswered. */
   drop(request: string): void {
     const wait = this.named(request);
-    if (wait) this.end(wait.tile, null);
+    if (!wait) return;
+    const status = this.o.status.get(wait.tile);
+    if (wait.prompt && status?.state === "waiting" && status.since === wait.since) this.letGo.set(wait.tile, wait);
+    this.end(wait.tile, null);
+  }
+
+  /** What the tool use `tile` waits on asks, as its hook said before it let go, while the agent's
+   *  own prompt still asks it. */
+  asked(tile: string): ToolAsked | undefined {
+    const wait = this.letGo.get(tile);
+    if (!wait?.tool) return undefined;
+    return { name: wait.tool, ...(wait.about ? { about: wait.about } : {}), ...(wait.asks ? { asks: wait.asks } : {}) };
   }
 
   /** How every use of `tool` by `tile` is decided, if it was answered `always`. */
@@ -172,6 +189,7 @@ export class Waits {
 
   /** The agent `tile` went: what it waited on ends unanswered, and it is told so. */
   forget(tile: string): void {
+    this.letGo.delete(tile);
     for (const key of this.rules.keys()) if (key.startsWith(`${tile}:`)) this.rules.delete(key);
     const held = this.held.get(tile);
     if (!held) return;

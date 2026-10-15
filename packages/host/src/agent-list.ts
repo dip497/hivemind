@@ -32,6 +32,8 @@ export interface AgentFacts {
   wait?(tile: string): Wait | undefined;
   /** The tool use its session file says it waits on (spec/needs.md 0.7). */
   asking?(tile: string): ToolAsked | undefined;
+  /** What its own hook said its tool use asks, after the hook let go. */
+  asked?(tile: string): ToolAsked | undefined;
   /** Whether its agent says the keys that choose an option of a question its tool asks. */
   chooses?(tile: string): boolean;
 }
