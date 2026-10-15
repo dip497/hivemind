@@ -299,7 +299,6 @@ overrides:
 
 patchedDependencies:
   '@xterm/addon-webgl@0.19.0': 6dee6d1635c7afc9b0602fdfda45f1cbbf9e1adab6823437838c68a689f1d505
-  '@xterm/xterm@6.0.0': 9b4d92614733e58619d5237db1bd7b2a7991387d1c4c7082644c7347297d2ea3
 
 importers:
 
@@ -497,7 +496,7 @@ importers:
         version: 6.0.0
       '@xterm/xterm':
         specifier: 'catalog:'
-        version: 6.0.0(patch_hash=9b4d92614733e58619d5237db1bd7b2a7991387d1c4c7082644c7347297d2ea3)
+        version: 6.0.0
       '@xyflow/react':
         specifier: 'catalog:'
         version: 12.12.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -7036,7 +7035,7 @@ snapshots:
 
   '@xterm/headless@6.0.0': {}
 
-  '@xterm/xterm@6.0.0(patch_hash=9b4d92614733e58619d5237db1bd7b2a7991387d1c4c7082644c7347297d2ea3)': {}
+  '@xterm/xterm@6.0.0': {}
 
   '@xyflow/react@12.12.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:

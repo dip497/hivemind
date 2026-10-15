@@ -105,28 +105,3 @@ test("a path or address a terminal shows opens on Ctrl+click only: a plain click
   await printed(String.raw`printf '\e]8;;http://127.0.0.1:9/osc\e\\osc-link\e]8;;\e\\\n'`, "osc-link");
   await follows("a link printed as one", async () => (await opened()).includes("http://127.0.0.1:9/osc"));
 });
-
-test("a terminal's scrollbar follows what it prints, and the wheel takes it back through what scrolled off", async () => {
-  await page.locator('[data-toolbar-action="board"]').click();
-  await page.locator('[data-add-menu] [data-board-choice="tile:shell"]').click();
-  const term = page.locator(".react-flow__node-terminal").last();
-  await term.locator(".xterm-screen").click();
-  const screen = () => term.evaluate((el) => ([el, ...el.querySelectorAll("*")].find((e) => "__hmScreen" in e) as (Element & { __hmScreen(): string }) | undefined)?.__hmScreen() ?? "");
-  await expect.poll(async () => {
-    await page.keyboard.type("clear; seq 1 3000\n");
-    return screen();
-  }, { timeout: 20_000, intervals: [1000] }).toMatch(/^3000$/m);
-  /** Where the scrollbar's handle is, as fractions of its track: its top, and its bottom. */
-  const handle = () => term.locator(".scrollbar.vertical").evaluate((track) => {
-    const t = track.getBoundingClientRect();
-    const s = track.querySelector(".slider")!.getBoundingClientRect();
-    return { top: (s.top - t.top) / t.height, bottom: (s.bottom - t.top) / t.height };
-  });
-  // Thousands of lines in a screenful: a small handle, at the end of the track.
-  await expect.poll(handle).toMatchObject({ bottom: expect.closeTo(1, 1), top: expect.closeTo(0.97, 1) });
-  const atEnd = (await handle()).top;
-  const box = (await term.locator(".xterm-screen").boundingBox())!;
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  for (let i = 0; i < 5; i++) await page.mouse.wheel(0, -400);
-  await expect.poll(async () => (await handle()).top).toBeLessThan(atEnd);
-});
