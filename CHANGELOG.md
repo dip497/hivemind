@@ -18,6 +18,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - The iOS and Android apps connect with a computer's offer too: scanned or pasted, they show the three words, and the phone becomes the person's only after a yes on each side. They point to Settings → Connect.
 - Each machine shows what kind of computer it is (laptop, desktop, server, virtual machine or container), as it reports when checked, and so does This computer. `hive machine add --json` includes it as `kind`.
 - `hive ctl inbox [--wait 90s]`: what other agents sent an agent (a worker's reply or report, that it waits on an answer, an approval it asks), each given once. `hive ctl send --interrupt` stops a worker's turn before sending.
+- Home on the phone (Android and the phone page) looks like your computer's Layers panel: each agent's own logo in a round mark, a folder or branch per frame in its colour, fold arrows with counts, a dot on what you have not seen, and the same View menu (Status, Activity, Group by, Sort by). Choices and folds are kept on the phone.
 
 ### Changed
 
