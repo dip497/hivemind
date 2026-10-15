@@ -40,10 +40,13 @@ import com.hivemind.phone.ui.common.NoticeEffect
 import com.hivemind.phone.ui.common.rememberNow
 import com.hivemind.phone.ui.home.HomeList
 import com.hivemind.phone.ui.home.HomeViewModel
+import com.hivemind.phone.ui.home.ViewButton
+import com.hivemind.phone.ui.home.ViewSheet
+import com.hivemind.phone.ui.home.narrowed
 
 /**
- * Home, the app: the desktop's Layers panel, with what needs the person on top (B5 §11.2); search
- * and Settings in its header, and + to start an agent.
+ * Home, the app: the desktop's Layers panel, with what needs the person on top (B5 §11.2); search,
+ * the View menu and Settings in its header, and + to start an agent.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,7 +57,8 @@ fun HomeScreen(
     onSettings: () -> Unit,
 ) {
     var searching by rememberSaveable { mutableStateOf(false) }
-    val home = viewModel { HomeViewModel(core.phone, core.feed.overview) }
+    var viewing by rememberSaveable { mutableStateOf(false) }
+    val home = viewModel { HomeViewModel(core.phone, core.feed.overview, core.homeChoices) }
     val homeState by home.state.collectAsStateWithLifecycle()
     val now = rememberNow()
     val lock = LocalPhoneLock.current
@@ -73,6 +77,7 @@ fun HomeScreen(
                     IconButton(onClick = { searching = !searching }) {
                         Icon(Icons.Filled.Search, stringResource(R.string.home_search), tint = colors.onSurfaceVariant)
                     }
+                    ViewButton(homeState.choices.narrowed) { viewing = true }
                     IconButton(onClick = onSettings, modifier = Modifier.testTag("home-settings")) {
                         Icon(Icons.Filled.Settings, stringResource(R.string.settings_title), tint = colors.onSurfaceVariant)
                     }
@@ -109,6 +114,8 @@ fun HomeScreen(
             onStart = onStart,
             modifier = Modifier.padding(padding),
             searching = searching,
+            onFold = home::fold,
         )
     }
+    if (viewing) ViewSheet(homeState.choices, onChoose = home::choose, onDismiss = { viewing = false })
 }

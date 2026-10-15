@@ -85,9 +85,12 @@ private val Dark = darkColorScheme(
     inverseOnSurface = Color(0xFF171717),
 )
 
-/** The colours of an agent's state: what waits on the person is the one warm thing on screen. */
+/**
+ * The colours of an agent's state: what waits on the person is the one warm thing on screen.
+ * [unread]: done since the person last looked.
+ */
 @Immutable
-data class StateColors(val waiting: Color, val working: Color, val done: Color, val failed: Color, val quiet: Color)
+data class StateColors(val waiting: Color, val working: Color, val done: Color, val failed: Color, val quiet: Color, val unread: Color)
 
 private val LightStates = StateColors(
     waiting = Color(0xFFB26A00),
@@ -95,6 +98,7 @@ private val LightStates = StateColors(
     done = Color(0xFF258B20),
     failed = Color(0xFFD73A49),
     quiet = Color(0xFF8F8F8F),
+    unread = Color(0xFF2F80D0),
 )
 
 private val DarkStates = StateColors(
@@ -103,6 +107,7 @@ private val DarkStates = StateColors(
     done = Color(0xFF5FBF57),
     failed = Color(0xFFF0707B),
     quiet = Color(0xFF6E6E6E),
+    unread = Color(0xFF5AA6F0),
 )
 
 val LocalStateColors = staticCompositionLocalOf { DarkStates }
