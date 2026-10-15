@@ -160,6 +160,11 @@ test("a shell tile opened on the paired page draws the computer's screen on a la
   await expect(elsewhere).toBeVisible();
   await elsewhere.getByRole("button", { name: "Use this window's size" }).click();
   await expect(elsewhere).toBeHidden({ timeout: 10_000 });
+  // The phone shows Fit off, the computer having the size; pressed, it fits the terminal again.
+  await expect(fit).toHaveAttribute("aria-pressed", "false");
+  await fit.click();
+  await expect(fit).toHaveAttribute("aria-pressed", "true");
+  await expect(elsewhere).toBeVisible({ timeout: 10_000 });
   await fit.click();
   await expect(fit).toHaveAttribute("aria-pressed", "false");
   await page.locator('[data-screen="terminal"] .term-view').tap();
