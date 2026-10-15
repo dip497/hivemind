@@ -45,6 +45,15 @@ const launch = async () => {
 const whenTrue = (page, test, arg) =>
   page.waitForFunction(test, arg ?? null, { polling: "raf", timeout: 60_000 }).then((h) => h.jsonValue());
 
+/** On a wait that timed out: where each terminal is and the end of its screen, then the error. */
+const showTerminals = (page) => async (e) => {
+  console.error(JSON.stringify(await page.evaluate(() => [...document.querySelectorAll(".react-flow__node-terminal")].map((n) => {
+    const r = n.getBoundingClientRect();
+    return { at: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)], tail: (n.querySelector(".xterm")?.parentElement?.__hmScreen?.() ?? "<none>").trim().slice(-400) };
+  })), null, 1));
+  throw e;
+};
+
 /** Main-thread time spent in tasks over 50 ms and the longest, from now until `stop()`. */
 const longTasks = (page) => page.evaluate(() => {
   const w = window;
@@ -60,12 +69,17 @@ const longTasksDone = (page) => page.evaluate(() => {
 });
 
 
-/** In the page: when every terminal inside the window shows that its output ended. Terminals off
- *  screen are sent nothing until shown, so they are not waited on. */
+/** In the page: when every terminal shown in the canvas shows that its output ended. Terminals off
+ *  screen, or with only a sliver in view (one under the Layers panel), are sent nothing until shown,
+ *  so they are not waited on. */
 const visibleDone = () => {
+  const pane = document.querySelector(".react-flow")?.getBoundingClientRect();
+  if (!pane) return false;
   const xs = [...document.querySelectorAll(".react-flow__node-terminal")].filter((n) => {
     const r = n.getBoundingClientRect();
-    return r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight;
+    const w = Math.min(r.right, pane.right) - Math.max(r.left, pane.left);
+    const h = Math.min(r.bottom, pane.bottom) - Math.max(r.top, pane.top);
+    return w > 0 && h > 0 && w * h >= 0.05 * r.width * r.height;
   });
   const done = xs.length > 0 && xs.every((n) => /DONE-\d/.test(n.querySelector(".xterm")?.parentElement?.__hmScreen?.() ?? ""));
   return done && performance.timeOrigin + performance.now();
@@ -99,6 +113,7 @@ const mainThreadCpu = async (app, page, act) => {
 const screenText = (page) => page.evaluate(() => [...document.querySelectorAll(".xterm")]
   .map((x) => x.parentElement?.__hmScreen?.() ?? "").join("\n"));
 
+let terminalsOnBoard = TERMINALS;
 // The board: TERMINALS shells, each having printed LINES lines, and a note.
 {
   const { app, page } = await launch();
@@ -113,13 +128,7 @@ const screenText = (page) => page.evaluate(() => [...document.querySelectorAll("
   for (const [i, id] of ids.entries()) {
     await page.evaluate(([t, n, k]) => window.hive.ptyWrite(`hm:${t}`, `bash print.sh ${k} ${n}\r`), [id, LINES, i]);
   }
-  await page.waitForFunction(visibleDone, null, { timeout: 180_000, polling: 500 }).catch(async (e) => {
-    console.error(JSON.stringify(await page.evaluate(() => [...document.querySelectorAll(".react-flow__node-terminal")].map((n) => {
-      const r = n.getBoundingClientRect();
-      return { at: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)], tail: (n.querySelector(".xterm")?.parentElement?.__hmScreen?.() ?? "<none>").trim().slice(-400) };
-    })), null, 1));
-    throw e;
-  });
+  await page.waitForFunction(visibleDone, null, { timeout: 180_000, polling: 500 }).catch(showTerminals(page));
   // The shells off screen print as fast; give them the time the shown ones took.
   await page.waitForTimeout(5000);
   // A bigger board: frames each holding tool tiles, and widgets from the Add menu.
@@ -141,12 +150,19 @@ const screenText = (page) => page.evaluate(() => [...document.querySelectorAll("
     await page.keyboard.press("Escape");
   }
   if (FRAMES || WIDGETS) await page.waitForTimeout(3000);
+  // The camera back on the shells, where the standard board leaves it.
+  if (FRAMES || WIDGETS) {
+    await page.evaluate((id) => window.dispatchEvent(new CustomEvent("hivemind:focus-tile", { detail: id })), ids.at(-1));
+    await page.waitForTimeout(2000);
+  }
+  // A frame's tools can bring a terminal of their own.
+  terminalsOnBoard = await page.locator(".react-flow__node-terminal").count();
   await app.close();
 }
 
 const result = {
   at: new Date().toISOString(),
-  board: { terminals: TERMINALS, lines: LINES, frames: FRAMES, widgets: WIDGETS },
+  board: { terminals: terminalsOnBoard, lines: LINES, frames: FRAMES, widgets: WIDGETS },
   os: { cpu: os.cpus()[0]?.model, cpus: os.cpus().length, load: os.loadavg(), display: process.env.DISPLAY ?? null },
   runs: [],
 };
@@ -160,8 +176,8 @@ for (let run = 0; run < RUNS; run++) {
     const n = performance.getEntriesByType("navigation")[0];
     return { origin: performance.timeOrigin, dcl: n?.domContentLoadedEventEnd ?? 0 };
   });
-  const board = await whenTrue(page, (n) => document.querySelectorAll(".react-flow__node-terminal").length === n && performance.timeOrigin + performance.now(), TERMINALS);
-  const shown = await whenTrue(page, visibleDone);
+  const board = await whenTrue(page, (n) => document.querySelectorAll(".react-flow__node-terminal").length === n && performance.timeOrigin + performance.now(), terminalsOnBoard);
+  const shown = await whenTrue(page, visibleDone).catch(showTerminals(page));
   const fcp = await page.evaluate(() => performance.getEntriesByName("first-contentful-paint")[0]?.startTime ?? null);
   r.startup = {
     toPage: Math.round(nav.origin - created),
