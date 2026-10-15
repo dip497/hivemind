@@ -389,11 +389,12 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   // Selected frame — F2 / bring-to-front / spawn target read the ref.
   const [selectedFrameId, setSelectedFrameId, selectedFrameIdRef] = useStateWithRef<string | null>(null);
 
-  // Latest viewport mutated on every pan tick (cheap — ref, no re-render);
-  // committed to state at onMoveEnd so the canvas-layout persist effect picks it
-  // up. Reload restores via react-flow's defaultViewport.
+  // Latest viewport mutated on every pan tick (cheap — ref, no re-render); a pan's
+  // end hands it straight to the save (`saveCamera` below), so it re-renders nothing.
+  // Reload restores via react-flow's defaultViewport.
   const currentViewportRef = useRef<Viewport>(cameraInitial ?? DEFAULT_VIEWPORT);
-  const [viewport, setViewport] = useState<Viewport>(cameraInitial ?? DEFAULT_VIEWPORT);
+  // The camera as loaded: it changes only when another workspace is shown.
+  const [loadedCamera, setLoadedCamera] = useState<Viewport>(cameraInitial ?? DEFAULT_VIEWPORT);
 
   // A new box goes where the canvas says: under the pointer, or in the middle of the view when
   // the pointer is elsewhere. "arrow" starts drawing one.
@@ -447,7 +448,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     setEditorTabs(next.editorTabs ?? {});
     setFrameOf(next.frameOf ?? {});
     reloadBoard(persistKey, next.frames);
-    if (nextCamera) { currentViewportRef.current = nextCamera; setViewport(nextCamera); }
+    if (nextCamera) { currentViewportRef.current = nextCamera; setLoadedCamera(nextCamera); }
   }, [persistKey, reloadBoard]);
 
   // Persist — trailing-debounced (250ms) so a drag's per-drop setPositions
@@ -490,7 +491,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       mergeBoard();
     }
   }), [persistKey, flushCore, flushGeometry, mergeBoard, closeTile, setFrames, setTiles, setFrameOf, setPositions, setSizes]);
-  useDebouncedSave(persistKey, viewport, useCallback((key: string, v: Viewport) => saveViewLayout(CANVAS_CAMERA, key, v), []));
+  const { schedule: saveCamera } = useDebouncedSave(persistKey, loadedCamera, useCallback((key: string, v: Viewport) => saveViewLayout(CANVAS_CAMERA, key, v), []));
 
   // Viewport-focus request: resolve the target's CENTER from our own state
   // (positions/sizes/frames) and hand absolute coords to <FocusOnTile>. Works
@@ -1242,7 +1243,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
 
   // The canvas plugin's private runtime access (milestone-1 seam).
   const canvasRuntime: CanvasRuntime = useMemo(() => ({
-    positions, sizes, currentViewportRef, setViewport,
+    positions, sizes, currentViewportRef, setViewport: saveCamera,
     onNodeResizeCommit, handleNodeDragStop, resetCanvas,
     focusReq, focusModeReq, setFocusModeReq, focusModeNonceRef, selectedTileIdRef, selectedFrameIdRef,
     selectedTileIdsRef, markSeen, toasts, dismissToast,
@@ -1251,7 +1252,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     agentSel, setAgentSel, spawnAgent, spawnBrowser,
     updateAvailable, updateStaged, onUpgrade: () => onUpgrade?.(), onRestart: () => onRestart?.(), upgrading,
   }), [
-    positions, sizes, onNodeResizeCommit, handleNodeDragStop, resetCanvas, focusReq, focusModeReq,
+    positions, sizes, saveCamera, onNodeResizeCommit, handleNodeDragStop, resetCanvas, focusReq, focusModeReq,
     selectedTileIdRef, selectedFrameIdRef, selectedTileIdsRef, markSeen, toasts, dismissToast, frameTiles,
     updateFrameTitle, bringFrameToFront,
     pins, togglePin, onPinChange, board, agentSel, spawnAgent, spawnBrowser, updateAvailable, updateStaged, onUpgrade, onRestart, upgrading,

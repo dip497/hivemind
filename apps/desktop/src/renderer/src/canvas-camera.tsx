@@ -5,7 +5,7 @@
  * Canvas. Pure presentational adapters with no Canvas state — extracted to keep
  * Canvas.tsx focused on orchestration.
  */
-import { createContext, useCallback, useContext, useEffect, useMemo } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useReactFlow, useStore } from "@xyflow/react";
 import { focusZoom } from "./camera-fit";
 import { tilePlugin } from "./tiles";
@@ -187,22 +187,28 @@ export function PanMomentum({
 }
 
 /** Snaps the LIVE viewport transform to whole device pixels (and a near-1 zoom
- *  to exactly 1) whenever `req` bumps — the real fix for blurry tiles under the
+ *  to exactly 1) whenever the canvas asks (`ask`) — the real fix for blurry tiles under the
  *  CSS-transformed viewport (xyflow#3282). `activeRef` (shared with the fling)
  *  tells the parent's onMove/onMoveEnd to ignore our own setViewport. Rendered
  *  inside <ReactFlow> so useReactFlow resolves. An instant setViewport cuts a flight
- *  short, so a move started after the request (`moveSeq` past `req.seq`) wins: its own
+ *  short, so a move started after the request (`moveSeq` past the ask's) wins: its own
  *  end asks again. */
 export function ViewportSnap({
-  req,
+  ask,
   moveSeq,
   activeRef,
 }: {
-  req: { n: number; seq: number } | null;
+  /** Set here to what asks for a snap: the ask is this component's state, so it re-renders alone. */
+  ask: React.MutableRefObject<() => void>;
   moveSeq: React.MutableRefObject<number>;
   activeRef: React.MutableRefObject<boolean>;
 }) {
   const { getViewport, setViewport } = useReactFlow();
+  const [req, setReq] = useState<{ n: number; seq: number } | null>(null);
+  useEffect(() => {
+    ask.current = () => setReq((r) => ({ n: (r?.n ?? 0) + 1, seq: moveSeq.current }));
+    return () => { ask.current = () => {}; };
+  }, [ask, moveSeq]);
   useEffect(() => {
     if (!req || moveSeq.current !== req.seq) return;
     const vp = getViewport();
