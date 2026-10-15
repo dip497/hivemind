@@ -21,6 +21,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
+- Reopening the app no longer makes the terminal daemon rebuild every terminal's saved screen: it hands back the one it already has, so typing into terminals is not held up while the app starts.
 - Canvas: panning no longer restyles and re-rasters every tile at the start and end of a pan, and the end of a pan re-renders nothing: about half the main-thread work per wheel notch on a large board.
 - Startup: a window no longer starts eight diff-highlighting workers or loads the diff library before a diff is shown (2 MB less JavaScript to start), its first screen's fonts load before it is drawn, and it opens without waiting for the terminal daemon's build check.
 - Phone page and Android app: one new look, written down in docs/design/phone-look-2026-10-15.md — neutral greys in light and dark, colour only for what waits on you, fails or changes; quiet rows with a trailing status mark; needs-you cards with the command and pill answers; a raised message box whose send becomes Stop; an All machine chip.
