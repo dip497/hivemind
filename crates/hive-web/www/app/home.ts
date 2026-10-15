@@ -1,13 +1,14 @@
 // Home (spec/home.md, the desktop's Layers panel): what waits on the person, with its answers;
 // what is at work; the pinned; then each machine's projects, frames and tiles, each tile with what
-// it last said. A search and, with more than one machine, a chip for each. Each list is kept by
-// key, so one change redraws one row.
+// it last said. A search, the View menu and, with more than one machine, a chip for each. Each
+// list is kept by key, so one change redraws one row.
 
 import type { App } from "./app.js";
 import { answers } from "./answers.js";
-import { Ask, Keyed, chips, h, iconButton, pill, say } from "./dom.js";
+import { Ask, Keyed, agentMark, chips, h, icon, iconButton, pill, say } from "./dom.js";
 import { onHold, onSwipe } from "./gestures.js";
-import type { Agent, HomeEntry, HomeTile, Overview, Shown } from "./types.js";
+import { HomeChoices, VIEW_CHOICES, VIEW_GROUPS } from "./home-choices.js";
+import type { Agent, HomeEntry, HomeTile, Mark, Overview, Shown } from "./types.js";
 import { ago, kindLabel, noneWaiting, stateLabel, where } from "./words.js";
 
 /** What Home is asked to show by: the words searched for and the machine chosen. */
@@ -43,18 +44,33 @@ export class Home {
   private acting: string | null = null;
   private readonly swipes: { shut(): void };
   readonly filter: Filter = { query: "", machine: null };
+  /** The View menu's choices, the folded and the seen: given with each call for Home. */
+  readonly choices = new HomeChoices();
+  private readonly viewOpen = iconButton("view", "View", () => this.openView(), { class: "icon-button view-open", "data-view-open": "" });
+  private readonly chosenDot = h("span", { class: "chosen-dot", hidden: true, "data-view-chosen": "" });
+  private readonly viewSheet = h("div", { class: "card sheet view-sheet", hidden: true, role: "dialog", "aria-label": "View", "data-view-sheet": "" });
+  private readonly scrim = h("div", { class: "scrim", hidden: true });
+  private marks: Record<string, Mark> = {};
+  private marksSig = "";
+  private readonly drawnMarks = new Map<string, SVGSVGElement>();
 
-  /** `changed` is called when the person searches or chooses a machine: show again. */
+  /** `changed` is called when the person searches, chooses a machine or a view, or folds: show again. */
   constructor(private readonly app: App, private readonly changed: () => void) {
     const start = iconButton("plus", "Start an agent", () => (location.hash = "start"), { "data-start": "" });
+    this.viewOpen.append(this.chosenDot);
+    this.scrim.addEventListener("click", () => this.closeView());
     this.el.append(
       h("h1", { class: "title" }, "Home", this.count, start),
-      h("div", { class: "find" }, this.search, this.machines),
+      h("div", { class: "find" }, h("div", { class: "find-row" }, this.search, this.viewOpen), this.machines),
       this.needsList, this.clear,
       this.workingHead, this.workingList,
       this.pinnedHead, this.pinnedList,
-      this.treeList, this.none, this.sheet,
+      this.treeList, this.none, this.sheet, this.scrim, this.viewSheet,
     );
+    void this.choices.load().then(() => {
+      this.chosenDot.hidden = !this.choices.chosen();
+      this.changed();
+    });
     this.sheet.append(this.sheetName, h("div", { class: "row" },
       this.sheetStop,
       pill("Close", () => this.askClose(), "", { "data-row-close": "" }),
@@ -73,7 +89,8 @@ export class Home {
       this.changed();
     });
     this.cards = new Keyed(this.needsList, (a) => a.tile, (a) => JSON.stringify([a.agent, a.name, a.machine, a.waiting]), (a) => this.card(a));
-    const sig = (e: HomeEntry) => JSON.stringify(e);
+    // A tile's row is drawn again once its agent's mark is in hand.
+    const sig = (e: HomeEntry) => JSON.stringify(e) + (e.of === "tile" && e.tile.agent && this.marks[e.tile.agent] ? "+mark" : "");
     this.working = new Keyed(this.workingList, (e) => e.key, sig, (e) => this.row(e, false));
     this.pinned = new Keyed(this.pinnedList, (e) => e.key, sig, (e) => this.row(e, true));
     this.tree = new Keyed(this.treeList, (e) => e.key, sig, (e) => this.row(e, true));
@@ -81,6 +98,12 @@ export class Home {
 
   show(shown: Shown, o: Overview): void {
     this.overview = o;
+    this.marks = shown.marks ?? {};
+    const marksSig = JSON.stringify(this.marks);
+    if (marksSig !== this.marksSig) {
+      this.marksSig = marksSig;
+      this.drawnMarks.clear();
+    }
     if (this.acting) this.showSheet();
     const waiting = new Map(o.needs.map((a) => [`t:${a.workspace}/${a.tile}`, a]));
     const needs = shown.needs.flatMap((key) => waiting.get(key) ?? []);
@@ -134,29 +157,47 @@ export class Home {
     if (e.of === "machine") return h("h2", { class: "machine", "data-machine": e.name }, e.name);
     if (e.of === "project") {
       // Its +: start an agent there.
-      const start = h("button", { type: "button", class: "more", "aria-label": `Start an agent in ${e.name}`, "data-start-in": e.key }, "+");
+      const start = h("button", { type: "button", class: "more", "aria-label": `Start an agent in ${e.name}`, "data-start-in": e.key }, icon("plus"));
       const at = new URLSearchParams({ workspace: e.workspace, ...(e.frame ? { frame: e.frame } : {}) });
       start.addEventListener("click", () => (location.hash = `start&${at}`));
-      return h("h3", { class: "project", "data-project": e.key }, h("span", { class: "name" }, e.name), start);
+      return h("h3", { class: "project", "data-project": e.key },
+        this.fold(e.key, e.folded, h("span", { class: "name" }, e.name), ...under(e.count, e.state)), start);
     }
-    if (e.of === "section") return h("h3", { class: "project", "data-section": e.key }, h("span", { class: "name" }, e.label));
+    // Grouped by none, its one section has no heading.
+    if (e.of === "section") {
+      if (!e.label) return h("h3", { hidden: true, "data-section": e.key });
+      return h("h3", { class: "group-head", "data-section": e.key },
+        // Grouped by status, the heading already says it.
+        this.fold(e.key, e.folded, h("span", { class: "name" }, e.label), ...under(e.count, this.choices.prefs.groupBy === "status" ? undefined : e.state)));
+    }
     const pad = `--depth:${e.depth}`;
     if (e.of === "frame") {
       const f = e.frame;
       const folder = f.folder && f.folder.name !== f.title ? f.folder.name : null;
-      return h("div", { class: "frame", style: pad, "data-frame": e.key },
-        h("span", { class: "swatch", style: `background:${f.color}` }),
-        h("span", { class: "name" }, f.title),
-        folder && h("span", { class: "status mono" }, folder));
+      const worktree = !!f.parentId || f.folder?.kind === "worktree";
+      // The frame's colour turned down: it says which one, the state says what needs a look.
+      const color = f.color || "var(--text3)";
+      const mark = icon(worktree ? "branch" : e.folded ? "folder" : "folderOpen", "folder-mark");
+      mark.style.color = `color-mix(in oklab, ${color} 62%, var(--text3))`;
+      if (!worktree) mark.style.fill = `color-mix(in oklab, ${color} 22%, transparent)`;
+      return h("div", { class: "frame", style: pad, "data-frame": e.key, ...(worktree ? { "data-worktree": "" } : {}) },
+        this.fold(e.key, e.folded, mark, h("span", { class: "name" }, f.title),
+          folder ? h("span", { class: "folder mono" }, folder) : null, ...under(e.count, e.state)));
     }
     const t = e.tile;
     const agent = t.state !== undefined;
     const shows = [
-      h("span", { class: "dot", "data-state": t.state ?? "none" }),
+      h("span", { class: "avatar", "data-mark": t.agent && this.marks[t.agent] ? t.agent : t.agent || t.terminal ? "terminal" : "window" },
+        this.markOf(t),
+        h("span", { class: "dot", "data-state": t.state ?? "none" })),
       h("span", { class: "col" },
-        h("span", { class: "name" }, t.name),
-        h("span", { class: `status${t.waiting ? " waits" : ""}`, "data-line": "" }, ...lineOf(t, e.line))),
-      t.since !== undefined && h("span", { class: "age", "data-since": t.since }, ago(t.since)),
+        h("span", { class: "top" },
+          h("span", { class: "name" }, t.name),
+          t.state === "waiting" && h("span", { class: "needs-you" }, "Needs you"),
+          t.since !== undefined && h("span", { class: "age", "data-since": t.since }, ago(t.since))),
+        h("span", { class: "under" },
+          h("span", { class: `status${t.waiting ? " waits" : ""}`, "data-line": "" }, ...lineOf(t, e.line)),
+          e.unread && h("span", { class: "unread", "aria-label": "Unread", "data-unread": "" }))),
     ];
     const row = h("div", {
       class: "agent", style: pad, "data-row": e.key, "data-kind": t.kind,
@@ -164,7 +205,7 @@ export class Home {
       ...(agent ? { "data-state": t.state } : {}),
     });
     if (!agent && !t.terminal) {
-      row.append(...shows.filter((n): n is HTMLElement => !!n));
+      row.append(...shows);
       return row;
     }
     // A shell's row opens its terminal.
@@ -181,6 +222,53 @@ export class Home {
     if (t.interrupt && (t.state === "working" || t.state === "waiting")) row.setAttribute("data-stoppable", "");
     row.append(open);
     return row;
+  }
+
+  /** What a tile's row shows it is: its agent's mark, a terminal for a shell, else a window. */
+  private markOf(t: HomeTile): SVGSVGElement {
+    const m = t.agent ? this.marks[t.agent] : undefined;
+    if (!m) return icon(t.agent || t.terminal ? "terminal" : "window");
+    let drawn = this.drawnMarks.get(t.agent!);
+    if (!drawn) this.drawnMarks.set(t.agent!, (drawn = agentMark(m)));
+    return drawn.cloneNode(true) as SVGSVGElement;
+  }
+
+  /** A heading that folds what is under `key` when tapped, its arrow first. */
+  private fold(key: string, folded: boolean, ...shows: Array<Node | null | false>): HTMLButtonElement {
+    const button = h("button", { type: "button", class: "fold", "aria-expanded": String(!folded), "data-fold": key },
+      icon("chevron", "chev"), ...shows);
+    button.addEventListener("click", () => {
+      this.choices.fold(key);
+      this.changed();
+    });
+    return button;
+  }
+
+  private openView(): void {
+    this.drawView();
+    this.scrim.hidden = false;
+    this.viewSheet.hidden = false;
+  }
+
+  private closeView(): void {
+    this.scrim.hidden = true;
+    this.viewSheet.hidden = true;
+  }
+
+  /** The View menu: one choice in each group, the chosen pressed. */
+  private drawView(): void {
+    const prefs = this.choices.prefs;
+    this.viewSheet.replaceChildren(
+      h("h3", { class: "name" }, "View"),
+      ...VIEW_GROUPS.map(([group, label]) => h("div", { class: "view-group", "data-view": group },
+        h("p", { class: "label-small" }, label),
+        chips<readonly [string, string]>(VIEW_CHOICES[group], ([, word]) => word, ([id]) => id === prefs[group], ([id]) => {
+          this.choices.choose(group, id);
+          this.chosenDot.hidden = !this.choices.chosen();
+          this.drawView();
+          this.changed();
+        }, { "aria-label": label }))),
+      pill("Done", () => this.closeView(), "primary", { "data-view-done": "" }));
   }
 
   /** What a row swiped left shows: Stop while its agent can be stopped, and Close. */
@@ -239,6 +327,15 @@ function lineOf(t: HomeTile, line: string | undefined): Array<string | HTMLEleme
   if (line) return line.split("`").map((part, i) => (i % 2 ? h("code", {}, part) : part)).filter((p) => p !== "");
   if (t.state) return [[stateLabel(t.state), t.program?.label].filter(Boolean).join(" · ")];
   return [t.kind];
+}
+
+/** What a heading says of what is under it: the state that most wants a look, then how many. */
+function under(count: number, state: string | undefined): HTMLElement[] {
+  const shows: HTMLElement[] = [h("span", { class: "gap" })];
+  if (state === "waiting") shows.push(h("span", { class: "needs-you" }, "Needs you"));
+  else if (state) shows.push(h("span", { class: "dot", "data-state": state }));
+  if (count > 0) shows.push(h("span", { class: "rows", "data-rows": "" }, String(count)));
+  return shows;
 }
 
 /** Working agents past which their dots stop breathing. */
