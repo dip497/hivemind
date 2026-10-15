@@ -23,11 +23,12 @@ final class MarkPathTests: XCTestCase {
 
     func testNumbersAreReadAsSVGWritesThemPackedTogether() {
         // A sign or a second point starts the next number; an exponent belongs to its number;
-        // pairs after a move are lines, as are pairs after a line.
-        XCTAssertEqual(elements("M-1.5-2L.5.5 1e1,2E-1M0 0 4 0 4 4Z"), [
+        // pairs after a move are lines, as are pairs after a line. (A path keeps its points as
+        // 32-bit floats: these are ones they hold exactly.)
+        XCTAssertEqual(elements("M-1.5-2L.5.5 1e1,25E-2M0 0 4 0 4 4Z"), [
             .move(to: CGPoint(x: -1.5, y: -2)),
             .line(to: CGPoint(x: 0.5, y: 0.5)),
-            .line(to: CGPoint(x: 10, y: 0.2)),
+            .line(to: CGPoint(x: 10, y: 0.25)),
             .move(to: CGPoint(x: 0, y: 0)),
             .line(to: CGPoint(x: 4, y: 0)),
             .line(to: CGPoint(x: 4, y: 4)),
