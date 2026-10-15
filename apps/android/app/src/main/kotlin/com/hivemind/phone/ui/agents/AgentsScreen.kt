@@ -66,8 +66,7 @@ fun LazyListScope.agentsItems(
 
 /**
  * An agent's row: its name, under it in grey what it [says] (else its state and program), for how
- * long, and its state as a small mark at the end, set in by [depth]. Swiped right it stops its turn (when it works and can be interrupted); left it
- * closes.
+ * long, and its state as a small mark at the end, set in by [depth]. Swiped as [AgentSwipe] says.
  */
 @Composable
 fun AgentRow(
@@ -80,34 +79,7 @@ fun AgentRow(
     says: String? = null,
     depth: Int = 0,
 ) {
-    val swipe = rememberSwipeToDismissBoxState()
-    val scope = rememberCoroutineScope()
-    SwipeToDismissBox(
-        state = swipe,
-        enableDismissFromStartToEnd = agent.stoppable && !busy,
-        enableDismissFromEndToStart = !busy,
-        // An action, not a removal: the row springs back, and the overview says what became of it.
-        onDismiss = { direction ->
-            when (direction) {
-                SwipeToDismissBoxValue.StartToEnd -> onStop(agent)
-                SwipeToDismissBoxValue.EndToStart -> onClose(agent)
-                SwipeToDismissBoxValue.Settled -> Unit
-            }
-            scope.launch { swipe.reset() }
-        },
-        backgroundContent = {
-            val toStop = swipe.dismissDirection == SwipeToDismissBoxValue.StartToEnd
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(if (toStop) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.errorContainer)
-                    .padding(horizontal = 20.dp),
-                contentAlignment = if (toStop) Alignment.CenterStart else Alignment.CenterEnd,
-            ) {
-                Text(stringResource(if (toStop) R.string.action_stop else R.string.action_close))
-            }
-        },
-    ) {
+    AgentSwipe(agent, busy, onStop, onClose) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -137,4 +109,46 @@ fun AgentRow(
             Box(Modifier.padding(start = 10.dp).size(12.dp), contentAlignment = Alignment.Center) { StateMark(agent.state) }
         }
     }
+}
+
+/**
+ * [row], an agent's: swiped right it stops its turn (when it works and can be interrupted); left it
+ * closes. The row draws its own ground over what the swipe uncovers.
+ */
+@Composable
+fun AgentSwipe(
+    agent: Agent,
+    busy: Boolean,
+    onStop: (Agent) -> Unit,
+    onClose: (Agent) -> Unit,
+    row: @Composable () -> Unit,
+) {
+    val swipe = rememberSwipeToDismissBoxState()
+    val scope = rememberCoroutineScope()
+    SwipeToDismissBox(
+        state = swipe,
+        enableDismissFromStartToEnd = agent.stoppable && !busy,
+        enableDismissFromEndToStart = !busy,
+        // An action, not a removal: the row springs back, and the overview says what became of it.
+        onDismiss = { direction ->
+            when (direction) {
+                SwipeToDismissBoxValue.StartToEnd -> onStop(agent)
+                SwipeToDismissBoxValue.EndToStart -> onClose(agent)
+                SwipeToDismissBoxValue.Settled -> Unit
+            }
+            scope.launch { swipe.reset() }
+        },
+        backgroundContent = {
+            val toStop = swipe.dismissDirection == SwipeToDismissBoxValue.StartToEnd
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(if (toStop) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.errorContainer)
+                    .padding(horizontal = 20.dp),
+                contentAlignment = if (toStop) Alignment.CenterStart else Alignment.CenterEnd,
+            ) {
+                Text(stringResource(if (toStop) R.string.action_stop else R.string.action_close))
+            }
+        },
+    ) { row() }
 }

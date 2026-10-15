@@ -1,10 +1,16 @@
 package com.hivemind.phone.ui.home
 
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
@@ -49,6 +55,7 @@ class HomeListTest {
     private val opened = mutableListOf<AgentRef>()
     private val stopped = mutableListOf<String>()
     private val closed = mutableListOf<String>()
+    private val folds = mutableListOf<String>()
 
     /** The line saying [text], scrolled to as the person scrolls the list to it. */
     private fun row(text: String): SemanticsNodeInteraction {
@@ -69,6 +76,7 @@ class HomeListTest {
                 onStop = { stopped += it.name },
                 onClose = { closed += it.name },
                 onStart = {},
+                onFold = { folds += it },
             )
         }
     }
@@ -162,18 +170,19 @@ class HomeListTest {
             tile = HomeTile(
                 at = AgentRef(DESK, "ws-1", id), name = name, kind = "terminal", agent = agent, terminal = true,
                 state = if (agent) AgentState.WAITING else null, since = null, waits = if (agent) WaitKind.PERMISSION else null,
-                tool = tool, about = about, question = null, line = line, program = null, interrupt = false,
+                tool = tool, about = about, question = null, line = line, program = null, interrupt = false, runs = null, unread = false,
             ),
         )
         val home = HomeShown(
             device = DESK, computer = "desk", needs = listOf(asking.at), working = emptyList(), pinned = emptyList(), machines = emptyList(),
             tree = listOf(
                 HomeEntry.Machine("m:desk", "desk"),
-                HomeEntry.Project("p:ws-1", "hivemind", "ws-1", null),
-                HomeEntry.Frame("f:ws-1/f1", 1u, "nav fix", "#3a7bd5", "nav-fix"),
+                HomeEntry.Project("p:ws-1", "hivemind", "ws-1", null, count = 1u, state = AgentState.WAITING, folded = false),
+                HomeEntry.Frame("f:ws-1/f1", 1u, "nav fix", "#3a7bd5", "nav-fix", worktree = false, branch = null, count = 2u, state = AgentState.WAITING, folded = false),
                 tile("t1", "api", agent = true, tool = "Bash", about = "rm -rf build"),
                 tile("t2", "shell", agent = false, line = "$ make"),
             ),
+            marks = emptyMap(),
         )
         show(overview(agents = listOf(asking), needs = listOf(asking)), listOf(home))
 
@@ -203,5 +212,75 @@ class HomeListTest {
 
         assertEquals(listOf("builder", "asker"), stopped)
         assertEquals(listOf("reviewer"), closed)
+    }
+
+    @Test
+    fun `a project, a frame and a section fold by their key when tapped, each arrow saying which way it goes`() {
+        val home = HomeShown(
+            device = DESK, computer = "desk", needs = emptyList(), working = emptyList(), pinned = emptyList(), machines = emptyList(),
+            tree = listOf(
+                HomeEntry.Project("p:ws-1", "hivemind", "ws-1", null, count = 1u, state = null, folded = false),
+                HomeEntry.Frame("f:ws-1/f1", 1u, "nav fix", "#3a7bd5", null, worktree = false, branch = null, count = 0u, state = null, folded = true),
+                HomeEntry.Section("s:waiting", "Waiting", count = 0u, state = null, folded = false),
+            ),
+            marks = emptyMap(),
+        )
+        show(overview(), listOf(home))
+
+        compose.onNodeWithContentDescription("Hide what is in hivemind").assertExists()
+        compose.onNodeWithContentDescription("Show what is in nav fix").assertExists()
+        row("hivemind").performClick()
+        row("nav fix").performClick()
+        row("WAITING").performClick()
+
+        assertEquals(listOf("p:ws-1", "f:ws-1/f1", "s:waiting"), folds)
+    }
+
+    @Test
+    fun `what needs the person says so on its tile and on the frame it is in, and a tile done since last looked at shows a dot`() {
+        fun tile(id: String, state: AgentState, unread: Boolean) = HomeEntry.Tile(
+            key = "t:ws-1/$id",
+            depth = 2u,
+            tile = HomeTile(
+                at = AgentRef(DESK, "ws-1", id), name = id, kind = "terminal", agent = true, terminal = true, state = state, since = null,
+                waits = null, tool = null, about = null, question = null, line = "said $id", program = null, interrupt = false,
+                runs = "claude", unread = unread,
+            ),
+        )
+        val home = HomeShown(
+            device = DESK, computer = "desk", needs = emptyList(), working = emptyList(), pinned = emptyList(), machines = emptyList(),
+            tree = listOf(
+                HomeEntry.Project("p:ws-1", "hivemind", "ws-1", null, count = 1u, state = AgentState.WAITING, folded = false),
+                HomeEntry.Frame("f:ws-1/f1", 1u, "nav fix", "#3a7bd5", null, worktree = true, branch = "nav-fix", count = 3u, state = AgentState.WAITING, folded = false),
+                tile("asker", AgentState.WAITING, unread = false),
+                tile("finished", AgentState.IDLE, unread = true),
+                tile("resting", AgentState.IDLE, unread = false),
+            ),
+            marks = emptyMap(),
+        )
+        show(overview(), listOf(home))
+
+        row("nav-fix").assertIsDisplayed()
+        compose.onAllNodesWithText("Needs you").assertCountEquals(3)
+        compose.onAllNodesWithContentDescription("Done since you last looked").assertCountEquals(1)
+        row("said finished").assertIsDisplayed()
+    }
+
+    @Test
+    fun `the View menu shows each group's choice, and a choice tapped is taken for its group`() {
+        val chosen = mutableListOf<Pair<ViewGroup, String>>()
+        compose.setContent { PhoneTheme(accent = null) { ViewChoices(FirstChoices.copy(sortBy = "name")) { group, id -> chosen += group to id } } }
+
+        compose.onNodeWithText("Name").assertIsSelected()
+        compose.onNodeWithText("Canvas order").assertIsNotSelected()
+        compose.onNodeWithText("Last activity").performClick()
+        compose.onNodeWithText("Agent").performClick()
+        compose.onNodeWithText("Past hour").performClick()
+        compose.onAllNodesWithText("Needs you")[0].performClick()
+
+        assertEquals(
+            listOf(ViewGroup.SORT_BY to "activity", ViewGroup.GROUP_BY to "agent", ViewGroup.ACTIVITY to "hour", ViewGroup.STATUS to "needs-you"),
+            chosen,
+        )
     }
 }

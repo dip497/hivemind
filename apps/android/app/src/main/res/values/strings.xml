@@ -70,6 +70,34 @@
     <string name="home_nothing">Nothing open on your computer yet.</string>
     <string name="home_no_match">Nothing matches.</string>
     <string name="home_start_in">Start an agent in %s</string>
+    <string name="home_needs_you">Needs you</string>
+    <string name="home_unread">Done since you last looked</string>
+    <string name="home_fold">Hide what is in %s</string>
+    <string name="home_unfold">Show what is in %s</string>
+
+    <!-- Home's View menu, in the desktop's words -->
+    <string name="view_title">View</string>
+    <string name="view_status">Status</string>
+    <string name="view_activity">Activity</string>
+    <string name="view_group_by">Group by</string>
+    <string name="view_sort_by">Sort by</string>
+    <string name="view_all">All</string>
+    <string name="view_needs_you">Needs you</string>
+    <string name="view_unread">Unread</string>
+    <string name="view_working">Working</string>
+    <string name="view_idle">Idle</string>
+    <string name="view_exited">Exited</string>
+    <string name="view_past_hour">Past hour</string>
+    <string name="view_today">Today</string>
+    <string name="view_this_week">This week</string>
+    <string name="view_project">Project</string>
+    <string name="view_machine">Machine</string>
+    <string name="view_date">Date</string>
+    <string name="view_agent">Agent</string>
+    <string name="view_none">None</string>
+    <string name="view_canvas_order">Canvas order</string>
+    <string name="view_last_activity">Last activity</string>
+    <string name="view_name">Name</string>
     <string name="agents_device_away">%s · away</string>
     <string name="action_stop">Stop</string>
     <string name="action_close">Close</string>

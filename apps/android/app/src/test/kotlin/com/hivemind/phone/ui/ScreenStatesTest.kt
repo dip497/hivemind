@@ -75,7 +75,7 @@ class ScreenStatesTest {
             agents = listOf(agent("t1", name = "api"), agent("t2", name = "docs", device = "laptop-id", deviceName = "laptop")),
             devices = listOf(device(DESK, "desk"), device("laptop-id", "laptop")),
         )
-        val desk = HomeShown(DESK, "desk", emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+        val desk = HomeShown(DESK, "desk", emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyMap())
 
         val state = HomeState.of(overview, listOf(desk), HomeFilter())
 

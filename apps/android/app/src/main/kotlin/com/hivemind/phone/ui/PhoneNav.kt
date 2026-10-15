@@ -1,6 +1,7 @@
 package com.hivemind.phone.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -136,6 +137,11 @@ fun PhoneNav(core: PhoneCore, opens: Flow<AgentRef>, links: Flow<String>) {
                 )
             }
             entry<Route.Agent> { route ->
+                // Looked at when opened and when left: what it did while watched is not unread on Home.
+                DisposableEffect(route) {
+                    core.homeChoices.opened(route.ref)
+                    onDispose { core.homeChoices.opened(route.ref) }
+                }
                 AgentScreen(
                     viewModel { AgentViewModel(core.phone, core.feed.overview, route.ref) },
                     onBack = { stack.removeLastOrNull() },

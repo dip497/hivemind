@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.hivemind.phone.core.Agent
 import com.hivemind.phone.core.AgentRef
 import com.hivemind.phone.core.Answer
+import com.hivemind.phone.core.HomeChoices
 import com.hivemind.phone.core.HomeShown
 import com.hivemind.phone.core.Overview
 import com.hivemind.phone.core.Phone
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import java.util.TimeZone
 
 /** What Home is asked to show by: the words searched for, and the machine chosen. */
 data class HomeFilter(val query: String = "", val machine: String? = null)
@@ -33,9 +35,11 @@ data class HomeState(
     /** Every agent of the overview, by where it is: what a tile's row acts on. */
     val agents: Map<AgentRef, Agent>,
     val filter: HomeFilter,
+    /** The View menu's choices and what is folded, as the person left them. */
+    val choices: HomeChoices = FirstChoices,
 ) {
     companion object {
-        fun of(overview: Overview, homes: List<HomeShown>, filter: HomeFilter): HomeState {
+        fun of(overview: Overview, homes: List<HomeShown>, filter: HomeFilter, choices: HomeChoices = FirstChoices): HomeState {
             val homed = homes.map { it.device }.toSet()
             val elsewhere = AgentsState.of(overview).devices.filter { it.id !in homed }
             return HomeState(
@@ -44,17 +48,27 @@ data class HomeState(
                 elsewhere = AgentsState(elsewhere),
                 agents = overview.agents.associateBy { it.at },
                 filter = filter,
+                choices = choices,
             )
         }
     }
 }
 
-class HomeViewModel(private val phone: Phone, overview: StateFlow<Overview>) : ViewModel() {
+class HomeViewModel(private val phone: Phone, overview: StateFlow<Overview>, private val kept: HomeChoicesStore) : ViewModel() {
     private val filter = MutableStateFlow(HomeFilter())
 
     // The core tells of Home's changes as it does the overview's: each overview pulls Home again.
-    val state: StateFlow<HomeState> = combine(overview, filter) { o, f -> HomeState.of(o, phone.home(f.query, f.machine), f) }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, HomeState.of(overview.value, phone.home("", null), HomeFilter()))
+    val state: StateFlow<HomeState> = combine(overview, filter, kept.choices) { o, f, c -> shown(o, f, c) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, shown(overview.value, HomeFilter(), kept.choices.value))
+
+    private fun shown(overview: Overview, filter: HomeFilter, choices: HomeChoices): HomeState {
+        val offset = TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60_000
+        return HomeState.of(overview, phone.home(filter.query, filter.machine, choices.copy(offsetMinutes = offset)), filter, choices)
+    }
+
+    fun choose(group: ViewGroup, id: String) = kept.choose(group, id)
+
+    fun fold(key: String) = kept.fold(key)
 
     val calls = CoreCalls(viewModelScope)
 

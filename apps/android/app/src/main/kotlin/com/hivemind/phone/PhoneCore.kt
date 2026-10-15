@@ -7,6 +7,7 @@ import com.hivemind.phone.core.Phone
 import com.hivemind.phone.live.OverviewFeed
 import com.hivemind.phone.push.Notices
 import com.hivemind.phone.push.Push
+import com.hivemind.phone.ui.home.HomeChoicesStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -16,7 +17,8 @@ import java.io.File
 /**
  * The core, opened once for the process (design §5.1): the phone, and the overview it follows; and
  * what the person is told while the app is away (P6): where the devices tell the phone, and the
- * notifications. [scope] is the process's own work, which outlives every screen.
+ * notifications. [scope] is the process's own work, which outlives every screen. [homeChoices]: how
+ * the person left Home, and when they last opened each agent.
  */
 class PhoneCore private constructor(
     val phone: Phone,
@@ -24,6 +26,7 @@ class PhoneCore private constructor(
     val notices: Notices,
     val push: Push,
     val scope: CoroutineScope,
+    val homeChoices: HomeChoicesStore,
 ) {
     companion object {
         /** Opens the core in the app's private files. Main thread: it reads only what the core kept. */
@@ -36,7 +39,8 @@ class PhoneCore private constructor(
             val notices = Notices(app)
             // A wait answered, or waiting no more, as its device says: its notification goes.
             scope.launch { feed.overview.collect(notices::cleared) }
-            return PhoneCore(phone, feed, notices, Push(app, phone, feed.overview, scope), scope)
+            val homeChoices = HomeChoicesStore(app.getSharedPreferences("home", Context.MODE_PRIVATE))
+            return PhoneCore(phone, feed, notices, Push(app, phone, feed.overview, scope), scope, homeChoices)
         }
 
         /** What the person's devices list this phone as: the name its settings give it, else its model. */
