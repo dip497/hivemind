@@ -190,6 +190,11 @@ export function App() {
   }, []);
   // Settings' code is fetched while nothing else is happening, so opening it never waits.
   useEffect(() => {
+    // Safari has no requestIdleCallback.
+    if (typeof requestIdleCallback !== "function") {
+      const id = setTimeout(() => void SettingsPages.preload(), 1000);
+      return () => clearTimeout(id);
+    }
     const id = requestIdleCallback(() => void SettingsPages.preload());
     return () => cancelIdleCallback(id);
   }, []);

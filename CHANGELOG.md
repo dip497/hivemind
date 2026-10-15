@@ -49,6 +49,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- The app served to a browser opens in Safari, on an iPhone too; before, it showed a black screen.
 - A canvas moved by one wheel notch is where it was left after a restart; before, it reopened where the last longer pan had left it.
 - Recents lists a folder's older sessions, and listing them no longer stalls the app on a long agent history.
 - Opening a tool use in an agent's conversation on your phone is instant on long sessions.
