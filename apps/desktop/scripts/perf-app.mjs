@@ -166,6 +166,20 @@ const cpuOf = (pid) => {
   return ms;
 };
 
+/** CPU time (ms) the terminal daemon this run's profile started has used so far; 0 before it runs. */
+const daemonCpu = () => {
+  for (const pid of readdirSync("/proc").filter((p) => /^\d+$/.test(p))) {
+    try {
+      const argv = readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0");
+      if (!argv.some((a) => /pty-daemon\.(js|ts)$/.test(a)) || !argv.some((a) => a.startsWith(root + path.sep))) continue;
+      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+      const f = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+      return ((Number(f[11]) + Number(f[12])) * 1000) / 100;
+    } catch { /* gone */ }
+  }
+  return 0;
+};
+
 // The board: TERMINALS shells, each having printed LINES lines, and a note. Its launch is the first
 // one: a new profile and no terminal daemon yet.
 let firstLaunch;
@@ -210,6 +224,7 @@ const result = {
 
 for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
   const r = BUILDS.length > 1 ? { build: BUILDS[b] } : {};
+  const daemonBefore = daemonCpu();
   const { app, page } = await launch(main);
   const created = await app.evaluate(() => process.getCreationTime());
   await mainStalls(app);
@@ -225,6 +240,7 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
   const cpuAtBoard = cpuOf(app.process().pid);
   const shown = await whenTrue(page, visibleDone);
   const cpu = cpuOf(app.process().pid);
+  const daemonAtShown = daemonCpu();
   const fcp = await page.evaluate(() => performance.getEntriesByName("first-contentful-paint")[0]?.startTime ?? null);
   const startupMain = await mainThread(cdp, renderer);
   r.startup = {
@@ -237,6 +253,7 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
     cpuRendererToBoard: cpuAtBoard.renderer,
     cpuMainToTerminalsShown: cpu.main,
     cpuRendererToTerminalsShown: cpu.renderer,
+    cpuDaemonToTerminalsShown: daemonAtShown - daemonBefore,
     mainBusyMs: Math.round(startupMain.task),
     mainCpuMs: Math.round(startupMain.cpu),
   };
