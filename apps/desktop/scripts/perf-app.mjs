@@ -519,8 +519,11 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
 
   // Canvas, at a person's pace: one wheel notch, then a rest, so each notch is a whole pan that starts and ends.
   {
-    // Over bare canvas: a wheel over a tile or the chrome does not pan. The pans above moved the camera.
+    // Over bare canvas: a wheel over a tile or the chrome does not pan. From the same view on every
+    // build: the shells' view, zoomed out until the board shows around them.
     await cameraOnShells(page);
+    for (let i = 0; i < 3; i++) await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:zoom", { detail: "out" })));
+    await page.waitForTimeout(1000);
     const at = await page.evaluate(() => {
       const b = document.querySelector(".react-flow__pane")?.getBoundingClientRect();
       if (!b) return null;
@@ -530,7 +533,12 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
       }
       return null;
     });
-    if (!at) throw new Error("no bare canvas to wheel over");
+    if (!at) throw new Error(`no bare canvas to wheel over (${r.build ?? "out"}): ${await page.evaluate(() => {
+      const b = document.querySelector(".react-flow__pane")?.getBoundingClientRect();
+      if (!b) return "no pane";
+      const e = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+      return `pane ${Math.round(b.width)}x${Math.round(b.height)}; at its middle ${e?.tagName}.${[...(e?.classList ?? [])].join(".")}`;
+    })}`);
     await page.mouse.move(at.x, at.y);
     await page.waitForTimeout(500);
     const NOTCHES = 10;
