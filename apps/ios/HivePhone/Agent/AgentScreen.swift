@@ -262,6 +262,7 @@ struct WaitCard: View {
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(Look.secondary)
                 }
+                WaitAsked(waiting: waiting)
                 if Answers(waiting) == .terminal {
                     Button("Answer in its terminal", action: type)
                         .buttonStyle(.outlinedPill)

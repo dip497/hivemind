@@ -29,8 +29,14 @@ func anAgent(
         hasConversation: hasConversation)
 }
 
-func aWait(_ kind: WaitKind, decide: Bool = false) -> Waiting {
-    Waiting(kind: kind, since: 1_700_000_000_000, plan: kind == .plan ? "1. Read the tests" : nil, decide: decide)
+func aWait(_ kind: WaitKind, decide: Bool = false, questions: [Question] = [], choose: Bool = false) -> Waiting {
+    Waiting(
+        kind: kind, since: 1_700_000_000_000, plan: kind == .plan ? "1. Read the tests" : nil, decide: decide,
+        questions: questions, choose: choose)
+}
+
+func aQuestion(_ question: String, _ options: String..., many: Bool = false) -> Question {
+    Question(question: question, options: options.map { Choice(label: $0, description: nil) }, many: many)
 }
 
 func aLine(_ index: UInt64, _ text: String) -> ScreenLine {

@@ -11,12 +11,36 @@ final class NeedsTests: XCTestCase {
             (aWait(.permission, decide: false), .terminal),
             (aWait(.plan), .plan),
             (aWait(.question), .reply),
+            // Questions its device cannot choose for are answered with a line.
+            (aWait(.question, questions: [color], choose: false), .reply),
+            (aWait(.question, questions: [color], choose: true), .choose),
+            (aWait(.question, questions: [sizes], choose: true), .questions),
+            (aWait(.question, questions: [color, color], choose: true), .questions),
             (aWait(.other), .terminal),
         ]
         for (pending, offered) in cases {
-            XCTAssertEqual(Answers(pending), offered, "\(pending.kind), decide: \(pending.decide)")
+            XCTAssertEqual(Answers(pending), offered, "\(pending.kind), decide: \(pending.decide), \(pending.questions.count) questions")
         }
     }
+
+    func testSeveralQuestionsAreEachAnsweredInTheirPlace() {
+        var picks = QuestionPicks([color, sizes])
+
+        picks.pick(2, of: 1)
+        picks.pick(0, of: 1)
+        XCTAssertFalse(picks.answered, "the first question has no answer yet")
+        picks.pick(0, of: 0)
+        picks.pick(1, of: 0)
+
+        XCTAssertTrue(picks.answered)
+        XCTAssertEqual(picks.answers, [.chosen(options: [1]), .chosen(options: [0, 2])])
+
+        picks.own[0] = " Teal "
+        XCTAssertEqual(picks.answers, [.text(text: "Teal"), .chosen(options: [0, 2])])
+    }
+
+    private let color = aQuestion("Which color?", "Red", "Green", "Blue")
+    private let sizes = aQuestion("Which sizes?", "Small", "Medium", "Large", many: true)
 
     func testADeviceIsAwayOnceTheCoreFoundItAwayAndSaysWhenItWasLastHeard() {
         let now = Date(timeIntervalSince1970: 1_700_000_000)

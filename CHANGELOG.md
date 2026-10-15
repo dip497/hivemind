@@ -50,6 +50,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- The Android and iOS apps answer an agent's questions as the phone page does: each question with its options as buttons, several answered together, each in its place, and a permission card shows its tool and command. Before, a question took only a line of text.
 - The app served to a browser opens in Safari, on an iPhone too; before, it showed a black screen.
 - A canvas moved by one wheel notch is where it was left after a restart; before, it reopened where the last longer pan had left it.
 - Recents lists a folder's older sessions, and listing them no longer stalls the app on a long agent history.

@@ -159,6 +159,42 @@ extension ButtonStyle where Self == PillButtonStyle {
     static var outlinedPill: PillButtonStyle { PillButtonStyle(filled: false) }
 }
 
+/// An option of a question as a compact pill: its label, and what it means under it; outlined, and
+/// filled once chosen.
+struct ChoiceButtonStyle: ButtonStyle {
+    let chosen: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        Pill(configuration: configuration, chosen: chosen)
+    }
+
+    private struct Pill: View {
+        let configuration: ButtonStyleConfiguration
+        let chosen: Bool
+        @Environment(\.isEnabled) private var enabled
+
+        var body: some View {
+            configuration.label
+                .foregroundStyle(chosen ? Look.onPrimary : Look.text)
+                .multilineTextAlignment(.leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(chosen ? Look.text : Look.background, in: Capsule())
+                .overlay {
+                    if !chosen {
+                        Capsule().strokeBorder(Look.outline, lineWidth: 1)
+                    }
+                }
+                .contentShape(Capsule())
+                .opacity(enabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
+        }
+    }
+}
+
+extension ButtonStyle where Self == ChoiceButtonStyle {
+    static func choicePill(chosen: Bool) -> ChoiceButtonStyle { ChoiceButtonStyle(chosen: chosen) }
+}
+
 /// A round dot: filled, or a ring when not.
 struct Dot: View {
     let color: Color
@@ -243,5 +279,54 @@ struct StateMark: View {
         }
         .frame(width: 14, height: 14)
         .accessibilityHidden(true)
+    }
+}
+
+/// Views side by side, wrapping onto the next row where the width runs out.
+struct WrappingRow: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = lines(of: subviews, width: proposal.width)
+        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
+        return CGSize(width: proposal.width ?? rows.map(\.width).max() ?? 0, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in lines(of: subviews, width: bounds.width) {
+            var x = bounds.minX
+            for (index, size) in zip(row.indices, row.sizes) {
+                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+
+    private struct Line {
+        var indices: [Int] = []
+        var sizes: [CGSize] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    private func lines(of subviews: Subviews, width: CGFloat?) -> [Line] {
+        let room = width ?? .infinity
+        var rows: [Line] = []
+        var line = Line()
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(ProposedViewSize(width: width, height: nil))
+            if !line.indices.isEmpty && line.width + spacing + size.width > room {
+                rows.append(line)
+                line = Line()
+            }
+            line.width += (line.indices.isEmpty ? 0 : spacing) + size.width
+            line.height = max(line.height, size.height)
+            line.indices.append(index)
+            line.sizes.append(size)
+        }
+        if !line.indices.isEmpty { rows.append(line) }
+        return rows
     }
 }
