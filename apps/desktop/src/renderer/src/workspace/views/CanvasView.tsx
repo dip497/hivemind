@@ -66,8 +66,9 @@ const PRO_OPTIONS = { hideAttribution: true };
 function ViewportMirror({ target }: { target: { current: { x: number; y: number; zoom: number } } }) {
   // Stable: the hook writes these into react-flow's store whenever they change.
   const mirror = useCallback((vp: { x: number; y: number; zoom: number }) => { target.current = vp; }, [target]);
+  // onStart too: a wheel pan's first notch reaches only the start, so a one-notch pan has no change.
   // Not onEnd: a scroll's end carries the viewport from before it, and the crisp snap would stand down.
-  useOnViewportChange({ onChange: mirror });
+  useOnViewportChange({ onStart: mirror, onChange: mirror });
   return null;
 }
 
