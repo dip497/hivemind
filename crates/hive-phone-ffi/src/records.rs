@@ -3,7 +3,12 @@
 
 use std::collections::BTreeMap;
 
-use hive_phone::{agents, connections::Seen, person, workspace::Reply};
+use hive_phone::{
+    agents,
+    connections::Seen,
+    person,
+    workspace::{self, Reply},
+};
 
 /// Whose devices these are: their name, and their colour, `#rrggbb`, or "" for none.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -103,6 +108,55 @@ pub struct Waiting {
     pub since: u64,
     pub plan: Option<String>,
     pub decide: bool,
+    /// A permission's tool, and what it is about.
+    #[uniffi(default)]
+    pub tool: Option<ToolAsked>,
+    /// A question's questions, each with its options.
+    #[uniffi(default)]
+    pub questions: Vec<Question>,
+    /// Its questions can be answered from here (`Answer::Questions`); else a line answers it.
+    #[uniffi(default)]
+    pub choose: bool,
+}
+
+/// The tool a permission is for: `Bash`, and what it is about (its command, its file), whole.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ToolAsked {
+    pub name: String,
+    pub about: Option<String>,
+}
+
+/// A question an agent asks the person, its options, and whether several may be chosen.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Question {
+    pub question: String,
+    pub options: Vec<Choice>,
+    pub many: bool,
+}
+
+/// An option of a question: its label, and what it means when the agent says.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Choice {
+    pub label: String,
+    pub description: Option<String>,
+}
+
+impl From<agents::Asked> for Question {
+    fn from(asked: agents::Asked) -> Self {
+        let mut descriptions = asked.descriptions.into_iter();
+        Self {
+            question: asked.question,
+            options: asked
+                .options
+                .into_iter()
+                .map(|label| Choice {
+                    label,
+                    description: descriptions.next().filter(|d| !d.is_empty()),
+                })
+                .collect(),
+            many: asked.many,
+        }
+    }
 }
 
 /// The program an agent is: `claude` · "Claude Code".
@@ -212,6 +266,15 @@ pub enum Answer {
         approve: bool,
         feedback: Option<String>,
     },
+    /// A wait that says `choose`: each of its questions answered, in their order.
+    Questions { answers: Vec<QuestionAnswer> },
+}
+
+/// The answer to one question: the options chosen, counting from 0, or a line of the person's own.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum QuestionAnswer {
+    Chosen { options: Vec<u32> },
+    Text { text: String },
 }
 
 impl From<Answer> for Reply {
@@ -222,6 +285,15 @@ impl From<Answer> for Reply {
                 allow: decision == Decision::Allow,
             },
             Answer::Plan { approve, feedback } => Reply::Plan { approve, feedback },
+            Answer::Questions { answers } => Reply::Answers(
+                answers
+                    .into_iter()
+                    .map(|answer| match answer {
+                        QuestionAnswer::Chosen { options } => workspace::Answer::Chosen(options),
+                        QuestionAnswer::Text { text } => workspace::Answer::Text(text),
+                    })
+                    .collect(),
+            ),
         }
     }
 }
@@ -312,6 +384,17 @@ fn shown(agent: agents::Agent, named: &BTreeMap<&str, &str>) -> Option<Agent> {
             since: waiting.since,
             plan: waiting.plan,
             decide: waiting.decide,
+            tool: waiting.tool.map(|tool| ToolAsked {
+                name: tool.name,
+                about: tool.about,
+            }),
+            questions: waiting
+                .asks
+                .into_iter()
+                .flatten()
+                .map(Question::from)
+                .collect(),
+            choose: waiting.choose,
         }),
         can_interrupt: agent.interrupt,
         has_conversation: agent.conversation,
@@ -535,6 +618,9 @@ mod tests {
                 since: 30,
                 plan: None,
                 decide: true,
+                tool: None,
+                questions: vec![],
+                choose: false,
             })
         );
         let approval = &shown.agents[2];
@@ -564,6 +650,9 @@ mod tests {
                     since: 20,
                     plan: Some("do it".into()),
                     decide: false,
+                    tool: None,
+                    questions: vec![],
+                    choose: false,
                 }),
                 can_interrupt: false,
                 has_conversation: false,
@@ -635,9 +724,118 @@ mod tests {
                     feedback: Some("smaller steps".into()),
                 },
             ),
+            (
+                Answer::Questions {
+                    answers: vec![
+                        QuestionAnswer::Chosen { options: vec![2] },
+                        QuestionAnswer::Text {
+                            text: "Durian".into(),
+                        },
+                        QuestionAnswer::Chosen {
+                            options: vec![0, 2],
+                        },
+                    ],
+                },
+                Reply::Answers(vec![
+                    workspace::Answer::Chosen(vec![2]),
+                    workspace::Answer::Text("Durian".into()),
+                    workspace::Answer::Chosen(vec![0, 2]),
+                ]),
+            ),
         ];
         for (answer, reply) in cases {
             assert_eq!(Reply::from(answer.clone()), reply, "{answer:?}");
         }
+    }
+
+    #[test]
+    fn a_wait_is_shown_with_its_tool_and_its_questions_each_option_with_what_it_means() {
+        let asking = |kind: &str, waits: agents::Waiting| agents::Agent {
+            waiting: Some(agents::Waiting {
+                kind: kind.into(),
+                ..waits
+            }),
+            ..waiting("w1", "t1", kind, 10)
+        };
+        let nothing = agents::Waiting {
+            kind: String::new(),
+            since: 10,
+            plan: None,
+            decide: false,
+            tool: None,
+            asks: None,
+            choose: false,
+        };
+        let question = asking(
+            "question",
+            agents::Waiting {
+                asks: Some(vec![
+                    agents::Asked {
+                        question: "Which color?".into(),
+                        options: vec!["Red".into(), "Blue".into()],
+                        descriptions: vec!["Warm".into(), "Cool".into()],
+                        many: true,
+                    },
+                    agents::Asked {
+                        question: "Which size?".into(),
+                        options: vec!["S".into(), "M".into()],
+                        descriptions: vec![],
+                        many: false,
+                    },
+                ]),
+                choose: true,
+                ..nothing.clone()
+            },
+        );
+        let permission = asking(
+            "permission",
+            agents::Waiting {
+                decide: true,
+                tool: Some(agents::ToolAsked {
+                    name: "Bash".into(),
+                    about: Some("rm -rf build".into()),
+                }),
+                ..nothing
+            },
+        );
+        let named = BTreeMap::from([("", "desk")]);
+        let choice = |label: &str, description: Option<&str>| Choice {
+            label: label.into(),
+            description: description.map(str::to_string),
+        };
+        let asked = shown(question, &named).and_then(|a| a.waiting).unwrap();
+        assert_eq!(
+            (asked.kind, asked.choose, asked.tool, asked.questions),
+            (
+                WaitKind::Question,
+                true,
+                None,
+                vec![
+                    Question {
+                        question: "Which color?".into(),
+                        options: vec![choice("Red", Some("Warm")), choice("Blue", Some("Cool"))],
+                        many: true,
+                    },
+                    Question {
+                        question: "Which size?".into(),
+                        options: vec![choice("S", None), choice("M", None)],
+                        many: false,
+                    },
+                ]
+            )
+        );
+        let asked = shown(permission, &named).and_then(|a| a.waiting).unwrap();
+        assert_eq!(
+            (asked.kind, asked.decide, asked.tool, asked.questions),
+            (
+                WaitKind::Permission,
+                true,
+                Some(ToolAsked {
+                    name: "Bash".into(),
+                    about: Some("rm -rf build".into()),
+                }),
+                vec![]
+            )
+        );
     }
 }

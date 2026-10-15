@@ -3425,6 +3425,63 @@ public func FfiConverterTypeAgentRef_lower(_ value: AgentRef) -> RustBuffer {
 
 
 /**
+ * An option of a question: its label, and what it means when the agent says.
+ */
+public struct Choice: Equatable, Hashable {
+    public var label: String
+    public var description: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(label: String, description: String?) {
+        self.label = label
+        self.description = description
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension Choice: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChoice: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Choice {
+        return
+            try Choice(
+                label: FfiConverterString.read(from: &buf), 
+                description: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Choice, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.label, into: &buf)
+        FfiConverterOptionString.write(value.description, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChoice_lift(_ buf: RustBuffer) throws -> Choice {
+    return try FfiConverterTypeChoice.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChoice_lower(_ value: Choice) -> RustBuffer {
+    return FfiConverterTypeChoice.lower(value)
+}
+
+
+/**
  * One of the person's devices: whether it is connected now, when it was found away, when it last
  * told anything, and when it last said what waits on the person there.
  */
@@ -4551,6 +4608,67 @@ public func FfiConverterTypePushTold_lower(_ value: PushTold) -> RustBuffer {
 
 
 /**
+ * A question an agent asks the person, its options, and whether several may be chosen.
+ */
+public struct Question: Equatable, Hashable {
+    public var question: String
+    public var options: [Choice]
+    public var many: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(question: String, options: [Choice], many: Bool) {
+        self.question = question
+        self.options = options
+        self.many = many
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension Question: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeQuestion: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Question {
+        return
+            try Question(
+                question: FfiConverterString.read(from: &buf), 
+                options: FfiConverterSequenceTypeChoice.read(from: &buf), 
+                many: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Question, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.question, into: &buf)
+        FfiConverterSequenceTypeChoice.write(value.options, into: &buf)
+        FfiConverterBool.write(value.many, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQuestion_lift(_ buf: RustBuffer) throws -> Question {
+    return try FfiConverterTypeQuestion.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQuestion_lower(_ value: Question) -> RustBuffer {
+    return FfiConverterTypeQuestion.lower(value)
+}
+
+
+/**
  * The screen a view is shown on: the size of its web view, in CSS pixels (points on iOS, dp on
  * Android), and the look the app gives views.
  */
@@ -5255,6 +5373,63 @@ public func FfiConverterTypeTool_lower(_ value: Tool) -> RustBuffer {
 
 
 /**
+ * The tool a permission is for: `Bash`, and what it is about (its command, its file), whole.
+ */
+public struct ToolAsked: Equatable, Hashable {
+    public var name: String
+    public var about: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String, about: String?) {
+        self.name = name
+        self.about = about
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ToolAsked: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeToolAsked: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ToolAsked {
+        return
+            try ToolAsked(
+                name: FfiConverterString.read(from: &buf), 
+                about: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ToolAsked, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.about, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeToolAsked_lift(_ buf: RustBuffer) throws -> ToolAsked {
+    return try FfiConverterTypeToolAsked.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeToolAsked_lower(_ value: ToolAsked) -> RustBuffer {
+    return FfiConverterTypeToolAsked.lower(value)
+}
+
+
+/**
  * What a tool gave back: of which use, its text, and whether it failed.
  */
 public struct ToolResult: Equatable, Hashable {
@@ -5673,14 +5848,38 @@ public struct Waiting: Equatable, Hashable {
     public var since: UInt64
     public var plan: String?
     public var decide: Bool
+    /**
+     * A permission's tool, and what it is about.
+     */
+    public var tool: ToolAsked?
+    /**
+     * A question's questions, each with its options.
+     */
+    public var questions: [Question]
+    /**
+     * Its questions can be answered from here (`Answer::Questions`); else a line answers it.
+     */
+    public var choose: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(kind: WaitKind, since: UInt64, plan: String?, decide: Bool) {
+    public init(kind: WaitKind, since: UInt64, plan: String?, decide: Bool, 
+        /**
+         * A permission's tool, and what it is about.
+         */tool: ToolAsked? = nil, 
+        /**
+         * A question's questions, each with its options.
+         */questions: [Question] = [], 
+        /**
+         * Its questions can be answered from here (`Answer::Questions`); else a line answers it.
+         */choose: Bool = false) {
         self.kind = kind
         self.since = since
         self.plan = plan
         self.decide = decide
+        self.tool = tool
+        self.questions = questions
+        self.choose = choose
     }
 
     
@@ -5702,7 +5901,10 @@ public struct FfiConverterTypeWaiting: FfiConverterRustBuffer {
                 kind: FfiConverterTypeWaitKind.read(from: &buf), 
                 since: FfiConverterUInt64.read(from: &buf), 
                 plan: FfiConverterOptionString.read(from: &buf), 
-                decide: FfiConverterBool.read(from: &buf)
+                decide: FfiConverterBool.read(from: &buf), 
+                tool: FfiConverterOptionTypeToolAsked.read(from: &buf), 
+                questions: FfiConverterSequenceTypeQuestion.read(from: &buf), 
+                choose: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -5711,6 +5913,9 @@ public struct FfiConverterTypeWaiting: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.since, into: &buf)
         FfiConverterOptionString.write(value.plan, into: &buf)
         FfiConverterBool.write(value.decide, into: &buf)
+        FfiConverterOptionTypeToolAsked.write(value.tool, into: &buf)
+        FfiConverterSequenceTypeQuestion.write(value.questions, into: &buf)
+        FfiConverterBool.write(value.choose, into: &buf)
     }
 }
 
@@ -5928,6 +6133,11 @@ public enum Answer: Equatable, Hashable {
     )
     case plan(approve: Bool, feedback: String?
     )
+    /**
+     * A wait that says `choose`: each of its questions answered, in their order.
+     */
+    case questions(answers: [QuestionAnswer]
+    )
 
 
 
@@ -5958,6 +6168,9 @@ public struct FfiConverterTypeAnswer: FfiConverterRustBuffer {
         case 3: return .plan(approve: try FfiConverterBool.read(from: &buf), feedback: try FfiConverterOptionString.read(from: &buf)
         )
         
+        case 4: return .questions(answers: try FfiConverterSequenceTypeQuestionAnswer.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -5980,6 +6193,11 @@ public struct FfiConverterTypeAnswer: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
             FfiConverterBool.write(approve, into: &buf)
             FfiConverterOptionString.write(feedback, into: &buf)
+            
+        
+        case let .questions(answers):
+            writeInt(&buf, Int32(4))
+            FfiConverterSequenceTypeQuestionAnswer.write(answers, into: &buf)
             
         }
     }
@@ -6937,6 +7155,81 @@ public func FfiConverterTypePushAt_lower(_ value: PushAt) -> RustBuffer {
 
 
 /**
+ * The answer to one question: the options chosen, counting from 0, or a line of the person's own.
+ */
+
+public enum QuestionAnswer: Equatable, Hashable {
+    
+    case chosen(options: [UInt32]
+    )
+    case text(text: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension QuestionAnswer: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeQuestionAnswer: FfiConverterRustBuffer {
+    typealias SwiftType = QuestionAnswer
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> QuestionAnswer {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .chosen(options: try FfiConverterSequenceUInt32.read(from: &buf)
+        )
+        
+        case 2: return .text(text: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: QuestionAnswer, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .chosen(options):
+            writeInt(&buf, Int32(1))
+            FfiConverterSequenceUInt32.write(options, into: &buf)
+            
+        
+        case let .text(text):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(text, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQuestionAnswer_lift(_ buf: RustBuffer) throws -> QuestionAnswer {
+    return try FfiConverterTypeQuestionAnswer.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQuestionAnswer_lower(_ value: QuestionAnswer) -> RustBuffer {
+    return FfiConverterTypeQuestionAnswer.lower(value)
+}
+
+
+
+/**
  * What an entry says, and who said it.
  */
 
@@ -7586,6 +7879,30 @@ fileprivate struct FfiConverterOptionTypeProgram: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeToolAsked: FfiConverterRustBuffer {
+    typealias SwiftType = ToolAsked?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeToolAsked.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeToolAsked.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeViewFonts: FfiConverterRustBuffer {
     typealias SwiftType = ViewFonts?
 
@@ -7754,6 +8071,31 @@ fileprivate struct FfiConverterOptionSequenceTypeViewSurface: FfiConverterRustBu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceUInt32: FfiConverterRustBuffer {
+    typealias SwiftType = [UInt32]
+
+    public static func write(_ value: [UInt32], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterUInt32.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UInt32] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UInt32]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterUInt32.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]
 
@@ -7821,6 +8163,31 @@ fileprivate struct FfiConverterSequenceTypeAgentRef: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeAgentRef.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeChoice: FfiConverterRustBuffer {
+    typealias SwiftType = [Choice]
+
+    public static func write(_ value: [Choice], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeChoice.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Choice] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Choice]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeChoice.read(from: &buf))
         }
         return seq
     }
@@ -7971,6 +8338,31 @@ fileprivate struct FfiConverterSequenceTypePushRefused: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypePushRefused.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeQuestion: FfiConverterRustBuffer {
+    typealias SwiftType = [Question]
+
+    public static func write(_ value: [Question], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeQuestion.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Question] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Question]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeQuestion.read(from: &buf))
         }
         return seq
     }
@@ -8221,6 +8613,31 @@ fileprivate struct FfiConverterSequenceTypeHomeEntry: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeHomeEntry.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeQuestionAnswer: FfiConverterRustBuffer {
+    typealias SwiftType = [QuestionAnswer]
+
+    public static func write(_ value: [QuestionAnswer], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeQuestionAnswer.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [QuestionAnswer] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [QuestionAnswer]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeQuestionAnswer.read(from: &buf))
         }
         return seq
     }
