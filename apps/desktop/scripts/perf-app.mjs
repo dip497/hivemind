@@ -408,6 +408,20 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
     }, [id, mark]);
     const m3 = await mainThread(cdp, renderer);
     r.terminalCatchUp = { ms: Math.round(c1 - c0), pans, mainBusyMs: Math.round(m3.task - m2.task), mainCpuMs: Math.round(m3.cpu - m2.cpu) };
+
+    // Live: the terminal in view prints LINES lines, as a long build log is watched; from the
+    // command to its end on screen.
+    const flood = mark + 1000;
+    await page.waitForTimeout(1000);
+    const m4 = await mainThread(cdp, renderer);
+    const f0 = await page.evaluate(() => performance.timeOrigin + performance.now());
+    await page.evaluate(([t, n, k]) => window.hive.ptyWrite(`hm:${t}`, `bash print.sh ${k} ${n}\r`), [id, LINES, flood]);
+    const f1 = await whenTrue(page, ([t, k]) => {
+      const host = document.querySelector(`.react-flow__node-terminal[data-id="${t}"] .xterm`)?.parentElement;
+      return new RegExp(`DONE-${k}`).test(host?.__hmScreen?.() ?? "") && performance.timeOrigin + performance.now();
+    }, [id, flood]);
+    const m5 = await mainThread(cdp, renderer);
+    r.terminalLive = { ms: Math.round(f1 - f0), mainBusyMs: Math.round(m5.task - m4.task), mainCpuMs: Math.round(m5.cpu - m4.cpu) };
   }
 
   // Canvas: wheel-pan across the board.
