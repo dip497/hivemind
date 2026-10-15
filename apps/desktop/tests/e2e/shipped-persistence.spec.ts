@@ -50,3 +50,39 @@ test("open tiles restore after restart (same repo)", async () => {
 
   try { execSync(`rm -rf ${repo} ${ud}`); } catch { /* ignore */ }
 });
+
+test("a camera moved by the wheel, one notch at a time, is where it was left after a restart", async () => {
+  const repo = mkdtempSync(path.join(tmpdir(), "hm-camera-"));
+  execSync("git init -q -b main", { cwd: repo, stdio: "pipe" });
+  const ud = mkdtempSync(path.join(tmpdir(), "hm-camera-ud-"));
+  const launch = async () => {
+    const app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=${ud}`], cwd: repo });
+    const page = await app.firstWindow();
+    await page.waitForSelector(".react-flow__viewport", { timeout: 15_000 });
+    return { app, page };
+  };
+  const cameraOf = (page: import("@playwright/test").Page) =>
+    page.locator(".react-flow__viewport").evaluate((el) => (el as HTMLElement).style.transform);
+
+  let { app, page } = await launch();
+  // A tile, so the board is not the empty one; the wheel goes to the bare pane below it.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
+  await page.waitForSelector(".react-flow__node-terminal", { timeout: 15_000 });
+  await expect.poll(async () => { const a = await cameraOf(page); await page.waitForTimeout(400); return a === await cameraOf(page); }).toBe(true);
+  const launched = await cameraOf(page);
+  const box = (await page.locator(".react-flow__pane").boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.97);
+  // Wheel delivery is async under xvfb: nudge until the camera moves.
+  await expect.poll(async () => { await page.mouse.wheel(80, 60); await page.waitForTimeout(120); return cameraOf(page); },
+    { timeout: 8_000, intervals: [50] }).not.toBe(launched);
+  await expect.poll(async () => { const a = await cameraOf(page); await page.waitForTimeout(400); return a === await cameraOf(page); }).toBe(true);
+  const panned = await cameraOf(page);
+  await page.waitForTimeout(600); // the camera's debounced save
+  await app.close();
+
+  ({ app, page } = await launch());
+  await expect.poll(() => cameraOf(page), { timeout: 8_000 }).toBe(panned);
+  await app.close();
+  fs.rmSync(repo, { recursive: true, force: true });
+  fs.rmSync(ud, { recursive: true, force: true });
+});

@@ -66,8 +66,9 @@ const PRO_OPTIONS = { hideAttribution: true };
 function ViewportMirror({ target }: { target: { current: { x: number; y: number; zoom: number } } }) {
   // Stable: the hook writes these into react-flow's store whenever they change.
   const mirror = useCallback((vp: { x: number; y: number; zoom: number }) => { target.current = vp; }, [target]);
+  // onStart too: a wheel pan's first notch reaches only the start, so a one-notch pan has no change.
   // Not onEnd: a scroll's end carries the viewport from before it, and the crisp snap would stand down.
-  useOnViewportChange({ onChange: mirror });
+  useOnViewportChange({ onStart: mirror, onChange: mirror });
   return null;
 }
 
@@ -249,10 +250,8 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
 
   const isEmpty = nodes.length === 0;
 
-  // Motion-aware compositing: while the viewport pans/zooms we add a class that
-  // (a) kills tile pointer-events (no hit-test churn) and (b) clips each tile's
-  // paint via `contain` so the browser composites fewer/cheaper layers. Restored
-  // shortly after motion stops. See styles.css `.canvas-moving`.
+  // While the viewport pans/zooms, a class stops heavy tiles taking the pointer, so a
+  // wheel pan is not caught by a tile sliding under the cursor. See styles.css `.canvas-moving`.
   const flowWrapRef = useRef<HTMLDivElement>(null);
   const moveEndTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Pan momentum: react-flow's pan stops DEAD on release, which reads as
@@ -274,8 +273,8 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
   // pan/zoom settle, on fling settle, and on tile select — the moments a tile is
   // promoted to its own layer and a fractional transform would blur it. It names the
   // move it was asked after, so a flight started before it is applied is left alone.
-  const [snapReq, setSnapReq] = useState<{ n: number; seq: number } | null>(null);
-  const bumpSnap = useCallback(() => setSnapReq((r) => ({ n: (r?.n ?? 0) + 1, seq: moveSeqRef.current })), []);
+  // Filled in by ViewportSnap, which keeps the ask itself: a snap re-renders it alone, not the canvas.
+  const askSnapRef = useRef<() => void>(() => {});
   const { currentViewportRef, setViewport } = rt;
   // Text is sharp only on whole pixels. The camera can rest on a half pixel (an odd-sized pane,
   // a zoom step), so once it is still at 100% each terminal is nudged by its own remainder —
@@ -286,19 +285,26 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
     alignTimerRef.current = setTimeout(() => {
       const exact = currentViewportRef.current.zoom === 1;
       const dpr = window.devicePixelRatio || 1;
-      for (const el of flowWrapRef.current?.querySelectorAll<HTMLElement>(".react-flow__node .xterm") ?? []) {
-        el.style.translate = "";
-        if (!exact) continue;
+      const terminals = [...(flowWrapRef.current?.querySelectorAll<HTMLElement>(".react-flow__node .xterm") ?? [])];
+      // Every place is read before any nudge is written: one layout, not one per terminal.
+      const nudges = terminals.map((el) => {
+        if (!exact) return "";
+        const [nx = 0, ny = 0] = el.style.translate.split(" ").map((v) => Number.parseFloat(v) || 0);
         const r = el.getBoundingClientRect();
-        const dx = Math.round(r.x * dpr) / dpr - r.x;
-        const dy = Math.round(r.y * dpr) / dpr - r.y;
-        if (dx || dy) el.style.translate = `${dx}px ${dy}px`;
-      }
+        const x = r.x - nx;
+        const y = r.y - ny;
+        const dx = Math.round(x * dpr) / dpr - x;
+        const dy = Math.round(y * dpr) / dpr - y;
+        return dx || dy ? `${dx}px ${dy}px` : "";
+      });
+      terminals.forEach((el, i) => { if (el.style.translate !== nudges[i]) el.style.translate = nudges[i]!; });
     }, 120);
   }, [currentViewportRef]);
   useEffect(() => () => { if (alignTimerRef.current) clearTimeout(alignTimerRef.current); }, []);
-  // A tile added, moved or resized, or the camera snapped, can shift a terminal without a move.
-  useEffect(() => { alignText(); }, [liveNodes, snapReq, alignText]);
+  // A tile added, moved or resized can shift a terminal without a move.
+  useEffect(() => { alignText(); }, [liveNodes, alignText]);
+  // The camera snapped can too.
+  const bumpSnap = useCallback(() => { askSnapRef.current(); alignText(); }, [alignText]);
   const onMove = useCallback((e: unknown, vp: { x: number; y: number; zoom: number }) => {
     currentViewportRef.current = vp;
     alignText();
@@ -637,7 +643,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
           <FocusOnTile req={focusReq} />
           <FocusMode req={focusModeReq} />
           <PanMomentum req={momentumReq} activeRef={inMomentumRef} onSettle={bumpSnap} />
-          <ViewportSnap req={snapReq} moveSeq={moveSeqRef} activeRef={inMomentumRef} />
+          <ViewportSnap ask={askSnapRef} moveSeq={moveSeqRef} activeRef={inMomentumRef} />
           <ViewportMirror target={currentViewportRef} />
           {repoPath && <FollowCamera repo={repoPath} />}
           <BoardPointer target={rt.canvasPointRef} pane={flowWrapRef} />
