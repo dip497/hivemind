@@ -1275,7 +1275,7 @@ function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYo
         ? <button type="button" onClick={retry} data-machine-state
             className="shrink-0 rounded px-1 normal-case tracking-normal font-normal text-count text-[var(--color-warn)] hover:bg-[var(--surface-3)]">Sign in</button>
         // Online or away, the dot says it; words only for what is under way or paused.
-        : <span className={`shrink-0 normal-case tracking-normal font-normal text-count text-[var(--color-fg3)] ${on && QUIET.has(s.state) ? "sr-only" : ""}`} data-machine-state>
+        : <span className={`shrink-0 normal-case tracking-normal font-normal text-count text-[var(--color-fg3)] ${on && QUIET.has(s.state) ? "sr-only" : m ? "group-hover/mach:invisible group-focus-within/mach:invisible" : ""}`} data-machine-state>
             {statusWords(s, on)}
           </span>
       )}
@@ -1288,7 +1288,8 @@ function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYo
       {m && (
         <span className="ml-auto flex items-center gap-0.5 normal-case tracking-normal">
           {/* Only a machine in use that is down keeps a button showing; the rest wait for hover or focus. */}
-          <span className={`absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 rounded-md bg-[var(--color-bg2)] shadow-[-8px_0_8px_var(--color-bg2)] ${menu ? "" : "opacity-0 group-hover/mach:opacity-100 focus-within:opacity-100"}`}>
+          {/* Over the row's own ground, which a pane row turns on hover: no box shows round the buttons. */}
+          <span className={`absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 rounded-md ${used ? "bg-[var(--color-bg2)] shadow-[-12px_0_8px_var(--color-bg2)]" : "bg-[var(--surface-3)] shadow-[-12px_0_8px_var(--surface-3)]"} ${menu ? "" : "opacity-0 group-hover/mach:opacity-100 focus-within:opacity-100"}`}>
           {(on && RETRYABLE.has(s.state)) || s.state === "attention" ? (
             <Button variant="ghost" size="icon-2xs" onClick={retry} title={s.state === "attention" ? "Sign in…" : "Retry now"} aria-label={`retry ${m.label}`}>
               <RefreshCw size={12} />

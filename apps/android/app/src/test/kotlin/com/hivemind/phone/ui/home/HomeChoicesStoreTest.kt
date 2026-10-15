@@ -52,6 +52,19 @@ class HomeChoicesStoreTest {
     }
 
     @Test
+    fun `reset puts every View choice back to the first and keeps what was folded and seen`() {
+        val store = HomeChoicesStore(kept, clock = { 7L })
+        store.choose(ViewGroup.STATUS, "unread")
+        store.choose(ViewGroup.GROUP_BY, "date")
+        store.fold("f:ws-1/f1")
+        store.opened(AgentRef(DESK, "ws-1", "t1"))
+
+        store.reset()
+
+        assertEquals(FirstChoices.copy(folded = listOf("f:ws-1/f1"), seen = mapOf("t:ws-1/t1" to 7uL)), HomeChoicesStore(kept).choices.value)
+    }
+
+    @Test
     fun `a record it cannot read, or a choice it does not know, leaves Home as it first shows`() {
         kept.edit { putString("choices", "{not json") }
         assertEquals(FirstChoices, HomeChoicesStore(kept).choices.value)

@@ -21,6 +21,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -58,20 +59,20 @@ fun ViewButton(narrowed: Boolean, onClick: () -> Unit) {
 /** The View menu as a sheet: one choice in each group, taken as it is tapped. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ViewSheet(choices: HomeChoices, onChoose: (ViewGroup, String) -> Unit, onDismiss: () -> Unit) {
+fun ViewSheet(choices: HomeChoices, onChoose: (ViewGroup, String) -> Unit, onReset: () -> Unit, onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = MaterialTheme.colorScheme.background,
     ) {
-        ViewChoices(choices, onChoose)
+        ViewChoices(choices, onChoose, onReset)
     }
 }
 
-/** The four groups of the View menu, each its choices as pills. */
+/** The four groups of the View menu, each its choices as pills, and a reset while any is not the first. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ViewChoices(choices: HomeChoices, onChoose: (ViewGroup, String) -> Unit) {
+fun ViewChoices(choices: HomeChoices, onChoose: (ViewGroup, String) -> Unit, onReset: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -90,5 +91,7 @@ fun ViewChoices(choices: HomeChoices, onChoose: (ViewGroup, String) -> Unit) {
                 }
             }
         }
+        Spacer(Modifier.height(18.dp))
+        TextButton(onClick = onReset, enabled = choices.narrowed) { Text(stringResource(R.string.view_reset)) }
     }
 }

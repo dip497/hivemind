@@ -1,8 +1,13 @@
 package com.hivemind.phone.ui.home
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasScrollToNodeAction
@@ -13,6 +18,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -269,11 +275,11 @@ class HomeListTest {
     @Test
     fun `the View menu shows each group's choice, and a choice tapped is taken for its group`() {
         val chosen = mutableListOf<Pair<ViewGroup, String>>()
-        compose.setContent { PhoneTheme(accent = null) { ViewChoices(FirstChoices.copy(sortBy = "name")) { group, id -> chosen += group to id } } }
+        compose.setContent { PhoneTheme(accent = null) { ViewChoices(FirstChoices.copy(sortBy = "name"), onChoose = { group, id -> chosen += group to id }, onReset = {}) } }
 
         compose.onNodeWithText("Name").assertIsSelected()
         compose.onNodeWithText("Canvas order").assertIsNotSelected()
-        compose.onNodeWithText("Last activity").performClick()
+        compose.onAllNodesWithText("Last activity")[1].performClick()
         compose.onNodeWithText("Agent").performClick()
         compose.onNodeWithText("Past hour").performClick()
         compose.onAllNodesWithText("Needs you")[0].performClick()
@@ -282,5 +288,17 @@ class HomeListTest {
             listOf(ViewGroup.SORT_BY to "activity", ViewGroup.GROUP_BY to "agent", ViewGroup.ACTIVITY to "hour", ViewGroup.STATUS to "needs-you"),
             chosen,
         )
+    }
+
+    @Test
+    fun `Reset to defaults can be pressed only while a choice is not its default`() {
+        var choices by mutableStateOf(FirstChoices)
+        var resets = 0
+        compose.setContent { PhoneTheme(accent = null) { ViewChoices(choices, onChoose = { _, _ -> }, onReset = { resets++ }) } }
+
+        compose.onNodeWithText("Reset to defaults").assertIsNotEnabled()
+        choices = FirstChoices.copy(groupBy = "agent")
+        compose.onNodeWithText("Reset to defaults").assertIsEnabled().performScrollTo().performClick()
+        assertEquals(1, resets)
     }
 }

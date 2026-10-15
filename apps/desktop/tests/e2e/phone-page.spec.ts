@@ -392,7 +392,7 @@ test("the View menu changes what Home lists: grouped by status, a heading for ea
   await expect(chosen).toBeHidden();
   await page.locator("[data-view-open]").click();
   const sheet = page.locator("[data-view-sheet]");
-  await expect(sheet.locator("[data-view] .label-small")).toHaveText(["Status", "Activity", "Group by", "Sort by"]);
+  await expect(sheet.locator("[data-view] .label-small")).toHaveText(["Status", "Last activity", "Group by", "Sort by"]);
   await expect(sheet.locator('[data-view="groupBy"] .chip')).toHaveText(["Project", "Machine", "Date", "Status", "Agent", "None"]);
   await sheet.locator('[data-view="groupBy"] .chip', { hasText: "Status" }).click();
   await expect(sheet.locator('[data-view="groupBy"] .chip', { hasText: "Status" })).toHaveAttribute("aria-pressed", "true");
@@ -408,10 +408,13 @@ test("the View menu changes what Home lists: grouped by status, a heading for ea
   await sheet.locator('[data-view="status"] .chip', { hasText: "Needs you" }).click();
   await expect(page.locator("[data-tree] [data-section] .name")).toHaveText(["Needs you"]);
   await expect(page.locator("[data-tree] [data-agent] .name")).toHaveText(["agent 0", "agent 4", "agent 8", "agent 12", "agent 16"]);
-  await sheet.locator('[data-view="status"] .chip', { hasText: "All" }).click();
-  await sheet.locator('[data-view="groupBy"] .chip', { hasText: "Project" }).click();
+  // Reset to defaults: every choice its first again, the tree back.
+  const reset = sheet.locator("[data-view-reset]");
+  await reset.click();
   await expect(page.locator("[data-tree] [data-section]")).toHaveCount(0);
   await expect(page.locator("[data-tree] [data-machine]")).toHaveText(["desk", "box"]);
+  await expect(sheet.locator('[data-view="status"] .chip', { hasText: "All" })).toHaveAttribute("aria-pressed", "true");
+  await expect(reset).toBeDisabled();
   await expect(chosen).toBeHidden();
 });
 

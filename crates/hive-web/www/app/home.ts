@@ -258,16 +258,25 @@ export class Home {
   /** The View menu: one choice in each group, the chosen pressed. */
   private drawView(): void {
     const prefs = this.choices.prefs;
+    const chose = () => {
+      this.chosenDot.hidden = !this.choices.chosen();
+      this.drawView();
+      this.changed();
+    };
+    const reset = pill("Reset to defaults", () => {
+      this.choices.reset();
+      chose();
+    }, "", { "data-view-reset": "" });
+    reset.toggleAttribute("disabled", !this.choices.chosen());
     this.viewSheet.replaceChildren(
       h("h3", { class: "name" }, "View"),
       ...VIEW_GROUPS.map(([group, label]) => h("div", { class: "view-group", "data-view": group },
         h("p", { class: "label-small" }, label),
         chips<readonly [string, string]>(VIEW_CHOICES[group], ([, word]) => word, ([id]) => id === prefs[group], ([id]) => {
           this.choices.choose(group, id);
-          this.chosenDot.hidden = !this.choices.chosen();
-          this.drawView();
-          this.changed();
+          chose();
         }, { "aria-label": label }))),
+      reset,
       pill("Done", () => this.closeView(), "primary", { "data-view-done": "" }));
   }
 

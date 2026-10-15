@@ -94,6 +94,9 @@ class HomeChoicesStore(private val kept: SharedPreferences, private val clock: (
 
     fun choose(group: ViewGroup, id: String) = change { it.choosing(group, id) }
 
+    /** Every View choice back to Home's first; what is folded and seen stays. */
+    fun reset() = change { ViewGroup.entries.fold(it) { kept, group -> kept.choosing(group, group.default) } }
+
     /** Folds what is under [key], or shows it again when it is folded. */
     fun fold(key: String) = change { it.copy(folded = if (key in it.folded) it.folded - key else it.folded + key) }
 

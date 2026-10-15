@@ -117,5 +117,5 @@ fun HomeScreen(
             onFold = home::fold,
         )
     }
-    if (viewing) ViewSheet(homeState.choices, onChoose = home::choose, onDismiss = { viewing = false })
+    if (viewing) ViewSheet(homeState.choices, onChoose = home::choose, onReset = home::resetView, onDismiss = { viewing = false })
 }

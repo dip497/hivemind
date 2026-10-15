@@ -289,7 +289,7 @@ private class Rows(
                     .padding(start = indent(depth), end = 16.dp, top = 10.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TileMark(mark, tile.kind, agentState)
+                TileMark(mark, tile.agent || tile.terminal, agentState)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -440,11 +440,11 @@ private fun stateColor(state: AgentState?): Color? {
 }
 
 /**
- * A tile's mark in a circle: its agent's own when the computer sent one, else a terminal for a
- * shell and a window for any other kind; its state as a dot on the corner.
+ * A tile's mark in a circle: its agent's own when the computer sent one, else a terminal for one
+ * that runs a terminal and a window for any other kind; its state as a dot on the corner.
  */
 @Composable
-private fun TileMark(mark: MarkPaths?, kind: String, state: AgentState?) {
+private fun TileMark(mark: MarkPaths?, runsTerminal: Boolean, state: AgentState?) {
     val colors = MaterialTheme.colorScheme
     Box(Modifier.size(MARK)) {
         Box(Modifier.matchParentSize().background(colors.surfaceContainerHigh, CircleShape), contentAlignment = Alignment.Center) {
@@ -452,7 +452,7 @@ private fun TileMark(mark: MarkPaths?, kind: String, state: AgentState?) {
                 val ink = colors.onSurface
                 Canvas(Modifier.size(22.dp)) { drawMark(mark, ink, size.minDimension) }
             } else {
-                Icon(if (kind == "terminal") LineIcons.Terminal else LineIcons.Window, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                Icon(if (runsTerminal) LineIcons.Terminal else LineIcons.Window, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
             }
         }
         stateColor(state)?.let { dot ->

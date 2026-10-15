@@ -68,6 +68,8 @@ class HomeViewModel(private val phone: Phone, overview: StateFlow<Overview>, pri
 
     fun choose(group: ViewGroup, id: String) = kept.choose(group, id)
 
+    fun resetView() = kept.reset()
+
     fun fold(key: String) = kept.fold(key)
 
     val calls = CoreCalls(viewModelScope)

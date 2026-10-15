@@ -12,7 +12,7 @@ export const VIEW_CHOICES = {
   sortBy: [["canvas", "Canvas order"], ["activity", "Last activity"], ["name", "Name"]],
 } as const satisfies Record<string, ReadonlyArray<readonly [string, string]>>;
 
-export const VIEW_GROUPS: Array<[ViewGroup, string]> = [["status", "Status"], ["activity", "Activity"], ["groupBy", "Group by"], ["sortBy", "Sort by"]];
+export const VIEW_GROUPS: Array<[ViewGroup, string]> = [["status", "Status"], ["activity", "Last activity"], ["groupBy", "Group by"], ["sortBy", "Sort by"]];
 
 export type ViewGroup = keyof typeof VIEW_CHOICES;
 type Prefs = Record<ViewGroup, string>;
@@ -65,6 +65,12 @@ export class HomeChoices {
       keys.sort((a, b) => this.seen[a]! - this.seen[b]!);
       for (const k of keys.slice(0, keys.length - SEEN_KEPT)) delete this.seen[k];
     }
+    this.keep();
+  }
+
+  /** Every View menu choice back to its first; what is folded and seen stays. */
+  reset(): void {
+    this.prefs = { ...DEFAULTS };
     this.keep();
   }
 

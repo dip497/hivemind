@@ -78,7 +78,8 @@
     <!-- Home's View menu, in the desktop's words -->
     <string name="view_title">View</string>
     <string name="view_status">Status</string>
-    <string name="view_activity">Activity</string>
+    <string name="view_activity">Last activity</string>
+    <string name="view_reset">Reset to defaults</string>
     <string name="view_group_by">Group by</string>
     <string name="view_sort_by">Sort by</string>
     <string name="view_all">All</string>

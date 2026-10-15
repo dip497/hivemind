@@ -53,6 +53,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- Layers panel, Machines: a machine's refresh, + and ⋯ buttons no longer cover its status words on hover.
+- Phone page and Android app: the View menu says "Last activity" as the computer's does, and has Reset to defaults; a shell's row shows a terminal mark, not a window.
 - A question Claude asks still shows on your phone with its options after an hour. Claude's hook gives up waiting after an hour, and the phone used to fall back to a bare "Permission requested".
 - The Android and iOS apps answer an agent's questions as the phone page does: each question with its options as buttons, several answered together, each in its place, and a permission card shows its tool and command. Before, a question took only a line of text.
 - The app served to a browser opens in Safari, on an iPhone too; before, it showed a black screen.
