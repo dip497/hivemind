@@ -196,20 +196,23 @@ private class Rows(
             AgentRow(agent, agent.at in busy, now, onOpen, onStop, onClose, says = tile.says(), depth = depth)
             return
         }
-        // Not an agent the overview lists: what it is, and what it last showed.
+        // Not an agent the overview lists: its name, and what it last showed when it showed anything.
+        val line = tile.says() ?: tile.state?.label()
         Row(
-            Modifier.fillMaxWidth().padding(start = 16.dp + 12.dp * depth, end = 16.dp, top = 10.dp, bottom = 10.dp),
+            Modifier.fillMaxWidth().padding(start = 16.dp + 12.dp * depth, end = 16.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
                 Text(tile.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(
-                    tile.says() ?: tile.state?.label() ?: tile.kind,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                line?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             tile.since?.let {
                 Text(
