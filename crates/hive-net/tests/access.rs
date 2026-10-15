@@ -200,6 +200,16 @@ fn on_a_closed_network_the_relay_admits_the_devices_enrolled_or_vouched_for_and_
     assert!(out.status.success(), "{}", text(&out));
     assert!(allowed(&access, &dev_id));
     assert!(relay_admits(&relay, &dev));
+    // The laptop asking again with it, its answer lost on the way: still in, and no use spent.
+    let out = hive_net(&[
+        "access",
+        "redeem",
+        &access,
+        enrol.trim(),
+        "--identity",
+        &dev,
+    ]);
+    assert!(out.status.success(), "{}", text(&out));
     // Used up: it enrols nobody else.
     let out = hive_net(&[
         "access",
@@ -210,6 +220,48 @@ fn on_a_closed_network_the_relay_admits_the_devices_enrolled_or_vouched_for_and_
         &other,
     ]);
     assert!(!out.status.success());
+    assert!(text(&out).contains("used up"), "{}", text(&out));
+    assert!(!allowed(&access, &other_id));
+
+    // A visit the laptop offers whoever holds it, once, as an offer to connect carries: the phone
+    // that took it asks again and is still in; nobody else gets in with it.
+    let (phone, phone_id) = device(&root, "phone");
+    let offer = String::from_utf8(
+        hive_net(&[
+            "access",
+            "voucher",
+            "--kind",
+            "visit",
+            "--uses",
+            "1",
+            "--expires-in",
+            "600",
+            "--identity",
+            &dev,
+        ])
+        .stdout,
+    )
+    .unwrap();
+    for _ in 0..2 {
+        let out = hive_net(&[
+            "access",
+            "redeem",
+            &access,
+            offer.trim(),
+            "--identity",
+            &phone,
+        ]);
+        assert!(out.status.success(), "{}", text(&out));
+    }
+    assert!(allowed(&access, &phone_id));
+    let out = hive_net(&[
+        "access",
+        "redeem",
+        &access,
+        offer.trim(),
+        "--identity",
+        &other,
+    ]);
     assert!(text(&out).contains("used up"), "{}", text(&out));
     assert!(!allowed(&access, &other_id));
 

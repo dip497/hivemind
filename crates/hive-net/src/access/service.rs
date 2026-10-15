@@ -112,6 +112,18 @@ impl Service {
                 && state.registered.contains_key(&id))
     }
 
+    /// Whether `device` is in as `voucher` would let it in.
+    fn admitted_by(state: &State, device: &PublicKey, voucher: &Voucher) -> bool {
+        let id = device.to_string();
+        match voucher.kind {
+            Kind::Enrol => state.enrolled.contains_key(&id),
+            Kind::Visit => state
+                .visiting
+                .get(&id)
+                .is_some_and(|v| v.by == voucher.by && v.until == voucher.expires),
+        }
+    }
+
     fn admit(state: &mut State, device: &PublicKey, voucher: &Voucher) {
         match voucher.kind {
             Kind::Enrol => {
@@ -161,6 +173,10 @@ impl Service {
             self.may_vouch(&state, &by, voucher.kind),
             "{by} may not vouch here"
         );
+        // Asked again by a device it already let in, whose answer was lost: yes, no use spent.
+        if Self::admitted_by(&state, device, voucher) {
+            return Ok(());
+        }
         let used = state.redeemed.get(&voucher.nonce).copied().unwrap_or(0);
         ensure!(used < voucher.uses, "the voucher was used up");
         state.redeemed.insert(voucher.nonce.clone(), used + 1);
