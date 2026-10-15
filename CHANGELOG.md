@@ -21,6 +21,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
+- Canvas: panning no longer restyles and re-rasters every tile at the start and end of a pan, and the end of a pan re-renders nothing: about half the main-thread work per wheel notch on a large board.
 - Startup: a window no longer starts eight diff-highlighting workers or loads the diff library before a diff is shown (2 MB less JavaScript to start), its first screen's fonts load before it is drawn, and it opens without waiting for the terminal daemon's build check.
 - Phone page and Android app: one new look, written down in docs/design/phone-look-2026-10-15.md — neutral greys in light and dark, colour only for what waits on you, fails or changes; quiet rows with a trailing status mark; needs-you cards with the command and pill answers; a raised message box whose send becomes Stop; an All machine chip.
 - **Breaking:** the `tile.opened` event no longer carries the tile's `prompt`: the host starts the tile with it, and no client is told what it was asked to do.
@@ -45,6 +46,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- A canvas moved by one wheel notch is where it was left after a restart; before, it reopened where the last longer pan had left it.
 - Recents lists a folder's older sessions, and listing them no longer stalls the app on a long agent history.
 - Opening a tool use in an agent's conversation on your phone is instant on long sessions.
 - HiveHub and a listed plugin's page open at once after the first fetch; a listed plugin's page no longer says the plugin is gone while loading.
