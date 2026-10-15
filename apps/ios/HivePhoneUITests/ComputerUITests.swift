@@ -129,7 +129,7 @@ final class ComputerUITests: XCTestCase {
         // after.
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let why = springboard.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "\(view) asks.")).firstMatch
-        XCTAssertTrue(why.waitForExistence(timeout: 60), "the phone's lock was asked first, for \(view)")
+        XCTAssertTrue(why.waitForExistence(timeout: 60), "the phone's lock was asked first, for \(view); the app showed: \(texts(app))")
         let cancel = springboard.keyboards.buttons.matching(NSPredicate(format: "label ==[c] %@", "cancel")).firstMatch
         XCTAssertTrue(cancel.waitForExistence(timeout: 10), "the passcode screen can be cancelled")
         cancel.tap()
@@ -154,6 +154,12 @@ final class ComputerUITests: XCTestCase {
     @MainActor
     private func inPage(_ text: String, _ app: XCUIApplication) -> XCUIElement {
         app.webViews.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
+    }
+
+    /// Every text the app shows, the view's page's too: what a failed step says it saw.
+    @MainActor
+    private func texts(_ app: XCUIApplication) -> String {
+        app.descendants(matching: .staticText).allElementsBoundByIndex.map(\.label).filter { !$0.isEmpty }.joined(separator: " | ")
     }
 
     /// The first element whose label has `text` in it, whatever kind it is: a row's text may be its

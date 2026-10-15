@@ -87,10 +87,13 @@ select.addEventListener("click", () => {
   if (tiles[0]) hm.commands.selectTile(tiles[0].id);
 });
 start.addEventListener("click", () => {
+  said("start", tiles[0]?.id ?? "none");
   try {
     hm.commands.spawnAgent(null, null);
   } catch (e) {
     hm.error(String(e));
+    // On the page too, so a run's recording shows why nothing was asked.
+    selected.textContent = `Not started: ${e}`;
   }
 });
 draw();

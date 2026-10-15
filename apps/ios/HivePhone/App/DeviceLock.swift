@@ -20,8 +20,10 @@ enum DeviceLock {
         do {
             let unlocked = try await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason)
             return unlocked ? .unlocked : .cancelled
-        } catch {
+        } catch let error as LAError where [LAError.Code.userCancel, .appCancel, .systemCancel].contains(error.code) {
             return .cancelled
+        } catch {
+            return .unavailable("The phone's lock could not be asked: \(error.localizedDescription)")
         }
     }
 }
