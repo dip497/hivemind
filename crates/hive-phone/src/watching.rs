@@ -150,6 +150,19 @@ impl Watching {
         let _ = self.typed.send(Input::Keys(keys));
     }
 
+    /// The person scrolls `lines` (up, to earlier, below 0) at the cell `col`, `row` (from 1):
+    /// sent to the program when the newest frame says it takes scrolling; false when the view
+    /// scrolls its own scrollback.
+    pub fn scroll(&self, lines: i32, col: u16, row: u16) -> bool {
+        let Some(keys) = self.newest().wheel.keys(lines, col, row) else {
+            return false;
+        };
+        if !keys.is_empty() {
+            let _ = self.typed.send(Input::Text(keys));
+        }
+        true
+    }
+
     /// Size the terminal to `cols` × `rows` for this phone, until it is watched no more; none:
     /// back to the size it had.
     pub fn fit(&self, size: Option<(u16, u16)>) {

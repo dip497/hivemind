@@ -702,6 +702,8 @@ export interface HiveIpc {
   /** Whether any view shows this terminal: bytes reach the renderer only while one does. */
   ptyInterest(tileId: string, shown: boolean): void;
   ptyResize(tileId: string, cols: number, rows: number): void;
+  /** Size the session to this window's `cols` × `rows` now, as typing here would. */
+  ptyFit(tileId: string, cols: number, rows: number): void;
   ptyKill(tileId: string): void;
   /** Window closed / tile unmounted: keep the session alive (daemon mode) or
    *  kill it (in-process mode). Distinct from ptyKill, which always terminates. */

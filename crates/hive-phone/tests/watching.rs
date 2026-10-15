@@ -280,3 +280,82 @@ async fn a_page_asks_for_some_history_as_it_begins_to_watch_and_more_when_the_pe
         ]
     );
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_scroll_goes_to_a_program_that_draws_its_own_screen_as_wheel_reports() {
+    let desk = Desk::start(36).await;
+    // Claude's TUI: the alternate screen, the mouse taken, reported as SGR.
+    *desk.screen.lock().unwrap() = "\x1b[?1049h\x1b[?1000h\x1b[?1006hthe transcript".into();
+    let phone = paired_with(&tmp("scroll"), &desk);
+    let connections = Connections::new(phone.clone(), || {});
+    connections.foreground();
+    let told = Arc::new(Told::default());
+    let watching = Watching::start(
+        &connections,
+        &phone.id(),
+        &desk.id,
+        WORKSPACE,
+        TILE,
+        told.clone(),
+    );
+    let drawn = || {
+        watching
+            .newest()
+            .changed(0)
+            .any(|(_, line)| line.text == "the transcript")
+    };
+    assert!(until(Duration::from_secs(10), drawn).await);
+
+    assert!(watching.scroll(-2, 10, 5));
+    let session = format!("hm:{TILE}");
+    let wheel =
+        json!({ "method": "terminal.write", "params": [session, "\x1b[<64;10;5M\x1b[<64;10;5M"] });
+    let sent = || {
+        desk.told
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(_, notice)| *notice == wheel)
+    };
+    assert!(
+        until(Duration::from_secs(10), sent).await,
+        "{:?}",
+        desk.told.lock().unwrap()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_shell_scrolled_is_the_views_to_scroll_and_nothing_is_typed() {
+    let desk = Desk::start(37).await;
+    let phone = paired_with(&tmp("scroll-shell"), &desk);
+    let connections = Connections::new(phone.clone(), || {});
+    connections.foreground();
+    let told = Arc::new(Told::default());
+    let watching = Watching::start(
+        &connections,
+        &phone.id(),
+        &desk.id,
+        WORKSPACE,
+        TILE,
+        told.clone(),
+    );
+    let drawn = || {
+        watching
+            .newest()
+            .changed(0)
+            .next()
+            .is_some_and(|(_, l)| !l.text.is_empty())
+    };
+    assert!(until(Duration::from_secs(10), drawn).await);
+
+    assert!(!watching.scroll(-2, 10, 5));
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let writes = desk
+        .told
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(_, notice)| notice["method"] == "terminal.write")
+        .count();
+    assert_eq!(writes, 0);
+}

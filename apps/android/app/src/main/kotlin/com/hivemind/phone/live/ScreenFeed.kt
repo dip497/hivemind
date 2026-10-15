@@ -10,6 +10,7 @@ import com.hivemind.phone.core.Phone
 import com.hivemind.phone.core.ScreenEnded
 import com.hivemind.phone.core.ScreenListener
 import com.hivemind.phone.core.Watch
+import com.hivemind.phone.terminal.FitHeld
 import com.hivemind.phone.terminal.TermSize
 import com.hivemind.phone.terminal.Terminal
 
@@ -26,6 +27,9 @@ class ScreenFeed(phone: Phone, agent: AgentRef) {
     /** The terminal as drawn. */
     val terminal = Terminal()
 
+    /** Whether the session still has the size this phone fitted it to. */
+    private val held = FitHeld()
+
     /** Who holds the session's keyboard; null while the person's own devices do. */
     var keyboard: String? by mutableStateOf(null)
         private set
@@ -37,7 +41,10 @@ class ScreenFeed(phone: Phone, agent: AgentRef) {
     private val main = Handler(Looper.getMainLooper())
 
     // Before watching: the core may tell of a frame as soon as the watch begins.
-    private val pull = FramePull { terminal.apply(watch.update(terminal.revision)) }
+    private val pull = FramePull {
+        terminal.apply(watch.update(terminal.revision))
+        held.sized(terminal.cols, terminal.rows)
+    }
 
     // What the core tells, from its threads: kept apart from what the screen calls.
     private val told = object : ScreenListener {
@@ -65,20 +72,28 @@ class ScreenFeed(phone: Phone, agent: AgentRef) {
     /** Presses [keys], tokens as `hive ctl keys` takes them: `enter`, `escape`, `ctrl-c`, … */
     fun typeKeys(keys: List<String>) = watch.typeKeys(keys)
 
-    // The size the phone fitted the session to, while it holds one.
-    private var fitted: TermSize? = null
+    /** Scrolls [lines] (up below 0) at the cell [col], [row] (from 1) in a program that takes scrolling; false: the view scrolls its own lines. */
+    fun scroll(lines: Int, col: Int, row: Int): Boolean = watch.scroll(lines, col.toUShort(), row.toUShort())
+
+    /** The phone fitted the session, and another screen has since taken its size (by typing there, or asking for it). */
+    val takenBack: Boolean get() = held.takenBack
 
     /** Sizes the session to [size] for this phone, by the host's rule: the last to fit or type holds the size. */
     fun fit(size: TermSize) {
-        if (size == fitted) return
-        fitted = size
+        if (size == held.size && !held.takenBack) return
+        held.asked(size)
         watch.fit(size.cols.toUShort(), size.rows.toUShort())
+    }
+
+    /** Takes the size back for this phone after another screen took it. */
+    fun fitAgain() {
+        held.size?.let(::fit)
     }
 
     /** Gives the session back the size it had, if the phone fitted it. */
     fun unfit() {
-        if (fitted == null) return
-        fitted = null
+        if (held.size == null) return
+        held.letGo()
         watch.unfit()
     }
 

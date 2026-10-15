@@ -87,6 +87,8 @@ pub struct Frame {
     pub cursor_line: u64,
     pub cursor_col: u16,
     pub cursor_visible: bool,
+    /// Where the person's scrolling goes: the view's own scrollback, or the program.
+    pub wheel: Wheel,
     lines: Vec<Arc<Line>>,
 }
 
@@ -165,6 +167,8 @@ pub struct Screen {
     reread: bool,
     /// The cursor as the last frame showed it: its line, its column, whether it shows.
     cursor: Option<(u64, u16, bool)>,
+    /// Where scrolling went, as the last frame said.
+    wheel: Wheel,
     /// The lines of scrollback last asked of the session's host.
     asked: usize,
 }
@@ -190,6 +194,7 @@ impl Default for Screen {
             alternate: false,
             reread: false,
             cursor: None,
+            wheel: Wheel::Scrollback,
             asked: FIRST_HISTORY,
         }
     }
@@ -275,34 +280,7 @@ impl Screen {
     /// cell `col`, `row` (from 1); none when the view scrolls its own scrollback, so 0 lines asks
     /// whose a scroll is.
     pub fn scroll(&self, lines: i32, col: u16, row: u16) -> Option<String> {
-        let mode = *self.term.mode();
-        let up = lines < 0;
-        let one = if mode.intersects(TermMode::MOUSE_MODE) {
-            let button = if up { 64 } else { 65 };
-            if mode.contains(TermMode::SGR_MOUSE) {
-                format!("\x1b[<{button};{col};{row}M")
-            } else {
-                // Each a character past 32: one byte, or in UTF-8 two at most.
-                let most = if mode.contains(TermMode::UTF8_MOUSE) {
-                    2_015
-                } else {
-                    95
-                };
-                let at = |n: u16| char::from_u32(32 + u32::from(n.clamp(1, most))).unwrap_or(' ');
-                format!("\x1b[M{}{}{}", char::from(32 + button), at(col), at(row))
-            }
-        } else if mode.contains(TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL) {
-            let key = if up { 'A' } else { 'B' };
-            let lead = if mode.contains(TermMode::APP_CURSOR) {
-                "\x1bO"
-            } else {
-                "\x1b["
-            };
-            format!("{lead}{key}")
-        } else {
-            return None;
-        };
-        Some(one.repeat(lines.unsigned_abs() as usize))
+        Wheel::of(*self.term.mode()).keys(lines, col, row)
     }
 
     /// While a synchronized update is open: when it lapses, the frame held back until then.
@@ -328,7 +306,8 @@ impl Screen {
             point.column.0 as u16,
             self.term.mode().contains(TermMode::SHOW_CURSOR),
         );
-        if !lines.changed && self.cursor == Some(cursor) {
+        let wheel = Wheel::of(*self.term.mode());
+        if !lines.changed && self.cursor == Some(cursor) && self.wheel == wheel {
             return None;
         }
         let frame = Frame {
@@ -339,11 +318,13 @@ impl Screen {
             cursor_line: cursor.0,
             cursor_col: cursor.1,
             cursor_visible: cursor.2,
+            wheel,
             lines: lines.kept.iter().cloned().collect(),
         };
         lines.revision += 1;
         lines.changed = false;
         self.cursor = Some(cursor);
+        self.wheel = wheel;
         Some(frame)
     }
 
@@ -558,5 +539,58 @@ fn colour(color: Color) -> u32 {
         Color::Spec(rgb) => {
             2 << 24 | u32::from(rgb.r) << 16 | u32::from(rgb.g) << 8 | u32::from(rgb.b)
         }
+    }
+}
+
+/// Where the person's scrolling goes, as the program's terminal modes say: the view's own
+/// scrollback, or the program, as mouse wheel reports or (on the alternate screen) arrow keys.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wheel {
+    Scrollback,
+    Mouse { sgr: bool, utf8: bool },
+    Arrows { app_cursor: bool },
+}
+
+impl Wheel {
+    fn of(mode: TermMode) -> Self {
+        if mode.intersects(TermMode::MOUSE_MODE) {
+            Self::Mouse {
+                sgr: mode.contains(TermMode::SGR_MOUSE),
+                utf8: mode.contains(TermMode::UTF8_MOUSE),
+            }
+        } else if mode.contains(TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL) {
+            Self::Arrows {
+                app_cursor: mode.contains(TermMode::APP_CURSOR),
+            }
+        } else {
+            Self::Scrollback
+        }
+    }
+
+    /// What the program is sent for scrolling `lines` (up, to earlier, below 0) at the cell `col`,
+    /// `row` (from 1); none when the view scrolls its own scrollback.
+    pub fn keys(self, lines: i32, col: u16, row: u16) -> Option<String> {
+        let up = lines < 0;
+        let one = match self {
+            Self::Scrollback => return None,
+            Self::Mouse { sgr, utf8 } => {
+                let button = if up { 64 } else { 65 };
+                if sgr {
+                    format!("\x1b[<{button};{col};{row}M")
+                } else {
+                    // Each a character past 32: one byte, or in UTF-8 two at most.
+                    let most = if utf8 { 2_015 } else { 95 };
+                    let at =
+                        |n: u16| char::from_u32(32 + u32::from(n.clamp(1, most))).unwrap_or(' ');
+                    format!("\x1b[M{}{}{}", char::from(32 + button), at(col), at(row))
+                }
+            }
+            Self::Arrows { app_cursor } => {
+                let key = if up { 'A' } else { 'B' };
+                let lead = if app_cursor { "\x1bO" } else { "\x1b[" };
+                format!("{lead}{key}")
+            }
+        };
+        Some(one.repeat(lines.unsigned_abs() as usize))
     }
 }

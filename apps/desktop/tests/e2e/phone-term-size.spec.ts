@@ -99,3 +99,34 @@ test("fitted, the phone shows every row of the size it asked for, the first incl
   const shown = page.locator("[data-term-text] > div");
   await expect.poll(() => shown.allTextContents()).toEqual(Array.from({ length: rows }, (_, i) => `row ${i}`));
 });
+
+test("taken back by the computer, Fit shows off and fits it again when pressed; out of sight the phone gives the size back", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await terminal();
+  await page.evaluate(() => document.fonts.ready);
+  await expect.poll(async () => (await fits(page)).length).toBeGreaterThan(0);
+  const [, cols, rows] = (await fits(page)).at(-1)! as [string, number, number];
+  const sessionAt = (revision: number, cols: number, rows: number) => page.evaluate(([revision, cols, rows]) => {
+    const w = window as unknown as { next: unknown; changed(): void };
+    w.next = { revision, cols, rows, firstLine: 0, lineCount: 1, cursorLine: 0, cursorCol: 0, cursorVisible: false, lines: [] };
+    w.changed();
+  }, [revision, cols, rows]);
+  const fit = page.locator("[data-fit]");
+  await sessionAt(1, cols, rows);
+  await expect(fit).toHaveAttribute("aria-pressed", "true");
+  await sessionAt(2, 120, 40);
+  await expect(fit).toHaveAttribute("aria-pressed", "false");
+  const before = (await fits(page)).length;
+  await fit.click();
+  await expect(fit).toHaveAttribute("aria-pressed", "true");
+  expect((await fits(page)).slice(before)).toEqual([["fit", cols, rows]]);
+
+  const shown = (hidden: boolean) => page.evaluate((hidden) => {
+    Object.defineProperty(document, "hidden", { value: hidden, configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, hidden);
+  await shown(true);
+  expect((await fits(page)).at(-1)).toEqual(["unfit"]);
+  await shown(false);
+  expect((await fits(page)).at(-1)).toEqual(["fit", cols, rows]);
+});

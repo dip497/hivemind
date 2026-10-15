@@ -3076,6 +3076,12 @@ public protocol WatchProtocol: AnyObject, Sendable {
      */
     func fit(cols: UInt16, rows: UInt16) 
     
+    /**
+     * The person scrolls `lines` (up, to earlier, below 0) at the cell `col`, `row` (from 1):
+     * sent to the program when it takes scrolling; false when the view scrolls its own lines.
+     */
+    func scroll(lines: Int32, col: UInt16, row: UInt16)  -> Bool
+    
     func stop() 
     
     /**
@@ -3166,6 +3172,22 @@ open func fit(cols: UInt16, rows: UInt16)  {try! rustCall() {
         FfiConverterUInt16.lower(rows),uniffiCallStatus
     )
 }
+}
+    
+    /**
+     * The person scrolls `lines` (up, to earlier, below 0) at the cell `col`, `row` (from 1):
+     * sent to the program when it takes scrolling; false when the view scrolls its own lines.
+     */
+open func scroll(lines: Int32, col: UInt16, row: UInt16) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_method_watch_scroll(
+            self.uniffiCloneHandle(),
+        FfiConverterInt32.lower(lines),
+        FfiConverterUInt16.lower(col),
+        FfiConverterUInt16.lower(row),uniffiCallStatus
+    )
+})
 }
     
 open func stop()  {try! rustCall() {
@@ -9399,6 +9421,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_watch_fit() != 57702) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_watch_scroll() != 35798) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_watch_stop() != 16582) {

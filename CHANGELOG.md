@@ -53,6 +53,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- Android app: scrolling the terminal of a program that draws its own screen (Claude Code, less, vim) scrolls the program, as the phone page and your computer do. It scrolled nothing.
+- A terminal fitted to a phone says so on your computer, with Use this window's size to take it back. The phone's Fit turns off once the computer takes the size, and the phone gives the size back when the app or page leaves the screen.
 - A question Claude asks still shows on your phone with its options after an hour. Claude's hook gives up waiting after an hour, and the phone used to fall back to a bare "Permission requested".
 - The Android and iOS apps answer an agent's questions as the phone page does: each question with its options as buttons, several answered together, each in its place, and a permission card shows its tool and command. Before, a question took only a line of text.
 - The app served to a browser opens in Safari, on an iPhone too; before, it showed a black screen.

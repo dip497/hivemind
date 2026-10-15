@@ -135,6 +135,9 @@ export class TerminalView {
   private fitted = false;
   /** The size last fitted to (`readSize`). */
   private said = "";
+  /** Fitted, the session took that size; and since, another screen took its size back. */
+  private reached = false;
+  private takenBack = false;
 
   /** The canvas's size, in device pixels, and the pixel ratio. */
   private width = 0;
@@ -163,6 +166,16 @@ export class TerminalView {
     bar.append(this.fitButton);
     this.el.append(this.view, bar);
     new ResizeObserver(() => this.measure()).observe(this.view);
+    // Out of sight, the phone gives the size back; in sight again, it fits it again.
+    document.addEventListener("visibilitychange", () => {
+      if (!this.source || !this.fitted) return;
+      this.said = "";
+      this.reached = false;
+      this.takenBack = false;
+      this.fitButton.setAttribute("aria-pressed", "true");
+      if (document.hidden) this.source.unfit();
+      else this.fit();
+    });
     void document.fonts?.load(`400 16px ${FONT}`).then(() => this.measure());
     this.listen();
   }
@@ -209,6 +222,8 @@ export class TerminalView {
     this.zoom = 1;
     this.across = 0;
     this.fitted = source !== null;
+    this.reached = false;
+    this.takenBack = false;
     this.fitButton.setAttribute("aria-pressed", String(this.fitted));
     this.drawn = "";
     this.said = "";
@@ -239,6 +254,7 @@ export class TerminalView {
   private apply(u: Update): void {
     const was = { newest: this.lines[this.newest]?.text, below: this.lines.length - this.newest, length: this.lines.length };
     this.revision = u.revision;
+    this.sized(u.cols, u.rows);
     this.rows = u.rows;
     if (u.cols !== this.cols) {
       this.cols = u.cols;
@@ -396,14 +412,31 @@ export class TerminalView {
     const size = this.readSize();
     if (!this.source || !this.fitted || !size || `${size.cols}x${size.rows}` === this.said) return;
     this.said = `${size.cols}x${size.rows}`;
+    this.reached = false;
     this.source.fit(size.cols, size.rows);
   }
 
-  /** Fit the terminal to this view, or give it back the size it had. */
+  /** The session is `cols` × `rows`: once it took the size fitted to, another size means another
+   *  screen took it back, and Fit shows off until pressed again. */
+  private sized(cols: number, rows: number): void {
+    if (!this.fitted || !this.said) return;
+    if (`${cols}x${rows}` === this.said) this.reached = true;
+    else if (this.reached) {
+      this.reached = false;
+      this.takenBack = true;
+      this.fitButton.setAttribute("aria-pressed", "false");
+    }
+  }
+
+  /** Fit the terminal to this view, or give it back the size it had; taken back by another
+   *  screen, fit it again. */
   private toggleFit(): void {
     const source = this.source;
     if (!source) return;
-    this.fitted = !this.fitted;
+    const again = this.fitted && this.takenBack;
+    this.takenBack = false;
+    this.reached = false;
+    if (!again) this.fitted = !this.fitted;
     this.fitButton.setAttribute("aria-pressed", String(this.fitted));
     this.said = "";
     if (!this.fitted) return source.unfit();
