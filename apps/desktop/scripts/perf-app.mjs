@@ -519,10 +519,13 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
 
   // Canvas, at a person's pace: one wheel notch, then a rest, so each notch is a whole pan that starts and ends.
   {
-    // Over bare canvas: a wheel over a tile or the chrome does not pan.
+    // Over bare canvas: a wheel over a tile or the chrome does not pan. The pans above moved the camera.
+    await cameraOnShells(page);
     const at = await page.evaluate(() => {
-      for (const y of [0.8, 0.65, 0.4, 0.2]) for (const x of [0.9, 0.75, 0.5, 0.35]) {
-        const p = { x: Math.round(innerWidth * x), y: Math.round(innerHeight * y) };
+      const b = document.querySelector(".react-flow__pane")?.getBoundingClientRect();
+      if (!b) return null;
+      for (let j = 9; j >= 1; j--) for (let i = 9; i >= 1; i--) {
+        const p = { x: Math.round(b.left + (b.width * i) / 10), y: Math.round(b.top + (b.height * j) / 10) };
         if (document.elementFromPoint(p.x, p.y)?.classList.contains("react-flow__pane")) return p;
       }
       return null;
