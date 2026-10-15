@@ -228,6 +228,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   kbRef.current = kb;
   // What fits this tile, and the sizes this window last asked the session to take (drawnSize).
   const ownSizeRef = useRef<PtySize | null>(null);
+  // The session has a size another screen gave it (a phone fitted it), not this window's.
+  const [sizedElsewhere, setSizedElsewhere] = useState(false);
   const askedRef = useRef<PtySize[]>([]);
   // In a workspace joined from elsewhere: whether the session is shown from its host now, and how
   // to show it again once the connection to the host is back (the host let go of it as it went).
@@ -403,6 +405,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       const own = ownSizeRef.current;
       if (!own) return;
       const drawn = drawnSize(own, askedRef.current, kbRef.current.size);
+      setSizedElsewhere(drawn.cols !== own.cols || drawn.rows !== own.rows);
       if (term.cols !== drawn.cols || term.rows !== drawn.rows) term.resize(drawn.cols, drawn.rows);
       const scale = scaleToFit(own, drawn);
       if (term.element) term.element.style.transform = scale < 1 ? `scale(${scale})` : "";
@@ -1367,6 +1370,18 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       <div className="hm-term-host relative flex-1 min-h-0 min-w-0 overflow-hidden bg-[var(--color-terminal-bg)] p-1.5">
         <div ref={hostRef} className="w-full h-full overflow-hidden" />
         {selected && <KeyboardPill tile={ptyId} kb={kb} />}
+        {sizedElsewhere && kb.mayType && (
+          <div className="nodrag pointer-events-auto absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-[var(--color-line)] bg-[var(--color-bg2)] px-3 py-1 text-label shadow-md" role="status" data-sized-elsewhere={ptyId}>
+            <span>Sized for another screen</span>
+            <Button size="sm" variant="secondary" onClick={() => {
+              const own = ownSizeRef.current;
+              if (!own) return;
+              sentSizeRef.current = own;
+              askedRef.current = [...askedRef.current.slice(-2), own];
+              window.hive.ptyFit(ptyId, own.cols, own.rows);
+            }}>Use this window's size</Button>
+          </div>
+        )}
         {bootWait !== null && (
           <div role="status" aria-label="Waiting to start" className="absolute inset-1.5 z-10 flex flex-col gap-2 bg-[var(--color-terminal-bg)] p-2">
             <Skeleton className="h-2.5 w-7/12" />

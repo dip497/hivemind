@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -30,7 +31,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -42,6 +47,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.sp
 import com.hivemind.phone.ui.common.FollowTheNewest
 import com.hivemind.phone.ui.common.NewestButton
@@ -71,10 +77,16 @@ internal fun readableSize(painter: TerminalPainter, width: Float, height: Int, r
  * the last in sight, also as the view is made shorter). Lines are drawn one by one, in a lazy
  * list keyed by their index, so a line that changes redraws alone and one that scrolls keeps its
  * place. [onReadableSize] is told the size that fills the view at a readable text size, and again
- * when the view's size changes.
+ * when the view's size changes. A program that draws its own screen takes the person's scrolling:
+ * [onScroll] is given it a line at a time (up, to earlier, below 0) and says whether it took it.
  */
 @Composable
-fun TerminalView(terminal: Terminal, modifier: Modifier = Modifier, onReadableSize: (TermSize) -> Unit = {}) {
+fun TerminalView(
+    terminal: Terminal,
+    modifier: Modifier = Modifier,
+    onReadableSize: (TermSize) -> Unit = {},
+    onScroll: (lines: Int, col: Int, row: Int) -> Boolean = { _, _, _ -> false },
+) {
     val palette = TermPalette.SIGNAL
     val fonts = LocalFontFamilyResolver.current
     val painter = remember(fonts) {
@@ -123,7 +135,9 @@ fun TerminalView(terminal: Terminal, modifier: Modifier = Modifier, onReadableSi
         val size = remember(painter, viewport, constraints.maxHeight, readable) { readableSize(painter, viewport, constraints.maxHeight, readable) }
         val tell by rememberUpdatedState(onReadableSize)
         LaunchedEffect(size) { tell(size) }
-        Box(Modifier.fillMaxSize().horizontalScroll(across)) {
+        val toProgram = rememberUpdatedState(onScroll)
+        val wheel = remember(terminal, cells.height) { ProgramScroll(terminal, cells.height, toProgram) }
+        Box(Modifier.fillMaxSize().nestedScroll(wheel).horizontalScroll(across)) {
             LazyColumn(state = terminal.follow.list, modifier = Modifier.width(width).fillMaxHeight()) {
                 items(count = terminal.lineCount, key = { terminal.firstLine + it }) { position ->
                     TerminalLine(terminal.slot(position), painter, cells, lineHeight)
@@ -132,6 +146,31 @@ fun TerminalView(terminal: Terminal, modifier: Modifier = Modifier, onReadableSi
         }
         NewestButton(terminal.follow) { terminal.rest }
     }
+}
+
+/** Scrolling, given a line at a time to a program that takes it, before the list would scroll its own lines. */
+private class ProgramScroll(
+    private val terminal: Terminal,
+    private val lineHeight: Float,
+    private val onScroll: State<(Int, Int, Int) -> Boolean>,
+) : NestedScrollConnection {
+    /** What was scrolled short of a whole line. */
+    private var owed = 0f
+
+    private fun send(lines: Int) = onScroll.value(lines, terminal.cols / 2 + 1, terminal.rows / 2 + 1)
+
+    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+        val lines = owed - available.y / lineHeight
+        val whole = lines.toInt()
+        if (!send(whole)) {
+            owed = 0f
+            return Offset.Zero
+        }
+        owed = lines - whole
+        return Offset(0f, available.y)
+    }
+
+    override suspend fun onPreFling(available: Velocity): Velocity = if (send(0)) available else Velocity.Zero
 }
 
 @Composable

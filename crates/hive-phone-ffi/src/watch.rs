@@ -129,6 +129,12 @@ impl Watch {
         self.0.type_keys(keys)
     }
 
+    /// The person scrolls `lines` (up, to earlier, below 0) at the cell `col`, `row` (from 1):
+    /// sent to the program when it takes scrolling; false when the view scrolls its own lines.
+    pub fn scroll(&self, lines: i32, col: u16, row: u16) -> bool {
+        self.0.scroll(lines, col, row)
+    }
+
     /// Size the terminal to `cols` × `rows` for this phone, until it is watched no more.
     pub fn fit(&self, cols: u16, rows: u16) {
         self.0.fit(Some((cols, rows)))

@@ -274,6 +274,21 @@ test("the last to fit or type sizes a session; when it lets go or goes, the one 
   assert.deepEqual(sizes().slice(7), ["48x30", "120x40", "48x30", "120x40"], "the same, and the phone went");
 });
 
+test("a window here that asks for its own size takes it back from a fitted phone, until the phone fits it again", async () => {
+  const h = host();
+  const window = h.client();
+  const phone = h.client({ kind: "peer", person: "p".repeat(64), device: "d".repeat(64), access: "owner" });
+  const sizes = () => h.calls.filter((call) => call.startsWith("resize")).map((call) => call.split(" ")[2]);
+  await h.open(window, "hm:t1");
+  h.notice(window, "terminal.resize", "hm:t1", 120, 40);
+  await h.open(phone, "hm:t1", { attachOnly: true });
+  h.notice(phone, "terminal.fit", "hm:t1", 48, 30);
+  h.notice(window, "terminal.fit", "hm:t1", 110, 36);
+  h.notice(window, "terminal.resize", "hm:t1", 100, 36);
+  h.notice(phone, "terminal.fit", "hm:t1", 48, 30);
+  assert.deepEqual(sizes(), ["120x40", "48x30", "110x36", "100x36", "48x30"]);
+});
+
 test("a client that acknowledges what it takes is paced by it: past its window it is sent nothing until it has taken all, then the host's screen", async () => {
   const h = host({ screen: "SCREEN" });
   await h.open(h.client(), "hm:t1");

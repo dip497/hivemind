@@ -155,6 +155,11 @@ test("a shell tile opened on the paired page draws the computer's screen on a la
   await expect(fit).toHaveAttribute("aria-pressed", "true");
   const fitted = await sizeOn(page);
   expect(Number(fitted.split(" ")[1])).toBeLessThan(60);
+  // The computer's tile says another screen sized it, and takes its own size back when asked.
+  const elsewhere = node.locator("[data-sized-elsewhere]");
+  await expect(elsewhere).toBeVisible();
+  await elsewhere.getByRole("button", { name: "Use this window's size" }).click();
+  await expect(elsewhere).toBeHidden({ timeout: 10_000 });
   await fit.click();
   await expect(fit).toHaveAttribute("aria-pressed", "false");
   await page.locator('[data-screen="terminal"] .term-view').tap();

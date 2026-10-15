@@ -84,6 +84,22 @@ class TerminalViewTest {
     }
 
     @Test
+    fun `a program that draws its own screen is given a finger's scrolling, up as lines below 0, and the list stays`() {
+        val terminal = Terminal()
+        terminal.apply(update(1, first = 0, count = 60, cols = 10, rows = 60, lines = (0L until 60L).map { line(it, "$it") }))
+        val given = mutableListOf<Int>()
+        compose.setContent {
+            TerminalView(terminal, Modifier.size(200.dp, 120.dp), onScroll = { lines, _, _ -> given += lines; true })
+        }
+
+        compose.onRoot().performTouchInput { swipeDown() }
+        compose.waitForIdle()
+        assertTrue(given.sum() < 0)
+        assertTrue(terminal.follow.on)
+        assertEquals(59, terminal.follow.list.layoutInfo.visibleItemsInfo.last().index)
+    }
+
+    @Test
     fun `a finger scrolling up stops the following, and the button goes back to the newest line`() {
         val terminal = Terminal()
         terminal.apply(update(1, first = 0, count = 60, cols = 10, rows = 60, lines = (0L until 60L).map { line(it, "$it") }))

@@ -38,11 +38,11 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,6 +57,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hivemind.phone.R
 import com.hivemind.phone.chat.ChatView
@@ -151,7 +152,10 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
                         TextButton(onClick = vm::stop, enabled = !busy) { Text(stringResource(R.string.action_stop)) }
                     }
                     if (showingTerminal) {
-                        PillChip(fit, onClick = { fit = !fit }, label = stringResource(R.string.terminal_fit), modifier = Modifier.testTag("terminal-fit"))
+                        PillChip(
+                            fit && !vm.screen.takenBack,
+                            onClick = { if (fit && vm.screen.takenBack) vm.screen.fitAgain() else fit = !fit },
+                            label = stringResource(R.string.terminal_fit), modifier = Modifier.testTag("terminal-fit"))
                     }
                     if (!overChat) {
                         if (chatFirst) {
@@ -192,14 +196,20 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
                     Note(stringResource(R.string.keyboard_held, holder))
                 }
                 vm.screen.ended?.let { ended -> Note(endedNote(ended, agent?.deviceName)) }
-                // Fitted to the phone while Fit is on; the size it had, given back once it is off or the terminal is left.
+                // Fitted to the phone while Fit is on and the app is in sight; the size it had, given back once
+                // Fit is off, the terminal is left or the app goes to the background.
                 var readable by remember { mutableStateOf<TermSize?>(null) }
                 LaunchedEffect(fit, readable) {
                     val size = readable
                     if (!fit) vm.screen.unfit() else if (size != null) vm.screen.fit(size)
                 }
-                DisposableEffect(vm.screen) { onDispose { vm.screen.unfit() } }
-                TerminalView(vm.screen.terminal, Modifier.weight(1f).fillMaxWidth(), onReadableSize = { readable = it })
+                val fitNow by rememberUpdatedState(fit)
+                val readableNow by rememberUpdatedState(readable)
+                LifecycleStartEffect(vm.screen) {
+                    if (fitNow) readableNow?.let(vm.screen::fit)
+                    onStopOrDispose { vm.screen.unfit() }
+                }
+                TerminalView(vm.screen.terminal, Modifier.weight(1f).fillMaxWidth(), onReadableSize = { readable = it }, onScroll = vm.screen::scroll)
             } else {
                 val waiting = agent?.waiting
                 ChatView(
