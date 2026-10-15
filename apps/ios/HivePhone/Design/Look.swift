@@ -40,8 +40,7 @@ enum Tones {
             alpha: 1)
     }
 
-    /// The bars drawn quiet: the page's own ground, the screen's name in the text colour, the tabs'
-    /// chosen one in the text colour and the rest faint, what waits on the person counted in amber.
+    /// The bars drawn quiet: the page's own ground, the screen's name in the text colour.
     @MainActor
     static func styleBars() {
         let nav = UINavigationBarAppearance()
@@ -62,21 +61,6 @@ enum Tones {
         bar.standardAppearance = nav
         bar.compactAppearance = nav
         bar.scrollEdgeAppearance = nav
-
-        let tabs = UITabBarAppearance()
-        tabs.configureWithOpaqueBackground()
-        tabs.backgroundColor = background
-        tabs.shadowColor = hairline
-        for item in [tabs.stackedLayoutAppearance, tabs.inlineLayoutAppearance, tabs.compactInlineLayoutAppearance] {
-            item.normal.iconColor = tertiary
-            item.normal.titleTextAttributes = [.foregroundColor: tertiary]
-            item.normal.badgeBackgroundColor = waiting
-            item.selected.iconColor = text
-            item.selected.titleTextAttributes = [.foregroundColor: text]
-        }
-        let tabBar = UITabBar.appearance()
-        tabBar.standardAppearance = tabs
-        tabBar.scrollEdgeAppearance = tabs
     }
 }
 

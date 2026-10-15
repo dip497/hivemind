@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The Agents tab's sections (design §6.3): the core's order (by device, then workspace, then name)
+/// Home's agents, in sections (design §6.3): the core's order (by device, then workspace, then name)
 /// cut wherever the device or the workspace changes.
 struct AgentSection: Identifiable {
     let id: String

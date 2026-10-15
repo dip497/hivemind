@@ -65,7 +65,6 @@ struct ViewScreen: View {
         }
         .navigationTitle(offered.info.name)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
         .onChange(of: theme, initial: true) { _, theme in
             page.looks(theme)
         }

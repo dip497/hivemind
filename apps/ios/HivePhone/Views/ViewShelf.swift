@@ -24,7 +24,7 @@ struct OfferedView: Hashable, Identifiable {
     var id: String { device + "\n" + workspace + "\n" + info.id }
 }
 
-/// One row of the Views tab: a view, dimmed and not opened while its computer is away.
+/// One row of Settings' views: a view, dimmed and not opened while its computer is away.
 struct ShelfRow: Identifiable {
     let view: OfferedView
     let away: Bool
@@ -37,7 +37,7 @@ struct ShelfRow: Identifiable {
     }
 }
 
-/// The Views tab's list (design §6 screen 9, §6.1), the index of what the phone may show: the
+/// Settings' list of views (design §6 screen 9, §6.1), the index of what the phone may show: the
 /// community views each of the person's computers offers the phone for each workspace it holds, as
 /// it last said. A computer that does not answer keeps what it said before.
 struct ViewShelf {

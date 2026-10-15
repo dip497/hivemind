@@ -1,6 +1,6 @@
 import Foundation
 
-/// The words of the Needs tab (design §6.2), from the overview's records.
+/// The words of what needs the person on Home (design §6.2), from the overview's records.
 enum NeedsSummary {
     /// When nothing waits: how many agents are at work. Nothing, while a device is still asked:
     /// until each has said, that nothing waits is not known.

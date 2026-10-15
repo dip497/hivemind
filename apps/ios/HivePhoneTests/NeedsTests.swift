@@ -1,7 +1,7 @@
 import XCTest
 @testable import HivePhone
 
-/// What the Needs tab offers and says (design §6.2), from records built here.
+/// What Home's needs offer and say (design §6.2), from records built here.
 final class NeedsTests: XCTestCase {
     func testEachWaitOffersTheAnswersItCanTake() {
         let cases: [(Waiting, Answers)] = [

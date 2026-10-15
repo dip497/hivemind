@@ -1,7 +1,7 @@
 import XCTest
 @testable import HivePhone
 
-/// The Views tab's list (design §6 screen 9, §6.1): what each computer last said it offers for each
+/// Settings' list of views (design §6 screen 9, §6.1): what each computer last said it offers for each
 /// workspace it holds, in the overview's order, the rows of a computer away saying so (as the
 /// Android app's do).
 final class ViewShelfTests: XCTestCase {

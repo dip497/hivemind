@@ -1,57 +1,5 @@
 import SwiftUI
 
-/// The home tab (design §6.2): what waits on the person, the longest-waiting first, each a card
-/// with the answers its wait allows; a device away, and what it last said.
-@MainActor
-struct NeedsTab: View {
-    let model: PhoneModel
-    @State private var path: [AgentRef] = []
-    @State private var composing: Composing? = nil
-
-    var body: some View {
-        NavigationStack(path: $path) {
-            TimelineView(.everyMinute) { context in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(NeedsSummary.away(model.overview.devices), id: \.id) { device in
-                            Label(NeedsSummary.awayLine(device, now: context.date), systemImage: "wifi.slash")
-                                .font(.footnote)
-                                .foregroundStyle(Look.tertiary)
-                        }
-                        let asking = NeedsSummary.asking(model.overview.devices)
-                        ForEach(asking, id: \.id) { device in
-                            Label(NeedsSummary.askingLine(device), systemImage: "ellipsis")
-                                .font(.footnote)
-                                .foregroundStyle(Look.tertiary)
-                        }
-                        if model.overview.needs.isEmpty,
-                           let nothing = NeedsSummary.nothing(working: model.overview.working, asking: asking) {
-                            Text(nothing)
-                                .font(.subheadline)
-                                .foregroundStyle(Look.secondary)
-                        }
-                        ForEach(model.overview.needs, id: \.at) { agent in
-                            NeedRow(model: model, agent: agent, now: context.date) { waiting in
-                                composing = Composing(agent: agent, waiting: waiting)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                }
-                .background(Look.background)
-            }
-            .navigationTitle("Needs you")
-            .navigationDestination(for: AgentRef.self) { ref in
-                AgentScreen(model: model, ref: ref)
-            }
-            .sheet(item: $composing) { item in
-                AnswerSheet(model: model, agent: item.agent, waiting: item.waiting)
-            }
-        }
-    }
-}
-
 /// An agent's wait, answered in a sheet: a plan to review, a question to reply to.
 struct Composing: Identifiable {
     let agent: Agent

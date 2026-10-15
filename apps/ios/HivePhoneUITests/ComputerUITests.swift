@@ -1,10 +1,11 @@
 import XCTest
 
 /// The app against a real computer (design §7): it pastes the link the computer's Settings → Your devices
-/// → Use on your phone shows, pairs, and is the person's; finds the computer and its agent among the
-/// agents; opens the agent and reads its line in its terminal, then what it and the person said in
-/// its chat; and sends it a message from the reply box, which it answers in the chat and in its
-/// terminal, still followed. Then the community view the computer offers the phone (P8): its page,
+/// → Use on your phone shows, pairs, and is the person's; finds the computer and its agent on Home;
+/// opens the agent on its chat, reads its line in its terminal (opened from the header, fitted to
+/// the phone), then what it and the person said in its chat; and sends it a message from the reply
+/// box, which it answers in the chat and in its terminal, still followed. Then, from Home's gear,
+/// the community view the computer offers the phone (P8): its page,
 /// served by the computer, shows the computer's agent; what the view may do at once (selecting a
 /// tile) the computer answers; what would start an agent waits for the phone's lock, whose prompt
 /// (a simulator always has a passcode) is cancelled, so nothing starts. Run by
@@ -57,25 +58,29 @@ final class ComputerUITests: XCTestCase {
         XCTAssertTrue(showing("This phone is \(person)'s.", in: app).waitForExistence(timeout: 120), "paired, as \(person)'s")
         app.buttons["Continue"].tap()
 
-        // The computer, and its agent, among the agents.
-        let agents = app.buttons["Agents"].firstMatch
-        XCTAssertTrue(agents.waitForExistence(timeout: 30), "the tabs are shown")
-        agents.tap()
+        // The computer, and its agent, on Home.
+        let settings = app.buttons["home.settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 30), "Home is shown")
         XCTAssertTrue(showing(computer, in: app).waitForExistence(timeout: 120), "\(computer) is among the agents' devices")
         let row = showing(agent, in: app)
         XCTAssertTrue(row.waitForExistence(timeout: 120), "\(agent) is among the agents")
         row.tap()
 
-        // Its terminal: the line the agent printed, as its screen has it.
-        let terminalTab = app.segmentedControls.buttons["Terminal"]
-        XCTAssertTrue(terminalTab.waitForExistence(timeout: 30), "the agent's screen is shown")
-        terminalTab.tap()
+        // Its terminal, from the header: fitted to the phone, and the line the agent printed, as its
+        // screen has it.
+        let openTerminal = app.buttons["agent.terminal.open"]
+        XCTAssertTrue(openTerminal.waitForExistence(timeout: 30), "the agent's screen is shown, on its chat")
+        openTerminal.tap()
         let terminal = app.descendants(matching: .any)["agent.terminal"]
         XCTAssertTrue(terminal.waitForExistence(timeout: 30), "its terminal is shown")
+        let fit = app.buttons["terminal.fit"]
+        XCTAssertTrue(fit.waitForExistence(timeout: 10), "its terminal offers Fit")
+        XCTAssertTrue(fit.isSelected, "its terminal opens fitted to the phone")
         XCTAssertEqual(shows(line, terminal), .completed, "its terminal shows \(line)")
 
-        // What it and the person said to each other.
-        app.segmentedControls.buttons["Chat"].tap()
+        // What it and the person said to each other, back on its chat.
+        let closeTerminal = app.buttons["terminal.close"]
+        closeTerminal.tap()
         XCTAssertTrue(showing(said, in: app).waitForExistence(timeout: 60), "its chat shows \(said)")
 
         // A message from the reply box: the agent hears it, and answers.
@@ -88,23 +93,27 @@ final class ComputerUITests: XCTestCase {
         app.buttons["agent.send"].tap()
         XCTAssertTrue(showing(answer, in: app).waitForExistence(timeout: 60), "the agent answered: \(answer)")
 
-        // Its terminal, followed all the while the chat was: what it printed on hearing it.
-        terminalTab.tap()
-        XCTAssertEqual(shows(heard, terminal), .completed, "its terminal shows \(heard)")
-
-        // The reply box gives the keyboard back (nothing is left in it to send), so that the tabs
-        // under the keyboard can be tapped.
+        // The reply box gives the keyboard back (nothing is left in it to send).
         if app.keyboards.firstMatch.exists {
             reply.typeText("\n")
             XCTAssertEqual(gone(app.keyboards.firstMatch), .completed, "the keyboard went")
         }
 
-        // The community views the computer offers the phone, and the one it offers for this test.
-        let viewsTab = app.buttons["Views"].firstMatch
-        XCTAssertTrue(viewsTab.waitForExistence(timeout: 30), "the Views tab is there")
-        viewsTab.tap()
+        // Its terminal, followed all the while the chat was: what it printed on hearing it.
+        openTerminal.tap()
+        XCTAssertTrue(terminal.waitForExistence(timeout: 30), "its terminal is shown again")
+        XCTAssertEqual(shows(heard, terminal), .completed, "its terminal shows \(heard)")
+        closeTerminal.tap()
+
+        // Home again; its gear opens Settings, with the community views the computer offers the
+        // phone, and the one it offers for this test.
+        let back = app.navigationBars.buttons.element(boundBy: 0)
+        XCTAssertTrue(back.waitForExistence(timeout: 10), "the agent's screen has a way back")
+        back.tap()
+        XCTAssertTrue(settings.waitForExistence(timeout: 30), "Home is shown again")
+        settings.tap()
         let offered = showing(view, in: app)
-        XCTAssertTrue(offered.waitForExistence(timeout: 120), "\(view) is among the views")
+        XCTAssertTrue(offered.waitForExistence(timeout: 120), "\(view) is among the views in Settings")
         offered.tap()
 
         // Its page, as the computer serves it, laid out for a phone, with the computer's agent on it.
