@@ -163,6 +163,24 @@ jobs:
           pnpm exec playwright test phone-app.spec.ts --retries=0 --reporter=list | tee "$RUNNER_TEMP/phone-app.txt"
           grep -q "1 passed" "$RUNNER_TEMP/phone-app.txt"
 
+      # The pictures of Home the paired run keeps (ComputerUITests), light and dark, for a person to look at.
+      - name: Home as the phone drew it
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/home-look"
+          find apps/desktop/test-results -maxdepth 4 -name HivePhone.xcresult -print | while read -r bundle; do
+            xcrun xcresulttool export attachments --path "$bundle" --output-path "$RUNNER_TEMP/home-look" || true
+          done
+          ls -la "$RUNNER_TEMP/home-look"
+
+      - name: Home's pictures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phone-ios-home
+          path: ${{ runner.temp }}/home-look/
+          if-no-files-found: ignore
+
       - name: What the desktop and the phone saw
         if: failure()
         uses: actions/upload-artifact@v7
