@@ -5,9 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.hivemind.phone.core.Agent
 import com.hivemind.phone.core.AgentRef
 import com.hivemind.phone.core.Answer
-import com.hivemind.phone.core.HomeEntry
 import com.hivemind.phone.core.HomeShown
-import com.hivemind.phone.core.HomeTile
 import com.hivemind.phone.core.Overview
 import com.hivemind.phone.core.Phone
 import com.hivemind.phone.ui.agents.AgentsState
@@ -35,8 +33,6 @@ data class HomeState(
     /** Every agent of the overview, by where it is: what a tile's row acts on. */
     val agents: Map<AgentRef, Agent>,
     val filter: HomeFilter,
-    /** Every tile of the computers' trees, by where it is: what an agent waiting on the person asks. */
-    val tiles: Map<AgentRef, HomeTile>,
 ) {
     companion object {
         fun of(overview: Overview, homes: List<HomeShown>, filter: HomeFilter): HomeState {
@@ -48,7 +44,6 @@ data class HomeState(
                 elsewhere = AgentsState(elsewhere),
                 agents = overview.agents.associateBy { it.at },
                 filter = filter,
-                tiles = homes.flatMap { it.tree }.filterIsInstance<HomeEntry.Tile>().associate { it.tile.at to it.tile },
             )
         }
     }

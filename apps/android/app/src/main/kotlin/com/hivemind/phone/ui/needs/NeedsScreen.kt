@@ -5,18 +5,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -25,24 +21,20 @@ import com.hivemind.phone.core.Agent
 import com.hivemind.phone.core.AgentRef
 import com.hivemind.phone.core.Answer
 import com.hivemind.phone.core.Device
-import com.hivemind.phone.core.HomeTile
 import com.hivemind.phone.ui.common.AnswerControls
 import com.hivemind.phone.ui.common.Dot
 import com.hivemind.phone.ui.common.RaisedCard
 import com.hivemind.phone.ui.common.asked
 import com.hivemind.phone.ui.common.sinceText
 import com.hivemind.phone.ui.theme.LocalStateColors
-import com.hivemind.phone.ui.theme.Mono
 
 /**
  * What waits on the person, the longest first (design §6.2), as items of Home's list: each a card
- * with why it waits and for how long, its agent and where it runs, what it asks ([tiles] tell its
- * tool and command, or its question), and its answers; and the devices away or still asked,
- * without which that nothing waits is not known.
+ * with why it waits and for how long, its agent and where it runs, what it asks and its answers;
+ * and the devices away or still asked, without which that nothing waits is not known.
  */
 fun LazyListScope.needsItems(
     state: NeedsState,
-    tiles: Map<AgentRef, HomeTile>,
     busy: Set<Any>,
     now: Long,
     onOpen: (AgentRef) -> Unit,
@@ -68,7 +60,7 @@ fun LazyListScope.needsItems(
         }
     }
     items(state.needs, key = { "need:${it.at.device}/${it.at.workspace}/${it.at.tile}" }) { agent ->
-        NeedRow(agent, tiles[agent.at], state.lastHeard(agent), agent.at in busy, now, onOpen, onAnswer, card)
+        NeedRow(agent, state.lastHeard(agent), agent.at in busy, now, onOpen, onAnswer, card)
     }
 }
 
@@ -100,7 +92,6 @@ private fun AwayNote(device: Device, now: Long, modifier: Modifier) {
 @Composable
 private fun NeedRow(
     agent: Agent,
-    tile: HomeTile?,
     lastHeard: Boolean,
     busy: Boolean,
     now: Long,
@@ -140,35 +131,7 @@ private fun NeedRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            tile?.question?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-            tile?.tool?.let { tool -> Command(tool, tile.about) }
             AnswerControls(waiting, busy, onAnswer = { onAnswer(agent, it) })
-        }
-    }
-}
-
-/** What a tool waiting on the person would run, as a terminal would show it: the tool, then its command. */
-@Composable
-private fun Command(tool: String, about: String?) {
-    Surface(color = MaterialTheme.colorScheme.background, shape = MaterialTheme.shapes.extraSmall, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(painterResource(R.drawable.ic_terminal), null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(16.dp))
-            Text(
-                tool,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 8.dp),
-            )
-            about?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = Mono,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
         }
     }
 }

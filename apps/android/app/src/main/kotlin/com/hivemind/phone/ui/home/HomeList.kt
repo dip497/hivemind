@@ -95,7 +95,7 @@ fun HomeList(
                 }
             }
         }
-        needsItems(state.needs, state.tiles, busy, now, onOpen, onAnswer)
+        needsItems(state.needs, busy, now, onOpen, onAnswer)
         val working = state.homes.flatMap { home -> home.working.map { home.device to it } }
         if (working.isNotEmpty()) {
             item(key = "working") { Heading(stringResource(R.string.home_working)) }

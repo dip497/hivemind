@@ -57,6 +57,9 @@
     <string name="changes_hint">What to change</string>
     <string name="reply_hint">Reply</string>
     <string name="action_send">Send</string>
+    <string name="choose_any">Choose any</string>
+    <string name="own_answer_hint">Type something</string>
+    <string name="own_answer_or_hint">Or type your own answer</string>
 
     <!-- Agents -->
     <string name="home_search">Search</string>

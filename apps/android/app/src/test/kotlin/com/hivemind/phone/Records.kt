@@ -3,15 +3,18 @@ package com.hivemind.phone
 import com.hivemind.phone.core.Agent
 import com.hivemind.phone.core.AgentRef
 import com.hivemind.phone.core.AgentState
+import com.hivemind.phone.core.Choice
 import com.hivemind.phone.core.Device
 import com.hivemind.phone.core.DeviceKind
 import com.hivemind.phone.core.Entry
 import com.hivemind.phone.core.Overview
 import com.hivemind.phone.core.Person
+import com.hivemind.phone.core.Question
 import com.hivemind.phone.core.Said
 import com.hivemind.phone.core.ScreenLine
 import com.hivemind.phone.core.ScreenUpdate
 import com.hivemind.phone.core.Tool
+import com.hivemind.phone.core.ToolAsked
 import com.hivemind.phone.core.ToolResult
 import com.hivemind.phone.core.WaitKind
 import com.hivemind.phone.core.Waiting
@@ -51,8 +54,18 @@ fun agent(
     hasConversation = hasConversation,
 )
 
-fun waiting(kind: WaitKind, since: Long, decide: Boolean = false, plan: String? = null) =
-    Waiting(kind = kind, since = since.toULong(), plan = plan, decide = decide)
+fun waiting(
+    kind: WaitKind,
+    since: Long,
+    decide: Boolean = false,
+    plan: String? = null,
+    tool: ToolAsked? = null,
+    questions: List<Question> = emptyList(),
+    choose: Boolean = false,
+) = Waiting(kind = kind, since = since.toULong(), plan = plan, decide = decide, tool = tool, questions = questions, choose = choose)
+
+fun question(question: String, vararg options: String, many: Boolean = false) =
+    Question(question = question, options = options.map { Choice(label = it, description = null) }, many = many)
 
 fun device(
     id: String,

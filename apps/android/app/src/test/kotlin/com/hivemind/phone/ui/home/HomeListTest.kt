@@ -25,9 +25,12 @@ import com.hivemind.phone.core.HomeEntry
 import com.hivemind.phone.core.HomeShown
 import com.hivemind.phone.core.HomeTile
 import com.hivemind.phone.core.Overview
+import com.hivemind.phone.core.QuestionAnswer
+import com.hivemind.phone.core.ToolAsked
 import com.hivemind.phone.core.WaitKind
 import com.hivemind.phone.device
 import com.hivemind.phone.overview
+import com.hivemind.phone.question
 import com.hivemind.phone.ui.theme.PhoneTheme
 import com.hivemind.phone.waiting
 import org.junit.Assert.assertEquals
@@ -71,12 +74,15 @@ class HomeListTest {
     }
 
     @Test
-    fun `a permission the device can decide is allowed from its row`() {
-        val asking = agent("t1", name = "fix the login bug", waiting = waiting(WaitKind.PERMISSION, since = now - 5 * MINUTE, decide = true))
+    fun `a permission the device can decide is allowed from its row, below its tool and command`() {
+        val bash = ToolAsked(name = "Bash", about = "rm -rf build")
+        val asking = agent("t1", name = "fix the login bug", waiting = waiting(WaitKind.PERMISSION, since = now - 5 * MINUTE, decide = true, tool = bash))
         show(overview(needs = listOf(asking)))
 
         compose.onNodeWithText("fix the login bug").assertIsDisplayed()
         compose.onNodeWithText("5 min").assertIsDisplayed()
+        compose.onNodeWithText("Bash").assertIsDisplayed()
+        compose.onNodeWithText("rm -rf build").assertIsDisplayed()
         compose.onNodeWithText("Deny").assertIsDisplayed()
         compose.onNodeWithText("Allow").performClick()
 
@@ -92,6 +98,37 @@ class HomeListTest {
         compose.onNodeWithText("Send").performClick()
 
         assertEquals(listOf(asking to Answer.Text("yes, the staging one")), answers)
+    }
+
+    @Test
+    fun `an option of the one question it asks answers it at once`() {
+        val which = question("Which database?", "staging", "production")
+        val asking = agent("t2", name = "migrate the db", waiting = waiting(WaitKind.QUESTION, since = now - MINUTE, questions = listOf(which), choose = true))
+        show(overview(needs = listOf(asking)))
+
+        compose.onNodeWithText("Which database?").assertIsDisplayed()
+        compose.onNodeWithText("production").performClick()
+
+        assertEquals(listOf(asking to Answer.Questions(listOf(QuestionAnswer.Chosen(listOf(1u))))), answers)
+    }
+
+    @Test
+    fun `several questions are each answered in their place, then sent together`() {
+        val color = question("Which color?", "Red", "Green", "Blue")
+        val sizes = question("Which sizes?", "Small", "Medium", "Large", many = true)
+        val asking = agent("t2", name = "order shirts", waiting = waiting(WaitKind.QUESTION, since = now - MINUTE, questions = listOf(color, sizes), choose = true))
+        show(overview(needs = listOf(asking)))
+
+        row("Large").performClick()
+        row("Small").performClick()
+        row("Send").performClick()
+        assertEquals("nothing is sent before each question has an answer", emptyList<Pair<Agent, Answer>>(), answers)
+
+        row("Green").performClick()
+        row("Send").performClick()
+
+        val chosen = listOf(QuestionAnswer.Chosen(listOf(1u)), QuestionAnswer.Chosen(listOf(0u, 2u)))
+        assertEquals(listOf(asking to Answer.Questions(chosen)), answers)
     }
 
     @Test
