@@ -34,6 +34,7 @@ import {
   writeConfig,
   WORKSPACE_FORMAT,
   installAgenticStack as coreInstallAgenticStack,
+  refreshSkills,
 } from "@hivemind/core";
 import os from "node:os";
 import { agentById, agentForCmd, getCatalog, preferredAgent, setCatalog, spawnableAgents, type AgentProviderDef } from "@hivemind/agents";
@@ -1238,6 +1239,11 @@ async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ p
   if (opts.cwd) {
     const st = await fsp.stat(opts.cwd).catch(() => null);
     if (!st?.isDirectory()) throw new Error(`pty cwd is not a directory: ${opts.cwd}`);
+    // An agent reads the hive skills as this version of the app wrote them.
+    if (spawning && !opts.attachOnly) {
+      const root = await findRoot(opts.cwd).catch(() => null);
+      if (root) await refreshSkills(path.dirname(root)).catch(() => {});
+    }
   }
   // Ensure the user's PATH/tokens are patched into process.env BEFORE the session starts: it
   // starts from this env (`attach.base`) — otherwise `claude`/`gh`/nvm-node may not resolve.

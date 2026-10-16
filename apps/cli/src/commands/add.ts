@@ -12,7 +12,7 @@ import { ok } from "../format.js";
 const addSkillCmd = defineCommand({
   meta: {
     name: "skill",
-    description: "Add the hive skills (hive-work, hive-workflow, hivemind, hive-browser) to .claude/skills/ (idempotent)",
+    description: "Add the hive skills (hive-work, hive-workflow, hivemind, hive-browser) to .claude/skills/, replacing older copies",
   },
   args: { json: { type: "boolean", description: "Emit JSON" } },
   async run({ args }) {

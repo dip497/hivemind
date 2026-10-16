@@ -1,6 +1,7 @@
 // A folder with no .hivemind: the empty canvas starts an agent, opens a folder or joins with a code,
 // and says nothing about setting anything up. Issues are the Issues tool's: it offers to keep them
-// in its folder, and once it has, they can be made.
+// in its folder, and once it has, they can be made, and an agent started there reads the hive skills
+// as this app wrote them.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -105,6 +106,18 @@ test("the Issues tool keeps issues in its folder when asked, and then its issues
   const md = await fs.readFile(path.join(workspace, ".hivemind", "issues", "TST-1.md"), "utf8");
   expect(md).toMatch(/id:\s*TST-1/);
   expect(md).toMatch(/title:\s*['"]?First issue after init/);
+});
+
+test("an agent started in the folder reads the hive skills it has as this app wrote them; one it lacks is not added", async () => {
+  const skills = path.join(workspace, ".claude", "skills");
+  const hivemind = path.join(skills, "hivemind", "SKILL.md");
+  const current = await fs.readFile(hivemind, "utf8");
+  // A copy an older app wrote, and one skill taken away.
+  await fs.writeFile(hivemind, "---\nname: hivemind\ndescription: an older copy\n---\n");
+  await fs.rm(path.join(skills, "hive-work"), { recursive: true });
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:spawn-agent", { detail: { agent: "claude" } })));
+  await expect.poll(() => fs.readFile(hivemind, "utf8"), { timeout: 20_000 }).toBe(current);
+  expect(fsSync.existsSync(path.join(skills, "hive-work"))).toBe(false);
 });
 
 test("a project opened last and since moved or deleted opens as the folder the app was started in", async () => {

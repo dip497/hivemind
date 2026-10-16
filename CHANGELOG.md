@@ -11,6 +11,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Added
 
+- The hivemind skill covers every `hive ctl` verb (sessions and `spawn --resume`, rename, tools, plugin commands, view events) and points to networks, sharing, grants, machines, hosts and push. The hive skills now follow the app: starting an agent in a workspace brings the skills it has up to this version, and `hive add skill` replaces older copies, edits too; keep a skill of your own under another name.
 - Remove a workspace from this computer from the Layers panel's title menu: hover it and press ×, or press Delete. Its board here goes; its folder and files stay. A workspace with a terminal still running says so and stays.
 - The Android app's first tab is Home, as on the phone page: what needs you on top, then what is working, the pinned, and each project's frames and tiles as your computer's Layers panel lists them, each with what it last said. A search and machine chips filter it. It replaces the Needs you and Agents tabs.
 - The full app in a browser tab: Settings → Advanced → In a browser serves it on 127.0.0.1 behind a key that changes each launch. For another device, put it behind `tailscale serve`.

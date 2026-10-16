@@ -42,36 +42,38 @@ export async function installClaudeAgentic(cwd: string): Promise<AgenticReport["
   }
 }
 
-/** Text that marks a skill file as one WE generated for the retired MCP surface
- *  (so it is stale and must be regenerated) rather than a user's own edit. */
-const STALE_RE = /mcp__hive__|hive_workflow\(|hive_spawn_agent\(|hive mcp-stdio/;
-
-export const SKILLS: Record<string, { body: () => string; managed: boolean }> = {
-  /** Write-if-missing (or stale): a user may have tuned these. */
-  "hive-work": { body: () => templates.HIVE_WORK_SKILL, managed: false },
-  hivemind: { body: () => templates.HIVEMIND_SKILL, managed: false },
-  "hive-browser": { body: () => templates.hiveBrowserSkill(), managed: false },
-  /** Hivemind-managed: regenerated on every install so it tracks the app version. */
-  "hive-workflow": { body: () => templates.hiveWorkflowSkill(), managed: true },
+/** The hive skills. The app owns them: an older copy is replaced by this version's, edits too; a
+ *  skill of a person's own goes under another name. */
+export const SKILLS: Record<string, () => string> = {
+  "hive-work": () => templates.HIVE_WORK_SKILL,
+  hivemind: () => templates.HIVEMIND_SKILL,
+  "hive-browser": () => templates.hiveBrowserSkill(),
+  "hive-workflow": () => templates.hiveWorkflowSkill(),
 };
 
-/** Install every hive skill under `.claude/skills/`. Returns the names written. */
-export async function installSkills(cwd: string): Promise<string[]> {
+/** Writes the hive skills under `.claude/skills/` that differ from this version's; with `addMissing`
+ *  false, only those already there. Returns the names written. */
+async function writeSkills(cwd: string, addMissing: boolean): Promise<string[]> {
   const written: string[] = [];
-  for (const [name, def] of Object.entries(SKILLS)) {
+  for (const [name, body] of Object.entries(SKILLS)) {
     const dir = path.join(cwd, ".claude", "skills", name);
     const file = path.join(dir, "SKILL.md");
-    const body = def.body();
-    let existing: string | null = null;
-    try { existing = await fs.readFile(file, "utf8"); } catch { /* missing */ }
-    if (existing != null && !def.managed && !STALE_RE.test(existing)) continue; // the user's copy
-    if (existing === body) continue;
+    const existing = await fs.readFile(file, "utf8").catch(() => null);
+    if (existing === null && !addMissing) continue;
+    if (existing === body()) continue;
     await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(file, body, "utf8");
+    await fs.writeFile(file, body(), "utf8");
     written.push(name);
   }
   return written;
 }
+
+/** Install every hive skill under `.claude/skills/`. Returns the names written. */
+export const installSkills = (cwd: string): Promise<string[]> => writeSkills(cwd, true);
+
+/** Bring the hive skills a workspace already has up to this version, before an agent starts there;
+ *  adds none. Returns the names written. */
+export const refreshSkills = (cwd: string): Promise<string[]> => writeSkills(cwd, false);
 
 /** Remove the retired `hive` MCP server from `.mcp.json` (keeps other servers;
  *  deletes the file when nothing is left). Returns true if it changed anything. */

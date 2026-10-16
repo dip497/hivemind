@@ -252,6 +252,12 @@ hive ctl spawn --agent claude --name "auth tests" --frame my-repo \\
 # → {"tile":"a1b2…"}   omit --frame to spawn beside you; --agent codex|pi|… picks the runtime
 \`\`\`
 Reporting is on by default: the worker's finished replies wait in YOUR inbox. \`--no-report\` turns it off.
+\`--mode yolo\` asks nothing; \`--model\` picks the model. To continue an earlier conversation instead of starting one:
+\`\`\`bash
+hive ctl sessions claude --json                     # its past sessions in this folder, newest first
+hive ctl spawn --agent claude --resume <sessionId> --json
+hive ctl rename <tileId> "billing review"           # the name every surface shows it by; no name takes it away
+\`\`\`
 
 ## Your inbox
 What other agents send you (a worker's reply or report, that it waits on an answer, an approval it asks) waits in your inbox. Your terminal is only told \`[hive] Your agents sent you messages. Read them: hive ctl inbox\`, when you are at your prompt; nothing an agent wrote is ever typed into it.
@@ -327,6 +333,28 @@ Ids from other registered repos resolve automatically.
 \`hive ctl focus <tileId>\` · \`hive ctl close <tileId>\` · \`hive ctl keys <tileId> Down,Enter\` (drive a TUI) ·
 \`hive ctl open-review --file plan.md\` (opens a review tile, blocks until the human decides) ·
 \`hive ctl stream <tileId> --json\` (NDJSON: what it prints from now on, until it ends; \`--lines N\` prints the last N lines first).
+
+## Tools, widgets and views (plugins)
+\`\`\`bash
+hive plugins list --json                                   # every plugin, on or off, by id
+hive ctl open-tool hivemind/web/browser --url https://example.com --json   # a tool's tile beside you (the hive-browser skill drives it)
+hive ctl plugin open widget:clock --json                   # get one running: tool:…, widget:… or view:…, as plugins list keys it
+hive ctl plugin commands --json                            # what the running ones let you run
+hive ctl plugin call <pluginId> <command> '{"key":"value"}' --json
+hive ctl view emit ci.build '{"status":"green"}' --json    # a named event to the active view
+\`\`\`
+
+## Beyond the canvas
+Each has \`--help\` with its exact options; read it before you run one.
+- \`hive network show|use|doctor|enrol-link\`: which network this computer is on and its servers; a link that puts one more device on it.
+- \`hive share\` · \`hive people\` · \`hive join\`: invite someone to a workspace, decide who gets in and what they may do, join one.
+- \`hive grant create|list|revoke\`: let a program drive workspaces here; its token prints once.
+- \`hive machine\` · \`hive run -- <cmd>\` · \`hive ps\` · \`hive attach\` · \`hive kill\`: saved ssh machines and terminal sessions that outlive the app.
+- \`hive host\`: this machine as an always-on host of its workspaces, with no desktop.
+- \`hive push set|test\`: phone notifications when an agent here needs the person.
+- \`hive agents\` · \`hive widgets\` · \`hive tools\` · \`hive views\` · \`hive config\` · \`hive theme\` · \`hive upgrade\`.
+
+Ask the person before anything that lets someone in, gives a program a token, or changes this computer's network; never type a password for them.
 `;
 
 export const SAMPLE_ISSUE_BODY = `## Description
