@@ -58,7 +58,7 @@ function hive(args: string[], env: Record<string, string> = {}) {
 const inboxRead = new Map<string, string[]>();
 function inboxTexts(tile: string): string[] {
   const read = inboxRead.get(tile) ?? [];
-  const r = hive(["ctl", "inbox", "--json"], asAgent(tile));
+  const r = hive(["ctl", "inbox", "--tile", tile, "--json"], asAgent(tile));
   read.push(...(r.json?.messages ?? []).map((m: { text: string }) => m.text));
   inboxRead.set(tile, read);
   return read;
@@ -184,10 +184,11 @@ test("a droid worker reports back to the claude orchestrator with `hive ctl repo
   expect(read.code, read.stdout + read.stderr).toBe(0);
   expect(read.json.finalStatus).toBe("turn");
   expect(JSON.parse(read.json.text)).toMatchObject({ delivered: true });
-  // The report waits in the orchestrator's inbox; its terminal is only told to read it.
-  await expect.poll(() => inboxTexts(orchestrator).join("\n"), { timeout: 30_000, intervals: [500] }).toContain("droid worker done");
+  // The report waits in the orchestrator's inbox; its terminal is only told to read it. The bell
+  // rings only while something is unread, so it is looked for before the inbox is read.
   const screen = () => hive(["ctl", "stream", orchestrator, "--lines", "60", "--snapshot"]).stdout;
   await expect.poll(screen, { timeout: 30_000, intervals: [500] }).toContain("Read them: hive ctl inbox");
+  await expect.poll(() => inboxTexts(orchestrator).join("\n"), { timeout: 30_000, intervals: [500] }).toContain("droid worker done");
   expect(screen()).not.toContain("droid worker done");
 
   hive(["ctl", "send", worker, "echo second turn from $HIVE_AGENT_ID"]);

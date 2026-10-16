@@ -176,7 +176,8 @@ test("a hook that carries the answer, ended by its agent while its chooser stays
   // Held, what it waits on is what its hook said.
   await expect.poll(() => toolOf(asking), { timeout: 10_000 }).toBe("Bash");
   await expect.poll(log, { timeout: 15_000 }).toBe("drawn\nhook let go\n");
-  await expect.poll(() => toolOf(asking), { timeout: 10_000 }).toBeUndefined();
+  // Let go, what it waits on is still what its prompt asks, as its hook said (a2b3ee66).
+  expect(await toolOf(asking)).toBe("Bash");
   expect(await asking()).toMatchObject({ state: "waiting", since });
   expect(await desktop.evaluate(([t, s]) => window.hive.agentAnswer(t, s, { decision: "allow" }), [tile, since] as const)).toEqual({ answered: true });
   expect(log()).toBe("drawn\nhook let go\ntook 1\n");
