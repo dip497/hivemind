@@ -43,6 +43,9 @@ test.skipIf(!fs.existsSync(HIVE_NET))("a held hook is answered through the door,
   const answered = run();
   await answered.exited;
   expect(answered.printed()).toBe("allow");
+  // The door lets go of the answered wait, but its close can reach the host after the hook exits.
+  await until(() => closed === 1);
+  expect(closed).toBe(1);
 
   answer = false;
   got.length = 0;

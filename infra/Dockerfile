@@ -23,6 +23,7 @@ COPY crates/Cargo.toml crates/Cargo.lock crates/
 COPY crates/hive-net/ crates/hive-net/
 COPY crates/hive-phone/ crates/hive-phone/
 COPY crates/hive-web/ crates/hive-web/
+COPY crates/vendor/ crates/vendor/
 RUN tools=$(crates/hive-web/tools.sh /tools) && eval "$tools" && crates/hive-web/build.sh \
   && cd crates/hive-web/www && rm -rf app js tsconfig.json echo.html pkg/*.js pkg/*.d.ts pkg/package.json pkg/.gitignore
 

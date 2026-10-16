@@ -1,4 +1,4 @@
-# The build needs hive-net's crate, and for the phone page hive-phone's, hive-web's and their workspace, the pairing
+# The build needs hive-net's crate, and for the phone page hive-phone's, hive-web's, their workspace and the crates it vendors, the pairing
 # words they read, the Rust the repository pins and the lockfile and catalog naming the page's tools;
 # nothing built here.
 *
@@ -8,6 +8,7 @@
 !crates/hive-net
 !crates/hive-phone
 !crates/hive-web
+!crates/vendor
 !spec
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
