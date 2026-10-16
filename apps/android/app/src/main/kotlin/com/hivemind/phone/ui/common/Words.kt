@@ -22,6 +22,16 @@ fun rememberNow(): Long {
     return now
 }
 
+/** How long something has run, [ms], as the working line says it: 12s, 3m 04s, 1h 02m. */
+fun elapsed(ms: Long): String {
+    val s = (ms / 1000).coerceAtLeast(0)
+    return when {
+        s < 60 -> "${s}s"
+        s < 3_600 -> "${s / 60}m ${"%02d".format(s % 60)}s"
+        else -> "${s / 3_600}h ${"%02d".format(s / 60 % 60)}m"
+    }
+}
+
 /** How long it has been since [since] (ms since the epoch), as the lists say it: now, 5 min, 2 h, 3 d. */
 @Composable
 fun sinceText(since: ULong, now: Long): String {

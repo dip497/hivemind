@@ -3,6 +3,7 @@ package com.hivemind.phone.chat
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,15 +12,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
@@ -44,14 +49,20 @@ private const val ENDED = -1
 private const val END = -2
 
 /** How an entry is drawn, so that the list reuses a row only for one drawn alike. */
-private enum class Kind { TOOL, RESULT, PERSON, AGENT, ENDED, END }
+private enum class Kind { TOOL, RESULT, PERSON, AGENT, TOOLS, ENDED, END }
 
-private fun kindOf(entry: Entry): Kind = when (entry.said) {
-    is Said.ToolUse -> Kind.TOOL
-    is Said.ToolOutput -> Kind.RESULT
-    is Said.Person -> Kind.PERSON
-    is Said.Agent -> Kind.AGENT
+private fun kindOf(shown: Shown): Kind = when (shown) {
+    is Shown.Tools -> Kind.TOOLS
+    is Shown.One -> when (shown.entry.said) {
+        is Said.ToolUse -> Kind.TOOL
+        is Said.ToolOutput -> Kind.RESULT
+        is Said.Person -> Kind.PERSON
+        is Said.Agent -> Kind.AGENT
+    }
 }
+
+/** Whether [shown] is the person's, so that a turn begins where who speaks changes. */
+private fun Shown.person() = this is Shown.One && entry.said is Said.Person
 
 /**
  * What an agent and the person say to each other, as a chat (design P7): the person's words in
@@ -80,7 +91,8 @@ fun ChatView(
             reverseLayout = true,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Bottom),
+            // 8 between what one says, 20 where the other begins (design PB §12.12).
+            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom),
         ) {
             if (endKey != null) item(key = END, contentType = Kind.END) { end() }
             chat.ended?.let { why ->
@@ -94,7 +106,17 @@ fun ChatView(
                     )
                 }
             }
-            items(chat.entries.asReversed(), key = { it.id }, contentType = ::kindOf) { entry -> EntryRow(entry, chat, onTool) }
+            val shown = chat.shown
+            items(shown.size, key = { shown[shown.size - 1 - it].key }, contentType = { kindOf(shown[shown.size - 1 - it]) }) { i ->
+                val at = shown.size - 1 - i
+                val turn = at > 0 && shown[at].person() != shown[at - 1].person()
+                Box(if (turn) Modifier.padding(top = 12.dp) else Modifier) {
+                    when (val item = shown[at]) {
+                        is Shown.One -> EntryRow(item.entry, chat, onTool)
+                        is Shown.Tools -> ToolsRow(item, chat, onTool)
+                    }
+                }
+            }
         }
         when {
             !chat.heard -> CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -123,8 +145,52 @@ private fun EntryRow(entry: Entry, chat: Chat, onTool: (String) -> Unit) {
         is Said.ToolUse -> ToolRow(said.tool.name, said.tool.about, chat.result(said.tool.id)) { onTool(entry.id) }
         // A result whose use was told before what is shown began.
         is Said.ToolOutput -> ToolRow(stringResource(R.string.chat_result), null, said.result) { onTool(entry.id) }
+        // Held down, what is said is selected, to copy.
         is Said.Person -> PersonSaid(said.text)
-        is Said.Agent -> Markdown(said.text)
+        is Said.Agent -> SelectionContainer { Markdown(said.text) }
+    }
+}
+
+/** Tools used one after another, folded: one row counting each ("Read 3 · Edit 2 · 1 failed"), that opens to them in order. */
+@Composable
+private fun ToolsRow(tools: Shown.Tools, chat: Chat, onTool: (String) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val open = chat.opened[tools.key] == true
+    val summary = chat.summary(tools.entries, stringResource(R.string.chat_result))
+    val state = stringResource(if (open) R.string.fold_open else R.string.fold_folded)
+    Column {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.extraSmall)
+                .clickable(role = Role.Button) { chat.opened[tools.key] = !open }
+                .semantics { stateDescription = state }
+                .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(summary.counts, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            if (summary.failed > 0) {
+                Text(
+                    stringResource(R.string.tools_failed, summary.failed),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.error,
+                    maxLines = 1,
+                    modifier = Modifier.padding(start = 6.dp),
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Icon(
+                if (open) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = colors.tertiary,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        if (open) {
+            Column(Modifier.padding(start = 12.dp)) {
+                for (entry in tools.entries) EntryRow(entry, chat, onTool)
+            }
+        }
     }
 }
 
@@ -132,7 +198,9 @@ private fun EntryRow(entry: Entry, chat: Chat, onTool: (String) -> Unit) {
 private fun PersonSaid(text: String) {
     Box(Modifier.fillMaxWidth().padding(start = 48.dp), contentAlignment = Alignment.CenterEnd) {
         Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(18.dp)) {
-            Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+            SelectionContainer {
+                Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+            }
         }
     }
 }
@@ -150,7 +218,7 @@ private fun ToolRow(name: String, about: String?, result: ToolResult?, onOpen: (
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(name, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium, color = tint, maxLines = 1)
+        Text(verb(name), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium, color = tint, maxLines = 1)
         if (about != null) {
             Text(
                 about,

@@ -4726,6 +4726,64 @@ public func FfiConverterTypePerson_lower(_ value: Person) -> RustBuffer {
 
 
 /**
+ * A photo given with a prompt: its type (`image/png`, `image/jpeg`, `image/webp`, `image/gif`)
+ * and its bytes.
+ */
+public struct Photo: Equatable, Hashable {
+    public var kind: String
+    public var bytes: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: String, bytes: Data) {
+        self.kind = kind
+        self.bytes = bytes
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension Photo: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePhoto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Photo {
+        return
+            try Photo(
+                kind: FfiConverterString.read(from: &buf), 
+                bytes: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Photo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.kind, into: &buf)
+        FfiConverterData.write(value.bytes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePhoto_lift(_ buf: RustBuffer) throws -> Photo {
+    return try FfiConverterTypePhoto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePhoto_lower(_ value: Photo) -> RustBuffer {
+    return FfiConverterTypePhoto.lower(value)
+}
+
+
+/**
  * The program an agent is: `claude` · "Claude Code".
  */
 public struct Program: Equatable, Hashable {
@@ -5216,15 +5274,23 @@ public struct Start: Equatable, Hashable {
     public var prompt: String?
     public var model: String?
     public var mode: String?
+    /**
+     * Photos given with the prompt, kept on the machine it runs on (at most four).
+     */
+    public var photos: [Photo]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(program: String, frame: String?, prompt: String?, model: String?, mode: String?) {
+    public init(program: String, frame: String?, prompt: String?, model: String?, mode: String?, 
+        /**
+         * Photos given with the prompt, kept on the machine it runs on (at most four).
+         */photos: [Photo] = []) {
         self.program = program
         self.frame = frame
         self.prompt = prompt
         self.model = model
         self.mode = mode
+        self.photos = photos
     }
 
     
@@ -5247,7 +5313,8 @@ public struct FfiConverterTypeStart: FfiConverterRustBuffer {
                 frame: FfiConverterOptionString.read(from: &buf), 
                 prompt: FfiConverterOptionString.read(from: &buf), 
                 model: FfiConverterOptionString.read(from: &buf), 
-                mode: FfiConverterOptionString.read(from: &buf)
+                mode: FfiConverterOptionString.read(from: &buf), 
+                photos: FfiConverterSequenceTypePhoto.read(from: &buf)
         )
     }
 
@@ -5257,6 +5324,7 @@ public struct FfiConverterTypeStart: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.prompt, into: &buf)
         FfiConverterOptionString.write(value.model, into: &buf)
         FfiConverterOptionString.write(value.mode, into: &buf)
+        FfiConverterSequenceTypePhoto.write(value.photos, into: &buf)
     }
 }
 
@@ -8670,6 +8738,31 @@ fileprivate struct FfiConverterSequenceTypeMarkShape: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeMarkShape.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypePhoto: FfiConverterRustBuffer {
+    typealias SwiftType = [Photo]
+
+    public static func write(_ value: [Photo], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePhoto.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Photo] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Photo]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePhoto.read(from: &buf))
         }
         return seq
     }

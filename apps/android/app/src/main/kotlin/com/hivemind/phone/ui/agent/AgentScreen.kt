@@ -40,6 +40,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -63,8 +64,10 @@ import com.hivemind.phone.R
 import com.hivemind.phone.chat.ChatView
 import com.hivemind.phone.chat.ToolScreen
 import com.hivemind.phone.core.Agent
+import com.hivemind.phone.core.AgentState
 import com.hivemind.phone.core.Answer
 import com.hivemind.phone.core.ScreenEnded
+import com.hivemind.phone.core.WaitKind
 import com.hivemind.phone.core.Waiting
 import com.hivemind.phone.terminal.TermSize
 import com.hivemind.phone.terminal.TerminalView
@@ -76,12 +79,16 @@ import com.hivemind.phone.ui.common.NoticeEffect
 import com.hivemind.phone.ui.common.PillChip
 import com.hivemind.phone.ui.common.RaisedCard
 import com.hivemind.phone.ui.common.asked
+import com.hivemind.phone.ui.common.composerAnswers
+import com.hivemind.phone.ui.common.StateMark
+import com.hivemind.phone.ui.common.elapsed
 import com.hivemind.phone.ui.common.label
 import com.hivemind.phone.ui.common.rememberNow
 import com.hivemind.phone.ui.common.sinceText
 import com.hivemind.phone.ui.common.stoppable
 import com.hivemind.phone.ui.theme.LocalStateColors
 import com.hivemind.phone.ui.theme.Mono
+import kotlinx.coroutines.delay
 
 /** Whether [agent]'s screen opens on what it and the person say: only when it keeps a conversation
  *  its device can read (its manifest maps its session file). Any other opens on its terminal. */
@@ -217,7 +224,7 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
                     onTool = { toolOpen = it },
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     endKey = waiting?.since,
-                    end = { if (waiting != null) WaitingCard(waiting, busy, vm::answer) },
+                    end = { if (waiting != null) WaitingCard(waiting, busy, vm::answer, ownReply = !composerAnswers(waiting)) },
                 )
             }
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -227,14 +234,21 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
                         PillChip(typing, onClick = { typing = true }, label = stringResource(R.string.mode_type))
                     }
                 }
+                if (!showingTerminal) agent?.let { WorkingLine(it) }
                 if (typingShown) {
                     TypeBox(vm.typed, enabled = vm.screen.keyboard == null && vm.screen.ended == null, onType = vm::type, onKey = vm::press)
                 } else {
+                    // In the chat, what the agent waits on in words is answered from here: one place to type.
+                    val waiting = agent?.waiting?.takeIf { !showingTerminal && composerAnswers(it) }
                     Composer(
-                        stringResource(R.string.message_hint, agent?.name.orEmpty()),
+                        when {
+                            waiting == null -> stringResource(R.string.message_hint, agent?.name.orEmpty())
+                            waiting.kind == WaitKind.QUESTION -> stringResource(R.string.own_answer_or_hint)
+                            else -> stringResource(R.string.reply_hint)
+                        },
                         busy,
-                        stoppable = agent?.stoppable == true,
-                        onSend = vm::send,
+                        stoppable = agent?.stoppable == true && waiting == null,
+                        onSend = { if (waiting == null) vm.send(it) else vm.answer(Answer.Text(it)) },
                         onStop = vm::stop,
                     )
                 }
@@ -258,12 +272,14 @@ private fun Composer(hint: String, busy: Boolean, stoppable: Boolean, onSend: (S
     }
     val colors = MaterialTheme.colorScheme
     RaisedCard(Modifier.shadow(4.dp, MaterialTheme.shapes.large, ambientColor = Color.Black.copy(alpha = 0.06f), spotColor = Color.Black.copy(alpha = 0.06f))) {
-        Row(Modifier.padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.Bottom) {
             TextField(
                 value = text,
                 onValueChange = { text = it },
                 placeholder = { Text(hint, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                singleLine = true,
+                // Grows with what is typed, up to six lines; Enter is a new line, the button sends.
+                maxLines = 6,
+                textStyle = MaterialTheme.typography.bodyLarge,
                 enabled = !busy,
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
@@ -275,16 +291,15 @@ private fun Composer(hint: String, busy: Boolean, stoppable: Boolean, onSend: (S
                     focusedPlaceholderColor = colors.tertiary,
                     unfocusedPlaceholderColor = colors.tertiary,
                 ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { send() }),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 modifier = Modifier.weight(1f).testTag("reply"),
             )
             if (stoppable && text.isEmpty()) {
-                FilledIconButton(onClick = onStop, enabled = !busy, modifier = Modifier.size(36.dp)) {
+                FilledIconButton(onClick = onStop, enabled = !busy, modifier = Modifier.padding(bottom = 10.dp).size(36.dp)) {
                     Icon(painterResource(R.drawable.ic_stop), stringResource(R.string.action_stop), modifier = Modifier.size(16.dp))
                 }
             } else {
-                FilledIconButton(onClick = send, enabled = !busy && text.isNotBlank(), modifier = Modifier.size(36.dp).testTag("reply-send")) {
+                FilledIconButton(onClick = send, enabled = !busy && text.isNotBlank(), modifier = Modifier.padding(bottom = 10.dp).size(36.dp).testTag("reply-send")) {
                     Icon(painterResource(R.drawable.ic_send_up), stringResource(R.string.action_send), modifier = Modifier.size(18.dp))
                 }
             }
@@ -305,10 +320,37 @@ private fun endedNote(ended: ScreenEnded, device: String?): String {
     }
 }
 
+/** While the agent works, how long for, under the chat: a dot and "working · 12s", counted each second (design PB §12.12). */
+@Composable
+private fun WorkingLine(agent: Agent) {
+    val since = agent.since
+    if (agent.state != AgentState.WORKING || since == null) return
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(since) {
+        while (true) {
+            now = System.currentTimeMillis()
+            delay(1_000)
+        }
+    }
+    Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Dot(LocalStateColors.current.working)
+        Text(
+            stringResource(R.string.working_for, elapsed(now - since.toLong())),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 8.dp).testTag("working-line"),
+        )
+    }
+}
+
+/** The agent's name, a spinner beside it while it works, and where it runs under it. */
 @Composable
 private fun AgentTitle(agent: Agent?) {
     Column {
-        Text(agent?.name.orEmpty(), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(agent?.name.orEmpty(), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            StateMark(agent?.state, Modifier.padding(start = 8.dp))
+        }
         if (agent != null) {
             Text(
                 stringResource(R.string.agent_subtitle, agent.state.label(), agent.workspaceName, agent.machine),
@@ -323,7 +365,7 @@ private fun AgentTitle(agent: Agent?) {
 
 /** What the agent waits on, as a card with its answers: the chat's last, or over its terminal. */
 @Composable
-private fun WaitingCard(waiting: Waiting, busy: Boolean, onAnswer: (Answer) -> Unit, modifier: Modifier = Modifier) {
+private fun WaitingCard(waiting: Waiting, busy: Boolean, onAnswer: (Answer) -> Unit, modifier: Modifier = Modifier, ownReply: Boolean = true) {
     val now = rememberNow()
     RaisedCard(modifier) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -336,7 +378,7 @@ private fun WaitingCard(waiting: Waiting, busy: Boolean, onAnswer: (Answer) -> U
                     modifier = Modifier.padding(start = 8.dp),
                 )
             }
-            AnswerControls(waiting, busy, onAnswer)
+            AnswerControls(waiting, busy, onAnswer, ownReply = ownReply)
         }
     }
 }

@@ -1,25 +1,35 @@
 package com.hivemind.phone.chat
 
+import android.content.ClipData
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -35,6 +45,8 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.hivemind.phone.R
 import com.hivemind.phone.core.BlockKind
 import com.hivemind.phone.core.ColumnAlign
 import com.hivemind.phone.core.ListMarker
@@ -42,6 +54,7 @@ import com.hivemind.phone.core.TextBlock
 import com.hivemind.phone.core.TextRun
 import com.hivemind.phone.core.markdown
 import com.hivemind.phone.ui.theme.Mono
+import kotlinx.coroutines.launch
 
 /**
  * What an agent says, which is markdown, as the core reads it (spec/markdown.md) and drawn here:
@@ -57,7 +70,7 @@ fun Markdown(text: String, modifier: Modifier = Modifier) {
 /** `blocks`, those in a quote deeper than `quote` drawn set in, after a bar. */
 @Composable
 private fun Blocks(blocks: List<TextBlock>, quote: UInt, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         var i = 0
         while (i < blocks.size) {
             val at = i
@@ -95,7 +108,7 @@ private fun Listed(block: TextBlock) {
         is ListMarker.Task -> if (m.done) "☑" else "☐"
     }
     Row(Modifier.padding(start = 20.dp * (block.depth.toInt() - 1))) {
-        Text(marker, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.widthIn(min = 22.dp).padding(end = 6.dp))
+        Text(marker, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.widthIn(min = 22.dp).padding(end = 6.dp))
         Drawn(block, Modifier.weight(1f))
     }
 }
@@ -112,36 +125,39 @@ private fun Drawn(block: TextBlock, modifier: Modifier = Modifier) {
     }
     when (val kind = block.kind) {
         // Across the row, each from the side its first letter is written from, as the core read it.
-        is BlockKind.Paragraph -> Text(remember(kind, marks) { marks.of(kind.runs) }, modifier.fillMaxWidth(), style = type.bodyMedium.copy(textDirection = block.direction))
+        is BlockKind.Paragraph -> Text(remember(kind, marks) { marks.of(kind.runs) }, modifier.fillMaxWidth(), style = type.bodyLarge.copy(textDirection = block.direction))
         is BlockKind.Heading -> Text(
             remember(kind, marks) { marks.of(kind.runs) },
-            modifier.fillMaxWidth().semantics { heading() },
-            // Larger than the text at every level, the higher the larger.
+            // Larger than the text at every level, the higher the larger; the text is 16/24.
             style = when (kind.level.toInt()) {
-                1 -> type.titleLarge
-                2 -> type.titleMedium.copy(fontWeight = FontWeight.SemiBold)
-                else -> type.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
+                1 -> type.headlineSmall
+                2 -> type.titleLarge
+                else -> type.titleMedium.copy(fontSize = 18.sp, lineHeight = 26.sp)
             }.copy(textDirection = block.direction),
+            modifier = modifier.fillMaxWidth().padding(top = 4.dp).semantics { heading() },
         )
         is BlockKind.Code -> Surface(
             color = colors.surfaceContainerHighest,
-            shape = RoundedCornerShape(8.dp),
+            shape = RoundedCornerShape(10.dp),
             modifier = modifier.fillMaxWidth(),
         ) {
-            Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                kind.language?.let { Text(it, style = type.labelSmall, color = colors.onSurfaceVariant) }
+            Column(Modifier.padding(start = 12.dp, end = 4.dp, bottom = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(kind.language.orEmpty(), style = type.labelMedium, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    CopyButton(kind.text)
+                }
                 // As written: its lines are not wrapped, it scrolls across instead.
                 Text(
                     kind.text,
-                    style = type.bodySmall,
+                    style = type.bodyMedium.copy(lineHeight = type.bodyMedium.fontSize * 1.5f),
                     fontFamily = Mono,
                     softWrap = false,
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    modifier = Modifier.padding(end = 8.dp).horizontalScroll(rememberScrollState()),
                 )
             }
         }
         BlockKind.Rule -> HorizontalDivider(modifier.padding(vertical = 4.dp), color = colors.outlineVariant)
-        is BlockKind.Table -> Table(kind, marks, type.bodySmall, modifier)
+        is BlockKind.Table -> Table(kind, marks, type.bodyMedium, modifier)
     }
 }
 
@@ -151,7 +167,12 @@ private val TextBlock.direction get() = if (rtl) TextDirection.Rtl else TextDire
 @Composable
 private fun Table(table: BlockKind.Table, marks: Marks, style: TextStyle, modifier: Modifier) {
     val columns = maxOf(table.head.size, table.rows.maxOfOrNull { it.size } ?: 0)
-    Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        color = MaterialTheme.colorScheme.surface,
+        modifier = modifier,
+    ) { Row(Modifier.horizontalScroll(rememberScrollState()).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
         for (c in 0 until columns) {
             val align = when (table.align.getOrNull(c)) {
                 ColumnAlign.CENTER -> Alignment.CenterHorizontally
@@ -163,6 +184,16 @@ private fun Table(table: BlockKind.Table, marks: Marks, style: TextStyle, modifi
                 for (row in table.rows) Text(marks.of(row.getOrNull(c).orEmpty()), style = style, softWrap = false)
             }
         }
+    } }
+}
+
+/** Copies [text] to the clipboard, as written. */
+@Composable
+private fun CopyButton(text: String) {
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    IconButton(onClick = { scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(null, text))) } }) {
+        Icon(painterResource(R.drawable.ic_copy), stringResource(R.string.action_copy), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
     }
 }
 

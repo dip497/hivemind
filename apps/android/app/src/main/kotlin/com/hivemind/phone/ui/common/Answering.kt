@@ -60,10 +60,11 @@ import com.hivemind.phone.ui.theme.Mono
  * filled: the tool a permission is for and its command; Deny and Allow side by side for a
  * permission the device can decide; a question's options as pills that wrap, each question
  * answered in its place; Approve or Ask for changes for a plan; and a line of reply for anything else. One
- * place for both the Needs you list and the agent's own screen.
+ * place for both the Needs you list and the agent's own screen. Where a composer answers in words
+ * ([composerAnswers]), [ownReply] false leaves out the card's own line: one place to type.
  */
 @Composable
-fun AnswerControls(waiting: Waiting, busy: Boolean, onAnswer: (Answer) -> Unit, modifier: Modifier = Modifier) {
+fun AnswerControls(waiting: Waiting, busy: Boolean, onAnswer: (Answer) -> Unit, modifier: Modifier = Modifier, ownReply: Boolean = true) {
     val questions = waiting.questions
     val choosing = waiting.kind == WaitKind.QUESTION && waiting.choose && questions.isNotEmpty()
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -80,7 +81,7 @@ fun AnswerControls(waiting: Waiting, busy: Boolean, onAnswer: (Answer) -> Unit, 
                         }
                     }
                 }
-                ReplyBox(hint = stringResource(R.string.own_answer_or_hint), busy = busy, onSend = { onAnswer(Answer.Text(it)) })
+                if (ownReply) ReplyBox(hint = stringResource(R.string.own_answer_or_hint), busy = busy, onSend = { onAnswer(Answer.Text(it)) })
             }
             choosing -> QuestionsForm(waiting, busy, onAnswer)
             waiting.kind == WaitKind.PERMISSION && waiting.decide -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -97,8 +98,24 @@ fun AnswerControls(waiting: Waiting, busy: Boolean, onAnswer: (Answer) -> Unit, 
                 }
             }
             waiting.kind == WaitKind.PLAN -> PlanControls(waiting.plan, busy, onAnswer, Modifier)
-            else -> ReplyBox(hint = stringResource(R.string.reply_hint), busy = busy, onSend = { onAnswer(Answer.Text(it)) })
+            ownReply -> ReplyBox(hint = stringResource(R.string.reply_hint), busy = busy, onSend = { onAnswer(Answer.Text(it)) })
         }
+    }
+}
+
+/**
+ * Whether what is typed answers [waiting] in words: a question with one choice to make (its own
+ * answer in place of an option), or a wait for a reply. Allow and Deny, a plan, and a form of
+ * questions keep their own controls.
+ */
+fun composerAnswers(waiting: Waiting?): Boolean {
+    if (waiting == null) return false
+    val choosing = waiting.kind == WaitKind.QUESTION && waiting.choose && waiting.questions.isNotEmpty()
+    return when {
+        choosing -> waiting.questions.size == 1 && !waiting.questions[0].many
+        waiting.kind == WaitKind.PERMISSION && waiting.decide -> false
+        waiting.kind == WaitKind.PLAN -> false
+        else -> true
     }
 }
 

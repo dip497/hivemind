@@ -1,6 +1,9 @@
 package com.hivemind.phone.ui.start
 
+import android.content.ContentResolver
+import android.net.Uri
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -9,17 +12,20 @@ import androidx.lifecycle.viewModelScope
 import com.hivemind.phone.core.AgentRef
 import com.hivemind.phone.core.Overview
 import com.hivemind.phone.core.Phone
+import com.hivemind.phone.core.Photo
 import com.hivemind.phone.core.PhoneException
 import com.hivemind.phone.core.Start
 import com.hivemind.phone.core.StartProgram
 import com.hivemind.phone.core.Startable
 import com.hivemind.phone.ui.common.CoreCalls
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** A workspace on one of the person's devices: where an agent can be started. */
 data class Place(val device: String, val deviceName: String, val workspace: String, val workspaceName: String)
@@ -64,6 +70,20 @@ class StartViewModel(private val phone: Phone, overview: StateFlow<Overview>) : 
     val options = mutableStateMapOf<String, String>()
 
     var prompt by mutableStateOf("")
+
+    /** Photos given with the prompt, in the order picked: at most [PHOTOS_MAX]. */
+    val photos = mutableStateListOf<Photo>()
+
+    /** Adds the photos picked, read off the main thread, up to [PHOTOS_MAX]; one that cannot be read is left out. */
+    fun addPhotos(resolver: ContentResolver, picked: List<Uri>) {
+        viewModelScope.launch {
+            for (uri in picked) {
+                if (photos.size >= PHOTOS_MAX) break
+                val photo = withContext(Dispatchers.IO) { runCatching { photoOf(resolver, uri) }.getOrNull() }
+                if (photo != null && photos.size < PHOTOS_MAX) photos += photo
+            }
+        }
+    }
 
     val calls = CoreCalls(viewModelScope)
     private var asking: Job? = null
@@ -116,6 +136,7 @@ class StartViewModel(private val phone: Phone, overview: StateFlow<Overview>) : 
             prompt = prompt.trim().ifEmpty { null },
             model = options["model"]?.trim()?.ifEmpty { null },
             mode = options["mode"]?.trim()?.ifEmpty { null },
+            photos = photos.toList(),
         )
         calls.launch(place, { phone.start(place.device, place.workspace, start) }, started)
     }

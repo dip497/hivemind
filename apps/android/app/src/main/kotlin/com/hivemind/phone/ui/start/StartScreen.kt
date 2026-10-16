@@ -1,6 +1,14 @@
 package com.hivemind.phone.ui.start
 
+import android.graphics.BitmapFactory
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -15,7 +23,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -35,6 +45,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -42,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hivemind.phone.R
 import com.hivemind.phone.core.AgentRef
+import com.hivemind.phone.core.Photo
 import com.hivemind.phone.core.StartOption
 import com.hivemind.phone.ui.common.GroupLabel
 import com.hivemind.phone.ui.common.LocalPhoneLock
@@ -64,6 +80,8 @@ fun StartScreen(vm: StartViewModel, onBack: () -> Unit, onStarted: (AgentRef) ->
     NoticeEffect(vm.calls, snackbar)
     val lockTitle = stringResource(R.string.lock_start_title, vm.program?.label.orEmpty())
     val lockSubtitle = stringResource(R.string.lock_subtitle)
+    val resolver = LocalContext.current.contentResolver
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(PHOTOS_MAX)) { vm.addPhotos(resolver, it) }
 
     val colors = MaterialTheme.colorScheme
     Scaffold(
@@ -153,16 +171,28 @@ fun StartScreen(vm: StartViewModel, onBack: () -> Unit, onStarted: (AgentRef) ->
                             ),
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        Button(
-                            onClick = {
-                                val asked = lock.ask(lockTitle, lockSubtitle) { vm.start(onStarted) }
-                                if (!asked) vm.calls.tell(Notice.NoLock)
-                            },
-                            enabled = vm.program != null && vm.calls.busy.isEmpty(),
-                            modifier = Modifier.align(Alignment.End).padding(12.dp),
-                        ) {
-                            Text(stringResource(R.string.action_start))
-                            Icon(painterResource(R.drawable.ic_send_up), null, modifier = Modifier.padding(start = 6.dp).size(18.dp))
+                        if (vm.photos.isNotEmpty()) {
+                            Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                vm.photos.forEachIndexed { i, photo -> PhotoThumb(photo) { vm.photos.removeAt(i) } }
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(
+                                onClick = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                                enabled = vm.photos.size < PHOTOS_MAX,
+                                modifier = Modifier.testTag("start-photos"),
+                            ) { Text(stringResource(R.string.start_add_photo)) }
+                            Box(Modifier.weight(1f))
+                            Button(
+                                onClick = {
+                                    val asked = lock.ask(lockTitle, lockSubtitle) { vm.start(onStarted) }
+                                    if (!asked) vm.calls.tell(Notice.NoLock)
+                                },
+                                enabled = vm.program != null && vm.calls.busy.isEmpty(),
+                            ) {
+                                Text(stringResource(R.string.action_start))
+                                Icon(painterResource(R.drawable.ic_send_up), null, modifier = Modifier.padding(start = 6.dp).size(18.dp))
+                            }
                         }
                     }
                 }
@@ -192,6 +222,29 @@ private fun OptionChoice(option: StartOption, chosen: String?, onChoose: (String
             for (value in option.values) {
                 PillChip(chosen == value, onClick = { onChoose(value) }, label = value)
             }
+        }
+    }
+}
+
+/** A photo given with the prompt, small, with × to take it out. */
+@Composable
+private fun PhotoThumb(photo: Photo, onRemove: () -> Unit) {
+    val image = remember(photo) {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(photo.bytes, 0, photo.bytes.size, bounds)
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 256) sample *= 2
+        BitmapFactory.decodeByteArray(photo.bytes, 0, photo.bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
+    }
+    Box(Modifier.size(64.dp).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.surfaceContainerHighest)) {
+        if (image != null) Image(image, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        IconButton(onClick = onRemove, modifier = Modifier.align(Alignment.TopEnd).size(28.dp)) {
+            Icon(
+                Icons.Filled.Close,
+                stringResource(R.string.action_remove_photo),
+                tint = Color.White,
+                modifier = Modifier.size(18.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).padding(2.dp),
+            )
         }
     }
 }

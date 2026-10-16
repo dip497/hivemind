@@ -1,6 +1,7 @@
 package com.hivemind.phone.chat
 
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -19,10 +20,17 @@ import com.hivemind.phone.ui.common.Follow
  */
 @Stable
 class Chat {
-    private val shown = mutableStateListOf<Entry>()
+    private val told = mutableStateListOf<Entry>()
 
     /** What is shown, oldest first: every entry but the results folded under their uses. */
-    val entries: List<Entry> get() = shown
+    val entries: List<Entry> get() = told
+
+    /** What the list draws, oldest first: each entry, but every run of two or more tools used one
+     *  after another in one fold (design PB §12.12). */
+    val shown: List<Shown> by derivedStateOf { shownOf(told) }
+
+    /** The folds the person opened, by their key. */
+    val opened = mutableStateMapOf<String, Boolean>()
 
     /** Whether the core has told anything yet: until it has, that nothing is shown says nothing. */
     var heard by mutableStateOf(false)
@@ -48,10 +56,11 @@ class Chat {
     fun said(said: List<Entry>, anew: Boolean) {
         heard = true
         if (anew) {
-            shown.clear()
+            told.clear()
             results.clear()
             ids.clear()
             uses.clear()
+            opened.clear()
             // What the person had scrolled back to is gone.
             follow.on = true
         }
@@ -68,7 +77,7 @@ class Chat {
             }
             added += entry
         }
-        shown.addAll(added)
+        told.addAll(added)
         follow.grew(0)
     }
 
@@ -79,7 +88,7 @@ class Chat {
     }
 
     /** The use of a tool that [entry] shows, as its own screen shows it; none when no such entry is shown. */
-    fun toolCall(entry: String): ToolCall? = when (val said = shown.firstOrNull { it.id == entry }?.said) {
+    fun toolCall(entry: String): ToolCall? = when (val said = told.firstOrNull { it.id == entry }?.said) {
         is Said.ToolUse -> ToolCall(said.tool.name, said.tool.about, results[said.tool.id])
         is Said.ToolOutput -> ToolCall(null, null, said.result)
         else -> null
@@ -88,3 +97,59 @@ class Chat {
 
 /** A use of a tool: the tool's name (none for a result whose use was told before what is shown began), what the use is about, and what it gave back, once it has. */
 data class ToolCall(val name: String?, val about: String?, val result: ToolResult?)
+
+/** One thing the chat draws: an entry, or tools used one after another, folded into one row. */
+sealed interface Shown {
+    /** Its key in the list: a fold's is its first tool's, so it stays the fold as more join it. */
+    val key: String
+
+    data class One(val entry: Entry) : Shown {
+        override val key: String get() = entry.id
+    }
+
+    data class Tools(val entries: List<Entry>) : Shown {
+        override val key: String get() = "tools:${entries.first().id}"
+    }
+}
+
+private val Entry.isTool get() = said is Said.ToolUse || said is Said.ToolOutput
+
+/** [entries], each run of two or more tools in one [Shown.Tools]; one alone stays its own row. */
+fun shownOf(entries: List<Entry>): List<Shown> {
+    val out = ArrayList<Shown>(entries.size)
+    var i = 0
+    while (i < entries.size) {
+        if (!entries[i].isTool) {
+            out += Shown.One(entries[i++])
+            continue
+        }
+        val from = i
+        while (i < entries.size && entries[i].isTool) i++
+        out += if (i - from == 1) Shown.One(entries[from]) else Shown.Tools(entries.subList(from, i).toList())
+    }
+    return out
+}
+
+/** What a tool's row and its fold call it: a command is run. */
+private val Verbs = mapOf("Bash" to "Run", "shell" to "Run", "exec_command" to "Run", "local_shell" to "Run")
+
+fun verb(name: String): String = Verbs[name] ?: name
+
+/** A fold's row: how many of each tool, in the order first used ("Read 3 · Edit 2"), and how many failed. */
+data class ToolsSummary(val counts: String, val failed: Int)
+
+/** [orphan] names a result whose use was told before what is shown began. */
+fun Chat.summary(tools: List<Entry>, orphan: String): ToolsSummary {
+    val counts = LinkedHashMap<String, Int>()
+    var failed = 0
+    for (entry in tools) {
+        val (name, gave) = when (val said = entry.said) {
+            is Said.ToolUse -> verb(said.tool.name) to result(said.tool.id)
+            is Said.ToolOutput -> orphan to said.result
+            else -> continue
+        }
+        counts[name] = (counts[name] ?: 0) + 1
+        if (gave?.error == true) failed++
+    }
+    return ToolsSummary(counts.entries.joinToString(" · ") { "${it.key} ${it.value}" }, failed)
+}

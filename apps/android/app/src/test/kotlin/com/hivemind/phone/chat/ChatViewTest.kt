@@ -14,6 +14,7 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -97,6 +98,9 @@ class ChatViewTest {
             }
         }
         compose.onNodeWithText("2 failed").assertDoesNotExist()
+        // Two tools one after another are one row, counting them, until it is opened.
+        compose.onNodeWithText("make test").assertDoesNotExist()
+        compose.onNodeWithText("Run 1 · Read 1").performClick()
         // A path too long for the row stays on one line, cut in the middle: its file's name is drawn.
         val row = compose.onNodeWithText(path, useUnmergedTree = true).layout()
         assertEquals(1, row.lineCount)
@@ -108,6 +112,7 @@ class ChatViewTest {
         val colors = lightColorScheme()
         assertEquals(colors.error, compose.onNodeWithText("2 failed").textColor())
         compose.onNodeWithTag("tool-back").performClick()
+        // Back from a tool, its fold is still open.
         compose.onNodeWithText(path).performClick()
         compose.onNodeWithText(path).assertIsDisplayed()
         assertTrue(compose.onNodeWithText(path).layout().lineCount > 1)
@@ -175,5 +180,37 @@ class ChatViewTest {
         assertTrue(chat.follow.on)
         assertEquals(0, chat.follow.list.firstVisibleItemIndex)
         compose.onNodeWithText("line 40").assertIsDisplayed()
+    }
+
+    @Test
+    fun `tools used one after another are one row that counts them and says how many failed, and opens to them in order`() {
+        val chat = Chat()
+        chat.said(
+            listOf(
+                person("e0", "Fix the nav"),
+                toolUse("e1", use = "u1", name = "Read", about = "nav.ts"),
+                toolUse("e2", use = "u2", name = "Edit", about = "nav.ts"),
+                toolUse("e3", use = "u3", name = "Bash", about = "make test"),
+                toolResult("e4", use = "u3", text = "1 failed", error = true),
+                toolUse("e5", use = "u4", name = "Read", about = "test.ts"),
+                agentSaid("e6", "One test fails."),
+                toolUse("e7", use = "u5", name = "Grep", about = "nav"),
+            ),
+            anew = true,
+        )
+        show(chat)
+
+        compose.onNodeWithText("Read 2 · Edit 1 · Run 1").assertIsDisplayed()
+        compose.onNodeWithText("· 1 failed").assertIsDisplayed()
+        compose.onNodeWithText("test.ts").assertDoesNotExist()
+        // One alone stays a row of its own.
+        compose.onNodeWithText("nav", useUnmergedTree = true).assertIsDisplayed()
+
+        compose.onNodeWithText("Read 2 · Edit 1 · Run 1").performClick()
+
+        val tops = listOf("nav.ts", "make test", "test.ts").map { about ->
+            compose.onAllNodesWithText(about, useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot.top
+        }
+        assertEquals(tops.sorted(), tops)
     }
 }

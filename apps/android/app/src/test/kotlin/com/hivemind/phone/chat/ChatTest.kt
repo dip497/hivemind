@@ -72,4 +72,48 @@ class ChatTest {
         chat.end(ConversationEnded.NotHeld)
         assertEquals(0, chat.follow.list.firstVisibleItemIndex)
     }
+
+    @Test
+    fun `a run of two or more tools is one fold, keyed by its first, which stays the fold as more join it; one alone stays an entry`() {
+        val chat = Chat()
+        chat.said(listOf(person("e1", "Fix the nav"), toolUse("e2", use = "u1", name = "Read")), anew = true)
+        assertEquals(listOf("e1", "e2"), chat.shown.map { it.key })
+
+        chat.said(listOf(toolUse("e3", use = "u2", name = "Edit"), toolResult("e4", use = "u0", text = "from before")), anew = false)
+        assertEquals(listOf("e1", "tools:e2"), chat.shown.map { it.key })
+        assertEquals(listOf("e2", "e3", "e4"), (chat.shown[1] as Shown.Tools).entries.map { it.id })
+
+        chat.said(listOf(agentSaid("e5", "Done."), toolUse("e6", use = "u3", name = "Bash")), anew = false)
+        assertEquals(listOf("e1", "tools:e2", "e5", "e6"), chat.shown.map { it.key })
+    }
+
+    @Test
+    fun `a fold counts each tool by what it does, in the order first used, a command as Run, and the ones that failed`() {
+        val chat = Chat()
+        chat.said(
+            listOf(
+                toolUse("e1", use = "u1", name = "Read"),
+                toolUse("e2", use = "u2", name = "Bash"),
+                toolResult("e3", use = "u2", text = "boom", error = true),
+                toolUse("e4", use = "u3", name = "Read"),
+                toolUse("e5", use = "u4", name = "exec_command"),
+                toolResult("e6", use = "u0", text = "from before", error = true),
+            ),
+            anew = true,
+        )
+        val tools = (chat.shown.single() as Shown.Tools).entries
+
+        assertEquals(ToolsSummary("Read 2 · Run 2 · Result 1", failed = 2), chat.summary(tools, orphan = "Result"))
+    }
+
+    @Test
+    fun `told anew, the folds the person opened are closed`() {
+        val chat = Chat()
+        chat.said(listOf(toolUse("e1", use = "u1", name = "Read"), toolUse("e2", use = "u2", name = "Edit")), anew = true)
+        chat.opened["tools:e1"] = true
+
+        chat.said(listOf(toolUse("e1", use = "u1", name = "Read"), toolUse("e2", use = "u2", name = "Edit")), anew = true)
+
+        assertNull(chat.opened["tools:e1"])
+    }
 }

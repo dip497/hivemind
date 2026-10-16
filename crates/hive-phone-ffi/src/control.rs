@@ -3,6 +3,7 @@
 //! what it changed; each a call on the connection to the device that holds the workspace, which
 //! carries it out as the person.
 
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine};
 use hive_phone::control;
 
 use crate::{on_runtime, phone::Phone, records::AgentRef, PhoneError};
@@ -47,6 +48,17 @@ pub struct Start {
     pub prompt: Option<String>,
     pub model: Option<String>,
     pub mode: Option<String>,
+    /// Photos given with the prompt, kept on the machine it runs on (at most four).
+    #[uniffi(default)]
+    pub photos: Vec<Photo>,
+}
+
+/// A photo given with a prompt: its type (`image/png`, `image/jpeg`, `image/webp`, `image/gif`)
+/// and its bytes.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Photo {
+    pub kind: String,
+    pub bytes: Vec<u8>,
 }
 
 /// A file an agent changed: its status (`M`, `A`, `D`, `R` or `?`, new to git), and the lines the
@@ -100,6 +112,14 @@ impl From<Start> for control::Start {
             prompt: s.prompt,
             model: s.model,
             mode: s.mode,
+            images: s
+                .photos
+                .into_iter()
+                .map(|p| control::Image {
+                    kind: p.kind,
+                    data: BASE64_STANDARD.encode(p.bytes),
+                })
+                .collect(),
             ..Self::default()
         }
     }
@@ -278,6 +298,7 @@ mod tests {
             prompt: Some("buy milk".into()),
             model: Some("opus".into()),
             mode: Some("plan".into()),
+            photos: vec![],
         };
         assert_eq!(
             control::Start::from(chosen),
@@ -289,6 +310,28 @@ mod tests {
                 mode: Some("plan".into()),
                 ..Default::default()
             }
+        );
+    }
+
+    #[test]
+    fn photos_given_with_the_prompt_are_sent_as_the_computer_reads_them() {
+        let chosen = Start {
+            program: "claude".into(),
+            frame: None,
+            prompt: Some("what is wrong here?".into()),
+            model: None,
+            mode: None,
+            photos: vec![Photo {
+                kind: "image/jpeg".into(),
+                bytes: vec![0xff, 0xd8, 0xff],
+            }],
+        };
+        assert_eq!(
+            control::Start::from(chosen).images,
+            vec![control::Image {
+                kind: "image/jpeg".into(),
+                data: "/9j/".into(),
+            }]
         );
     }
 }
