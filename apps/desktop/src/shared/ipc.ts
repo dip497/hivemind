@@ -584,6 +584,9 @@ export interface HiveIpc {
   listWorkspaces(): Promise<WorkspaceInfo[]>;
   /** Every workspace here, with how many tiles it has and how many of them need you or work. */
   workspaceSummaries(): Promise<WorkspaceSummary[]>;
+  /** Delete the board of the workspace at `repo` from this computer; its folder stays. Refused
+   *  while a terminal of it runs. */
+  removeWorkspace(repo: string): Promise<void>;
   /** Resolve the `.hivemind` root that owns an issue id (via its prefix), or
    *  null if its workspace isn't registered. Used to open a cross-repo link. */
   resolveIssueRoot(id: string): Promise<{ root: string | null }>;

@@ -89,6 +89,15 @@ export async function registerWorkspace(root: string): Promise<WorkspaceEntry> {
   return entry;
 }
 
+/** Drop every entry for the folder `repo`: it is listed again once it is used again. */
+export async function forgetWorkspace(repo: string): Promise<void> {
+  const reg = await readRegistry();
+  const prefixes = Object.keys(reg.workspaces).filter((p) => reg.workspaces[p]!.repo === repo);
+  if (!prefixes.length) return;
+  for (const p of prefixes) delete reg.workspaces[p];
+  await writeRegistry(reg);
+}
+
 /** Extract the workspace prefix from an issue id (`MANAGEARK-3` → `MANAGEARK`,
  *  `PAY-1.2` → `PAY`). Returns null if the id isn't well-formed. */
 export function prefixOf(id: string): string | null {

@@ -43,6 +43,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
 
     listWorkspaces: () => port.invoke("listWorkspaces"),
     workspaceSummaries: () => port.invoke("workspaceSummaries"),
+    removeWorkspace: (repo) => port.invoke("removeWorkspace", repo),
     resolveIssueRoot: (id) => port.invoke("resolveIssueRoot", id),
 
     openPathInApp: local("openPathInApp", invoke("openPathInApp")),

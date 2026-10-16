@@ -27,6 +27,7 @@ import { spawn } from "node:child_process";
 import {
   findRoot,
   listWorkspaces,
+  forgetWorkspace,
   registerWorkspace,
   resolveRootForIssue,
   writeAgentContext,
@@ -854,6 +855,19 @@ handle("workspaceSummaries", wrap(async () => {
     });
     return { repo: h.repo, title: h.name, ...workspaceCounts(statuses) };
   }).sort((a, b) => a.title.localeCompare(b.title));
+}));
+// Removing a workspace from this computer deletes its board here, never its folder; one with a
+// terminal still running is refused, so no session is left without a tile, and its stopped ones go
+// with it.
+handle("removeWorkspace", wrap(async (_e, repo: string) => {
+  if (typeof repo !== "string" || !path.isAbsolute(repo)) throw new Error("removeWorkspace: not a folder's path");
+  const tiles = new Set((workspaceStore().getCore(repo)?.tiles ?? []).map((t) => t.id));
+  const sessions = (await ptyDaemon.listSessions()).filter((s) => tiles.has(toBareId(s.id)));
+  const running = sessions.filter((s) => s.state === "live").length;
+  if (running) throw new Error(`${path.basename(repo)} has ${running === 1 ? "a terminal" : `${running} terminals`} running: close ${running === 1 ? "it" : "them"} first.`);
+  for (const s of sessions) killPty(s.id);
+  workspaceStore().forget(repo);
+  await forgetWorkspace(repo);
 }));
 handle(
   "resolveIssueRoot",

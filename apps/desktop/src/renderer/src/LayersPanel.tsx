@@ -732,7 +732,8 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       <div className="flex-1 min-w-0 flex flex-col">
       {/* Whose it is (and every other workspace, in its menu) and its two quick tools, then the pane. */}
       <header className="flex items-center gap-1 pl-[14px] pr-2 h-12 shrink-0">
-        <PanelMenu title={title} workspaces={projects} here={layoutKey} onHide={() => setHidden(true)} />
+        <PanelMenu title={title} workspaces={projects} here={layoutKey} onHide={() => setHidden(true)}
+          onRemoved={(repo) => setProjects((list) => list.filter((w) => w.repo !== repo))} />
         <span className="ml-auto" />
         <Button variant="ghost" size="icon-xs" aria-label="Search tiles" title="Search tiles" aria-pressed={searching} data-layers-search-toggle
           onClick={() => { setSearching((x) => !x); setQuery(""); }}><Search size={ICON} className="size-4" /></Button>
@@ -1010,9 +1011,14 @@ function RailButton({ label, icon, pane, active, onPick, badge = 0 }: { label: s
 }
 
 /** The panel's title: this workspace, every other one to switch to, and the panel itself. */
-function PanelMenu({ title, workspaces, here, onHide }: { title: string; workspaces: WorkspaceSummary[]; here: string | null; onHide: () => void }) {
+function PanelMenu({ title, workspaces, here, onHide, onRemoved }: { title: string; workspaces: WorkspaceSummary[]; here: string | null; onHide: () => void; onRemoved: (repo: string) => void }) {
   const [open, setOpen] = useState(false);
+  const [removing, setRemoving] = useState<WorkspaceSummary | null>(null);
+  const ask = (w: WorkspaceSummary) => { setOpen(false); setRemoving(w); };
+  // The row opens its workspace on any click it receives, so the button keeps its own.
+  const own = (e: { stopPropagation(): void; preventDefault(): void }) => { e.stopPropagation(); e.preventDefault(); };
   return (
+    <>
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <span className="relative inline-flex min-w-0">
         <button type="button" onClick={() => setOpen(true)} aria-expanded={open} data-layers-title
@@ -1029,12 +1035,20 @@ function PanelMenu({ title, workspaces, here, onHide }: { title: string; workspa
             {workspaces.map((w) => {
               const isHere = w.repo === here;
               return (
-                <DropdownMenuItem key={w.repo} disabled={isHere} data-layers-workspace={w.title}
-                  onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:open-workspace", { detail: { repo: w.repo } }))}>
+                <DropdownMenuItem key={w.repo} disabled={isHere} data-layers-workspace={w.title} className="group/ws"
+                  onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:open-workspace", { detail: { repo: w.repo } }))}
+                  onKeyDown={(e) => { if (!isHere && (e.key === "Delete" || e.key === "Backspace")) { own(e); ask(w); } }}>
                   {isHere ? <FolderOpen /> : <Folder />}
                   <span className="flex-1 truncate">{w.title}</span>
                   {w.needsYou > 0 && <span className="shrink-0 text-chip font-medium leading-none px-1.5 py-[3px] rounded-full" style={{ color: "var(--color-warn)", background: "color-mix(in srgb, var(--color-warn) 16%, transparent)" }}>{w.needsYou} need you</span>}
-                  <span className={`shrink-0 ${COUNT}`}>{isHere ? "here" : w.tiles}</span>
+                  <span className={`shrink-0 ${COUNT} ${isHere ? "" : "group-data-[highlighted]/ws:hidden"}`}>{isHere ? "here" : w.tiles}</span>
+                  {!isHere && (
+                    <button type="button" aria-label={`Remove ${w.title} from this computer`} title="Remove from this computer" data-layers-workspace-remove
+                      className="-my-1 -mr-1 hidden size-6 shrink-0 place-items-center rounded text-[var(--color-fg3)] hover:bg-[var(--surface-4)] hover:text-[var(--color-fg)] group-data-[highlighted]/ws:grid"
+                      onPointerDown={own} onPointerUp={own} onClick={(e) => { own(e); ask(w); }}>
+                      <X size={14} />
+                    </button>
+                  )}
                 </DropdownMenuItem>
               );
             })}
@@ -1050,6 +1064,39 @@ function PanelMenu({ title, workspaces, here, onHide }: { title: string; workspa
         <DropdownMenuItem onSelect={onHide} data-layers-hide><PanelLeftClose />Hide panel<DropdownMenuShortcut>{MOD}B</DropdownMenuShortcut></DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    <RemoveWorkspaceDialog workspace={removing} onClose={(removed) => { if (removed && removing) onRemoved(removing.repo); setRemoving(null); }} />
+    </>
+  );
+}
+
+/** Removing a workspace from this computer deletes its board here; its folder and files stay. */
+function RemoveWorkspaceDialog({ workspace, onClose }: { workspace: WorkspaceSummary | null; onClose: (removed: boolean) => void }) {
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setError(null); setBusy(false); }, [workspace]);
+  const remove = () => {
+    if (!workspace) return;
+    setBusy(true);
+    window.hive.removeWorkspace(workspace.repo).then(() => onClose(true), (e: unknown) => {
+      setBusy(false);
+      setError((e instanceof Error ? e.message : String(e)).replace(/^Error invoking remote method '[^']+': (Error: )?/, ""));
+    });
+  };
+  const tiles = workspace?.tiles ?? 0;
+  return (
+    <Dialog open={!!workspace} onOpenChange={(o) => { if (!o) onClose(false); }}>
+      <DialogContent className="sm:max-w-[440px]" data-remove-workspace>
+        <DialogTitle>Remove “{workspace?.title}” from this computer?</DialogTitle>
+        <DialogDescription>
+          Its board here is deleted{tiles ? `, with its ${tiles === 1 ? "tile" : `${tiles} tiles`} and their notes` : ""}. The folder <span className="font-mono">{workspace?.repo}</span> and its files stay; opening it again starts a new board.
+        </DialogDescription>
+        {error && <p className="text-label text-[var(--color-err)]" role="alert" data-remove-workspace-error>{error}</p>}
+        <DialogFooter>
+          <Button variant="ghost" autoFocus onClick={() => onClose(false)}>Cancel</Button>
+          <Button variant="destructive" disabled={busy} data-remove-workspace-confirm onClick={remove}>Remove</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
