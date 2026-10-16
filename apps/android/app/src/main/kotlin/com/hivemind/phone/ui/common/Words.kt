@@ -3,11 +3,13 @@ package com.hivemind.phone.ui.common
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import com.hivemind.phone.R
 import com.hivemind.phone.core.Agent
 import com.hivemind.phone.core.AgentState
 import com.hivemind.phone.core.WaitKind
+import com.hivemind.phone.ui.start.PHOTOS_MAX
 import kotlinx.coroutines.delay
 
 /** The time now, refreshed often enough to say how long ago something was. */
@@ -88,6 +90,8 @@ fun Notice.text(): String = when (this) {
     Notice.AlreadyClosed -> stringResource(R.string.notice_already_closed)
     is Notice.NotTold -> stringResource(R.string.notice_not_told, device)
     Notice.NoLock -> stringResource(R.string.notice_no_lock)
+    Notice.Retargeted -> stringResource(R.string.notice_retargeted)
+    is Notice.PhotosLeftOut -> pluralStringResource(R.plurals.notice_photos_left_out, count, count, PHOTOS_MAX)
 }
 
 /**

@@ -59,7 +59,9 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleStartEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hivemind.phone.R
 import com.hivemind.phone.chat.ChatView
@@ -212,6 +214,7 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
                 // Fit is off, the terminal is left or the app goes to the background.
                 var readable by remember { mutableStateOf<TermSize?>(null) }
                 var fitted by remember { mutableStateOf(false) }
+                val lifecycle = LocalLifecycleOwner.current.lifecycle
                 LaunchedEffect(fit, readable) {
                     val size = readable
                     // Fitted at once when opened, then to the size it settles at: while the keyboard
@@ -219,8 +222,11 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
                     // its whole screen for.
                     if (!fit) vm.screen.unfit() else if (size != null) {
                         if (fitted) delay(FIT_SETTLES_MS)
-                        vm.screen.fit(size)
-                        fitted = true
+                        // Gone to the background meanwhile: its size was given back, and stays so.
+                        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                            vm.screen.fit(size)
+                            fitted = true
+                        }
                     }
                 }
                 val fitNow by rememberUpdatedState(fit)
@@ -261,8 +267,10 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
                         },
                         busy,
                         stoppable = agent?.stoppable == true && waiting == null,
+                        target = waiting?.since?.let { "wait:$it" } ?: "message",
                         onSend = { if (waiting == null) vm.send(it) else vm.answer(Answer.Text(it)) },
                         onStop = vm::stop,
+                        onRetarget = { vm.calls.tell(Notice.Retargeted) },
                     )
                 }
             }
@@ -275,12 +283,28 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
  * send; while the agent is in a turn it can be stopped from, and nothing is typed, the button stops it.
  */
 @Composable
-private fun Composer(hint: String, busy: Boolean, stoppable: Boolean, onSend: (String) -> Unit, onStop: () -> Unit) {
+private fun Composer(
+    hint: String,
+    busy: Boolean,
+    stoppable: Boolean,
+    target: String,
+    onSend: (String) -> Unit,
+    onStop: () -> Unit,
+    onRetarget: () -> Unit,
+) {
     var text by rememberSaveable { mutableStateOf("") }
+    // What the text was begun for: a message, or the answer to one wait. Sent only to that; if what the
+    // agent waits on changed meanwhile, the first Send says so and the next sends it to what is there now.
+    var typedFor by rememberSaveable { mutableStateOf(target) }
     val send = {
         if (text.isNotBlank()) {
-            onSend(text)
-            text = ""
+            if (typedFor != target) {
+                typedFor = target
+                onRetarget()
+            } else {
+                onSend(text)
+                text = ""
+            }
         }
     }
     val colors = MaterialTheme.colorScheme
@@ -288,7 +312,10 @@ private fun Composer(hint: String, busy: Boolean, stoppable: Boolean, onSend: (S
         Row(Modifier.padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.Bottom) {
             TextField(
                 value = text,
-                onValueChange = { text = it },
+                onValueChange = {
+                    if (text.isEmpty()) typedFor = target
+                    text = it
+                },
                 placeholder = { Text(hint, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 // Grows with what is typed, up to six lines; Enter is a new line, the button sends.
                 maxLines = 6,

@@ -38,9 +38,24 @@ class Follow(private val newestFirst: Boolean = false) {
     /** Whether the list keeps its newest item in view. */
     var on by mutableStateOf(true)
 
+    /** Where the list was to rest when the person was moving it: shown once they let go, still following. */
+    private var owed = -1
+
     /** The list changed, and rests at [at]: shown while following, though not while the person moves it. */
     fun grew(at: Int) {
-        if (on && at >= 0 && !list.isScrollInProgress) list.requestScrollToItem(at)
+        if (!on || at < 0) return
+        if (list.isScrollInProgress) {
+            owed = at
+        } else {
+            owed = -1
+            list.requestScrollToItem(at)
+        }
+    }
+
+    /** The list stopped moving: following, it goes where it was to rest meanwhile. */
+    fun settled() {
+        if (on && owed >= 0) list.requestScrollToItem(owed)
+        owed = -1
     }
 
     /** Back to where the list rests, [at], following it again. */
@@ -58,7 +73,15 @@ fun FollowTheNewest(follow: Follow) {
         if (dragged) follow.on = false else if (follow.atNewest) follow.on = true
     }
     LaunchedEffect(follow) {
-        snapshotFlow { follow.atNewest }.collect { newest -> if (newest) follow.on = true }
+        snapshotFlow { follow.atNewest }.collect { newest ->
+            if (newest) {
+                follow.on = true
+                follow.settled()
+            }
+        }
+    }
+    LaunchedEffect(follow) {
+        snapshotFlow { follow.list.isScrollInProgress }.collect { moving -> if (!moving) follow.settled() }
     }
 }
 

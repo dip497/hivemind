@@ -29,6 +29,12 @@ sealed interface Notice {
 
     /** Starting or closing an agent asks the phone's lock, and this phone has none set. */
     data object NoLock : Notice
+
+    /** What was typed was for something else than what the agent waits on now: not sent, so it is read first. */
+    data object Retargeted : Notice
+
+    /** Photos picked past the most one start takes, left out. */
+    data class PhotosLeftOut(val count: Int) : Notice
 }
 
 /**

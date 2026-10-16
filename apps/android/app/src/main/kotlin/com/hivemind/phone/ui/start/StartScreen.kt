@@ -1,6 +1,5 @@
 package com.hivemind.phone.ui.start
 
-import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -42,6 +41,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -85,7 +85,9 @@ fun StartScreen(vm: StartViewModel, onBack: () -> Unit, onStarted: (AgentRef) ->
     val lockTitle = stringResource(R.string.lock_start_title, vm.program?.label.orEmpty())
     val lockSubtitle = stringResource(R.string.lock_subtitle)
     val resolver = LocalContext.current.contentResolver
-    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(PHOTOS_MAX)) { vm.addPhotos(resolver, it) }
+    // As many as there is room for: the picker lets no more be chosen than are kept.
+    val pickMany = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(PHOTOS_MAX)) { vm.addPhotos(resolver, it) }
+    val pickOne = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { vm.addPhotos(resolver, listOf(it)) } }
 
     val colors = MaterialTheme.colorScheme
     Scaffold(
@@ -177,12 +179,16 @@ fun StartScreen(vm: StartViewModel, onBack: () -> Unit, onStarted: (AgentRef) ->
                         )
                         if (vm.photos.isNotEmpty()) {
                             Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                vm.photos.forEachIndexed { i, photo -> PhotoThumb(photo) { vm.photos.removeAt(i) } }
+                                // Taken out by which photo it is, not where it was: two quick taps take out two.
+                                for (photo in vm.photos) key(photo) { PhotoThumb(photo) { vm.photos.remove(photo) } }
                             }
                         }
                         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             TextButton(
-                                onClick = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                                onClick = {
+                                    val request = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    if (PHOTOS_MAX - vm.photos.size > 1) pickMany.launch(request) else pickOne.launch(request)
+                                },
                                 enabled = vm.photos.size < PHOTOS_MAX,
                                 modifier = Modifier.testTag("start-photos"),
                             ) { Text(stringResource(R.string.start_add_photo)) }
@@ -236,11 +242,7 @@ private fun PhotoThumb(photo: Photo, onRemove: () -> Unit) {
     // Drawn small, off the main thread: a photo of a few megabytes is not decoded while the screen draws.
     val image by produceState<ImageBitmap?>(null, photo) {
         value = withContext(Dispatchers.Default) {
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeByteArray(photo.bytes, 0, photo.bytes.size, bounds)
-            var sample = 1
-            while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 256) sample *= 2
-            BitmapFactory.decodeByteArray(photo.bytes, 0, photo.bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
+            drawn(photo.bytes, 256)?.asImageBitmap()
         }
     }
     Box(Modifier.size(64.dp).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.surfaceContainerHighest)) {

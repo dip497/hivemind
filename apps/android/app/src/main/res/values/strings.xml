@@ -218,6 +218,11 @@
     <string name="notice_failed">That did not work.</string>
     <string name="notice_already_answered">It no longer waits on you.</string>
     <string name="notice_not_running">No agent runs there now.</string>
+    <string name="notice_retargeted">What it waits on changed since you began typing. Read it, then send again.</string>
+    <plurals name="notice_photos_left_out">
+        <item quantity="one">%1$d photo left out: a start takes %2$d at most.</item>
+        <item quantity="other">%1$d photos left out: a start takes %2$d at most.</item>
+    </plurals>
     <string name="notice_not_stopped">It was not in a turn.</string>
     <string name="notice_already_closed">It was already closed.</string>
     <string name="notice_not_told">%s was not told: unpair this phone on it too.</string>

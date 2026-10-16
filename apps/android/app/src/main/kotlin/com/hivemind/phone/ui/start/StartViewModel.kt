@@ -18,6 +18,7 @@ import com.hivemind.phone.core.Start
 import com.hivemind.phone.core.StartProgram
 import com.hivemind.phone.core.Startable
 import com.hivemind.phone.ui.common.CoreCalls
+import com.hivemind.phone.ui.common.Notice
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharingStarted
@@ -77,11 +78,16 @@ class StartViewModel(private val phone: Phone, overview: StateFlow<Overview>) : 
     /** Adds the photos picked, read off the main thread, up to [PHOTOS_MAX]; one that cannot be read is left out. */
     fun addPhotos(resolver: ContentResolver, picked: List<Uri>) {
         viewModelScope.launch {
+            var leftOut = 0
             for (uri in picked) {
-                if (photos.size >= PHOTOS_MAX) break
+                if (photos.size >= PHOTOS_MAX) {
+                    leftOut++
+                    continue
+                }
                 val photo = withContext(Dispatchers.IO) { runCatching { photoOf(resolver, uri) }.getOrNull() }
-                if (photo != null && photos.size < PHOTOS_MAX) photos += photo
+                if (photo != null) photos += photo
             }
+            if (leftOut > 0) calls.tell(Notice.PhotosLeftOut(leftOut))
         }
     }
 
