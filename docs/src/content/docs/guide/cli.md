@@ -100,26 +100,40 @@ only one open. `send` and `close` to a tile no agent runs exit 5.
 ## `hive ctl` — plugins
 
 ```text
+hive ctl plugin list [--json]              # every plugin running, each starting, ready or failed,
+                                           # with its commands; and the views there are
 hive ctl plugin open <record> [--frame f] [--json]
                                            # get it running: a tool's tile opened, a widget added
-                                           # to the board, a view switched to
-hive ctl plugin commands [--json]          # what the running plugins let you run, with what each takes
+                                           # to the board, a view switched to; answers once it
+                                           # can be called
+hive ctl plugin commands [--json]          # what the ready plugins let you run, with what each takes
 hive ctl plugin call <plugin> <command> ['{"json":"argument"}' | -] [--tile id] [--json]
                                            # runs it and prints what the plugin answered
+hive ctl plugin close <instance> [--plugin p] [--json]
+                                           # close its tile, take the widget off the board,
+                                           # leave the view for the canvas
 ```
 
 A view, a tool or a widget declares commands in its manifest and answers them in its code. They
 can be run while the plugin runs: the view shown, a tool's open tile, a widget on the board.
 `plugin open` gets one there, named as `hive plugins list` names it (`tool:owner/name` opens its
-first tool, `tool:owner/name/tool` another; `widget:@owner/name`; `view:id`).
-`--tile` picks one when the same plugin runs more than once (two tiles of one tool). What the
-plugin throws is the command's error, and the exit code is not 0.
+first tool, `tool:owner/name/tool` another; `widget:@owner/name`; `view:id`), and answers when
+its code has connected, so a `call` right after it runs.
+
+Each running plugin is `starting` until its code connects, then `ready`. One that does not
+connect in 15 s, or that the app stops for misbehaving, is `failed`, and `plugin list` says why.
+A call to one still starting waits for it; the whole call has 30 s. `--tile` picks one when the
+same plugin runs more than once (two tiles of one tool). The exit code says what went wrong:
+5 when it is not running or has no such command, 4 when it was still starting or did not answer
+in time, 2 when it runs twice and no `--tile` says which, 1 when it failed or refused (what it
+threw is the message).
 
 ```sh
-hive ctl plugin open widget:@dip497/progress                           # → added widget widget-…
+hive ctl plugin open widget:@dip497/progress                           # → added widget widget-…: ready (set-title, add, …)
 hive ctl plugin call @dip497/progress add '{"text":"Run the tests"}'   # → {"index": 0}
 hive ctl plugin call agent-board post '{"text":"Tests pass","kind":"done"}'
 hive ctl plugin call dip497/worktrees list
+hive ctl plugin close widget-…                                         # the widget leaves the board
 ```
 
 ## `hive ctl` — workflows, supervision, review

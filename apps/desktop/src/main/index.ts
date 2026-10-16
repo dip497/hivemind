@@ -73,7 +73,7 @@ import { REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
 import type { ReadScreen } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { driveSockPath, hcpSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
-import { ApiError } from "@hivemind/workspace-api/protocol";
+import { ApiError, isErrorCode } from "@hivemind/workspace-api/protocol";
 import { appViewsDir, handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog, viewSdk } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, onSettingsChange, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
@@ -1850,13 +1850,13 @@ function callWindow(win: BrowserWindow, method: string, params: unknown, timeout
 }
 handle(
   "hcp:result",
-  wrap(async (_e, id: string, ok: boolean, result: unknown, errorMessage?: string) => {
+  wrap(async (_e, id: string, ok: boolean, result: unknown, errorMessage?: string, code?: unknown) => {
     const p = pendingHcp.get(id);
     if (!p) return;
     pendingHcp.delete(id);
     clearTimeout(p.timer);
     if (ok) p.resolve(result);
-    else p.reject(new ApiError("FAILED", errorMessage || "renderer verb failed"));
+    else p.reject(new ApiError(isErrorCode(code) ? code : "FAILED", errorMessage || "renderer verb failed"));
   }), { local: true },
 );
 /** View protocol 1.3 host services: the status ledger, presence, and sharing an image. */

@@ -7,7 +7,8 @@
  * caller's: a frame's window, or a client in this window.
  */
 import { chordMatches, type PluginCommand } from "@hivemind/view-sdk/commands";
-import { offerCommands, type CommandOffer } from "./plugin-commands";
+import type { Running } from "@hivemind/view-host/instances";
+import { pluginInstances } from "./plugin-instances";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { PROTOCOL_VERSION, type HostMessage, type ShareOutcome, type SurfaceRect, type ViewPermission } from "@hivemind/view-sdk/protocol";
 import type { SettingField } from "@hivemind/view-sdk/settings";
@@ -77,6 +78,8 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
   const { frames, tiles, frameOf, layerTiles, links, selectedTileId, selectedFrameId, layoutKey } = model;
   const linkRef = useRef<CommunityLink | null>(null);
   const [ready, setReady] = useState(false);
+  /** This plugin in the window's lifecycle of running plugins, from its mount to its unmount. */
+  const running = useRef<Running | null>(null);
   const optsRef = useRef(o);
   optsRef.current = o;
   const commandsRef = useRef(commands);
@@ -178,7 +181,7 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
       issueRoot: () => optsRef.current.issueRoot?.() ?? rootRef.current,
       issueFolder: () => { const d = optsRef.current.issueFolder?.() ?? repoRef.current; return d && !isRemote(d) ? d : null; },
     }),
-    onDisable: (reason) => optsRef.current.onDisable(reason),
+    onDisable: (reason) => { running.current?.disabled(reason); optsRef.current.onDisable(reason); },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), []);
   linkRef.current = link;
@@ -281,20 +284,28 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
     return () => { ro.disconnect(); document.removeEventListener("visibilitychange", onVis); mo.disconnect(); if (themeTimer) clearTimeout(themeTimer); };
   }, [send]);
 
-  // While it runs, an agent may run what its manifest declares (`hive ctl plugin call`): offered
-  // once its code has connected, so a call never reaches a plugin that is still loading.
+  // What an agent reads of it and calls in it (`hive ctl plugin list|call`): every plugin, with or
+  // without commands, starting from its mount, ready once its code has connected, so a call waits
+  // for one still loading rather than missing it.
   const declared = o.commands ?? [];
   const declaredKey = JSON.stringify(declared);
   const instanceId = o.instance?.id ?? o.layoutId;
   const instanceLabel = o.instance?.label ?? o.name;
   useEffect(() => {
-    if (!declared.length || !ready) return;
-    return offerCommands({
-      plugin: o.pluginId, kind: o.record.kind as CommandOffer["kind"], instance: instanceId, label: instanceLabel,
-      commands: declared, call: (name, args) => link.invoke(name, args),
+    const r = pluginInstances.start({
+      plugin: o.pluginId, kind: o.record.kind as "tool" | "widget" | "view", instance: instanceId, label: optsRef.current.instance?.label ?? optsRef.current.name,
+      commands: optsRef.current.commands ?? [], call: (name, args, timeoutMs) => link.invoke(name, args, timeoutMs),
     });
+    if (link.stats.disabled) r.disabled(link.stats.disabled);
+    else if (link.stats.ready) r.connected();
+    running.current = r;
+    return () => { r.stop(); if (running.current === r) running.current = null; };
+  }, [link, o.pluginId, o.record.kind, instanceId]);
+  useEffect(() => { if (ready) running.current?.connected(); }, [ready]);
+  useEffect(() => {
+    running.current?.update({ label: instanceLabel, commands: declared });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- declaredKey stands for `declared`
-  }, [link, ready, declaredKey, o.pluginId, o.record.kind, instanceId, instanceLabel]);
+  }, [instanceLabel, declaredKey]);
 
   // The active view's keys run wherever focus is in the app, a terminal too: caught before the
   // terminal takes them. In its own frame its client runs them (`hello.keys`).

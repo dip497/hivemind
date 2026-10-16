@@ -32,7 +32,7 @@ import { Button } from "./components/ui/button";
 import { DeleteFrameDialog, type FrameDeleteAsk } from "./DeleteFrameDialog";
 import { Plus } from "./components/icons";
 import { PickerDialog } from "./picker-dialog";
-import { callCommand, listCommands } from "./workspace/plugin-commands";
+import { isPluginVerb, pluginVerb, type PluginVerbHost } from "./workspace/plugin-verbs";
 import type { LayerTile, LayerFrame } from "./LayersPanel";
 import { forgetStatus, statusOf, setHostedStatus, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
 import { ToolPlugins, WorkspacePropsContext } from "./tiles/tool-plugins";
@@ -426,6 +426,16 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   }, [addWidget, startArrow, widgetPackages]);
   const addBoardRef = useRef(addBoard);
   addBoardRef.current = addBoard;
+  // What an agent's plugin verbs do in this window (`workspace/plugin-verbs.ts`).
+  const pluginHostRef = useRef<PluginVerbHost>(null!);
+  pluginHostRef.current = {
+    activeView: () => activeViewIdRef.current ?? FALLBACK_VIEW_ID,
+    showView: (id) => setViewMode(id),
+    addWidget: (id) => addBoardRef.current(`widget:${id}` as BoardChoice),
+    widgetRuns: (id) => !!widgetPackages.find((w) => w.id === id)?.code,
+    closeTile: (id) => closeTile(id),
+    removeWidget: (id) => board.remove(id),
+  };
 
   // Reload when the repo changes — each repo has its own workspace + view
   // layouts. Skip on first mount (initial values already came from the memos).
@@ -947,6 +957,10 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     const off = window.hive.onHcpCommand(async (cmd) => {
       try {
         const p = (cmd.params ?? {}) as Record<string, unknown>;
+        if (isPluginVerb(cmd.method)) {
+          await reply(cmd.id, true, await pluginVerb(cmd.method, p, pluginHostRef.current));
+          return;
+        }
         switch (cmd.method) {
           case "view.emit": {
             const ev = p as { name: string; data: never; view?: string; from: "shell" | { tileId: string } };
@@ -956,29 +970,6 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
             const { event, delivered } = vh.viewEvents.emitCustom(ev.name, ev.data, ev.from, ev.view);
             const reason = delivered ? null : ev.view && ev.view !== active ? "not-active" : "no-listener";
             await reply(cmd.id, true, { ok: true, id: event.id, delivered, view: active, ...(reason ? { reason, buffered: true } : {}) });
-            break;
-          }
-          case "plugin.commands": {
-            await reply(cmd.id, true, { plugins: listCommands() });
-            break;
-          }
-          case "plugin.open": {
-            const o = p as { kind: "widget" | "view"; id: string };
-            if (o.kind === "view") {
-              if (!getView(o.id)) throw new Error(`no view ${o.id} here: install it (\`hive views install <folder>\`) and switch it on (\`hive plugins enable view:${o.id}\`)`);
-              setViewMode(o.id);
-              await reply(cmd.id, true, { view: o.id });
-            } else {
-              const widget = addBoardRef.current(`widget:${o.id}` as BoardChoice);
-              if (!widget) throw new Error(`no widget ${o.id} here: install it (\`hive widgets install <folder>\`) and switch it on (\`hive plugins enable widget:${o.id}\`)`);
-              await reply(cmd.id, true, { widget });
-            }
-            break;
-          }
-          case "plugin.call": {
-            const c = p as { plugin: string; command: string; args: unknown; tile?: string };
-            const result = await callCommand(c.plugin, c.command, c.args, c.tile);
-            await reply(cmd.id, true, { result });
             break;
           }
           case "views.rescan": {
@@ -1003,7 +994,9 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
             await reply(cmd.id, false, undefined, `unknown renderer verb: ${cmd.method}`);
         }
       } catch (e) {
-        await reply(cmd.id, false, undefined, (e as Error)?.message ?? "renderer error");
+        // The code (NOT_FOUND, TIMEOUT …) is what the agent's exit status is made from.
+        const code = (e as { code?: unknown } | null)?.code;
+        await reply(cmd.id, false, undefined, (e as Error)?.message ?? "renderer error", typeof code === "string" ? code : undefined);
       }
     });
     return off;

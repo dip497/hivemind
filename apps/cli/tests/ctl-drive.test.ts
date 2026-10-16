@@ -70,6 +70,14 @@ beforeAll(async () => {
     answer("plugin.commands", () => ({ plugins: [{ plugin: "@a/progress", kind: "widget", instance: "w1", label: "Progress", commands: [{ name: "add", description: "Add a step.", args: '{ "text": string }' }] }] })),
     // As the host answers (control/methods.ts pluginOpen): a tool's tile, else the window's answer.
     answer("plugin.open", (plugin) => (String(plugin).startsWith("tool:") ? { tile: "t-9" } : { widget: "w-5" })),
+    answer("plugin.list", () => ({
+      plugins: [
+        { plugin: "@a/progress", kind: "widget", instance: "w1", label: "Progress", state: "ready", since: 1, commands: [{ name: "add", description: "Add a step." }] },
+        { plugin: "@a/valley", kind: "view", instance: "@a/valley", label: "Valley", state: "failed", reason: "it did not start in 15 s", since: 2, commands: [] },
+      ],
+      views: [{ id: "canvas", label: "Canvas", active: true }, { id: "@a/valley", label: "Valley", active: false }],
+    })),
+    answer("plugin.close", (instance, plugin) => { if (instance === "ghost") throw new ApiError("NOT_FOUND", "no plugin runs as ghost"); return { closed: instance, plugin: plugin ?? "@a/progress", kind: "widget" }; }),
     answer("plugin.call", (_p, command, args, tile) => { if (command === "check") throw new ApiError("FAILED", "there is no step 7"); return { result: { echoed: args, tile: tile ?? null } }; }),
   ]);
   server = new WorkspaceServer([{ answers, effects: {} }], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
@@ -257,5 +265,18 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     const before = calls.length;
     const bad = await hive(["ctl", "plugin", "call", "@a/progress", "add", "{nope"], { env: env() });
     expect([bad.code === 0, bad.stderr.includes("must be JSON"), calls.length]).toEqual([false, true, before]);
+  });
+
+  test("plugin: list says each one's state and why one failed, and the views there are; close names the copy, and one not running exits 5", async () => {
+    const list = await hive(["ctl", "plugin", "list"], { env: env() });
+    expect(list.stdout.trim().split("\n")).toEqual([
+      "w1  widget @a/progress (Progress)  ready  commands: add",
+      "@a/valley  view @a/valley (Valley)  failed: it did not start in 15 s",
+      "views: canvas (shown), @a/valley",
+    ]);
+    const closed = await hive(["ctl", "plugin", "close", "w1", "--plugin", "@a/progress", "--json"], { env: env() });
+    expect([closed.code, closed.json, last("plugin.close").params]).toEqual([0, { closed: "w1", plugin: "@a/progress", kind: "widget" }, ["w1", "@a/progress"]]);
+    const ghost = await hive(["ctl", "plugin", "close", "ghost", "--json"], { env: env() });
+    expect([ghost.code, (ghost.json as { code: string }).code]).toEqual([5, "NOT_FOUND"]);
   });
 });

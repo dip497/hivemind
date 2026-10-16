@@ -11,6 +11,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Added
 
+- Agents drive the plugins in the app as one lifecycle: `hive ctl plugin list` shows every tool tile, widget with code and view running, each starting, ready or failed (with why), and the views there are; `hive ctl plugin open` answers once what it opened can be called, so a `call` right after it works; a call to a plugin still starting waits for it; `hive ctl plugin close` closes a tool's tile, takes a widget off the board or leaves a view. Workspace API 0.27 (`plugin.list`, `plugin.close`).
 - The hivemind skill covers every `hive ctl` verb (sessions and `spawn --resume`, rename, tools, plugin commands, view events) and points to networks, sharing, grants, machines, hosts and push. The hive skills now follow the app: starting an agent in a workspace brings the skills it has up to this version, and `hive add skill` replaces older copies, edits too; keep a skill of your own under another name.
 - Remove a workspace from this computer from the Layers panel's title menu: hover it and press ×, or press Delete. Its board here goes; its folder and files stay. A workspace with a terminal still running says so and stays.
 - The Android app's first tab is Home, as on the phone page: what needs you on top, then what is working, the pinned, and each project's frames and tiles as your computer's Layers panel lists them, each with what it last said. A search and machine chips filter it. It replaces the Needs you and Agents tabs.
@@ -59,6 +60,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- `hive ctl plugin call` and `open` exit with the code their failure has: 5 when the plugin is not running or has no such command, 4 when it did not answer in time, 2 when it runs twice and no `--tile` says which; before, every one exited 1. A slow command now ends with the plugin's own reason, not the CLI's timeout, which used to come first.
 - A Claude agent whose folder-trust screen was answered now receives the messages sent to it; before, every one was held for a turn that never ended.
 - A path holding a long run of slashes is read at once; one with 50,000 of them took ten seconds.
 - Connect's Phone browser tab, on a network whose server does not serve the phone page, and Reach devices elsewhere → Serve from one of my devices offer **Set it up with an agent**: pick an agent installed here, and it asks you how your devices should reach this computer (Tailscale, your own domain, a tunnel, a forwarded port), sets up the server with the phone page and puts this computer on it, asking you for anything only you can do. The command shown there before had no `--phone`, so a server set up from it never gave a phone link.

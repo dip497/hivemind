@@ -766,7 +766,8 @@ export interface HiveIpc {
 
   /** Reply to a main→renderer HCP command (a control-plane verb that needs the
    *  canvas, e.g. plugin.open). `id` correlates with the pushed command. */
-  hcpResult?(id: string, ok: boolean, result?: unknown, errorMessage?: string): Promise<void>;
+  /** `code`: why it failed, as the workspace API says it (`NOT_FOUND`, `TIMEOUT` …); another is FAILED. */
+  hcpResult?(id: string, ok: boolean, result?: unknown, errorMessage?: string, code?: string): Promise<void>;
 }
 
 /** A control-plane verb main asks the renderer to execute (request-id correlated

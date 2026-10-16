@@ -1,4 +1,4 @@
-# Workspace API (0.26)
+# Workspace API (0.27)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -59,7 +59,7 @@ whichever starts first does, and the other says so. Lines of JSON both ways, 1 M
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.26", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.27", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -291,9 +291,11 @@ other devices included, nor a program.
 | `host.status` | | `{workspaces: [{repo, workspace}]}`: what this host serves, each by its folder and its id | read |
 | `host.join` | `link` | what joining a workspace by its link answers, as `hive join` | target the link's workspace |
 | `tile.focus` | `tile` | `null`: the tile brought forward in the window showing it | — |
-| `plugin.commands` | | the commands each plugin running in a window offers | read |
-| `plugin.open` | `plugin` (`tool:<owner>/<name>[/<tool>]`, `widget:@<owner>/<name>` or `view:<id>`), `frame`? (a tool's tile's) | what opening it answers: a tool's tile placed (`{tile}`), a widget added to the board, a view switched to, so its commands can be called | target the plugin |
-| `plugin.call` | `plugin`, `command`, `args`?, `tile`? | what the plugin's command answers, run in a window | target the plugin |
+| `plugin.list` | | `{plugins: [{plugin, kind, instance, label, state, reason?, since, commands}], views: [{id, label, active}]}`: every plugin running in a window (a tool's tile, a widget with code, a community view), `state` `starting` until its code connects, then `ready`; `failed` with its `reason` when it did not start in 15 s or was disabled; and the views the window can show (0.27) | read |
+| `plugin.commands` | | the commands each ready plugin running in a window offers | read |
+| `plugin.open` | `plugin` (`tool:<owner>/<name>[/<tool>]`, `widget:@<owner>/<name>` or `view:<id>`), `frame`? (a tool's tile's) | what opening it answers: a tool's tile placed (`{tile}`), a widget added to the board (`{widget}`), a view switched to (`{view}`); for one with code, once it can be called or 10 s pass, with its `instance`, `state`, `reason`? and `commands` (0.27) | target the plugin |
+| `plugin.call` | `plugin`, `command`, `args`?, `tile`? | `{result}`: what the plugin's command answers, run in a window. One still starting is waited for; the whole call has 30 s in the window. Refused `NOT_FOUND` (not running, no such copy or command), `BAD_REQUEST` (two copies and no `tile`, an argument over 64 KB), `TIMEOUT` (still starting, or no answer in time), `FAILED` (the plugin failed, or refused: its own words) | target the plugin |
+| `plugin.close` | `instance`, `plugin`? | `{closed, plugin, kind}` once it stopped: a tool's tile closed, a widget taken off the board, a view left for the canvas (0.27) | target the instance |
 | `view.emit` | `name`, `data`?, `view`? | `{id, delivered, view, reason?, buffered?}`: the event sent to the view open in the window, or kept for it until it listens (`view`: only while that one is open) | — |
 | `views.rescan`, `agents.rescan`, `widgets.rescan`, `tools.rescan` | | `null`: those installed read again from disk | — |
 | `settings.reload` | | `null`: `settings.json` read again | — |

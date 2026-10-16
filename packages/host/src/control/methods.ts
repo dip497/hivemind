@@ -9,6 +9,7 @@
  */
 import { typeKeys } from "@hivemind/agent-host/keys";
 import { ApiError } from "@hivemind/workspace-api/protocol";
+import { PLUGIN_CALL_HOST_MS, type PluginList } from "@hivemind/workspace-api/plugins";
 import type { HcpCall } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
@@ -200,8 +201,6 @@ const isClient = (parent: string): boolean => parent.startsWith("client:");
 const CONTROL = { writer: "control" };
 
 const RENDERER_TIMEOUT = 15_000;
-/** A plugin's command may do real work (read a repository, ask a server): longer than a window verb. */
-const PLUGIN_CALL_TIMEOUT = 35_000;
 const DEFAULT_READ_TIMEOUT = 120_000;
 /** How much of what an agent printed `agent.output` gives when not asked for more. */
 const DEFAULT_OUTPUT_LINES = 40;
@@ -229,9 +228,11 @@ export interface ControlWork {
   connect(src: string, dst: string): void;
   disconnect(src: string, dst?: string): void;
   viewEmit(caller: string | undefined, name: unknown, data: unknown, view: unknown): Promise<unknown>;
+  pluginList(): Promise<PluginList>;
   pluginCommands(): Promise<unknown>;
   pluginOpen(caller: string | undefined, plugin: unknown, frame: unknown): Promise<unknown>;
   pluginCall(plugin: unknown, command: unknown, args: unknown, tile: unknown): Promise<unknown>;
+  pluginClose(instance: string, plugin: string | undefined): Promise<{ closed: string; plugin: string; kind: string }>;
   focus(tile: string): Promise<unknown>;
   rescan(what: "views" | "agents" | "widgets" | "tools"): Promise<unknown>;
   reloadSettings(): Promise<unknown>;
@@ -838,7 +839,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       if (!emitBucket.take()) throw new ApiError("RATE_LIMITED", `at most ${EMIT_RATE.perSecond} view events a second`);
       return await deps.callRenderer("view.emit", ev, RENDERER_TIMEOUT);
     },
-    // What the plugins running in the window let an agent run.
+    // Every plugin running in the window, with its state; and what the ready ones let an agent run.
+    pluginList: async () => await deps.callRenderer("plugin.list", {}, RENDERER_TIMEOUT) as PluginList,
     pluginCommands: () => deps.callRenderer("plugin.commands", {}, RENDERER_TIMEOUT),
     // Get a plugin running, so its commands can be called: a tool's tile opened (`tool:owner/name`,
     // its first tool, or `tool:owner/name/tool`), a widget added to the board, a view switched to.
@@ -846,7 +848,11 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       const m = typeof plugin === "string" && plugin.length <= 200 ? /^(tool|widget|view):(.+)$/.exec(plugin) : null;
       if (!m) throw new ApiError("BAD_REQUEST", "plugin must be a record: tool:owner/name, widget:@owner/name or view:id, as `hive plugins list` shows it");
       const [, kind, id] = m as unknown as [string, "tool" | "widget" | "view", string];
-      if (kind === "tool") return { tile: await openTool({ caller, frame }, (tools) => tools.find((t) => t.id === id) ?? tools.find((t) => t.pluginId === id), `${id} has no tool to open`) };
+      if (kind === "tool") {
+        const tile = await openTool({ caller, frame }, (tools) => tools.find((t) => t.id === id) ?? tools.find((t) => t.pluginId === id), `${id} has no tool to open`);
+        // Answered once its tile's plugin can be called, as a widget's and a view's are.
+        return { tile, ...(await deps.callRenderer("plugin.settle", { instance: tile }, RENDERER_TIMEOUT) as object) };
+      }
       if (kind === "widget" && !deps.spawnAllowed()) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
       return await deps.callRenderer("plugin.open", { kind, id }, RENDERER_TIMEOUT);
     },
@@ -856,8 +862,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       if (typeof command !== "string" || !COMMAND_NAME_RE.test(command)) throw new ApiError("BAD_REQUEST", "command must be one of the plugin's command names");
       if (tile != null && (typeof tile !== "string" || !tile || tile.length > 256)) throw new ApiError("BAD_REQUEST", "tile must be an id");
       if (!callBucket.take()) throw new ApiError("RATE_LIMITED", `at most ${EMIT_RATE.perSecond} plugin calls a second`);
-      return await deps.callRenderer("plugin.call", { plugin, command, args: args ?? null, ...(tile ? { tile } : {}) }, PLUGIN_CALL_TIMEOUT);
+      return await deps.callRenderer("plugin.call", { plugin, command, args: args ?? null, ...(tile ? { tile } : {}) }, PLUGIN_CALL_HOST_MS);
     },
+    pluginClose: async (instance, plugin) => await deps.callRenderer("plugin.close", { instance, ...(plugin ? { plugin } : {}) }, RENDERER_TIMEOUT) as { closed: string; plugin: string; kind: string },
     focus: (tile) => deps.callRenderer("tile.focus", { tileId: tile }, RENDERER_TIMEOUT),
     // A plugins folder changed (`hive … install|remove`): a running app picks it up without a
     // restart. Views and agents are scanned by the window, which owns the workspace root; widgets

@@ -57,19 +57,23 @@ test.beforeAll(async () => {
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
 const commands = async () => JSON.parse((await hive("ctl", "plugin", "commands", "--json")).out) as { plugins: Array<{ plugin: string; kind: string; commands: Array<{ name: string }> }> };
+const running = async () => JSON.parse((await hive("ctl", "plugin", "list", "--json")).out) as { plugins: Array<{ plugin: string; instance: string; state: string }>; views: Array<{ id: string; active: boolean }> };
 
 test("a widget's commands: an agent lists them, adds and ticks steps, and the card shows what it did", async () => {
-  // Not running yet: nothing to call, and the agent is told how to get it running.
+  // Not running yet: nothing to call, the agent is told how to get it running, and its exit says not found.
   expect((await commands()).plugins.find((p) => p.plugin === "@dip497/progress")).toBeUndefined();
-  expect((await call("@dip497/progress", "list")).data.message).toContain("is not running here");
+  const absent = await call("@dip497/progress", "list");
+  expect([absent.status, absent.data.code]).toEqual([5, "NOT_FOUND"]);
+  expect(absent.data.message).toContain("is not running here");
 
+  // Opened, it answers once its code can be called: the first call straight after it runs.
   const opened = await hive("ctl", "plugin", "open", "widget:@dip497/progress", "--json");
   expect(opened.status, opened.err).toBe(0);
-  expect(JSON.parse(opened.out).widget).toMatch(/^widget-/);
-  await expect.poll(async () => (await commands()).plugins.find((p) => p.plugin === "@dip497/progress")?.commands.map((c) => c.name), { timeout: 15_000 })
-    .toEqual(["set-title", "add", "check", "list", "clear"]);
-
+  const widget = JSON.parse(opened.out) as { widget: string; instance: string; state: string; commands: Array<{ name: string }> };
+  expect(widget.widget).toMatch(/^widget-/);
+  expect([widget.instance, widget.state, widget.commands.map((c) => c.name)]).toEqual([widget.widget, "ready", ["set-title", "add", "check", "list", "clear"]]);
   expect((await call("@dip497/progress", "set-title", '{"title":"Ship the release"}')).data.result).toEqual({ title: "Ship the release" });
+  expect((await running()).plugins.find((p) => p.instance === widget.widget)?.state).toBe("ready");
   expect((await call("@dip497/progress", "add", '{"text":"Run the tests"}')).data.result).toEqual({ index: 0 });
   expect((await call("@dip497/progress", "add", '{"text":"Tag it"}')).data.result).toEqual({ index: 1 });
   expect((await call("@dip497/progress", "check", '{"index":0}')).data.result).toEqual({ text: "Run the tests", done: true });
@@ -82,15 +86,24 @@ test("a widget's commands: an agent lists them, adds and ticks steps, and the ca
 
   // What the plugin refuses, and a command it does not have, come back as the agent's error.
   const bad = await call("@dip497/progress", "check", '{"index":7}');
-  expect(bad.status).not.toBe(0);
+  expect([bad.status, bad.data.code]).toEqual([1, "FAILED"]);
   expect(bad.data.message).toContain("there is no step 7");
-  expect((await call("@dip497/progress", "launch")).data.message).toContain('has no command "launch"');
+  const launch = await call("@dip497/progress", "launch");
+  expect([launch.status, launch.data.code]).toEqual([5, "NOT_FOUND"]);
+  expect(launch.data.message).toContain('has no command "launch"');
+
+  // Closed, it leaves the board and the plugins that run.
+  const closed = await hive("ctl", "plugin", "close", widget.widget, "--json");
+  expect(closed.status, closed.err).toBe(0);
+  expect(JSON.parse(closed.out)).toEqual({ closed: widget.widget, plugin: "@dip497/progress", kind: "widget" });
+  expect((await running()).plugins.find((p) => p.instance === widget.widget)).toBeUndefined();
+  await expect(page.getByText("Ship the release")).toHaveCount(0);
 });
 
 test("a view's commands: an agent pins notes to the Agent board while it is the view shown", async () => {
   expect((await commands()).plugins.find((p) => p.plugin === "agent-board")).toBeUndefined();
-  expect(JSON.parse((await hive("ctl", "plugin", "open", "view:agent-board", "--json")).out)).toEqual({ view: "agent-board" });
-  await expect.poll(async () => (await commands()).plugins.find((p) => p.plugin === "agent-board")?.kind, { timeout: 15_000 }).toBe("view");
+  expect((await running()).views.map((v) => v.id)).toEqual(expect.arrayContaining(["canvas", "agent-board"]));
+  expect(JSON.parse((await hive("ctl", "plugin", "open", "view:agent-board", "--json")).out)).toMatchObject({ view: "agent-board", instance: "agent-board", state: "ready" });
   expect((await call("agent-board", "post", '{"text":"Tests pass on main","from":"claude #1","kind":"done"}')).data).toEqual({ result: { notes: 1 } });
   const board = page.frameLocator('[data-community-view="agent-board"] iframe');
   await expect(board.locator("article[data-note='done']")).toContainText("Tests pass on main");
@@ -104,11 +117,13 @@ test("a tool's commands: an agent asks an open Worktrees tile what is there", as
   // Named by its plugin alone: its first tool opens.
   const opened = await hive("ctl", "plugin", "open", "tool:dip497/worktrees", "--json");
   expect(opened.status, opened.err).toBe(0);
-  expect(JSON.parse(opened.out).tile).toBeTruthy();
-  await expect.poll(async () => {
-    const r = await call("dip497/worktrees", "list");
-    return Array.isArray(r.data.result) ? (r.data.result as Array<{ branch: string; main: boolean }>).map((w) => [w.branch, w.main]) : r.data.message;
-  }, { timeout: 20_000 }).toEqual([["main", true]]);
+  const tool = JSON.parse(opened.out) as { tile: string; instance: string; state: string };
+  expect([tool.instance, tool.state]).toEqual([tool.tile, "ready"]);
+  const r = await call("dip497/worktrees", "list");
+  expect((r.data.result as Array<{ branch: string; main: boolean }>).map((w) => [w.branch, w.main])).toEqual([["main", true]]);
+  // Closed by its instance, as `plugin list` names it: its tile goes.
+  expect((await hive("ctl", "plugin", "close", tool.tile, "--json")).status).toBe(0);
+  expect((await running()).plugins.find((p) => p.instance === tool.tile)).toBeUndefined();
 });
 
 test("what is not here to open is refused, with how to get it", async () => {
@@ -116,7 +131,9 @@ test("what is not here to open is refused, with how to get it", async () => {
   expect(widget.status).not.toBe(0);
   expect(JSON.parse(widget.out).message).toContain("hive widgets install");
   const view = await hive("ctl", "plugin", "open", "view:nothing", "--json");
+  expect([view.status, JSON.parse(view.out).code]).toEqual([5, "NOT_FOUND"]);
   expect(JSON.parse(view.out).message).toContain("hive plugins enable view:nothing");
+  expect(JSON.parse(view.out).message).toContain("these are: canvas");
   expect(JSON.parse((await hive("ctl", "plugin", "open", "tool:nobody/nothing", "--json")).out).message).toContain("has no tool to open");
   expect(JSON.parse((await hive("ctl", "plugin", "open", "nothing", "--json")).out).code).toBe("BAD_REQUEST");
 });

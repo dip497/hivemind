@@ -9,15 +9,17 @@
  * commands (`hive new`, `hive update`, `hive show --json`, `hive list --json`, …).
  *
  * Every subcommand:
- *   • `--json` prints the raw result — the SAME shape the matching MCP tool
- *     returned — as one line on stdout. Without it, a pretty-printed version.
+ *   • `--json` prints the result as the workspace API answers it, as one line
+ *     on stdout. Without it, a pretty-printed version.
  *   • errors print `{ ok:false, code, message }` (with --json) or a one-line
  *     `error [CODE] message` on stderr, and exit non-zero (see EXIT in hcp.ts:
  *     2 usage · 3 app not running · 4 timeout · 5 not found · 6 unauthorized ·
  *     7 refused · 1 anything else).
  *   • blocking waits are made of short requests (≤ 10 s each) so they
  *     never trip a caller's tool timeout — `read --timeout` is honoured
- *     end-to-end and `--poll` returns immediately.
+ *     end-to-end and `--poll` returns immediately. A plugin's command is one
+ *     request: 30 s in the window, the host and this CLI each waiting longer
+ *     than the hop within, so the reason printed is the innermost one.
  */
 import path from "node:path";
 import { defineCommand, type ArgsDef, type ParsedArgs } from "citty";
@@ -34,6 +36,7 @@ import { readTurn, runWorkflow } from "../workflow.js";
 import { ensureAgentCatalog } from "../agent-catalog.js";
 import { detectWho } from "../who.js";
 import type { InboxMessage } from "@hivemind/workspace-api/agents";
+import { PLUGIN_CALL_CLIENT_MS, type PluginInstance, type PluginList } from "@hivemind/workspace-api/plugins";
 
 const ISSUE_STATES = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"] as const;
 
@@ -62,7 +65,7 @@ function fail(e: unknown, json: boolean): never {
   process.exit(exit);
 }
 
-const JSON_ARG = { json: { type: "boolean", description: "print the raw result (same shape as the MCP tool) on one line" } } as const;
+const JSON_ARG = { json: { type: "boolean", description: "print the result as JSON on one line" } } as const;
 
 /** defineCommand with `--json`, structured errors and exit codes wired in. */
 function sub<A extends ArgsDef>(
@@ -543,7 +546,7 @@ const pluginCall = defineCommand({
       if (raw !== undefined && raw !== "") {
         try { payload = JSON.parse(String(raw)); } catch { throw new UsageError("the argument must be JSON, e.g. '{\"text\":\"milk\"}'"); }
       }
-      const r = await onDrive((d) => d.call("plugin.call", [String(args.plugin), String(args.command), payload, ...(args.tile ? [String(args.tile)] : [])])) as { result: unknown };
+      const r = await onDrive((d) => d.call("plugin.call", [String(args.plugin), String(args.command), payload, ...(args.tile ? [String(args.tile)] : [])], PLUGIN_CALL_CLIENT_MS)) as { result: unknown };
       console.log(json ? JSON.stringify(r) : typeof r.result === "string" ? r.result : JSON.stringify(r.result, null, 2));
     } catch (e) { fail(e, json); }
   },
@@ -559,15 +562,43 @@ const pluginOpen = defineCommand({
   async run({ args }) {
     const json = !!args.json;
     try {
-      const r = await onDrive((d) => d.call("plugin.open", [String(args.plugin), ...(args.frame ? [String(args.frame)] : [])])) as { tile?: string; widget?: string; view?: string };
-      console.log(json ? JSON.stringify(r) : r.tile ? `opened tile ${r.tile}` : r.widget ? `added widget ${r.widget}` : `switched to view ${r.view}`);
+      const r = await onDrive((d) => d.call("plugin.open", [String(args.plugin), ...(args.frame ? [String(args.frame)] : [])])) as { tile?: string; widget?: string; view?: string } & Partial<PluginInstance>;
+      if (json) { console.log(JSON.stringify(r)); return; }
+      const what = r.tile ? `opened tile ${r.tile}` : r.widget ? `added widget ${r.widget}` : `switched to view ${r.view}`;
+      // A plugin with code says whether it can be called yet.
+      console.log(r.state === "ready" ? `${what}: ready${r.commands?.length ? ` (${r.commands.map((c) => c.name).join(", ")})` : ""}`
+        : r.state === "failed" ? `${what}, and it failed: ${r.reason ?? "it stopped"}`
+        : r.state === "starting" ? `${what}: still starting (\`hive ctl plugin list\` shows when it is ready; a call waits for it)` : what);
     } catch (e) { fail(e, json); }
   },
 });
 
+const pluginList = defineCommand({
+  meta: { name: "list", description: "Every plugin running (tool tiles, widgets with code, the view), each starting, ready or failed; and the views there are" },
+  args: { ...JSON_ARG },
+  async run({ args }) {
+    const json = !!args.json;
+    try {
+      const r = await onDrive((d) => d.call("plugin.list", [])) as PluginList;
+      if (json) { console.log(JSON.stringify(r)); return; }
+      if (!r.plugins.length) console.log("no plugin is running");
+      for (const p of r.plugins) {
+        const offers = p.commands.length ? `  commands: ${p.commands.map((c) => c.name).join(", ")}` : "";
+        console.log(`${p.instance}  ${p.kind} ${p.plugin} (${p.label})  ${p.state}${p.reason ? `: ${p.reason}` : ""}${offers}`);
+      }
+      console.log(`views: ${r.views.map((v) => (v.active ? `${v.id} (shown)` : v.id)).join(", ")}`);
+    } catch (e) { fail(e, json); }
+  },
+});
+
+const pluginClose = sub("close", "Stop a running plugin: close a tool's tile, take a widget off the board, leave a view for the canvas", {
+  instance: { type: "positional", required: true, description: "which one, as `hive ctl plugin list` names it" },
+  plugin: { type: "string", description: "the plugin it must be (refused when another runs as that instance)" },
+}, (args) => onDrive((d) => d.call("plugin.close", [String(args.instance), ...(args.plugin ? [String(args.plugin)] : [])])));
+
 const plugin = defineCommand({
-  meta: { name: "plugin", description: "Run what plugins let an agent do: open one, list the running ones' commands, call one" },
-  subCommands: { open: pluginOpen, commands: pluginCommands, call: pluginCall },
+  meta: { name: "plugin", description: "Drive the plugins in the app: list what runs, open one, list and call their commands, close one" },
+  subCommands: { list: pluginList, open: pluginOpen, commands: pluginCommands, call: pluginCall, close: pluginClose },
 });
 
 export const ctlCmd = defineCommand({

@@ -15,7 +15,7 @@ import type { ControlWork } from "./control/methods.js";
 
 type Method =
   | "agent.send" | "agent.rename" | "agent.keys" | "agent.read" | "agent.output" | "agent.sessions" | "tool.open" | "link.connect" | "link.disconnect"
-  | "view.emit" | "plugin.commands" | "plugin.open" | "plugin.call" | "tile.focus"
+  | "view.emit" | "plugin.list" | "plugin.commands" | "plugin.open" | "plugin.call" | "plugin.close" | "tile.focus"
   | "views.rescan" | "agents.rescan" | "widgets.rescan" | "tools.rescan" | "settings.reload" | "host.status" | "host.join";
 
 export interface ControlApiOptions {
@@ -71,9 +71,11 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       "link.connect": async (_from, src, dst) => { (await o.control()).connect(text(src, "src"), text(dst, "dst")); },
       "link.disconnect": async (_from, src, dst) => { (await o.control()).disconnect(text(src, "src"), dst != null ? text(dst, "dst") : undefined); },
       "view.emit": async (from, name, data, view) => (await o.control()).viewEmit(callerOf(from), name, data, view),
+      "plugin.list": async () => (await o.control()).pluginList(),
       "plugin.commands": async () => (await o.control()).pluginCommands(),
       "plugin.open": async (from, plugin, frame) => (await o.control()).pluginOpen(callerOf(from), plugin, frame),
       "plugin.call": async (_from, plugin, command, args, tile) => (await o.control()).pluginCall(plugin, command, args, tile),
+      "plugin.close": async (_from, instance, plugin) => (await o.control()).pluginClose(text(instance, "instance"), plugin != null ? text(plugin, "plugin") : undefined),
       "tile.focus": done((w, tile) => w.focus(text(tile, "tile"))),
       "views.rescan": done((w) => w.rescan("views")),
       "agents.rescan": done((w) => w.rescan("agents")),
@@ -92,6 +94,7 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       "link.disconnect": (src, dst) => ({ target: pipeOf(src, dst) }),
       "plugin.open": (plugin) => ({ target: named(plugin) }),
       "plugin.call": (plugin, command) => ({ target: named(plugin) && `${plugin as string}:${named(command) ?? ""}` }),
+      "plugin.close": (instance) => ({ target: named(instance) }),
       "views.rescan": () => ({}),
       "agents.rescan": () => ({}),
       "widgets.rescan": () => ({}),

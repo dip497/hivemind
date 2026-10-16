@@ -14,6 +14,7 @@ import type { DeviceCertificate } from "@hivemind/workspace-host/identity";
 import type { ClientGrant, NewGrant } from "./grants.js";
 import type { FrameClose, FrameClosed, FrameOpened, FrameSpec } from "./frames.js";
 import type { ViewFile, ViewListing, ViewScreen } from "./views.js";
+import type { PluginList } from "./plugins.js";
 import type { HostMessage, PluginMessage, SurfaceRect } from "@hivemind/view-sdk/protocol";
 import type { Answering, LinkRole, Role } from "@hivemind/workspace-host/access";
 import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
@@ -160,12 +161,19 @@ export interface WorkspaceMethods {
    *  peer's; what only this machine's windows and files do.
    *  A view event for the view shown (`name` dotted, `data` JSON), from `view` if given. */
   "view.emit": (name: string, data?: unknown, view?: string) => unknown;
-  /** The commands the plugins running in a window offer. */
+  /** (0.27) Every plugin running in a window, each with its state (starting, ready, failed), and
+   *  the views it can show (`plugins.ts`). */
+  "plugin.list": () => PluginList;
+  /** The commands the ready plugins running in a window offer. */
   "plugin.commands": () => unknown;
-  /** Get a plugin running: `tool:owner/name`, `widget:@owner/name` or `view:id`. */
+  /** Get a plugin running: `tool:owner/name`, `widget:@owner/name` or `view:id`; answered once it
+   *  can be called, or with the state it reached (0.27). */
   "plugin.open": (plugin: string, frame?: string) => unknown;
-  /** Run one of a plugin's commands, and answer what it answered. */
+  /** Run one of a plugin's commands, and answer what it answered; one still starting is waited for (0.27). */
   "plugin.call": (plugin: string, command: string, args?: unknown, tile?: string) => unknown;
+  /** (0.27) Stop the running plugin `instance` (as `plugin.list` names it): a tool's tile closed, a
+   *  widget taken off the board, a view left for the canvas. */
+  "plugin.close": (instance: string, plugin?: string) => { closed: string; plugin: string; kind: string };
   /** Bring a tile into view and give it the keyboard. */
   "tile.focus": (tile: string) => null;
   /** The installed views, agents, widgets or tools changed on disk: read them again. */

@@ -338,11 +338,16 @@ Ids from other registered repos resolve automatically.
 \`\`\`bash
 hive plugins list --json                                   # every plugin, on or off, by id
 hive ctl open-tool hivemind/web/browser --url https://example.com --json   # a tool's tile beside you (the hive-browser skill drives it)
-hive ctl plugin open widget:clock --json                   # get one running: tool:…, widget:… or view:…, as plugins list keys it
-hive ctl plugin commands --json                            # what the running ones let you run
-hive ctl plugin call <pluginId> <command> '{"key":"value"}' --json
+hive ctl plugin open widget:@dip497/progress --json        # get one running: tool:…, widget:… or view:…, as plugins list keys it
+                                                           # → answers once it can be called: {"widget","instance","state":"ready","commands":[…]}
+hive ctl plugin list --json                                # what runs: each {plugin,instance,state,reason?,commands}, and the views there are
+hive ctl plugin call <pluginId> <command> '{"key":"value"}' --json   # --tile <instance> when it runs twice
+hive ctl plugin close <instance> --json                    # close its tile, take the widget off the board, leave the view
 hive ctl view emit ci.build '{"status":"green"}' --json    # a named event to the active view
 \`\`\`
+A plugin is \`starting\` until its code connects, then \`ready\`; \`failed\` says why in \`reason\`. A call to one still
+starting waits for it (30 s in all). Exit 5: not running, or no such command; 4: still starting or no answer in time;
+2: it runs twice and you did not say which (\`--tile\`); 1: it failed or refused, in its own words.
 
 ## Beyond the canvas
 Each has \`--help\` with its exact options; read it before you run one.
