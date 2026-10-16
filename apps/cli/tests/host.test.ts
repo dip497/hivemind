@@ -347,13 +347,15 @@ describe.skipIf(!built)("hive host", () => {
         });
       });
       const there = guest.dial(keys.deviceId, { addrs: laptop.ready.addrs, relay: null });
-      let told: Moved | null = null;
+      // Told the move as the connection closes: the close may be seen first, so it is waited for.
+      let tellLaptop!: (moved: Moved) => void;
+      const told = new Promise<Moved>((r) => { tellLaptop = r; });
       const onLaptop = await new Promise<{ closed: Promise<string> }>((resolve) => {
         void there.then((link) => {
           replicate(new WorkspaceStore({ dir: path.join(dir, "guest4", "shared") }), workspaceUrl(workspace), streamOf(link, "sync"), {
             workspace, changes: () => () => {},
             onWelcome: (access) => { expect(access).toBe("edit"); resolve({ closed: link.closed }); },
-            onMoved: (moved) => { told = moved; },
+            onMoved: (moved) => { tellLaptop(moved); },
           });
         });
       });
@@ -378,7 +380,7 @@ describe.skipIf(!built)("hive host", () => {
       expect(notice).toMatchObject({ host: offered.device, seq: 2 });
       // The guest is told where it is now, and the connection to the laptop closes.
       expect(await onLaptop.closed).toContain("moved");
-      expect(told).toEqual(notice);
+      expect(await told).toEqual(notice);
       const key = idOf(workspaceSeed(keys.person, workspace));
       expect(await guest.verifyHost(key, notice.record)).toEqual({ host: offered.device, seq: 2 });
       expect(lists.hosting(workspace)).toEqual({ host: offered.device, seq: 2, record: notice.record });
