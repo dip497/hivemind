@@ -53,10 +53,10 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             crates/hive-net/target
-          key: hive-net-${{ runner.os }}-${{ hashFiles('crates/hive-net/Cargo.lock') }}
+          key: hive-net-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'crates/hive-net/Cargo.lock') }}
 
       - name: Build hive-net (the daemon client's tests run it)
-        run: rustup update stable --no-self-update && rustup default stable && cargo build --locked --manifest-path crates/hive-net/Cargo.toml
+        run: rustup toolchain install && cargo build --locked --manifest-path crates/hive-net/Cargo.toml
 
       - name: Unit tests (desktop)
         # After hive-net's build: the daemon client's test under Node runs it.
@@ -93,8 +93,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Rust (stable)
-        run: rustup update stable --no-self-update && rustup default stable
+      - name: Rust (rust-toolchain.toml)
+        run: rustup toolchain install
 
       - uses: actions/cache@v6
         with:
@@ -102,7 +102,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             crates/hive-net/target
-          key: hive-net-${{ runner.os }}-${{ hashFiles('crates/hive-net/Cargo.lock') }}
+          key: hive-net-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'crates/hive-net/Cargo.lock') }}
 
       - name: Test
         run: cargo test --locked
@@ -136,8 +136,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Rust (stable)
-        run: rustup update stable --no-self-update && rustup default stable
+      - name: Rust (rust-toolchain.toml)
+        run: rustup toolchain install
 
       - uses: actions/cache@v6
         with:
@@ -146,7 +146,7 @@ jobs:
             ~/.cargo/git
             crates/hive-phone/target
             crates/hive-phone-ffi/target
-          key: hive-phone-${{ runner.os }}-${{ hashFiles('crates/hive-phone/Cargo.lock', 'crates/hive-phone-ffi/Cargo.lock') }}
+          key: hive-phone-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'crates/hive-phone/Cargo.lock', 'crates/hive-phone-ffi/Cargo.lock') }}
 
       - name: Test
         run: cargo test --locked
@@ -231,8 +231,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Rust (stable)
-        run: rustup update stable --no-self-update && rustup default stable
+      - name: Rust (rust-toolchain.toml)
+        run: rustup toolchain install
 
       - uses: actions/cache@v6
         with:
@@ -240,7 +240,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             crates/hive-net/target
-          key: hive-net-${{ runner.os }}-${{ hashFiles('crates/hive-net/Cargo.lock') }}
+          key: hive-net-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'crates/hive-net/Cargo.lock') }}
 
       - name: Build hive-net (the devices the checks run)
         run: cargo build --locked --manifest-path crates/hive-net/Cargo.toml

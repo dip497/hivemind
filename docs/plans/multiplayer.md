@@ -29,7 +29,7 @@ steps 1–3 ☑; step 4 (both apps' Views tab and web view host) merged, its rea
 still being made green (see the newest log entry); step 5's core ☑ (the `surfaces` feature, view
 protocol 1.6, workspace API 0.15, `view_surfaces`). Next, in order:
 
-1. **P8 step 4 green in CI** (`phone-android.yml` `computer`, `phone-ios.yml` real-computer step):
+1. **P8 step 4 green in CI** (`phone-android.yml` `computer`; `phone-ios.yml`'s real-computer step, now run by hand only):
    the newest log entry says what the last run showed.
 2. **P8 step 5's apps** (design §6.1 step 5 (c)–(d)): each app opens a view with `surfaces`, takes
    a page's `view_surfaces` and places the Agent screen's terminal (Android `ScreenFeed` +

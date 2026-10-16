@@ -793,14 +793,14 @@ jobs:
         with:
           ref: ${{ inputs.source_ref || github.ref }}
 
-      - name: Rust (stable)
+      - name: Rust (rust-toolchain.toml)
         run: |
-          if command -v rustup >/dev/null 2>&1; then
-            rustup update stable --no-self-update && rustup default stable
-          else
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
             echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+            export PATH="$HOME/.cargo/bin:$PATH"
           fi
+          rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
         with:

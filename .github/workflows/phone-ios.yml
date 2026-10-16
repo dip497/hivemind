@@ -5,29 +5,9 @@ name: phone-ios
 # unit and UI tests on an iPhone simulator, the committed Swift bindings held to the core, the app
 # for an iPhone as it ships (Release, the core for devices), and the app on the simulator paired with
 # the desktop app on the runner, driving an agent there. No Apple account: nothing is signed.
+# By hand only (Actions → phone-ios → Run workflow): with no Apple developer account the app is
+# not shipped, so a push does not wait on a macOS runner for it.
 on:
-  push:
-    paths:
-      - "apps/ios/**"
-      - "crates/hive-phone/**"
-      - "crates/hive-phone-ffi/**"
-      - "crates/hive-net/**"
-      - "scripts/phone/**"
-      - "apps/desktop/tests/e2e/phone-app.spec.ts"
-      - "apps/desktop/tests/e2e/helpers/phone.ts"
-      - "apps/desktop/tests/e2e/fixtures/views/phone-probe/**"
-      - ".github/workflows/phone-ios.yml"
-  pull_request:
-    paths:
-      - "apps/ios/**"
-      - "crates/hive-phone/**"
-      - "crates/hive-phone-ffi/**"
-      - "crates/hive-net/**"
-      - "scripts/phone/**"
-      - "apps/desktop/tests/e2e/phone-app.spec.ts"
-      - "apps/desktop/tests/e2e/helpers/phone.ts"
-      - "apps/desktop/tests/e2e/fixtures/views/phone-probe/**"
-      - ".github/workflows/phone-ios.yml"
   workflow_dispatch:
 
 permissions:
@@ -55,7 +35,7 @@ jobs:
 
       - name: Rust (stable), for iOS devices and Apple Silicon simulators
         run: |
-          rustup update stable --no-self-update && rustup default stable
+          rustup toolchain install
           rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 
       - uses: Swatinem/rust-cache@v2

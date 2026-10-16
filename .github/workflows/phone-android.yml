@@ -29,6 +29,13 @@ on:
       - .github/workflows/phone-android.yml
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: phone-android-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -41,20 +48,16 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Rust (stable) for the host and the app's two ABIs
+      - name: Rust (rust-toolchain.toml) for the host and the app's two ABIs
         run: |
-          rustup update stable --no-self-update && rustup default stable
+          rustup toolchain install
           rustup target add aarch64-linux-android x86_64-linux-android
 
-      - uses: actions/cache@v6
+      # Keyed by the Rust version and the lockfile, and pruned of what this build no longer uses, so
+      # the cache stays the size of one build.
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin/cargo-ndk
-            crates/hive-phone-ffi/target
-          key: phone-android-cargo-${{ runner.os }}-${{ hashFiles('crates/hive-phone-ffi/Cargo.lock') }}
-          restore-keys: phone-android-cargo-${{ runner.os }}-
+          workspaces: crates/hive-phone-ffi -> target
 
       - name: cargo-ndk
         run: command -v cargo-ndk || cargo install cargo-ndk --locked --version 4.1.2
@@ -206,8 +209,8 @@ jobs:
         with:
           bun-version: "1.4"
 
-      - name: Rust (stable)
-        run: rustup update stable --no-self-update && rustup default stable
+      - name: Rust (rust-toolchain.toml)
+        run: rustup toolchain install
 
       - uses: actions/cache@v6
         with:
@@ -216,7 +219,7 @@ jobs:
             ~/.cargo/git
             crates/hive-net/target
           # ci.yml's: the same debug build.
-          key: hive-net-${{ runner.os }}-${{ hashFiles('crates/hive-net/Cargo.lock') }}
+          key: hive-net-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'crates/hive-net/Cargo.lock') }}
           restore-keys: hive-net-${{ runner.os }}-
 
       - name: hive-net, the desktop app's network
