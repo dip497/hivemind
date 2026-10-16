@@ -164,7 +164,9 @@ test("Phone browser, on a network with no server for the page, says so and shows
   await expect(offered.locator("[data-connect-qr]")).toBeVisible({ timeout: 20_000 });
   await offered.locator('[data-connect-way="browser"]').click();
   await expect(offered.locator('[data-connect-way="browser"]')).toHaveAttribute("aria-selected", "true");
-  await expect(offered.locator("[data-connect-no-page]")).toContainText("this network has none that serves it");
+  await expect(offered.locator("[data-connect-no-page]")).toContainText("does not serve it");
+  // What serves it, ready to copy.
+  await expect(offered.locator("[data-connect-no-page]")).toContainText("hive-net serve --all --url https://<its address> --data ~/hive-network --phone ~/hive-network/phone");
   await expect(offered.locator("[data-connect-qr]")).toHaveCount(0);
   await expect(offered.locator("[data-connect-copy]")).toHaveCount(0);
   await offered.locator('[data-connect-way="app"]').click();

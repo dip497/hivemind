@@ -12,6 +12,13 @@ import { Input } from "../components/ui/input";
 type Chosen = NetworkProfile & { admission?: string };
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e)).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
 
+/** What runs a server of your own that every device reaches, phones' browsers too: the phone page
+ *  this release made, and the server serving it at an HTTPS address. */
+export const SERVE_COMMANDS = [
+  "mkdir -p ~/hive-network && curl -L https://github.com/dip497/hivemind/releases/latest/download/hive-phone-page.tar.gz | tar -xz -C ~/hive-network",
+  "hive-net serve --all --url https://<its address> --data ~/hive-network --phone ~/hive-network/phone",
+] as const;
+
 export function ReachChooser({ onChosen, onCancel, current }: { onChosen: (net: Chosen) => void; onCancel?: () => void; current?: NetworkProfile | null }) {
   const [link, setLink] = useState("");
   const [serving, setServing] = useState(false);
@@ -41,7 +48,7 @@ export function ReachChooser({ onChosen, onCancel, current }: { onChosen: (net: 
       {serving && (
         <p className="rounded bg-[var(--color-bg3)] p-2 text-[var(--color-fg2)]" data-reach-serve-how>
           On a machine the others can reach (a public address, a forwarded port or a VPN such as Tailscale), run{" "}
-          <code className="break-all font-mono">hive-net serve --all --url https://&lt;its address&gt; --data ~/hive-network</code>, then{" "}
+          {SERVE_COMMANDS.map((c) => <code key={c} className="block break-all font-mono">{c}</code>)} then{" "}
           <code className="break-all font-mono">hive network enrol-link --data ~/hive-network --uses 5</code> and paste that link above on each device.
         </p>
       )}
