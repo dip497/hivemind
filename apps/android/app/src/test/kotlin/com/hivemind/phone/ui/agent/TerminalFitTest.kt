@@ -6,6 +6,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -154,12 +155,15 @@ class TerminalFitTest {
         compose.mainClock.autoAdvance = false
         for (height in 620 downTo 380 step 20) {
             screen = DpSize(400.dp, height.dp)
+            // The clock is driven by hand: a write is seen once it is applied, as a frame would.
+            Snapshot.sendApplyNotifications()
             compose.mainClock.advanceTimeBy(16)
         }
         assertEquals("fitted once when opened, and not while it slid: ${session.fits}", 1, session.fits.size)
 
-        compose.mainClock.advanceTimeBy(300)
         compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(300)
         compose.waitForIdle()
         // Fitted again, and only to where it settled: none of the sizes it slid through.
         val after = session.fits.drop(1)
