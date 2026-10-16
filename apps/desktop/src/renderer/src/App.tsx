@@ -222,10 +222,14 @@ export function App() {
     const onRecent = (e: Event) => { setSettingsOpen(false); setRecentOpen((e as CustomEvent<{ join?: boolean }>).detail?.join ? "join" : "recent"); };
     // The Layers panel's Projects: this window shows that workspace instead.
     const onWorkspace = (e: Event) => { const repo = (e as CustomEvent<{ repo?: string }>).detail?.repo; if (repo) openRecent(repo); };
+    // An agent started from Settings (set it up with an agent): the agent is shown.
+    const onAgent = () => setSettingsOpen(false);
+    window.addEventListener("hivemind:spawn-agent", onAgent);
     window.addEventListener("hivemind:open-folder", onFolder);
     window.addEventListener("hivemind:open-recent", onRecent);
     window.addEventListener("hivemind:open-workspace", onWorkspace);
     return () => {
+      window.removeEventListener("hivemind:spawn-agent", onAgent);
       window.removeEventListener("hivemind:open-folder", onFolder);
       window.removeEventListener("hivemind:open-recent", onRecent);
       window.removeEventListener("hivemind:open-workspace", onWorkspace);

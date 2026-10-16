@@ -8,16 +8,24 @@ import { useState } from "react";
 import type { NetworkProfile } from "@hivemind/workspace-host/network-profile";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { StartAgentWith } from "../agent-choice";
 
 type Chosen = NetworkProfile & { admission?: string };
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e)).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
 
-/** What runs a server of your own that every device reaches, phones' browsers too: the phone page
- *  this release made, and the server serving it at an HTTPS address. */
-export const SERVE_COMMANDS = [
-  "mkdir -p ~/hive-network && curl -L https://github.com/dip497/hivemind/releases/latest/download/hive-phone-page.tar.gz | tar -xz -C ~/hive-network",
-  "hive-net serve --all --url https://<its address> --data ~/hive-network --phone ~/hive-network/phone",
-] as const;
+/** What an agent here is asked: the outcome, what it needs to know, and what only the person can
+ *  do, which it asks for. How devices reach this computer is theirs to choose, so it asks first. */
+export const SET_UP_SERVER = `Set up my own Hivemind network server on this computer, so my other devices reach it from anywhere and a phone can open hivemind in its browser.
+
+First ask me how my devices should reach this computer, offering what fits this machine: a VPN such as Tailscale (if it is installed), a domain of mine pointing at a public address, a tunnel, or a port forwarded on my router. Then set it up:
+
+- The server is \`hive-net serve --all --url <the HTTPS address devices use> --data ~/hive-network --phone ~/hive-network/phone\`, kept running in the background; \`--bind\` where the HTTPS in front of it reaches it, or \`--domain\` (or \`--cert\` and \`--key\`) for it to serve HTTPS itself. hive-net is beside hive (\`~/.hivemind-app/hive-net\`, or on PATH).
+- The phone page: \`mkdir -p ~/hive-network && curl -L https://github.com/dip497/hivemind/releases/latest/download/hive-phone-page.tar.gz | tar -xz -C ~/hive-network\`.
+- A phone's browser runs the page only over HTTPS with a trusted certificate: check that https://<address>/phone/manifest.webmanifest answers 200. Use a port nothing else on this machine listens on.
+- Put this computer on the network: \`hive network enrol-link --data ~/hive-network --uses 1\`, then \`hive network use <that link>\`; \`hive network show\` says enrolled.
+- What only I can do (a sudo, a DNS record, a setting in an admin console or on my router), ask me and wait. Never type a password.
+
+Then tell me the phone link, whether the server comes back after a restart, and how to stop it.`;
 
 export function ReachChooser({ onChosen, onCancel, current }: { onChosen: (net: Chosen) => void; onCancel?: () => void; current?: NetworkProfile | null }) {
   const [link, setLink] = useState("");
@@ -46,11 +54,10 @@ export function ReachChooser({ onChosen, onCancel, current }: { onChosen: (net: 
         Serve from one of my devices
       </Button>
       {serving && (
-        <p className="rounded bg-[var(--color-bg3)] p-2 text-[var(--color-fg2)]" data-reach-serve-how>
-          On a machine the others can reach (a public address, a forwarded port or a VPN such as Tailscale), run{" "}
-          {SERVE_COMMANDS.map((c) => <code key={c} className="block break-all font-mono">{c}</code>)} then{" "}
-          <code className="break-all font-mono">hive network enrol-link --data ~/hive-network --uses 5</code> and paste that link above on each device.
-        </p>
+        <div className="flex flex-col items-start gap-2 rounded bg-[var(--color-bg3)] p-2 text-[var(--color-fg2)]" data-reach-serve-how>
+          <p>An agent here sets up a server on this computer: it asks you how your devices should reach it, then asks you for anything only you can do.</p>
+          <StartAgentWith label="Set it up with an agent" work={SET_UP_SERVER} data-serve-with-agent />
+        </div>
       )}
       {onCancel && (
         <Button variant="ghost" className="justify-start" onClick={onCancel} data-reach-not-now>

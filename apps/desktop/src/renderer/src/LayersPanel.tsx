@@ -19,9 +19,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode
 import { PanelLeftOpen, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, AddWidget, Blocks, History, Mail, MailOpen, AlarmClock, AlarmClockOff, LayoutList, LogIn, Settings, Settings2, Monitor } from "./components/icons";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon, agentById, useAgents } from "./agents";
-import { notReady, useAgentPresence } from "./agent-plugins";
-import { preferredAgent } from "@hivemind/agents";
 import { FrameMenu, type FrameActions } from "./FrameMenu";
+import { getAnAgent, useReadyAgents } from "./agent-choice";
 import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem,
   DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
@@ -944,12 +943,8 @@ function ActionRow({ icon, label, hint, data, primary, onClick }: { icon: ReactN
  *  installed it opens Settings ▸ Agents, where one is got. */
 function NewAgentRow() {
   const [open, setOpen] = useState(false);
-  const presence = useAgentPresence();
-  const chosen = useSettings().agents.defaultAgent;
-  const ready = useAgents().filter((a) => a.enabled && !notReady(presence, a.id));
-  const first = preferredAgent(chosen, (d) => !notReady(presence, d.id))?.id;
-  const ordered = [...ready].sort((a, b) => Number(b.id === first) - Number(a.id === first));
-  const getOne = () => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "agents" } }));
+  const { ordered, first } = useReadyAgents();
+  const getOne = getAnAgent;
   // Where the 2 key puts one: the selected frame, else the one asked for.
   const start = (agent: string) => window.dispatchEvent(new CustomEvent("hivemind:spawn-agent", { detail: { agent } }));
   return (

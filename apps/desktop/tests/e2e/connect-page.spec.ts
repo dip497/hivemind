@@ -12,6 +12,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { HIVE_NET, hiveNetBuilt, openConnect } from "./helpers/multiplayer";
+import { seedAgents } from "./helpers/agents";
 
 const PKG = path.resolve("../../crates/hive-web/www/pkg");
 const pageBuilt = (): boolean => fs.existsSync(path.join(PKG, "hive_web_bg.wasm"));
@@ -24,7 +25,12 @@ test.beforeAll(async () => {
   test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
   const repo = path.join(root, "api");
   execFileSync("git", ["init", "-q", repo]);
-  const env = { ...process.env, XDG_CONFIG_HOME: path.join(root, "config"), HIVEMIND_HIVE_NET: HIVE_NET } as Record<string, string>;
+  // A Claude that writes down what it was started with, and stays.
+  const bin = path.join(root, "bin");
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, "claude"), `#!/bin/sh\n[ "$1" = --version ] && echo '2.0.0 (Claude Code)' && exit 0\necho "$@" > ${JSON.stringify(path.join(root, "claude-args"))}\nexec sleep 60\n`, { mode: 0o755 });
+  seedAgents(path.join(root, "config"));
+  const env = { ...process.env, XDG_CONFIG_HOME: path.join(root, "config"), HIVEMIND_HIVE_NET: HIVE_NET, HIVEMIND_SHELL_ENV: "0", PATH: `${bin}${path.delimiter}${process.env.PATH}` } as Record<string, string>;
   delete env.ELECTRON_RUN_AS_NODE;
   app = await electron.launch({ args: [path.resolve("out/main/index.js"), "--no-sandbox"], cwd: repo, env });
   page = await app.firstWindow();
@@ -165,8 +171,6 @@ test("Phone browser, on a network with no server for the page, says so and shows
   await offered.locator('[data-connect-way="browser"]').click();
   await expect(offered.locator('[data-connect-way="browser"]')).toHaveAttribute("aria-selected", "true");
   await expect(offered.locator("[data-connect-no-page]")).toContainText("does not serve it");
-  // What serves it, ready to copy.
-  await expect(offered.locator("[data-connect-no-page]")).toContainText("hive-net serve --all --url https://<its address> --data ~/hive-network --phone ~/hive-network/phone");
   await expect(offered.locator("[data-connect-qr]")).toHaveCount(0);
   await expect(offered.locator("[data-connect-copy]")).toHaveCount(0);
   await offered.locator('[data-connect-way="app"]').click();
@@ -179,4 +183,17 @@ test("Join closes Settings and opens the join form, where a code from elsewhere 
   await expect(page.locator(".settings-dialog")).toHaveCount(0);
   await expect(page.locator("[data-join-link]")).toBeVisible();
   await page.keyboard.press("Escape");
+});
+
+test("Set it up with an agent offers the agents here; the one chosen starts with the setup, which asks first how devices reach this computer", async () => {
+  await openConnect(page);
+  const offered = page.locator("[data-connect-offered]");
+  if (!(await offered.count())) await page.locator("[data-connect-offer]").click();
+  await offered.locator('[data-connect-way="browser"]').click();
+  await offered.locator("[data-serve-with-agent]").click();
+  await page.locator('[data-start-agent-with] [data-start-agent-choice="claude"]').click();
+  await expect(page.locator(".settings-dialog")).toHaveCount(0);
+  const args = path.join(root, "claude-args");
+  await expect.poll(() => fs.existsSync(args) && fs.readFileSync(args, "utf8"), { timeout: 30_000 }).toContain("First ask me how my devices should reach this computer");
+  expect(fs.readFileSync(args, "utf8")).toContain("--phone ~/hive-network/phone");
 });

@@ -14,8 +14,8 @@ import { PeopleList } from "./multiplayer/people-list";
 import { Hosting } from "./multiplayer/hosting";
 import { useShown } from "./multiplayer/shown";
 import { useCanShare } from "./multiplayer/workspace-actions";
-import { ReachChooser, SERVE_COMMANDS } from "./multiplayer/reach-chooser";
-import { CopyCommand } from "./machines/status";
+import { ReachChooser, SET_UP_SERVER } from "./multiplayer/reach-chooser";
+import { StartAgentWith } from "./agent-choice";
 import { ConnectRequest, answerRequest, useRequestsShownHere } from "./multiplayer/requests";
 
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e)).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
@@ -123,10 +123,12 @@ function Offer({ repo }: { repo: string | null }) {
       ) : (
         <div className="flex flex-col gap-2" data-connect-no-page>
           <p className="text-label text-[var(--color-fg2)]">
-            A phone's browser opens the page from your network's server over HTTPS, and this network's server does not serve it. On the machine that runs it, serve the page at the server's HTTPS address, then use the network link it prints here:
+            A phone's browser opens the page from your network's server over HTTPS, and this network's server does not serve it. An agent here can set that up: it asks you how your devices should reach this computer, then asks you for anything only you can do.
           </p>
-          {SERVE_COMMANDS.map((c) => <CopyCommand key={c} cmd={c} />)}
-          <div>{cancel}</div>
+          <div className="flex flex-wrap gap-2">
+            <StartAgentWith label="Set it up with an agent" work={SET_UP_SERVER} data-serve-with-agent />
+            {cancel}
+          </div>
         </div>
       )}
     </section>

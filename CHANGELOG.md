@@ -54,7 +54,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
-- Connect's Phone browser tab, on a network whose server does not serve the phone page, gives the two commands that do, ready to copy; Reach devices elsewhere gives them too. They had no `--phone`, so a server set up from them never gave a phone link.
+- Connect's Phone browser tab, on a network whose server does not serve the phone page, and Reach devices elsewhere → Serve from one of my devices offer **Set it up with an agent**: pick an agent installed here, and it asks you how your devices should reach this computer (Tailscale, your own domain, a tunnel, a forwarded port), sets up the server with the phone page and puts this computer on it, asking you for anything only you can do. The command shown there before had no `--phone`, so a server set up from it never gave a phone link.
 - The Machines pane's status dot sits clear of the machine's icon instead of covering its corner.
 - Phones draw an agent's mark in the colours its manifest gives, as your computer does, instead of all in the text colour.
 - Settings → Connect has two tabs, Hivemind app and Phone browser, each with its own QR code and Copy the link. Phone browser says so when your network has no server serving the page.
