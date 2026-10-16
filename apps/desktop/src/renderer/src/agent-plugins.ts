@@ -71,7 +71,8 @@ export function openPluginSettings(): void {
  *  instead of doing nothing silently. */
 export function noAgentInstalled(): void {
   toast.error("No agent installed — install one from Settings ▸ Plugins.");
-  openPluginSettings();
+  // After the spawn-agent event is done: its own listeners close Settings (App.tsx onAgent).
+  setTimeout(openPluginSettings, 0);
 }
 
 /** Re-check PATH (cheap, runs nothing): after a scan, or when the user asks. */

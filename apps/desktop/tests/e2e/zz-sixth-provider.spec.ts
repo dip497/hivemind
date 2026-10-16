@@ -147,7 +147,7 @@ test("lifecycle proof: spawn → working/idle → send → read → report → w
   const rep = hive(["ctl", "read", worker, "--timeout", "40000", "--json"]);
   expect(JSON.parse(rep.json.text)).toMatchObject({ delivered: true });
   // It waits in the orchestrator's inbox, given once.
-  const inbox = hive(["ctl", "inbox", "--wait", "30s", "--json"], asAgent(orchestrator));
+  const inbox = hive(["ctl", "inbox", "--tile", orchestrator, "--wait", "30s", "--json"], asAgent(orchestrator));
   expect(inbox.json.messages.map((m: { kind: string; text: string }) => [m.kind, m.text])).toContainEqual(["report", "faux done"]);
   // workflow gathers from a fleet of the new runtime.
   const wf = hive(["ctl", "workflow", "--shape", "fanout", "--agent", "faux", "--items", "x || y", "--prompt", "echo did {item}", "--timeout", "60000", "--close", "--json"], asAgent(orchestrator));

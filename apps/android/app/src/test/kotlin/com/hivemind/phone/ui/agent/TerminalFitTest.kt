@@ -156,11 +156,14 @@ class TerminalFitTest {
             screen = DpSize(400.dp, height.dp)
             compose.mainClock.advanceTimeBy(16)
         }
-        assertEquals("fitted once when opened, and not while it slid", 1, session.fits.size)
+        assertEquals("fitted once when opened, and not while it slid: ${session.fits}", 1, session.fits.size)
 
         compose.mainClock.advanceTimeBy(300)
         compose.mainClock.autoAdvance = true
         compose.waitForIdle()
-        assertEquals("fitted once more, to where it settled", 2, session.fits.size)
+        // Fitted again, and only to where it settled: none of the sizes it slid through.
+        val after = session.fits.drop(1)
+        assertTrue("fitted to where it settled: ${session.fits}", after.isNotEmpty())
+        assertEquals("to one size only: ${session.fits}", 1, after.distinct().size)
     }
 }

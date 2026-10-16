@@ -81,10 +81,12 @@ test("no button on any Settings page is wider than its label", async () => {
 
 test("a field's focus ring is the selection colour, not the brand colour", async () => {
   await page.evaluate(() => window.hive.settingsSet("appearance.accent", "amber"));
-  await open("people");
-  const expiry = page.locator("#share-expiry");
+  await open("browser");
+  const more = page.locator("[data-browser-app-more] summary");
+  await more.click();
+  const expiry = page.locator("#browser-app-port");
   await expect(expiry).toBeVisible();
-  await page.locator("#share-role").focus();
+  await more.focus();
   await page.keyboard.press("Tab");
   await expect(expiry).toBeFocused();
   const [ring, select] = await expiry.evaluate((el) => {
