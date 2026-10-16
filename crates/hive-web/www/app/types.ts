@@ -213,7 +213,8 @@ export interface Mark {
   y: number;
   width: number;
   height: number;
-  shapes: Array<{ d: string; fill: boolean; even_odd: boolean; stroke: number; round: boolean; opacity: number }>;
+  /** `fill_color` and `stroke_color` are `#rrggbb`; null is the row's colour. */
+  shapes: Array<{ d: string; fill: boolean; fill_color: string | null; even_odd: boolean; stroke: number; stroke_color: string | null; round: boolean; opacity: number }>;
 }
 
 /** Home as it shows (hive-phone's `home::Shown`). */

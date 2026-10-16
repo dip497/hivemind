@@ -45,7 +45,7 @@ const show = () => screen.show(view.shown(screen.filter.query, screen.filter.mac
 const T = 1790000000000;
 window.snapshot = (n, answered) => {
   const rows = [["w:w0", { of: "workspace", workspace: "w0", name: "api" }],
-    ["a:claude", { of: "agent", id: "claude", label: "Claude", icon: { viewBox: "0 0 24 24", shapes: [{ path: { d: "m4 4h16v16h-16z" } }, { circle: { cx: 12, cy: 12, r: 3, fill: "none", stroke: "currentColor", "stroke-width": "2" } }] } }]];
+    ["a:claude", { of: "agent", id: "claude", label: "Claude", icon: { viewBox: "0 0 24 24", shapes: [{ path: { d: "m4 4h16v16h-16z" } }, { circle: { cx: 12, cy: 12, r: 3, fill: "none", stroke: "currentColor", "stroke-width": "2" } }, { rect: { x: 1, y: 1, width: 2, height: 2, fill: "#D97757" } }] } }]];
   for (let f = 0; f < 10; f++) rows.push(["f:w0/f" + f, { of: "frame", workspace: "w0", id: "f" + f, title: "frame " + f, color: "#336699", order: f, ...(f >= 5 ? { machine: { name: "box" } } : {}) }]);
   const lines = [];
   for (let i = 0; i < n; i++) {
@@ -444,7 +444,7 @@ test("a frame tapped folds its tiles away and says how many it holds; folded, it
   await expect(tiles).toHaveCount(2);
 });
 
-test("a tile's row draws its agent's own mark, as the computer gives it; a shell's a terminal, any other kind's a window", async () => {
+test("a tile's row draws its agent's own mark in its own colours, as the computer gives it; a shell's a terminal, any other kind's a window", async () => {
   test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
   const page = await home();
   await page.evaluate(() => {
@@ -460,8 +460,10 @@ test("a tile's row draws its agent's own mark, as the computer gives it; a shell
     text: (() => { const p = document.createElement("p"); p.style.color = "var(--text)"; document.body.append(p); return getComputedStyle(p).color; })(),
   }));
   expect(drawn.box).toBe("0 0 24 24");
-  expect(drawn.paths).toHaveLength(2);
+  expect(drawn.paths).toHaveLength(3);
   expect(drawn.paths[0]![1]).toBe("currentColor");
+  // A shape in the brand's own colour is drawn in it.
+  expect(drawn.paths[2]![1]).toBe("#d97757");
   expect(drawn.paths[0]![0]).toMatch(/^M\s*4[ ,]4/);
   expect(drawn.paths[1]!.slice(1)).toEqual(["none", "currentColor"]);
   expect(drawn.color).toBe(drawn.text);

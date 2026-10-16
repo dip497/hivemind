@@ -56,7 +56,7 @@ export function icon(name: IconName, extra = ""): SVGSVGElement {
   return svg;
 }
 
-/** An agent's mark as the core gives it: its paths in the text colour, in their box. */
+/** An agent's mark as the core gives it: its paths in their own colours or the text colour, in their box. */
 export function agentMark(m: Mark): SVGSVGElement {
   const svg = document.createElementNS(SVG, "svg");
   svg.setAttribute("viewBox", `${m.x} ${m.y} ${m.width} ${m.height}`);
@@ -65,10 +65,10 @@ export function agentMark(m: Mark): SVGSVGElement {
   for (const s of m.shapes) {
     const path = document.createElementNS(SVG, "path");
     path.setAttribute("d", s.d);
-    path.setAttribute("fill", s.fill ? "currentColor" : "none");
+    path.setAttribute("fill", s.fill ? s.fill_color ?? "currentColor" : "none");
     if (s.even_odd) path.setAttribute("fill-rule", "evenodd");
     if (s.stroke > 0) {
-      path.setAttribute("stroke", "currentColor");
+      path.setAttribute("stroke", s.stroke_color ?? "currentColor");
       path.setAttribute("stroke-width", String(s.stroke));
     }
     if (s.round) {

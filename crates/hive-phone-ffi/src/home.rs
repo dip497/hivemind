@@ -138,13 +138,15 @@ pub struct AgentMark {
 
 /// One path of a mark: `d` holds only absolute `M`, `L`, `C`, `Q` and `Z`. Filled when `fill`
 /// (by the even-odd rule when `even_odd`), outlined `stroke` wide when above 0, round-ended when
-/// `round`, at `opacity`.
+/// `round`, at `opacity`. `fill_color` and `stroke_color` are `#rrggbb`; none is the row's colour.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct MarkShape {
     pub d: String,
     pub fill: bool,
+    pub fill_color: Option<String>,
     pub even_odd: bool,
     pub stroke: f64,
+    pub stroke_color: Option<String>,
     pub round: bool,
     pub opacity: f64,
 }
@@ -162,8 +164,10 @@ impl From<Mark> for AgentMark {
                 .map(|s| MarkShape {
                     d: s.d,
                     fill: s.fill,
+                    fill_color: s.fill_color,
                     even_odd: s.even_odd,
                     stroke: s.stroke,
+                    stroke_color: s.stroke_color,
                     round: s.round,
                     opacity: s.opacity,
                 })

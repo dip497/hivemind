@@ -219,7 +219,7 @@ fn a_project_or_frame_says_how_many_rows_are_one_level_under_it_and_what_wants_a
 }
 
 #[test]
-fn home_carries_once_the_mark_of_each_agent_a_tile_listed_runs_as_absolute_paths_moved_as_its_shapes_say(
+fn home_carries_once_the_mark_of_each_agent_a_tile_listed_runs_as_absolute_paths_moved_as_its_shapes_say_in_their_colours(
 ) {
     let (mut home, computer) = whole_case();
     let seq = home.at.unwrap().layout;
@@ -229,6 +229,7 @@ fn home_carries_once_the_mark_of_each_agent_a_tile_listed_runs_as_absolute_paths
         "shapes": [
             { "path": { "d": "m2 2h4a2 2 0 0 1 2 2z" } },
             { "circle": { "cx": 12, "cy": 12, "r": "2", "transform": "translate(1 2) scale(2)", "fill": "none", "stroke": "currentColor", "stroke-width": "1.5" } },
+            { "rect": { "x": 1, "y": 1, "width": 4, "height": 4, "fill": "#D97757", "stroke": "#00f" } },
         ],
     });
     assert!(home.apply(&json!({
@@ -246,7 +247,7 @@ fn home_carries_once_the_mark_of_each_agent_a_tile_listed_runs_as_absolute_paths
         (mark.x, mark.y, mark.width, mark.height),
         (0.0, 0.0, 24.0, 24.0)
     );
-    let [path, ring] = mark.shapes.as_slice() else {
+    let [path, ring, logo] = mark.shapes.as_slice() else {
         panic!("{mark:?}")
     };
     // The arc is a curve; relative moves are absolute.
@@ -263,6 +264,12 @@ fn home_carries_once_the_mark_of_each_agent_a_tile_listed_runs_as_absolute_paths
     // Scaled by 2 about the origin, then moved by (1, 2): its left point (10, 12) is at (21, 26).
     assert!(ring.d.starts_with("M21 26"), "{}", ring.d);
     assert_eq!((ring.fill, ring.stroke), (false, 3.0));
+    // A shape in the brand's own colour keeps it; one in the row's colour says none.
+    assert_eq!((&path.fill_color, &ring.stroke_color), (&None, &None));
+    assert_eq!(
+        (logo.fill_color.as_deref(), logo.stroke_color.as_deref()),
+        (Some("#d97757"), Some("#0000ff"))
+    );
     let searched = home.shown("zzz-nothing", None, &computer, &HomeView::default());
     assert!(searched.marks.is_empty(), "no tile listed, no mark");
 }

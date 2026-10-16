@@ -43,17 +43,21 @@ class MarkCache {
     }
 }
 
-/** Draws [mark] in [color], fitted into the square [side] wide whose corner is at [at]. */
+/** A shape's own colour, `#rrggbb`, or [row] where it has none. */
+fun shapeColor(hex: String?, row: Color): Color =
+    hex?.removePrefix("#")?.takeIf { it.length == 6 }?.toLongOrNull(16)?.let { Color(0xFF000000 or it) } ?: row
+
+/** Draws [mark] in its shapes' own colours, [color] where they have none, fitted into the square [side] wide whose corner is at [at]. */
 fun DrawScope.drawMark(mark: MarkPaths, color: Color, side: Float, at: Offset = Offset.Zero) {
     val place = placeMark(mark.mark, side)
     translate(at.x + place.left, at.y + place.top) {
         withTransform({ scale(place.scale, place.scale, pivot = Offset.Zero) }) {
             for ((path, shape) in mark.paths) {
                 val alpha = shape.opacity.toFloat().coerceIn(0f, 1f)
-                if (shape.fill) drawPath(path, color, alpha = alpha)
+                if (shape.fill) drawPath(path, shapeColor(shape.fillColor, color), alpha = alpha)
                 if (shape.stroke > 0) {
                     val cap = if (shape.round) StrokeCap.Round else StrokeCap.Butt
-                    drawPath(path, color, alpha = alpha, style = Stroke(shape.stroke.toFloat(), cap = cap))
+                    drawPath(path, shapeColor(shape.strokeColor, color), alpha = alpha, style = Stroke(shape.stroke.toFloat(), cap = cap))
                 }
             }
         }

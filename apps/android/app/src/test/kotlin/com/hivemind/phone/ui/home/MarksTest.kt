@@ -23,8 +23,8 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class MarksTest {
-    private fun shape(d: String, fill: Boolean = true, evenOdd: Boolean = false, stroke: Double = 0.0) =
-        MarkShape(d = d, fill = fill, evenOdd = evenOdd, stroke = stroke, round = false, opacity = 1.0)
+    private fun shape(d: String, fill: Boolean = true, evenOdd: Boolean = false, stroke: Double = 0.0, fillColor: String? = null) =
+        MarkShape(d = d, fill = fill, fillColor = fillColor, evenOdd = evenOdd, stroke = stroke, strokeColor = null, round = false, opacity = 1.0)
 
     /** A 10-wide square with a 4-wide hole in its middle, in a box that starts at 10, 10. */
     private fun ring(evenOdd: Boolean) = AgentMark(
@@ -59,6 +59,17 @@ class MarksTest {
         assertEquals("the hole is left empty", 0f, holed(20, 20).alpha)
 
         assertEquals(Color.Black, drawn(ring(evenOdd = false))(20, 20))
+    }
+
+    @Test
+    fun `a shape in its brand's colour is drawn in it, and one with none in the row's colour`() {
+        val two = AgentMark(
+            0.0, 0.0, 10.0, 10.0,
+            listOf(shape("M0 0 L5 0 L5 10 L0 10 Z", fillColor = "#d97757"), shape("M5 0 L10 0 L10 10 L5 10 Z")),
+        )
+        val drawnTwo = drawn(two)
+        assertEquals(Color(0xFFD97757), drawnTwo(10, 20))
+        assertEquals(Color.Black, drawnTwo(30, 20))
     }
 
     @Test

@@ -1,6 +1,7 @@
 //! An agent's mark as a phone draws it: its manifest's shapes (paths, rectangles, circles,
 //! ellipses, each maybe transformed) made into paths of absolute moves, lines and curves alone,
-//! which every phone's drawing code reads without an SVG renderer. Drawn in one colour.
+//! which every phone's drawing code reads without an SVG renderer, each in its own colour or the
+//! row's.
 
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -32,13 +33,15 @@ pub struct Mark {
 
 /// One path of a mark: `d` holds only absolute `M`, `L`, `C`, `Q` and `Z`. Filled when `fill`
 /// (by the even-odd rule when `even_odd`), outlined `stroke` wide when above 0, round-ended when
-/// `round`, at `opacity`.
+/// `round`, at `opacity`. `fill_color` and `stroke_color` are `#rrggbb`; none is the row's colour.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct MarkShape {
     pub d: String,
     pub fill: bool,
+    pub fill_color: Option<String>,
     pub even_odd: bool,
     pub stroke: f64,
+    pub stroke_color: Option<String>,
     pub round: bool,
     pub opacity: f64,
 }
@@ -120,12 +123,14 @@ pub fn mark_of(icon: &Icon) -> Option<Mark> {
                 d,
                 // SVG fills a shape that says nothing of its fill.
                 fill: fill.is_none() || painted(&fill),
+                fill_color: color(&fill),
                 even_odd,
                 stroke: if painted(&stroke) {
                     width * scale(&transform)
                 } else {
                     0.0
                 },
+                stroke_color: color(&stroke),
                 round,
                 opacity: opacity(get("opacity")) * opacity(root("opacity", "opacity")),
             })
@@ -144,6 +149,12 @@ pub fn mark_of(icon: &Icon) -> Option<Mark> {
 }
 
 /// An attribute's value as text: a manifest may give a number.
+/// A paint's colour as `#rrggbb`; none for the row's colour (`currentColor`) or what is not one.
+fn color(paint: &Option<String>) -> Option<String> {
+    let c = paint.as_deref()?.trim().parse::<svgtypes::Color>().ok()?;
+    Some(format!("#{:02x}{:02x}{:02x}", c.red, c.green, c.blue))
+}
+
 fn text(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),

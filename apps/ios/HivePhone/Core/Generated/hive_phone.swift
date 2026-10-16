@@ -4367,23 +4367,27 @@ public func FfiConverterTypeJoinRef_lower(_ value: JoinRef) -> RustBuffer {
 /**
  * One path of a mark: `d` holds only absolute `M`, `L`, `C`, `Q` and `Z`. Filled when `fill`
  * (by the even-odd rule when `even_odd`), outlined `stroke` wide when above 0, round-ended when
- * `round`, at `opacity`.
+ * `round`, at `opacity`. `fill_color` and `stroke_color` are `#rrggbb`; none is the row's colour.
  */
 public struct MarkShape: Equatable, Hashable {
     public var d: String
     public var fill: Bool
+    public var fillColor: String?
     public var evenOdd: Bool
     public var stroke: Double
+    public var strokeColor: String?
     public var round: Bool
     public var opacity: Double
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(d: String, fill: Bool, evenOdd: Bool, stroke: Double, round: Bool, opacity: Double) {
+    public init(d: String, fill: Bool, fillColor: String?, evenOdd: Bool, stroke: Double, strokeColor: String?, round: Bool, opacity: Double) {
         self.d = d
         self.fill = fill
+        self.fillColor = fillColor
         self.evenOdd = evenOdd
         self.stroke = stroke
+        self.strokeColor = strokeColor
         self.round = round
         self.opacity = opacity
     }
@@ -4406,8 +4410,10 @@ public struct FfiConverterTypeMarkShape: FfiConverterRustBuffer {
             try MarkShape(
                 d: FfiConverterString.read(from: &buf), 
                 fill: FfiConverterBool.read(from: &buf), 
+                fillColor: FfiConverterOptionString.read(from: &buf), 
                 evenOdd: FfiConverterBool.read(from: &buf), 
                 stroke: FfiConverterDouble.read(from: &buf), 
+                strokeColor: FfiConverterOptionString.read(from: &buf), 
                 round: FfiConverterBool.read(from: &buf), 
                 opacity: FfiConverterDouble.read(from: &buf)
         )
@@ -4416,8 +4422,10 @@ public struct FfiConverterTypeMarkShape: FfiConverterRustBuffer {
     public static func write(_ value: MarkShape, into buf: inout [UInt8]) {
         FfiConverterString.write(value.d, into: &buf)
         FfiConverterBool.write(value.fill, into: &buf)
+        FfiConverterOptionString.write(value.fillColor, into: &buf)
         FfiConverterBool.write(value.evenOdd, into: &buf)
         FfiConverterDouble.write(value.stroke, into: &buf)
+        FfiConverterOptionString.write(value.strokeColor, into: &buf)
         FfiConverterBool.write(value.round, into: &buf)
         FfiConverterDouble.write(value.opacity, into: &buf)
     }
