@@ -89,6 +89,7 @@ class Terminal {
     fun slot(position: Int): LineSlot = slots[position]
 
     fun apply(update: ScreenUpdate) {
+        val was = Triple(firstLine, lineCount, rest)
         revision = update.revision
         cols = update.cols.toInt()
         rows = update.rows.toInt()
@@ -121,6 +122,7 @@ class Terminal {
         lineCount = count
         val written = slots.indexOfLast { it.line.text.isNotEmpty() }
         newest = if (cursorSlot != null) maxOf(cursorAt.toInt(), written) else written
-        follow.grew(rest)
+        // A line rewritten in place (a spinner, a status line) moves nothing: the list is not laid out again for it.
+        if (Triple(firstLine, lineCount, rest) != was) follow.grew(rest)
     }
 }

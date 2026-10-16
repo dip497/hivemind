@@ -11,6 +11,7 @@ import com.hivemind.phone.ui.home.HomeChoicesStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -38,7 +39,13 @@ class PhoneCore private constructor(
             val app = context.applicationContext
             val notices = Notices(app)
             // A wait answered, or waiting no more, as its device says: its notification goes.
-            scope.launch { feed.overview.collect(notices::cleared) }
+            // Asked only when what waits, or when a device last answered, changed: not on every line an
+            // agent prints, each of which is a new overview, and each ask is a call to the system.
+            scope.launch {
+                feed.overview
+                    .distinctUntilChangedBy { o -> o.needs.map { it.at to it.waiting?.since } to o.devices.map { it.id to it.answeredAt } }
+                    .collect(notices::cleared)
+            }
             val homeChoices = HomeChoicesStore(app.getSharedPreferences("home", Context.MODE_PRIVATE))
             return PhoneCore(phone, feed, notices, Push(app, phone, feed.overview, scope), scope, homeChoices)
         }

@@ -40,10 +40,29 @@ class ScreenFeed(phone: Phone, agent: AgentRef) {
 
     private val main = Handler(Looper.getMainLooper())
 
+    /** Whether the terminal is out of sight (its agent's chat is shown): what changes is pulled once it is back, in one update. */
+    private var hidden = false
+
+    /** A frame came while the terminal was out of sight. */
+    private var missed = false
+
     // Before watching: the core may tell of a frame as soon as the watch begins.
     private val pull = FramePull {
-        terminal.apply(watch.update(terminal.revision))
-        held.sized(terminal.cols, terminal.rows)
+        if (hidden) {
+            missed = true
+        } else {
+            terminal.apply(watch.update(terminal.revision))
+            held.sized(terminal.cols, terminal.rows)
+        }
+    }
+
+    /** The terminal is shown, or [hidden] behind its agent's chat: hidden, its frames wait, not pulled each one on the main thread. Main thread. */
+    fun shown(shown: Boolean) {
+        hidden = !shown
+        if (shown && missed) {
+            missed = false
+            pull.request()
+        }
     }
 
     // What the core tells, from its threads: kept apart from what the screen calls.

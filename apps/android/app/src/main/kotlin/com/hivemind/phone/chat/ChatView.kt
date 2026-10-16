@@ -156,7 +156,7 @@ private fun EntryRow(entry: Entry, chat: Chat, onTool: (String) -> Unit) {
         // A result whose use was told before what is shown began.
         is Said.ToolOutput -> ToolRow(stringResource(R.string.chat_result), null, said.result) { onTool(entry.id) }
         is Said.Person -> PersonSaid(said.text)
-        is Said.Agent -> Markdown(said.text, Modifier.copiedOnHold(said.text))
+        is Said.Agent -> Markdown(said.text, Modifier.copiedOnHold(said.text), chat.blocks(entry.id))
     }
 }
 

@@ -3,8 +3,12 @@
 //! (spec/pairing.md 0.3); it only reads certificates, never makes one.
 
 use std::{
+    any::Any,
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+    time::SystemTime,
 };
 
 use anyhow::{Context, Result};
@@ -82,6 +86,37 @@ impl DeviceCertificate {
 pub struct Identity {
     dir: PathBuf,
     key: SecretKey,
+    /// What was read of its files, kept until they change: reading the certificate and the
+    /// devices verifies their signatures, and Home and the overview ask for them on every change.
+    kept: Mutex<HashMap<&'static str, Kept>>,
+}
+
+/// A file read, as it was when read: what this process had written of it, and what the file
+/// system said of it (another process may write it too), and what was made of it.
+struct Kept {
+    written: u64,
+    stamp: Option<Stamp>,
+    value: Arc<dyn Any + Send + Sync>,
+}
+
+/// When a file was changed, how long it is, and which file it is: a write by rename is a new one.
+type Stamp = (SystemTime, u64, u64);
+
+fn stamp(file: &Path) -> Option<Stamp> {
+    let meta = fs::metadata(file).ok()?;
+    #[cfg(unix)]
+    let ino = std::os::unix::fs::MetadataExt::ino(&meta);
+    #[cfg(not(unix))]
+    let ino = 0;
+    Some((meta.modified().ok()?, meta.len(), ino))
+}
+
+/// How many times this process wrote each file, by its path.
+static WRITTEN: Mutex<Option<HashMap<PathBuf, u64>>> = Mutex::new(None);
+
+fn writes(file: &Path) -> u64 {
+    let written = WRITTEN.lock().unwrap_or_else(|e| e.into_inner());
+    written.as_ref().and_then(|w| w.get(file).copied()).unwrap_or(0)
 }
 
 impl Identity {
@@ -91,6 +126,7 @@ impl Identity {
         Ok(Self {
             dir: dir.to_path_buf(),
             key,
+            kept: Mutex::new(HashMap::new()),
         })
     }
 
@@ -108,11 +144,31 @@ impl Identity {
         &self.dir
     }
 
+    /// What `name`, a file of its directory, holds as `read` makes it: read again only once this
+    /// process wrote it or the file system says it changed.
+    pub(crate) fn kept<T: Clone + Send + Sync + 'static>(&self, name: &'static str, read: impl FnOnce(&Path) -> T) -> T {
+        let file = self.dir.join(name);
+        let (written, stamp) = (writes(&file), stamp(&file));
+        let mut kept = self.kept.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(k) = kept.get(name) {
+            if k.written == written && k.stamp == stamp {
+                if let Some(value) = k.value.downcast_ref::<T>() {
+                    return value.clone();
+                }
+            }
+        }
+        let value = read(&file);
+        kept.insert(name, Kept { written, stamp, value: Arc::new(value.clone()) });
+        value
+    }
+
     /// The certificate it was given when it paired, while it verifies and names this phone.
     pub fn certificate(&self) -> Option<DeviceCertificate> {
-        let text = fs::read_to_string(self.dir.join("device.cert")).ok()?;
-        let cert = DeviceCertificate::verified(&serde_json::from_str(&text).ok()?)?;
-        (cert.device == self.id()).then_some(cert)
+        self.kept("device.cert", |file| {
+            let text = fs::read_to_string(file).ok()?;
+            let cert = DeviceCertificate::verified(&serde_json::from_str(&text).ok()?)?;
+            (cert.device == self.id()).then_some(cert)
+        })
     }
 
     /// Keep `cert` as this phone's certificate.
@@ -137,5 +193,8 @@ pub(crate) fn write_private(file: &Path, text: &str) -> Result<()> {
             .with_context(|| format!("cannot write {}", tmp.display()))?,
         text.as_bytes(),
     )?;
-    fs::rename(&tmp, file).with_context(|| format!("cannot write {}", file.display()))
+    fs::rename(&tmp, file).with_context(|| format!("cannot write {}", file.display()))?;
+    let mut written = WRITTEN.lock().unwrap_or_else(|e| e.into_inner());
+    *written.get_or_insert_with(HashMap::new).entry(file.to_path_buf()).or_default() += 1;
+    Ok(())
 }

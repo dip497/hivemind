@@ -793,3 +793,22 @@ fn whose_devices_these_are_is_as_the_app_paired_with_first_says_a_name_that_is_n
     phone.keep(&paired(&phone, 20, &sam), 8).unwrap();
     assert_eq!(phone.person(), None);
 }
+
+#[test]
+fn the_devices_are_read_again_when_their_file_changes_however_it_was_written() {
+    let dir = tmp("reread");
+    let phone = Identity::open(&dir.join("id")).unwrap();
+    let priya = key(1);
+    phone.keep(&paired(&phone, 10, &priya), 1_000).unwrap();
+    let file = dir.join("id").join("devices.json");
+    let one = fs::read_to_string(&file).unwrap();
+    assert_eq!(names(&phone.devices()), ["app 10"]);
+
+    // Kept by this phone: read again at once.
+    phone.keep(&paired(&phone, 11, &priya), 2_000).unwrap();
+    assert_eq!(names(&phone.devices()), ["app 10", "app 11"]);
+
+    // Written by another process, in place: read again as the file now says.
+    fs::write(&file, &one).unwrap();
+    assert_eq!(names(&phone.devices()), ["app 10"]);
+}

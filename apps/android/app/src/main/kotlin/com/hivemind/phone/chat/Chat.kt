@@ -4,12 +4,14 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.hivemind.phone.core.ConversationEnded
 import com.hivemind.phone.core.Entry
 import com.hivemind.phone.core.Said
+import com.hivemind.phone.core.TextBlock
 import com.hivemind.phone.core.ToolResult
 import com.hivemind.phone.ui.common.Follow
 
@@ -43,17 +45,24 @@ class Chat {
     /** The list, drawn from the bottom up: its first item is the newest. */
     val follow = Follow(newestFirst = true)
 
-    private val results = mutableStateMapOf<String, ToolResult>()
+    // Each use's result a state of its own: one that comes redraws the row that shows it, not every tool row in sight.
+    private val results = HashMap<String, MutableState<ToolResult?>>()
+
+    // What the agent said, as markdown read off the main thread, by its entry's id.
+    private val parsed = HashMap<String, List<TextBlock>>()
+
+    /** What the agent said in [entry], read as markdown before it came to the main thread; none, read when drawn. */
+    fun blocks(entry: String): List<TextBlock>? = parsed[entry]
 
     // The entries shown and the tools used, by id: each entry is shown once, as the list keys it.
     private val ids = HashSet<String>()
     private val uses = HashSet<String>()
 
     /** What a use of a tool gave back, by the use's id; none yet. */
-    fun result(use: String): ToolResult? = results[use]
+    fun result(use: String): ToolResult? = results[use]?.value
 
-    /** [said] after what was told before, or [anew], in place of it all (another session began). */
-    fun said(said: List<Entry>, anew: Boolean) {
+    /** [said] after what was told before, or [anew], in place of it all (another session began); [read], what the agent said read as markdown, by entry. */
+    fun said(said: List<Entry>, anew: Boolean, read: Map<String, List<TextBlock>> = emptyMap()) {
         heard = true
         if (anew) {
             told.clear()
@@ -61,6 +70,7 @@ class Chat {
             ids.clear()
             uses.clear()
             opened.clear()
+            parsed.clear()
             // What the person had scrolled back to is gone.
             follow.on = true
         }
@@ -69,16 +79,18 @@ class Chat {
             if (!ids.add(entry.id)) continue
             when (val what = entry.said) {
                 is Said.ToolOutput -> if (what.result.of in uses) {
-                    results[what.result.of] = what.result
+                    results.getOrPut(what.result.of) { mutableStateOf(null) }.value = what.result
                     continue
                 }
-                is Said.ToolUse -> uses += what.tool.id
+                is Said.ToolUse -> if (uses.add(what.tool.id)) results.getOrPut(what.tool.id) { mutableStateOf(null) }
                 is Said.Person, is Said.Agent -> {}
             }
             added += entry
         }
+        read.forEach { (id, blocks) -> if (id in ids) parsed[id] = blocks }
         told.addAll(added)
-        follow.grew(0)
+        // Only what was added moves the list: a result folded under its use redraws its row alone.
+        if (anew || added.isNotEmpty()) follow.grew(0)
     }
 
     fun end(why: ConversationEnded) {

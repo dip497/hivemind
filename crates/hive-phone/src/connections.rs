@@ -308,9 +308,10 @@ impl Connections {
     /// Home as each app the phone reached sent it, by the app's id, in the order the devices are
     /// listed.
     pub fn homes(&self) -> Vec<(Seen, Home)> {
+        // Read before the lock: what it reads from disk does not hold up Home's updates.
+        let seen = self.seen();
         let homes = lock(&self.0.homes);
-        self.seen()
-            .into_iter()
+        seen.into_iter()
             .filter_map(|seen| {
                 let home = homes.get(&seen.with.device)?.clone();
                 Some((seen, home))

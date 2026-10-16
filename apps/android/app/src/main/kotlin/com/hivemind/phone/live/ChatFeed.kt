@@ -6,6 +6,9 @@ import com.hivemind.phone.core.ConversationEnded
 import com.hivemind.phone.core.ConversationListener
 import com.hivemind.phone.core.Entry
 import com.hivemind.phone.core.Phone
+import com.hivemind.phone.core.Said
+import com.hivemind.phone.core.TextBlock
+import com.hivemind.phone.core.markdown
 import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
@@ -19,7 +22,7 @@ class ChatFeed(phone: Phone, agent: AgentRef) {
     val chat = Chat()
 
     private sealed interface Told {
-        class Said(val entries: List<Entry>, val anew: Boolean) : Told
+        class Said(val entries: List<Entry>, val anew: Boolean, val read: Map<String, List<TextBlock>>) : Told
 
         class Ended(val why: ConversationEnded) : Told
     }
@@ -30,7 +33,7 @@ class ChatFeed(phone: Phone, agent: AgentRef) {
     private val pull = FramePull {
         while (true) {
             when (val next = told.poll() ?: break) {
-                is Told.Said -> chat.said(next.entries, next.anew)
+                is Told.Said -> chat.said(next.entries, next.anew, next.read)
                 is Told.Ended -> chat.end(next.why)
             }
         }
@@ -38,7 +41,9 @@ class ChatFeed(phone: Phone, agent: AgentRef) {
 
     private val listener = object : ConversationListener {
         override fun said(entries: List<Entry>, anew: Boolean) {
-            told += Told.Said(entries, anew)
+            // Read here, on the core's thread: the main thread only draws what was read.
+            val read = entries.mapNotNull { e -> (e.said as? Said.Agent)?.let { e.id to markdown(it.text) } }.toMap()
+            told += Told.Said(entries, anew, read)
             pull.request()
         }
 

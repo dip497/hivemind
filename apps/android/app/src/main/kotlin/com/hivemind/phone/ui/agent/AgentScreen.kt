@@ -39,6 +39,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -94,6 +95,9 @@ import kotlinx.coroutines.delay
  *  its device can read (its manifest maps its session file). Any other opens on its terminal. */
 internal fun opensOnChat(agent: Agent?): Boolean = agent?.hasConversation == true
 
+/** How long the terminal's size stays put before the session is fitted to it. */
+private const val FIT_SETTLES_MS = 200L
+
 /** The keys of the Type row, as shown and as `type_keys` takes them. */
 private val Keys = listOf(
     "Esc" to "escape", "Tab" to "tab", "↑" to "up", "↓" to "down", "←" to "left", "→" to "right",
@@ -125,6 +129,7 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
     val overChat = terminalOpen && chatFirst
     BackHandler(enabled = overChat) { terminalOpen = false }
     val showingTerminal = overChat || !chatFirst
+    SideEffect { vm.screen.shown(showingTerminal) }
 
     val lock = LocalPhoneLock.current
     val snackbar = remember { SnackbarHostState() }
@@ -206,9 +211,17 @@ fun AgentScreen(vm: AgentViewModel, onBack: () -> Unit, onDiff: () -> Unit, onCl
                 // Fitted to the phone while Fit is on and the app is in sight; the size it had, given back once
                 // Fit is off, the terminal is left or the app goes to the background.
                 var readable by remember { mutableStateOf<TermSize?>(null) }
+                var fitted by remember { mutableStateOf(false) }
                 LaunchedEffect(fit, readable) {
                     val size = readable
-                    if (!fit) vm.screen.unfit() else if (size != null) vm.screen.fit(size)
+                    // Fitted at once when opened, then to the size it settles at: while the keyboard
+                    // slides, each frame is another size, and each fit is a resize the agent redraws
+                    // its whole screen for.
+                    if (!fit) vm.screen.unfit() else if (size != null) {
+                        if (fitted) delay(FIT_SETTLES_MS)
+                        vm.screen.fit(size)
+                        fitted = true
+                    }
                 }
                 val fitNow by rememberUpdatedState(fit)
                 val readableNow by rememberUpdatedState(readable)

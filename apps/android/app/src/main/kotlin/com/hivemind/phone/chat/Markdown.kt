@@ -62,8 +62,9 @@ import kotlinx.coroutines.launch
  * and opens it when tapped.
  */
 @Composable
-fun Markdown(text: String, modifier: Modifier = Modifier) {
-    val blocks = remember(text) { markdown(text) }
+fun Markdown(text: String, modifier: Modifier = Modifier, read: List<TextBlock>? = null) {
+    // Read already, off the main thread, as the chat's feed does; else read here, once.
+    val blocks = remember(text, read) { read ?: markdown(text) }
     Blocks(blocks, quote = 0u, modifier)
 }
 
@@ -179,9 +180,10 @@ private fun Table(table: BlockKind.Table, marks: Marks, style: TextStyle, modifi
                 ColumnAlign.RIGHT -> Alignment.End
                 else -> Alignment.Start
             }
+            val cells = remember(table, marks, c) { listOf(table.head.getOrNull(c).orEmpty()).plus(table.rows.map { it.getOrNull(c).orEmpty() }).map(marks::of) }
             Column(horizontalAlignment = align, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(marks.of(table.head.getOrNull(c).orEmpty()), style = style.copy(fontWeight = FontWeight.SemiBold), softWrap = false)
-                for (row in table.rows) Text(marks.of(row.getOrNull(c).orEmpty()), style = style, softWrap = false)
+                Text(cells[0], style = style.copy(fontWeight = FontWeight.SemiBold), softWrap = false)
+                for (cell in cells.drop(1)) Text(cell, style = style, softWrap = false)
             }
         }
     } }

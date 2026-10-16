@@ -5,7 +5,7 @@
 //! the person's other computers and hosts, which it reaches too (0.7). What the phone asks one of
 //! them on its `device` stream, and unpairing (spec/pairing.md, "Unpairing").
 
-use std::{collections::BTreeMap, fs, time::Duration};
+use std::{collections::BTreeMap, fs, path::Path, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result};
 use hive_net::frames::{read_frame, write_frame};
@@ -43,21 +43,35 @@ impl Identity {
         let Some(mine) = self.certificate() else {
             return vec![];
         };
-        let Ok(text) = fs::read_to_string(self.dir().join("devices.json")) else {
-            return vec![];
-        };
-        let Ok(Value::Array(all)) = serde_json::from_str(&text) else {
-            return vec![];
-        };
-        all.into_iter()
-            .filter_map(|d| serde_json::from_value::<PairedDevice>(d).ok())
-            .filter(|d| {
-                let c = &d.with.certificate;
-                c.verifies() && c.device == d.with.device && c.person == mine.person
-            })
+        // Verified once each time the list changes, not each time it is asked for.
+        let all = self.kept("devices.json", |file| -> Arc<Vec<PairedDevice>> {
+            Arc::new(read_devices(file))
+        });
+        all.iter()
+            .filter(|d| d.with.certificate.person == mine.person)
+            .cloned()
             .collect()
     }
+}
 
+/// The devices `file` lists, those whose certificates verify and name them.
+fn read_devices(file: &Path) -> Vec<PairedDevice> {
+    let Ok(text) = fs::read_to_string(file) else {
+        return vec![];
+    };
+    let Ok(Value::Array(all)) = serde_json::from_str(&text) else {
+        return vec![];
+    };
+    all.into_iter()
+        .filter_map(|d| serde_json::from_value::<PairedDevice>(d).ok())
+        .filter(|d| {
+            let c = &d.with.certificate;
+            c.verifies() && c.device == d.with.device
+        })
+        .collect()
+}
+
+impl Identity {
     /// Keep what pairing gave, at `now` (ms since the epoch): the certificate as this phone's
     /// own, the device paired with among the person's, and the network it is on. A phone is the
     /// person it paired with last: another person's devices, and their network, are forgotten.
