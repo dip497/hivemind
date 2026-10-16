@@ -5,6 +5,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // The published manifests: the same files a HiveHub install drops into the user's agents
@@ -17,7 +18,8 @@ const check = process.argv.includes("--check");
 // JSON is committed for exactly that case, and regenerating without the published manifests
 // would quietly drop every agent.
 let parse;
-try { ({ parse } = await import("yaml")); } catch { parse = null; }
+// The parser the package that reads these manifests depends on, resolved from that package.
+try { ({ parse } = createRequire(path.resolve(here, "../../packages/hive-agents/package.json"))("yaml")); } catch { parse = null; }
 if (!parse || !existsSync(PUBLISHED)) {
   const why = !parse ? "no yaml parser here" : "published agent manifests are not in this checkout";
   if (check) { console.error(`icons: cannot verify — ${why}`); process.exit(1); }
