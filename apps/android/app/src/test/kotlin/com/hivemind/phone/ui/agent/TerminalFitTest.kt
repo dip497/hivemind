@@ -115,9 +115,11 @@ class TerminalFitTest {
         compose.onNodeWithText("row 1").assertIsDisplayed()
         compose.onNodeWithText("row $rows").assertIsDisplayed()
 
-        // The keyboard, a turn, another phone: each size fitted anew, every row of it in sight.
+        // The keyboard, a turn, another phone: each size fitted anew once it settles, every row of it in sight.
         for (size in listOf(DpSize(400.dp, 380.dp), DpSize(640.dp, 360.dp), DpSize(393.dp, 700.dp), DpSize(411.dp, 731.dp), DpSize(361.dp, 613.dp), DpSize(150.dp, 640.dp), DpSize(152.dp, 640.dp), DpSize(154.dp, 640.dp))) {
             screen = size
+            compose.waitForIdle()
+            compose.mainClock.advanceTimeBy(300)
             compose.waitForIdle()
             val (_, fitted) = session.fits.last()
             compose.onNodeWithText("row 1").assertIsDisplayed()
@@ -128,5 +130,37 @@ class TerminalFitTest {
         compose.waitForIdle()
 
         assertEquals(1, session.unfits)
+    }
+
+    @Test
+    fun `while the screen keeps changing size, as the keyboard slides, the session is not resized for each frame`() {
+        val session = Session()
+        val coder = agent("t1", hasConversation = true)
+        val vm = AgentViewModel(Computer(session), MutableStateFlow(overview(agents = listOf(coder))), coder.at)
+        val lock = PhoneLock(Robolectric.buildActivity(FragmentActivity::class.java).create().get())
+        var screen by mutableStateOf(DpSize(400.dp, 640.dp))
+        compose.setContent {
+            PhoneTheme(accent = null) {
+                CompositionLocalProvider(LocalPhoneLock provides lock) {
+                    Box(Modifier.size(screen)) { AgentScreen(vm, onBack = {}, onDiff = {}, onClosed = {}) }
+                }
+            }
+        }
+        compose.onNodeWithTag("agent-terminal").performClick()
+        compose.waitForIdle()
+        assertEquals(1, session.fits.size)
+
+        // A frame of the keyboard's slide every 16 ms, each a little shorter.
+        compose.mainClock.autoAdvance = false
+        for (height in 620 downTo 380 step 20) {
+            screen = DpSize(400.dp, height.dp)
+            compose.mainClock.advanceTimeBy(16)
+        }
+        assertEquals("fitted once when opened, and not while it slid", 1, session.fits.size)
+
+        compose.mainClock.advanceTimeBy(300)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        assertEquals("fitted once more, to where it settled", 2, session.fits.size)
     }
 }
