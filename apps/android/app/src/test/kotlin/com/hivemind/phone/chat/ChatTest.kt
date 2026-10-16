@@ -74,7 +74,7 @@ class ChatTest {
     }
 
     @Test
-    fun `a run of two or more tools is one fold, keyed by its first, which stays the fold as more join it; one alone stays an entry`() {
+    fun `a run of two or more tools is one fold, keyed by its first, which stays the fold as more join it, and one alone stays an entry`() {
         val chat = Chat()
         chat.said(listOf(person("e1", "Fix the nav"), toolUse("e2", use = "u1", name = "Read")), anew = true)
         assertEquals(listOf("e1", "e2"), chat.shown.map { it.key })

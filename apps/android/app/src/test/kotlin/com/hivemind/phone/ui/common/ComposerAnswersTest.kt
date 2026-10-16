@@ -9,7 +9,7 @@ import org.junit.Test
 /** Where the person types an answer in words on an agent's screen: the composer, or the card's own controls (design PB §12.12). */
 class ComposerAnswersTest {
     @Test
-    fun `the composer answers a question with one choice and a wait for words; Allow and Deny, a plan and a form keep their own`() {
+    fun `the composer answers a question with one choice and a wait for words, and Allow and Deny, a plan and a form keep their own`() {
         assertEquals(false, composerAnswers(null))
         assertEquals(true, composerAnswers(waiting(WaitKind.QUESTION, 0, choose = true, questions = listOf(question("Which?", "a", "b")))))
         assertEquals(false, composerAnswers(waiting(WaitKind.QUESTION, 0, choose = true, questions = listOf(question("Which?", "a", "b", many = true)))))
