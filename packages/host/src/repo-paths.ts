@@ -6,7 +6,7 @@
 import path from "node:path";
 import { realpath } from "node:fs/promises";
 import { ApiError } from "@hivemind/workspace-api/protocol";
-import { isRemote } from "@hivemind/core/remote-uri";
+import { isRemote, withoutTrailingSlashes } from "@hivemind/core/remote-uri";
 
 const escapes = (rel: string): never => {
   throw new ApiError("BAD_REQUEST", `path escapes repo: ${rel}`);
@@ -68,5 +68,5 @@ export function allInRepo(repoPath: string, rels: readonly string[]): string[] {
 /** A file in a repo as an effect names it, from params not yet checked: the path it resolves to. */
 export function fileIn(repo: unknown, rel: unknown): string | undefined {
   if (typeof repo !== "string" || typeof rel !== "string" || !repo || !rel) return undefined;
-  return isRemote(repo) ? `${repo.replace(/\/+$/, "")}/${rel}` : path.resolve(repo, rel);
+  return isRemote(repo) ? `${withoutTrailingSlashes(repo)}/${rel}` : path.resolve(repo, rel);
 }

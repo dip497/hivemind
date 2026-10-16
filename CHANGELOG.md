@@ -51,10 +51,12 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Security
 
+- An agent manifest, from HiveHub or anywhere, can no longer change what every object in the app holds through a field path such as `__proto__.x` in its session mapping: a field path reads and writes a record's own fields only.
 - A computer, phone or browser no longer becomes yours by entering a pairing code first: today's pairing gave the person key to whoever proved the code first, asking nobody. Connect asks you, shows three words on both screens, and the device is yours only after a yes on each side.
 
 ### Fixed
 
+- A path holding a long run of slashes is read at once; one with 50,000 of them took ten seconds.
 - Connect's Phone browser tab, on a network whose server does not serve the phone page, and Reach devices elsewhere → Serve from one of my devices offer **Set it up with an agent**: pick an agent installed here, and it asks you how your devices should reach this computer (Tailscale, your own domain, a tunnel, a forwarded port), sets up the server with the phone page and puts this computer on it, asking you for anything only you can do. The command shown there before had no `--phone`, so a server set up from it never gave a phone link.
 - The Machines pane's status dot sits clear of the machine's icon instead of covering its corner.
 - Phones draw an agent's mark in the colours its manifest gives, as your computer does, instead of all in the text colour.

@@ -88,6 +88,14 @@ test("posixJoin handles children, absolute, and parent (..)", () => {
   assert.equal(posixJoin("/", ".."), "/");
 });
 
+test("a path of many slashes is read in time linear in its length", () => {
+  const slashes = "/".repeat(50_000);
+  const started = performance.now();
+  assert.equal(remoteBasename(`ssh://h${slashes}a`), "a");
+  assert.equal(posixJoin(`/a${slashes}b`, ".."), `/a${slashes.slice(1)}`);
+  assert.ok(performance.now() - started < 500, `took ${Math.round(performance.now() - started)} ms`);
+});
+
 test("malformed uris throw", () => {
   assert.throws(() => parseRemote("ssh://"));
   assert.throws(() => parseRemote("/not/remote"));

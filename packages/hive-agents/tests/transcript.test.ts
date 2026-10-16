@@ -46,6 +46,17 @@ test("a tool use its hook gives, before its session file records it, is about wh
   expect(toolAbout(mapping, "Agent", { prompt: "look around" })).toBeUndefined();
 });
 
+test("a mapping's field paths read and write a record's own fields, never what every object shares", () => {
+  const rule = (input: string) => ({ tool: { id: "id", name: "name", input, about: ["input.command"] } });
+  for (const input of ["__proto__.polluted", "constructor.prototype.polluted"]) {
+    const taken = defFromManifest(withTranscript({ id: "uuid", at: "timestamp", said: [rule(input)] })).session!.transcript!;
+    expect(toolAbout(taken, "Bash", { command: "ls" }), input).toBeUndefined();
+    expect(({} as Record<string, unknown>).polluted, input).toBeUndefined();
+  }
+  const taken = defFromManifest(withTranscript({ id: "uuid", at: "timestamp", said: [rule("input")] })).session!.transcript!;
+  expect(toolAbout(taken, "Bash", { command: "ls" })).toBe("ls");
+});
+
 test("a mapping is refused as it is loaded unless every rule reads one thing it can name, and the session file is named", () => {
   const rule = { require: { type: "user" }, text: "message.content", who: "person" };
   const mapping = (said: unknown[], more: Record<string, unknown> = {}) => ({ id: "uuid", at: "timestamp", said, ...more });

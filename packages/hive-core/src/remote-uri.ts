@@ -32,6 +32,13 @@ export interface RemoteTarget {
 }
 
 export const REMOTE_SCHEME = "ssh://";
+
+/** `p` without the slashes it ends with, in time linear in its length whatever it holds. */
+export function withoutTrailingSlashes(p: string): string {
+  let end = p.length;
+  while (end > 0 && p.charCodeAt(end - 1) === 47) end--;
+  return p.slice(0, end);
+}
 export const MACHINE_SCHEME = "machine://";
 
 /** True when a path string denotes a folder on another computer (machine:// or ssh://). */
@@ -159,7 +166,7 @@ export function formatRemote(t: {
 
 /** A saved machine's ssh target (`alias`, `user@host`, `ssh://user@host:port`) as an ssh uri at `path`. */
 export function sshUri(target: string, path = "/"): string {
-  const authority = target.startsWith(REMOTE_SCHEME) ? target.slice(REMOTE_SCHEME.length).replace(/\/.*$/, "") : target;
+  const authority = target.startsWith(REMOTE_SCHEME) ? target.slice(REMOTE_SCHEME.length).split("/", 1)[0]! : target;
   return `${REMOTE_SCHEME}${authority}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
@@ -192,7 +199,7 @@ export function remoteDisplay(uri: string, machineName?: string): string {
 /** The basename of a remote uri's path — for a frame title. */
 export function remoteBasename(uri: string): string {
   const path = remotePath(uri);
-  const trimmed = path.replace(/\/+$/, "");
+  const trimmed = withoutTrailingSlashes(path);
   const idx = trimmed.lastIndexOf("/");
   return idx === -1 ? trimmed || "/" : trimmed.slice(idx + 1) || "/";
 }
@@ -200,7 +207,7 @@ export function remoteBasename(uri: string): string {
 /** POSIX path join for remote paths (the client may be Windows — never use path.join). */
 export function posixJoin(a: string, b: string): string {
   if (b === "..") {
-    const t = a.replace(/\/+$/, "");
+    const t = withoutTrailingSlashes(a);
     const i = t.lastIndexOf("/");
     return i <= 0 ? "/" : t.slice(0, i);
   }

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
 import type { ContextMenuItem, ContextMenuOpenContext, FileTreeRowDecoration } from "@pierre/trees";
 import { MenuItem } from "../components/ui/menu-item";
+import { withoutTrailingSlashes } from "@hivemind/core/remote-uri";
 
 // ── changed-files TREE ──────────────────────────────────────────────────
 // @pierre/diffs ships no file-navigation component, but @pierre/trees DOES —
@@ -34,12 +35,11 @@ export function FileTree({
   onJump: (id: string) => void;
   onToggleViewed: (file: string) => void;
 }) {
-  const norm = (p: string) => p.replace(/\/+$/, "");
-  const paths = useMemo(() => rows.map((r) => norm(r.file)), [rows]);
+    const paths = useMemo(() => rows.map((r) => withoutTrailingSlashes(r.file)), [rows]);
   // path → row, for jump-on-select + the +adds/−dels decoration.
   const byPath = useMemo(() => {
     const m = new Map<string, FileRow>();
-    for (const r of rows) m.set(norm(r.file), r);
+    for (const r of rows) m.set(withoutTrailingSlashes(r.file), r);
     return m;
   }, [rows]);
   // The model is built once; its callbacks must read the latest maps/handlers.
@@ -58,12 +58,12 @@ export function FileTree({
     itemHeight: 22,
     onSelectionChange: (sel) => {
       const p = sel[0];
-      const r = p ? byPathRef.current.get(p.replace(/\/+$/, "")) : undefined;
+      const r = p ? byPathRef.current.get(withoutTrailingSlashes(p)) : undefined;
       if (r) onJumpRef.current(r.id); // directory selections resolve to no row
     },
     renderRowDecoration: ({ item }): FileTreeRowDecoration | null => {
       if (item.kind === "directory") return null;
-      const r = byPathRef.current.get(item.path.replace(/\/+$/, ""));
+      const r = byPathRef.current.get(withoutTrailingSlashes(item.path));
       return r ? { text: `+${r.adds} −${r.dels}`, title: `+${r.adds} −${r.dels}` } : null;
     },
   });
@@ -75,7 +75,7 @@ export function FileTree({
       model={model}
       className="h-full w-full nowheel"
       renderContextMenu={(item: ContextMenuItem, ctx: ContextMenuOpenContext) => {
-        const r = byPathRef.current.get(item.path.replace(/\/+$/, ""));
+        const r = byPathRef.current.get(withoutTrailingSlashes(item.path));
         if (!r) return <></>;
         return (
           <div className="min-w-[180px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md shadow-2xl p-1 text-label">

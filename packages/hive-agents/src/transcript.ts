@@ -3,7 +3,7 @@
  * maps the file's records (`session.transcript`): what the person, the agent and its tools said,
  * whichever agent keeps it. Nothing here knows one agent's format; the manifest does.
  */
-import { valueAt } from "./field-path.js";
+import { setValueAt, valueAt } from "./field-path.js";
 import type { AgentTranscript, TranscriptAsks, TranscriptRule } from "./types.js";
 
 /** A question a tool use asks the person, and the options to choose from; `descriptions`: what
@@ -98,18 +98,11 @@ export function toolAbout(transcript: AgentTranscript, name: string, input: unkn
   for (const rule of transcript.said) {
     if (!rule.tool?.input || !rule.tool.about) continue;
     const use: Record<string, unknown> = {};
-    for (const [path, value] of [[rule.tool.id, ""], [rule.tool.name, name], [rule.tool.input, input]] as const) put(use, path, value);
+    for (const [path, value] of [[rule.tool.id, ""], [rule.tool.name, name], [rule.tool.input, input]] as const) setValueAt(use, path, value);
     const entry = entryOf(rule, use, "", 0, true, false);
     if (entry && "tool" in entry && entry.tool.about !== undefined) return entry.tool.about;
   }
   return undefined;
-}
-
-function put(obj: Record<string, unknown>, path: string, value: unknown): void {
-  const keys = path.split(".");
-  let cur = obj;
-  for (const key of keys.slice(0, -1)) cur = (cur[key] ??= {}) as Record<string, unknown>;
-  cur[keys.at(-1)!] = value;
 }
 
 /** What the records in `lines` say, read as `transcript` maps them, in order. An entry read from

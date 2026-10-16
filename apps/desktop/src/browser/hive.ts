@@ -21,7 +21,7 @@ export async function connectHive(url: string, token: string, onClose: (code: nu
   let next = 1;
   const deliver = (ch: string, args: unknown[]): void => {
     for (const l of listeners.get(ch) ?? []) {
-      try { l(...args); } catch (e) { console.error(`[hive] a listener for ${ch} failed:`, e); }
+      try { l(...args); } catch (e) { console.error("[hive] a listener for %s failed:", ch, e); }
     }
   };
   const put = (frame: TabFrame): void => {
