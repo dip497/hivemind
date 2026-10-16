@@ -42,10 +42,12 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -65,6 +67,8 @@ import com.hivemind.phone.ui.common.Notice
 import com.hivemind.phone.ui.common.NoticeEffect
 import com.hivemind.phone.ui.common.PillChip
 import com.hivemind.phone.ui.common.RaisedCard
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Device, then workspace, then folder, then agent (with its model and mode, when it has them), as
@@ -229,15 +233,18 @@ private fun OptionChoice(option: StartOption, chosen: String?, onChoose: (String
 /** A photo given with the prompt, small, with × to take it out. */
 @Composable
 private fun PhotoThumb(photo: Photo, onRemove: () -> Unit) {
-    val image = remember(photo) {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(photo.bytes, 0, photo.bytes.size, bounds)
-        var sample = 1
-        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 256) sample *= 2
-        BitmapFactory.decodeByteArray(photo.bytes, 0, photo.bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
+    // Drawn small, off the main thread: a photo of a few megabytes is not decoded while the screen draws.
+    val image by produceState<ImageBitmap?>(null, photo) {
+        value = withContext(Dispatchers.Default) {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(photo.bytes, 0, photo.bytes.size, bounds)
+            var sample = 1
+            while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 256) sample *= 2
+            BitmapFactory.decodeByteArray(photo.bytes, 0, photo.bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
+        }
     }
     Box(Modifier.size(64.dp).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.surfaceContainerHighest)) {
-        if (image != null) Image(image, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        image?.let { Image(it, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
         IconButton(onClick = onRemove, modifier = Modifier.align(Alignment.TopEnd).size(28.dp)) {
             Icon(
                 Icons.Filled.Close,

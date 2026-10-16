@@ -1,6 +1,15 @@
 package com.hivemind.phone.chat
 
+import android.content.ClipData
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +30,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -145,9 +153,8 @@ private fun EntryRow(entry: Entry, chat: Chat, onTool: (String) -> Unit) {
         is Said.ToolUse -> ToolRow(said.tool.name, said.tool.about, chat.result(said.tool.id)) { onTool(entry.id) }
         // A result whose use was told before what is shown began.
         is Said.ToolOutput -> ToolRow(stringResource(R.string.chat_result), null, said.result) { onTool(entry.id) }
-        // Held down, what is said is selected, to copy.
         is Said.Person -> PersonSaid(said.text)
-        is Said.Agent -> SelectionContainer { Markdown(said.text) }
+        is Said.Agent -> Markdown(said.text, Modifier.copiedOnHold(said.text))
     }
 }
 
@@ -198,9 +205,7 @@ private fun ToolsRow(tools: Shown.Tools, chat: Chat, onTool: (String) -> Unit) {
 private fun PersonSaid(text: String) {
     Box(Modifier.fillMaxWidth().padding(start = 48.dp), contentAlignment = Alignment.CenterEnd) {
         Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(18.dp)) {
-            SelectionContainer {
-                Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
-            }
+            Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.copiedOnHold(text).padding(horizontal = 14.dp, vertical = 10.dp))
         }
     }
 }
@@ -239,4 +244,23 @@ private fun ToolRow(name: String, about: String?, result: ToolResult?, onOpen: (
             modifier = Modifier.size(18.dp),
         )
     }
+}
+
+/**
+ * Held down, [text] is copied whole, with a tap of haptics. Not a selection: a selection container
+ * on every message weighs on the list as it scrolls, and a message is copied whole far more often
+ * than a part of it.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun Modifier.copiedOnHold(text: String): Modifier {
+    val clipboard = LocalClipboard.current
+    val haptics = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    val label = stringResource(R.string.action_copy)
+    // No ripple: a tap on a message does nothing, and its links take their own taps first.
+    return combinedClickable(interactionSource = null, indication = null, onLongClickLabel = label, onLongClick = {
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(null, text))) }
+    }, onClick = {})
 }
