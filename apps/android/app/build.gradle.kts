@@ -94,6 +94,11 @@ tasks.withType<Test>().configureEach {
     // One Robolectric sandbox for every test: the core is loaded once per process and its
     // listeners call back into the sandbox that loaded it last.
     systemProperty("robolectric.graphicsMode", "NATIVE")
+    // A failure says what it expected and what it got in the build's own output: CI shows nothing else.
+    testLogging {
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
 }
 
 dependencies {

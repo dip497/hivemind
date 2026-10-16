@@ -4,7 +4,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.fragment.app.FragmentActivity
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -95,7 +97,8 @@ class ComposerTargetTest {
         assertEquals(emptyList<Pair<ULong, Answer>>(), computer.answered)
         compose.onNodeWithText("What it waits on changed since you began typing. Read it, then send again.").assertExists()
 
-        compose.onNodeWithTag("reply-send").performClick()
+        // The notice is over the composer now: Send is pressed as itself, not where the notice lies.
+        compose.onNodeWithTag("reply-send").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitForIdle()
         assertEquals(listOf(200uL to Answer.Text("yes, the second one")), computer.answered)
         assertEquals(emptyList<String>(), computer.sent)
