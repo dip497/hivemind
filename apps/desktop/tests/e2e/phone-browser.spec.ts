@@ -55,9 +55,9 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   // address on the network's server, named as the one given the code with it, the link in its
   // fragment.
   const app = await offerToConnect(desktop);
-  await expect(desktop.locator("[data-connect-server]")).toContainText(`The page comes from ${new URL(net.relay).host}`);
   const inBrowser = async (app: string) => {
-    await desktop.locator('[data-connect-browser] [role="switch"]').click();
+    await desktop.locator('[data-connect-way="browser"]').click();
+    await expect(desktop.locator("[data-connect-server]")).toContainText(`The page comes from ${new URL(net.relay).host}`);
     const link = (await desktop.locator("[data-connect-copy]").getAttribute("title"))!;
     // The app's link without the addresses, which a browser cannot use: a QR code a camera reads.
     expect(link.startsWith(`${net.relay}/phone/#connect=hivemind://connect/`)).toBe(true);

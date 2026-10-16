@@ -10,7 +10,6 @@ import { QrCode } from "./components/qr-code";
 import type { ConnectState, PairedDeviceSummary } from "../../shared/ipc";
 import type { NetworkProfile } from "@hivemind/workspace-host/network-profile";
 import { Button } from "./components/ui/button";
-import { Switch } from "./appearance-controls";
 import { PeopleList } from "./multiplayer/people-list";
 import { Hosting } from "./multiplayer/hosting";
 import { useShown } from "./multiplayer/shown";
@@ -80,34 +79,54 @@ function Offer({ repo }: { repo: string | null }) {
   // A phone without hivemind opens the page in its browser; asked for, never the default: the page
   // comes from the network's server, whose operator is given the code with it.
   const page = offer.page;
-  const shown = page && inBrowser ? page : offer.link;
+  const shown = inBrowser ? page : offer.link;
   const server = page && new URL(page).host;
   const until = new Date(offer.expires).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
+  const cancel = <Button variant="ghost" onClick={() => void window.hive.connectCancel()} data-connect-cancel>Cancel</Button>;
   return (
-    <section className="flex flex-wrap items-start gap-4" aria-label="Connect" data-connect-offered>
-      <QrCode text={shown} label="QR code of the offer to connect" data-connect-qr />
-      <div className="flex min-w-[200px] flex-1 flex-col gap-2">
-        <p className="font-mono text-row tracking-wide" data-connect-code>{offer.code.split("-").join(" ")}</p>
-        <p className="text-label text-[var(--color-fg2)]">
-          On the other device, enter these words (on this network) or the link under Join, or scan the code with hivemind on a phone.
-          You are asked who it is when it does. Until {until}, or once used.
-        </p>
-        {page && (
-          <div className="flex flex-col gap-1" data-connect-browser={inBrowser ? "on" : "off"}>
-            <label className="flex items-center gap-2 text-label">
-              <Switch on={inBrowser} onChange={setInBrowser} label="Open in the phone's browser" /> Open in the phone's browser, no app needed
-            </label>
-            <p className="text-label text-[var(--color-fg3)]" data-connect-server={server}>
-              The page comes from {server}, this network's server. Whoever runs it is given the code with it: turn this on only if that is you.
-            </p>
-            {inBrowser && <PageHash page={page.split("#")[0]!} />}
-          </div>
-        )}
-        <div className="flex flex-wrap gap-2">
-          <CopyLink text={shown} />
-          <Button variant="ghost" onClick={() => void window.hive.connectCancel()} data-connect-cancel>Cancel</Button>
-        </div>
+    <section className="flex flex-col gap-3" aria-label="Connect" data-connect-offered>
+      <div role="tablist" aria-label="Open with" className="plugins-scope self-start">
+        <button type="button" role="tab" aria-selected={!inBrowser} data-connect-way="app" onClick={() => setInBrowser(false)}>Hivemind app</button>
+        <button type="button" role="tab" aria-selected={inBrowser} data-connect-way="browser" onClick={() => setInBrowser(true)}>Phone browser</button>
       </div>
+      {shown ? (
+        <div className="flex flex-wrap items-start gap-4">
+          <QrCode text={shown} label="QR code of the offer to connect" data-connect-qr />
+          <div className="flex min-w-[200px] flex-1 flex-col gap-2">
+            {inBrowser ? (
+              <>
+                <p className="text-label text-[var(--color-fg2)]">
+                  Scan the code with the phone's camera, or send it the link: it opens in the browser, no app needed.
+                  You are asked who it is when it does. Until {until}, or once used.
+                </p>
+                <p className="text-label text-[var(--color-fg3)]" data-connect-server={server}>
+                  The page comes from {server}, this network's server. Whoever runs it is given the code with it: use this only if that is you.
+                </p>
+                <PageHash page={page!.split("#")[0]!} />
+              </>
+            ) : (
+              <>
+                <p className="font-mono text-row tracking-wide" data-connect-code>{offer.code.split("-").join(" ")}</p>
+                <p className="text-label text-[var(--color-fg2)]">
+                  Scan the code with hivemind on a phone, or on another computer enter these words (on this network) or the link under Join.
+                  You are asked who it is when it does. Until {until}, or once used.
+                </p>
+              </>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <CopyLink text={shown} />
+              {cancel}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2" data-connect-no-page>
+          <p className="text-label text-[var(--color-fg2)]">
+            A phone's browser opens the page from your network's server, and this network has none that serves it. Use the Hivemind app, or run your own server under Settings → Servers.
+          </p>
+          <div>{cancel}</div>
+        </div>
+      )}
     </section>
   );
 }

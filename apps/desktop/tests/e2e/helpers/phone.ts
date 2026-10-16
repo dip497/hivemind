@@ -32,7 +32,7 @@ export async function offerToConnect(desktop: Page, inBrowser = false): Promise<
   await desktop.locator("[data-connect-offer]").click();
   // The offer runs hive-net (a voucher on a closed network): seconds on a loaded machine.
   await expect(desktop.locator("[data-connect-qr]")).toBeVisible({ timeout: 20_000 });
-  if (inBrowser) await desktop.locator('[data-connect-browser] [role="switch"]').click();
+  if (inBrowser) await desktop.locator('[data-connect-way="browser"]').click();
   const link = (await desktop.locator("[data-connect-copy]").getAttribute("title"))!;
   expect(link).toMatch(inBrowser ? /#connect=/ : /^hivemind:\/\/connect\//);
   return link;

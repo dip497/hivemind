@@ -3,7 +3,8 @@
 // shown without a click, with where it runs. The offer's QR code fills its box with the four-module
 // margin a reader needs, opens as large as the window allows and closes with Esc, and a phone's
 // camera frame of it reads back the link, by the phone page's own reader (crates/hive-web); it stays
-// inside its box. Join closes Settings for the join form.
+// inside its box. Phone browser, where no server serves the page, says so. Join closes Settings for
+// the join form.
 import { test, expect, _electron as electron, type ElectronApplication, type Locator, type Page } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";
@@ -155,6 +156,20 @@ test("the offer's code, with this computer's addresses, stays inside its box, wh
   // What is beside it starts after it.
   const text = (await offered.locator("p").first().boundingBox())!;
   expect(text.y >= box.y + box.height || text.x >= box.x + box.width).toBe(true);
+});
+
+test("Phone browser, on a network with no server for the page, says so and shows no code; Hivemind app shows the app's link again", async () => {
+  const offered = page.locator("[data-connect-offered]");
+  if (!(await offered.count())) await page.locator("[data-connect-offer]").click();
+  await expect(offered.locator("[data-connect-qr]")).toBeVisible({ timeout: 20_000 });
+  await offered.locator('[data-connect-way="browser"]').click();
+  await expect(offered.locator('[data-connect-way="browser"]')).toHaveAttribute("aria-selected", "true");
+  await expect(offered.locator("[data-connect-no-page]")).toContainText("this network has none that serves it");
+  await expect(offered.locator("[data-connect-qr]")).toHaveCount(0);
+  await expect(offered.locator("[data-connect-copy]")).toHaveCount(0);
+  await offered.locator('[data-connect-way="app"]').click();
+  await expect(offered.locator("[data-connect-copy]")).toHaveAttribute("title", /^hivemind:\/\/connect\//);
+  await expect(offered.locator("[data-connect-code]")).toBeVisible();
 });
 
 test("Join closes Settings and opens the join form, where a code from elsewhere is entered", async () => {

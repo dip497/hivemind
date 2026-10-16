@@ -53,6 +53,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- Settings → Connect has two tabs, Hivemind app and Phone browser, each with its own QR code and Copy the link. Phone browser says so when your network has no server serving the page.
 - Layers panel, Machines: a machine's refresh, + and ⋯ buttons no longer cover its status words on hover.
 - Phone page and Android app: the View menu says "Last activity" as the computer's does, and has Reset to defaults; a shell's row shows a terminal mark, not a window.
 - The workspace menu in the Layers panel lists every workspace this computer holds, as your phone's Home does. Folders whose issues share a prefix, and folders with no issues, were missing from it.
