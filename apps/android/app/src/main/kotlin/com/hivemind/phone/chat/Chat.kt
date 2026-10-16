@@ -101,7 +101,7 @@ class Chat {
 
     /** The use of a tool that [entry] shows, as its own screen shows it; none when no such entry is shown. */
     fun toolCall(entry: String): ToolCall? = when (val said = told.firstOrNull { it.id == entry }?.said) {
-        is Said.ToolUse -> ToolCall(said.tool.name, said.tool.about, results[said.tool.id])
+        is Said.ToolUse -> ToolCall(said.tool.name, said.tool.about, result(said.tool.id))
         is Said.ToolOutput -> ToolCall(null, null, said.result)
         else -> null
     }
