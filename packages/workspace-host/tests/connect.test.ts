@@ -244,8 +244,9 @@ describe("what gives nothing", () => {
   });
 
   test("an offer lasts a day, and one closed tells those waiting it expired", async () => {
-    const at = Date.now();
     const late = offering();
+    // Read once the offer is made: making it can take longer than the millisecond past its day.
+    const at = Date.now();
     expect(late.offer.open(at + OFFER_TTL_MS - 60_000)).toBe(true);
     expect(late.offer.answer(idOf(newSeed()), { v: 1, connect: "ask" }, at + OFFER_TTL_MS + 1)).toEqual({ ok: false, error: "expired" });
 
