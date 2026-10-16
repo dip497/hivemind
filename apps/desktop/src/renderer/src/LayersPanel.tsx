@@ -1308,7 +1308,7 @@ function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYo
         <>
           <span className="relative size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]" title={group.hostId ? statusWords(s, on) : "online"}>
             <MachineIcon kind={group.key === "local" ? snap.thisComputerKind : m?.kind} thisComputer={group.key === "local"} size={ICON} />
-            <span className="absolute -bottom-0.5 -right-0.5 grid rounded-full p-px bg-[var(--color-bg2)] group-hover/mach:bg-[var(--surface-3)]">
+            <span className="absolute -bottom-1 -right-1 grid rounded-full p-[2px] bg-[var(--color-bg2)] group-hover/mach:bg-[var(--surface-3)]">
               <MachineDot status={group.hostId ? s : { state: "online", at: 0 }} enabled={on} size={6} />
             </span>
           </span>
