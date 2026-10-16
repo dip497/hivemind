@@ -282,7 +282,9 @@ test("restore of a session whose JSONL vanished starts fresh under the same id, 
     await delay(80);
     const uuidC = argVal(created[0], "--session-id");
     assert.ok(uuidC);
-    await mgr.flushAll();
+    // Snapshotted once it has said something: on a slow machine that is later than the spawn.
+    for (let i = 0; i < 60 && !snaps.has("hm:tile-C"); i++) { await mgr.flushAll(); await delay(20); }
+    assert.ok(snaps.has("hm:tile-C"), "the tile snapshotted");
 
     // The session's JSONL disappears (claude GC, repo moved, etc.).
     unlinkSync(path.join(markerDir, `${uuidC!}.jsonl`));
