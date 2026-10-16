@@ -841,14 +841,20 @@ handleEffect(
 // ── cross-repo: registry + transfer + links ─────────────────────────────
 handle("listWorkspaces", wrap(async () => listWorkspaces({ persistPrune: true })));
 // The Layers panel's Projects: every workspace this computer holds, as a phone's Home lists them,
-// with what runs in it now.
-handle("workspaceSummaries", wrap(async () => heldBoards(workspaceStore()).map((h): WorkspaceSummary => {
-  const statuses = (h.core?.tiles ?? []).map((t) => {
-    const s = control.status.get(t.id);
-    return s ? tileStatusOf(s).status : null;
-  });
-  return { repo: h.repo, title: h.name, ...workspaceCounts(statuses) };
-}).sort((a, b) => a.title.localeCompare(b.title))));
+// and every folder set up for issues here but not opened yet, with what runs in each now.
+handle("workspaceSummaries", wrap(async () => {
+  const held = heldBoards(workspaceStore());
+  const known = (await listWorkspaces({ persistPrune: false }))
+    .filter((w) => !held.some((h) => h.repo === w.repo))
+    .map((w) => ({ repo: w.repo, name: path.basename(w.repo), core: workspaceStore().getCore(w.repo) }));
+  return [...held, ...known].map((h): WorkspaceSummary => {
+    const statuses = (h.core?.tiles ?? []).map((t) => {
+      const s = control.status.get(t.id);
+      return s ? tileStatusOf(s).status : null;
+    });
+    return { repo: h.repo, title: h.name, ...workspaceCounts(statuses) };
+  }).sort((a, b) => a.title.localeCompare(b.title));
+}));
 handle(
   "resolveIssueRoot",
   wrap(async (_e, id: string) => ({ root: await resolveRootForIssue(id) })),
