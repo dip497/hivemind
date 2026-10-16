@@ -148,7 +148,9 @@ export class ControlPlane {
       const was = this.inTurn.has(tileId);
       if (now) this.inTurn.add(tileId);
       else this.inTurn.delete(tileId);
-      if (now && !was && (o.signalsTurns?.(tileId) ?? false)) this.mailbox.setBusy(toPtyId(tileId));
+      // A wait is in a turn, but does not start one: a startup screen (a folder's trust) answered
+      // reads working with no turn to end, and would hold every message after it.
+      if (status.state === "working" && !was && (o.signalsTurns?.(tileId) ?? false)) this.mailbox.setBusy(toPtyId(tileId));
       if (was && !now && status.state !== "exited") this.mailbox.setIdle(toPtyId(tileId));
     });
   }

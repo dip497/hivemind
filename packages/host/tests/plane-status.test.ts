@@ -47,3 +47,13 @@ test("what a tile's screen last showed is kept by its bare id, and told; anythin
   p.forget("hm:t1");
   assert.deepEqual([...p.lines], []);
 });
+
+test("a startup screen answered (a folder's trust) does not hold the messages sent after it", () => {
+  const wrote: string[] = [];
+  const p = plane({ signalsTurns: () => true, write: (_pty: string, data: string) => { wrote.push(data); return true; } });
+  p.event("agent.screen", { tileId: "hm:t1", state: "permission", says: "trust" });
+  p.event("agent.screen", { tileId: "hm:t1", state: "working" });
+  p.mailbox.deliver("hm:t1", "hello");
+  assert.ok(wrote.some((d) => d.includes("hello")), "the message is typed, not held for a turn that never ends");
+  p.mailbox.forget("hm:t1");
+});

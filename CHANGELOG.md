@@ -59,6 +59,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- A Claude agent whose folder-trust screen was answered now receives the messages sent to it; before, every one was held for a turn that never ended.
 - A path holding a long run of slashes is read at once; one with 50,000 of them took ten seconds.
 - Connect's Phone browser tab, on a network whose server does not serve the phone page, and Reach devices elsewhere → Serve from one of my devices offer **Set it up with an agent**: pick an agent installed here, and it asks you how your devices should reach this computer (Tailscale, your own domain, a tunnel, a forwarded port), sets up the server with the phone page and puts this computer on it, asking you for anything only you can do. The command shown there before had no `--phone`, so a server set up from it never gave a phone link.
 - The Machines pane's status dot sits clear of the machine's icon instead of covering its corner.
