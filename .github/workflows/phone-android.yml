@@ -65,7 +65,16 @@ jobs:
       - name: The NDK the app is built with (gradle/libs.versions.toml)
         run: |
           ndk=$(sed -n 's/^ndk = "\(.*\)"/\1/p' apps/android/gradle/libs.versions.toml)
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ndk" > /dev/null
+          # The runner's download now and then arrives corrupt ("Error on ZipFile unknown archive"):
+          # tried again, from scratch, before the job is failed for it.
+          for try in 1 2 3; do
+            if yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ndk" > /dev/null \
+              && [ -f "$ANDROID_HOME/ndk/$ndk/source.properties" ]; then exit 0; fi
+            echo "::warning::NDK $ndk install failed (try $try)"
+            rm -rf "$ANDROID_HOME/ndk/$ndk"
+            sleep $((try * 10))
+          done
+          exit 1
 
       - uses: gradle/actions/setup-gradle@v6
         with:
