@@ -1,9 +1,11 @@
 package com.hivemind.phone.chat
 
 import android.content.ClipData
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ClipEntry
@@ -247,20 +249,27 @@ private fun ToolRow(name: String, about: String?, result: ToolResult?, onOpen: (
 }
 
 /**
- * Held down, [text] is copied whole, with a tap of haptics. Not a selection: a selection container
- * on every message weighs on the list as it scrolls, and a message is copied whole far more often
- * than a part of it.
+ * Held down, [text] is copied whole, with a tap of haptics; "Copy" is an action for a screen reader
+ * too. Not a selection: a selection container on every message weighs on the list as it scrolls,
+ * and a message is copied whole far more often than a part of it. Neither merges what it holds, so
+ * each paragraph, item and link stays its own to a screen reader, and takes its own taps.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Modifier.copiedOnHold(text: String): Modifier {
     val clipboard = LocalClipboard.current
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val label = stringResource(R.string.action_copy)
-    // No ripple: a tap on a message does nothing, and its links take their own taps first.
-    return combinedClickable(interactionSource = null, indication = null, onLongClickLabel = label, onLongClick = {
-        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+    val copy = {
         scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(null, text))) }
-    }, onClick = {})
+        Unit
+    }
+    return this
+        .pointerInput(text) {
+            detectTapGestures(onLongPress = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                copy()
+            })
+        }
+        .semantics { customActions = listOf(CustomAccessibilityAction(label) { copy(); true }) }
 }
