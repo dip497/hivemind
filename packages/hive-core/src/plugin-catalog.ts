@@ -1,4 +1,4 @@
-/** The plugin catalog: HiveHub lists every published agent, view and widget, with every file's
+/** The plugin catalog: HiveHub lists every published agent, view, widget and tool, with every file's
  *  SHA-256 and the commit it came from. Content is pinned by hash, so a file that changed
  *  after listing fails the install instead of being trusted. */
 import { createHash } from "node:crypto";
@@ -8,11 +8,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MIN_APP_VERSION_RE, appMeetsMinVersion } from "@hivemind/agents";
 import { AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
+import { TOOL_ID_RE } from "./tool-registry.js";
 
 export const DEFAULT_PLUGIN_INDEX = "https://hivehub.griiken.workers.dev/api/v1/index.json";
 
-export type CatalogType = "agent" | "view" | "widget";
-const TYPES: readonly string[] = ["agent", "view", "widget"];
+export type CatalogType = "agent" | "view" | "widget" | "tool";
+const TYPES: readonly string[] = ["agent", "view", "widget", "tool"];
 export interface CatalogFile { path: string; sha256: string }
 export interface CatalogEntry {
   id: string;
@@ -39,9 +40,11 @@ export interface CatalogEntry {
 }
 
 // A view or a widget carries its publisher's scope; an agent is one name for one CLI, settled in
-// the plugins repository — the same split the registry enforces when it lists them.
+// the plugins repository; a tool is the app's own tool id, owner/name, whose folder is owner--name
+// — the same split the registry enforces when it lists them.
 const SCOPED = /^(?!.*--)@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
-const ID_RE: Record<CatalogType, RegExp> = { view: SCOPED, widget: SCOPED, agent: /^[a-z0-9][a-z0-9-]{0,31}$/ };
+const TOOL = new RegExp(`^(?!.*--)${TOOL_ID_RE.source.slice(1)}`);
+const ID_RE: Record<CatalogType, RegExp> = { view: SCOPED, widget: SCOPED, tool: TOOL, agent: /^[a-z0-9][a-z0-9-]{0,31}$/ };
 const SEGMENT_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 const SHA_RE = /^[0-9a-f]{64}$/;
 export const MAX_FILE = 20 << 20;
@@ -69,7 +72,7 @@ export function parseCatalog(raw: unknown): CatalogEntry[] {
     const at = `plugins[${i}]`;
     const type = p.type as CatalogType;
     if (typeof p.id !== "string" || !ID_RE[type].test(p.id)) {
-      throw new Error(`${at}.id is not ${type === "agent" ? "an agent id — it must be one name" : `a ${type} id — it must be @owner/name`}`);
+      throw new Error(`${at}.id is not ${type === "agent" ? "an agent id — it must be one name" : type === "tool" ? "a tool id — it must be owner/name" : `a ${type} id — it must be @owner/name`}`);
     }
     const key = `${p.type}:${p.id}`;
     if (seen.has(key)) throw new Error(`${at} lists ${key} twice`);

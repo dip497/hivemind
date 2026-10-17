@@ -15,6 +15,9 @@ import { newNonce } from "@hivemind/core/view-files";
 import { reviewViewDir } from "./view-packages.js";
 import { installWidget, listWidgets, readWidget } from "@hivemind/core/widgets";
 import { widgetsChanged } from "./widgets.js";
+import { installToolPackage, listToolPackages, readToolPackage } from "@hivemind/core/tool-packages";
+import { toolsChanged } from "./tool-packages.js";
+import { reloadSettings } from "./settings-store.js";
 import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
 
 export interface AgentReview {
@@ -80,6 +83,7 @@ export function installPluginCatalogIpc(): void {
   });
   let pendingAgent: { token: string; dir: string; id: string } | null = null;
   let pendingWidget: { token: string; dir: string; id: string } | null = null;
+  let pendingTool: { token: string; dir: string; id: string } | null = null;
   handle("plugins:catalog", () => catalogNow());
 
   // Which installed agents are no longer what the catalog lists. Agents carry no version of
@@ -119,6 +123,21 @@ export function installPluginCatalogIpc(): void {
         pendingWidget = { token: newNonce(), dir, id: entry.id };
         const replaces = (await listWidgets()).some((w) => w.id === entry.id && !w.builtin);
         return { type: "widget", token: pendingWidget.token, id: entry.id, name: pkg.name, permissions: pkg.permissions, code: pkg.code !== "", replaces };
+      } catch (e) { await rm(dir, { recursive: true, force: true }); throw e; }
+    }
+    if (entry.type === "tool") {
+      try {
+        // Its hivemind-tool.json must name the listing it came from, as a widget's must.
+        const pkg = await readToolPackage(dir, entry.id);
+        if (pkg.problem) throw new Error(pkg.problem);
+        if (pendingTool) await rm(pendingTool.dir, { recursive: true, force: true }).catch(() => {});
+        pendingTool = { token: newNonce(), dir, id: entry.id };
+        const had = (await listToolPackages()).find((t) => t.id === entry.id && t.source === "you");
+        return {
+          type: "tool", token: pendingTool.token, id: entry.id, name: pkg.name, permissions: pkg.permissions,
+          tools: pkg.tools.map((t) => t.label), ...(pkg.service ? { service: pkg.service.command.join(" ") } : {}),
+          replacesVersion: had ? had.version ?? "0.0.0" : null,
+        };
       } catch (e) { await rm(dir, { recursive: true, force: true }); throw e; }
     }
     if (entry.type === "view") {
@@ -187,6 +206,14 @@ export function installPluginCatalogIpc(): void {
     const { dir, id } = pendingWidget;
     pendingWidget = null;
     try { await installWidget(dir, id); widgetsChanged(); }
+    finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
+  });
+  handleEffect("plugins:install-tool", (token) => ({ target: pendingTool && pendingTool.token === token ? pendingTool.id : undefined }), async (_event, token: string) => {
+    if (!pendingTool || pendingTool.token !== token) throw new Error("Review the tool again before installing it.");
+    const { dir, id } = pendingTool;
+    pendingTool = null;
+    // It arrives off, an update too: switching it on trusts the code that was there.
+    try { await installToolPackage(dir, id); await reloadSettings(); toolsChanged(); }
     finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
   });
   handleEffect("plugins:install-agent", (token) => ({ target: pendingAgent && pendingAgent.token === token ? pendingAgent.id : undefined }), async (_event, token: string) => {

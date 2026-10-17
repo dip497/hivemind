@@ -9,6 +9,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- Tool plugins install from HiveHub: Settings ▸ Plugins lists them under Tools, and `hive tools install owner/name` takes one by its id (a folder of that name is still the folder). Every file is checked against the index, its `hivemind-tool.json` must say the id it was listed under, and it arrives switched off, an update too.
+
 ## [2026.10.2] — 2026-10-18
 
 ### Added

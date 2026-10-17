@@ -11,6 +11,7 @@ import { rescan } from "./settings-views";
 import { PLUGIN_KINDS, permissionWords, type PluginKind } from "./plugins/library";
 import { PluginGroup, PluginRow } from "./plugins/PluginList";
 import { useWidgetPackages } from "./board-objects/widget-runtime";
+import { useToolPackages } from "./tiles/tool-plugins";
 import { useSettingsNavigate } from "./settings-panels";
 
 export type Preview = NonNullable<Awaited<ReturnType<NonNullable<typeof window.hive.previewViewInstall>>>>;
@@ -62,6 +63,7 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
   const views = useCommunityReport().packages;
   const agents = useAgentEntries();
   const widgets = useWidgetPackages();
+  const tools = useToolPackages().packages;
   const go = useSettingsNavigate();
   const load = () => {
     setLoadError(null); setEntries(null);
@@ -79,6 +81,7 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
     e.type === "view" ? views.find((v) => v.id === e.id)?.manifest?.version ?? null
     // A widget that says no version is older than any listed one.
     : e.type === "widget" ? (widgets.some((w) => w.id === e.id) ? widgets.find((w) => w.id === e.id)!.version ?? "0.0.0" : null)
+    : e.type === "tool" ? (tools.some((t) => t.id === e.id && t.source === "you") ? tools.find((t) => t.id === e.id && t.source === "you")!.version ?? "0.0.0" : null)
     : agents.some((a) => a.id === e.id && a.source === "user") ? "installed" : null;
   const q = query.trim().toLowerCase();
   const shown = (entries ?? []).filter((e) => (kind === "all" || e.type === kind)
@@ -105,6 +108,7 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
     try {
       if (r.type === "view") { await window.hive.installViewPackage(r.token); rescan(); }
       else if (r.type === "widget") await window.hive.installCatalogWidget(r.token);
+      else if (r.type === "tool") await window.hive.installCatalogTool(r.token);
       else { await window.hive.installCatalogAgent(r.token); await syncAgentPlugins(); }
       setReview(null);
       setDone({ entry: e });
@@ -119,6 +123,11 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
         : "It has no code: the app draws it from its description."}</p>
       <p>{open.permissions.length ? <>It may also: {permissionWords(open.permissions).join("; ")}.</> : "It asks for nothing beyond showing itself and what it keeps."}</p>
       {open.replaces && <p className="settings-note">Replaces the {open.name} you installed before. What each placed one holds is kept.</p>}
+    </> : open.type === "tool" ? <>
+      <p>Adds {open.name}: {open.tools.join(", ")}, opened from a frame or the Add menu. It runs inside Hivemind with the app's access to your files and network, so it is installed switched off. Switch it on from its page once you trust who wrote it.</p>
+      <p>{open.permissions.length ? <>Its tiles may also: {permissionWords(open.permissions).join("; ")}.</> : "Its tiles ask for nothing more."}</p>
+      {open.service && <p>While it is on, it keeps this running: <code className="catalog-flag">{open.service}</code></p>}
+      {open.replacesVersion && <p className="settings-note">Replaces version {open.replacesVersion}. Like any update to a tool, it is switched off until you switch it on again.</p>}
     </> : open.type === "view" ? <>
       <p>This view can show workspace names and agent status, and open your existing tools.</p>
       <p>{open.package.manifest?.permissions.length ? `Additional access: ${open.package.manifest.permissions.join(", ")}` : "No additional access requested."}</p>
