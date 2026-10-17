@@ -135,8 +135,59 @@ jobs:
         # design tokens, so they have to match the repository's.
         run: node docs/scripts/sync-install.mjs --check && node docs/scripts/sync-tokens.mjs --check && node docs/scripts/sync-agent-icons.mjs --check
 
+  # The files hive-net, hive-phone and compose read, hashed. A job whose files passed it before, on
+  # this pull request or on main, is skipped, and a skipped check counts as passed. The hash is of
+  # the commit checked out (a pull request's merge with main), so a change on main counts; and of
+  # the week, so what the repository does not pin (base images, the runner) is met at least weekly.
+  inputs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      hive-net: ${{ steps.hash.outputs.hive-net }}
+      hive-phone: ${{ steps.hash.outputs.hive-phone }}
+      compose: ${{ steps.hash.outputs.compose }}
+      hive-net-passed: ${{ steps.hive-net.outputs.cache-hit }}
+      hive-phone-passed: ${{ steps.hive-phone.outputs.cache-hit }}
+      compose-passed: ${{ steps.compose.outputs.cache-hit }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # compose's are what infra/Dockerfile.dockerignore lets in, infra/ and the hive-net the checks run.
+      - id: hash
+        run: |
+          hash() { { date -u +%G-%V; git ls-tree -r HEAD -- .github/workflows/ci.yml rust-toolchain.toml "$@"; } | sha256sum | cut -c1-40; }
+          {
+            echo "hive-net=$(hash crates/hive-net conformance scripts/traffic-test.sh)"
+            echo "hive-phone=$(hash crates/hive-phone crates/hive-phone-ffi crates/hive-net conformance spec scripts/phone/bindings.sh apps/ios/HivePhone/Core/Generated)"
+            echo "compose=$(hash infra crates/Cargo.toml crates/Cargo.lock crates/hive-net crates/hive-phone crates/hive-web crates/vendor spec pnpm-lock.yaml pnpm-workspace.yaml)"
+          } | tee -a "$GITHUB_OUTPUT"
+
+      - id: hive-net
+        uses: actions/cache/restore@v6
+        with:
+          path: .passed
+          key: passed-hive-net-${{ steps.hash.outputs.hive-net }}
+          lookup-only: true
+
+      - id: hive-phone
+        uses: actions/cache/restore@v6
+        with:
+          path: .passed
+          key: passed-hive-phone-${{ steps.hash.outputs.hive-phone }}
+          lookup-only: true
+
+      - id: compose
+        uses: actions/cache/restore@v6
+        with:
+          path: .passed
+          key: passed-compose-${{ steps.hash.outputs.compose }}
+          lookup-only: true
+
   hive-net:
     # The Rust network crate (R10): its CLI end to end, on the local network and through a relay.
+    needs: inputs
+    # Not cancelled(): should inputs fail, this runs.
+    if: ${{ !cancelled() && needs.inputs.outputs.hive-net-passed != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -185,10 +236,18 @@ jobs:
           command -v nft >/dev/null || sudo apt-get install -y nftables
           sudo HIVE_NET_BIN="$PWD/target/debug/hive-net" bash ../../scripts/traffic-test.sh
 
+      - run: touch "$GITHUB_WORKSPACE/.passed"
+      - uses: actions/cache/save@v6
+        with:
+          path: .passed
+          key: passed-hive-net-${{ needs.inputs.outputs.hive-net }}
+
   hive-phone:
     # The phone's Rust core (M5): conformance/pairing.json from the phone's side, and what it keeps;
     # the facade the apps link (crates/hive-phone-ffi), and the Swift generated from it, committed.
     # That crates/hive-web builds for a browser with them is phone-page's: it builds its wasm.
+    needs: inputs
+    if: ${{ !cancelled() && needs.inputs.outputs.hive-phone-passed != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     defaults:
@@ -230,6 +289,12 @@ jobs:
           scripts/phone/bindings.sh
           git diff --exit-code -- apps/ios/HivePhone/Core/Generated
           test -z "$(git status --porcelain -- apps/ios/HivePhone/Core/Generated)"
+
+      - run: touch "$GITHUB_WORKSPACE/.passed"
+      - uses: actions/cache/save@v6
+        with:
+          path: .passed
+          key: passed-hive-phone-${{ needs.inputs.outputs.hive-phone }}
 
   phone-page:
     # The phone page (crates/hive-web, docs/design/phone-browser-2026-10-03.md): the wasm and the app
@@ -279,6 +344,8 @@ jobs:
     # R13: the stack self-hosters run (infra/compose.yml), built from this commit, and its checks:
     # the network's link, admission, a device found by id through the lookup server, a host
     # record, and a restart survived.
+    needs: inputs
+    if: ${{ !cancelled() && needs.inputs.outputs.compose-passed != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -325,3 +392,9 @@ jobs:
       - name: Stop it
         if: always()
         run: docker compose -f infra/compose.yml down -v
+
+      - run: touch .passed
+      - uses: actions/cache/save@v6
+        with:
+          path: .passed
+          key: passed-compose-${{ needs.inputs.outputs.compose }}
