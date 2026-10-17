@@ -8,7 +8,9 @@
 //! - main → daemon: `hello {v}`, then `admit {devices}` (the devices the access lists let in, which
 //!   the gate enforces), `dial {req, peer, addrs, relay}` (a workspace's host, on `hive/ws/1`),
 //!   `open {conn, stream, name}` (a stream named `name` on a connection main dialled, by the id main
-//!   gives it), `send {conn, stream, data}`, `close {conn, reason?}`, `pair {req, peer, addrs,
+//!   gives it), `send {conn, stream, data}`, `end {conn, stream}` (nothing more goes on a stream
+//!   main opened, once what it sent is written: the other side hears it end), `close {conn,
+//!   reason?}`, `pair {req, peer, addrs,
 //!   relay, hello}` (first contact with a host), `pair-reply {req, reply}` (the answer to someone's
 //!   `pair-request`), `advertise {data}` (what this device announces to the devices nearby, by
 //!   mDNS; null for nothing), `nearby {req}` (the devices nearby, and what each announces),
@@ -80,8 +82,9 @@ use crate::{
 };
 
 /// The protocol main and the daemon speak. 2: a stream is known by its id, and a connection carries
-/// any number of streams of one name (1, before it, knew a stream by its name: one of each).
-pub const PROTOCOL: u32 = 2;
+/// any number of streams of one name (1, before it, knew a stream by its name: one of each). 3: main
+/// ends a stream it opened.
+pub const PROTOCOL: u32 = 3;
 
 /// How long a host's person has to answer someone asking to join.
 const PAIR_ANSWER_WITHIN: Duration = Duration::from_secs(180);
@@ -114,6 +117,11 @@ enum FromMain {
         conn: u64,
         stream: u64,
         data: String,
+    },
+    /// A stream main opened ends, after what was sent on it before.
+    End {
+        conn: u64,
+        stream: u64,
     },
     Close {
         conn: u64,
@@ -565,6 +573,12 @@ impl Daemon {
                     .is_some_and(|frames| frames.send(data.into_bytes()).is_ok());
                 if !queued {
                     self.tell(ToMain::Took { conn, stream, n });
+                }
+            }
+            FromMain::End { conn, stream } => {
+                // Its writer finishes it once what is queued is written; main ended it, so is not told.
+                if let Some(link) = self.links.lock().unwrap().get_mut(&conn) {
+                    link.streams.remove(&stream);
                 }
             }
             FromMain::Close { conn, reason } => {

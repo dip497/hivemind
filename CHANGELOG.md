@@ -81,6 +81,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- A guest with two windows on the same shared terminal: hiding it in one window no longer stops it in the other, closing it in one no longer lets the host drop it while the other shows it, and asking for more history in one no longer resets the other's screen. Each window now has a connection of its own to the host for its terminals; everything else still comes once per computer. The app and `hive-net` speak daemon protocol 3; install them from one release, as before.
 - A guest's change that its role does not allow can no longer reach the host by being sent before a change it waits on.
 - A guest who may edit a shared workspace can no longer change whose it is: the owner's host refuses that change.
 - A guest who edited a shared workspace while away, while its owner's app restarted, no longer parts from it for good: on reconnecting it takes the owner's board and sends its own edits on top, instead of the owner dropping every change it sends from then on.

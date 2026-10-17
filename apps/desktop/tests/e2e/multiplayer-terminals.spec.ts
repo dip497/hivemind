@@ -4,7 +4,8 @@
 // window draws it at that size, and the host's tile says they are typing while their pointer is
 // not drawn; the host takes it back, and the guest's keys stop reaching it.
 // When the host goes away and comes back, the guest's terminal shows the host's shell again, live,
-// and the keyboard the guest held is the host's again.
+// and the keyboard the guest held is the host's again. A guest with two windows on it: one hiding
+// it, letting go of it or closing leaves it live in the other.
 import { test, expect, type ElectronApplication, type Page } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";
@@ -132,3 +133,24 @@ test("the host goes away and comes back: the guest's terminal shows the host's s
   await expect.poll(() => screen(guest), { timeout: 15_000 }).toContain("shown-42");
 });
 
+
+test("a guest with two windows on the host's shell: one hiding it, letting go of it or closing leaves it live in the other", async () => {
+  test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
+  const { host, guest, repo } = await sharedWorkspace(root, apps, "view");
+  await run(host, `echo up > ${repo}/up`, `${repo}/up`, /^up$/);
+  const [second] = await Promise.all([apps[1]!.waitForEvent("window"), guest.evaluate(() => window.hive.newWindow?.())]);
+  await second.waitForSelector(".react-flow", { timeout: 15_000 });
+  await host.keyboard.type("echo both-$((6*7))\n");
+  for (const w of [guest, second]) await expect.poll(() => screen(w), { timeout: 15_000 }).toContain("both-42");
+
+  const session = `hm:${await terminal(second).getAttribute("data-id")}`;
+  await second.evaluate((s) => window.hive.ptyInterest(s, false), session);
+  await host.keyboard.type("echo hidden-$((6*7))\n");
+  await expect.poll(() => screen(guest), { timeout: 15_000 }).toContain("hidden-42");
+  await second.evaluate((s) => window.hive.ptyDetach(s), session);
+  await host.keyboard.type("echo let-go-$((6*7))\n");
+  await expect.poll(() => screen(guest), { timeout: 15_000 }).toContain("let-go-42");
+  await second.close();
+  await host.keyboard.type("echo closed-$((6*7))\n");
+  await expect.poll(() => screen(guest), { timeout: 15_000 }).toContain("closed-42");
+});

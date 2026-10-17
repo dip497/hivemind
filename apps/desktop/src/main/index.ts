@@ -1357,8 +1357,8 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
 // from elsewhere, by its host.
 const onDevices = deviceFolders({ mine: isYourDevice, dial: dialDevice });
 const workspaceIpc = serveWorkspaceApi(workspaceServer, {
-  call: (method, params) => elsewhere.call(method, params) ?? onDevices.call(method, params),
-  notice: (method, params) => elsewhere.notice(method, params) || onDevices.notice(method, params),
+  call: (method, params, from) => elsewhere.call(method, params, from) ?? onDevices.call(method, params),
+  notice: (method, params, from) => elsewhere.notice(method, params, from) || onDevices.notice(method, params),
 });
 
 /** The workspace a window shows, or null. */

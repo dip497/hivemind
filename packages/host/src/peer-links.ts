@@ -109,6 +109,51 @@ function opened(text: string): { workspace: string; squeeze: boolean } | null {
   }
 }
 
+/** Each `api` stream the device on `link` opens, served as a connection of its own once the
+ *  workspace it is for is known (`serve` is given) and its first frame came, which says what it is
+ *  for: `{"terminals": true}`, a window's terminals alone; `{"terminals": false}`, the rest; one
+ *  that does not say, everything. What comes on it before then waits. */
+function apiStreams(link: Link): (serve: (api: TextChannel & Room, terminals: boolean | null) => void) => void {
+  let serving: ((api: TextChannel & Room, terminals: boolean | null) => void) | null = null;
+  interface Held { api: Stream; came: string[]; off(): void }
+  const waiting = new Set<Held>();
+  const start = (held: Held): void => {
+    if (!serving || held.came.length === 0) return;
+    waiting.delete(held);
+    held.off();
+    const { api } = held;
+    const terminals = forTerminals(held.came[0]!);
+    const came = terminals === null ? held.came : held.came.slice(1);
+    serving({
+      send: (text) => api.send(text),
+      closed: api.closed,
+      on: (listener) => { for (const text of came) listener(text); return api.on(listener); },
+      hasRoom: () => api.hasRoom(),
+      whenRoom: (listener) => api.whenRoom(listener),
+    }, terminals);
+  };
+  link.streams("api", (api) => {
+    const held: Held = { api, came: [], off: () => {} };
+    waiting.add(held);
+    held.off = api.on((text) => { held.came.push(text); start(held); });
+  });
+  return (serve) => {
+    serving = serve;
+    for (const held of [...waiting]) start(held);
+  };
+}
+
+/** Whether a stream whose first frame is `text` is for terminals alone; null when that frame does
+ *  not say, but asks. */
+function forTerminals(text: string): boolean | null {
+  try {
+    const said = (JSON.parse(text) as { terminals?: unknown } | null)?.terminals;
+    return typeof said === "boolean" ? said : null;
+  } catch {
+    return null;
+  }
+}
+
 /** A link's named stream as a channel of text frames, with its link's room. */
 export const streamOf = (link: Link, stream: string): TextChannel & Room => ({
   send: (text) => link.send(stream, text),
@@ -373,6 +418,7 @@ export class PeerLinks {
       void answered.then((answer) => link.send("hosting", JSON.stringify(answer)));
     });
     link.streams("device", (device) => device.on((text) => this.answerDevice(link, device, text, false)));
+    const serveApi = apiStreams(link);
     const off = link.on("sync", (text) => {
       const hello = parseSync(text);
       if (hello?.t !== "hello") return;
@@ -400,14 +446,16 @@ export class PeerLinks {
       // The owner's other devices keep its list in step, to take it over with as it is (M3).
       const list = access === "owner" ? serveList(lists, hello.workspace, streamOf(link, "list")) : () => {};
       const stop = () => { replica(); list(); };
-      servePeer(server, streamOf(link, "api"), {
+      // Its app's stream hears what happens in the workspace, once; each window's, its terminals'.
+      serveApi((api, terminals) => servePeer(server, api, {
         actor: { kind: "peer", person, device: link.peer, access },
         workspace: hello.workspace,
         repo,
         // A terminal is named by its session (`hm:<tile>`), the document by the tile.
         holds: (tile) => store.workspaceOf(toBareId(tile)) === repo,
         places: () => frameWorktrees(store.getCore(repo)),
-      });
+        ...(terminals === null ? {} : { hears: (event: string) => event.startsWith("terminal.") === terminals }),
+      }));
       const entry: Served = { workspace: hello.workspace, person, link, stop };
       this.served.add(entry);
       const who = `${link.peer.slice(0, 8)}… in ${hello.workspace.slice(0, 8)}…`;

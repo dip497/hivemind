@@ -471,6 +471,63 @@ async fn a_stream_the_other_device_stops_reading_holds_up_no_other_and_the_netwo
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn main_ends_a_stream_it_opened_and_the_other_device_hears_it_end_while_the_others_of_that_name_carry_on(
+) {
+    let root = temp();
+    let mut host = Main::start(&root, "host").await;
+    let mut guest = Main::start(&root, "guest").await;
+    host.send(json!({ "t": "admit", "devices": [guest.id] }))
+        .await;
+    guest
+        .send(json!({ "t": "dial", "req": 1, "peer": host.id, "addrs": host.addr_list() }))
+        .await;
+    let conn = guest.next("dialed").await["conn"].clone();
+
+    // Two windows of a guest's app, each with an `api` stream of its own on the one connection.
+    guest.open(&conn, 1, "api", "window a").await;
+    guest.open(&conn, 2, "api", "window b").await;
+    let host_conn = host.next("incoming").await["conn"].clone();
+    let mut by_window = HashMap::new();
+    for _ in 0..2 {
+        let recv = host.next("recv").await;
+        by_window.insert(
+            recv["data"].as_str().unwrap().to_string(),
+            recv["stream"].as_u64().unwrap(),
+        );
+    }
+    let (a, b) = (by_window["window a"], by_window["window b"]);
+
+    // Window a closes: main ends its stream, and the host's main is told it ended.
+    guest
+        .send(json!({ "t": "end", "conn": conn, "stream": 1 }))
+        .await;
+    let ended = host.next("ended").await;
+    assert_eq!(
+        (ended["conn"].clone(), ended["stream"].clone()),
+        (host_conn.clone(), json!(a))
+    );
+
+    // Window b's carries on, both ways; the main that ended a's is not told of it again.
+    guest.send_on(&conn, 2, "b again").await;
+    let recv = host.next("recv").await;
+    assert_eq!(
+        (recv["stream"].clone(), recv["data"].clone()),
+        (json!(b), json!("b again"))
+    );
+    host.send_on(&host_conn, b, "answer b").await;
+    let back = guest.next("recv").await;
+    assert_eq!(
+        (back["stream"].clone(), back["data"].clone()),
+        (json!(2), json!("answer b"))
+    );
+    assert!(guest
+        .within("ended", Duration::from_millis(500))
+        .await
+        .is_none());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn an_app_that_speaks_another_protocol_is_told_so_and_the_daemon_stops() {
     let root = temp();
     // An app of an earlier release says nothing of its protocol: it admits devices first. One of a

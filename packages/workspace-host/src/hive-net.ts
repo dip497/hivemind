@@ -37,8 +37,9 @@ export interface FoundHost extends HostRecord {
 }
 
 /** The daemon's protocol: what this process speaks to it (`PROTOCOL` in daemon.rs). 2: a stream is
- *  known by its id, and a connection carries any number of streams of one name. */
-export const PROTOCOL = 2;
+ *  known by its id, and a connection carries any number of streams of one name. 3: this process
+ *  ends a stream it opened. */
+export const PROTOCOL = 3;
 
 /** How many bytes sent on a link may wait for the network to take them before it has no room. */
 export const LINK_ROOM = 512 * 1024;
@@ -64,6 +65,12 @@ export interface Stream extends Room {
   readonly closed: Promise<string>;
 }
 
+/** A stream this device opened with `Link.open`, which it ends when it is done with it. */
+export interface OpenedStream extends Stream {
+  /** Nothing more goes either way on it: the other device hears it end. */
+  end(): void;
+}
+
 /** One connection to another device, on `hive/ws/1`: frames of text on named streams. The device
  *  that dialled opens them, as many of a name as it likes (a phone opens an `api` stream for each
  *  terminal it watches, conversation it follows and call it makes); the other side answers on
@@ -80,6 +87,9 @@ export interface Link extends Room {
   /** Each stream named `stream` the other device opens from now on, as it opens it: a stream of
    *  its own, its frames its own, and answered on alone. */
   streams(stream: string, listener: (opened: Stream) => void): () => void;
+  /** A new stream named `stream`, opened now beside any others of that name: its frames its own
+   *  (`on` hears them too), and `send` never goes on it. Only the device that dialled opens one. */
+  open(stream: string): OpenedStream;
   /** Close it, saying why to the other side ("removed", "left", …). */
   close(reason?: string): void;
   /** Resolves, with why, when the connection is gone. */
@@ -113,15 +123,18 @@ export interface HiveNetOptions {
 type Message = Record<string, unknown> & { t: string };
 
 /** A stream of a connection the daemon holds, by its id there. */
-class DaemonStream implements Stream {
+class DaemonStream implements OpenedStream {
   readonly listeners = new Set<(data: string) => void>();
   readonly closed: Promise<string>;
-  end!: (why: string) => void;
+  settle!: (why: string) => void;
   constructor(readonly id: number, readonly name: string, private readonly link: DaemonLink) {
-    this.closed = new Promise((resolve) => { this.end = resolve; });
+    this.closed = new Promise((resolve) => { this.settle = resolve; });
   }
   send(data: string): void {
     this.link.write(this, data);
+  }
+  end(): void {
+    this.link.finish(this);
   }
   on(listener: (data: string) => void): () => void {
     this.listeners.add(listener);
@@ -138,7 +151,7 @@ class DaemonStream implements Stream {
 class DaemonLink implements Link {
   /** Its streams open now, by id: given here to those this device opens, when it dialled; by the
    *  daemon to those the other device opens, when it did. */
-  private readonly open = new Map<number, DaemonStream>();
+  private readonly live = new Map<number, DaemonStream>();
   /** The newest stream open of each name: where `send` goes. */
   private readonly newest = new Map<string, DaemonStream>();
   private readonly listeners = new Map<string, Set<(data: string) => void>>();
@@ -165,7 +178,7 @@ class DaemonLink implements Link {
   }
   /** `data` on the stream `s`, while it is open: one that ended takes nothing more. */
   write(s: DaemonStream, data: string): void {
-    if (this.open.get(s.id) !== s) return;
+    if (this.live.get(s.id) !== s) return;
     this.waiting += Buffer.byteLength(data);
     this.tell({ t: "send", conn: this.conn, stream: s.id, data });
   }
@@ -201,6 +214,18 @@ class DaemonLink implements Link {
     set.add(listener);
     return () => { set!.delete(listener); };
   }
+  open(stream: string): OpenedStream {
+    if (!this.dialled) throw new Error("only the device that dialled a connection opens streams on it");
+    const s = this.add(this.nextStream++, stream, false);
+    this.tell({ t: "open", conn: this.conn, stream: s.id, name: stream });
+    return s;
+  }
+  /** This device ends `s`, which it opened, while it is open. */
+  finish(s: DaemonStream): void {
+    if (this.live.get(s.id) !== s) return;
+    this.tell({ t: "end", conn: this.conn, stream: s.id });
+    this.ended(s.id);
+  }
   close(reason?: string): void {
     this.tell({ t: "close", conn: this.conn, reason });
   }
@@ -210,31 +235,32 @@ class DaemonLink implements Link {
     for (const l of this.accepting.get(name) ?? []) l(s);
   }
   receive(id: number, data: string): void {
-    const s = this.open.get(id);
+    const s = this.live.get(id);
     if (!s) return;
     for (const l of s.listeners) l(data);
     for (const l of this.listeners.get(s.name) ?? []) l(data);
   }
   /** Nothing more goes either way on the stream `id`. */
   ended(id: number): void {
-    const s = this.open.get(id);
+    const s = this.live.get(id);
     if (!s) return;
-    this.open.delete(id);
+    this.live.delete(id);
     if (this.newest.get(s.name) === s) this.newest.delete(s.name);
-    s.end("ended");
+    s.settle("ended");
   }
   gone(why: string): void {
     this.isGone = true;
     this.roomFor.clear();
-    for (const s of this.open.values()) s.end(why);
-    this.open.clear();
+    for (const s of this.live.values()) s.settle(why);
+    this.live.clear();
     this.newest.clear();
     this.end(why);
   }
-  private add(id: number, name: string): DaemonStream {
+  /** `newest`: `send` goes on it, until a newer one of its name opens. */
+  private add(id: number, name: string, newest = true): DaemonStream {
     const s = new DaemonStream(id, name, this);
-    this.open.set(id, s);
-    this.newest.set(name, s);
+    this.live.set(id, s);
+    if (newest) this.newest.set(name, s);
     return s;
   }
 }

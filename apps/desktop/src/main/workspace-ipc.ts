@@ -11,12 +11,13 @@ import { PERSON, handle, on, type Caller } from "./app-ipc.js";
 
 type Client = Caller["sender"];
 
-/** Calls and notices another host answers: a workspace shared from elsewhere (M1). */
+/** Calls and notices another host answers: a workspace shared from elsewhere (M1). `from`: the
+ *  window that asks (none: this process itself). */
 export interface Elsewhere {
   /** The answer from the host of the workspace the call names; null when it names none. */
-  call(method: unknown, params: unknown): Promise<Answer> | null;
+  call(method: unknown, params: unknown, from?: Connection): Promise<Answer> | null;
   /** Whether the notice went to such a host. */
-  notice(method: unknown, params: unknown): boolean;
+  notice(method: unknown, params: unknown, from?: Connection): boolean;
 }
 
 export function serveWorkspaceApi(server: WorkspaceServer, elsewhere?: Elsewhere): { connect(client: Client): Connection; find(client: Client): Connection | undefined } {
@@ -41,11 +42,11 @@ export function serveWorkspaceApi(server: WorkspaceServer, elsewhere?: Elsewhere
   };
   handle("workspace", (e, method: unknown, params: unknown) => {
     const conn = connect(e.sender);
-    return elsewhere?.call(method, params) ?? server.answer(method, params, conn);
+    return elsewhere?.call(method, params, conn) ?? server.answer(method, params, conn);
   });
   on("workspace:notice", (e, method: unknown, params: unknown) => {
     const conn = connect(e.sender);
-    if (!elsewhere?.notice(method, params)) server.notice(method, params, conn);
+    if (!elsewhere?.notice(method, params, conn)) server.notice(method, params, conn);
   });
   return { connect, find: (wc) => connections.get(wc) };
 }

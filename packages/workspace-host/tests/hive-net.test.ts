@@ -158,6 +158,39 @@ test.skipIf(!built || process.platform !== "linux")("a link to a device that sto
   }
 }, 90_000);
 
+test.skipIf(!built)("a stream the dialling device opens beside another of its name is its own both ways; once it ends it, the other device hears it end and the other carries on", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hn-streams-"));
+  try {
+    const streams: Array<{ said: string[]; closed: Promise<string>; send(t: string): void }> = [];
+    const host = await device(root, "host", {
+      incoming: (there) => there.streams("api", (s) => { const said: string[] = []; s.on((t) => said.push(t)); streams.push({ said, closed: s.closed, send: (t) => s.send(t) }); }),
+    });
+    const guest = await device(root, "guest");
+    host.admit([guest.ready.id]);
+    const link = await guest.dial(host.ready.id, { addrs: host.ready.addrs, relay: null });
+    // Two windows, each with an `api` stream of its own.
+    const [a, b] = [link.open("api"), link.open("api")];
+    a.send("from a");
+    b.send("from b");
+    while (streams.filter((s) => s.said.length > 0).length < 2) await Bun.sleep(20);
+    const [toA, toB] = [streams.find((s) => s.said[0] === "from a")!, streams.find((s) => s.said[0] === "from b")!];
+    const [atA, atB] = [next<string>((r) => a.on(r)), next<string>((r) => b.on(r))];
+    toA.send("to a");
+    toB.send("to b");
+    expect([await atA, await atB]).toEqual(["to a", "to b"]);
+
+    a.end();
+    expect(await a.closed).toBe("ended");
+    expect(await toA.closed).toBe("ended");
+    b.send("b again");
+    while (toB.said.length < 2) await Bun.sleep(20);
+    expect(toB.said).toEqual(["from b", "b again"]);
+    expect(toA.said).toEqual(["from a"]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}, 30_000);
+
 test.skipIf(!built)("a device announces what it wants found, and the devices nearby find it with that, then without it", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hn-nearby-"));
   try {

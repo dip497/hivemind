@@ -24,6 +24,7 @@ import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import { workspaceDomains } from "../src/domains.ts";
 import { PeerLinks } from "../src/peer-links.ts";
+import { Terminals, type SessionOutput } from "../src/terminals.ts";
 import type { WaitingStatus } from "../src/needs.ts";
 import type { LayersShown } from "../src/home.ts";
 import type { HomeMessage } from "@hivemind/workspace-api/home";
@@ -755,4 +756,126 @@ test("the owner's devices follow Home: sent both sequences whole, then each chan
   stranger.send("home", { t: "follow" });
   assert.equal(await Promise.race([stranger.closed, wait(2_000).then(() => "still open")]), "removed");
   assert.deepEqual(stranger.heard.get("home"), []);
+});
+
+/** The person's computer hosting the workspace `api`, whose terminals are the host's own
+ *  (terminals.ts) over a backend that records which sessions it lets go of, and Priya's computer, a
+ *  guest there, with her app's `api` stream for the workspace and two windows showing t1's
+ *  terminal, each with an `api` stream of its own for terminals, on her one connection, as her app
+ *  opens them. `early`: the first window asks before her app's hello on `sync` arrives, as one may
+ *  just after it dials. */
+async function guestWindows({ early = false } = {}) {
+  const dir = path.join(tmp, String(made++));
+  const repo = path.join(dir, "api");
+  const person = newSeed();
+  const store = new WorkspaceStore({ dir: path.join(dir, "workspaces"), person });
+  store.setCore(repo, { v: 1, frames: [], tiles: [{ id: "t1", kind: "claude", label: "Claude" }] });
+  const workspace = store.ownership(repo)!.workspaceId as string;
+  const [priya, hers] = [newSeed(), idOf(newSeed())];
+  const lists = new AccessLists({ dir: path.join(dir, "access"), owner: person, devices: () => [] });
+  lists.grant(workspace, idOf(priya), "view");
+  lists.addDevice(workspace, certifyDevice(priya, hers));
+  const intents = new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") }));
+  const letGo: string[] = [];
+  let session: SessionOutput | undefined;
+  const terminals = new Terminals({
+    intents,
+    relay: { record: () => {}, screenPrefix: "" },
+    backend: {
+      start: async (_, out) => { session = out; return { pid: 7 }; },
+      write: () => {}, echoes: () => false, resize: () => {}, repaint: () => {}, pause: () => {}, resume: () => {}, kill: () => {},
+      detach: (tile) => letGo.push(tile),
+      screen: (_, lines) => (cb) => { cb(lines === undefined ? "screen" : `screen with ${lines} lines`); return true; },
+    },
+  });
+  const server = new WorkspaceServer([...workspaceDomains, terminals.domain], intents);
+  const links = new PeerLinks({ store, changes: () => () => {}, lists, server, machines: { self: () => ({ device: idOf(newSeed()), name: "desk" }), mine: () => undefined, whose: () => undefined, saved: () => undefined } });
+  const [computerEnd, herComputer] = linkPair(hers, idOf(newSeed()));
+  links.serve(computerEnd);
+  const hello = () => herComputer.send("sync", JSON.stringify({ t: "hello", workspace, seen: null }));
+  if (!early) hello();
+  const stream = (first?: unknown) => {
+    const api = herComputer.open("api");
+    if (first) api.send(JSON.stringify(first));
+    const heard: Array<{ id?: number; event?: string; params?: unknown[] }> = [];
+    api.on((t) => { const m = JSON.parse(t) as typeof heard[number] | typeof heard; heard.push(...(Array.isArray(m) ? m : [m])); });
+    return { api, heard, events: () => heard.flatMap((m) => (m.event ? [m.event] : [])) };
+  };
+  const herApp = stream({ terminals: false });
+  const window = () => {
+    const { api, heard, events } = stream({ terminals: true });
+    return {
+      events,
+      open: () => api.send(JSON.stringify({ id: 1, method: "terminal.open", params: [{ tileId: "hm:t1", tile: "t1", cwd: `hive://${workspace}`, cmd: "", cols: 80, rows: 24, attachOnly: true }] })),
+      notice: (method: string, ...params: unknown[]) => api.send(JSON.stringify({ method, params })),
+      answered: () => heard.some((m) => m.id === 1),
+      /** What it was sent of t1's screen and output. */
+      shown: () => heard.filter((m) => m.event === "terminal.data").map((m) => m.params![1] as string),
+    };
+  };
+  const [a, b] = [window(), window()];
+  a.open();
+  if (early) {
+    await wait(50);
+    hello();
+  }
+  await until(() => a.answered());
+  b.open();
+  await until(() => b.shown().includes("screen"));
+  return { a, b, herApp, letGo, server, print: (data: string) => session!.data(data) };
+}
+
+test("a guest's app hears what happens in the workspace once, on its own stream, and her windows only their terminals", async () => {
+  const { a, b, herApp, server, print } = await guestWindows();
+  server.publish("status.changed", { tileId: "t1", state: "working", since: T } as never);
+  server.publish("terminal.size", "hm:t1", 100, 30);
+  print("out");
+  await until(() => herApp.events().includes("status.changed") && b.shown().includes("out"));
+  await wait(100);
+  assert.deepEqual(herApp.events(), ["status.changed"]);
+  for (const w of [a, b]) {
+    assert.deepEqual(w.events().filter((e) => !e.startsWith("terminal.")), [], "a window hears no event but a terminal's");
+    assert.ok(w.events().includes("terminal.size"));
+  }
+});
+
+test("a guest's window that asks before her app's hello reaches the host is answered once it does", async () => {
+  const { a, b, print } = await guestWindows({ early: true });
+  assert.ok(a.answered());
+  print("live");
+  await until(() => a.shown().includes("live"));
+  assert.deepEqual(a.shown(), ["live"]);
+  assert.deepEqual(b.shown(), ["screen", "live"]);
+});
+
+test("a guest's window that hides a terminal another of her windows shows hides it from itself alone: the other is sent its output", async () => {
+  const { a, b, print } = await guestWindows();
+  a.notice("terminal.show", "hm:t1", false);
+  await wait(50);
+  print("after a hid it");
+  await until(() => b.shown().includes("after a hid it"));
+  assert.deepEqual(b.shown(), ["screen", "after a hid it"]);
+  assert.deepEqual(a.shown(), []);
+});
+
+test("a guest's window that lets go of a terminal another of her windows shows leaves it shown there; once both let go, the host lets go of it", async () => {
+  const { a, b, letGo, print } = await guestWindows();
+  a.notice("terminal.detach", "hm:t1");
+  await wait(100);
+  assert.deepEqual(letGo, []);
+  print("still shown");
+  await until(() => b.shown().includes("still shown"));
+  assert.deepEqual(b.shown(), ["screen", "still shown"]);
+  b.notice("terminal.detach", "hm:t1");
+  await until(() => letGo.length > 0);
+  assert.deepEqual(letGo, ["hm:t1"]);
+});
+
+test("a guest's window that asks for more of a terminal's history is sent the screen again alone: her other window showing it is sent nothing", async () => {
+  const { a, b } = await guestWindows();
+  a.notice("terminal.history", "hm:t1", 500);
+  await until(() => a.shown().length > 0);
+  await wait(100);
+  assert.deepEqual(b.shown(), ["screen"]);
+  assert.deepEqual(a.shown(), ["screen with 500 lines"]);
 });

@@ -102,7 +102,14 @@ path out of it (`..`), another workspace or a machine is `FORBIDDEN` (a notice i
 place in it is its repo or the worktree of one of its frames, wherever git put it (0.20). The
 person's own devices are the owner, there as here. What the host answers of every agent it runs
 (`status.all`, `link.list`) a peer is answered for the workspace's own agents alone, as it hears
-only their events. One of the owner's phones (`pairing.md` 0.3) opens a workspace's API on an `api`
+only their events. A computer's app opens an `api` stream of
+its own for each workspace it joined, and one more for each of its windows that shows the
+workspace's terminals, on its one connection: each is a connection of its own, and its first frame
+says what it is for (0.28): `{"terminals": true}`, a window's, is sent the events of terminals
+(`terminal.*`) alone, and its terminal calls and notices come on it; `{"terminals": false}`, the
+app's, is sent every other event, once for all its windows. One whose first frame is a call is
+sent every event. The app ends a window's stream when the window closes or shows another
+workspace. One of the owner's phones (`pairing.md` 0.3) opens a workspace's API on an `api`
 stream of its own connection, the stream's first frame naming it (`{ "t": "open", "workspace":
 "<id>" }`; any other first frame, or a workspace not held there, closes the connection), as the
 owner. Its first frame may offer `"z": "deflate"` (0.27): the host then sends each frame of over

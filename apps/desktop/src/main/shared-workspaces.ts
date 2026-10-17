@@ -2,7 +2,11 @@
  * Workspaces shared with this person, open here (M1; design §4.2 B–C, F): each one's host dialled
  * over hive-net, its document kept in a replica (`sharedStore`, named `hive://<id>`) in sync, and
  * its host's workspace API for everything else a window asks about it. A window's call is routed
- * by what it names: the workspace (or a path in it), or a tile the replica holds.
+ * by what it names: the workspace (or a path in it), or a tile the replica holds. Each window that
+ * shows the host's terminals has an `api` stream of its own for them, a connection of its own
+ * there, so the host keeps what each shows apart (a terminal one window hides or lets go of stays
+ * shown in another), and hears only their events on it; everything else goes on the workspace's
+ * own stream, whose events reach every window, once.
  *
  * The connection comes back by itself: when it drops, or the host cannot be reached, it is dialled
  * again, sooner at first and then every 15 s, while the window keeps showing the replica (edits
@@ -20,10 +24,11 @@ import { mayEdit, replicate, type Moved } from "@hivemind/workspace-host/doc-syn
 import { refusedEdit } from "@hivemind/workspace-host/edit-rules";
 import type { KeptCore } from "@hivemind/workspace-doc/shapes";
 import { followList } from "@hivemind/workspace-host/list-sync";
-import type { Link } from "@hivemind/workspace-host/hive-net";
+import type { Link, OpenedStream } from "@hivemind/workspace-host/hive-net";
 import { peerTransport, workspaceUrl } from "@hivemind/workspace-api/peers";
 import type { ClientTransport } from "@hivemind/workspace-api/client";
 import type { Answer, EventMessage } from "@hivemind/workspace-api/protocol";
+import type { Connection } from "@hivemind/workspace-api/server";
 import type { Elsewhere } from "./workspace-ipc.js";
 import { streamOf } from "@hivemind/host/peer-links";
 import { onWorkspaceChange, sharedStore } from "./workspace-store-ipc.js";
@@ -73,10 +78,20 @@ interface Open {
   status: SharedStatus;
   /** How its host last said it looks, checked; null until it says. */
   looks: Appearance | null;
+  /** The workspace's own stream to its host: what is no one window's. */
   api: ClientTransport | null;
+  /** Each window's own stream to its host for terminals, opened as it first asks about one. */
+  windows: Map<Connection, WindowApi>;
+  /** Opens a window's own stream for terminals, while connected. */
+  openWindow: ((window: Connection) => ClientTransport) | null;
   link: Link | null;
   retry: ReturnType<typeof setTimeout> | null;
   tries: number;
+}
+
+interface WindowApi {
+  api: ClientTransport;
+  end(): void;
 }
 
 const open = new Map<string, Open>();
@@ -107,7 +122,7 @@ const idOf = (v: unknown): string | null => {
 export async function openShared(workspace: string, access: Access, reach: Reach): Promise<void> {
   if (open.has(workspace)) return;
   const repo = workspaceUrl(workspace);
-  const entry: Open = { status: { state: "connecting", access }, looks: null, api: null, link: null, retry: null, tries: 0 };
+  const entry: Open = { status: { state: "connecting", access }, looks: null, api: null, windows: new Map(), openWindow: null, link: null, retry: null, tries: 0 };
   open.set(workspace, entry);
   const set = (state: SharedState, given = entry.status.access): void => {
     entry.status = { state, access: given };
@@ -149,16 +164,36 @@ export async function openShared(workspace: string, access: Access, reach: Reach
       quiet = true;
       log(`no update from the host for ${QUIET_MS / 1000}s while connected`);
     }, 15_000);
-    entry.api = peerTransport(streamOf(link, "api"));
-    // A tile in a frame of this person's on this machine runs here, whoever put it there: what is
-    // said of it (a task for it, its keyboard, its size) is this machine's, never its host's (M4).
-    entry.api.events((event) => {
+    /** An event the host sent on a window's own stream, its terminals' (null: the workspace's). */
+    const fromHost = (event: EventMessage, window: Connection | null): void => {
       // The host's look is this workspace's, not every window's: it goes to the reach, checked.
       if (event.event === "appearance.changed") return looked(event.params[0]);
+      // A tile in a frame of this person's on this machine runs here, whoever put it there: what is
+      // said of it (a task for it, its keyboard, its size) is this machine's, never its host's (M4).
       const tile = tileNamed(event.params);
       if (tile && guestIn(workspace) && (placesHere().placed(workspace, tile) || onThisMachine(repo, tile))) return;
-      reach.publish(event);
-    });
+      if (window) window.send(event);
+      else reach.publish(event);
+    };
+    // Each stream says first what it is for: a window's is sent its terminals' events alone.
+    const opened = (terminals: boolean): OpenedStream => {
+      const stream = link.open("api");
+      stream.send(JSON.stringify({ terminals }));
+      return stream;
+    };
+    entry.api = peerTransport(opened(false));
+    entry.api.events((event) => fromHost(event, null));
+    // A window's stream ends when it closes; all of them, when the connection goes.
+    const dropped = new AbortController();
+    entry.openWindow = (window) => {
+      const stream = opened(true);
+      const api = peerTransport(stream);
+      api.events((event) => fromHost(event, window));
+      const own: WindowApi = { api, end: () => { if (entry.windows.get(window) === own) entry.windows.delete(window); stream.end(); } };
+      entry.windows.set(window, own);
+      window.closed.addEventListener("abort", own.end, { once: true, signal: dropped.signal });
+      return api;
+    };
     let following: Promise<boolean> = Promise.resolve(false);
     let stopList = (): void => {};
     let stopMachine = (): void => {};
@@ -202,6 +237,9 @@ export async function openShared(workspace: string, access: Access, reach: Reach
       stopMachine();
       entry.link = null;
       entry.api = null;
+      dropped.abort();
+      entry.windows.clear();
+      entry.openWindow = null;
       if (open.get(workspace) !== entry) return;
       // Taken off the list, or refused at the door: nothing comes of dialling again.
       if (/removed|not admitted/.test(why)) {
@@ -386,22 +424,39 @@ function workspaceOf(method: unknown, params: unknown): string | null {
   return null;
 }
 
-/** Routes a window's calls about a workspace shared from elsewhere to its host. The store's own
- *  methods stay here: the replica answers them. */
+/** Where `window`'s call of `method` about the workspace `entry` goes: a terminal's on its own
+ *  stream, opened the first time; anything else, or a call no window made, on the workspace's.
+ *  Null while not connected. */
+function apiOf(entry: Open, window: Connection | undefined, method: unknown): ClientTransport | null {
+  if (!window || !entry.api || typeof method !== "string" || !method.startsWith("terminal.")) return entry.api;
+  return entry.windows.get(window)?.api ?? entry.openWindow?.(window) ?? null;
+}
+
+/** `window` shows `repo` now (null: nothing): its streams to the hosts of the others end. */
+function shows(window: Connection, repo: unknown): void {
+  const showing = idOf(repo);
+  for (const [workspace, entry] of open) if (workspace !== showing) entry.windows.get(window)?.end();
+}
+
+/** Routes a window's calls about a workspace shared from elsewhere to its host, a terminal's on
+ *  that window's own stream. The store's own methods stay here: the replica answers them. */
 export const elsewhere: Elsewhere = {
-  call(method, params): Promise<Answer> | null {
+  call(method, params, from): Promise<Answer> | null {
     if (typeof method === "string" && method.startsWith("store.")) return null;
     const ws = workspaceOf(method, params);
     if (!ws) return null;
     const entry = open.get(ws);
-    if (!entry?.api) return Promise.resolve({ error: { code: "FAILED", message: "not connected to this workspace's host" } });
-    return entry.api.call(method as string, attaching(method, params as unknown[], entry.status.access));
+    const api = entry && apiOf(entry, from, method);
+    if (!entry || !api) return Promise.resolve({ error: { code: "FAILED", message: "not connected to this workspace's host" } });
+    return api.call(method as string, attaching(method, params as unknown[], entry.status.access));
   },
-  notice(method, params): boolean {
+  notice(method, params, from): boolean {
+    if (method === "store.shown" && from && Array.isArray(params)) shows(from, params[0]);
     if (typeof method === "string" && method.startsWith("store.")) return false;
     const ws = workspaceOf(method, params);
     if (!ws) return false;
-    open.get(ws)?.api?.notice(method as string, params as unknown[]);
+    const entry = open.get(ws);
+    if (entry) apiOf(entry, from, method)?.notice(method as string, params as unknown[]);
     return true;
   },
 };

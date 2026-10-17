@@ -49,6 +49,9 @@ export interface PeerOf {
    *  workspace's terminals and answers and messages its agents, and does nothing else there (M5).
    *  None: what its role allows. */
   allows?(method: string, params: unknown[]): boolean;
+  /** Which events it is sent (none: every one): a guest's window hears its terminals' alone, and
+   *  the guest's app the rest, once for all its windows. */
+  hears?(event: string): boolean;
 }
 
 const refused = (message: string): Answer => ({ error: { code: "FORBIDDEN", message } });
@@ -232,6 +235,7 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     // What a view it opens may do is what the peer may (P8): its role, and what its device asks.
     may: (method) => (!peer.allows || peer.allows(method, [])) && mayCall(peer.actor, method),
     send: (event) => {
+      if (peer.hears && !peer.hears(event.event)) return;
       const out = outbound(event);
       if (!out) return;
       queued.push(out);
