@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.10.3] — 2026-10-18
+
 ### Added
 
 - Tool plugins install from HiveHub: Settings ▸ Plugins lists them under Tools, and `hive tools install owner/name` takes one by its id (a folder of that name is still the folder). Every file is checked against the index, its `hivemind-tool.json` must say the id it was listed under, and it arrives switched off, an update too.
@@ -1854,7 +1856,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.10.2...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.10.3...HEAD
+[2026.10.3]: https://github.com/dip497/hivemind/releases/tag/v2026.10.3
 [2026.10.2]: https://github.com/dip497/hivemind/releases/tag/v2026.10.2
 [2026.10.1]: https://github.com/dip497/hivemind/releases/tag/v2026.10.1
 [2026.10.0]: https://github.com/dip497/hivemind/releases/tag/v2026.10.0
