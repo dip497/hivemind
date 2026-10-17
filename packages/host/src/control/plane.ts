@@ -115,6 +115,8 @@ export class ControlPlane {
   private spawnTimes: number[] = [];
   /** Tiles whose status says a turn is going (working, or waiting within it). */
   private readonly inTurn = new Set<string>();
+  /** The session last written for each tile, by the id its hooks name it by. */
+  private readonly recorded = new Map<string, string>();
 
   constructor(private readonly o: ControlPlaneOptions) {
     this.spawnRecords = new SpawnRecords(path.join(o.dir(), SPAWN_RECORDS_FILE));
@@ -152,7 +154,14 @@ export class ControlPlane {
       // reads working with no turn to end, and would hold every message after it.
       if (status.state === "working" && !was && (o.signalsTurns?.(tileId) ?? false)) this.mailbox.setBusy(toPtyId(tileId));
       if (was && !now && status.state !== "exited") this.mailbox.setIdle(toPtyId(tileId));
+      // An ended session's file goes with it (its daemon evicts it): the next one is written again.
+      if (status.state === "exited") this.forgetRecorded(tileId);
     });
+  }
+
+  private forgetRecorded(bare: string): void {
+    this.recorded.delete(bare);
+    this.recorded.delete(toPtyId(bare));
   }
 
   /** A program's write (a message, a pipe, `hive ctl keys`): after the keys of an answer going in. */
@@ -307,6 +316,7 @@ export class ControlPlane {
     this.status.forget(bare);
     this.agentOf.delete(bare);
     this.lines.delete(bare);
+    this.forgetRecorded(bare);
   }
 
   /** An event from a machine's daemon (here or another device's, R6): a session's status as it
@@ -350,9 +360,14 @@ export class ControlPlane {
     if (method !== AGENT_EVENT_METHOD) return;
     const evt = parseAgentEvent(params);
     if (!evt) return;
-    // The session an agent reports from is the one its tile resumes.
-    if (evt.sessionId) try { writeTrackedSession(path.join(this.o.dir(), TILE_SESSIONS_DIR), evt.tileId, evt.sessionId); } catch { /* best-effort */ }
     const bare = toBareId(evt.tileId);
+    // The session an agent reports from is the one its tile resumes; written when it is another.
+    if (evt.sessionId && this.recorded.get(evt.tileId) !== evt.sessionId) {
+      try {
+        writeTrackedSession(path.join(this.o.dir(), TILE_SESSIONS_DIR), evt.tileId, evt.sessionId);
+        this.recorded.set(evt.tileId, evt.sessionId);
+      } catch { /* best-effort: tried again with its next event */ }
+    }
     const pid = toPtyId(evt.tileId);
     this.status.event(bare, evt);
     if (evt.event === "subagent.started" || evt.event === "subagent.stopped" || evt.event === "turn.ended") {

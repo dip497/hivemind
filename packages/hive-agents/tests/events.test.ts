@@ -147,4 +147,11 @@ describe("the posted event", () => {
     expect(parseAgentEvent({ tileId: "t", event: "turn.ended", background: "3; rm -rf" })).toEqual({ tileId: "t", event: "turn.ended", outcome: "done" });
     for (const bad of [null, {}, { tileId: "", event: "turn.ended" }, { tileId: "t", event: "tool.called" }]) expect(parseAgentEvent(bad)).toBeNull();
   });
+
+  test("names a session only by an id, never by what a restart would read as a flag or a path", () => {
+    expect(parseAgentEvent({ tileId: "t", event: "session.started", sessionId: "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d" })?.sessionId).toBe("0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d");
+    for (const sessionId of ["--dangerously-skip-permissions", "../../etc/passwd", "a b", ""]) {
+      expect(parseAgentEvent({ tileId: "t", event: "session.started", sessionId })).toEqual({ tileId: "t", event: "session.started" });
+    }
+  });
 });

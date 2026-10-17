@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync, spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -110,6 +110,26 @@ test("tracker no-ops when session_id is absent or value unchanged", () => {
     });
     assert.equal(readTrackedSession(dir, "tile-z"), undefined);
     assert.ok(!readdirSync(dir).some((f) => f === path.basename(tileSessionFile(dir, "tile-z"))));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a session is recorded and resumed only by an id: one that reads as a flag or a path is neither written, by the store or the tracker, nor read back", () => {
+  const dir = freshDir();
+  const trackerPath = path.join(dir, "tracker.cjs");
+  writeFileSync(trackerPath, trackerSource());
+  try {
+    writeTrackedSession(dir, "tile-a", "--dangerously-skip-permissions");
+    assert.ok(!existsSync(tileSessionFile(dir, "tile-a")), "the store wrote it");
+    spawnSync(process.execPath, [trackerPath, dir], {
+      env: { ...process.env, HIVEMIND_TILE: "tile-b" },
+      input: JSON.stringify({ session_id: "--resume=../x" }),
+    });
+    assert.ok(!existsSync(tileSessionFile(dir, "tile-b")), "the tracker wrote it");
+    // Written by anyone else, it is still not resumed.
+    writeFileSync(tileSessionFile(dir, "tile-c"), JSON.stringify({ session_id: "-p" }));
+    assert.equal(readTrackedSession(dir, "tile-c"), undefined);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

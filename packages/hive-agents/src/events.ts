@@ -4,6 +4,7 @@
  * ever reasons about these. Facts only — never text an agent wrote.
  */
 import type { AgentHookEntry, AgentProviderDef } from "./types.js";
+import { isSessionId } from "./catalog.js";
 
 export const AGENT_EVENTS = [
   "session.started", "session.ready", "session.ended",
@@ -72,6 +73,6 @@ export function parseAgentEvent(raw: unknown): AgentEvent | null {
     ...(d.event === "input.requested" ? { kind: kind ?? "other" } : {}),
     ...(str(d.agentId, 256) ? { agentId: d.agentId as string } : {}),
     ...(d.event === "turn.ended" && Number.isInteger(d.background) && (d.background as number) > 0 && (d.background as number) < 10_000 ? { background: d.background as number } : {}),
-    ...(str(d.sessionId, 256) ? { sessionId: d.sessionId as string } : {}),
+    ...(isSessionId(d.sessionId) ? { sessionId: d.sessionId } : {}),
   };
 }

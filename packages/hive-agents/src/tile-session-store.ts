@@ -20,6 +20,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { isSessionId, SESSION_ID_RE } from "./catalog.js";
 
 /** The directory, under the host's data directory, where each tile's live session is kept. */
 export const TILE_SESSIONS_DIR = "tile-sessions";
@@ -33,6 +34,8 @@ export function tileSessionFile(dir: string, tileId: string): string {
  *  so concurrent writers for DIFFERENT tiles never touch the same path, and
  *  there is no shared map to lose-update. No-ops when the value is unchanged. */
 export function writeTrackedSession(dir: string, tileId: string, sessionId: string): void {
+  // It is resumed as an argument: never one that reads as a flag or a path.
+  if (!isSessionId(sessionId)) return;
   const out = tileSessionFile(dir, tileId);
   try {
     if ((JSON.parse(fs.readFileSync(out, "utf8")) || {}).session_id === sessionId) return;
@@ -49,7 +52,7 @@ export function writeTrackedSession(dir: string, tileId: string, sessionId: stri
 export function readTrackedSession(dir: string, tileId: string): string | undefined {
   try {
     const v = JSON.parse(fs.readFileSync(tileSessionFile(dir, tileId), "utf8"));
-    if (v && typeof v.session_id === "string") return v.session_id;
+    if (v && isSessionId(v.session_id)) return v.session_id;
   } catch {
     /* none recorded */
   }
@@ -81,7 +84,7 @@ process.stdin.on("end", () => {
     const dir = process.argv[2];
     if (!tile || !dir) return;
     const sid = (JSON.parse(input || "{}") || {}).session_id;
-    if (!sid) return;
+    if (typeof sid !== "string" || !${SESSION_ID_RE}.test(sid)) return;
     const out = path.join(dir, Buffer.from(tile).toString("base64url") + ".json");
     try { if ((JSON.parse(fs.readFileSync(out, "utf8")) || {}).session_id === sid) return; } catch {}
     fs.mkdirSync(dir, { recursive: true });

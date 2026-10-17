@@ -3,6 +3,10 @@
 // hooks say it is in (`agent.event`); and what a tile's screen last showed (`tile.line`).
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { evictTrackedSession, readTrackedSession, TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 import { ControlPlane, type ControlPlaneOptions } from "../src/control/plane.ts";
 
 const plane = (o: Partial<ControlPlaneOptions> = {}) => new ControlPlane({
@@ -56,4 +60,25 @@ test("a startup screen answered (a folder's trust) does not hold the messages se
   p.mailbox.deliver("hm:t1", "hello");
   assert.ok(wrote.some((d) => d.includes("hello")), "the message is typed, not held for a turn that never ends");
   p.mailbox.forget("hm:t1");
+});
+
+test("the session an agent's hooks name is recorded for its tile to resume: a new one replaces it, and after its session ends and its file is gone, the same one is recorded again", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "plane-sessions-"));
+  try {
+    const p = plane({ dir: () => dir });
+    const kept = () => readTrackedSession(path.join(dir, TILE_SESSIONS_DIR), "hm:t1");
+    p.event("agent.event", { tileId: "hm:t1", event: "session.started", sessionId: "s1" });
+    p.event("agent.event", { tileId: "hm:t1", event: "turn.started", sessionId: "s1" });
+    assert.equal(kept(), "s1");
+    p.event("agent.event", { tileId: "hm:t1", event: "session.started", sessionId: "s2" });
+    assert.equal(kept(), "s2");
+    // Its daemon ends the session and takes its file; the tile resumes the same session.
+    p.event("agent.event", { tileId: "hm:t1", event: "session.ended", sessionId: "s2" });
+    p.status.exited("t1");
+    evictTrackedSession(path.join(dir, TILE_SESSIONS_DIR), "hm:t1");
+    p.event("agent.event", { tileId: "hm:t1", event: "session.started", sessionId: "s2" });
+    assert.equal(kept(), "s2");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
