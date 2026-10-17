@@ -10,6 +10,7 @@
  * (`moved`, M3) and closes.
  */
 import { ROLES, type Access } from "./access.js";
+import type { KeptCore } from "@hivemind/workspace-doc/shapes";
 import { refusedEdit } from "./edit-rules.js";
 import { RefusedImport, type WorkspaceChange, type WorkspaceStore } from "./store.js";
 
@@ -99,7 +100,9 @@ export function serveReplica(
     if (m?.t !== "update") return;
     if (!mayEdit(opts.access)) return opts.onDropped?.("a viewer's change");
     try {
-      store.importFrom(repo, fromB64(m.data), { writer: opts.writer }, (before, after) => refusedEdit(before, after, opts.access, opts.device));
+      // The owner may make any layout: nothing to check, so no copy of the document to check it on.
+      const check = opts.access === "owner" ? undefined : (before: KeptCore | null, after: KeptCore | null) => refusedEdit(before, after, opts.access, opts.device);
+      store.importFrom(repo, fromB64(m.data), { writer: opts.writer }, check);
     } catch (e) {
       opts.onDropped?.(e instanceof RefusedImport ? `a change its role does not allow: ${e.message}` : `a change that is not a document's (${e instanceof Error ? e.message : String(e)})`);
     }

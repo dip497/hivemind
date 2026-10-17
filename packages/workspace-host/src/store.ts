@@ -345,8 +345,13 @@ export class WorkspaceStore {
     const { doc } = this.workspace(repo);
     if (check) {
       const trial = doc.fork();
-      trial.import(bytes);
-      const why = check(readCore(doc), readCore(trial));
+      let why: string | null;
+      try {
+        trial.import(bytes);
+        why = check(readCore(doc), readCore(trial));
+      } finally {
+        trial.free();
+      }
       if (why) throw new RefusedImport(why);
     }
     const before = doc.frontiers();
