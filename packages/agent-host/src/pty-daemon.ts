@@ -102,6 +102,8 @@ const userDataDir = path.dirname(socketPath);
 // Per-tile directory — each tile records its live session id in its OWN file, so
 // concurrent session starts (every tile on restart) never clobber each other.
 const tileSessionsDir = path.join(userDataDir, TILE_SESSIONS_DIR);
+/** The session last written for each tile: a hook's event writes only another one. */
+const recordedSessions = new Map<string, string>();
 const trackerPath = path.join(userDataDir, "tile-session-tracker.cjs");
 try { fs.writeFileSync(trackerPath, trackerSource()); } catch { /* best-effort */ }
 
@@ -278,6 +280,7 @@ function evictSnapshot(id: string): void {
   // Drop the tile's per-tile tracked-session file so killed tiles don't leave
   // stale ids behind.
   evictTrackedSession(tileSessionsDir, id);
+  recordedSessions.delete(id);
 }
 function loadSnapshot(id: string): SessionSnapshot | undefined {
   const snap = readSnapshot(snapshotPath(id), id);
@@ -422,7 +425,7 @@ const manager = new SessionManager(factory, {
     const flag = agentForCmd(out.cmd)?.session?.resume?.from?.bound;
     const at = flag ? (out.args ?? []).indexOf(flag) : -1;
     const bound = at >= 0 ? out.args![at + 1] : undefined;
-    if (bound && !bound.startsWith("-")) try { writeTrackedSession(tileSessionsDir, id, bound); } catch { /* best-effort */ }
+    if (bound && !bound.startsWith("-")) try { writeTrackedSession(tileSessionsDir, id, bound); recordedSessions.set(id, bound); } catch { /* best-effort */ }
     return out;
   },
   // Strip the one-time HIVE_INITIAL_PROMPT before ANY provider sees the spec. A
@@ -745,7 +748,12 @@ if (STANDALONE) {
     const evt = parseAgentEvent(params);
     if (!evt) return;
     // The session an agent reports from is the one its tile resumes.
-    if (evt.sessionId) try { writeTrackedSession(tileSessionsDir, evt.tileId, evt.sessionId); } catch { /* best-effort */ }
+    if (evt.sessionId && recordedSessions.get(evt.tileId) !== evt.sessionId) {
+      try {
+        writeTrackedSession(tileSessionsDir, evt.tileId, evt.sessionId);
+        recordedSessions.set(evt.tileId, evt.sessionId);
+      } catch { /* best-effort: written with its next event */ }
+    }
     statuses?.event(evt.tileId, evt);
     for (const push of eventViewers) if (push !== heard) push({ t: "event", topic: AGENT_EVENT_METHOD, data: evt });
     void notifyPush(evt);
@@ -753,23 +761,27 @@ if (STANDALONE) {
   /** One connection's lines: what it reports is heard; what it asks is answered with `answer`, or
    *  left to the control plane it goes on to (`heard`). */
   const lines = (answer: ((id: unknown, body: Record<string, unknown>) => void) | null, heard?: (m: ServerMsg) => void) => {
-    let authed = false;
+    /** Whose token signed this connection in: a tile's speaks only for that tile. */
+    let who: ReturnType<typeof holderOf> = null;
+    const mine = (params: unknown): boolean => !who || !("tile" in who) || (params as { tileId?: unknown } | null)?.tileId === who.tile;
     return (line: string): void => {
       let m: { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: unknown };
       try { m = JSON.parse(line); } catch { return; }
       if (m.jsonrpc !== "2.0" || typeof m.method !== "string") return;
       const params = (m.params ?? {}) as Record<string, unknown>;
       if (m.id === undefined) {
-        if (m.method === AGENT_EVENT_METHOD) reported(m.method, m.params, heard);
+        // A reply, ahead of the turn end it belongs to, from a hook signed in on this connection.
+        if ((m.method === AGENT_EVENT_METHOD || (who && m.method === "agent.reply")) && mine(m.params)) reported(m.method, m.params, heard);
         return;
       }
       if (m.method === "initialize") {
-        authed = !!holderOf(installToken, params.token);
-        if (!authed) return answer?.(m.id, { error: { code: -32000, message: "bad or missing token", data: { code: "FORBIDDEN" } } });
+        who = holderOf(installToken, params.token);
+        if (!who) return answer?.(m.id, { error: { code: -32000, message: "bad or missing token", data: { code: "FORBIDDEN" } } });
         return answer?.(m.id, { result: { protocolVersion: 2, capabilities: { status: false } } });
       }
-      if (!authed) return answer?.(m.id, { error: { code: -32000, message: "call initialize with the token first", data: { code: "FORBIDDEN" } } });
+      if (!who) return answer?.(m.id, { error: { code: -32000, message: "call initialize with the token first", data: { code: "FORBIDDEN" } } });
       if (m.method === "agent.reply") {
+        if (!mine(params)) return answer?.(m.id, { error: { code: -32000, message: "a tile hands over only its own reply", data: { code: "FORBIDDEN" } } });
         reported(m.method, m.params, heard);
         return answer?.(m.id, { result: { ok: true } });
       }

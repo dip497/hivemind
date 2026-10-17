@@ -10,6 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { frame, makeLineDecoder, type ServerMsg } from "@hivemind/agent-host/pty-protocol";
 import { tileToken } from "@hivemind/agent-host/hooks/token";
+import { readTrackedSession, TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 
 const unix = process.platform !== "win32";
 /** Bun, which runs `hive`, on PATH. */
@@ -308,4 +309,52 @@ test("inside the desktop the daemon leaves the control-plane socket to the app",
   await until(() => host.msgs.some((m) => m.t === "control"));
   assert.deepEqual(host.msgs.find((m) => m.t === "control"), { t: "control", reqId: "c1", error: "the app serves this machine's control plane" });
   host.c.destroy();
+});
+
+test("standalone: an agent speaks for its own tile only: a reply or event another tile's token names it with is refused or dropped, and reaches no desktop; its own reply, sent ahead of its turn end, is heard", { skip: !unix, timeout: 60000 }, async () => {
+  const d = await startDaemon(true);
+  const token = fs.readFileSync(path.join(d.dir, "hcp.token"), "utf8").trim();
+  const v = await statusViewer(d.sock);
+  await wait(200);
+  const [a, b] = ["hm:tile-a", "hm:tile-b"];
+  const asB = { jsonrpc: "2.0", id: "init", method: "initialize", params: { token: tileToken(token, b) } };
+  const forged = await hook(d.hcp, [asB, { jsonrpc: "2.0", id: "r1", method: "agent.reply", params: { tileId: a, text: "forged" } }], true, 2);
+  assert.equal(JSON.parse(forged.trim().split("\n").at(-1)!).error.data.code, "FORBIDDEN");
+  await hook(d.hcp, [asB, { jsonrpc: "2.0", method: "agent.reply", params: { tileId: a, text: "forged too" } }, { jsonrpc: "2.0", method: "agent.event", params: { tileId: a, event: "turn.started" } }]);
+  await hook(d.hcp, [asB, { jsonrpc: "2.0", method: "agent.reply", params: { tileId: b, text: "mine" } }, { jsonrpc: "2.0", method: "agent.event", params: { tileId: b, event: "turn.ended" } }]);
+  await until(() => v.events.some((e) => e.topic === "agent.event" && e.tileId === b));
+  await wait(300);
+  assert.deepEqual(v.events.filter((e) => e.topic !== "agent.status"), [{ topic: "agent.reply", tileId: b }, { topic: "agent.event", tileId: b }]);
+  v.c.destroy();
+});
+
+test("standalone: the session an agent reports is its tile's: a new one replaces it, sleep keeps it, and once the tile was closed the same one reported again is written again", { skip: !unix, timeout: 60000 }, async () => {
+  const d = await startDaemon(true);
+  const sessions = path.join(d.dir, TILE_SESSIONS_DIR);
+  const v = await statusViewer(d.sock);
+  const [kept, closed] = ["hm:tile-s", "hm:tile-k"];
+  for (const id of [kept, closed]) v.c.write(frame({ t: "attach", reqId: `a-${id}`, id, spec: { cwd: d.dir, cmd: "bash", args: ["-c", "sleep 30"], cols: 80, rows: 24 } }));
+  await wait(500);
+  const said = (id: string, sessionId: string) => hook(d.hcp, { jsonrpc: "2.0", method: "agent.event", params: { tileId: id, event: "turn.started", sessionId } });
+  await said(kept, "s1");
+  await until(() => readTrackedSession(sessions, kept) === "s1");
+  await said(kept, "s2");
+  await until(() => readTrackedSession(sessions, kept) === "s2");
+  assert.equal(readTrackedSession(sessions, kept), "s2");
+  // Asleep, its session stays, for its wake resumes it.
+  v.c.write(frame({ t: "sleep", reqId: "z1", id: kept }));
+  await until(() => v.msgs.some((m) => m.t === "slept"));
+  await said(kept, "s2");
+  await wait(300);
+  assert.equal(readTrackedSession(sessions, kept), "s2");
+  // Closed, its session goes; the same one reported again is written again.
+  await said(closed, "c1");
+  await until(() => readTrackedSession(sessions, closed) === "c1");
+  v.c.write(frame({ t: "kill", id: closed }));
+  await until(() => readTrackedSession(sessions, closed) === undefined);
+  assert.equal(readTrackedSession(sessions, closed), undefined);
+  await said(closed, "c1");
+  await until(() => readTrackedSession(sessions, closed) === "c1");
+  assert.equal(readTrackedSession(sessions, closed), "c1");
+  v.c.destroy();
 });
