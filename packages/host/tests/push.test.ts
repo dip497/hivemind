@@ -189,7 +189,22 @@ test("subscriptions are kept one per phone, readable by this user alone; anythin
   subscriptions.remove("b".repeat(64));
   const kept = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
   fs.writeFileSync(file, JSON.stringify({ ...kept, ["c".repeat(64)]: { endpoint: "ftp://x", p256dh: "", auth: "" }, ["d".repeat(64)]: { ...b.sub, sign: "yes" }, nonsense: a.sub }));
-  assert.deepEqual(subscriptions.list(), [{ device: "a".repeat(64), ...a2.sub, sign: true }, { device: "d".repeat(64), ...b.sub }]);
+  // Read as the app reads it when it starts.
+  assert.deepEqual(new PushSubscriptions(file).list(), [{ device: "a".repeat(64), ...a2.sub, sign: true }, { device: "d".repeat(64), ...b.sub }]);
+});
+
+test("the subscriptions are read once; a file that cannot be read for now is read again once it can be, never taken for none", () => {
+  const file = path.join(tmp, `push-${made++}.json`);
+  const a = phone("https://push.example/a");
+  new PushSubscriptions(file).set("a".repeat(64), a.sub);
+  fs.chmodSync(file, 0o000);
+  const subscriptions = new PushSubscriptions(file);
+  try {
+    assert.deepEqual(subscriptions.list(), []);
+  } finally {
+    fs.chmodSync(file, 0o600);
+  }
+  assert.deepEqual(subscriptions.list(), [{ device: "a".repeat(64), ...a.sub }]);
 });
 
 test("a notice is posted as Web Push takes it; signed, where its subscription asks, by the device that posts it over the phone's handle, its time and its body; and never where a redirect points", async () => {

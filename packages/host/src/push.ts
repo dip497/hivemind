@@ -87,13 +87,29 @@ function noticeFor(t: Notice["t"], { tileId, status }: WaitingStatus, held: Held
   return { v: 1, t, ...at, name: short(at.name), agent: short(at.agent), ...(t === "needs" ? { kind: status.kind, ...(status.says ? { says: status.says } : {}) } : {}), since: status.since, ...(decide ? { decide } : {}) };
 }
 
-/** The phones subscribed here, kept in a file beside this device's keys (0600): one each. */
+/** The phones subscribed here, kept in a file beside this device's keys (0600): one each. Read
+ *  once; this is the file's only writer. */
 export class PushSubscriptions {
+  private kept: Array<{ device: string } & Subscription> | null = null;
+
   constructor(private readonly file: string) {}
 
+  /** Kept once read whole, or known missing: a file that cannot be read now is read again, so a
+   *  write never takes it for empty. */
   list(): Array<{ device: string } & Subscription> {
+    if (this.kept) return this.kept;
+    let text: string;
+    try { text = fs.readFileSync(this.file, "utf8"); } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") this.kept = [];
+      return [];
+    }
     let all: unknown;
-    try { all = JSON.parse(fs.readFileSync(this.file, "utf8")); } catch { return []; }
+    try { all = JSON.parse(text); } catch { return []; }
+    this.kept = this.parsed(all);
+    return this.kept;
+  }
+
+  private parsed(all: unknown): Array<{ device: string } & Subscription> {
     if (!all || typeof all !== "object") return [];
     return Object.entries(all as Record<string, unknown>).flatMap(([device, s]) => {
       const sub = /^[0-9a-f]{64}$/.test(device) ? subscriptionOf(s) : null;
@@ -117,6 +133,7 @@ export class PushSubscriptions {
     const kept = Object.fromEntries(all.map(({ device, ...sub }) => [device, sub]));
     fs.writeFileSync(tmp, `${JSON.stringify(kept, null, 2)}\n`, { mode: 0o600 });
     fs.renameSync(tmp, this.file);
+    this.kept = all;
   }
 }
 
