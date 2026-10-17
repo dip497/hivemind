@@ -55,9 +55,7 @@ fn serve(root: &Path, admin: &str, policy: &str, bits: &str) -> (Running, String
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
         for line in BufReader::new(stdout).lines() {
-            if tx.send(line.unwrap_or_default()).is_err() {
-                break;
-            }
+            let _ = tx.send(line.unwrap_or_default());
         }
     });
     let line = || {

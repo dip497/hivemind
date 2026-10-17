@@ -248,9 +248,7 @@ fn a_device_is_reached_through_a_relay_only_its_profile_names() {
         let (tx, rx) = mpsc::channel();
         thread::spawn(move || {
             for line in BufReader::new(stdout).lines() {
-                if tx.send(line.unwrap_or_default()).is_err() {
-                    break;
-                }
+                let _ = tx.send(line.unwrap_or_default());
             }
         });
         let first = rx

@@ -39,9 +39,7 @@ fn start(args: &[&str]) -> (Running, String) {
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
         for line in BufReader::new(stdout).lines() {
-            if tx.send(line.unwrap_or_default()).is_err() {
-                break;
-            }
+            let _ = tx.send(line.unwrap_or_default());
         }
     });
     let first = rx
@@ -129,14 +127,7 @@ fn on_the_local_network_a_device_is_found_by_its_id_alone() {
     let a = identity(&root, "a", &rand_hex(32));
     let b = identity(&root, "b", &rand_hex(32));
     let (_a, id) = start(&["run", "--identity", a.to_str().unwrap()]);
-    let ping = || hive_net(&["ping", &id, "--identity", b.to_str().unwrap()]);
-    let mut out = ping();
-    for _ in 0..2 {
-        if out.status.success() {
-            break;
-        }
-        out = ping();
-    }
+    let out = hive_net(&["ping", &id, "--identity", b.to_str().unwrap()]);
     assert!(out.status.success(), "{}", text(&out));
     assert!(
         text(&out).contains(&format!("{id} answered")),
