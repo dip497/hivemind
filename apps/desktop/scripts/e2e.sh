@@ -38,7 +38,19 @@ if [ -f "$lock" ] && kill -0 "$(cat "$lock")" 2>/dev/null; then
   exit 3
 fi
 echo $$ > "$lock"
-trap 'rm -f "$lock"' EXIT
+# Every app and terminal daemon of this run inherits the mark. A daemon outlives its app, and a run
+# that is stopped never reaches playwright's teardown, so its daemons are stopped here.
+export HIVEMIND_E2E_RUN="$$-$(date +%s%N)"
+stop_run_daemons() {
+  local d
+  for d in /proc/[0-9]*; do
+    tr '\0' '\n' 2>/dev/null < "$d/cmdline" | grep -q 'pty-daemon\.\(js\|ts\)$' || continue
+    tr '\0' '\n' 2>/dev/null < "$d/environ" | grep -qx "HIVEMIND_E2E_RUN=$HIVEMIND_E2E_RUN" && kill -KILL "${d#/proc/}" 2>/dev/null
+  done
+  return 0
+}
+trap 'stop_run_daemons; rm -f "$lock"' EXIT
+trap 'exit 130' INT TERM
 
 unset ELECTRON_RUN_AS_NODE
 export XDG_SESSION_TYPE=x11
