@@ -97,7 +97,8 @@ test("a second window on the workspace shows its terminals live and the wires dr
   expect(hive(["ctl", "read", parent, "--timeout", "40000", "--json"]).json).toMatchObject({ text: "early-words" });
   const child: string = hive(["ctl", "spawn", "--agent", "claude", "--name", "twin-child", "--prompt", "echo child", "--no-report", "--json"], asAgent(parent)).json.tile;
   const wire = `[data-testid="rf__edge-spawn-${parent}-${child}"]`;
-  await expect(page.locator(wire)).toHaveCount(1);
+  // A wire is drawn once both tiles are measured, which a window just opened on a busy machine takes seconds to do.
+  await expect(page.locator(wire)).toHaveCount(1, { timeout: 15_000 });
 
   // Another project was opened last: the new window opens on the one this window shows anyway.
   const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "hm-xprov-else-"));
@@ -299,7 +300,8 @@ test("two windows share where tiles and notes are, and each keeps its own camera
   const board = (w: Page) => w.evaluate((r) => window.hive.workspaceObjectsSync(r) as unknown as Note[], repo);
   const [older] = await board(second);
   await page.evaluate(([r, o]) => window.hive.workspaceEditObjectsSync(r, { objects: { [o.id]: { ...o, text: "from the second, edited" } }, base: { [o.id]: o } } as never), [repo, older!] as const);
-  for (const w of windows) await expect.poll(() => notes(w)).toEqual(["from the second, edited"]);
+  // A window is not told of its own write (its board has it already): the other one shows it.
+  await expect.poll(() => notes(second)).toEqual(["from the second, edited"]);
   await second.evaluate(([r, o]) => window.hive.workspaceEditObjectsSync(r, { objects: { [o.id]: { ...o, x: (o.x ?? 0) + 40 } }, base: { [o.id]: o } } as never), [repo, older!] as const);
   for (const w of windows) await expect.poll(async () => (await board(w)).map(({ text, x }) => ({ text, x }))).toEqual([{ text: "from the second, edited", x: (older!.x ?? 0) + 40 }]);
   for (const w of windows) await expect.poll(() => notes(w)).toEqual(["from the second, edited"]);
