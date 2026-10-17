@@ -75,14 +75,14 @@ Settings → Shortcuts lists every key.
 | **Status you can see** | working, finished, or waiting for you — read from the agent's own screen, so it needs no cooperation |
 | **Terminals that outlive the window** | a detached daemon keeps them running and replays the screen on reopen; a session resumes after a reboot |
 | **Issues as files in your repo** | markdown with YAML frontmatter under `.hivemind/`; no database, no account |
-| **Agents driving agents** | `hive ctl` is on every agent's PATH, so one agent spawns three more, reads their replies and approves their tools — see below |
+| **Agents driving agents** | one agent spawns three more, reads their replies and approves their tools — see below |
 | **Views** | Canvas and Windows come with the app; Queue, Tiled and Board are on HiveHub; write your own against a sandboxed API with no files, network or app access |
 | **Tool plugins and widgets** | a kind of tile your code draws (a commit browser, a pull request panel), or a small live box an agent keeps up to date; from HiveHub or a folder |
 | **Your phone** | the phone page answers questions and permission prompts, sends messages, starts and stops agents; pair it with three words on Settings → Connect |
 | **Sleep and wake** | an idle agent's process ends and frees its memory; waking it continues the same conversation |
 | **Your own network** | `hive-net` runs the relay and admission on a machine you choose, for your phone, other computers and your team; there is no hosted one |
 
-Works with **Claude Code · Codex · Cursor · Droid · Kiro · pi · Gemini · opencode** and a
+Works with **Claude Code · Codex · Cursor · Droid · Kiro · pi · Amp · opencode** and a
 dozen more.
 
 ## One agent, running the others
@@ -110,17 +110,17 @@ whole screen from the workspace we hand it: frames, tiles, names, live status. T
 inside your scene is the real one, still running; you tell the app where to put it and it
 mounts the session there.
 
-A queue if you triage. A board if you lead. A subway map where each line is a branch. A Mars
-base where every agent is a module and a stalled one goes dark. Anything you can draw in a web
-page, with real terminals living inside it.
+Canvas and Windows come with the app; Queue (if you triage), Board (if you lead) and Tiled are
+on HiveHub. Or build your own: anything you can draw in a web page, with real terminals living
+inside it.
 
 ```bash
 hive views new my-view     # a starter you can build, install and publish
 ```
 
 It writes a working view **and a `PROMPT.md`**: the whole view API, the theme variables and the
-rules of the sandbox, in one file. Describe what you want at the top of it — *"a subway map where
-each line is a git branch"* — hand it to your agent, and let the agent build it.
+rules of the sandbox, in one file. Describe what you want at the top of it, hand it to your agent,
+and let the agent build it.
 
 Build the room you always wanted to work in, then put it on
 [HiveHub](https://hivehub.griiken.workers.dev/) so everyone else can work in it too. Ten people
@@ -135,7 +135,8 @@ each agent's conversation, and its questions and permission prompts to answer. T
 lets in another computer of yours, or a person to one workspace.
 
 The page comes from your own network's server — `hive-net`, which the installer puts beside
-`hive`. See [phone](https://hivemind.griiken.com/guide/phone/) and
+`hive` — run with a public name, with the computer on that network; the default *Local network*
+serves no page. See [phone](https://hivemind.griiken.com/guide/phone/) and
 [self-hosting](https://hivemind.griiken.com/guide/self-hosting/). The iOS and Android apps do
 the same and are **not published yet**.
 
@@ -172,7 +173,7 @@ and nothing to fork.
 ```bash
 hive agents validate ./my-agent    # what a user will be told about it
 hive agents install ./my-agent     # from a folder
-hive agents install gemini         # or by name, from HiveHub
+hive agents install amp            # or by name, from HiveHub
 ```
 
 Adding an agent for everyone is a pull request to

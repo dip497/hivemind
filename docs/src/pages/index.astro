@@ -3,9 +3,9 @@ import { HIVEHUB } from "../hivehub";
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 import ViewGallery from '../components/ViewGallery.astro';
 const link = (path: string) => `${base}/${path}`;
-const title = 'Hivemind — a workspace for your coding agents';
+const title = 'Hivemind — build the workspace your agents work in';
 const description =
-  'Run coding-agent CLIs on one canvas, next to the terminals, editor and diffs they are working on. Local, open source, driven from your shell.';
+  'Run your coding-agent CLIs in a workspace you shape: views, tools and widgets are plugins, and your agents drive them. Local, open source, driven from your shell.';
 const repo = 'https://github.com/dip497/hivemind';
 const install = 'bash <(curl -fsSL https://hivemind.griiken.com/install.sh)';
 const installPs = 'irm https://hivemind.griiken.com/install.ps1 | iex';
@@ -76,7 +76,7 @@ const ogImage = new URL(link('shots/og.jpg'), Astro.site).href;
       <div class="hero-copy">
         <p class="eyebrow"><span class="tag">Free &amp; open source</span> MIT licensed</p>
         <h1>Build the workspace your agents work in.</h1>
-        <p class="lede">The screen is yours to draw — a queue, a board, a subway map, a Mars base —
+        <p class="lede">The screen is yours to draw — a canvas, windows, a queue, a board, or a view you build —
           and we keep the agents, terminals and diffs alive inside it. Every verb is a command, and <code>hive ctl</code> is on every agent's PATH: one agent spawns three more, watches them
           work and approves their tools, while you watch all four.</p>
 
@@ -95,23 +95,16 @@ const ogImage = new URL(link('shots/og.jpg'), Astro.site).href;
         </ul>
       </div>
 
-      <!-- The product, not a drawing of it: four real captures of one workspace — sixteen agents
-           across five frames (docs/design/demo-scene-2026-09-18.md) — cycling on the wallpaper. -->
+      <!-- The product, not a drawing of it: one capture of the scene in
+           docs/design/demo-scene-2026-09-18.md, a widget an agent filled in above it. -->
       <figure class="hero-shot" style={`--hero-bg:url(${link('shots/hero-bg.webp')})`}>
         <div class="stage">
-          {[
-            ['windows', 'Windows — the agent that needs you, in its own window'],
-            ['board', 'Board — doing, needs you, review, done'],
-            ['queue', 'Queue — sorted by who needs you'],
-            ['tiled', 'Tiled — one pane per agent, tabbed by frame'],
-          ].map(([id, caption], i) => (
-            <img class="slide" style={`--i:${i}`} src={link(`shots/view-${id}.webp`)}
-              width="1600" height="1120" loading={i === 0 ? 'eager' : 'lazy'}
-              fetchpriority={i === 0 ? 'high' : 'auto'} alt={caption} />
-          ))}
+          <img class="slide still" src={link('shots/agent-plugins.webp')}
+            width="1600" height="1120" loading="eager" fetchpriority="high"
+            alt="The Windows view: sixteen agents in five frames, one asking to edit a file, and above it a Progress widget an agent filled in, 3 of 4 done" />
         </div>
         <figcaption>
-          <span>Sixteen agents across five frames, three waiting on you</span>
+          <span>Sixteen agents in five frames, three waiting on you; an agent keeps the Progress widget</span>
           <a href="#walkthrough">Watch the walkthrough →</a>
         </figcaption>
       </figure>
@@ -138,10 +131,10 @@ const ogImage = new URL(link('shots/og.jpg'), Astro.site).href;
       <ul class="track">
         {[0, 1].map((pass) => icons.agents.map((a) => (
           <li class="is-published" aria-hidden={pass === 1 ? 'true' : undefined}>
-            <svg viewBox={a.icon.viewBox} width="22" height="22" fill="currentColor"
+            {a.icon && <svg viewBox={a.icon.viewBox} width="22" height="22" fill="currentColor"
               fill-rule={a.icon.fillRule} aria-hidden="true">
               {a.icon.paths.map((d) => <path d={d} />)}
-            </svg>
+            </svg>}
             <span>{a.label}</span>
           </li>
         )))}
@@ -242,8 +235,7 @@ detect:
         <p class="sub">Nobody agrees what a workspace should look like — so we stopped deciding. A
           view draws the whole screen from what we hand it: frames, tiles, names, live status. The
           terminal inside your scene is the real one, still running. A queue if you triage, a board
-          if you lead, a subway map where each line is a branch, a Mars base where every agent is a
-          module and a stalled one goes dark — anything you can draw in a web page.</p>
+          if you lead, or one you build yourself — anything you can draw in a web page.</p>
         <p class="sub">Canvas and Windows come with the app. Queue, Tiled and Board are plugins on <a href={HIVEHUB}>HiveHub</a>, installed like anyone's. Build the room you always wanted
           to work in and put it there too. A view decides how the workspace <em>looks</em> — never
           what runs.</p>
@@ -262,21 +254,11 @@ detect:
       <header class="head">
         <h2>Your agents build the workspace while they work</h2>
         <p class="sub">Everything on the screen is a plugin: the agents, the view, the tiles, the
-          boxes above them. <code>hive ctl</code> is on every agent's PATH, so an agent installs a
-          plugin, opens it, and keeps a widget's steps ticked as it goes — no restart, nothing for
-          you to click.</p>
+          boxes above them. An agent installs one, opens it, and keeps a widget's steps ticked as it
+          goes, as in the Progress box at the top of this page — nothing for you to click.</p>
       </header>
       <div class="byo">
-        <figure class="shot-frame">
-          <img src={link('shots/agent-plugins.webp')} width="1600" height="1120" loading="lazy" decoding="async"
-            alt="The Windows view with the Progress widget floating above it: Ship 2026.10.3, 3 of 4 done, each step added and ticked by an agent" />
-          <figcaption>An agent installed Progress from HiveHub, opened it, and ticked off its steps as it worked.</figcaption>
-        </figure>
         <div class="byo-copy">
-          <pre class="cmd"><span class="w">$</span> hive ctl plugin list
-<span class="w">$</span> hive ctl plugin open <span class="s">widget:@dip497/progress</span>
-<span class="w">$</span> hive ctl plugin commands
-<span class="w">$</span> hive ctl plugin call @dip497/progress check <span class="g">'&#123;"index":2&#125;'</span></pre>
           <p>A <b>tool</b> is a kind of tile your code draws, beside the terminals in every view.
             On HiveHub now: <b>Worktrees</b> (every worktree, its changes and diffs) and <b>CI runs</b> (a failed job's lines, rerun, hand it to an agent). Install one from
             Settings → Plugins → Tools or with <code>hive tools install dip497/worktrees</code>; it
@@ -288,6 +270,10 @@ detect:
             &nbsp; <a href={link('guide/tool-plugins/')}>Tools →</a>
             &nbsp; <a href={link('guide/widgets/')}>Widgets →</a></p>
         </div>
+          <pre class="cmd"><span class="w">$</span> hive ctl plugin list
+<span class="w">$</span> hive ctl plugin open <span class="s">widget:@dip497/progress</span>
+<span class="w">$</span> hive ctl plugin commands
+<span class="w">$</span> hive ctl plugin call @dip497/progress check <span class="g">'&#123;"index":2&#125;'</span></pre>
       </div>
     </div>
   </section>
@@ -315,13 +301,14 @@ detect:
           <figcaption>A permission prompt</figcaption></figure>
       </div>
       <ol class="pair">
+        <li>Run your own network with a public name; its <code>hive-net</code> server serves the page.
+          Put the computer on it in <b>Settings → Servers</b>. The default <em>Local network</em> serves no page.</li>
         <li>On the computer, <b>Settings → Connect</b>, and turn on <em>Open in the phone's browser</em>.</li>
         <li>Scan the code. Both screens show the same three words.</li>
         <li>Say yes on each side. The phone is yours until you unpair it.</li>
       </ol>
       <p class="sub">The same offer lets in another computer of yours, or a person, to one
-        workspace. The page needs your own network's server: <code>hive-net</code> ships with the
-        app. <span class="pill">Preview</span> The iOS and Android apps do the same and are not
+        workspace. <span class="pill">Preview</span> The iOS and Android apps do the same and are not
         published yet.</p>
       <p class="after"><a href={link('guide/phone/')}>Set up the phone page →</a>
         &nbsp; <a href={link('guide/self-hosting/')}>Run your own network →</a></p>
@@ -333,7 +320,7 @@ detect:
     <div class="wrap">
       <header class="head"><h2>What else is in the box</h2></header>
       <div class="cards">
-        <article><h3>Worktrees as frames</h3><p>Every agent on its own branch, physically unable to collide with a sibling's work.</p></article>
+        <article><h3>Worktrees as frames</h3><p>Give each agent its own worktree, and no two of them edit the same files.</p></article>
         <article><h3>Issues as Markdown</h3><p>They live in your repository. No tracker, no account — greppable, and reviewable in a diff.</p></article>
         <article><h3>Remote hosts over SSH</h3><p>PTYs on the host, editor over SFTP, in the same canvas as everything local.</p></article>
         <article><h3>Driven from the shell</h3><p>Every verb takes <code>--json</code> and returns a real exit status, so any script can drive it.</p></article>
@@ -361,8 +348,7 @@ detect:
           and gives them one command to talk to each other.</dd>
         <dt>How finished is it?</dt>
         <dd>Agents, views, tool plugins, widgets, the phone page and your own network are in the
-          release. The iOS and Android apps are not published yet, and the docs mark every
-          preview.</dd>
+          release, and the docs mark every preview.</dd>
       </dl>
     </div>
   </section>
@@ -413,7 +399,7 @@ detect:
     <div class="wrap close-in">
       <div>
         <h2>Start with one repo.</h2>
-        <p class="sub">One binary. Linux, macOS and Windows, MIT licensed.</p>
+        <p class="sub">One install: the app, the <code>hive</code> CLI and <code>hive-net</code>. Linux, macOS and Windows, MIT licensed.</p>
       </div>
       <div class="cta">
         <a class="btn primary" href="#download">Download</a>
@@ -544,7 +530,8 @@ detect:
   .hero-shot .slide{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:14px;
     opacity:0;animation:cycle 26s infinite;animation-delay:calc(var(--i) * 6.5s)}
   /* The first frame is what a thumbnail and a skim-reader get: it must be up at rest. */
-  .hero-shot .slide[style*="--i:0"]{opacity:1}
+  .hero-shot .slide[style*="--i:0"],.hero-shot .slide.still{opacity:1}
+  .hero-shot .slide.still{animation:none}
   @keyframes cycle{0%{opacity:0}2%{opacity:1}23%{opacity:1}25%{opacity:0}100%{opacity:0}}
   .hero-shot figcaption{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:space-between;
     align-items:baseline;margin-top:12px;font-family:var(--f-m);font-size:12.5px;color:var(--fg3)}
