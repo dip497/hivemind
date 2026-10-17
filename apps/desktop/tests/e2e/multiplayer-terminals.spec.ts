@@ -134,9 +134,9 @@ test("the host goes away and comes back: the guest's terminal shows the host's s
 });
 
 
-test("a guest with two windows on the host's shell: one hiding it, letting go of it or closing leaves it live in the other", async () => {
+test("a guest with two windows on the host's shell: one hiding it, letting go of it or closing leaves it live in the other, and the keyboard it held comes back to the host", async () => {
   test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
-  const { host, guest, repo } = await sharedWorkspace(root, apps, "view");
+  const { host, guest, repo } = await sharedWorkspace(root, apps, "terminals", { names: { host: "Adarsh", guest: "Priya" } });
   await run(host, `echo up > ${repo}/up`, `${repo}/up`, /^up$/);
   const [second] = await Promise.all([apps[1]!.waitForEvent("window"), guest.evaluate(() => window.hive.newWindow?.())]);
   await second.waitForSelector(".react-flow", { timeout: 15_000 });
@@ -150,7 +150,13 @@ test("a guest with two windows on the host's shell: one hiding it, letting go of
   await second.evaluate((s) => window.hive.ptyDetach(s), session);
   await host.keyboard.type("echo let-go-$((6*7))\n");
   await expect.poll(() => screen(guest), { timeout: 15_000 }).toContain("let-go-42");
+  await second.evaluate((s) => window.hive.keyboardAsk(s), session);
+  await host.locator("[data-sonner-toast]", { hasText: "Priya asks for the keyboard" }).getByRole("button", { name: "Give" }).click();
+  await expect(holder(second)).toHaveAttribute("data-keyboard-holder", "You");
+  await expect(holder(host)).toHaveAttribute("data-keyboard-holder", "Priya");
   await second.close();
+  await expect(holder(guest)).toHaveAttribute("data-keyboard-holder", "Adarsh");
+  await expect(holder(host)).not.toHaveAttribute("data-keyboard-holder", "Priya");
   await host.keyboard.type("echo closed-$((6*7))\n");
   await expect.poll(() => screen(guest), { timeout: 15_000 }).toContain("closed-42");
 });
