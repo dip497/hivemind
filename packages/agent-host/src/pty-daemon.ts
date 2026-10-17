@@ -391,7 +391,13 @@ const manager = new SessionManager(factory, {
   onTitle: (id, raw) => reportTitle(id, raw),
   // An ended session is gone for good: its readings go with it, or a desktop that connects later
   // is told of a screen nothing shows any more.
-  onEnd: (id) => { titles.forget(id); screens.forget(id); statuses?.exited(id); statuses?.forget(id); },
+  onEnd: (id, asleep) => {
+    titles.forget(id);
+    screens.forget(id);
+    if (asleep) return statuses?.slept(id);
+    statuses?.exited(id);
+    statuses?.forget(id);
+  },
   idleMs: IDLE_EXIT_MS,
   onEmpty: () => {
     if (controller) return;

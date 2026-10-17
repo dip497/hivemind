@@ -1,7 +1,8 @@
 // The real daemon: a session put to sleep ends its process and its children, says so in its exit,
 // and keeps the screen it showed when it was put to sleep, though it clears its screen as it ends.
 // Only an attach that wakes it restores it, from that screen, also after the daemon restarts; any
-// other is told it is asleep. Its viewer is shown the newest lines only.
+// other is told it is asleep. Its viewer is shown the newest lines only. Asleep, it keeps its name
+// and is not counted as exited.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -20,8 +21,16 @@ const alive = (pid: number) => {
 };
 const unix = process.platform !== "win32";
 const sock = path.join(dir, "d.sock");
+// An installed agent, so the daemon names its tiles from their titles.
+const manifest = path.join(dir, "config", "hivemind", "agents", "acme", "agent.yaml");
+fs.mkdirSync(path.dirname(manifest), { recursive: true });
+fs.writeFileSync(manifest, JSON.stringify({
+  manifestVersion: 2, id: "acme", label: "Acme", bin: "acme",
+  caps: { promptDelivery: "typed", turnSignal: false, resume: "none", supervise: "human", blockedDetection: false },
+}));
 const start = async () => {
-  daemon = spawn(process.execPath, [DAEMON, sock], { stdio: "ignore", env: { ...process.env, HOME: dir } });
+  // Standalone: the daemon keeps the statuses, as under `hive host`.
+  daemon = spawn(process.execPath, [DAEMON, sock], { stdio: "ignore", env: { ...process.env, HOME: dir, XDG_CONFIG_HOME: path.join(dir, "config"), HIVEMIND_DAEMON_STANDALONE: "1" } });
   for (let i = 0; i < 100 && !fs.existsSync(sock); i++) await new Promise((r) => setTimeout(r, 100));
 };
 beforeAll(async () => { if (unix) await start(); });
@@ -44,9 +53,15 @@ const connect = async () => {
 };
 
 test.skipIf(!unix)("a session put to sleep ends with its children, keeps its last screen, and only an attach that wakes it brings it back", async () => {
-  // A child that ignores the hangup, as an agent's tool server may.
-  const spec = { cwd: dir, cmd: "sh", args: ["-c", "(trap '' HUP; exec sleep 1000) & echo CHILD=$!; trap 'printf \"\\033[2J\\033[3J\\033[H\"; echo CLEARED; exit 0' HUP; echo WORKING; while :; do sleep 0.1; done"], cols: 80, rows: 24 };
+  // The agent, whose title is kept: it starts a child that ignores the hangup, as an agent's
+  // tool server may, and clears its screen as it ends.
+  const agent = path.join(dir, "bin", "acme");
+  fs.mkdirSync(path.dirname(agent), { recursive: true });
+  fs.writeFileSync(agent, "#!/bin/sh\n(trap '' HUP; exec sleep 1000) & echo CHILD=$!\ntrap 'printf \"\\033[2J\\033[3J\\033[H\"; echo CLEARED; exit 0' HUP\nprintf '\\033]0;Named\\007'; echo WORKING\nwhile :; do sleep 0.1; done\n", { mode: 0o755 });
+  const spec = { cwd: dir, cmd: agent, args: [], cols: 80, rows: 24 };
 
+  const events = await connect();
+  events.send({ t: "hello", caps: ["events"] });
   const first = await connect();
   first.send({ t: "attach", reqId: "a", id: "t1", spec });
   const started = await first.reply("attached");
@@ -61,6 +76,9 @@ test.skipIf(!unix)("a session put to sleep ends with its children, keeps its las
   expect(child).toBeGreaterThan(0);
   for (let i = 0; i < 40 && alive(child); i++) await new Promise((r) => setTimeout(r, 25));
   expect(alive(child)).toBe(false);
+  const of = (topic: string) => events.got.flatMap((m) => (m.t === "event" && m.topic === topic && (m.data as { tileId?: string }).tileId === "t1" ? [m.data] : []));
+  expect(of("agent.title").at(-1)).toMatchObject({ title: "Named" });
+  expect(of("agent.status").at(-1)).toMatchObject({ status: { state: "idle", title: "Named" } });
 
   first.send({ t: "screen", reqId: "r", id: "t1", saved: true });
   const saved = await first.reply("screen");
@@ -85,7 +103,7 @@ test.skipIf(!unix)("a session put to sleep ends with its children, keeps its las
   expect(alive(woke!.pid)).toBe(true);
 
   waker.send({ t: "kill", id: "t1" });
-  for (const v of [first, watcher, viewer, waker]) v.c.destroy();
+  for (const v of [events, first, watcher, viewer, waker]) v.c.destroy();
 }, 20_000);
 
 test.skipIf(!unix)("a sleeping session's viewer asking for 1000 lines is shown its newest, not all it saved", async () => {

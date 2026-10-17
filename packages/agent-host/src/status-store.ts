@@ -170,6 +170,12 @@ export class StatusStore {
     this.apply(tileId, cur?.source ?? null, (s) => ({ ...foldStatus(s, { fact: "exited" }), title: undefined }));
   }
 
+  /** Put to sleep: a turn it was in is interrupted, nothing runs, and it keeps its title. */
+  slept(tileId: string): void {
+    const cur = this.sessions.get(tileId);
+    this.apply(tileId, cur?.source ?? null, (s) => ({ ...foldStatus(s, { fact: "interrupt" }), subagents: [], background: 0, compacting: false }));
+  }
+
   /** The agent's title changed ("" when it says nothing worth a name). Changes no state. */
   title(tileId: string, title: string): void {
     if (this.mirrored.has(tileId)) return;

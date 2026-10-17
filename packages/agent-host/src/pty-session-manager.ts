@@ -210,8 +210,9 @@ export interface SessionManagerOptions {
   onOutput?: (id: string) => void;
   /** A session's window title (OSC 0/2) changed, or was restored from its snapshot. */
   onTitle?: (id: string, title: string) => void;
-  /** A session ended: its process exited, or it was killed. */
-  onEnd?: (id: string) => void;
+  /** A session ended: its process exited, or it was killed; `asleep`, it was put to sleep and is
+   *  kept, to be woken. */
+  onEnd?: (id: string, asleep?: boolean) => void;
   onSnapshot?: (id: string, snapshot: SessionSnapshot) => void | Promise<void>;
   /** Reads back what `onSnapshot` saved: how a session put to sleep is restored. */
   loadSnapshot?: (id: string) => SessionSnapshot | undefined;
@@ -289,7 +290,7 @@ export class SessionManager {
   private readonly restoreRetryTransform?: (spec: SpawnSpec) => SpawnSpec | null;
   private readonly onOutput?: (id: string) => void;
   private readonly onTitle?: (id: string, title: string) => void;
-  private readonly onEnd?: (id: string) => void;
+  private readonly onEnd?: (id: string, asleep?: boolean) => void;
   private readonly restoreRetryMs: number;
 
   constructor(
@@ -512,8 +513,8 @@ export class SessionManager {
     // once, fresh. Observed, not guessed from its output.
     const sinceSpawn = Date.now() - session.spawnedAt;
     if (!session.sleeping && code !== 0 && sinceSpawn < this.restoreRetryMs && this.tryRestoreRetry(session)) return false;
-    this.onTitle?.(id, ""); // a process that has ended is doing nothing
     const slept = !!session.sleeping;
+    if (!slept) this.onTitle?.(id, ""); // a process that has ended is doing nothing; one asleep keeps its name
     for (const c of session.clients) c.onExit(code, signal, slept || undefined);
     if (slept) session.dirty = true; // its screen at sleep is saved even when nothing printed since
     const saved = this.flushSnapshot(session); // last write before drop
@@ -527,7 +528,7 @@ export class SessionManager {
       const info = this.infoOf(session);
       this.frozen.set(id, { load: () => this.loadSnapshot!(id), asleep: true, info: { ...info, state: "frozen", pid: null, viewers: 0, asleep: true } });
     }
-    this.onEnd?.(id);
+    this.onEnd?.(id, kept); // asleep only once saved
     this.scheduleIdle();
     session.sleeping?.settle(kept);
     return kept;
