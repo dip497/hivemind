@@ -166,7 +166,26 @@ const SAVED_SCROLLBACK = 500;
 /** The scrollback a viewer of a sleeping session is first shown, as a window opens a terminal with. */
 export const RECENT_LINES = 1000;
 /** A program still running this long after it was told to end for sleep is ended outright. */
-const SLEEP_GRACE_MS = 5000;
+const SLEEP_GRACE_MS = 15_000;
+
+/** A session saved, not running: how to read it, and once read, what it is. */
+interface Frozen {
+  load: () => SessionSnapshot | undefined;
+  info?: SessionInfo;
+  /** Put to sleep (its snapshot says so), as far as it has been read. */
+  asleep?: boolean;
+}
+
+/** An attach to a session put to sleep that does not wake it. */
+export class Asleep extends Error {
+  constructor(id: string) { super(`'${id}' is asleep`); }
+}
+
+/** A signal to the process and its group (its children): the pty makes it a group's leader. */
+function signalGroup(p: ManagedPty, signal: "SIGHUP" | "SIGKILL"): void {
+  if (process.platform !== "win32") try { process.kill(-p.pid, signal); return; } catch { /* no group, or gone */ }
+  try { p.kill(signal); } catch { /* gone, or no signals here */ }
+}
 
 /** The title (OSC 0) ahead of a replay, which SerializeAddon leaves out. Control chars stripped so
  *  an embedded BEL/ESC can't truncate it. */
@@ -238,6 +257,8 @@ export interface SessionSnapshot {
   replay: string;
   /** Put to sleep: the screen again with only its newest RECENT_LINES of scrollback, for a viewer. */
   recentReplay?: string;
+  /** Put to sleep: only an attach that wakes it restores it. */
+  sleeping?: true;
   /** Last OSC window title (SerializeAddon omits it) so a reboot-restored
    *  session re-emits the agent's name ahead of its replay, same as a live
    *  reattach — the daemon is the single source of truth for the title. */
@@ -252,7 +273,7 @@ export class SessionManager {
    *  fresh PTY is spawned with the stored spec; the headless term already
    *  carries the pre-reboot screen so the user sees their last state plus a
    *  working new shell. Evicted when attach actually happens or on explicit kill. */
-  private frozen = new Map<string, () => SessionSnapshot | undefined>();
+  private frozen = new Map<string, Frozen>();
   private idleTimer: ReturnType<typeof setTimeout> | undefined;
   private snapshotTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly scrollback: number;
@@ -294,12 +315,12 @@ export class SessionManager {
 
   /** Materialized as a live session on the next `createOrAttach`. */
   restoreSnapshot(snap: SessionSnapshot): void {
-    this.frozen.set(snap.id, () => snap);
+    this.frozen.set(snap.id, { load: () => snap, ...(snap.sleeping ? { asleep: true } : {}) });
   }
 
   /** `load` runs when the tile attaches, and must be synchronous (see createOrAttach). */
   restoreLazySnapshot(id: string, load: () => SessionSnapshot | undefined): void {
-    this.frozen.set(id, load);
+    this.frozen.set(id, { load });
   }
 
   frozenIds(): string[] {
@@ -320,13 +341,14 @@ export class SessionManager {
   }
 
   /** `view`: the client only watches (M4): a running session keeps its size and its pauses.
-   *  `lines`: at most that much scrollback in the replay of a running session. */
-  async createOrAttach(id: string, spec: SpawnSpec, client: SessionClient, view = false, lines?: number): Promise<AttachResult> {
+   *  `lines`: at most that much scrollback in the replay of a running session. `wake`: a session put
+   *  to sleep is restored; without it, the attach throws `Asleep`. */
+  async createOrAttach(id: string, spec: SpawnSpec, client: SessionClient, view = false, lines?: number, wake = false): Promise<AttachResult> {
     const existing = this.sessions.get(id);
     // Going to sleep: it is restored from what it saves, not started afresh beside it.
     if (existing?.exited && existing.sleeping) {
       await existing.sleeping.done;
-      return this.createOrAttach(id, spec, client, view, lines);
+      return this.createOrAttach(id, spec, client, view, lines, wake);
     }
     if (existing && !existing.exited) {
       existing.clients.add(client);
@@ -341,9 +363,13 @@ export class SessionManager {
     // VT-escape replay so the client sees its last screen before the new shell
     // emits its first byte. The user's session feels continuous.
     // No await between take and spawn, or a second attach would spawn fresh.
-    const loadFrozen = this.frozen.get(id);
-    if (loadFrozen) this.frozen.delete(id);
-    const frozenSnap = loadFrozen ? loadFrozen() : undefined;
+    const kept = this.frozen.get(id);
+    const frozenSnap = kept ? kept.load() : undefined;
+    if (kept) {
+      kept.asleep = !!frozenSnap?.sleeping;
+      if (kept.asleep && !wake) throw new Asleep(id);
+      this.frozen.delete(id);
+    }
     // Spec from the snapshot wins over the caller's (cwd/cmd/env are what the
     // user had); only cols/rows from the live attach apply (window dims).
     // For RESTORE paths, also run the optional transform so the daemon can
@@ -492,11 +518,14 @@ export class SessionManager {
     if (slept) session.dirty = true; // its screen at sleep is saved even when nothing printed since
     const saved = this.flushSnapshot(session); // last write before drop
     if (slept) await saved;
+    // What is left of its process group (a child that ignored the hangup) goes with it.
+    if (slept) signalGroup(session.pty, "SIGKILL");
     const kept = slept && !session.killed && !session.dirty && !!this.loadSnapshot;
     if (this.sessions.get(id) === session) this.sessions.delete(id);
     if (kept) {
       try { session.term.dispose(); } catch { /* ignore */ }
-      this.frozen.set(id, () => this.loadSnapshot!(id));
+      const info = this.infoOf(session);
+      this.frozen.set(id, { load: () => this.loadSnapshot!(id), asleep: true, info: { ...info, state: "frozen", pid: null, viewers: 0, asleep: true } });
     }
     this.onEnd?.(id);
     this.scheduleIdle();
@@ -510,26 +539,40 @@ export class SessionManager {
   sleep(id: string): Promise<boolean> {
     const s = this.sessions.get(id);
     if (s?.sleeping) return s.sleeping.done;
-    if (!s || s.exited) return Promise.resolve(!s && this.frozen.has(id));
+    if (!s || s.exited) return s ? Promise.resolve(false) : this.markAsleep(id);
     let settle!: (kept: boolean) => void;
     s.sleeping = { done: new Promise<boolean>((r) => { settle = r; }), settle };
     const at = s.seq;
     s.term.write("", () => {
       if (s.exited) return;
       s.sleepScreen = { replay: this.screenText(s, at, this.scrollback), recent: s.serializer.serialize({ scrollback: Math.min(RECENT_LINES, this.scrollback) }) };
-      try { s.pty.kill(); } catch { /* already gone */ }
-      const stubborn = setTimeout(() => { if (!s.exited) try { s.pty.kill("SIGKILL"); } catch { /* gone, or no signals here */ } }, SLEEP_GRACE_MS);
+      signalGroup(s.pty, "SIGHUP");
+      const stubborn = setTimeout(() => { if (!s.exited) signalGroup(s.pty, "SIGKILL"); }, SLEEP_GRACE_MS);
       stubborn.unref?.();
     });
     return s.sleeping.done;
   }
 
+  /** A session saved but not running (after a reboot) is marked asleep where it is saved. */
+  private async markAsleep(id: string): Promise<boolean> {
+    const kept = this.frozen.get(id);
+    if (!kept) return false;
+    if (kept.asleep) return true;
+    const snap = kept.load();
+    if (!snap || !this.onSnapshot) return false;
+    try { await this.onSnapshot(id, { ...snap, sleeping: true }); } catch { return false; }
+    if (this.frozen.get(id) !== kept) return false;
+    kept.asleep = true;
+    if (kept.info) kept.info = { ...kept.info, asleep: true };
+    return true;
+  }
+
   /** What a frozen session saved as its screen (title first), with its newest RECENT_LINES of
    *  scrollback unless `lines` asks for more (none: all of it); null when it is not frozen. */
   async savedScreen(id: string, lines?: number): Promise<string | null> {
-    const load = this.frozen.get(id);
-    if (!load || this.sessions.has(id)) return null;
-    const snap = this.readSnapshot ? await this.readSnapshot(id) : load();
+    const kept = this.frozen.get(id);
+    if (!kept || this.sessions.has(id)) return null;
+    const snap = this.readSnapshot ? await this.readSnapshot(id) : kept.load();
     if (!snap || !this.frozen.has(id) || this.sessions.has(id)) return null;
     const recent = lines !== undefined && lines <= RECENT_LINES ? snap.recentReplay : undefined;
     return titled(snap.title, recent ?? snap.replay);
@@ -802,27 +845,32 @@ export class SessionManager {
 
   info(): SessionInfo[] {
     const out: SessionInfo[] = [];
-    for (const s of this.sessions.values()) {
-      if (s.exited) continue;
-      out.push({
-        id: s.id, state: "live", cmd: s.spec.cmd, args: s.spec.args ?? [], cwd: s.spec.cwd,
-        pid: s.pty.pid, viewers: s.clients.size, cols: s.spec.cols, rows: s.spec.rows,
-        ...(s.lastTitle ? { title: s.lastTitle } : {}),
-      });
-    }
-    // Frozen snapshots are read on demand (startup no longer loads them all), so this costs
-    // a read per frozen session — only when something actually asks for the list.
-    for (const [id, load] of this.frozen) {
+    for (const s of this.sessions.values()) if (!s.exited) out.push(this.infoOf(s));
+    // Frozen snapshots are read on demand (startup does not load them), each once: what it says
+    // is kept, as nothing changes it until it is restored.
+    for (const [id, kept] of this.frozen) {
       if (this.sessions.has(id)) continue;
-      const f = load();
-      if (!f) continue;
-      out.push({
-        id: f.id, state: "frozen", cmd: f.spec.cmd, args: f.spec.args ?? [], cwd: f.spec.cwd,
-        pid: null, viewers: 0, cols: f.spec.cols, rows: f.spec.rows,
-        ...(f.title ? { title: f.title } : {}),
-      });
+      if (!kept.info) {
+        const f = kept.load();
+        if (!f) continue;
+        kept.asleep = !!f.sleeping;
+        kept.info = {
+          id: f.id, state: "frozen", cmd: f.spec.cmd, args: f.spec.args ?? [], cwd: f.spec.cwd,
+          pid: null, viewers: 0, cols: f.spec.cols, rows: f.spec.rows,
+          ...(f.title ? { title: f.title } : {}), ...(f.sleeping ? { asleep: true } : {}),
+        };
+      }
+      out.push(kept.info);
     }
     return out;
+  }
+
+  private infoOf(s: Session): SessionInfo {
+    return {
+      id: s.id, state: "live", cmd: s.spec.cmd, args: s.spec.args ?? [], cwd: s.spec.cwd,
+      pid: s.pty.pid, viewers: s.clients.size, cols: s.spec.cols, rows: s.spec.rows,
+      ...(s.lastTitle ? { title: s.lastTitle } : {}),
+    };
   }
 
   has(id: string): boolean {
@@ -888,7 +936,7 @@ export class SessionManager {
             spec: s.spec,
             ...(s.asked ? { asked: s.asked } : {}),
             replay: s.sleepScreen?.replay ?? this.screenText(s, at, lines),
-            ...(s.sleepScreen ? { recentReplay: s.sleepScreen.recent } : {}),
+            ...(s.sleepScreen ? { recentReplay: s.sleepScreen.recent, sleeping: true as const } : {}),
             title: s.lastTitle,
             savedAt: Date.now(),
           });

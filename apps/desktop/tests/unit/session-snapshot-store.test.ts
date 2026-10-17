@@ -92,7 +92,7 @@ test("the directory is 0700 and files are tightened to 0600", { skip: !posix }, 
   assert.equal(fs.statSync(f).mode & 0o777, 0o600, "a snapshot written before this rule is repaired");
 });
 
-test("retention evicts only snapshots that are BOTH unclaimed and old", () => {
+test("retention evicts only snapshots that are unclaimed, old and not asleep", () => {
   const now = 1_000_000_000_000;
   const old = now - SNAPSHOT_RETENTION_MS - 1;
   const fresh = now - 1000;
@@ -100,12 +100,13 @@ test("retention evicts only snapshots that are BOTH unclaimed and old", () => {
     { id: "gone-old", file: "a", mtimeMs: old },      // closed long ago → evict
     { id: "gone-fresh", file: "b", mtimeMs: fresh },  // closed recently → keep a while
     { id: "open-old", file: "c", mtimeMs: old },      // attached this boot → keep
+    { id: "asleep-old", file: "d", mtimeMs: old },    // put to sleep long ago → waits to be woken
   ];
-  assert.deepEqual(staleSnapshotIds(entries, ["gone-old", "gone-fresh"], now), ["gone-old"]);
+  assert.deepEqual(staleSnapshotIds(entries, ["gone-old", "gone-fresh", "asleep-old"], now, (id) => id === "asleep-old"), ["gone-old"]);
 });
 
 test("retention never evicts a snapshot some tile claimed, however old", () => {
   const now = 1_000_000_000_000;
   const entries = [{ id: "t", file: "x", mtimeMs: 0 }];
-  assert.deepEqual(staleSnapshotIds(entries, [], now), []);
+  assert.deepEqual(staleSnapshotIds(entries, [], now, () => false), []);
 });

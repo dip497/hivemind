@@ -17,7 +17,7 @@ import type * as NodePty from "@lydell/node-pty";
 import * as bunPty from "./bun-pty.js";
 import { listenExclusive } from "./socket-claim.js";
 import { dropHandedDown, HANDED_DOWN } from "./handed-down.js";
-import { SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot, type SessionClient } from "./pty-session-manager.js";
+import { Asleep, SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot, type SessionClient } from "./pty-session-manager.js";
 import { type ClientMsg, type ServerMsg, frame, makeLineDecoder } from "./pty-protocol.js";
 import { PtyOutputBuffer } from "./pty-output-buffer.js";
 import { ipcPath } from "@hivemind/core/ipc";
@@ -437,7 +437,7 @@ const bootSnapshots = registerSnapshots();
 // Open canvases attach within seconds, so anything unclaimed after this is a candidate.
 const RETENTION_GRACE_MS = 5 * 60 * 1000;
 const retentionTimer = setTimeout(() => {
-  for (const id of staleSnapshotIds(bootSnapshots, manager.frozenIds(), Date.now())) manager.kill(id);
+  for (const id of staleSnapshotIds(bootSnapshots, manager.frozenIds(), Date.now(), (id) => !!loadSnapshot(id)?.sleeping)) manager.kill(id);
 }, RETENTION_GRACE_MS);
 retentionTimer.unref?.();
 
@@ -593,7 +593,7 @@ const server = net.createServer((sock) => {
         // The spawn/restore checkpoint: an agent installed after boot is wired here,
         // before its spec is transformed.
         void ensureAgentsCurrent()
-          .then(() => manager.createOrAttach(msg.id, msg.spec, viewer, view, linesOf(msg.lines)))
+          .then(() => manager.createOrAttach(msg.id, msg.spec, viewer, view, linesOf(msg.lines), msg.wake === true))
           .then((r) => {
             ready = true;
             send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: r.pid, isNew: r.isNew, replay: r.replay, seq: r.seq, epoch: r.epoch, cols: r.cols, rows: r.rows });
@@ -604,6 +604,7 @@ const server = net.createServer((sock) => {
             // pendingAttach hangs until its 6s timeout — with nothing logged.
             // Reply with a failure pid so spawnPty resolves immediately.
             if (viewers.get(msg.id) === viewer) viewers.delete(msg.id);
+            if (e instanceof Asleep) { send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: -1, isNew: false, replay: "", error: e.message, asleep: true }); return; }
             console.error(`[pty-daemon] attach ${msg.id} failed:`, e);
             send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: -1, isNew: false, replay: "", error: e instanceof Error ? e.message : String(e) });
           });

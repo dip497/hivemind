@@ -90,14 +90,16 @@ export function parseSnapshot(body: string, expectedId?: string): SessionSnapsho
   }
 }
 
-/** Unclaimed AND old: a canvas not opened this session keeps its tiles. */
+/** Unclaimed AND old: a canvas not opened this session keeps its tiles. One put to sleep waits to be
+ *  woken however long it takes (`asleep` is asked only of the old ones). */
 export function staleSnapshotIds(
   entries: readonly SnapshotEntry[],
   unclaimed: Iterable<string>,
   now: number,
+  asleep: (id: string) => boolean,
   retentionMs: number = SNAPSHOT_RETENTION_MS,
 ): string[] {
   const open = new Set(unclaimed);
   const cutoff = now - retentionMs;
-  return entries.filter((e) => open.has(e.id) && e.mtimeMs < cutoff).map((e) => e.id);
+  return entries.filter((e) => open.has(e.id) && e.mtimeMs < cutoff && !asleep(e.id)).map((e) => e.id);
 }

@@ -25,6 +25,8 @@ export interface SessionInfo {
   cols: number;
   rows: number;
   title?: string;
+  /** Put to sleep: only an attach with `wake` restores it. */
+  asleep?: true;
 }
 
 // Append-only: new fields are optional and ignored by older peers.
@@ -37,8 +39,9 @@ export type ClientMsg =
    *  view: a viewer that only watches (a workspace's host, shown a session on someone else's
    *  machine, M4): the session keeps its size and its other viewers' pauses.
    *  base: the environment of whoever starts sessions, as it is now (the app's, after it read the
-   *  person's shell): what a session starts from, under its own `spec.env`. Never saved. */
-  | { t: "attach"; reqId: string; id: string; spec: SpawnSpecWire; noSpawn?: boolean; liveOnly?: boolean; since?: { seq: number; epoch: string }; view?: boolean; base?: Record<string, string>; lines?: number }
+   *  person's shell): what a session starts from, under its own `spec.env`. Never saved.
+   *  wake: a session put to sleep is restored; any other attach to it is answered `asleep`. */
+  | { t: "attach"; reqId: string; id: string; spec: SpawnSpecWire; noSpawn?: boolean; liveOnly?: boolean; since?: { seq: number; epoch: string }; view?: boolean; base?: Record<string, string>; lines?: number; wake?: boolean }
   /** Capabilities of this client; "resync" = may be sent a fresh screen instead of every byte when behind. */
   | { t: "hello"; caps: string[] }
   | { t: "write"; id: string; data: string; /** A message pasted into the TUI, not keystrokes (see paste.ts). */ paste?: boolean }
@@ -76,8 +79,9 @@ export type ClientMsg =
 /** daemon → client */
 export type ServerMsg =
   /** delta: `replay` is only the output after the requested position, not a redraw.
-   *  cols/rows: the session's size, which a viewer that only watches draws it at. */
-  | { t: "attached"; reqId: string; id: string; pid: number; isNew: boolean; replay: string; error?: string; seq?: number; epoch?: string; delta?: boolean; cols?: number; rows?: number }
+   *  cols/rows: the session's size, which a viewer that only watches draws it at.
+   *  asleep: it was put to sleep, and the attach did not wake it (with `error`). */
+  | { t: "attached"; reqId: string; id: string; pid: number; isNew: boolean; replay: string; error?: string; seq?: number; epoch?: string; delta?: boolean; cols?: number; rows?: number; asleep?: true }
   | { t: "data"; id: string; data: string; seq?: number }
   /** The session's size changed: to each of its viewers. */
   | { t: "size"; id: string; cols: number; rows: number }

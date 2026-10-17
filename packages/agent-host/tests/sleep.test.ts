@@ -1,7 +1,7 @@
-// The real daemon: a session put to sleep ends its process, says so in its exit, and keeps the
-// screen it showed when it was put to sleep, though it clears its screen as it ends. A viewer that
-// only watches does not wake it; a plain attach does, restored from that screen. Its viewer is
-// shown the newest lines only.
+// The real daemon: a session put to sleep ends its process and its children, says so in its exit,
+// and keeps the screen it showed when it was put to sleep, though it clears its screen as it ends.
+// Only an attach that wakes it restores it, from that screen, also after the daemon restarts; any
+// other is told it is asleep. Its viewer is shown the newest lines only.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -17,11 +17,11 @@ afterAll(() => { daemon?.kill("SIGKILL"); fs.rmSync(dir, { recursive: true, forc
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 const unix = process.platform !== "win32";
 const sock = path.join(dir, "d.sock");
-beforeAll(async () => {
-  if (!unix) return;
+const start = async () => {
   daemon = spawn(process.execPath, [DAEMON, sock], { stdio: "ignore", env: { ...process.env, HOME: dir } });
   for (let i = 0; i < 100 && !fs.existsSync(sock); i++) await new Promise((r) => setTimeout(r, 100));
-});
+};
+beforeAll(async () => { if (unix) await start(); });
 const connect = async () => {
   const c = net.connect(sock);
   await new Promise((r) => c.once("connect", r));
@@ -39,8 +39,9 @@ const connect = async () => {
   return { c, got, reply, out: () => out, send: (m: ClientMsg) => c.write(frame(m)) };
 };
 
-test.skipIf(!unix)("a session put to sleep ends, keeps its last screen, and only a plain attach brings it back", async () => {
-  const spec = { cwd: dir, cmd: "sh", args: ["-c", "trap 'printf \"\\033[2J\\033[3J\\033[H\"; echo CLEARED; exit 0' HUP; echo WORKING; while :; do sleep 0.1; done"], cols: 80, rows: 24 };
+test.skipIf(!unix)("a session put to sleep ends with its children, keeps its last screen, and only an attach that wakes it brings it back", async () => {
+  // A child that ignores the hangup, as an agent's tool server may.
+  const spec = { cwd: dir, cmd: "sh", args: ["-c", "(trap '' HUP; exec sleep 1000) & echo CHILD=$!; trap 'printf \"\\033[2J\\033[3J\\033[H\"; echo CLEARED; exit 0' HUP; echo WORKING; while :; do sleep 0.1; done"], cols: 80, rows: 24 };
 
   const first = await connect();
   first.send({ t: "attach", reqId: "a", id: "t1", spec });
@@ -52,6 +53,10 @@ test.skipIf(!unix)("a session put to sleep ends, keeps its last screen, and only
   expect(slept?.error).toBeUndefined();
   expect((await first.reply("exit"))?.slept).toBe(true);
   expect(alive(started!.pid)).toBe(false);
+  const child = Number(/CHILD=(\d+)/.exec(first.out())?.[1]);
+  expect(child).toBeGreaterThan(0);
+  for (let i = 0; i < 40 && alive(child); i++) await new Promise((r) => setTimeout(r, 25));
+  expect(alive(child)).toBe(false);
 
   first.send({ t: "screen", reqId: "r", id: "t1", saved: true });
   const saved = await first.reply("screen");
@@ -62,17 +67,21 @@ test.skipIf(!unix)("a session put to sleep ends, keeps its last screen, and only
   watcher.send({ t: "attach", reqId: "w", id: "t1", spec, noSpawn: true, liveOnly: true });
   expect((await watcher.reply("attached"))?.error).toBeDefined();
   watcher.send({ t: "list", reqId: "l", detail: true });
-  expect((await watcher.reply("sessions"))?.detail?.find((s) => s.id === "t1")?.state).toBe("frozen");
+  expect((await watcher.reply("sessions"))?.detail?.find((s) => s.id === "t1")).toMatchObject({ state: "frozen", asleep: true });
+
+  const viewer = await connect();
+  viewer.send({ t: "attach", reqId: "v", id: "t1", spec });
+  expect((await viewer.reply("attached"))?.asleep).toBe(true);
 
   const waker = await connect();
-  waker.send({ t: "attach", reqId: "b", id: "t1", spec });
+  waker.send({ t: "attach", reqId: "b", id: "t1", spec, wake: true });
   const woke = await waker.reply("attached");
   expect(woke?.isNew).toBe(true);
   expect(woke?.replay).toContain("WORKING");
   expect(alive(woke!.pid)).toBe(true);
 
   waker.send({ t: "kill", id: "t1" });
-  for (const v of [first, watcher, waker]) v.c.destroy();
+  for (const v of [first, watcher, viewer, waker]) v.c.destroy();
 }, 20_000);
 
 test.skipIf(!unix)("a sleeping session's viewer asking for 1000 lines is shown its newest, not all it saved", async () => {
@@ -94,3 +103,37 @@ test.skipIf(!unix)("a sleeping session's viewer asking for 1000 lines is shown i
   v.send({ t: "kill", id: "t2" });
   v.c.destroy();
 }, 20_000);
+
+test.skipIf(!unix)("asleep stays asleep when the daemon restarts, and a session saved before a restart can be put to sleep too", async () => {
+  const spec = (word: string) => ({ cwd: dir, cmd: "sh", args: ["-c", `echo ${word}; while :; do sleep 0.1; done`], cols: 80, rows: 24 });
+  const v = await connect();
+  for (const [id, word] of [["t3", "SLEPT"], ["t4", "SAVED"]] as const) v.send({ t: "attach", reqId: id, id, spec: spec(word) });
+  for (let i = 0; i < 200 && !(v.out().includes("SLEPT") && v.out().includes("SAVED")); i++) await new Promise((r) => setTimeout(r, 25));
+  v.send({ t: "sleep", reqId: "s", id: "t3" });
+  expect((await v.reply("slept"))?.error).toBeUndefined();
+  v.c.destroy();
+  // t4's periodic save lands (2 s): what a daemon stopped at once still has.
+  await new Promise((r) => setTimeout(r, 2500));
+  const gone = new Promise((r) => daemon!.once("exit", r));
+  daemon!.kill("SIGTERM");
+  await gone;
+  fs.rmSync(sock, { force: true });
+  await start();
+
+  const after = await connect();
+  after.send({ t: "attach", reqId: "a", id: "t3", spec: spec("SLEPT") });
+  expect((await after.reply("attached"))?.asleep).toBe(true);
+  after.got.length = 0;
+  after.send({ t: "sleep", reqId: "z", id: "t4" });
+  expect((await after.reply("slept"))?.error).toBeUndefined();
+  after.send({ t: "attach", reqId: "b", id: "t4", spec: spec("SAVED") });
+  const t4 = await after.reply("attached");
+  expect(t4?.asleep).toBe(true);
+  after.got.length = 0;
+  after.send({ t: "attach", reqId: "w", id: "t4", spec: spec("SAVED"), wake: true });
+  const woke = await after.reply("attached");
+  expect(woke?.pid).toBeGreaterThan(0);
+  expect(woke?.replay).toContain("SAVED");
+  for (const id of ["t3", "t4"]) after.send({ t: "kill", id });
+  after.c.destroy();
+}, 30_000);
