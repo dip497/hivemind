@@ -465,10 +465,7 @@ export class WorkspaceStore {
     doc.import(taken);
     if (JSON.stringify(doc.frontiers()) !== JSON.stringify(before)) {
       const parts = partsChanged(doc, before);
-      if (parts.some((p) => p.part === "core")) {
-        this.tiles.delete(repo);
-        this.cores.delete(repo);
-      }
+      if (parts.some((p) => p.part === "core")) this.coreChanged(repo);
       this.persist(repo, doc);
       for (const changed of parts) this.opts.onChange?.({ repo, ...changed, writer: from.writer ?? "" });
     }
@@ -503,8 +500,7 @@ export class WorkspaceStore {
     for (const history of old.histories.values()) history.free();
     this.dropTrial(old);
     this.workspaces.set(repo, { doc, histories: new Map(), hostHas: VersionVector.decode(hostVersion), stored: null });
-    this.tiles.delete(repo);
-    this.cores.delete(repo);
+    this.coreChanged(repo);
     this.persist(repo, doc);
     const writer = from.writer ?? "";
     const views = new Set([...Object.keys(readViews(doc)), ...Object.keys(mine.views)]);
@@ -531,8 +527,7 @@ export class WorkspaceStore {
     const workspace = this.workspaces.get(repo);
     if (workspace) this.dropTrial(workspace);
     this.workspaces.delete(repo);
-    this.tiles.delete(repo);
-    this.cores.delete(repo);
+    this.coreChanged(repo);
     this.unsaved.delete(repo);
     this.stored?.delete(repo);
     removeDoc(this.opts.dir, repo);
@@ -604,9 +599,14 @@ export class WorkspaceStore {
 
   private commit(repo: string, doc: LoroDoc, origin: string): void {
     doc.commit({ origin });
+    this.coreChanged(repo);
+    this.persist(repo, doc);
+  }
+
+  /** What is kept of the core layout of `repo` is read again when next asked. */
+  private coreChanged(repo: string): void {
     this.tiles.delete(repo);
     this.cores.delete(repo);
-    this.persist(repo, doc);
   }
 
   private tilesOf(repo: string): Set<string> {
@@ -625,10 +625,7 @@ export class WorkspaceStore {
     edit(doc);
     doc.commit({ origin });
     if (JSON.stringify(doc.frontiers()) === JSON.stringify(before)) return;
-    if (part === "core") {
-      this.tiles.delete(repo);
-      this.cores.delete(repo);
-    }
+    if (part === "core") this.coreChanged(repo);
     this.persist(repo, doc);
     // Which objects changed, from the change itself: a reader reads only those.
     const objects = part === "board" ? partsChanged(doc, before).find((p) => p.part === "board")?.objects : undefined;
