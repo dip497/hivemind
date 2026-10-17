@@ -627,7 +627,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     // for all of it, and keeps the line it was reading in place when that screen arrives.
     let history: number | undefined = FIRST_HISTORY;
     let keepPlace: number | undefined;
-    const historyAsked = () => (history === undefined ? {} : { history });
+    /** Every spawn and attach of this tile's session: its size now, and the history it holds. */
+    const spawn = (more: Partial<Parameters<typeof window.hive.ptySpawn>[0]> = {}) => window.hive.ptySpawn({
+      tileId: ptyId, tile: tileId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows,
+      ...(history === undefined ? {} : { history }), ...more,
+    });
     term.onScroll(() => {
       const buf = term.buffer.active;
       if (history === undefined || buf.viewportY > 0 || buf.baseY < history) return;
@@ -640,7 +644,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     reattachRef.current = () => {
       attachedRef.current = true;
       exited = false;
-      window.hive.ptySpawn({ tileId: ptyId, tile: tileId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows, attachOnly: true, ...historyAsked() })
+      spawn({ attachOnly: true })
         .then(({ pid }) => { if (pid === -1) attachedRef.current = false; }, () => { attachedRef.current = false; });
       if (interested) window.hive.ptyInterest(ptyId, true);
       sentSizeRef.current = null;
@@ -900,7 +904,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         if (agent && !session && isRestored(tileId) && !isRemote(cwd)) {
           // liveOnly: a session saved before a reboot restores on attach, which is the
           // start this queue is for; it must wait its turn like any other.
-          const probe = await window.hive.ptySpawn({ tileId: ptyId, tile: tileId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows, attachOnly: true, liveOnly: true, ...historyAsked() });
+          const probe = await spawn({ attachOnly: true, liveOnly: true });
           if (probe.asleep) { asleepRef.current?.(); return; }
           if (probe.pid !== -1) attachedPid = probe.pid;
           if (attachedPid === undefined && !cancelled) {
@@ -909,17 +913,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           }
         }
         attachedRef.current = true;
-        const { pid, joined, asleep } = attachedPid !== undefined ? { pid: attachedPid, joined: false, asleep: undefined } : await window.hive.ptySpawn({
-          tileId: ptyId,
-          tile: tileId,
-          cwd,
-          cmd,
-          args: args ?? [],
-          cols: term.cols,
-          rows: term.rows,
+        const { pid, joined, asleep } = attachedPid !== undefined ? { pid: attachedPid, joined: false, asleep: undefined } : await spawn({
           ...(initialPrompt ? { initialPrompt } : {}),
           ...(session ? { attachOnly: true } : {}),
-          ...historyAsked(),
         });
         if (cancelled) {
           // An adopted session is someone's running job: an abandoned mount only lets go of it.
