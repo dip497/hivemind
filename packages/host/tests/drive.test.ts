@@ -107,7 +107,7 @@ async function connect(hello: Record<string, unknown>) {
 test("a program with a grant drives its workspace at its role, and is refused what its role does not reach", async () => {
   const { token } = grants.create({ name: "review-bot", repos: [repoA], role: "agents" });
   const p = await connect({ token, workspace: repoA });
-  assert.deepEqual((await p.next((m) => "hello" in m)).hello, { api: "0.27", as: { client: "review-bot", role: "agents", workspace: repoA } });
+  assert.deepEqual((await p.next((m) => "hello" in m)).hello, { api: "0.28", as: { client: "review-bot", role: "agents", workspace: repoA } });
   const started = await p.call("agent.start", [repoA, { program: "claude" }]);
   assert.equal((started.result as { by: { client?: string } }).by.client, "review-bot");
   const pushed = await p.call("git.push", [repoA]);
@@ -119,14 +119,14 @@ test("a program with a grant drives its workspace at its role, and is refused wh
 
 test("a grant that reaches one workspace needs it named no more than an agent does; one that reaches several names one", async () => {
   const one = await connect({ token: grants.create({ name: "one", repos: [repoA], role: "view" }).token });
-  assert.deepEqual((await one.next((m) => "hello" in m)).hello, { api: "0.27", as: { client: "one", role: "view", workspace: repoA } });
+  assert.deepEqual((await one.next((m) => "hello" in m)).hello, { api: "0.28", as: { client: "one", role: "view", workspace: repoA } });
   one.socket.destroy();
   const both = grants.create({ name: "both", repos: [repoA, repoB], role: "view" }).token;
   const unnamed = await connect({ token: both });
   assert.equal(((await unnamed.next((m) => "error" in m)).error as { code: string }).code, "BAD_REQUEST");
   await within(unnamed.closed, "the unnamed connection closing");
   const named = await connect({ token: both, workspace: repoB });
-  assert.deepEqual((await named.next((m) => "hello" in m)).hello, { api: "0.27", as: { client: "both", role: "view", workspace: repoB } });
+  assert.deepEqual((await named.next((m) => "hello" in m)).hello, { api: "0.28", as: { client: "both", role: "view", workspace: repoB } });
   named.socket.destroy();
 });
 
@@ -184,14 +184,14 @@ test("a grant that runs out closes its program's connection then, and lets nothi
 
 test("the install's token is the person, with every method", async () => {
   const person = await connect({ token: INSTALL });
-  assert.deepEqual((await person.next((m) => "hello" in m)).hello, { api: "0.27", as: "person" });
+  assert.deepEqual((await person.next((m) => "hello" in m)).hello, { api: "0.28", as: "person" });
   assert.deepEqual(((await person.call("git.push", [repoA])).result as { by: unknown }).by, { kind: "person" });
   person.socket.destroy();
 });
 
 test("an agent's token drives the workspace its tile is in, as that agent at the role agents, while its tile is there; no other workspace, and none with no tile", async () => {
   const agent = await connect({ token: tileToken(INSTALL, "hm:tile-a") });
-  assert.deepEqual((await agent.next((m) => "hello" in m)).hello, { api: "0.27", as: { agent: "tile-a", role: "agents", workspace: repoA } });
+  assert.deepEqual((await agent.next((m) => "hello" in m)).hello, { api: "0.28", as: { agent: "tile-a", role: "agents", workspace: repoA } });
   const started = await agent.call("agent.start", [repoA, { program: "claude" }]);
   assert.deepEqual((started.result as { by: unknown }).by, { kind: "peer", person: "tile-a", device: "tile-a", access: "agents", client: "the tile-a agent", tile: "tile-a" });
   assert.equal(((await agent.call("git.push", [repoA])).error as { code: string }).code, "FORBIDDEN");

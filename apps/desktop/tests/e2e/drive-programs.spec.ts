@@ -67,7 +67,7 @@ test("a program let in from Settings drives this workspace at its role, and is c
   await expect(page.locator("[data-grant]")).toContainText("Drive agents in api");
 
   const p = program(path.join(root, "config", "hivemind-dev", "drive.sock"), { token, workspace: repo });
-  await expect.poll(() => p.heard[0]).toEqual({ hello: { api: "0.27", as: { client: "orchestrator", role: "agents", workspace: fs.realpathSync(repo) } } });
+  await expect.poll(() => p.heard[0]).toEqual({ hello: { api: "0.28", as: { client: "orchestrator", role: "agents", workspace: fs.realpathSync(repo) } } });
   const startable = await p.call("agent.startable", [fs.realpathSync(repo)]);
   expect(startable.result).toHaveProperty("programs");
   const pushed = await p.call("git.push", [fs.realpathSync(repo)]);
