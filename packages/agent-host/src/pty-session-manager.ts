@@ -181,10 +181,13 @@ export class Asleep extends Error {
   constructor(id: string) { super(`'${id}' is asleep`); }
 }
 
-/** A signal to the process and its group (its children): the pty makes it a group's leader. */
+/** A signal to the process and its group (its children): the pty makes it a group's leader. A
+ *  pty that takes no signals (Windows') is ended outright. */
 function signalGroup(p: ManagedPty, signal: "SIGHUP" | "SIGKILL"): void {
   if (process.platform !== "win32") try { process.kill(-p.pid, signal); return; } catch { /* no group, or gone */ }
-  try { p.kill(signal); } catch { /* gone, or no signals here */ }
+  try { p.kill(signal); } catch {
+    try { p.kill(); } catch { /* gone */ }
+  }
 }
 
 /** The title (OSC 0) ahead of a replay, which SerializeAddon leaves out. Control chars stripped so
@@ -558,6 +561,9 @@ export class SessionManager {
     s.term.write("", () => {
       if (s.exited) return;
       s.sleepScreen = { replay: this.screenText(s, at, this.scrollback), recent: s.serializer.serialize({ scrollback: Math.min(RECENT_LINES, this.scrollback) }) };
+      // Its output is read as it ends, or an agent writing as it exits waits for the SIGKILL.
+      s.pausedBy.clear();
+      this.applyPause(s);
       signalGroup(s.pty, "SIGHUP");
       const stubborn = setTimeout(() => { if (!s.exited) signalGroup(s.pty, "SIGKILL"); }, SLEEP_GRACE_MS);
       stubborn.unref?.();
@@ -705,7 +711,7 @@ export class SessionManager {
   /** Stop reading the child's output while any viewer is paused. */
   pause(id: string, client?: SessionClient): void {
     const s = this.sessions.get(id);
-    if (!s || s.exited) return;
+    if (!s || s.exited || s.sleeping) return;
     s.pausedBy.add(client ?? null);
     this.applyPause(s);
   }

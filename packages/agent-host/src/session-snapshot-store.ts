@@ -90,8 +90,12 @@ export function parseSnapshot(body: string, expectedId?: string): SessionSnapsho
   }
 }
 
+/** How long a session put to sleep and never woken is kept: by then an agent has usually let go of
+ *  the conversation itself, so waking it would start afresh anyway. */
+export const SLEEP_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+
 /** Unclaimed AND old: a canvas not opened this session keeps its tiles. One put to sleep waits to be
- *  woken however long it takes (`asleep` is asked only of the old ones). */
+ *  woken for SLEEP_RETENTION_MS (`asleep` is asked only of the old ones). */
 export function staleSnapshotIds(
   entries: readonly SnapshotEntry[],
   unclaimed: Iterable<string>,
@@ -101,5 +105,6 @@ export function staleSnapshotIds(
 ): string[] {
   const open = new Set(unclaimed);
   const cutoff = now - retentionMs;
-  return entries.filter((e) => open.has(e.id) && e.mtimeMs < cutoff && !asleep(e.id)).map((e) => e.id);
+  const sleepCutoff = now - SLEEP_RETENTION_MS;
+  return entries.filter((e) => open.has(e.id) && e.mtimeMs < cutoff && (e.mtimeMs < sleepCutoff || !asleep(e.id))).map((e) => e.id);
 }
