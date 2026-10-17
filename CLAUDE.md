@@ -16,6 +16,23 @@ Every test written or changed passes the authoring gate in `.claude/skills/test-
 (the maintainer's rule, adapted from openclaw's test-audit skill), and each new test is shown
 to fail when the behaviour it guards is broken.
 
+## Work that runs per event
+
+Agent status, terminal output, keystrokes and store changes fire many times a second, on Electron
+main or the pty daemon's one thread, where every window and terminal waits behind them. Fix the
+cause, at the owner, not the symptom. Before adding work there, check:
+
+- It does not re-derive from scratch (folder scan, whole-document read or copy, full serialize).
+  The owner keeps the result and clears it on change (`WorkspaceStore.getCore`).
+- It gives back the same object when nothing changed. Caches, memos and debounced saves key on
+  identity (`rebaseRecords`).
+- Its cost at 50 tiles, workspaces, board objects or 5000 scrollback lines is measured and stated.
+- A heavy resource per item (GL context, process, full read) is spread or bounded, not made N at once.
+- A feed, poll or listener stops when its last follower leaves.
+
+Measure the built app before and after, on a real GPU (xvfb renders in software and lies), and put
+both numbers in the commit.
+
 ## Adding or completing an agent integration
 
 Wiring a new CLI agent (kiro, gemini, amp, …) — or finishing a half-wired one — follows
