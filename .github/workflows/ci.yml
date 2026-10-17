@@ -17,7 +17,60 @@ permissions:
   contents: read
 
 jobs:
+  # The check the main branch requires: desktop and packages, which run side by side, both passed.
   build-and-test:
+    needs: [desktop, packages]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          DESKTOP: ${{ needs.desktop.result }}
+          PACKAGES: ${{ needs.packages.result }}
+        run: |
+          echo "desktop: $DESKTOP, packages: $PACKAGES"
+          [ "$DESKTOP" = success ] && [ "$PACKAGES" = success ]
+
+  packages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          run_install: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4"
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/hive-net/target
+          key: hive-net-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'crates/hive-net/Cargo.lock') }}
+
+      - name: Build hive-net (the workspace host's and the CLI's network tests run it)
+        # Without it those tests skip, and pass.
+        run: rustup toolchain install && cargo build --locked --manifest-path crates/hive-net/Cargo.toml
+
+      - name: Unit tests (packages and CLI)
+        # Every package's own tests: the workspace store, settings.json and its lock, agent
+        # discovery, the view SDK, the agent host, the CLI (`bun test`), and the host's domains
+        # (under Node, as the app runs them). None reads what the build makes.
+        run: pnpm test
+
+  desktop:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -61,12 +114,6 @@ jobs:
       - name: Unit tests (desktop)
         # After hive-net's build: the daemon client's test under Node runs it.
         run: pnpm --filter @hivemind/desktop run test:unit
-
-      - name: Unit tests (packages and CLI)
-        # Every package's own tests: the workspace store, settings.json and its lock, agent
-        # discovery, the view SDK, the agent host, the CLI (`bun test`), and the host's domains
-        # (under Node, as the app runs them).
-        run: pnpm test
 
       - name: Installer platform matrix
         # Cheap guard on the install.sh ↔ release.yml contract: the asset names
