@@ -1544,7 +1544,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       },
     });
     installWorkspaceStoreIpc(layouts, workspaceIpc.connect, (change) =>
-      workspaceServer.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part }));
+      workspaceServer.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part, objects: change.objects }));
     void initMachines({
       send: (snap) => broadcast("machines:changed", snap),
       listLocalSessions: () => ptyDaemon.listSessions(),
