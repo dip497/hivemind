@@ -170,7 +170,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     person: keys.person,
     onWarn: o.onWarn,
     onChange: (change) => {
-      api.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part });
+      api.publishTo((c) => !layouts.made(c, change), "store.changed", { repo: change.repo, part: change.part, objects: change.objects });
       heard.tell(change);
       if (change.part === "core") agentFeed?.changed();
     },
