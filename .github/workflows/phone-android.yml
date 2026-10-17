@@ -45,12 +45,15 @@ jobs:
   # request, so once one touched the phone, every push to it ran all of this (14 min), a push of
   # desktop code alone too. A push to a pull request that changed none of the phone's paths, made
   # on a head this workflow passed on, is not run again: what it would test is what passed.
+  # A push to a branch with an open pull request is that pull request's run to check: both ran
+  # all of this on the same commit, and each kept its own 4 GB of caches.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
       actions: read
+      pull-requests: read
     outputs:
       phone: ${{ steps.diff.outputs.phone }}
     steps:
@@ -70,6 +73,13 @@ jobs:
               changed=$(git diff --name-only "$BEFORE" "$HEAD")
               echo "changed since $BEFORE, which passed:"; echo "$changed"
               grep -Eq "$PHONE_PATHS" <<< "$changed" || phone=false
+            fi
+          fi
+          if [ "$EVENT" = push/ ]; then
+            # Should the question fail, this runs.
+            open=$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$GITHUB_REF_NAME&state=open" --jq length || echo 0)
+            if [ "${open:-0}" -gt 0 ]; then
+              echo "an open pull request from $GITHUB_REF_NAME checks this commit"; phone=false
             fi
           fi
           echo "phone=$phone" | tee -a "$GITHUB_OUTPUT"
