@@ -7,7 +7,10 @@ use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicU64, Ordering::Relaxed},
+        Arc, Mutex,
+    },
     time::SystemTime,
 };
 
@@ -182,7 +185,12 @@ impl Identity {
 
 /// Write `text` to `file` whole, readable by this user alone.
 pub(crate) fn write_private(file: &Path, text: &str) -> Result<()> {
-    let tmp = file.with_extension(format!("{}.tmp", std::process::id()));
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let tmp = file.with_extension(format!(
+        "{}.{}.tmp",
+        std::process::id(),
+        NEXT.fetch_add(1, Relaxed)
+    ));
     let mut options = fs::OpenOptions::new();
     options.write(true).create(true).truncate(true);
     #[cfg(unix)]

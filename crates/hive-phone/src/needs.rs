@@ -234,6 +234,11 @@ fn need_of(agent: &Agent) -> Option<Need> {
 }
 
 const HEARD: &str = "heard.json";
+static KEEPING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn keeping() -> std::sync::MutexGuard<'static, ()> {
+    KEEPING.lock().unwrap_or_else(|e| e.into_inner())
+}
 const AWAY: &str = "away.json";
 
 impl Identity {
@@ -291,6 +296,7 @@ impl Identity {
         at: u64,
         mut said: impl FnMut(&str, &mut Heard),
     ) -> Result<()> {
+        let _keeping = keeping();
         let mut heard = self.heard();
         for device in devices {
             let kept = heard.entry(device.to_string()).or_insert_with(|| Heard {
@@ -327,6 +333,7 @@ impl Identity {
         if devices.is_empty() {
             return Ok(());
         }
+        let _keeping = keeping();
         let mut away = self.away();
         for device in devices {
             away.insert(device.clone(), at);
@@ -338,6 +345,7 @@ impl Identity {
     /// and so shows it. It is not away from then on; one it found away after is, as a notice can
     /// come late.
     pub fn back(&self, device: &str, since: u64) -> Result<bool> {
+        let _keeping = keeping();
         let mut away = self.away();
         if away.get(device).is_none_or(|&at| at > since) {
             return Ok(false);
@@ -357,6 +365,7 @@ fn write_away(identity: &Identity, away: &BTreeMap<String, u64>) -> Result<()> {
 
 /// Forget what `device` said, and that it was away; or that of every device.
 pub(crate) fn forget_heard(identity: &Identity, device: Option<&str>) -> Result<()> {
+    let _keeping = keeping();
     let (mut heard, mut away) = (identity.heard(), identity.away());
     let (had_heard, had_away) = (heard.len(), away.len());
     match device {

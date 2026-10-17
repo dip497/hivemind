@@ -812,3 +812,21 @@ fn the_devices_are_read_again_when_their_file_changes_however_it_was_written() {
     fs::write(&file, &one).unwrap();
     assert_eq!(names(&phone.devices()), ["app 10"]);
 }
+
+#[test]
+fn two_threads_keeping_what_devices_said_at_once_both_keep_it() {
+    let dir = tmp("at-once");
+    let phone = Identity::open(&dir.join("id")).unwrap();
+    std::thread::scope(|s| {
+        for thread in ["a", "b"] {
+            let phone = &phone;
+            s.spawn(move || {
+                for at in 0..100 {
+                    phone.hear_workspaces(&format!("{thread}{at}"), &[], at).unwrap();
+                }
+            });
+        }
+    });
+    assert_eq!(phone.heard().len(), 200);
+    let _ = fs::remove_dir_all(&dir);
+}

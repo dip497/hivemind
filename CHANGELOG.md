@@ -66,6 +66,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- The phone no longer fails to save, or silently loses, what your computers last told it when two of them answer at once, or when you unpair one while it is connected.
 - `hive ctl plugin call` and `open` exit with the code their failure has: 5 when the plugin is not running or has no such command, 4 when it did not answer in time, 2 when it runs twice and no `--tile` says which; before, every one exited 1. A slow command now ends with the plugin's own reason, not the CLI's timeout, which used to come first.
 - A Claude agent whose folder-trust screen was answered now receives the messages sent to it; before, every one was held for a turn that never ended.
 - A path holding a long run of slashes is read at once; one with 50,000 of them took ten seconds.
