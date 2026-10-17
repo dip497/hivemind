@@ -25,6 +25,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
+- An edit from someone you share a workspace with is announced only for what it changed. Each one used to announce the layout, the board and every view, so every window read all of them again and saved them back.
 - Opening a tool call on your phone no longer freezes the app on a long session: it is looked for only in the part of the conversation you were shown. It used to read the session file back to its start, 4.6 s for a 400 MB file. Home on the phone also stops working things out once no phone follows it.
 - Typing in a note on a busy board is faster: each edit wrote every object on the board and read it four times. It now reads it once and writes only what changed, 96 → 21 ms per character with 50 objects, 381 → 192 ms with 800.
 - A change from another window, your phone or an agent no longer redraws every tile in the window. Only the tiles it changed are drawn again: with 100 tiles open, a rename used to rebuild all 100.

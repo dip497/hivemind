@@ -4,7 +4,7 @@ import { test, expect, beforeEach, afterEach } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { WorkspaceStore } from "../src/store.ts";
+import { WorkspaceStore, type WorkspaceChange } from "../src/store.ts";
 import { readDoc } from "../src/doc-file.ts";
 import { idOf, newSeed, workspaceSeed } from "../src/identity.ts";
 
@@ -517,4 +517,27 @@ test("what a widget keeps is never an undo step: undo takes back the edit before
   s.setObjects("/a", [widget({ z: 5, state: { n: 2 } })]);
   expect(s.undo("/a")).toBe(true);
   expect(s.getObjects("/a")).toEqual([widget({ z: 0, state: { n: 2 } })] as never);
+});
+
+test("a replica taking another's changes is told only the parts they changed", () => {
+  const host = new WorkspaceStore({ dir, person });
+  const told: WorkspaceChange["part"][] = [];
+  const replica = new WorkspaceStore({ dir: path.join(tmp, "replica"), onChange: (c) => told.push(c.part) });
+  host.setCore("/a", core("api"));
+  host.setView("/a", "canvas", { v: 2, data: { positions: {} } });
+  host.setView("/a", "windows", { v: 1, data: { tab: "t1" } });
+  host.setObjects("/a", [note("ship it")]);
+  replica.importFrom("/a", host.exportSince("/a", null));
+  const after = (edit: () => void): WorkspaceChange["part"][] => {
+    const seen = host.version("/a");
+    edit();
+    told.length = 0;
+    replica.importFrom("/a", host.exportSince("/a", seen));
+    return [...told].sort();
+  };
+  expect(after(() => host.setObjects("/a", [note("ship it now")]))).toEqual(["board"]);
+  expect(after(() => host.renameTile("t1", "reviewer"))).toEqual(["core"]);
+  expect(after(() => host.setView("/a", "windows", { v: 1, data: { tab: "t2" } }))).toEqual(["view:windows"]);
+  expect(after(() => host.setView("/a", "board", { v: 1, data: {} }))).toEqual(["view:board"]);
+  expect(after(() => { host.setCore("/a", core("renamed")); host.setObjects("/a", []); })).toEqual(["board", "core"]);
 });

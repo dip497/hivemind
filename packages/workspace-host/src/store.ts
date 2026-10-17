@@ -32,7 +32,7 @@ import { addFrame, addTile, hasCore, readCore, removeFrame, removeTile, tileIds,
 import { readObjects, writeObjects } from "@hivemind/workspace-doc/objects";
 import { rebaseBoard } from "@hivemind/workspace-doc/rebase";
 import { readView, readViews, writeView } from "@hivemind/workspace-doc/views";
-import { readOwnership, replaceOwnership, stampOwnership, stampSchema, type Ownership } from "@hivemind/workspace-doc/schema";
+import { partsChanged, readOwnership, replaceOwnership, stampOwnership, stampSchema, type Ownership } from "@hivemind/workspace-doc/schema";
 import type { BoardObject, CoreLayout, FrameRecord, Frozen, KeptCore, TileRecord, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "./layout.js";
 import { readDoc, removeDoc, storedKeys, writeDoc } from "./doc-file.js";
@@ -349,13 +349,15 @@ export class WorkspaceStore {
       const why = check(readCore(doc), readCore(trial));
       if (why) throw new RefusedImport(why);
     }
-    const before = JSON.stringify(doc.frontiers());
+    const before = doc.frontiers();
     doc.import(bytes);
-    if (JSON.stringify(doc.frontiers()) === before) return;
-    this.tiles.delete(repo);
-    this.cores.delete(repo);
+    if (JSON.stringify(doc.frontiers()) === JSON.stringify(before)) return;
+    const parts = partsChanged(doc, before);
+    if (parts.includes("core")) {
+      this.tiles.delete(repo);
+      this.cores.delete(repo);
+    }
     this.persist(repo, doc);
-    const parts: WorkspaceChange["part"][] = ["core", "board", ...Object.keys(readViews(doc)).map((v) => `view:${v}` as const)];
     for (const part of parts) this.opts.onChange?.({ repo, part, writer: from.writer ?? "" });
   }
 

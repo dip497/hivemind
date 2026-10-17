@@ -14,7 +14,7 @@
  * The §8 container without a writer yet, `machines` (R9), arrives with it: a root container
  * added later needs no migration.
  */
-import { LoroDoc } from "loro-crdt";
+import { LoroDoc, type Frontiers } from "loro-crdt";
 
 export const META = "meta";
 export const FRAMES = "frames";
@@ -78,4 +78,20 @@ export function stampOwnership(doc: LoroDoc, ownership: () => Ownership): void {
   meta.set("workspaceId", workspaceId);
   meta.set("owner", owner);
   meta.set("workspacePublicKey", workspacePublicKey);
+}
+
+/** The parts of a workspace's layout: the core layout, the board, one view's layout. */
+export type LayoutPart = "core" | "board" | `view:${string}`;
+
+/** The parts that changed in `doc` since `before`, by the root container each change lies under. */
+export function partsChanged(doc: LoroDoc, before: Frontiers): LayoutPart[] {
+  const parts = new Set<LayoutPart>();
+  for (const [id, diff] of doc.diff(before, doc.frontiers(), false)) {
+    const [root, viewId] = doc.getPathToContainer(id) ?? [];
+    if (root === OBJECTS) parts.add("board");
+    else if (root !== VIEWS) parts.add("core");
+    else if (viewId !== undefined) parts.add(`view:${viewId}`);
+    else if (diff.type === "map") for (const key of Object.keys(diff.updated)) parts.add(`view:${key}`);
+  }
+  return [...parts];
 }
