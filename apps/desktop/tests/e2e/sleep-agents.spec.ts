@@ -27,6 +27,8 @@ function sleepyAgent(): { PATH: string; SLEEPY_TALKS: string } {
   fs.mkdirSync(talks);
   fs.writeFileSync(path.join(bin, "sleepy-agent"), [
     "#!/bin/bash",
+    // The app counts it installed only when it answers as a CLI does.
+    "[ \"$1\" = --version ] && { echo 'sleepy 1.0.0'; exit 0; }",
     "id=''; resumed=''",
     "while [ $# -gt 0 ]; do case \"$1\" in --session-id) id=\"$2\"; shift 2;; --resume) id=\"$2\"; resumed=1; shift 2;; *) shift;; esac; done",
     "talk=\"$SLEEPY_TALKS/${id:-none}\"",
@@ -40,7 +42,7 @@ function sleepyAgent(): { PATH: string; SLEEPY_TALKS: string } {
   fs.writeFileSync(path.join(agent, "agent.yaml"), [
     "manifestVersion: 2", "id: sleepy", "label: Sleepy", "bin: sleepy-agent", "enabled: true",
     "caps: { promptDelivery: typed, turnSignal: false, resume: none, supervise: human, blockedDetection: false }",
-    "detect: { default: idle }",
+    "detect: { default: idle, rules: [] }",
     "session:",
     "  bind: { args: [--session-id, '{newId}'], unless: [--session-id, --resume] }",
     "  resume: { args: [--resume, '{id}'], position: before, from: { bound: --session-id } }",
@@ -61,6 +63,7 @@ test("an agent put to sleep ends, its tile keeps its last screen; Resume brings 
   fs.mkdirSync(home);
   const desktop = await person(root, "desktop", repo, apps, { ...env, HIVEMIND_SHELL_ENV: "0", HOME: home });
   await desktop.evaluate(() => window.hive.settingsSet("agents.defaultAgent", "sleepy"));
+  await expect(desktop.getByRole("group", { name: "Workspace tools" }).getByRole("button", { name: "Sleepy", exact: true })).toBeVisible({ timeout: 20_000 });
   await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:shortcut", { detail: "agent" })));
   const node = desktop.locator(".react-flow__node-terminal");
   await expect(node).toHaveCount(1, { timeout: 20_000 });
