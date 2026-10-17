@@ -32,12 +32,51 @@ on:
 permissions:
   contents: read
 
+# The phone's paths, as `paths:` above lists them: what the `changes` job looks for in a push.
+env:
+  PHONE_PATHS: '^(apps/android/|crates/hive-phone/|crates/hive-phone-ffi/|crates/hive-net/|scripts/phone/|apps/desktop/tests/e2e/phone-app\.spec\.ts$|apps/desktop/tests/e2e/helpers/phone\.ts$|apps/desktop/tests/e2e/fixtures/views/phone-probe/|\.github/workflows/phone-android\.yml$)'
+
 concurrency:
   group: phone-android-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # Whether this push changed the phone. On a pull request GitHub's `paths:` reads the whole pull
+  # request, so once one touched the phone, every push to it ran all of this (14 min), a push of
+  # desktop code alone too. A push to a pull request that changed none of the phone's paths, made
+  # on a head this workflow passed on, is not run again: what it would test is what passed.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      phone: ${{ steps.diff.outputs.phone }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}/${{ github.event.action }}
+          BEFORE: ${{ github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          phone=true
+          if [ "$EVENT" = pull_request/synchronize ] && [ -n "$BEFORE" ]; then
+            passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/phone-android.yml/runs?head_sha=$BEFORE&event=pull_request&status=success&per_page=1" --jq .total_count || echo 0)
+            # The previous head may be gone (a force push): then everything runs.
+            if [ "$passed" != 0 ] && git fetch -q --depth=1 origin "$BEFORE" "$HEAD"; then
+              changed=$(git diff --name-only "$BEFORE" "$HEAD")
+              echo "changed since $BEFORE, which passed:"; echo "$changed"
+              grep -Eq "$PHONE_PATHS" <<< "$changed" || phone=false
+            fi
+          fi
+          echo "phone=$phone" | tee -a "$GITHUB_OUTPUT"
+
   build:
+    needs: changes
+    if: needs.changes.outputs.phone == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -133,6 +172,13 @@ jobs:
 
       - name: SDK command-line tools, the newest (the image's cannot make an Android 17 AVD)
         run: bash scripts/phone/update-cmdline-tools.sh
+
+      # The emulator's system image, kept between runs: downloading it took a minute of every run
+      # (run 38965971758). The emulator still boots cold, from no snapshot.
+      - uses: actions/cache@v6
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-37.0/google_apis/x86_64
+          key: android-system-image-37.0-google_apis-x86_64
 
       # Booted cold, not from a snapshot: an emulator restored from one dropped off adb as Maestro
       # started its driver ("device offline", runs 36987502508 and 36989241234). Drawn by SwiftShader
@@ -240,6 +286,13 @@ jobs:
 
       - name: SDK command-line tools, the newest (the image's cannot make an Android 17 AVD)
         run: bash scripts/phone/update-cmdline-tools.sh
+
+      # The emulator's system image, kept between runs: downloading it took a minute of every run
+      # (run 38965971758). The emulator still boots cold, from no snapshot.
+      - uses: actions/cache@v6
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-37.0/google_apis/x86_64
+          key: android-system-image-37.0-google_apis-x86_64
 
       # Booted cold, and drawn through ANGLE, as for the smoke flow.
       - name: The app paired with the desktop app, driving its agent
