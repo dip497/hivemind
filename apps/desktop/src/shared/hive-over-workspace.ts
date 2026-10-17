@@ -66,6 +66,7 @@ export function hiveOverWorkspace(workspace: WorkspaceClient) {
     worktreeRemove: (repo, worktree, force) => workspace.call("worktree.remove", repo, worktree, force),
     worktreePrune: (repo) => workspace.call("worktree.prune", repo),
     ptySpawn: (opts) => workspace.call("terminal.open", opts),
+    ptySaved: (tile, lines) => workspace.call("terminal.saved", tile, lines),
     ptyWrite: (tile, data, paste) => workspace.notice("terminal.write", tile, data, paste),
     ptyInterest: (tile, shown) => workspace.notice("terminal.show", tile, shown),
     ptyHistory: (tile, lines) => workspace.notice("terminal.history", tile, lines),
@@ -115,6 +116,8 @@ export function hiveOverWorkspace(workspace: WorkspaceClient) {
     agentList: (repo) => workspace.call("agent.list", repo),
     agentSince: (repo, seq) => workspace.call("agent.since", repo, seq),
     agentAnswer: (tile, since, answer) => workspace.call("agent.answer", tile, since, answer),
+    agentSleep: (repo, target, force) => workspace.call("agent.sleep", repo, target, force),
+    agentWake: (repo, target) => workspace.call("agent.wake", repo, target),
     // View protocol 1.4: a folder's past sessions, without what the agent wrote; a prompt the user
     // confirmed, held while the agent is mid-turn.
     viewSessions: async (agent, cwd) => (await workspace.call("agent.sessions", cwd, agent, 100)).sessions

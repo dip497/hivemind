@@ -91,7 +91,7 @@ import { HANDED_OFF, handOff } from "@hivemind/host/hand-off";
 import { deviceFolders } from "@hivemind/host/device-files";
 import { agents } from "@hivemind/host/agents";
 import { Terminals, type SessionOutput, type StartOpts } from "@hivemind/host/terminals";
-import { startSpawned } from "@hivemind/host/spawned";
+import { startSpawned, wakeSpawned } from "@hivemind/host/spawned";
 import { Layouts, type Shown } from "@hivemind/host/store";
 import { presence } from "@hivemind/host/presence";
 import { widgets } from "@hivemind/host/widgets";
@@ -101,7 +101,7 @@ import { serveDrive } from "@hivemind/host/drive";
 import { frameWorktrees, framesDomain } from "@hivemind/host/frames";
 import { worktreeCreate, worktreeList, worktreeRemove } from "@hivemind/host/git-adapter";
 import { answers } from "@hivemind/host/answers";
-import { answerKeys, heldBoards, manifestOf, runsIn } from "@hivemind/host/needs";
+import { answerKeys, heldBoards, manifestOf, runsIn, sessionFolder } from "@hivemind/host/needs";
 import { agentControl } from "@hivemind/host/agent-control";
 import { StartPlaces } from "@hivemind/host/start-places";
 import { controlApi } from "@hivemind/host/control-api";
@@ -1058,7 +1058,10 @@ const control: ControlPlane = new ControlPlane({
     workspaces: workspaceStore(),
     shownWorkspace,
     launchOptions: (agentId) => stringOptions(pluginOptions(getAppSettings().plugins.state, "agent", agentId)),
-    endSession: (tileId) => terminals.end(tileId),
+    endSession: (tileId, folder) => terminals.end(tileId, folder),
+    sleepSession: (tileId, folder) => terminals.sleep(tileId, folder),
+    wakeSession: (start) => wakeSpawned(terminals, start),
+    sessionOf: (bare) => transcriptOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR))?.session || undefined,
     sessionHeld: (id) => hasSession(id) || hasRemotePty(id),
     intents: hostIntents(),
     // `hive join`: in, the window the user is at opens the workspace, as the Join dialog's Open does.
@@ -1146,6 +1149,8 @@ const terminals = new Terminals({
   who: whoIs,
   // A terminal on a participant's machine is typed into and sized there, by its person (M4).
   machineOf: terminalMachine,
+  folderOf: (bare) => sessionFolder(heldBoards(workspaceStore()), bare),
+  conversationAsleep: (opts) => control.conversationAsleep(opts.tileId, opts.args ?? []),
   watchActivity: (tiles) => ptyActivity.setWatched(tiles),
   onError: (m) => console.warn(`[terminals] ${m}`),
   backend: {
@@ -1236,7 +1241,11 @@ async function startSession(opts: StartOpts, out: SessionOutput): Promise<{ pid:
     onData: (data: string, replay?: boolean) => { out.data(data, replay); if (!replay) ptyActivity.note(bare, data.length); },
     // What is pending (recorded and shipped), then the exit, BEFORE the HCP teardown forgets the
     // tile; asleep, it is not gone, and what waits on it waits on.
-    onExit: (code: number, signal?: number, slept?: boolean) => { out.exit(code, signal, slept); if (!slept) onPtyExit(opts.tileId); },
+    onExit: (code: number, signal?: number, slept?: boolean) => {
+      out.exit(code, signal, slept);
+      if (slept) control.slept(opts.tileId);
+      else onPtyExit(opts.tileId);
+    },
   };
   // A frame on this device named by its id is a frame here, at its path.
   const onDevice = parseDeviceUri(opts.cwd);

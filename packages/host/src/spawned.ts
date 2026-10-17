@@ -16,6 +16,12 @@ import { toPtyId } from "@hivemind/workspace-api/tile-id";
 import type { Terminals } from "./terminals.js";
 
 /** The size a session the host starts runs at, until someone shows it at theirs. */
+/** Wake the session `start` names where it sleeps, its agent resumed, and keep it running whoever
+ *  shows it, as a spawn here is. */
+export function wakeSpawned(terminals: Terminals, start: { ptyId: string; cwd: string; cmd: string; args: string[] }): Promise<{ pid: number }> {
+  return terminals.own({ tileId: start.ptyId, cwd: start.cwd, cmd: start.cmd, args: start.args, cols: COLS, rows: ROWS, wake: true }, { data: () => {}, exit: () => {} });
+}
+
 const COLS = 120;
 const ROWS = 36;
 

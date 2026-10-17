@@ -3,7 +3,9 @@
 // process ends; a client showing one is told it slept, not that it ended; the screen it saved is
 // read by its tile, from the folder the layout says it slept in; a client's open, even one asking
 // to wake it, starts nothing and is told it sleeps; the host wakes it, and a client then joins it;
-// and a client whose connection to the daemon dropped while it slept is told it slept once back.
+// a client whose connection to the daemon dropped while it slept is told it slept once back; a start
+// that would resume a conversation another tile sleeps in is refused, whoever starts it; and a wake
+// that finds nothing asleep says so.
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -13,7 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DaemonEndpoint } from "@hivemind/agent-host/daemon-endpoint";
-import { frame, makeLineDecoder, type ServerMsg } from "@hivemind/agent-host/pty-protocol";
+import { NothingAsleep, frame, makeLineDecoder, type ServerMsg } from "@hivemind/agent-host/pty-protocol";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
@@ -58,12 +60,15 @@ async function host() {
   stops.push(() => endpoint.close());
   /** The folder each tile's session runs in, as the layout says. */
   const slept = new Map<string, string>();
+  /** The tile asleep in each conversation, as the control plane says. */
+  const conversations = new Map<string, string>();
   const file = path.join(dir, `audit-${Math.random()}.jsonl`);
   const terminals = new Terminals({
     intents: new Intents(new AuditLog({ file })),
     relay: { record: () => {}, screenPrefix: "" },
     backend: daemonSessions({ endpoint, pace: async () => {} }),
     folderOf: (tile) => slept.get(tile),
+    conversationAsleep: (opts) => (opts.args ?? []).map((a) => conversations.get(a)).find((t) => t && `hm:${t}` !== opts.tileId),
   });
   const server = new WorkspaceServer([terminals.domain], new Intents(new AuditLog({ file })));
   const client = () => {
@@ -84,7 +89,7 @@ async function host() {
   };
   const notice = (from: Connection, method: string, ...params: unknown[]) => server.notice(method, params, from);
   const exits = (c: { received: EventMessage[] }, tile: string) => c.received.filter((m) => m.event === "terminal.exit" && m.params[0] === tile).map((m) => m.params[1]);
-  return { endpoint, paused, terminals, slept, client, open, saved, notice, exits };
+  return { endpoint, paused, terminals, slept, conversations, client, open, saved, notice, exits };
 }
 
 /** Until `ok`, or a few seconds. */
@@ -167,4 +172,14 @@ test("a session a viewer holds back still ends promptly when put to sleep: what 
   assert.notEqual((got.find((m) => m.t === "exit") as Extract<ServerMsg, { t: "exit" }> | undefined)?.signal, 9);
   c.write(frame({ t: "kill", id: "hm:s4" }));
   c.destroy();
+});
+
+test("a start that would resume a conversation another tile sleeps in is refused, whoever starts it; a wake that finds nothing asleep says so", { skip: !unix }, async () => {
+  const h = await host();
+  h.conversations.set("CONVERSATION-1", "s9");
+  const window = h.client();
+  const resuming = { args: ["-c", "echo RESUMED", "CONVERSATION-1"] };
+  await assert.rejects(h.open(window, "hm:n1", "X", resuming), /that conversation is asleep in tile s9: wake it instead/);
+  await assert.rejects(h.terminals.own({ tileId: "hm:n2", ...loop("X"), ...resuming }, { data: () => {}, exit: () => {} }), /asleep in tile s9/);
+  await assert.rejects(h.terminals.own({ tileId: "hm:n3", ...loop("X"), wake: true }, { data: () => {}, exit: () => {} }), NothingAsleep);
 });

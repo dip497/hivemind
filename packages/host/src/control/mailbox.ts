@@ -91,6 +91,10 @@ export class Mailbox {
   private typedAt = new Map<string, number>();
   /** A pending release timer, so a burst of idle signals releases exactly one. */
   private releaseTimer = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Tiles whose session sleeps: nothing is typed into them, and what comes waits. */
+  private asleep = new Set<string>();
+  /** Tiles woken whose agent has not yet said its session is up. */
+  private waking = new Set<string>();
 
   constructor(
     /** Raw write into a tile's pty. `paste` = a message handed over as one block, not
@@ -107,6 +111,7 @@ export class Mailbox {
   /** Turn started (UserPromptSubmit / agent_start) — hold everything from here, and
    *  mark this tile as one that emits turn events (so it's serialized, not immediate). */
   setBusy(ptyId: string): void {
+    this.waking.delete(ptyId);
     this.managed.add(ptyId);
     this.busy.add(ptyId);
     this.draft.delete(ptyId); // a turn began: whatever was in the composer was sent
@@ -142,8 +147,34 @@ export class Mailbox {
   /** Turn ended (Stop / agent_end). Coalesced: repeated calls before the release fires
    *  (pi sends two per turn) schedule at most one release. */
   setIdle(ptyId: string): void {
+    this.waking.delete(ptyId);
     this.busy.delete(ptyId);
     this.scheduleRelease(ptyId);
+  }
+
+  /** The tile's session was put to sleep: its turn is over, and what comes for it waits. */
+  sleep(ptyId: string): void {
+    this.asleep.add(ptyId);
+    this.busy.delete(ptyId);
+    this.draft.delete(ptyId);
+    this.cancelRelease(ptyId);
+  }
+
+  /** Woken, it comes back at its prompt: what waited goes once its agent says its session is up,
+   *  or, from one that reports no turns, once it has had a moment to start. */
+  woke(ptyId: string): void {
+    this.asleep.delete(ptyId);
+    this.waking.add(ptyId);
+    if (!this.managed.has(ptyId)) setTimeout(() => this.up(ptyId, IDLE_SETTLE_MS), SUBMIT_SETTLE_MS).unref?.();
+  }
+
+  /** The tile's agent says its session is up (it also says so mid-turn, after compacting). */
+  started(ptyId: string): void {
+    this.up(ptyId, SUBMIT_SETTLE_MS);
+  }
+
+  private up(ptyId: string, after: number): void {
+    if (this.waking.delete(ptyId)) this.scheduleRelease(ptyId, after);
   }
 
   /**
@@ -157,7 +188,8 @@ export class Mailbox {
     // An agent that steers reads it mid-turn: typed now, into the turn that is running.
     const steer = !o.atPrompt && this.busy.has(ptyId) && !this.queued.get(ptyId)?.length && this.steers(ptyId)
       && Date.now() - (this.typedAt.get(ptyId) ?? 0) >= TYPING_QUIET_MS;
-    if (steer || (!this.managed.has(ptyId) && !this.draft.has(ptyId))) {
+    const held = this.asleep.has(ptyId) || this.waking.has(ptyId);
+    if (!held && (steer || (!this.managed.has(ptyId) && !this.draft.has(ptyId)))) {
       // Hookless (or not-yet-seen-a-turn) → immediate, matching the pre-mailbox path.
       if (o.wanted && !o.wanted()) return true;
       const ok = this.send(ptyId, text);
@@ -185,6 +217,12 @@ export class Mailbox {
     this.draft.delete(ptyId);
     this.typedAt.delete(ptyId);
     this.queued.delete(ptyId);
+    this.asleep.delete(ptyId);
+    this.waking.delete(ptyId);
+    this.cancelRelease(ptyId);
+  }
+
+  private cancelRelease(ptyId: string): void {
     const t = this.releaseTimer.get(ptyId);
     if (t) clearTimeout(t);
     this.releaseTimer.delete(ptyId);
@@ -195,6 +233,7 @@ export class Mailbox {
   private scheduleRelease(ptyId: string, after = IDLE_SETTLE_MS): void {
     if (this.releaseTimer.has(ptyId)) return; // a release is already pending
     if (this.busy.has(ptyId)) return; // still mid-turn
+    if (this.asleep.has(ptyId) || this.waking.has(ptyId)) return; // nothing runs to read it yet
     if (this.draft.has(ptyId)) return; // the person is writing there
     if (!this.queued.get(ptyId)?.length) return; // nothing to send
     const t = setTimeout(() => {

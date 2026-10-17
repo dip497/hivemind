@@ -35,7 +35,7 @@ import { Waits } from "../waits.js";
 export type EmbedderDeps = Omit<
   MethodDeps,
   | "agentOf" | "writeToTile" | "deliverToTile" | "turns" | "recorder" | "spawnAllowed" | "connect" | "disconnect"
-  | "forgetPipes" | "spawnEdge" | "spawnRecords" | "waits" | "status" | "announceSpawn" | "inbox" | "waitingOf"
+  | "forgetPipes" | "spawnEdge" | "spawnRecords" | "waits" | "status" | "announceSpawn" | "inbox" | "waitingOf" | "slept" | "woke"
 >;
 
 export interface ControlPlaneOptions {
@@ -217,6 +217,8 @@ export class ControlPlane {
       writeToTile: (ptyId, data) => this.write(ptyId, data),
       deliverToTile: (ptyId, text, onSent) => this.mailbox.deliver(ptyId, text, onSent),
       inbox: this.inbox,
+      slept: (bare) => this.slept(bare),
+      woke: (bare) => this.woke(bare),
       waitingOf: (bare) => o.waitingOf?.(bare),
       turns: this.turns,
       recorder: this.recorder,
@@ -256,6 +258,12 @@ export class ControlPlane {
   /** What the control plane's messages call a tile. */
   labelOf(tileId: string): string {
     return this.dispatcher.labelOf(tileId);
+  }
+
+  /** The tile asleep in a conversation that `args`, started in `tileId`, would resume: woken, it
+   *  would write that conversation too. */
+  conversationAsleep(tileId: string, args: readonly string[]): string | undefined {
+    return this.dispatcher.conversationAsleep(tileId, args);
   }
 
   /** Start `program` (none: the person's default) in the workspace at `repo` for the person, from
@@ -308,6 +316,21 @@ export class ControlPlane {
     this.status.exited(bare);
     this.spawnRecords.forget(bare);
     this.made?.forgetTile(tileId);
+  }
+
+  /** The session of `tileId` was put to sleep: it runs nothing, but is not gone. A turn it was in is
+   *  over; what was sent it, its inbox, its supervision and its pipes wait for it to wake. */
+  slept(tileId: string): void {
+    const bare = toBareId(tileId);
+    this.mailbox.sleep(toPtyId(tileId));
+    this.inTurn.delete(bare);
+    this.status.slept(bare);
+  }
+
+  /** The session of `tileId` was woken: what waited for it is told once it is up. */
+  woke(tileId: string): void {
+    this.mailbox.woke(toPtyId(tileId));
+    this.inbox.remind(toBareId(tileId));
   }
 
   /** The tile `tileId` is gone for good: nothing more is asked of its status or its agent. */
@@ -378,6 +401,7 @@ export class ControlPlane {
     // Hold agent-to-agent messages while this tile is mid-turn (its TUI would swallow them),
     // release one at its prompt.
     if (evt.event === "turn.started") { this.mailbox.setBusy(pid); return; }
+    if (evt.event === "session.started") { this.mailbox.started(pid); return; }
     if (evt.event !== "turn.ended") return;
     // A reply a waiting `hive ctl read` took, or one the worker reported itself, goes to no inbox.
     const given = this.turns.recordTurn(pid);

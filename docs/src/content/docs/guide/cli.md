@@ -88,6 +88,8 @@ hive ctl stream <tileId> [--lines 40] [--timeout 30s]
                        [--snapshot] [--json]        # what it prints, live; --lines: the last N first
 hive ctl focus <tileId>
 hive ctl close <tileId>                 # ends what runs in it; exit 5 if it is not open
+hive ctl sleep [tile|frame] [--force]   # its process ends, its screen and conversation kept; none: every agent
+hive ctl wake [tile|frame]              # back in its conversation; exit 7 if nothing woke
 hive ctl rename <tileId> ["name"]       # no name: back to what its agent says it is doing
 hive ctl connect <src> <dst>
 hive ctl disconnect <src> [<dst>]

@@ -102,7 +102,9 @@ the document; only the machine running the agent can stop a process from startin
   cleared as the session starts) → flag off. A wake acts on the daemon's mark, flag or not.
 - No other attach restores a marked session (a window, a reconnect, a guest, "press Enter to
   restart"): it is answered `asleep`. A flag lost by mistake shows the sleeping tile, never a
-  second process; a flag left on by mistake shows a saved screen with Resume, which wakes it.
+  second process; a flag left on by mistake shows a saved screen with Resume, which wakes it, or,
+  when nothing sleeps there any more (retention, `hive kill`, a machine that lost its state), is
+  told `gone` and clears the flag: shown again, the tile starts afresh.
 
 ## Options
 
@@ -212,9 +214,16 @@ must be taken before the signal, and the grace must be long.
    carries `slept`, and a slept exit never runs `control.exited` (spawn record, supervision,
    mailbox, inbox and pipes kept); the title is not cleared; a `hive ctl read` waiting is
    answered "asleep"; `hive ctl send` to a sleeping tile is refused ("asleep: wake it first").
-   Wake: `terminals.own` with `wake`, then flag off, then the inbox is rung if it holds mail (a
-   worker's report sent while its parent slept). Per-tile queue: a wake waits for a sleep in
-   flight. Workspace API: `agent.sleep(workspace, target, force?)`,
+   Wake: `terminals.own` with `wake`, then flag off, then the mailbox and inbox are told it woke.
+   The mailbox holds what comes for a sleeper (nothing is typed into it), and, woken, holds it
+   until the agent says its session started (`session.started`), or, for one that reports no
+   turns, for a moment (2 s); then it is typed, a worker's report sent while its parent slept
+   included. The control plane runs `control.slept` itself once the sleep resolves, so a sleeper
+   no window shows is not left "working". A wake answered `gone` clears the flag and says why.
+   Per-tile queue: a wake waits for a sleep in flight. Another tile may not start a sleeper's
+   conversation: every start passes `Terminals`, which asks the control plane whether its
+   arguments name a conversation a sleeping tile holds (the window's own "Resume conversation"
+   included); a wake is refused while another tile runs that conversation. Workspace API: `agent.sleep(workspace, target, force?)`,
    `agent.wake(workspace, target)` (permission `agents`, scoped like `agent.start`);
    `terminal.saved(tile, lines?)` (permission `view`, scoped by tile; the host reads the folder).
    `hive ctl sleep|wake <target> [--force] [--json]` →
@@ -228,7 +237,9 @@ must be taken before the signal, and the grace must be long.
 6. **Phone.** No new status state (the phone core drops agents in a state it does not know):
    `agentsOf` lists a sleeping tile with `sleeping: true` beside its state (from the flag, even
    with no status). The phone core reads it (`only_true`, like its other flags); the row shows
-   "Asleep" and offers Wake (`agent.wake`).
+   "Asleep" and offers Wake (`agent.wake`). Three phone surfaces read it: Android, iOS and the
+   browser phone (`crates/hive-web`), each with its Home row, its agent screen (the saved screen
+   for a sleeper) and Wake.
 
 ## Review round 1 (a fresh reviewer, 9 material points)
 
@@ -282,6 +293,20 @@ must be taken before the signal, and the grace must be long.
 | 5 | A sleeping ssh or device tile closed through sync, or by the control plane after it removed the tile, is killed on the wrong daemon and kept forever | The control plane reads the flag's folder before removing the tile and passes it to the end; a window's close finds it while the tile is still in the host's layout; one closed through sync is left to retention, now 90 days for a sleeper (built), not forever |
 | minor | `resumed` has no channel; a paused session sleeps at SIGKILL; an unreadable sleeper after a restart is not known asleep; adopted tiles; bare ids; `folderOf` not wired; HTML from agent output; pipes into a sleeper; the store still writes `true` | `resumed` dropped (the banner says it); paused: built (host test, under node); unreadable after a restart: ceiling, as for any corrupt snapshot; adopted tiles skipped like close skips them; ids normalised (built); wiring and the store's folder in step 5; the screen is built from escaped text nodes, styles only from the palette; a pipe into a sleeper is dropped: ceiling, listed in the answer |
 
+## Review round 5 (a fresh reviewer, 4 material points)
+
+| # | Point | Answer |
+|---|---|---|
+| 1 | The status is fixed only by the slept exit, which reaches the host only while something there is attached: a sleeper no window shows stays "working" or "waiting" everywhere, and later sleeps skip it as busy | Built: `sleepTiles` runs `control.slept` once the sleep resolves (the exit's call stays; twice is once). `control-sleep.test.ts` |
+| 2 | A flag whose sleeper is gone (retention, `hive kill`, lost machine state) can never be cleared: every wake is refused "nothing asleep" | Built: the daemon answers such a wake `gone`, the endpoint throws `NothingAsleep`, the control plane clears the flag and lists why ("what it saved is gone: shown again, it starts afresh") |
+| 3 | The window's "Resume conversation" builds its tile in the window and never calls `agent.start`, so it passes the two-process guard | Built: the guard moved to where every start passes, `Terminals` (`conversationAsleep`), one rule in the control plane shared with `agent.start`'s early answer |
+| 4 | The browser phone (`crates/hive-web`) is a third phone surface, missing from the plan | Step 7 widened (piece 6) |
+| minor | An agent ending by itself before its screen is read is saved without the mark; `markAsleep` racing a restore; removing a workspace ends only this machine's sleepers; a participant cannot sleep their own agent in someone else's workspace | Built: the mark is written whenever a sleep was asked (`sleep-no-signals.test.ts`); the race leaves a mark on a live session until its next save, harmless (a wake restores it): accepted; other machines' sleepers of a removed workspace go at 90 days: ceiling; the participant limit is stated (theirs to run, so theirs to sleep from their own app) |
+
+Found while building round 5: a sleep cleared the turn before the status said so, so the mailbox
+never heard the turn end and held a woken agent's messages until its next turn. The mailbox now
+owns the sleeper's state (asleep, waking) and the test drives it through the control plane.
+
 ## Pre-mortem (a year on, it failed)
 
 1. **"Resume brought back a blank agent."** The transcript was pruned by the agent, or the agent
@@ -317,7 +342,8 @@ taking its resume time. A sleep takes the agent's own exit time (Claude: ~4.5 s 
    a slept exit keeps the spawn record, `--json` shape).
 6. Window: `SleepingTile`, quiet slept exit, menus, Layers — unit test of the screen-to-HTML step;
    e2e specs listed for the coordinator.
-7. Phone: `sleeping: true` in `agentsOf` and the phone core; Wake on the rows (Android, iOS).
+7. Phone: `sleeping: true` in `agentsOf` and the phone core; Wake on the rows (Android, iOS, the
+   browser phone).
 8. Bench (`bench-sleep.ts`): 5 real agents, RSS of their trees before / after, no descendant left,
    Resume continues the conversation (the agent recalls a word given before sleep).
 

@@ -181,6 +181,7 @@ test.skipIf(!unix)("a sleep that cannot be saved is an end, and a wake then find
   v.send({ t: "attach", reqId: "w", id: "t5", spec: loop("UNSAVED"), wake: true });
   const woke = await v.reply("attached");
   expect(woke?.error).toContain("nothing asleep");
+  expect(woke?.gone).toBe(true);
   expect(woke?.pid).toBe(-1);
   v.c.destroy();
 }, 20_000);
@@ -216,6 +217,7 @@ test.skipIf(!unix)("a sleeper whose saved screen is lost stays asleep: nothing s
   const woke = await v.reply("attached");
   expect(woke?.pid).toBe(-1);
   expect(woke?.error).toContain("cannot be read");
+  expect(woke?.gone, "still asleep, not gone").toBeUndefined();
   v.send({ t: "kill", id: "t7" });
   v.c.destroy();
 }, 20_000);

@@ -6,7 +6,8 @@
  * Editing the board is moving, sizing, naming and grouping what is on it. A tile that runs
  * something on the host (a terminal, an agent, a browser page) is started by placing it: adding
  * one, taking one away, or changing what it runs or which frame it is in is driving agents. Where
- * a frame's tiles run (its folder, its worktree, the frame it is nested in) is the owner's to say.
+ * a frame's tiles run (its folder, its worktree, the frame it is nested in) is the owner's to say,
+ * as is whether a tile sleeps, and where.
  * The owner, at any of their devices, may change anything.
  *
  * But anyone who may edit the board may put a frame of their own on their own machine (M4, design
@@ -54,6 +55,11 @@ export function refusedEdit(before: KeptCore | null, after: KeptCore | null, acc
   }
   for (const [id, frame] of was.frames) {
     if (!now.frames.has(id) && placed(frame) && !theirs(frame)) return `frame ${id} runs its tiles in a folder: taking it away is the owner's`;
+  }
+
+  // Whether a tile sleeps, and where, is the host's: its wake, its screen and its end go there.
+  for (const [id, tile] of now.tiles) {
+    if (!same(was.tiles.get(id)?.sleeping, tile.sleeping)) return `whether tile ${id} sleeps is the owner's to say`;
   }
 
   if (drives(access)) return null;

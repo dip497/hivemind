@@ -62,6 +62,16 @@ export class Inbox {
     }
     this.kept.set(to, list);
     for (const wake of this.waiters.get(to) ?? []) wake();
+    return this.tell(to);
+  }
+
+  /** Tell `to` again that messages wait, when some do and it was not told (it was asleep). */
+  remind(to: string): void {
+    if (this.unread(to) > 0) this.tell(to);
+  }
+
+  /** Tell `to` that messages wait, unless it was told already. False when it could not be told. */
+  private tell(to: string): boolean {
     if (this.ringing.has(to)) return true;
     this.ringing.add(to);
     const wanted = (): boolean => {

@@ -102,6 +102,9 @@ export interface TerminalsOptions {
   /** The folder a tile's session runs in: where it slept, as its layout says, else its frame's;
    *  undefined when no workspace here has it. */
   folderOf?(tile: string): string | undefined;
+  /** The tile asleep in the conversation a start would resume: refused, or two processes would
+   *  write it once that tile wakes. */
+  conversationAsleep?(opts: TerminalOpts): string | undefined;
 }
 
 /** A participant's machine a session runs on (M4): whose it is, and whether they lend its keyboard
@@ -230,7 +233,7 @@ export class Terminals {
     const out = this.outputOf(tile);
     const host: Viewer = { data: (_, data) => watch.data(data), exit: () => watch.exit(), alive: () => true };
     if (!this.sizes.has(tile)) this.sizes.set(tile, { cols: opts.cols, rows: opts.rows });
-    const { pid } = await this.relay.open(tile, host, () => this.opts.backend.start(opts, out), () => this.opts.backend.screen(tile));
+    const { pid } = await this.relay.open(tile, host, () => this.begin(opts, out), () => this.opts.backend.screen(tile));
     return { pid };
   }
 
@@ -261,6 +264,13 @@ export class Terminals {
     return this.opts.backend.sleep(tile, cwd);
   }
 
+  /** Start `opts` through the backend, unless it would resume a conversation another tile sleeps in. */
+  private begin(opts: StartOpts, out: SessionOutput): ReturnType<SessionBackend["start"]> {
+    const sleeper = opts.wake || opts.attachOnly ? undefined : this.opts.conversationAsleep?.(opts);
+    if (sleeper) return Promise.reject(new Error(`that conversation is asleep in tile ${sleeper}: wake it instead`));
+    return this.opts.backend.start(opts, out);
+  }
+
   /** Whether a session here is open on another device. */
   private watchedFromAfar(): boolean {
     for (const opened of this.openers.values()) for (const c of opened) if (c.actor.kind === "peer" && !c.closed.aborted) return true;
@@ -271,7 +281,7 @@ export class Terminals {
     const tile = opts.tileId;
     const bare = toBareId(tile);
     const out = this.outputOf(tile);
-    const run = () => this.opts.backend.start(opts, out);
+    const run = () => this.begin(opts, out);
     const start = () => opts.attachOnly
       ? run()
       : this.opts.intents.perform(from.actor, { verb: "terminal.open", target: bare, detail: named(path.basename(opts.cmd)) }, run);

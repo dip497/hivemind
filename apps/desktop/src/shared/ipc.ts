@@ -98,7 +98,7 @@ export interface SharedStatus {
 import type { BoardEdit, BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 export type { NotificationSettings };
 export type { AgentChange, AgentEvent, AgentItem } from "@hivemind/workspace-api/agents";
-import type { AgentAnswer, AgentChange, AgentEvent, AgentItem, Answerer, PipeChange, SpawnChange, StatusChange, TileOpened } from "@hivemind/workspace-api/agents";
+import type { AgentAnswer, AgentChange, AgentEvent, AgentItem, Answerer, PipeChange, SleepAnswer, SpawnChange, StatusChange, TileOpened, WakeAnswer } from "@hivemind/workspace-api/agents";
 
 export type { WidgetOption, WidgetPackage } from "@hivemind/core/widget-format";
 import type { WidgetPackage } from "@hivemind/core/widget-format";
@@ -371,6 +371,10 @@ export interface HiveIpc {
    *  supervised tool use, its screen. `answered` false: it waits on that no more, or someone
    *  answered first (`by`). */
   agentAnswer(tile: string, since: number, answer: AgentAnswer): Promise<{ answered: boolean; by?: Answerer }>;
+  /** Put to sleep the agents of `target` in the workspace at `repo` (a tile or a frame; none: all). */
+  agentSleep(repo: string, target?: string, force?: boolean): Promise<SleepAnswer>;
+  /** Wake the sleeping agents of `target` in the workspace at `repo` (none: all). */
+  agentWake(repo: string, target?: string): Promise<WakeAnswer>;
   onAgentChanged(cb: (repo: string, change: AgentChange) => void): () => void;
   onAgentEvent(cb: (repo: string, event: AgentEvent) => void): () => void;
   /** The installed widget packages changed. */
@@ -698,7 +702,9 @@ export interface HiveIpc {
   worktreePrune(repoPath: string): Promise<{ removed: string[] }>;
 
   // ── PTY ───────────────────────────────────────────────────
-  ptySpawn(opts: TerminalOpts): Promise<{ pid: number; /** Another window started it: this one only shows it. */ joined?: boolean }>;
+  ptySpawn(opts: TerminalOpts): Promise<{ pid: number; /** Another window started it: this one only shows it. */ joined?: boolean; /** It sleeps: nothing was started. */ asleep?: true }>;
+  /** What the agent in `tileId`, put to sleep, last showed, with its newest `lines`; null when it does not sleep. */
+  ptySaved(tileId: string, lines?: number): Promise<string | null>;
   /** Install the agentic stack (hive skills + CLAUDE.md section) into a repo so
    *  a spawned agent can actually work issues with `hive`. Idempotent. */
   installAgentic(dir: string): Promise<{ ok: boolean }>;
@@ -855,7 +861,8 @@ export type HiveApi = HiveIpc & {
   onPtyData: (tileId: string, cb: (data: string) => void) => () => void;
   onPtyExit: (
     tileId: string,
-    cb: (info: { code: number; signal?: number }) => void
+    /** `slept`: it was put to sleep, and is not gone. */
+    cb: (info: { code: number; signal?: number; slept?: true }) => void
   ) => () => void;
   onFsChanged: (
     repoPath: string,

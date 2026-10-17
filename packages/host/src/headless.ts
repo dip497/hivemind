@@ -65,7 +65,7 @@ import { workspaceDomains } from "./domains.js";
 import { HANDED_OFF, handOff } from "./hand-off.js";
 import { answers } from "./answers.js";
 import { PeerLinks, tellGuestOf } from "./peer-links.js";
-import { answerKeys, heldBoards, manifestOf, participantNamed, runsIn } from "./needs.js";
+import { answerKeys, heldBoards, manifestOf, participantNamed, runsIn, sessionFolder } from "./needs.js";
 import { agentControl } from "./agent-control.js";
 import { StartPlaces } from "./start-places.js";
 import { askingOf, conversations, LastSaid, transcriptOf } from "./conversations.js";
@@ -83,7 +83,7 @@ import { listWidgets, widgetAsset } from "@hivemind/core/widgets";
 import { disabledPlugins, pluginOptions, stringOptions } from "@hivemind/core/plugin-settings";
 import { AgentFeed } from "./agent-feed.js";
 import { makeSpawnPacer } from "./spawn-pacer.js";
-import { startSpawned } from "./spawned.js";
+import { startSpawned, wakeSpawned } from "./spawned.js";
 import { Layouts } from "./store.js";
 import { Terminals, type SessionBackend } from "./terminals.js";
 
@@ -225,7 +225,11 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       return sessions.start(supervise ? { ...opts, env: { ...opts.env, HIVE_SUPERVISE: supervise } } : opts, {
         data: (data, replay) => out.data(data, replay),
         // Asleep, it is not gone: what waits on it waits on.
-        exit: (code, signal, slept) => { out.exit(code, signal, slept); if (!slept) control.exited(opts.tileId); },
+        exit: (code, signal, slept) => {
+          out.exit(code, signal, slept);
+          if (slept) control.slept(opts.tileId);
+          else control.exited(opts.tileId);
+        },
         size: out.size,
       });
     },
@@ -240,6 +244,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     who,
     // A terminal on a participant's machine is typed into and sized there, by its person (M4).
     machineOf: (opts) => participantAt(opts, { self: keys.deviceId, mine, lists, nameOf, shown: (device, tile) => peers.shownFrom(device, tile) }),
+    folderOf: (bare) => sessionFolder(heldBoards(store), bare),
+    conversationAsleep: (opts) => control.conversationAsleep(opts.tileId, opts.args ?? []),
     onError: o.onWarn,
     backend,
   });
@@ -397,7 +403,10 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       // A caller in no tile acts on the one workspace this host serves, when it serves one.
       shownWorkspace: () => { const repos = store.repos(); return repos.length === 1 ? { repo: repos[0]!, frame: null } : null; },
       launchOptions: (agentId) => stringOptions(pluginOptions(catalog.settings().plugins.state, "agent", agentId)),
-      endSession: (ptyId) => terminals.end(ptyId),
+      endSession: (ptyId, folder) => terminals.end(ptyId, folder),
+      sleepSession: (ptyId, folder) => terminals.sleep(ptyId, folder),
+      wakeSession: (start) => wakeSpawned(terminals, start),
+      sessionOf: (bare) => transcriptOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR))?.session || undefined,
       sessionHeld: holds,
       intents,
       join: (link) => joinWith(link),

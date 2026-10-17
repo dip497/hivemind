@@ -164,10 +164,18 @@ export function answerKeys(held: HeldBoard[], tile: string, status: { kind?: Inp
 
 /** The folder the agent of `tile` runs in on `board`: its frame's worktree's, else its frame's,
  *  else its workspace's. */
-export function folderOf(board: HeldBoard, tile: string): string {
+export function folderOf(board: Pick<HeldBoard, "core" | "repo">, tile: string): string {
   const id = board.core?.frameOf?.[tile];
   const frame = id === undefined ? undefined : board.core?.frames.find((f) => f.id === id);
   return frame?.worktreePath ?? frame?.workspacePath ?? board.repo;
+}
+
+/** Where the session of `tile` is, on whichever board of `held` it is: the folder it slept in, else
+ *  the one it runs in; undefined for a tile on none of them. */
+export function sessionFolder(held: HeldBoard[], tile: string): string | undefined {
+  const bare = toBareId(tile);
+  const record = held.flatMap((h) => h.core?.tiles ?? []).find((t) => t.id === bare);
+  return record?.sleeping ?? runsIn(held, bare) ?? undefined;
 }
 
 /** The folder the agent of `tile` runs in, on whichever board of `held` it is; null for a tile on

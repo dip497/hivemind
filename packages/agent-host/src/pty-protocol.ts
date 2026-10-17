@@ -80,8 +80,9 @@ export type ClientMsg =
 export type ServerMsg =
   /** delta: `replay` is only the output after the requested position, not a redraw.
    *  cols/rows: the session's size, which a viewer that only watches draws it at.
-   *  asleep: it was put to sleep, and the attach did not wake it (with `error`). */
-  | { t: "attached"; reqId: string; id: string; pid: number; isNew: boolean; replay: string; error?: string; seq?: number; epoch?: string; delta?: boolean; cols?: number; rows?: number; asleep?: true }
+   *  asleep: it was put to sleep, and the attach did not wake it (with `error`).
+   *  gone: a wake found nothing asleep there (with `error`). */
+  | { t: "attached"; reqId: string; id: string; pid: number; isNew: boolean; replay: string; error?: string; seq?: number; epoch?: string; delta?: boolean; cols?: number; rows?: number; asleep?: true; gone?: true }
   | { t: "data"; id: string; data: string; seq?: number }
   /** The session's size changed: to each of its viewers. */
   | { t: "size"; id: string; cols: number; rows: number }
@@ -109,6 +110,9 @@ export const SOCKET_NAME = "pty-daemon.sock";
 
 /** Printed by `hive daemon bridge` once connected; anything before it is shell-profile noise. */
 export const BRIDGE_READY = "HIVE-BRIDGE-READY\n";
+
+/** A wake found nothing asleep: what the session saved is gone, or it never slept there. */
+export class NothingAsleep extends Error {}
 
 export function frame(msg: ClientMsg | ServerMsg): string {
   return JSON.stringify(msg) + "\n";

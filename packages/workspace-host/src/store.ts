@@ -296,11 +296,11 @@ export class WorkspaceStore {
     return repo;
   }
 
-  /** Mark the tile `tileId` asleep, or awake, in the workspace that holds it. That workspace, or
-   *  null. */
-  setSleeping(tileId: string, sleeping: boolean, from: Writer = {}): string | null {
+  /** Mark the tile `tileId` asleep in the folder `folder`, or awake (null), in the workspace that
+   *  holds it. That workspace, or null. */
+  setSleeping(tileId: string, folder: string | null, from: Writer = {}): string | null {
     const repo = this.workspaceOf(tileId);
-    if (repo !== null) this.write(repo, "core", LAYOUT, from, (doc) => writeTileSleeping(doc, tileId, sleeping));
+    if (repo !== null) this.write(repo, "core", LAYOUT, from, (doc) => writeTileSleeping(doc, tileId, folder));
     return repo;
   }
 

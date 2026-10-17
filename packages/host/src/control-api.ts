@@ -1,6 +1,7 @@
 /**
  * What the control plane does that the workspace API asks by name (spec/workspace-api.md, 0.23):
  * send an agent a message, name it, type keys to it, read its next reply or what it printed last,
+ * put agents to sleep and wake them,
  * list the sessions it keeps, open a tool's tile, pipe one agent's replies to another; and the
  * person's own machine methods (a view event, the plugins running in a window, a tile brought
  * forward, rescans, settings, joining). Each effect is recorded as the caller's; an agent on the
@@ -14,7 +15,7 @@ import { promptProblem } from "@hivemind/view-sdk/protocol";
 import type { ControlWork } from "./control/methods.js";
 
 type Method =
-  | "agent.send" | "agent.rename" | "agent.keys" | "agent.read" | "agent.output" | "agent.sessions" | "tool.open" | "link.connect" | "link.disconnect"
+  | "agent.send" | "agent.rename" | "agent.keys" | "agent.read" | "agent.output" | "agent.sessions" | "agent.sleep" | "agent.wake" | "tool.open" | "link.connect" | "link.disconnect"
   | "view.emit" | "plugin.list" | "plugin.commands" | "plugin.open" | "plugin.call" | "plugin.close" | "tile.focus"
   | "views.rescan" | "agents.rescan" | "widgets.rescan" | "tools.rescan" | "settings.reload" | "host.status" | "host.join";
 
@@ -30,6 +31,8 @@ const text = (v: unknown, what: string): string => {
 /** The agent's tile a connection asks from: none for the person or a program. */
 const callerOf = (from: Connection): string | undefined => (from.actor.kind === "peer" && from.actor.tile ? toBareId(from.actor.tile) : undefined);
 const tileOf = (v: unknown): string | undefined => { const t = named(v); return t && toBareId(t); };
+/** What a sleep or a wake is of: a tile or a frame; none, the whole workspace. */
+const targetOf = (v: unknown): string | undefined => (v == null || v === "" ? undefined : text(v, "target"));
 /** A pipe, or every pipe out of a tile: `src->dst`, `src->*`. */
 const pipeOf = (src: unknown, dst: unknown): string | undefined => { const from = tileOf(src); return from && `${from}->${tileOf(dst) ?? "*"}`; };
 
@@ -84,6 +87,8 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       "settings.reload": done((w) => w.reloadSettings()),
       "host.status": async () => (await o.control()).hostStatus(),
       "host.join": async (_from, link) => (await o.control()).join(text(link, "link")),
+      "agent.sleep": async (_from, repo, target, force) => (await o.control()).sleep(text(repo, "repo"), targetOf(target), force === true),
+      "agent.wake": async (_from, repo, target) => (await o.control()).wake(text(repo, "repo"), targetOf(target)),
     },
     effects: {
       "agent.send": (tile) => ({ target: tileOf(tile) }),
@@ -100,6 +105,8 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       "widgets.rescan": () => ({}),
       "tools.rescan": () => ({}),
       "settings.reload": () => ({}),
+      "agent.sleep": (repo, target) => ({ target: named(target) ?? named(repo) }),
+      "agent.wake": (repo, target) => ({ target: named(target) ?? named(repo) }),
     },
   };
 }

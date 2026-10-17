@@ -54,6 +54,8 @@ const cases: Array<[string, Change, Access]> = [
   ["a frame nested in another", frames((fs) => fs.map((f) => (f.id === "f2" ? { ...f, parentFrameId: "f1" } : f))), "owner"],
   ["a frame added with a folder", frames((fs) => [...fs, { id: "f3", title: "etc", workspacePath: "/etc" }]), "owner"],
   ["a frame with a folder taken away", frames((fs) => fs.filter((f) => f.id !== "f1")), "owner"],
+  ["an agent put to sleep, and where", tile("a1", { sleeping: "ssh://me@box/home" }), "owner"],
+  ["an agent in their frame put to sleep", (l) => ({ ...tile("p9", { sleeping: MINE })(l) }), "owner"],
   // Their own frame on their own machine, and what runs in it.
   ["a frame of theirs put on their machine", frames((fs) => [...fs, { id: "p2", title: "web", workspacePath: `machine://${D}/home/priya/web` }]), "edit"],
   ["their frame moved to another folder of theirs", frames((fs) => fs.map((f) => (f.id === "p1" ? { ...f, workspacePath: `machine://${D}/tmp/x` } : f))), "edit"],

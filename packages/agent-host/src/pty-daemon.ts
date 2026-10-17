@@ -18,7 +18,7 @@ import * as bunPty from "./bun-pty.js";
 import { listenExclusive } from "./socket-claim.js";
 import { dropHandedDown, HANDED_DOWN } from "./handed-down.js";
 import { Asleep, SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot, type SessionClient } from "./pty-session-manager.js";
-import { type ClientMsg, type ServerMsg, frame, makeLineDecoder } from "./pty-protocol.js";
+import { type ClientMsg, type ServerMsg, NothingAsleep, frame, makeLineDecoder } from "./pty-protocol.js";
 import { PtyOutputBuffer } from "./pty-output-buffer.js";
 import { ipcPath } from "@hivemind/core/ipc";
 import { repairShellSpec } from "./shell-spec.js";
@@ -615,6 +615,7 @@ const server = net.createServer((sock) => {
             // Reply with a failure pid so spawnPty resolves immediately.
             if (viewers.get(msg.id) === viewer) viewers.delete(msg.id);
             if (e instanceof Asleep) { send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: -1, isNew: false, replay: "", error: e.message, asleep: true }); return; }
+            if (e instanceof NothingAsleep) { send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: -1, isNew: false, replay: "", error: e.message, gone: true }); return; }
             console.error(`[pty-daemon] attach ${msg.id} failed:`, e);
             send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: -1, isNew: false, replay: "", error: e instanceof Error ? e.message : String(e) });
           });

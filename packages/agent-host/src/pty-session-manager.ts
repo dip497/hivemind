@@ -31,7 +31,7 @@ import * as HeadlessXtermNS from "@xterm/headless";
 import { bracketedPaste, mouseEncodingSeq } from "./replay-modes.js";
 import { pasteText } from "./paste.js";
 import * as SerializeAddonNS from "@xterm/addon-serialize";
-import type { SessionInfo } from "./pty-protocol.js";
+import { NothingAsleep, type SessionInfo } from "./pty-protocol.js";
 import { randomUUID } from "node:crypto";
 import { splitAtBoundary } from "./vt-boundary.js";
 type HeadlessCtor = typeof import("@xterm/headless").Terminal;
@@ -376,7 +376,7 @@ export class SessionManager {
       if (kept.asleep && !frozenSnap) throw new Error(`'${id}' sleeps, but what it saved cannot be read`);
       this.frozen.delete(id);
     } else if (wake) {
-      throw new Error(`nothing asleep as '${id}'`);
+      throw new NothingAsleep(`nothing asleep as '${id}'`);
     }
     // Spec from the snapshot wins over the caller's (cwd/cmd/env are what the
     // user had); only cols/rows from the live attach apply (window dims).
@@ -954,7 +954,9 @@ export class SessionManager {
             spec: s.spec,
             ...(s.asked ? { asked: s.asked } : {}),
             replay: s.sleepScreen?.replay ?? this.screenText(s, at, lines),
-            ...(s.sleepScreen ? { recentReplay: s.sleepScreen.recent, sleeping: true as const } : {}),
+            ...(s.sleepScreen ? { recentReplay: s.sleepScreen.recent } : {}),
+            // Asked to sleep, it is asleep, even if it ended by itself before its screen was read.
+            ...(s.sleeping ? { sleeping: true as const } : {}),
             title: s.lastTitle,
             savedAt: Date.now(),
           });

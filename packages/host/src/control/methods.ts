@@ -15,9 +15,9 @@ import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
 import type { Inbox } from "./inbox.js";
 import { mintId, toPtyId as ptyId, toBareId as bareOf } from "@hivemind/workspace-api/tile-id";
-import type { AgentItem, AgentRead, AgentSessions, TileOpened } from "@hivemind/workspace-api/agents";
+import type { AgentItem, AgentRead, AgentSessions, SleepAnswer, Skipped, TileOpened, WakeAnswer } from "@hivemind/workspace-api/agents";
 import { labelOf as labelIn } from "./names.js";
-import { agentById, agentLaunch, agentOption, cleanName, isSessionId, nextOrdinal, spawnableAgents, workerAgents, type AgentProviderDef, type AgentStatus, type InputKind, type SpawnOptions } from "@hivemind/agents";
+import { agentById, agentForCmd, agentLaunch, agentOption, cleanName, isSessionId, nextOrdinal, spawnableAgents, workerAgents, type AgentProviderDef, type AgentStatus, type InputKind, type SpawnOptions } from "@hivemind/agents";
 import { hookAnswerOf, hookAsks, printedAnswer, toolAbout, type HookReply } from "@hivemind/agents/node";
 import { canListSessions, listSessions } from "@hivemind/agents/node";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
@@ -25,10 +25,12 @@ import { createToolRegistry, type ToolPluginContribution } from "@hivemind/core/
 import type { ToolsSettings } from "@hivemind/core/settings-schema";
 import { customDataProblem, isCustomEventName } from "@hivemind/view-sdk/protocol";
 import { COMMAND_NAME_RE } from "@hivemind/view-sdk/commands";
+import { NothingAsleep } from "@hivemind/agent-host/pty-protocol";
 import { AGENT_TILE_KIND, isTerminalKind, type KeptCore, type FrameRecord, type TileRecord } from "@hivemind/workspace-doc/shapes";
 import { defaultFrame, frameFor } from "@hivemind/workspace-doc/tile-list";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
 import type { Waits } from "../waits.js";
+import { folderOf } from "../needs.js";
 import { Refused, type Intent, type Intents } from "@hivemind/workspace-host/intents";
 import type { StatusStore } from "@hivemind/agent-host/status-store";
 import type { SpawnRecords } from "./spawn-records.js";
@@ -139,6 +141,11 @@ export interface MethodDeps {
   deliverToTile: (ptyId: string, text: string, onSent?: () => void) => boolean;
   /** What other agents have for an agent (by bare id), until it reads them. */
   inbox: Pick<Inbox, "post" | "wait" | "given" | "forget">;
+  /** A tile's session was put to sleep: its turn is over. Its exit says so too, when something here
+   *  was attached to it; twice is the same as once. */
+  slept(bare: string): void;
+  /** A tile's session was woken: what waited for it is told once it is up. */
+  woke(bare: string): void;
   /** What the agent of a tile waits on, as the person's devices are told it. */
   waitingOf: (bareTile: string) => AgentItem["waiting"];
   turns: TurnTracker;
@@ -171,7 +178,7 @@ export interface MethodDeps {
   waits: Waits;
   /** The workspaces main has open. The canvas verbs read them, and write them as `control`;
    *  their windows follow. */
-  workspaces: Pick<WorkspaceStore, "workspaceOf" | "getCore" | "addTile" | "renameTile" | "removeTile" | "repos" | "ownership">;
+  workspaces: Pick<WorkspaceStore, "workspaceOf" | "getCore" | "addTile" | "renameTile" | "removeTile" | "repos" | "ownership" | "setSleeping">;
   /** The workspace the window the user is at shows, and the frame the user is in there, if
    *  any: what a caller in no tile (a terminal, a script) acts on. */
   shownWorkspace: () => { repo: string; frame: string | null } | null;
@@ -182,8 +189,18 @@ export interface MethodDeps {
   announceSpawn: (spawn: TileOpened & { prompt?: string }) => void;
   /** Every session's status, as its host reports it. */
   status: Pick<StatusStore, "get">;
-  /** End the session a tile runs (by its pty id), as its window's kill does. */
-  endSession: (ptyId: string) => void;
+  /** End the session a tile runs (by its pty id), as its window's kill does; `folder`, where one
+   *  asleep sleeps. */
+  endSession: (ptyId: string, folder?: string) => void;
+  /** End the process of the session a tile runs in `folder` (by its pty id), keeping it to be
+   *  woken. Rejects with why it cannot. */
+  sleepSession: (ptyId: string, folder: string) => Promise<void>;
+  /** Wake the session a tile runs (by its pty id) where it sleeps, its agent resumed, and keep it
+   *  running whoever shows it. `pid` -1: no answer in time. Rejects with why it cannot. */
+  wakeSession: (start: { ptyId: string; cwd: string; cmd: string; args: string[] }) => Promise<{ pid: number }>;
+  /** The conversation the agent of a tile (bare id) keeps, as this machine knows it; undefined
+   *  when it knows none. */
+  sessionOf?: (bareTile: string) => string | undefined;
   /** Whether main holds a session by this pty id (a window showed it, here or remote). */
   sessionHeld: (ptyId: string) => boolean;
   /** Ask the host an invite link names to let this person in, as the Join dialog does. */
@@ -237,6 +254,11 @@ export interface ControlWork {
   rescan(what: "views" | "agents" | "widgets" | "tools"): Promise<unknown>;
   reloadSettings(): Promise<unknown>;
   hostStatus(): { workspaces: Array<{ repo: string; workspace: string | null }> };
+  /** Put to sleep the agents of `target` in the workspace of `repo` (a tile or a frame, by id or
+   *  name; none: all of them), leaving one working or waiting on someone unless `force`. */
+  sleep(repo: string, target: string | undefined, force: boolean): Promise<SleepAnswer>;
+  /** Wake the sleeping agents of `target` in the workspace of `repo` (none: all of them). */
+  wake(repo: string, target: string | undefined): Promise<WakeAnswer>;
   join(link: string): Promise<unknown>;
 }
 
@@ -253,6 +275,8 @@ export interface Dispatcher {
   forgetTile: (tileId: string) => void;
   /** What the control plane's messages call a tile (names.ts). */
   labelOf: (tileId: string) => string;
+  /** The tile asleep in a conversation that `args`, started in `tile`, would resume. */
+  conversationAsleep: (tile: string, args: readonly string[]) => string | undefined;
   /** Spawn an agent, without recording it: the caller has (M5). */
   spawn: (opts: {
     agent?: string; frame?: string; prompt?: string; model?: string; mode?: string; name?: string; resume?: string;
@@ -385,6 +409,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     if (resume !== undefined) {
       if (!def.session?.resume) throw new ApiError("UNSUPPORTED", `${def.label} cannot resume a session`);
       if (!isSessionId(resume)) throw new ApiError("BAD_REQUEST", "resume must be a session id");
+      // Woken later, it would write the same conversation as this one.
+      const holder = sleeperIn(resume);
+      if (holder) throw new ApiError("FAILED", `that conversation is asleep in tile ${holder.id}: wake it instead`);
     }
     // A spawner-chosen display name ("reviewer", "test-writer") — becomes the tile
     // name and tags every message this worker sends back. One printable line, capped like every
@@ -482,9 +509,127 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   const closeTile = async (tileId: string): Promise<unknown> => {
     const closed = deps.workspaces.removeTile(bareOf(tileId), CONTROL)?.tile;
     if (!closed) throw new ApiError("NOT_FOUND", `no open workspace has tile ${bareOf(tileId)}`);
-    if (isTerminalKind(closed.kind) && !closed.session) deps.endSession(ptyId(tileId));
+    if (isTerminalKind(closed.kind) && !closed.session) deps.endSession(ptyId(tileId), closed.sleeping);
     forgetTileState(tileId);
     return { ok: true };
+  };
+
+  // ── Sleep and wake (docs/design/sleep-agents-2026-10-17.md) ──
+  /** The tile `bare` as its workspace holds it; undefined when none does. */
+  const recordOf = (bare: string): TileRecord | undefined => {
+    const repo = deps.workspaces.workspaceOf(bare);
+    return repo === null ? undefined : coreOf(repo).tiles.find((t) => t.id === bare);
+  };
+  /** Every tile asleep, in every workspace here. */
+  const asleep = (): TileRecord[] => deps.workspaces.repos().flatMap((repo) => coreOf(repo).tiles.filter((t) => !!t.sleeping));
+  /** The tile other than `except` asleep in the conversation `session`: started again elsewhere, it
+   *  would be written by two processes once that tile wakes. */
+  const sleeperIn = (session: string, except?: string): TileRecord | undefined =>
+    asleep().find((t) => t.id !== except && deps.sessionOf?.(t.id) === session);
+  /** The tile asleep in a conversation that `args`, started in `tile`, would resume. */
+  const conversationAsleep = (tile: string, args: readonly string[]): string | undefined =>
+    args.map((a) => a.slice(a.indexOf("=") + 1)).filter(isSessionId).map((s) => sleeperIn(s, bareOf(tile))).find(Boolean)?.id;
+  /** The work on each tile's sleep or wake, the latest last: a wake waits for a sleep in flight. */
+  const sleepWork = new Map<string, Promise<unknown>>();
+  const oneAtATime = <T>(bare: string, work: () => Promise<T>): Promise<T> => {
+    const run = (sleepWork.get(bare) ?? Promise.resolve()).catch(() => {}).then(work);
+    const settled = run.catch(() => {});
+    sleepWork.set(bare, settled);
+    void settled.then(() => { if (sleepWork.get(bare) === settled) sleepWork.delete(bare); });
+    return run;
+  };
+  /** The tiles of `target` in the workspace of `repo`: a tile by its id or name, else those of a
+   *  frame (and the frames in it) by its id or name; none: all of them. */
+  const tilesOf = (repo: string, target: string | undefined): { core: KeptCore; tiles: readonly TileRecord[] } => {
+    if (!deps.workspaces.repos().includes(repo)) throw new ApiError("NOT_FOUND", "no such workspace here");
+    const core = coreOf(repo);
+    if (!target) return { core, tiles: core.tiles };
+    const byId = core.tiles.find((t) => t.id === bareOf(target));
+    if (byId) return { core, tiles: [byId] };
+    const named = core.tiles.filter((t) => core.tileNames?.[t.id] === target);
+    if (named.length > 1) throw new ApiError("BAD_REQUEST", `${named.length} tiles are called "${target}": name one by its id`);
+    if (named.length === 1) return { core, tiles: named };
+    const frame = frameFor(core.frames, target);
+    if (!frame) throw new ApiError("NOT_FOUND", `no tile or frame here answers to "${target}"`);
+    const within = new Set([frame.id]);
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const f of core.frames) if (f.parentFrameId && within.has(f.parentFrameId) && !within.has(f.id)) { within.add(f.id); grew = true; }
+    }
+    return { core, tiles: core.tiles.filter((t) => within.has(core.frameOf?.[t.id] ?? "")) };
+  };
+  const why = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+  /** Why `tile` is not put to sleep; null when it is. */
+  const keptAwake = (tile: TileRecord, force: boolean): string | null => {
+    if (tile.sleeping) return "asleep already";
+    if (tile.session) return "it shows a session started elsewhere, which is theirs";
+    const def = agentForCmd(tile.cmd);
+    if (!def) return "not an agent: only an agent comes back where it was";
+    if (!def.session?.resume) return `${def.label} cannot resume its conversation: it would wake blank`;
+    const state = deps.status.get(tile.id)?.state;
+    if (!force && (state === "working" || state === "waiting")) return `${state}: --force puts it to sleep anyway`;
+    return null;
+  };
+  const sleepTiles = async (repo: string, target: string | undefined, force: boolean): Promise<SleepAnswer> => {
+    const { core, tiles } = tilesOf(repo, target);
+    const slept: string[] = [];
+    const skipped: Skipped[] = [];
+    await Promise.all(tiles.filter((t) => isTerminalKind(t.kind)).map(async (tile) => {
+      const kept = keptAwake(tile, force);
+      if (kept) return void skipped.push({ tile: tile.id, why: kept });
+      const folder = folderOf({ repo, core }, tile.id);
+      try {
+        await oneAtATime(tile.id, async () => {
+          // Given up on is not undone: asked again, the daemon answers once the first is done.
+          await deps.sleepSession(ptyId(tile.id), folder).catch(() => deps.sleepSession(ptyId(tile.id), folder));
+          deps.workspaces.setSleeping(tile.id, folder, CONTROL);
+          deps.slept(tile.id);
+        });
+        slept.push(tile.id);
+      } catch (e) {
+        skipped.push({ tile: tile.id, why: why(e) });
+      }
+    }));
+    return { slept, skipped };
+  };
+  const wakeTiles = async (repo: string, target: string | undefined): Promise<WakeAnswer> => {
+    const { core, tiles } = tilesOf(repo, target);
+    const woke: string[] = [];
+    const skipped: Skipped[] = [];
+    // A tile named is woken whatever its layout says (its daemon knows); a frame's, those asleep.
+    const named = tiles.length === 1 && !!target && tiles[0]!.id === bareOf(target);
+    await Promise.all(tiles.filter((t) => isTerminalKind(t.kind) && (t.sleeping || named)).map(async (tile) => {
+      const def = agentForCmd(tile.cmd);
+      if (!def) return void skipped.push({ tile: tile.id, why: `no agent here runs ${tile.cmd ?? "it"}` });
+      if (!tile.cmd) return void skipped.push({ tile: tile.id, why: "it runs nothing" });
+      const start = { ptyId: ptyId(tile.id), cwd: tile.sleeping ?? folderOf({ repo, core }, tile.id), cmd: tile.cmd, args: (tile as TileRecord & { args?: string[] }).args ?? [] };
+      // Another tile running this conversation would write it as this one does.
+      const session = deps.sessionOf?.(tile.id);
+      const twin = session ? core.tiles.find((t) => t.id !== tile.id && !t.sleeping && deps.sessionOf?.(t.id) === session && deps.sessionHeld(ptyId(t.id))) : undefined;
+      if (twin) return void skipped.push({ tile: tile.id, why: `tile ${twin.id} runs this conversation now` });
+      try {
+        const { pid } = await oneAtATime(tile.id, async () => {
+          // No answer in time is asked again: a wake of what runs now joins it.
+          let r = await deps.wakeSession(start);
+          if (r.pid === -1) r = await deps.wakeSession(start);
+          if (r.pid !== -1) {
+            deps.workspaces.setSleeping(tile.id, null, CONTROL);
+            deps.woke(tile.id);
+          }
+          return r;
+        });
+        if (pid === -1) skipped.push({ tile: tile.id, why: "no answer from where it sleeps" });
+        else woke.push(tile.id);
+      } catch (e) {
+        // Kept asleep, it could never be woken: shown again, it starts afresh.
+        if (e instanceof NothingAsleep && tile.sleeping) {
+          deps.workspaces.setSleeping(tile.id, null, CONTROL);
+          return void skipped.push({ tile: tile.id, why: "what it saved is gone: shown again, it starts afresh" });
+        }
+        skipped.push({ tile: tile.id, why: why(e) });
+      }
+    }));
+    return { woke, skipped };
   };
 
   // The workspace a canvas verb acts on: the one holding the caller's tile, else the one the
@@ -734,7 +879,10 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   };
 
   const api: ControlWork = {
+    sleep: sleepTiles,
+    wake: wakeTiles,
     send(tile, text) {
+      if (recordOf(bareOf(tile))?.sleeping) throw new ApiError("FAILED", `tile ${bareOf(tile)} is asleep: wake it first`);
       // Delivered through the mailbox, which types text-then-Enter as separate writes (a bundled
       // newline is dropped by claude's TUI) and HOLDS it while the agent is mid-turn, where it
       // would strand in the composer unread.
@@ -889,6 +1037,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   return {
     agentChannel, api, forgetTile: forgetTileState, labelOf: label, spawn: doSpawn, close: closeTile,
-    parentOf, onStatus,
+    parentOf, onStatus, conversationAsleep,
   };
 }

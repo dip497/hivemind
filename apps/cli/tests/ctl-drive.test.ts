@@ -1,7 +1,7 @@
 /** `hive ctl` on a REAL drive socket (the host's serveDrive and workspace server, a scripted
  *  domain): who it is (the person, or the agent whose tile token it holds), the workspace it acts
- *  on, each verb as its API method, `--json` shapes, exit codes, read's short polls, and
- *  `agents --watch` following the feed's events. */
+ *  on, each verb as its API method, `--json` shapes, exit codes, read's short polls, sleep and wake
+ *  refused when they did nothing, and `agents --watch` following the feed's events. */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -52,6 +52,11 @@ beforeAll(async () => {
     answer("agent.start", () => ({ tile: "w-2" })),
     answer("agent.send", (tile, text) => { if (!text) throw new ApiError("BAD_REQUEST", "text required"); return { sent: tile !== "ghost" }; }),
     answer("agent.close", (tile) => ({ closed: tile !== "ghost" })),
+    answer("agent.sleep", (_repo, target) => (target === "busy" ? { slept: [], skipped: [{ tile: "w-1", why: "working: --force puts it to sleep anyway" }] } : { slept: ["w-1"], skipped: [{ tile: "s-1", why: "not an agent: only an agent comes back where it was" }] })),
+    answer("agent.wake", (_repo, target) => {
+      if (target === "ghost") throw new ApiError("NOT_FOUND", 'no tile or frame here answers to "ghost"');
+      return target === "w-2" ? { woke: [], skipped: [{ tile: "w-2", why: "tile w-1 runs this conversation now" }] } : { woke: ["w-1"], skipped: [] };
+    }),
     answer("agent.read", async () => {
       if (++reads > turnAfterReads) return { text: `reply ${reads}`, finalStatus: "turn", truncated: false };
       await new Promise((r) => setTimeout(r, 50));
@@ -155,6 +160,23 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
       ["tool.open", repoA, { tool: "a/b/c", url: "https://x" }], ["agent.sessions", repoA, "codex", 5],
     ]);
   });
+
+  test("sleep and wake a tile, a frame or every agent of the workspace, as agent.sleep and agent.wake; nothing done with something left is exit 7, saying why", async () => {
+    const one = await hive(["ctl", "sleep", "w-1", "--repo", repoA, "--json"], { env: env() });
+    expect([one.code, one.json]).toEqual([0, { slept: ["w-1"], skipped: [{ tile: "s-1", why: "not an agent: only an agent comes back where it was" }] }]);
+    expect(last("agent.sleep").params).toEqual([repoA, "w-1", false]);
+    expect((await hive(["ctl", "sleep", "--force", "--repo", repoA], { env: env() })).code).toBe(0);
+    expect(last("agent.sleep").params).toEqual([repoA, "", true]);
+    const busy = await hive(["ctl", "sleep", "busy", "--repo", repoA, "--json"], { env: env() });
+    expect([busy.code, busy.json]).toEqual([7, { slept: [], skipped: [{ tile: "w-1", why: "working: --force puts it to sleep anyway" }] }]);
+
+    const woke = await hive(["ctl", "wake", "api", "--repo", repoA, "--json"], { env: env() });
+    expect([woke.code, woke.json, last("agent.wake").params]).toEqual([0, { woke: ["w-1"], skipped: [] }, [repoA, "api"]]);
+    const twin = await hive(["ctl", "wake", "w-2", "--repo", repoA], { env: env() });
+    expect([twin.code, twin.stdout]).toEqual([7, expect.stringContaining("tile w-1 runs this conversation now")]);
+    const ghost = await hive(["ctl", "wake", "ghost", "--repo", repoA, "--json"], { env: env() });
+    expect([ghost.code, (ghost.json as { code: string }).code]).toEqual([5, "NOT_FOUND"]);
+  }, 30_000);
 
   test("approve answers the wait its request names, as agent.answer; always and never decide the tool from now on; one not waiting is exit 2", async () => {
     for (const [decision, answer] of [["allow", { decision: "allow" }], ["never", { decision: "deny", always: true }], ["always", { decision: "allow", always: true }]] as const) {

@@ -1,6 +1,6 @@
 /** One PTY daemon connection over any transport: attach, stream, and re-attach live tiles after a drop. */
 import type { Duplex } from "node:stream";
-import { type ClientMsg, type ServerMsg, type SessionInfo, frame, makeLineDecoder } from "./pty-protocol.js";
+import { type ClientMsg, type ServerMsg, type SessionInfo, NothingAsleep, frame, makeLineDecoder } from "./pty-protocol.js";
 
 export interface SpawnOpts {
   tileId: string;
@@ -65,7 +65,7 @@ export class DaemonEndpoint {
   private connecting: Promise<Duplex> | null = null;
   private readonly cbs = new Map<string, Callbacks>();
   private readonly specs = new Map<string, AttachSpec>();
-  private readonly pending = new Map<string, (r: Attached) => void>();
+  private readonly pending = new Map<string, (r: Attached & { error?: string; gone?: true }) => void>();
   /** Where each tile's output stands, so a re-attach asks only for what it missed. */
   private readonly pos = new Map<string, { seq: number; epoch: string }>();
   /** Tiles whose session exists in the daemon: a re-attach must never start them again. */
@@ -115,7 +115,7 @@ export class DaemonEndpoint {
         const redraw = msg.reqId.startsWith("re") && !msg.delta;
         if (msg.replay) this.cbs.get(msg.id)?.onData(redraw ? REATTACH_RESET + msg.replay : msg.replay, true);
         const resolve = this.pending.get(msg.reqId);
-        if (resolve) { this.pending.delete(msg.reqId); resolve(msg.asleep ? { pid: msg.pid, asleep: true } : { pid: msg.pid }); }
+        if (resolve) { this.pending.delete(msg.reqId); resolve({ pid: msg.pid, ...(msg.asleep ? { asleep: true as const } : {}), ...(msg.gone ? { gone: true as const } : {}), ...(msg.error ? { error: msg.error } : {}) }); }
         break;
       }
       case "data": {
@@ -298,7 +298,7 @@ export class DaemonEndpoint {
     this.specs.set(opts.tileId, spec);
     if (opts.noSpawn) this.live.add(opts.tileId);
     const reqId = `a${++this.seq}`;
-    const result = new Promise<Attached>((resolve) => {
+    const result = new Promise<Attached & { error?: string; gone?: true }>((resolve) => {
       this.pending.set(reqId, resolve);
       // A wake starts an agent that resumes its conversation: given as long as a sleep.
       const t = setTimeout(() => { if (this.pending.delete(reqId)) resolve({ pid: -1 }); }, Math.max(this.o.attachTimeoutMs ?? 6000, opts.wake ? WAKE_TIMEOUT_MS : 0));
@@ -313,7 +313,13 @@ export class DaemonEndpoint {
       if (!this.o.isFatal?.(msg)) this.scheduleReattach();
       if (this.pending.delete(reqId)) return { pid: -1 };
     }
-    return result;
+    const r = await result;
+    // Refused (nothing asleep there, or what it saved cannot be read): nothing to bring back later.
+    if (opts.wake && r.error) {
+      this.forget(opts.tileId);
+      throw r.gone ? new NothingAsleep(r.error) : new Error(r.error);
+    }
+    return r.asleep ? { pid: r.pid, asleep: true } : { pid: r.pid };
   }
 
   has(tileId: string): boolean { return this.specs.has(tileId); }

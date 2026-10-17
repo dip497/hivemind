@@ -155,6 +155,19 @@ An agent whose manifest says no keys is `BAD_REQUEST`.
 `agent.close(tile)` ends the agent's session and takes its tile off the board, as `hive ctl close`
 does, and answers `{ "closed": true }`; `{ "closed": false }` when no workspace here has the tile.
 
+## Sleep
+
+`agent.sleep(repo, target?, force?)` puts agents to sleep, as `hive ctl sleep` does: a tile by its
+id or name, else a frame's agents (those of the frames in it too), else every agent of the
+workspace. Each one's process ends; its tile keeps its name and its last screen, and the folder it
+slept in (`sleeping` in the layout). Left awake, each listed with why: an agent working or waiting on
+someone (unless `force`), one whose manifest says no `session.resume` (it would wake blank), a
+shell, and a session started elsewhere. Nothing is typed into a sleeping agent: `agent.send` to it
+is refused, and what other agents send it waits. `agent.wake(repo, target?)` starts each again in
+its conversation, in the folder it slept in; what waited is typed once it says its session started.
+Another tile may not start a sleeping agent's conversation, and a sleeper is not woken while
+another tile runs it. Both answer `{ "slept" | "woke": [tile], "skipped": [{ "tile", "why" }] }`.
+
 ## Changes
 
 `agent.diff(tile)` answers what the agent changed, in the folder it runs in (its frame's worktree's,

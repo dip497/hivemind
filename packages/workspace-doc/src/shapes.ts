@@ -52,9 +52,10 @@ export interface TileRecord {
   /** Terminal only: an existing session it shows (started by `hive run` or another device). It
    *  never starts one, and closing it only lets go. */
   session?: string;
-  /** Agent only: put to sleep. Its process ended; its last screen and its conversation wait for
-   *  it to be woken (docs/design/sleep-agents-2026-10-17.md). */
-  sleeping?: true;
+  /** Agent only: put to sleep, in this folder (where its session is kept, however its frame moves).
+   *  Its process ended; its last screen and its conversation wait for it to be woken
+   *  (docs/design/sleep-agents-2026-10-17.md). */
+  sleeping?: string;
 }
 
 /** The kind every agent's tile has, whatever runs in it: the historical id, kept for saved

@@ -266,6 +266,23 @@ const close = sub("close", "Close an agent: its session ends and its tile goes",
   if (!r.closed) throw notFound(a.tileId);
   return r;
 }));
+/** A tile or a frame of the workspace, by its id or name; none: all of it. */
+const targetArg = { target: { type: "positional", required: false, description: "a tile or a frame, by its id or name (none: every agent of the workspace)" } } as const;
+type Skipped = Array<{ tile: string; why: string }>;
+/** Refused when nothing was done and something was left, so a script can tell. */
+const doneOrRefused = (done: string[], skipped: Skipped, result: unknown) => (done.length === 0 && skipped.length > 0 ? { __exit: EXIT.refused, result } : result);
+
+const sleep = sub("sleep", "Put agents to sleep: each one's process ends, and its last screen and conversation wait for `hive ctl wake`",
+  { ...targetArg, force: { type: "boolean", description: "also those working or waiting on someone" }, ...repoArg },
+  (a) => onDrive(async (d) => {
+    const r = await d.call("agent.sleep", [await workspaceOf(d, a.repo), a.target ?? "", !!a.force]) as { slept: string[]; skipped: Skipped };
+    return doneOrRefused(r.slept, r.skipped, r);
+  }));
+const wake = sub("wake", "Wake agents put to sleep: each starts again in its conversation", { ...targetArg, ...repoArg },
+  (a) => onDrive(async (d) => {
+    const r = await d.call("agent.wake", [await workspaceOf(d, a.repo), a.target ?? ""]) as { woke: string[]; skipped: Skipped };
+    return doneOrRefused(r.woke, r.skipped, r);
+  }));
 const rename = sub("rename", "Name an agent; with no name, take its name away",
   { ...tileArg, name: { type: "positional", required: false, description: "the name every surface shows it by" } },
   (a) => onDrive((d) => d.call("agent.rename", [a.tileId, a.name ?? ""])));
@@ -605,7 +622,7 @@ export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/workflow/report) and the issue verbs agents use" },
   subCommands: {
     agents, frames, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, report, inbox, "open-review": openReview,
-    focus, close, rename, connect, disconnect, view, plugin,
+    focus, close, sleep, wake, rename, connect, disconnect, view, plugin,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,
   },
