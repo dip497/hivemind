@@ -1,7 +1,7 @@
 // A workspace's access list (access.ts, design §6 and §10): a person's devices have the role the
 // owner granted them, until it expires or is revoked; the owner's own devices are the owner;
 // nothing else gets in, and a grant not signed by the owner counts for nothing.
-import { test, expect, beforeEach, afterEach } from "bun:test";
+import { test, expect, beforeEach, afterEach, setSystemTime } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -85,14 +85,14 @@ test("the list is the same after a restart; a grant changed on disk, or made by 
   expect(warnings.length).toBeGreaterThan(0);
 });
 
-test("a revoked person, and one whose grant has expired, gets nothing, on any of their devices", async () => {
+test("a revoked person, and one whose grant has expired, gets nothing, on any of their devices", () => {
   const ws = newWorkspaceId();
   const a = lists();
   const priya = someone();
   const sam = someone();
   a.grant(ws, priya.id, "terminals");
   a.addDevice(ws, priya.cert);
-  a.grant(ws, sam.id, "view", Date.now() + 150);
+  a.grant(ws, sam.id, "view", Date.now() + 60_000);
   a.addDevice(ws, sam.cert);
   expect(a.accessOf(ws, sam.cert.device)).toBe("view");
 
@@ -103,9 +103,13 @@ test("a revoked person, and one whose grant has expired, gets nothing, on any of
   a.grant(ws, priya.id, "view");
   expect(a.accessOf(ws, priya.cert.device)).toBeNull();
 
-  await Bun.sleep(200);
-  expect(a.accessOf(ws, sam.cert.device)).toBeNull();
-  expect(a.people(ws).map((p) => p.person)).toEqual([priya.id]);
+  setSystemTime(new Date(Date.now() + 61_000));
+  try {
+    expect(a.accessOf(ws, sam.cert.device)).toBeNull();
+    expect(a.people(ws).map((p) => p.person)).toEqual([priya.id]);
+  } finally {
+    setSystemTime();
+  }
 });
 
 test("a device its person revoked gets into none of their workspaces here; one they certified after, and their other devices, keep their place", () => {
