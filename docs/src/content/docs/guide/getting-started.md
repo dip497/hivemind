@@ -32,7 +32,7 @@ says it is downloaded already rather than fetching it twice.
 
 hivemind runs agent CLIs you install yourself. It ships with none: when it starts, it adds
 every agent listed on HiveHub whose CLI is on your `PATH` — install `claude`, `codex`,
-`gemini` or any other, start hivemind, and it appears. After installing one, check
+`amp` or any other, start hivemind, and it appears. After installing one, check
 detection from an initialised workspace with `hive agent detect`. Capability differences
 are in [Agents](../agents/).
 

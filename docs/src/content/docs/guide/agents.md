@@ -33,7 +33,7 @@ ends:
 
 codex spawns with `--sandbox workspace-write --ask-for-approval on-request`.
 
-Everything else listed on HiveHub — codex, cursor, gemini, aider and the rest — spawns
+Everything else listed on HiveHub — codex, cursor, amp, aider and the rest — spawns
 the same way once its CLI is found, but is driven by hand: its manifest declares no turn
 signal, so replies cannot be gathered and workflows refuse it up front.
 

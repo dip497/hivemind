@@ -86,9 +86,10 @@ a board, Windows puts them in tabs and split panes. Switching keeps every sessio
   <li><a href="extension-authoring/"><b>Write a view</b><span>The same protocol the built-ins use.</span></a></li>
 </ul>
 
-These docs follow the development branch. **Widgets, tool plugins, the Plugins page, the phone
-page and self-hosting are development previews**, not in a release yet. Check `hive --help` for
-what your installed version has.
+These docs follow the latest release. Widgets, tool plugins, the Plugins page, the phone page and
+your own network (`hive-net`) are in it. **The iOS and Android apps are development previews**,
+not published yet, and so is [package inspection](packages/). Check `hive --help` for what your
+installed version has.
 
 For coding agents: [the documentation index](../llms.txt). Every guide is also plain Markdown
 under `markdown/`.

@@ -3,8 +3,6 @@ title: Connect devices and people
 description: Pair your phone or another computer, or let someone into a workspace, with one offer from Settings → Connect.
 ---
 
-**Development preview.** None of this is in a release yet.
-
 One offer, made on **Settings → Connect**, serves your phone, another computer, or someone else.
 You say which when the other device uses it.
 

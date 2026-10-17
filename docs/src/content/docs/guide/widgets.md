@@ -3,8 +3,6 @@ title: Widgets
 description: Small live boxes on the board, drawn from what your code renders.
 ---
 
-**Development preview.** Not in a release yet.
-
 A widget is a small live card whose content your code draws: a counter, a meter of busy agents,
 a reminder. Widgets float above every view; drag each one where you want it. Where they sit is
 yours alone (kept on your machine), and the eye button hides them all. Which widgets there are,
