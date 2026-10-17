@@ -736,6 +736,36 @@ async fn a_frame_larger_than_the_budget_arrives_while_other_streams_wait_for_mai
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_device_that_begins_more_frames_at_once_than_the_host_holds_is_closed_saying_so() {
+    let root = temp();
+    let mut host = Main::start(&root, "host").await;
+    let (_phone, connection) = phone_of(&mut host).await;
+    // Three of the largest frames begun on three streams, none finished: the host holds two.
+    let mut kept = Vec::new();
+    for _ in 0..3 {
+        let (mut out, recv) = ws::open(&connection, "api").await.unwrap();
+        out.write_all(&((MAX_FRAME - 17) as u32).to_be_bytes())
+            .await
+            .unwrap();
+        out.write_all(&[b'x'; 1024]).await.unwrap();
+        kept.push((out, recv));
+    }
+    let closed = host.next("closed").await;
+    assert!(
+        closed["reason"]
+            .as_str()
+            .unwrap()
+            .starts_with("sent too much at once"),
+        "{closed}"
+    );
+    let why = tokio::time::timeout(Duration::from_secs(10), connection.closed())
+        .await
+        .expect("the device is closed too");
+    assert!(why.to_string().contains("sent too much at once"), "{why}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn an_app_that_speaks_another_protocol_is_told_so_and_the_daemon_stops() {
     let root = temp();
     // An app of the first release says nothing of its protocol: it admits devices first; one of

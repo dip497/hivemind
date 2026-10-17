@@ -268,7 +268,9 @@ The contract both sides build to (`PROTOCOL` 3 in daemon.rs and hive-net.ts).
   more than `BUDGET` counts; a frame it has begun it reads to the end. Holding budget while a body
   is still on its way deadlocks: other streams' unread bytes fill the receive window, and the
   body's tail never comes. While main is behind, the daemon begins no more frames of that
-  connection. Ceiling: the frames begun when the gate shuts, at most one per stream.
+  connection. Frames begun are not held back but counted (`UNFINISHED_AT_MOST`, two of the
+  largest, 128 MiB): a device that begins more at once is closed `sent too much at once`. Holding
+  them back would deadlock as above; closing cannot.
 - **`closed`** (the other side closed, or the connection was lost) reaches main only after every
   stream's reader has handed over what arrived before it.
 - **QUIC windows** (net.rs, every endpoint): `send_window` 1 MiB, `receive_window` 2 MiB,
@@ -354,6 +356,11 @@ Round 3:
 | 3 | Two windows on a guest share one viewer: one detaching, hiding or asking history changes the other's (a bug today) | found, not caused here; reported to the coordinator as its own fix (the guest's main counts windows per tile) |
 
 ## Ceilings, written
+
+- **What one admitted device costs the host per connection:** 128 MiB of frames begun, plus 1 MiB
+  handed to main, plus the 2 MiB receive window. A device that begins more is closed. Upgrade: a
+  stream receive window small enough that streams waiting at the gate cannot fill the
+  connection's, so frames begun can be paced instead of counted.
 
 - **Calls in flight.** A peer that sends calls faster than main answers them grows main's pending
   answers. Upgrade: main gives the daemon credit back per frame it handled (`read {conn, stream,

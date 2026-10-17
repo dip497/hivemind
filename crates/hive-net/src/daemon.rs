@@ -38,7 +38,7 @@
 //! What arrives is read while main keeps up: while more than `BUDGET` of what arrived on a
 //! connection waits to be written to main, no new frame of it is read, so QUIC stops crediting the
 //! other device. A frame begun is read to its end: one stream waiting for room never holds up
-//! another's frame.
+//! another's frame. A device that begins more than `UNFINISHED_AT_MOST` of frames at once is closed.
 //!
 //! A stream is named by its first frame and opened by the device that dialled, as many of one name
 //! as it likes: a phone opens an `api` stream for each terminal it watches, conversation it follows
@@ -52,7 +52,7 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc,
     },
     time::Duration,
@@ -306,6 +306,8 @@ struct Link {
     read: mpsc::Receiver<()>,
     /// The bytes that arrived from the other device and wait to be written to main.
     budget: Budget,
+    /// The bytes of the frames its streams have begun to read and not finished.
+    unfinished: Arc<AtomicUsize>,
 }
 
 /// What a stream's writer and reader take from its link: the queue of main's frames for it, what
@@ -315,6 +317,7 @@ struct ForStream {
     writing: mpsc::Sender<()>,
     reading: mpsc::Sender<()>,
     budget: Budget,
+    unfinished: Arc<AtomicUsize>,
 }
 
 /// While more than this of what arrived on a connection waits to be written to main, no new frame
@@ -340,6 +343,36 @@ impl Handed {
 impl Drop for Handed {
     fn drop(&mut self) {
         self.budget.send_modify(|waiting| *waiting -= self.n);
+    }
+}
+
+/// A connection whose streams have begun frames of more than this, not yet finished, is closed:
+/// two of the largest at once fit. Frames begun are not held back, which would deadlock.
+const UNFINISHED_AT_MOST: usize = 2 * MAX_FRAME;
+
+/// A frame begun on a stream, counted in its connection's `unfinished` until it is dropped.
+struct Unfinished {
+    unfinished: Arc<AtomicUsize>,
+    n: usize,
+}
+
+impl Unfinished {
+    /// None when the connection would have more than `UNFINISHED_AT_MOST` unfinished.
+    fn begin(unfinished: &Arc<AtomicUsize>, n: usize) -> Option<Unfinished> {
+        if unfinished.fetch_add(n, Ordering::SeqCst) + n > UNFINISHED_AT_MOST {
+            unfinished.fetch_sub(n, Ordering::SeqCst);
+            return None;
+        }
+        Some(Unfinished {
+            unfinished: unfinished.clone(),
+            n,
+        })
+    }
+}
+
+impl Drop for Unfinished {
+    fn drop(&mut self) {
+        self.unfinished.fetch_sub(self.n, Ordering::SeqCst);
     }
 }
 
@@ -412,6 +445,7 @@ impl Daemon {
                 reading,
                 read,
                 budget: Arc::new(watch::channel(0).0),
+                unfinished: Arc::new(AtomicUsize::new(0)),
             },
         );
         conn
@@ -429,6 +463,7 @@ impl Daemon {
             writing: link.writing.clone(),
             reading: link.reading.clone(),
             budget: link.budget.clone(),
+            unfinished: link.unfinished.clone(),
         })
     }
 
@@ -441,6 +476,7 @@ impl Daemon {
             writing,
             reading,
             budget,
+            unfinished,
         }) = self.queue(conn, stream)
         else {
             return;
@@ -452,7 +488,7 @@ impl Daemon {
                     let reader = d.clone();
                     tokio::spawn(async move {
                         reader
-                            .read_stream(conn, stream, recv, reading, budget)
+                            .read_stream(conn, stream, recv, reading, budget, unfinished)
                             .await
                     });
                     d.write_stream(conn, stream, send, queue, writing).await;
@@ -482,6 +518,7 @@ impl Daemon {
             writing,
             reading,
             budget,
+            unfinished,
         }) = self.queue(conn, stream)
         else {
             return;
@@ -489,7 +526,7 @@ impl Daemon {
         let writer = self.clone();
         tokio::spawn(async move { writer.write_stream(conn, stream, send, queue, writing).await });
         self.tell(ToMain::Opened { conn, stream, name });
-        self.read_stream(conn, stream, recv, reading, budget).await;
+        self.read_stream(conn, stream, recv, reading, budget, unfinished).await;
     }
 
     /// Write the frames main queues for `stream`, in order, each moment's in one write, telling
@@ -567,12 +604,18 @@ impl Daemon {
         mut recv: RecvStream,
         _reading: mpsc::Sender<()>,
         budget: Budget,
+        unfinished: Arc<AtomicUsize>,
     ) {
         let mut room = budget.subscribe();
         while let Ok(Some(len @ ..=STREAM_FRAME_AT_MOST)) = read_len(&mut recv).await {
             if room.wait_for(|waiting| *waiting < BUDGET).await.is_err() {
                 break;
             }
+            let Some(_begun) = Unfinished::begin(&unfinished, len) else {
+                let at_once = (unfinished.load(Ordering::SeqCst) + len) / (1024 * 1024);
+                self.close_link(conn, format!("sent too much at once ({at_once} MB begun)"));
+                break;
+            };
             let Ok(frame) = read_body(&mut recv, len).await else {
                 break;
             };
@@ -590,6 +633,18 @@ impl Daemon {
         };
         if link.streams.remove(&stream).is_some() && link.connection.close_reason().is_none() {
             self.tell(ToMain::Ended { conn, stream });
+        }
+    }
+
+    /// Close `conn`, saying why to main and to the other device, once what main sent is written.
+    fn close_link(&self, conn: u64, reason: String) {
+        let link = self.links.lock().unwrap().remove(&conn);
+        if let Some(link) = link {
+            self.tell(ToMain::Closed {
+                conn,
+                reason: reason.clone(),
+            });
+            tokio::spawn(close(link, reason));
         }
     }
 
@@ -694,15 +749,7 @@ impl Daemon {
                 }
             }
             FromMain::Close { conn, reason } => {
-                let link = self.links.lock().unwrap().remove(&conn);
-                if let Some(link) = link {
-                    let reason = reason.unwrap_or_else(|| "closed".into());
-                    self.tell(ToMain::Closed {
-                        conn,
-                        reason: reason.clone(),
-                    });
-                    tokio::spawn(close(link, reason));
-                }
+                self.close_link(conn, reason.unwrap_or_else(|| "closed".into()))
             }
             FromMain::Pair {
                 req,
