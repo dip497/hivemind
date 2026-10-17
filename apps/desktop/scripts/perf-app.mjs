@@ -21,9 +21,11 @@ const out = process.argv[2] ?? "/tmp/perf-app.json";
 const RUNS = Number(process.env.PERF_RUNS) || 5;
 const TERMINALS = Number(process.env.PERF_TERMINALS) || 6;
 const LINES = Number(process.env.PERF_LINES) || 20000;
-// PERF_ONLY=screens: startup and screens, no scrolling. PERF_ONLY=startup: startup alone.
+// PERF_ONLY=screens: startup and screens, no scrolling. PERF_ONLY=startup: startup alone. PERF_ONLY=scroll:
+// startup and scrolling, no screens (some screens need the network: HiveHub).
 const ONLY_SCREENS = process.env.PERF_ONLY === "screens";
 const ONLY_STARTUP = process.env.PERF_ONLY === "startup";
+const ONLY_SCROLL = process.env.PERF_ONLY === "scroll";
 const BUILDS = process.env.PERF_OUT ? process.env.PERF_OUT.split(",") : [null];
 const MAINS = BUILDS.map((b) => path.resolve(b ? path.join(import.meta.dirname, "..", b, "main/index.js") : process.env.PERF_MAIN ?? path.join(import.meta.dirname, "../out/main/index.js")));
 const FRAMES = Number(process.env.PERF_FRAMES) || 0;
@@ -350,95 +352,97 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
     continue;
   }
 
-  // Screens: asked for → drawn, the first time this launch and once more.
-  const open = async (name, ask, ready, close) => {
+  if (!ONLY_SCROLL) {
+    // Screens: asked for → drawn, the first time this launch and once more.
+    const open = async (name, ask, ready, close) => {
+      for (const time of ["first", "again"]) {
+        await longTasks(page);
+        await mainStalls(app);
+        const t0 = await page.evaluate(() => performance.timeOrigin + performance.now());
+        await ask();
+        const t1 = await whenTrue(page, ready);
+        const lt = await longTasksDone(page);
+        (r.screens ??= {})[`${name} ${time}`] = { ms: Math.round(t1 - t0), longTasks: lt.total, mainStalls: (await mainStalls(app)).total };
+        await close();
+        await page.waitForTimeout(300);
+      }
+    };
+    const now = () => performance.timeOrigin + performance.now();
+    const settings = (pageId) => () => page.evaluate((p) => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: p } })), pageId);
+    /** In the page: the Settings page drawn, with nothing in it still loading. */
+    const settingsDrawn = () => {
+      const body = document.querySelector("[data-settings-body]");
+      return !!body && body.textContent.length > 20 && !body.querySelector("[role=status][aria-live]") && performance.timeOrigin + performance.now();
+    };
+    const escape = () => page.keyboard.press("Escape");
+    /** A click on what `selector` finds, once it is there: no waiting for it to hold still, so the
+     *  time is the app's. */
+    const press = (selector) => page.waitForSelector(selector).then((el) => el.evaluate((e) => e.click()));
+    await open("settings", settings("general"), settingsDrawn, escape);
+    for (const p of ["profile", "appearance", "shortcuts", "connect", "api", "browser", "servers", "about"]) await open(`settings ${p}`, settings(p), settingsDrawn, escape);
+    await open("plugins", settings("plugins"),
+      () => document.querySelectorAll(".plugin-rows > *").length > 3 && performance.timeOrigin + performance.now(),
+      escape);
+    // HiveHub's catalog, from the Plugins page.
+    await open("hivehub",
+      async () => { await settings("plugins")(); await press("[data-plugins-scope=hub]"); },
+      () => document.querySelectorAll("[data-catalog-plugin]").length > 0 && performance.timeOrigin + performance.now(),
+      async () => { await page.locator("[data-plugins-scope=installed]").click(); await escape(); });
+    await open("plugin page", settings("plugin:agent:claude"),
+      () => !!document.querySelector("[data-plugin-page] [role=tabpanel]") && performance.timeOrigin + performance.now(), escape);
+    // A plugin HiveHub lists and this app has not installed: its page and its README.
+    await open("hivehub plugin page", settings("plugin:view:@dip497/queue"),
+      () => {
+        const panel = document.querySelector("[data-plugin-page] [role=tabpanel]");
+        return !!panel && panel.textContent.length > 10 && !panel.querySelector("[role=status][aria-live]") && performance.timeOrigin + performance.now();
+      }, escape);
+    await open("add menu", () => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-add"))),
+      () => document.querySelectorAll("[data-add-menu] [data-board-choice]").length > 0 && performance.timeOrigin + performance.now(), escape);
+    await open("machines", () => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:machines", { detail: { kind: "manage" } }))),
+      () => (document.querySelector("[role=dialog]")?.textContent.length ?? 0) > 40 && performance.timeOrigin + performance.now(), escape);
+    // The Layers panel, hidden then shown again, and each of its panes.
+    const toggleLayers = (shown) => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-layers")))
+      .then(() => whenTrue(page, (want) => !!document.querySelector("aside[aria-label=Layers] [data-layers-pane]") === want && performance.timeOrigin + performance.now(), shown));
+    if (await page.evaluate(() => !!document.querySelector("aside[aria-label=Layers]"))) await toggleLayers(false);
+    await open("layers", () => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-layers"))),
+      () => !!document.querySelector("aside[aria-label=Layers] [data-layers-pane]") && performance.timeOrigin + performance.now(),
+      () => toggleLayers(false));
+    await toggleLayers(true);
+    const pane = (p, ready) => open(`layers ${p}`, () => press(`[data-layers-rail=${p}]`), ready, () => press("[data-layers-rail=tiles]"));
+    await pane("recents", () => document.querySelectorAll("[data-layers-recent]").length > 0 && performance.timeOrigin + performance.now());
+    await pane("machines", () => !!document.querySelector("[data-layers-pane=machines] [data-machine-group]") && performance.timeOrigin + performance.now());
+    // What Recents reads: this repo's past sessions, asked of main as the panel asks.
+    for (const time of ["first", "again"]) {
+      await mainStalls(app);
+      const ms = await page.evaluate(async (dir) => { const t = performance.now(); await window.hive.viewSessions("claude", dir); return Math.round(performance.now() - t); }, repo);
+      const shown = await page.evaluate((dir) => window.hive.viewSessions("claude", dir).then((l) => l.length), repo);
+      (r.screens ??= {})[`recents read ${time}`] = { ms, sessions: shown, mainStalls: (await mainStalls(app)).total };
+    }
+    // The Windows view, and the canvas again.
+    await open("windows view", () => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "windows" } }))),
+      () => !!document.querySelector("[data-community-view][data-community-ready='1'] [data-community-slot] .xterm") && performance.timeOrigin + performance.now(),
+      async () => {
+        await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
+        await whenTrue(page, (n) => document.querySelectorAll(".react-flow__node-terminal").length === n && performance.timeOrigin + performance.now(), TERMINALS);
+      });
+    // A new terminal: asked for → its shell's prompt on screen; then closed from Layers, so the board stays as it was.
     for (const time of ["first", "again"]) {
       await longTasks(page);
       await mainStalls(app);
-      const t0 = await page.evaluate(() => performance.timeOrigin + performance.now());
-      await ask();
-      const t1 = await whenTrue(page, ready);
+      const before = await page.evaluate(() => [...document.querySelectorAll(".react-flow__node-terminal")].map((n) => n.getAttribute("data-id")));
+      const t0 = await page.evaluate(now);
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
+      const t1 = await whenTrue(page, (had) => {
+        const n = [...document.querySelectorAll(".react-flow__node-terminal")].find((x) => !had.includes(x.getAttribute("data-id")));
+        return !!n && !!(n.querySelector(".xterm")?.parentElement?.__hmScreen?.() ?? "").trim() && performance.timeOrigin + performance.now();
+      }, before);
       const lt = await longTasksDone(page);
-      (r.screens ??= {})[`${name} ${time}`] = { ms: Math.round(t1 - t0), longTasks: lt.total, mainStalls: (await mainStalls(app)).total };
-      await close();
-      await page.waitForTimeout(300);
-    }
-  };
-  const now = () => performance.timeOrigin + performance.now();
-  const settings = (pageId) => () => page.evaluate((p) => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: p } })), pageId);
-  /** In the page: the Settings page drawn, with nothing in it still loading. */
-  const settingsDrawn = () => {
-    const body = document.querySelector("[data-settings-body]");
-    return !!body && body.textContent.length > 20 && !body.querySelector("[role=status][aria-live]") && performance.timeOrigin + performance.now();
-  };
-  const escape = () => page.keyboard.press("Escape");
-  /** A click on what `selector` finds, once it is there: no waiting for it to hold still, so the
-   *  time is the app's. */
-  const press = (selector) => page.waitForSelector(selector).then((el) => el.evaluate((e) => e.click()));
-  await open("settings", settings("general"), settingsDrawn, escape);
-  for (const p of ["profile", "appearance", "shortcuts", "connect", "api", "browser", "servers", "about"]) await open(`settings ${p}`, settings(p), settingsDrawn, escape);
-  await open("plugins", settings("plugins"),
-    () => document.querySelectorAll(".plugin-rows > *").length > 3 && performance.timeOrigin + performance.now(),
-    escape);
-  // HiveHub's catalog, from the Plugins page.
-  await open("hivehub",
-    async () => { await settings("plugins")(); await press("[data-plugins-scope=hub]"); },
-    () => document.querySelectorAll("[data-catalog-plugin]").length > 0 && performance.timeOrigin + performance.now(),
-    async () => { await page.locator("[data-plugins-scope=installed]").click(); await escape(); });
-  await open("plugin page", settings("plugin:agent:claude"),
-    () => !!document.querySelector("[data-plugin-page] [role=tabpanel]") && performance.timeOrigin + performance.now(), escape);
-  // A plugin HiveHub lists and this app has not installed: its page and its README.
-  await open("hivehub plugin page", settings("plugin:view:@dip497/queue"),
-    () => {
-      const panel = document.querySelector("[data-plugin-page] [role=tabpanel]");
-      return !!panel && panel.textContent.length > 10 && !panel.querySelector("[role=status][aria-live]") && performance.timeOrigin + performance.now();
-    }, escape);
-  await open("add menu", () => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-add"))),
-    () => document.querySelectorAll("[data-add-menu] [data-board-choice]").length > 0 && performance.timeOrigin + performance.now(), escape);
-  await open("machines", () => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:machines", { detail: { kind: "manage" } }))),
-    () => (document.querySelector("[role=dialog]")?.textContent.length ?? 0) > 40 && performance.timeOrigin + performance.now(), escape);
-  // The Layers panel, hidden then shown again, and each of its panes.
-  const toggleLayers = (shown) => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-layers")))
-    .then(() => whenTrue(page, (want) => !!document.querySelector("aside[aria-label=Layers] [data-layers-pane]") === want && performance.timeOrigin + performance.now(), shown));
-  if (await page.evaluate(() => !!document.querySelector("aside[aria-label=Layers]"))) await toggleLayers(false);
-  await open("layers", () => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-layers"))),
-    () => !!document.querySelector("aside[aria-label=Layers] [data-layers-pane]") && performance.timeOrigin + performance.now(),
-    () => toggleLayers(false));
-  await toggleLayers(true);
-  const pane = (p, ready) => open(`layers ${p}`, () => press(`[data-layers-rail=${p}]`), ready, () => press("[data-layers-rail=tiles]"));
-  await pane("recents", () => document.querySelectorAll("[data-layers-recent]").length > 0 && performance.timeOrigin + performance.now());
-  await pane("machines", () => !!document.querySelector("[data-layers-pane=machines] [data-machine-group]") && performance.timeOrigin + performance.now());
-  // What Recents reads: this repo's past sessions, asked of main as the panel asks.
-  for (const time of ["first", "again"]) {
-    await mainStalls(app);
-    const ms = await page.evaluate(async (dir) => { const t = performance.now(); await window.hive.viewSessions("claude", dir); return Math.round(performance.now() - t); }, repo);
-    const shown = await page.evaluate((dir) => window.hive.viewSessions("claude", dir).then((l) => l.length), repo);
-    (r.screens ??= {})[`recents read ${time}`] = { ms, sessions: shown, mainStalls: (await mainStalls(app)).total };
-  }
-  // The Windows view, and the canvas again.
-  await open("windows view", () => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "windows" } }))),
-    () => !!document.querySelector("[data-community-view][data-community-ready='1'] [data-community-slot] .xterm") && performance.timeOrigin + performance.now(),
-    async () => {
-      await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
+      r.screens[`new terminal ${time}`] = { ms: Math.round(t1 - t0), longTasks: lt.total, mainStalls: (await mainStalls(app)).total };
+      const added = await page.evaluate((had) => [...document.querySelectorAll(".react-flow__node-terminal")].map((n) => n.getAttribute("data-id")).find((id) => !had.includes(id)), before);
+      await page.locator(`[data-layer-tile="${added}"] [data-layer-tile-menu]`).click({ force: true });
+      await page.getByRole("menuitem", { name: /^Close tile/ }).click();
       await whenTrue(page, (n) => document.querySelectorAll(".react-flow__node-terminal").length === n && performance.timeOrigin + performance.now(), TERMINALS);
-    });
-  // A new terminal: asked for → its shell's prompt on screen; then closed from Layers, so the board stays as it was.
-  for (const time of ["first", "again"]) {
-    await longTasks(page);
-    await mainStalls(app);
-    const before = await page.evaluate(() => [...document.querySelectorAll(".react-flow__node-terminal")].map((n) => n.getAttribute("data-id")));
-    const t0 = await page.evaluate(now);
-    await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
-    const t1 = await whenTrue(page, (had) => {
-      const n = [...document.querySelectorAll(".react-flow__node-terminal")].find((x) => !had.includes(x.getAttribute("data-id")));
-      return !!n && !!(n.querySelector(".xterm")?.parentElement?.__hmScreen?.() ?? "").trim() && performance.timeOrigin + performance.now();
-    }, before);
-    const lt = await longTasksDone(page);
-    r.screens[`new terminal ${time}`] = { ms: Math.round(t1 - t0), longTasks: lt.total, mainStalls: (await mainStalls(app)).total };
-    const added = await page.evaluate((had) => [...document.querySelectorAll(".react-flow__node-terminal")].map((n) => n.getAttribute("data-id")).find((id) => !had.includes(id)), before);
-    await page.locator(`[data-layer-tile="${added}"] [data-layer-tile-menu]`).click({ force: true });
-    await page.getByRole("menuitem", { name: /^Close tile/ }).click();
-    await whenTrue(page, (n) => document.querySelectorAll(".react-flow__node-terminal").length === n && performance.timeOrigin + performance.now(), TERMINALS);
+    }
   }
 
   // Content: a terminal's older output, scrolled back to its start.
