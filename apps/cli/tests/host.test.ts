@@ -338,13 +338,15 @@ describe.skipIf(!built)("hive host", () => {
         const replica = new WorkspaceStore({ dir: path.join(dir, "guest4", `shared-${at.slice(0, 6)}-${Date.now()}`), onChange: (c) => { for (const l of edits) l(c); } });
         let tell!: (moved: Moved) => void;
         const told = new Promise<Moved>((r) => { tell = r; });
+        const notIn = (why: unknown) => resolve({ moved: null, access: null, why: Promise.resolve(String(why)), told, replica });
         void guest.dial(at, { addrs, relay: null }).then((link) => {
           replicate(replica, workspaceUrl(workspace), streamOf(link, "sync"), {
             workspace, changes: (l) => { edits.add(l); return () => { edits.delete(l); }; },
             onWelcome: (access) => resolve({ moved: null, access, why: link.closed, told, replica }),
             onMoved: (moved) => { tell(moved); resolve({ moved, access: null, why: link.closed, told, replica }); },
           });
-        });
+          void link.closed.then(notIn);
+        }, notIn);
       });
       const there = guest.dial(keys.deviceId, { addrs: laptop.ready.addrs, relay: null });
       // Told the move as the connection closes: the close may be seen first, so it is waited for.
