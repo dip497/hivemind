@@ -15,7 +15,7 @@
  * its layout that this person's role there does not allow (`refuse`): its host would not take it,
  * and the copy would part from the host's.
  */
-import { ApiError, text } from "@hivemind/workspace-api/protocol";
+import { ApiError, text, texts } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import type { Method } from "@hivemind/workspace-api/methods";
 import type { LegacyLayout, ViewLayout, WorkspaceChange, WorkspaceStore } from "@hivemind/workspace-host/store";
@@ -79,6 +79,7 @@ export class Layouts {
         "store.core": (_, repo) => { const r = repoOf(repo); return store(r).getCore(r); },
         "store.view": (_, repo, viewId) => { const r = repoOf(repo); return store(r).getView(r, text(viewId, "viewId")); },
         "store.objects": (_, repo) => { const r = repoOf(repo); return store(r).getObjects(r); },
+        "store.objectsWithIds": (_, repo, ids) => { const r = repoOf(repo); return store(r).getObjectsWithIds(r, texts(ids, "ids")); },
         "store.setCore": (from, repo, core, base) => {
           const r = repoOf(repo);
           if (!writable(from, r, "core")) return;
@@ -96,9 +97,9 @@ export class Layouts {
           const id = text(viewId, "viewId");
           if (writable(from, r, `view:${id}`)) refused(() => writing(from, r).setView(r, id, layout as ViewLayout, { ...as(from), base }));
         },
-        "store.setObjects": (from, repo, objects, base) => {
+        "store.editObjects": (from, repo, edit) => {
           const r = repoOf(repo);
-          if (writable(from, r, "board")) refused(() => writing(from, r).setObjects(r, objects, { ...as(from), base }));
+          if (writable(from, r, "board")) refused(() => writing(from, r).editObjects(r, edit, as(from)));
         },
         "store.import": (_, repo, legacy) => { const r = repoOf(repo); if (mayWrite(r)) refused(() => store(r).importLegacy(r, legacy as LegacyLayout)); },
         "store.undo": (from, repo) => { const r = repoOf(repo); return mayWrite(r) && writing(from, r).undo(r, as(from)); },

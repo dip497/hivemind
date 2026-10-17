@@ -16,6 +16,7 @@ import { WorkspaceClient } from "@hivemind/workspace-api/client";
 import { StoreReplica } from "@hivemind/workspace-api/store-replica";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
 import { Layouts } from "../src/store.ts";
+import { boardEdit } from "@hivemind/workspace-doc/board-edit";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-replica-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -31,13 +32,14 @@ async function until(check: () => boolean, ms = 3_000): Promise<void> {
 function host() {
   const dir = path.join(tmp, `host-${hosts++}`);
   let server: WorkspaceServer;
-  const store = new WorkspaceStore({ dir, person: newSeed(), onChange: (c) => server.publishTo((conn) => !layouts.made(conn, c), "store.changed", { repo: c.repo, part: c.part }) });
+  const store = new WorkspaceStore({ dir, person: newSeed(), onChange: (c) => server.publishTo((conn) => !layouts.made(conn, c), "store.changed", { repo: c.repo, part: c.part, objects: c.objects }) });
   const layouts = new Layouts(() => store);
   server = new WorkspaceServer([layouts.domain], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
   /** A client over a stream: every answer and every event arrives later, every other call
    *  overtaking the one before it. */
   const client = () => {
     let calls = 0;
+    const asked: string[] = [];
     const listeners: Array<(m: EventMessage) => void> = [];
     const connection: Connection = {
       actor: { kind: "person" },
@@ -47,6 +49,7 @@ function host() {
     server.connect(connection);
     const api = new WorkspaceClient({
       call: async (method, params) => {
+        asked.push(method);
         await new Promise((r) => setTimeout(r, calls++ % 2 === 0 ? 8 : 0));
         const answer = await server.answer(method, JSON.parse(JSON.stringify(params)), connection);
         await later();
@@ -55,7 +58,7 @@ function host() {
       notice: (method, params) => server.notice(method, params, connection),
       events: (listener) => { listeners.push(listener); },
     });
-    return new StoreReplica(api, (m) => { throw new Error(m); });
+    return Object.assign(new StoreReplica(api, (m) => { throw new Error(m); }), { asked });
   };
   return { store, client };
 }
@@ -115,14 +118,32 @@ test("an undo answers false at once, and what it took back arrives as a change",
   const a = h.client();
   await a.open("/r");
   const note = (id: string, text: string) => ({ id, kind: "note" as const, x: 0, y: 0, w: 200, h: 160, text });
-  a.setObjects("/r", [note("n1", "first")], []);
-  a.setObjects("/r", [note("n1", "second")], [note("n1", "first")]);
+  a.editObjects("/r", boardEdit([], [note("n1", "first")]));
+  a.editObjects("/r", boardEdit([note("n1", "first")], [note("n1", "second")]));
   const texts: string[] = [];
   a.onChange((c) => { if (c.part === "board") texts.push((a.objects("/r")[0] as unknown as { text: string }).text); });
   assert.equal(a.undo("/r"), false);
   await until(() => texts.length > 0);
   assert.deepEqual(texts, ["first"]);
   assert.equal((h.store.getObjects("/r")[0] as unknown as { text: string }).text, "first");
+});
+
+test("a client told which objects another changed reads those alone, and holds them with the rest as they were", async () => {
+  const h = host();
+  const [a, b] = [h.client(), h.client()];
+  await Promise.all([a.open("/r"), b.open("/r")]);
+  const note = (id: string, text: string) => ({ id, kind: "note" as const, x: 0, y: 0, w: 200, h: 160, text });
+  b.editObjects("/r", boardEdit([], [note("n1", "one"), note("n2", "two"), note("n3", "three")]));
+  await until(() => a.objects("/r").length === 3);
+  const told: unknown[] = [];
+  a.onChange((c) => told.push(c));
+  a.asked.length = 0;
+  b.editObjects("/r", boardEdit([note("n2", "two"), note("n3", "three")], [note("n2", "two, retyped")]));
+  await until(() => told.length > 0);
+  assert.deepEqual(told, [{ repo: "/r", part: "board", objects: ["n2", "n3"] }]);
+  assert.deepEqual(a.asked, ["store.objectsWithIds"]);
+  assert.deepEqual(a.objects("/r").map((o) => `${o.id}: ${(o as unknown as { text: string }).text}`), ["n1: one", "n2: two, retyped"]);
+  assert.deepEqual(a.objectsWithIds("/r", ["n2", "n3"]), { n2: h.store.getObjects("/r")[1], n3: null });
 });
 
 test("a read of a workspace not opened answers nothing and opens it; what it holds then arrives as changes", async () => {

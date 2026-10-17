@@ -14,6 +14,7 @@ import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
 import { Layouts } from "../src/store.ts";
+import { boardEdit } from "@hivemind/workspace-doc/board-edit";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-layouts-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -21,7 +22,7 @@ const note = (id: string, text: string) => ({ id, kind: "note" as const, x: 0, y
 
 function host(mayWrite?: (repo: string) => boolean) {
   let server: WorkspaceServer;
-  const store = new WorkspaceStore({ dir: tmp, person: newSeed(), onChange: (c) => server.publishTo((conn) => !layouts.made(conn, c), "store.changed", { repo: c.repo, part: c.part }) });
+  const store = new WorkspaceStore({ dir: tmp, person: newSeed(), onChange: (c) => server.publishTo((conn) => !layouts.made(conn, c), "store.changed", { repo: c.repo, part: c.part, objects: c.objects }) });
   const layouts = new Layouts(() => store, { mayWrite });
   server = new WorkspaceServer([layouts.domain], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
   const client = () => {
@@ -42,10 +43,10 @@ function host(mayWrite?: (repo: string) => boolean) {
 test("each client writes as itself: it is told of the other's change, never of its own, and its undo takes back only its edit", async () => {
   const h = host();
   const [a, b] = [h.client(), h.client()];
-  await h.call(a, "store.setObjects", "/board", [note("n1", "a's")], []);
-  await h.call(b, "store.setObjects", "/board", [note("n1", "a's"), note("n2", "b's")], [note("n1", "a's")]);
-  assert.deepEqual(a.told, [{ event: "store.changed", params: [{ repo: "/board", part: "board" }] }]);
-  assert.deepEqual(b.told, [{ event: "store.changed", params: [{ repo: "/board", part: "board" }] }]);
+  await h.call(a, "store.editObjects", "/board", boardEdit([], [note("n1", "a's")]));
+  await h.call(b, "store.editObjects", "/board", boardEdit([note("n1", "a's")], [note("n1", "a's"), note("n2", "b's")]));
+  assert.deepEqual(a.told, [{ event: "store.changed", params: [{ repo: "/board", part: "board", objects: ["n2"] }] }]);
+  assert.deepEqual(b.told, [{ event: "store.changed", params: [{ repo: "/board", part: "board", objects: ["n1"] }] }]);
   assert.equal(await h.call(a, "store.undo", "/board"), true);
   assert.deepEqual(h.store.getObjects("/board").map((o) => o.id), ["n2"]);
   assert.equal(await h.call(a, "store.undo", "/board"), false, "b's edit is not a's to take back");
@@ -76,7 +77,7 @@ test("a client says which workspace it shows, and where its user is there, until
 test("a workspace the host may only read takes no write, and the client is told to read the part again", async () => {
   const h = host((repo) => repo !== "hive://copy");
   const a = h.client();
-  await h.call(a, "store.setObjects", "hive://copy", [note("n1", "mine")], []);
+  await h.call(a, "store.editObjects", "hive://copy", boardEdit([], [note("n1", "mine")]));
   await h.call(a, "store.setView", "hive://copy", "canvas", { data: { zoom: 2 } }, null);
   assert.deepEqual(h.store.getObjects("hive://copy"), []);
   assert.equal(h.store.getView("hive://copy", "canvas"), null);
@@ -87,6 +88,6 @@ test("a workspace the host may only read takes no write, and the client is told 
     { event: "store.changed", params: [{ repo: "hive://copy", part: "view:canvas" }] },
   ]);
   // Elsewhere it writes as before.
-  await h.call(a, "store.setObjects", "/mine", [note("n1", "mine")], []);
+  await h.call(a, "store.editObjects", "/mine", boardEdit([], [note("n1", "mine")]));
   assert.deepEqual(h.store.getObjects("/mine").map((o) => o.id), ["n1"]);
 });
