@@ -15,11 +15,12 @@ The person keeps agents only for reference: project A has 5 agents, B has 4; the
 stop costing anything while their titles stay, and wake any one later with its conversation.
 
 **Goal.** Sleeping a tile, a frame or a workspace frees each agent's process (CPU and memory); the
-tile keeps its title and its last screen, dimmed, with Resume; Resume continues the same
+tile keeps its title and shows Resume on a black screen; Resume continues the same
 conversation.
 
 **Constraints.**
-- The person chose: a dimmed last screen (not a small card); the flag lives in the workspace
+- The person chose: a black screen with Resume (a dimmed last screen first, dropped on
+  2026-10-17 as it did not fill the tile); the flag lives in the workspace
   layout so every view sees it.
 - Every surface: `hive ctl sleep|wake <tile|frame|workspace> [--json]`, the canvas tile, the
   Layers panel, the frame and workspace menus, the phone's list, `hive host`.

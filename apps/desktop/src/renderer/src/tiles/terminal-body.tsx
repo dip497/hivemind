@@ -6,7 +6,7 @@ import { SleepingTile } from "./SleepingTile";
 import type { TileBodyArgs } from "./api";
 import type { TerminalTileData } from "./terminal";
 
-/** A terminal plus its machine's link banner; asleep, its last screen with Resume. */
+/** A terminal plus its machine's link banner; asleep, a black screen with Resume. */
 export default function TerminalBody({ data, selected }: TileBodyArgs<TerminalTileData>) {
   // Its exit or its open can say it sleeps before its layout does.
   const [slept, setSlept] = useState(false);
@@ -15,7 +15,7 @@ export default function TerminalBody({ data, selected }: TileBodyArgs<TerminalTi
   return (
     <div className="relative w-full h-full">
       {sleeping || slept
-        ? <SleepingTile tileId={data.tileId} name={data.name} sleeping={!!sleeping} onClose={data.onClose} onWake={() => onWake().then(() => setSlept(false))} />
+        ? <SleepingTile name={data.name} onClose={data.onClose} onWake={() => onWake().then(() => setSlept(false))} />
         : <TerminalTile {...terminal} selected={selected} onAsleep={() => setSlept(true)} />}
       {isRemote(data.cwd) && <LinkBanner cwd={data.cwd} />}
     </div>
