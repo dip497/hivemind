@@ -33,7 +33,9 @@ const loroInline: import("bun").BunPlugin = {
 };
 
 const result = await Bun.build({
-  entrypoints: [path.join(import.meta.dir, "..", "src", "index.ts")],
+  // The daemon's screen worker loads `screen-worker.js` beside it: flat names put both at the root.
+  entrypoints: [path.join(import.meta.dir, "..", "src", "index.ts"), path.join(import.meta.dir, "..", "..", "..", "packages", "agent-host", "src", "screen-worker.ts")],
+  naming: { entry: "[name].[ext]" },
   compile: { outfile },
   plugins: [loroInline],
   define: {
