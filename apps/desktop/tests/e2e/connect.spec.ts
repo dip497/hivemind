@@ -111,8 +111,9 @@ test("a phone uses the computer's offer: it shows the same words, is never someo
   // Asked again with a new offer, it says they match: it is the person's phone.
   const second = await desktop.evaluate((r) => window.hive.connectOffer(r), api);
   const yes = phoneConnects(second.link, "yes");
-  await expect(request.locator("[data-connect-request-words]")).toHaveText((await yes.words).join(" · "), { timeout: 20_000 });
-  await request.getByRole("button", { name: "It's me — the words match" }).click();
+  const asking = request.filter({ has: desktop.locator("[data-connect-request-words]", { hasText: (await yes.words).join(" · ") }) });
+  await expect(asking).toBeVisible({ timeout: 20_000 });
+  await asking.getByRole("button", { name: "It's me — the words match" }).click();
   const { code, last } = await yes.ended;
   expect(code).toBe(0);
   expect(JSON.parse(last)).toMatchObject({ device: me.deviceId, kind: "app", person: me.personId, profile: { name: "Priya" } });
