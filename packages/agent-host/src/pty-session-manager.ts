@@ -889,6 +889,12 @@ export class SessionManager {
     return Array.from(ids);
   }
 
+  /** What a live session runs with: what it was asked for, as its agent's launch made it. */
+  spawnedWith(id: string): SpawnSpec | undefined {
+    const s = this.sessions.get(id);
+    return s && !s.exited ? s.spec : undefined;
+  }
+
   /** Live and frozen sessions, for `hive ps`. */
   /** The command a live session runs. */
   commandOf(id: string): string | undefined {

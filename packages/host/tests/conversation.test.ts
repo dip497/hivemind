@@ -17,7 +17,7 @@ import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { readAgentManifest } from "@hivemind/agents/load";
 import { followConversation, lastSaid, pendingTool, readConversation, TAIL_BYTES, TAIL_ENTRIES, TOOL_MAX, toolUse } from "../src/conversation.ts";
-import { askingOf, conversations, LastSaid, transcriptOf, type Transcript } from "../src/conversations.ts";
+import { askingOf, conversationOf, conversations, LastSaid, transcriptOf, type Transcript } from "../src/conversations.ts";
 import { manifestFacts } from "../src/agent-list.ts";
 import { StatusStore } from "@hivemind/agent-host/status-store";
 
@@ -343,6 +343,30 @@ test("the tool use an agent waits on is read from its session file as it is now:
   fs.utimesSync(next, then, then);
   writeTrackedSession(sessions, "hm:t1", "s-b");
   assert.deepEqual(askingOf(held, "hm:t1", sessions, home), { name: "Bash", about: "mak2" });
+});
+
+test("the conversation a tile is in is the one recorded for it, else the one its command line names, for any agent that resumes one, never the newest in its folder; an agent that resumes none is in none", () => {
+  const sessions = path.join(tmp, `tile-sessions-${made++}`);
+  // Its store keeps a conversation for the folder its tile runs in.
+  const store = fs.mkdtempSync(path.join(tmp, "store-"));
+  fs.writeFileSync(path.join(store, "c.jsonl"), `${JSON.stringify({ id: "0b6c1a52-7d0e-4c55-9f43-2a8f6f2b9c11", cwd: "/home/p/api" })}\n`);
+  const folio = {
+    id: "folio", label: "Folio", bin: "folio", enabled: true,
+    session: { resume: { args: ["--resume", "{id}"], find: { strategy: "jsonl-header", root: store, cwdPath: "cwd", idPath: "id" } } },
+  } as unknown as AgentProviderDef;
+  const plain = { id: "plain", label: "Plain", bin: "plain", enabled: true } as unknown as AgentProviderDef;
+  setCatalog([folio, plain]);
+  const held = [{ workspace: "w", name: "api", repo: "/home/p/api", core: { frames: [], tiles: [
+    { id: "t1", kind: "folio", label: "Folio", cmd: "folio" },
+    { id: "t2", kind: "folio", label: "Folio", cmd: "folio", args: ["--resume", "s-named"] },
+    { id: "t3", kind: "plain", label: "Plain", cmd: "plain", args: ["--resume", "s-named"] },
+  ] } }] as never;
+  assert.equal(conversationOf(held, "t1", sessions), undefined);
+  assert.equal(conversationOf(held, "t2", sessions), "s-named");
+  writeTrackedSession(sessions, "hm:t1", "s-recorded");
+  writeTrackedSession(sessions, "hm:t2", "s-recorded-2");
+  writeTrackedSession(sessions, "hm:t3", "s-recorded-3");
+  assert.deepEqual(["t1", "hm:t2", "t3", "t9"].map((t) => conversationOf(held, t, sessions)), ["s-recorded", "s-recorded-2", undefined, undefined]);
 });
 
 test("what an agent last said, in a line: the first line of its last words, or the tool it last used and what about, what tools gave back passed over; at most 160 characters", () => {

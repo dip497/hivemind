@@ -107,7 +107,7 @@ import { StartPlaces } from "@hivemind/host/start-places";
 import { controlApi } from "@hivemind/host/control-api";
 import { views } from "@hivemind/host/views";
 import { listInstalledViews } from "@hivemind/core/views";
-import { askingOf, conversations, LastSaid, transcriptOf } from "@hivemind/host/conversations";
+import { askingOf, conversationOf, conversations, LastSaid, transcriptOf } from "@hivemind/host/conversations";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
@@ -1068,7 +1068,7 @@ const control: ControlPlane = new ControlPlane({
     endSession: (tileId, folder) => terminals.end(tileId, folder),
     sleepSession: (tileId, folder) => terminals.sleep(tileId, folder),
     wakeSession: (start) => wakeSpawned(hostStarted(), start),
-    sessionOf: (bare) => transcriptOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR))?.session || undefined,
+    sessionOf: (bare) => conversationOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)),
     sessionHeld: (id) => hasSession(id) || hasRemotePty(id),
     intents: hostIntents(),
     // `hive join`: in, the window the user is at opens the workspace, as the Join dialog's Open does.

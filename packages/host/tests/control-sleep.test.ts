@@ -295,6 +295,30 @@ test("a read of an agent's turn is answered at once that it is asleep, one alrea
   assert.deepEqual(await api.read("a1", 10_000), asleep);
 });
 
+test("two sleepers of one frame in one conversation: one is woken, the other is not, while it runs it", async () => {
+  const conversation = "0b6c1a52-7d0e-4c55-9f43-2a8f6f2b9c11";
+  const { p } = plane({ sessions: { a1: conversation, a3: conversation } });
+  const api = await p.api();
+  await api.sleep(REPO, "api", false);
+  const r = await api.wake(REPO, "api");
+  const first = r.woke.find((t) => t === "a1" || t === "a3")!;
+  assert.deepEqual(r.woke.filter((t) => t !== first), ["a2"]);
+  assert.deepEqual(r.skipped, [{ tile: first === "a1" ? "a3" : "a1", why: `tile ${first} runs this conversation now` }]);
+});
+
+test("put to sleep again in another conversation, a tile is asleep in that one", async () => {
+  const sessions: Record<string, string> = { a1: "0b6c1a52-7d0e-4c55-9f43-2a8f6f2b9c11" };
+  const { p } = plane({ sessions });
+  const api = await p.api();
+  await api.sleep(REPO, "a1", false);
+  assert.equal(p.conversationAsleep("hm:n1", ["--resume", sessions.a1!]), "a1");
+  await api.wake(REPO, "a1");
+  sessions.a1 = "6f1d0c2e-1111-4c55-9f43-2a8f6f2b9c22";
+  await api.sleep(REPO, "a1", false);
+  assert.equal(p.conversationAsleep("hm:n1", ["--resume", "0b6c1a52-7d0e-4c55-9f43-2a8f6f2b9c11"]), undefined);
+  assert.equal(p.conversationAsleep("hm:n1", ["--resume", sessions.a1]), "a1");
+});
+
 test("a sleeper closed is ended where it sleeps", async () => {
   const { p, calls } = plane();
   const api = await p.api();

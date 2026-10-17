@@ -11,7 +11,7 @@ import { SDK_ENV } from "@hivemind/agent-sdk";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import nodePath from "node:path";
-import type { AgentNodeParts, AgentProviderDef, DaemonPaths, ProviderResumeTransforms, ProviderSpawnContext, SpawnSpec } from "./types.js";
+import type { AgentNodeParts, AgentProviderDef, Conversation, DaemonPaths, ProviderResumeTransforms, ProviderSpawnContext, SpawnSpec } from "./types.js";
 
 export * from "./types.js";
 export * from "./catalog.js";
@@ -172,6 +172,7 @@ export interface ComposedResume {
   transformSpecOnRestore: (spec: SpawnSpec, id: string, ran?: SpawnSpec) => SpawnSpec;
   restoreRetryTransform: (spec: SpawnSpec) => SpawnSpec | null;
   restoreRetryMs: number;
+  conversationOf: (spec: SpawnSpec, id: string) => Conversation | null | undefined;
 }
 
 export function composeResume(ctx: ProviderSpawnContext): ComposedResume {
@@ -195,6 +196,13 @@ export function composeResumeFrom(providers: readonly AgentProvider[], ctx: Prov
         if (r) return r;
       }
       return null;
+    },
+    conversationOf: (spec, id) => {
+      for (const t of ts) {
+        const c = t.conversationOf?.(spec, id);
+        if (c !== undefined) return c;
+      }
+      return undefined;
     },
     // The window in which a fast death triggers a restore-retry: the largest any
     // provider asks for (5s floor).

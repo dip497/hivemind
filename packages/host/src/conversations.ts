@@ -4,7 +4,7 @@
  * sent to that caller as it comes, and the next session's from its start once the agent begins
  * another (as Claude Code's `/clear` does), until the caller goes.
  */
-import { agentForCmd, readTrackedSession, sessionFile, sessionFor, type AgentProviderDef, type AgentTranscript } from "@hivemind/agents/node";
+import { agentForCmd, readTrackedSession, sessionFile, sessionFor, sessionNamed, type AgentProviderDef, type AgentTranscript } from "@hivemind/agents/node";
 import { ApiError, text } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
@@ -48,8 +48,20 @@ export function transcriptOf(held: HeldBoard[], tile: string, tileSessionsDir: s
   const exists = def.session!.resume!.exists!;
   const format = def.session!.transcript!;
   const spec = { cwd: runsIn(held, bare) ?? "", args: record.args ?? [] };
-  const session = readTrackedSession(tileSessionsDir, `hm:${bare}`) ?? readTrackedSession(tileSessionsDir, bare) ?? sessionFor(def, spec);
+  const session = conversationOf(held, bare, tileSessionsDir) ?? sessionFor(def, spec);
   return { session: session ?? "", file: session ? sessionFile(exists, session, home) : null, format };
+}
+
+/** The conversation the agent of `tile`, among the boards `held`, is in: the one recorded for its
+ *  tile in `tileSessionsDir` (by its tracker hook, its agent's report, the daemon as it bound one at
+ *  its start or as it put it to sleep), else the one its command line names; undefined when neither
+ *  says. Never looked for in the agent's own store: that finds a folder's, not a tile's. */
+export function conversationOf(held: HeldBoard[], tile: string, tileSessionsDir: string): string | undefined {
+  const bare = toBareId(tile);
+  const record = held.flatMap((h) => h.core?.tiles ?? []).find((t) => t.id === bare) as { cmd?: string; args?: string[] } | undefined;
+  const def = agentForCmd(record?.cmd);
+  if (!record || !def?.session?.resume) return undefined;
+  return readTrackedSession(tileSessionsDir, `hm:${bare}`) ?? readTrackedSession(tileSessionsDir, bare) ?? sessionNamed(def, record.args ?? []);
 }
 
 /** The tool use the agent of `tile`, among the boards `held`, waits on, as its session file says

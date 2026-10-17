@@ -68,7 +68,7 @@ import { PeerLinks, tellGuestOf } from "./peer-links.js";
 import { answerKeys, heldBoards, manifestOf, participantNamed, runsIn, sessionFolder } from "./needs.js";
 import { agentControl } from "./agent-control.js";
 import { StartPlaces } from "./start-places.js";
-import { askingOf, conversations, LastSaid, transcriptOf } from "./conversations.js";
+import { askingOf, conversationOf, conversations, LastSaid, transcriptOf } from "./conversations.js";
 import { views } from "./views.js";
 import { listInstalledViews } from "@hivemind/core/views";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
@@ -410,7 +410,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       endSession: (ptyId, folder) => terminals.end(ptyId, folder),
       sleepSession: (ptyId, folder) => terminals.sleep(ptyId, folder),
       wakeSession: (start) => wakeSpawned(hostStarted, start),
-      sessionOf: (bare) => transcriptOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR))?.session || undefined,
+      sessionOf: (bare) => conversationOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR)),
       sessionHeld: holds,
       intents,
       join: (link) => joinWith(link),

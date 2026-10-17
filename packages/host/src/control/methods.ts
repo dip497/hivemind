@@ -514,6 +514,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const closed = deps.workspaces.removeTile(bareOf(tileId), CONTROL)?.tile;
     if (!closed) throw new ApiError("NOT_FOUND", `no open workspace has tile ${bareOf(tileId)}`);
     if (isTerminalKind(closed.kind) && !closed.session) deps.endSession(ptyId(tileId), closed.sleeping);
+    sleepers.delete(closed.id);
     forgetTileState(tileId);
     return { ok: true };
   };
@@ -529,7 +530,15 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   /** The tile other than `except` asleep in the conversation `session`: started again elsewhere, it
    *  would be written by two processes once that tile wakes. */
   const sleeperIn = (session: string, except?: string): TileRecord | undefined =>
-    asleep().find((t) => t.id !== except && deps.sessionOf?.(t.id) === session);
+    asleep().find((t) => t.id !== except && sleepsIn(t.id) === session);
+  /** The conversation each sleeper is in, read once: nothing runs to change it while it sleeps. */
+  const sleepers = new Map<string, string | undefined>();
+  const sleepsIn = (bare: string): string | undefined => {
+    if (!sleepers.has(bare)) sleepers.set(bare, deps.sessionOf?.(bare));
+    return sleepers.get(bare);
+  };
+  /** The tile each conversation is being woken in, while that wake is in flight. */
+  const wakingIn = new Map<string, string>();
   /** The tile asleep in a conversation that `args`, started in `tile`, would resume. */
   const conversationAsleep = (tile: string, args: readonly string[]): string | undefined =>
     args.map((a) => a.slice(a.indexOf("=") + 1)).filter(isSessionId).map((s) => sleeperIn(s, bareOf(tile))).find(Boolean)?.id;
@@ -608,10 +617,14 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       if (!def) return void skipped.push({ tile: tile.id, why: `no agent here runs ${tile.cmd ?? "it"}` });
       if (!tile.cmd) return void skipped.push({ tile: tile.id, why: "it runs nothing" });
       const start = { ptyId: ptyId(tile.id), cwd: tile.sleeping ?? folderOf({ repo, core }, tile.id), cmd: tile.cmd, args: (tile as TileRecord & { args?: string[] }).args ?? [] };
-      // Another tile running this conversation would write it as this one does.
+      // Another tile running this conversation, or waking it now, would write it as this one does.
       const session = deps.sessionOf?.(tile.id);
-      const twin = session ? core.tiles.find((t) => t.id !== tile.id && !t.sleeping && deps.sessionOf?.(t.id) === session && deps.sessionHeld(ptyId(t.id))) : undefined;
-      if (twin) return void skipped.push({ tile: tile.id, why: `tile ${twin.id} runs this conversation now` });
+      const claimed = session ? wakingIn.get(session) : undefined;
+      const twin = claimed && claimed !== tile.id
+        ? claimed
+        : session ? core.tiles.find((t) => t.id !== tile.id && !t.sleeping && deps.sessionOf?.(t.id) === session && deps.sessionHeld(ptyId(t.id)))?.id : undefined;
+      if (twin) return void skipped.push({ tile: tile.id, why: `tile ${twin} runs this conversation now` });
+      if (session) wakingIn.set(session, tile.id);
       try {
         const { pid } = await oneAtATime(tile.id, async () => {
           // A sleep it waited for may have left it awake.
@@ -621,6 +634,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           if (r.pid === -1) r = await deps.wakeSession(start);
           if (r.pid !== -1) {
             deps.workspaces.setSleeping(tile.id, null, CONTROL);
+            sleepers.delete(tile.id);
             deps.woke(tile.id, r.ready);
           }
           return r;
@@ -632,9 +646,12 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // Kept asleep, it could never be woken: shown again, it starts afresh.
         if (e instanceof NothingAsleep && tile.sleeping) {
           deps.workspaces.setSleeping(tile.id, null, CONTROL);
+          sleepers.delete(tile.id);
           return void skipped.push({ tile: tile.id, why: "what it saved is gone: shown again, it starts afresh" });
         }
         skipped.push({ tile: tile.id, why: why(e) });
+      } finally {
+        if (session && wakingIn.get(session) === tile.id) wakingIn.delete(session);
       }
     }));
     return { woke, skipped };

@@ -449,6 +449,16 @@ export interface ProviderResumeTransforms {
   restoreRetryTransform?: (spec: SpawnSpec) => SpawnSpec | null;
   /** Window in which a fast death triggers `restoreRetryTransform`. */
   restoreRetryMs?: number;
+  /** The conversation a restore of a session that ran with `spec` resumes (`byFolder`: found
+   *  only as the newest in its folder); null when it is this agent's and none is found, undefined
+   *  when it is not this agent's. */
+  conversationOf?: (spec: SpawnSpec, id: string) => Conversation | null | undefined;
+}
+
+/** A conversation a restore resumes. */
+export interface Conversation {
+  session: string;
+  byFolder?: true;
 }
 
 /** Everything the daemon generated that a provider might wire into a spawn: the

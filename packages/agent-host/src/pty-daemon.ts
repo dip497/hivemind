@@ -29,7 +29,7 @@ import {
 import { applyInitialPrompt, stripInitialPrompt } from "./initial-prompt.js";
 import { sanitizeShellEnv } from "./shell-env.js";
 import { titleBook } from "./title-book.js";
-import { AGENT_EVENT_METHOD, agentForCmd, composeResume, envToUnset, evictTrackedSession, parseAgentEvent, prepareProviders, TILE_SESSIONS_DIR, trackerSource, writeTrackedSession, setCatalog, TILE_ENV, type AgentEvent } from "@hivemind/agents/node";
+import { AGENT_EVENT_METHOD, agentForCmd, composeResume, envToUnset, evictTrackedSession, parseAgentEvent, prepareProviders, readTrackedSession, TILE_SESSIONS_DIR, trackerSource, writeTrackedSession, setCatalog, TILE_ENV, type AgentEvent } from "@hivemind/agents/node";
 import { resolveWindowsSpawn } from "@hivemind/agents/discover";
 import { agentEventHookSource } from "./hooks/agent-event-hook-source.js";
 import { startHookDoor } from "./hooks/hook-door.js";
@@ -281,6 +281,27 @@ function evictSnapshot(id: string): void {
   // stale ids behind.
   evictTrackedSession(tileSessionsDir, id);
   recordedSessions.delete(id);
+}
+/** Keep, as the one its tile resumes, the conversation of the session `id` about to sleep: woken,
+ *  it is that one, not the newest in its folder. Why it may not sleep; null when it may. */
+function pinConversation(id: string): string | null {
+  const ran = manager.spawnedWith(id);
+  const pinned = ran && resume.conversationOf(ran, id);
+  if (!ran || pinned === undefined) return null;
+  if (pinned === null) return "its conversation cannot be found: woken, it would start afresh";
+  if (pinned.byFolder) {
+    const agentOf = (spec: SpawnSpec) => path.basename(spec.cmd.trim().split(/\s+/)[0] ?? "");
+    const agent = agentOf(ran);
+    const twin = manager.list().find((other) => {
+      if (other === id) return false;
+      const runs = manager.spawnedWith(other);
+      if (runs) return agentOf(runs) === agent && runs.cwd === ran.cwd;
+      return readTrackedSession(tileSessionsDir, other) === pinned.session;
+    });
+    if (twin) return `its conversation is found only by its folder, which session '${twin}' shares`;
+  }
+  try { writeTrackedSession(tileSessionsDir, id, pinned.session); } catch { return "the conversation it resumes could not be kept"; }
+  return null;
 }
 function loadSnapshot(id: string): SessionSnapshot | undefined {
   const snap = readSnapshot(snapshotPath(id), id);
@@ -647,6 +668,8 @@ const server = net.createServer((sock) => {
       }
       case "sleep": {
         const { reqId, id } = msg;
+        const refused = pinConversation(id);
+        if (refused) { send({ t: "slept", reqId, id, error: refused }); break; }
         void manager.sleep(id).then((kept) => send({ t: "slept", reqId, id, ...(kept ? {} : { error: `nothing running as '${id}' to put to sleep, or its screen could not be saved` }) }));
         break;
       }

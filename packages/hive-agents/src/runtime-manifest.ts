@@ -204,31 +204,40 @@ export function manifestRuntime(
 }
 
 /**
- * The session this agent would resume, in the order a manifest asks for: the live one our
- * tracker hook recorded for this tile (it follows whatever the user did inside the agent),
- * then the id bound when the tile first spawned, then the one it was last resumed in, then
- * whatever its own store says.
+ * The session this agent would resume: the one recorded for this tile (by our tracker hook, which
+ * follows whatever the user did inside the agent, the agent's own report, its bind or its sleep),
+ * then the one its command line names, then the newest its own store keeps in its folder
+ * (`byFolder` false: never that one).
  */
 export function sessionFor(
   def: AgentProviderDef,
   spec: { cwd: string; args?: readonly string[] },
-  ctx: { tileId?: string; tileSessionsDir?: string; sessionRoot?: string } = {},
+  ctx: { tileId?: string; tileSessionsDir?: string; sessionRoot?: string; byFolder?: false } = {},
 ): string | undefined {
   const resume = def.session?.resume;
   if (!resume) return undefined;
-  if (resume.from?.tracked && ctx.tileId && ctx.tileSessionsDir) {
-    const tracked = readTrackedSession(ctx.tileSessionsDir, ctx.tileId);
-    if (tracked) return tracked;
+  if (ctx.tileId && ctx.tileSessionsDir) {
+    const recorded = readTrackedSession(ctx.tileSessionsDir, ctx.tileId);
+    if (recorded) return recorded;
   }
+  const named = sessionNamed(def, spec.args ?? []);
+  if (named || ctx.byFolder === false) return named;
+  return resume.find ? findSession(resume.find, spec.cwd, ctx.sessionRoot) : undefined;
+}
+
+/** The session `args` name for this agent: the id bound when the tile first spawned, then the one
+ *  it was last resumed in. */
+export function sessionNamed(def: AgentProviderDef, args: readonly string[]): string | undefined {
+  const resume = def.session?.resume;
+  if (!resume) return undefined;
   if (resume.from?.bound) {
-    const i = (spec.args ?? []).indexOf(resume.from.bound);
-    const bound = i >= 0 ? (spec.args ?? [])[i + 1] : undefined;
+    const i = args.indexOf(resume.from.bound);
+    const bound = i >= 0 ? args[i + 1] : undefined;
     if (bound && !bound.startsWith("-")) return bound;
   }
-  const resumed = (spec.args ?? []).indexOf(resume.args[0] ?? "\0");
-  const named = resumed >= 0 ? (spec.args ?? [])[resumed + 1] : undefined;
-  if (named && !named.startsWith("-") && resume.args[1]?.includes("{id}")) return named;
-  return resume.find ? findSession(resume.find, spec.cwd, ctx.sessionRoot) : undefined;
+  const resumed = args.indexOf(resume.args[0] ?? "\0");
+  const named = resumed >= 0 ? args[resumed + 1] : undefined;
+  return named && !named.startsWith("-") && resume.args[1]?.includes("{id}") ? named : undefined;
 }
 
 /** `spec` without the argument that hands the agent its hooks document, and that document. */
@@ -324,6 +333,14 @@ export function transformsFor(
     return exists ? !sessionExists(exists, id, paths.home) : !sessionListed(def, id);
   };
   return {
+    conversationOf: (spec, tileId) => {
+      if (!isThisAgent(spec) || !def.session?.resume) return undefined;
+      const ctx = { tileId, tileSessionsDir: paths.tileSessionsDir, sessionRoot: opts.sessionRoot };
+      const known = sessionFor(def, spec, { ...ctx, byFolder: false });
+      if (known) return { session: known };
+      const found = sessionFor(def, spec, ctx);
+      return found ? { session: found, byFolder: true } : null;
+    },
     transformSpecOnSpawn: (spec, tileId) => run(spec, tileId, "spawn"),
     transformSpecOnRestore: (spec, tileId, ran) => {
       // Only what it ran with is known (a snapshot of before): the hooks it was given go, so the
