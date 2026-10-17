@@ -8,8 +8,10 @@
 FROM rust:1-bookworm AS build
 WORKDIR /src
 COPY rust-toolchain.toml crates/hive-net/ .
-# The build's own files go with it: only the binary is kept, so the cached layer is not the target dir.
-RUN cargo build --release --locked && cp target/release/hive-net /hive-net && rm -rf target
+# The build's own files go with it: only the binary is kept, so the cached layer is not the target
+# dir, the crates it downloaded or the Rust rust-toolchain.toml installed.
+RUN cargo build --release --locked && cp target/release/hive-net /hive-net \
+  && rm -rf target "$CARGO_HOME/registry" "$(rustc --print sysroot)"
 
 # The phone page, as crates/hive-web/build.sh builds it, with the tools at the versions the
 # repository pins (crates/hive-web/tools.sh): the same bytes, and hash, as the release's.
@@ -25,7 +27,9 @@ COPY crates/hive-net/ crates/hive-net/
 COPY crates/hive-phone/ crates/hive-phone/
 COPY crates/hive-web/ crates/hive-web/
 COPY crates/vendor/ crates/vendor/
+# Only www/ is kept, as for the build above: not the target dir, the tools, the crates or the Rust.
 RUN tools=$(crates/hive-web/tools.sh /tools) && eval "$tools" && crates/hive-web/build.sh \
+  && rm -rf /src/crates/target /tools /root/.cargo/registry /root/.rustup/toolchains \
   && cd crates/hive-web/www && rm -rf app js tsconfig.json echo.html pkg/*.js pkg/*.d.ts pkg/package.json pkg/.gitignore
 
 # glibc and CA certificates, nothing else: no shell, no package manager.
