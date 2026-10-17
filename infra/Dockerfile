@@ -8,7 +8,8 @@
 FROM rust:1-bookworm AS build
 WORKDIR /src
 COPY rust-toolchain.toml crates/hive-net/ .
-RUN cargo build --release --locked && cp target/release/hive-net /hive-net
+# The build's own files go with it: only the binary is kept, so the cached layer is not the target dir.
+RUN cargo build --release --locked && cp target/release/hive-net /hive-net && rm -rf target
 
 # The phone page, as crates/hive-web/build.sh builds it, with the tools at the versions the
 # repository pins (crates/hive-web/tools.sh): the same bytes, and hash, as the release's.

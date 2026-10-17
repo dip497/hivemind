@@ -80,6 +80,10 @@ jobs:
         with:
           # The action's open-source cache (MIT); its default from v6 is a proprietary one.
           cache-provider: basic
+          # Written from every branch, not only main: a pull request's next push starts from its last
+          # build (dependencies, and the build cache org.gradle.caching keeps there), not cold. Read
+          # only, it restored nothing and the step took 7 min every time (run 38965971758).
+          cache-read-only: false
 
       - name: Build (the core through buildCore), unit tests and lint
         working-directory: apps/android
