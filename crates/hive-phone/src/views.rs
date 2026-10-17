@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{bail, Context, Result};
 use base64::{engine::general_purpose::STANDARD, Engine};
-use hive_net::frames::{read_frame, write_frame};
+use hive_net::frames::write_frame;
 use iroh::endpoint::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -253,8 +253,7 @@ impl Session {
             std::future::pending::<Result<Ended>>().await
         };
         let hearing = async {
-            while let Some(frame) = read_frame(&mut recv).await? {
-                let message: Value = serde_json::from_slice(&frame)?;
+            while let Some(message) = crate::workspace::read_message(&mut recv).await? {
                 if message.get("id").and_then(Value::as_u64) == Some(closing) {
                     result_of(message)?;
                     return Ok(Ended::Closed);

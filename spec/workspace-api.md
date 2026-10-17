@@ -105,7 +105,10 @@ person's own devices are the owner, there as here. What the host answers of ever
 only their events. One of the owner's phones (`pairing.md` 0.3) opens a workspace's API on an `api`
 stream of its own connection, the stream's first frame naming it (`{ "t": "open", "workspace":
 "<id>" }`; any other first frame, or a workspace not held there, closes the connection), as the
-owner. It opens one for each thing it does at once (a terminal watched, a conversation followed, a
+owner. Its first frame may offer `"z": "deflate"` (0.27): the host then sends each frame of over
+16 KB on that stream deflated, as `z:` and the frame's UTF-8 as raw DEFLATE (RFC 1951) in base64,
+each frame alone and in the order sent; a frame of JSON never starts so (`conformance/squeeze.json`).
+A host that does not know `z` sends every frame as it is. It opens one for each thing it does at once (a terminal watched, a conversation followed, a
 call), on that one connection: each is a connection of its own, for the workspace it names, its
 answers and events on it alone, until it ends (0.13). It may
 call nothing there but `terminal.open` with `attachOnly` (it watches a terminal, its screen and

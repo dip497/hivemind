@@ -84,7 +84,7 @@ impl Workspace {
     /// Open `workspace` on `connection`, to the device that holds it.
     pub async fn open(connection: &Connection, workspace: &str) -> Result<Self> {
         let (mut send, recv) = hive_net::ws::open(connection, "api").await?;
-        let hello = json!({ "t": "open", "workspace": workspace });
+        let hello = json!({ "t": "open", "workspace": workspace, "z": crate::squeeze::OFFER });
         write_frame(&mut send, hello.to_string().as_bytes()).await?;
         Ok(Self {
             send,
@@ -104,10 +104,7 @@ impl Workspace {
 
     /// The next message: an answer, or one or more events. None once the device closed it.
     async fn message(&mut self) -> Result<Option<Value>> {
-        Ok(match read_frame(&mut self.recv).await? {
-            Some(frame) => Some(serde_json::from_slice(&frame)?),
-            None => None,
-        })
+        read_message(&mut self.recv).await
     }
 
     /// Ask `method` and wait for its result; the events that come meanwhile go unread.
@@ -123,6 +120,13 @@ impl Workspace {
             }
         }
     }
+}
+
+pub(crate) async fn read_message(recv: &mut RecvStream) -> Result<Option<Value>> {
+    Ok(match read_frame(recv).await? {
+        Some(frame) => Some(serde_json::from_slice(&crate::squeeze::unsqueezed(frame)?)?),
+        None => None,
+    })
 }
 
 /// An answer's result, or why it was refused.
@@ -277,9 +281,9 @@ pub async fn watch(
     let watched = async {
         // The output taken, in UTF-16 units as the device counts it, and how much was told.
         let (mut taken, mut told) = (0u64, 0u64);
-        while let Some(frame) = read_frame(&mut recv).await? {
+        while let Some(message) = read_message(&mut recv).await? {
             // A moment's events come as one frame.
-            let events = match serde_json::from_slice::<Value>(&frame)? {
+            let events = match message {
                 Value::Array(events) => events,
                 m if m.get("id").and_then(Value::as_u64) == Some(opened) => {
                     // Attached to no session: there is none.

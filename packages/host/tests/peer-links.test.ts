@@ -14,6 +14,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
+import { inflateRawSync } from "node:zlib";
 import { AccessLists } from "@hivemind/workspace-host/access";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { certifyDevice, idOf, newSeed } from "@hivemind/workspace-host/identity";
@@ -282,6 +283,31 @@ test("a phone is answered which workspaces its computer holds and what waits on 
   await wait(200);
   assert.deepEqual([...phone.heard].filter(([s, h]) => s !== "device" && h.length > 0).map(([s]) => s), [], "the phone hears on no other stream");
   assert.equal(c.daemons.length, 1, "no connection to the daemon for the phone");
+});
+
+test("a phone that reads deflated frames is sent its long ones deflated, in the order they were sent; one that does not, and the short ones, as they are", async () => {
+  const c = computer();
+  const phone = c.connect(c.phone);
+  const watch = { tileId: "hm:t1", tile: "t1", cwd: `hive://${c.workspace}`, cmd: "", cols: 80, rows: 24, attachOnly: true };
+  const reads = phone.open("api");
+  const old = phone.open("api");
+  reads.send({ t: "open", workspace: c.workspace, z: "deflate" });
+  old.send({ t: "open", workspace: c.workspace });
+  reads.send({ id: 1, method: "terminal.open", params: [watch] });
+  old.send({ id: 1, method: "terminal.open", params: [watch] });
+  await until(() => reads.heard.length >= 1 && old.heard.length >= 1);
+  const long = "build ok · résumé 🐝\r\n".repeat(1_200);
+  c.output("hm:t1", long);
+  await wait(60);
+  c.output("hm:t1", "done\r\n");
+  await until(() => reads.heard.length >= 3 && old.heard.length >= 3);
+  const said = (frames: string[]) => frames.slice(1).map((f) => (f.startsWith("z:") ? inflateRawSync(Buffer.from(f.slice(2), "base64")).toString() : f));
+  const data = (frames: string[]) => said(frames).map((f) => (JSON.parse(f) as { params: [string, string] }).params[1]);
+  assert.deepEqual(data(reads.heard), [long, "done\r\n"]);
+  assert.deepEqual(data(old.heard), [long, "done\r\n"]);
+  assert.deepEqual(reads.heard.slice(1).map((f) => f.startsWith("z:")), [true, false]);
+  assert.ok(reads.heard[1]!.length < long.length / 3, `deflated to ${reads.heard[1]!.length} of ${long.length}`);
+  assert.deepEqual(old.heard.slice(1).map((f) => f.startsWith("z:")), [false, false]);
 });
 
 test("a phone opens a workspace to watch and type into its terminals and answer and message its agents, as the owner's device; anything else there (starting a terminal, sizing one, giving or taking a keyboard) is refused, and one opened without naming a workspace here is closed", async () => {

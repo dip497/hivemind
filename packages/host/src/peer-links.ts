@@ -57,6 +57,7 @@ import type { Moved } from "@hivemind/workspace-host/doc-sync";
 import type { Hosting } from "./hosting.js";
 import { MACHINE_OFFER, grantOf, type Grant } from "./machine-share.js";
 import { serveFiles } from "./device-files.js";
+import { SQUEEZE_OFFER, squeezed } from "./squeeze.js";
 import { heldBoards, needsOf, workingIn, type HeldBoard, type Need, type WaitingStatus } from "./needs.js";
 import { agentsOf, type AgentFacts, type AgentItem } from "./agent-list.js";
 import { agentById } from "@hivemind/agents";
@@ -97,10 +98,11 @@ export const phoneMay = (method: string, params: unknown[]): boolean =>
   (method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true) || PHONE_MAY.has(method);
 
 /** The workspace a phone's `api` stream opens, as its first frame names it; null for anything else. */
-function opened(text: string): string | null {
+function opened(text: string): { workspace: string; squeeze: boolean } | null {
   try {
-    const m = JSON.parse(text) as { t?: unknown; workspace?: unknown };
-    return m.t === "open" && typeof m.workspace === "string" && /^[0-9a-f]{32}$/.test(m.workspace) ? m.workspace : null;
+    const m = JSON.parse(text) as { t?: unknown; workspace?: unknown; z?: unknown };
+    if (m.t !== "open" || typeof m.workspace !== "string" || !/^[0-9a-f]{32}$/.test(m.workspace)) return null;
+    return { workspace: m.workspace, squeeze: m.z === SQUEEZE_OFFER };
   } catch {
     return null;
   }
@@ -326,11 +328,12 @@ export class PeerLinks {
       link.streams("api", (api) => {
         const off = api.on((text) => {
           off();
-          const workspace = opened(text);
+          const open = opened(text);
+          const workspace = open?.workspace;
           const repo = workspace ? store.repoOf(workspace) : null;
           const person = workspace ? lists.personOf(workspace, link.peer) : null;
           if (!workspace || !repo || !person) return link.close("removed");
-          servePeer(server, api, {
+          servePeer(server, open?.squeeze ? squeezed(api) : api, {
             // The owner's device, held to what a phone does.
             actor: { kind: "peer", person, device: link.peer, access: "owner" },
             workspace,

@@ -25,6 +25,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
+- Phones open long conversations and terminal histories faster: the computer sends what is over 16 KB deflated, a third of the bytes or less, to a phone that says it reads it. Older phones and computers keep working with each other as before. Workspace API 0.27.
 - Reopening the app no longer makes the terminal daemon rebuild every terminal's saved screen: it hands back the one it already has, so typing into terminals is not held up while the app starts.
 - Canvas: panning no longer restyles and re-rasters every tile at the start and end of a pan, and the end of a pan re-renders nothing: about half the main-thread work per wheel notch on a large board.
 - Startup: a window no longer starts eight diff-highlighting workers or loads the diff library before a diff is shown (2 MB less JavaScript to start), its first screen's fonts load before it is drawn, and it opens without waiting for the terminal daemon's build check.

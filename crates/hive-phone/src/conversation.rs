@@ -6,7 +6,6 @@
 use std::ops::Not;
 
 use anyhow::{Context, Result};
-use hive_net::frames::read_frame;
 use iroh::endpoint::Connection;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
@@ -200,10 +199,9 @@ pub async fn follow(
     let asked = w.ask("agent.conversation", params).await?;
     let mut handed = Handed::default();
     loop {
-        let Some(frame) = read_frame(&mut w.recv).await? else {
+        let Some(message) = crate::workspace::read_message(&mut w.recv).await? else {
             return Ok(());
         };
-        let message: Value = serde_json::from_slice(&frame)?;
         if message.get("id").and_then(Value::as_u64) == Some(asked) {
             let answer = crate::workspace::result_of(message)?;
             let cursor = answer
