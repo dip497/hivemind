@@ -1011,6 +1011,16 @@ function writeTile(tileId: string, data: string, paste?: boolean): boolean {
 let said: LastSaid | null = null;
 const lastSaid = (): LastSaid => (said ??= new LastSaid({ tileSessionsDir: path.join(app.getPath("userData"), TILE_SESSIONS_DIR) }));
 
+/** How the host watches a session it starts or wakes. */
+function hostStarted() {
+  return {
+    terminals,
+    holds: (ptyId: string) => onYourDevices.holds(ptyId) || hasRemotePty(ptyId) || hasSession(ptyId),
+    status: (bare: string) => { const s = control.status.get(bare); return s && tileStatusOf(s).status; },
+    screen: (ptyId: string) => (hasRemotePty(ptyId) ? viewportRemotePty(ptyId) : ptyDaemon.viewportPty(ptyId)),
+  };
+}
+
 const control: ControlPlane = new ControlPlane({
   dir: () => app.getPath("userData"),
   waitsChanged: () => agentFeed()?.changed(),
@@ -1024,12 +1034,9 @@ const control: ControlPlane = new ControlPlane({
   // The host starts a spawned tile, its task on the agent's command line where it takes one there:
   // a window that shows it joins it, so whichever opens it first, the agent gets its task.
   spawned: (spawn) => queueMicrotask(() => void startSpawned({
+    ...hostStarted(),
     store: workspaceStore(),
-    terminals,
-    holds: (ptyId) => onYourDevices.holds(ptyId) || hasRemotePty(ptyId) || hasSession(ptyId),
     write: (ptyId, data, paste) => void writeTile(ptyId, data, paste),
-    status: (bare) => { const s = control.status.get(bare); return s && tileStatusOf(s).status; },
-    screen: (ptyId) => (hasRemotePty(ptyId) ? viewportRemotePty(ptyId) : ptyDaemon.viewportPty(ptyId)),
     onWarn: (m) => console.warn(`[hcp] ${m}`),
   }, spawn)),
   windowsUp: () => openWindows().length > 0,
@@ -1060,7 +1067,7 @@ const control: ControlPlane = new ControlPlane({
     launchOptions: (agentId) => stringOptions(pluginOptions(getAppSettings().plugins.state, "agent", agentId)),
     endSession: (tileId, folder) => terminals.end(tileId, folder),
     sleepSession: (tileId, folder) => terminals.sleep(tileId, folder),
-    wakeSession: (start) => wakeSpawned(terminals, start),
+    wakeSession: (start) => wakeSpawned(hostStarted(), start),
     sessionOf: (bare) => transcriptOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR))?.session || undefined,
     sessionHeld: (id) => hasSession(id) || hasRemotePty(id),
     intents: hostIntents(),

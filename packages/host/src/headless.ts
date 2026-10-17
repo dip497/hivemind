@@ -372,6 +372,12 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   // A tile's last line changed: the person's phone's Home is told, once it is served.
   let homeChanged = (): void => {};
   const said = new LastSaid({ tileSessionsDir: path.join(o.dir, TILE_SESSIONS_DIR) });
+  // How the host watches a session it starts or wakes.
+  const hostStarted = {
+    terminals, holds,
+    status: (bare: string) => { const s = control.status.get(bare); return s && tileStatusOf(s).status; },
+    screen: (ptyId: string) => (endpoint.has(ptyId) ? endpoint.viewport(ptyId) : Promise.resolve(null)),
+  };
   const control: ControlPlane = new ControlPlane({
     dir: () => o.dir,
     waitsChanged: () => agentFeed?.changed(),
@@ -384,10 +390,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     // Nobody lays a spawned tile out: the host starts it, once it is in its workspace.
     spawned: (spawn) => {
       queueMicrotask(() => void startSpawned({
-        store, terminals, holds,
+        ...hostStarted, store,
         write: (ptyId, data, paste) => sessions.write(ptyId, data, paste),
-        status: (bare) => { const s = control.status.get(bare); return s && tileStatusOf(s).status; },
-        screen: (ptyId) => (endpoint.has(ptyId) ? endpoint.viewport(ptyId) : Promise.resolve(null)),
         onWarn: o.onWarn,
       }, spawn));
     },
@@ -405,7 +409,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       launchOptions: (agentId) => stringOptions(pluginOptions(catalog.settings().plugins.state, "agent", agentId)),
       endSession: (ptyId, folder) => terminals.end(ptyId, folder),
       sleepSession: (ptyId, folder) => terminals.sleep(ptyId, folder),
-      wakeSession: (start) => wakeSpawned(terminals, start),
+      wakeSession: (start) => wakeSpawned(hostStarted, start),
       sessionOf: (bare) => transcriptOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR))?.session || undefined,
       sessionHeld: holds,
       intents,

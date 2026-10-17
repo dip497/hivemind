@@ -145,8 +145,8 @@ export interface MethodDeps {
   /** A tile's session was put to sleep: its turn is over. Its exit says so too, when something here
    *  was attached to it; twice is the same as once. */
   slept(bare: string): void;
-  /** A tile's session was woken: what waited for it is told once it is up. */
-  woke(bare: string): void;
+  /** A tile's session was woken: what waited for it is told once it is up (`ready`, at the latest). */
+  woke(bare: string, ready?: Promise<void>): void;
   /** What the agent of a tile waits on, as the person's devices are told it. */
   waitingOf: (bareTile: string) => AgentItem["waiting"];
   turns: TurnTracker;
@@ -197,8 +197,9 @@ export interface MethodDeps {
    *  woken. Rejects with why it cannot. */
   sleepSession: (ptyId: string, folder: string) => Promise<void>;
   /** Wake the session a tile runs (by its pty id) where it sleeps, its agent resumed, and keep it
-   *  running whoever shows it. `pid` -1: no answer in time. Rejects with why it cannot. */
-  wakeSession: (start: { ptyId: string; cwd: string; cmd: string; args: string[] }) => Promise<{ pid: number }>;
+   *  running whoever shows it. `pid` -1: no answer in time; `ready` settles once its agent is at its
+   *  prompt. Rejects with why it cannot. */
+  wakeSession: (start: { ptyId: string; cwd: string; cmd: string; args: string[] }) => Promise<{ pid: number; ready?: Promise<void> }>;
   /** The conversation the agent of a tile (bare id) keeps, as this machine knows it; undefined
    *  when it knows none. */
   sessionOf?: (bareTile: string) => string | undefined;
@@ -620,7 +621,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           if (r.pid === -1) r = await deps.wakeSession(start);
           if (r.pid !== -1) {
             deps.workspaces.setSleeping(tile.id, null, CONTROL);
-            deps.woke(tile.id);
+            deps.woke(tile.id, r.ready);
           }
           return r;
         });

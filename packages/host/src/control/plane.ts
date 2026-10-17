@@ -218,7 +218,7 @@ export class ControlPlane {
       deliverToTile: (ptyId, text, onSent) => this.mailbox.deliver(ptyId, text, onSent),
       inbox: this.inbox,
       slept: (bare) => this.slept(bare),
-      woke: (bare) => this.woke(bare),
+      woke: (bare, ready) => this.woke(bare, ready),
       waitingOf: (bare) => o.waitingOf?.(bare),
       turns: this.turns,
       recorder: this.recorder,
@@ -328,9 +328,12 @@ export class ControlPlane {
     this.made?.asleep(bare);
   }
 
-  /** The session of `tileId` was woken: what waited for it is told once it is up. */
-  woke(tileId: string): void {
-    this.mailbox.woke(toPtyId(tileId));
+  /** The session of `tileId` was woken: what waited for it is told once it is up; `ready` settles
+   *  once its screen has. */
+  woke(tileId: string, ready?: Promise<void>): void {
+    const pty = toPtyId(tileId);
+    this.mailbox.woke(pty);
+    void ready?.then(() => this.mailbox.ready(pty));
     this.inbox.remind(toBareId(tileId));
   }
 

@@ -61,6 +61,8 @@ function plane(o: { slowSleep?: number; sleepFails?: Set<string>; noAnswer?: Set
   const running = new Set(["a1", "a2", "a3", "a4", "a5"].filter((t) => !o.asleep?.[t]).map((t) => `hm:${t}`));
   const writes: Array<{ to: string; data: string }> = [];
   const calls: string[] = [];
+  /** Settles a woken tile's screen. */
+  const settled = new Map<string, () => void>();
   const p = new ControlPlane({
     dir: () => dir,
     publish: () => {},
@@ -85,7 +87,7 @@ function plane(o: { slowSleep?: number; sleepFails?: Set<string>; noAnswer?: Set
         if (o.noAnswer?.delete(start.ptyId)) return { pid: -1 };
         if (o.gone?.has(start.ptyId)) throw new NothingAsleep(`nothing asleep as '${start.ptyId}'`);
         running.add(start.ptyId);
-        return { pid: 42 };
+        return { pid: 42, ready: new Promise<void>((r) => settled.set(start.ptyId.slice(3), r)) };
       },
       sessionOf: (bare: string) => o.sessions?.[bare],
       sessionHeld: (pty: string) => running.has(pty),
@@ -96,7 +98,8 @@ function plane(o: { slowSleep?: number; sleepFails?: Set<string>; noAnswer?: Set
   } as unknown as ControlPlaneOptions);
   const asleepIn = (tile: string) => workspaces.getCore(REPO)?.tiles.find((t) => t.id === tile)?.sleeping;
   const typed = (tile: string) => writes.filter((w) => w.to === `hm:${tile}`).map((w) => w.data).join("");
-  return { p, calls, asleepIn, typed, running };
+  const settle = (tile: string) => settled.get(tile)!();
+  return { p, calls, asleepIn, typed, running, settle };
 }
 
 const sorted = <T extends { slept?: string[]; woke?: string[]; skipped: Array<{ tile: string }> }>(r: T): T =>
@@ -158,7 +161,7 @@ test("a sleep that fails is asked once more, and then leaves its tile awake, say
 });
 
 test("asleep, an agent keeps its name and is not counted as ended; nothing is typed into it, and what was sent it is told once it is up again", async () => {
-  const { p, typed } = plane();
+  const { p, typed, settle } = plane();
   p.event("agent.event", { tileId: "hm:a1", event: "turn.started" });
   p.status.title("a1", "Fix the login");
   const api = await p.api();
@@ -177,18 +180,38 @@ test("asleep, an agent keeps its name and is not counted as ended; nothing is ty
   assert.deepEqual([typed("a1"), typed("a3")], ["", ""], "nothing reaches a session that is not running");
 
   assert.deepEqual(sorted(await api.wake(REPO, undefined)), { woke: ["a1", "a3"], skipped: [] });
-  await new Promise((r) => setTimeout(r, 600));
-  assert.deepEqual([typed("a1"), typed("a3")], ["", ""], "nothing is typed into an agent as it starts");
-  await new Promise((r) => setTimeout(r, 1800));
-  assert.match(typed("a3"), /hive ctl inbox/, "one that reports no turns is told once it has had a moment to start");
-  assert.equal(typed("a1"), "", "one that reports its turns waits until it says it is up");
-  p.event("agent.event", { tileId: "hm:a1", event: "session.started" });
   await new Promise((r) => setTimeout(r, 2500));
-  assert.match(typed("a1"), /hive ctl inbox/, "once it says it is up, it is told what came while it slept");
+  assert.deepEqual([typed("a1"), typed("a3")], ["", ""], "nothing is typed into an agent as it starts");
+  // a1 has reported turns, and says nothing as it starts.
+  settle("a1");
+  await new Promise((r) => setTimeout(r, 600));
+  assert.match(typed("a1"), /hive ctl inbox/, "told once its screen has settled");
+  assert.equal(typed("a3"), "");
+  p.event("agent.event", { tileId: "hm:a3", event: "session.started" });
+  await new Promise((r) => setTimeout(r, 2500));
+  assert.match(typed("a3"), /hive ctl inbox/, "or once it says it is up, whichever comes first");
 });
 
-test("one asleep since before this host started is told, once woken, what was sent it meanwhile", async () => {
-  const { p, typed } = plane({ asleep: { a5: "ssh://me@box/web" } });
+test("one woken that neither says it is up nor settles is told what waited after a minute", async (t) => {
+  const { p, typed } = plane();
+  const api = await p.api();
+  await api.sleep(REPO, "a3", false);
+  api.connect("a2", "a3");
+  p.event("agent.event", { tileId: "hm:a2", event: "turn.started" });
+  p.event("agent.reply", { tileId: "hm:a2", text: "done" });
+  p.event("agent.event", { tileId: "hm:a2", event: "turn.ended" });
+  await new Promise((r) => setTimeout(r, 300));
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  await api.wake(REPO, "a3");
+  t.mock.timers.tick(59_000);
+  assert.equal(typed("a3"), "");
+  t.mock.timers.tick(1_000);
+  t.mock.timers.tick(300);
+  assert.match(typed("a3"), /hive ctl inbox/);
+});
+
+test("one asleep since before this host started is told, once woken and settled, what was sent it meanwhile", async () => {
+  const { p, typed, settle } = plane({ asleep: { a5: "ssh://me@box/web" } });
   const api = await p.api();
   api.connect("a2", "a5");
   p.event("agent.event", { tileId: "hm:a2", event: "turn.started" });
@@ -197,9 +220,10 @@ test("one asleep since before this host started is told, once woken, what was se
   await new Promise((r) => setTimeout(r, 300));
   assert.equal(typed("a5"), "");
   assert.deepEqual(await api.wake(REPO, "a5"), { woke: ["a5"], skipped: [] });
-  await new Promise((r) => setTimeout(r, 600));
+  await new Promise((r) => setTimeout(r, 2500));
   assert.equal(typed("a5"), "", "nothing is typed into an agent as it starts");
-  await new Promise((r) => setTimeout(r, 2000));
+  settle("a5");
+  await new Promise((r) => setTimeout(r, 600));
   assert.match(typed("a5"), /hive ctl inbox/);
 });
 

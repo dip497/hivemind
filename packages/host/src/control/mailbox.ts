@@ -49,6 +49,9 @@ const IDLE_SETTLE_MS = 250;
  *  held message is typed: typed sooner, it lands in the turn that is starting. */
 const SUBMIT_SETTLE_MS = 2000;
 
+/** How long a woken agent that never says it is up, nor settles, is waited for. */
+const WAKE_WAIT_MS = 60_000;
+
 /** A person who typed this recently may be writing a message of their own to the working
  *  agent: nothing is typed over it. */
 const TYPING_QUIET_MS = 5000;
@@ -160,12 +163,17 @@ export class Mailbox {
     this.cancelRelease(ptyId);
   }
 
-  /** Woken, it comes back at its prompt: what waited goes once its agent says its session is up,
-   *  or, from one that reports no turns, once it has had a moment to start. */
+  /** Woken, it comes back at its prompt: what waited goes once its agent says its session is up
+   *  (`started`) or its screen has settled (`ready`), whichever is first, or after WAKE_WAIT_MS. */
   woke(ptyId: string): void {
     this.asleep.delete(ptyId);
     this.waking.add(ptyId);
-    if (!this.managed.has(ptyId)) setTimeout(() => this.up(ptyId, IDLE_SETTLE_MS), SUBMIT_SETTLE_MS).unref?.();
+    setTimeout(() => this.up(ptyId, IDLE_SETTLE_MS), WAKE_WAIT_MS).unref?.();
+  }
+
+  /** A woken agent's screen has settled: it is at its prompt. */
+  ready(ptyId: string): void {
+    this.up(ptyId, IDLE_SETTLE_MS);
   }
 
   /** The tile's agent says its session is up (it also says so mid-turn, after compacting). */

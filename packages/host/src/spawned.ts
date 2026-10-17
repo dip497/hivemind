@@ -12,16 +12,41 @@ import { deliversPromptViaArgv } from "@hivemind/agent-host/agent-io";
 import { AgentStart, START_TICK_MS } from "@hivemind/agent-host/agent-start";
 import { typeKeys } from "@hivemind/agent-host/keys";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
-import { toPtyId } from "@hivemind/workspace-api/tile-id";
+import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
 import type { Terminals } from "./terminals.js";
 
-/** The size a session the host starts runs at, until someone shows it at theirs. */
 /** Wake the session `start` names where it sleeps, its agent resumed, and keep it running whoever
- *  shows it, as a spawn here is. */
-export function wakeSpawned(terminals: Terminals, start: { ptyId: string; cwd: string; cmd: string; args: string[] }): Promise<{ pid: number }> {
-  return terminals.own({ tileId: start.ptyId, cwd: start.cwd, cmd: start.cmd, args: start.args, cols: COLS, rows: ROWS, wake: true }, { data: () => {}, exit: () => {} });
+ *  shows it, as a spawn here is. `ready` settles once its screen has, as a first task waits for: the
+ *  agent is at its prompt (or it ended). */
+export async function wakeSpawned(
+  o: Pick<SpawnedOptions, "terminals" | "holds" | "status" | "screen">,
+  start: { ptyId: string; cwd: string; cmd: string; args: string[] },
+): Promise<{ pid: number; ready: Promise<void> }> {
+  const settle = new AgentStart(undefined, Date.now());
+  let dirty = true;
+  let ended = false;
+  const { pid } = await o.terminals.own(
+    { tileId: start.ptyId, cwd: start.cwd, cmd: start.cmd, args: start.args, cols: COLS, rows: ROWS, wake: true },
+    { data: () => { dirty = true; }, exit: () => { ended = true; } },
+  );
+  const ready = new Promise<void>((resolve) => {
+    if (pid === -1) return resolve();
+    let looking = false;
+    const tick = setInterval(() => {
+      if (looking) return;
+      if (ended || !o.holds(start.ptyId)) return void (clearInterval(tick), resolve());
+      looking = true;
+      void o.screen(start.ptyId).then((screen) => {
+        if (settle.settled(dirty, o.status(toBareId(start.ptyId)), screen ?? "")) { clearInterval(tick); resolve(); }
+        dirty = false;
+      }, () => {}).finally(() => { looking = false; });
+    }, START_TICK_MS);
+    tick.unref?.();
+  });
+  return { pid, ready };
 }
 
+/** The size a session the host starts runs at, until someone shows it at theirs. */
 const COLS = 120;
 const ROWS = 36;
 
