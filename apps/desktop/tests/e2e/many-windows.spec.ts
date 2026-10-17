@@ -285,22 +285,24 @@ test("two windows share where tiles and notes are, and each keeps its own camera
     await addFromMenu(w, "note", text);
     return at;
   };
-  const olderBoard = await second.evaluate((r) => window.hive.workspaceObjectsSync(r), repo);
   await note(page, "from the first");
   for (const w of windows) await expect.poll(() => notes(w)).toEqual(["from the first"]);
-  // So does a save of the board from before the note.
-  await second.evaluate(([r, b]) => {
-    const objects = Object.fromEntries((b as Array<{ id: string }>).map((o) => [o.id, o]));
-    window.hive.workspaceEditObjectsSync(r, { objects, base: objects } as never);
-  }, [repo, olderBoard] as const);
-  await page.waitForTimeout(300);
-  for (const w of windows) expect(await notes(w)).toEqual(["from the first"]);
   await note(second, "from the second");
   for (const w of windows) await expect.poll(async () => (await notes(w)).sort()).toEqual(["from the first", "from the second"]);
   const off = (await emptySpot(page))!;
   await page.mouse.click(off.x, off.y); // the canvas, off the note
   await page.keyboard.press("Control+z");
   for (const w of windows) await expect.poll(() => notes(w)).toEqual(["from the second"]);
+
+  // An edit made from an older reading of a note keeps what was written in it since.
+  type Note = { id: string; text?: string; x?: number };
+  const board = (w: Page) => w.evaluate((r) => window.hive.workspaceObjectsSync(r) as unknown as Note[], repo);
+  const [older] = await board(second);
+  await page.evaluate(([r, o]) => window.hive.workspaceEditObjectsSync(r, { objects: { [o.id]: { ...o, text: "from the second, edited" } }, base: { [o.id]: o } } as never), [repo, older!] as const);
+  for (const w of windows) await expect.poll(() => notes(w)).toEqual(["from the second, edited"]);
+  await second.evaluate(([r, o]) => window.hive.workspaceEditObjectsSync(r, { objects: { [o.id]: { ...o, x: (o.x ?? 0) + 40 } }, base: { [o.id]: o } } as never), [repo, older!] as const);
+  for (const w of windows) await expect.poll(async () => (await board(w)).map(({ text, x }) => ({ text, x }))).toEqual([{ text: "from the second, edited", x: (older!.x ?? 0) + 40 }]);
+  for (const w of windows) await expect.poll(() => notes(w)).toEqual(["from the second, edited"]);
 
   await second.close();
   hive(["ctl", "close", shell]);
