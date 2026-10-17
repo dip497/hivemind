@@ -1,6 +1,6 @@
 # An agent's hook event in microseconds
 
-Status: accepted after one review round, 2026-10-17. Building.
+Status: accepted after three review rounds, 2026-10-17. Steps 1, 3 (the field), 4, 5, 6 and 7 built, and the round 3 fixes. Not built: step 2 (the door records sessions, which needs the door to know the sessions folder); Claude's and Codex's switch to `reply:` is a change to their published manifests in hivemind-plugins. See "Built".
 
 ## Verdict
 
@@ -8,8 +8,10 @@ Cut the work at its source, then keep every derived answer until what it came fr
 
 1. The hook process keeps only the payload fields the host reads, so the daemon never parses a
    tool's output. The host names the fields, per hook entry; `hive-net hook` only applies the list.
-2. Every hook of ours runs native where hive-net is: the session tracker and the turn's reply too
-   (a manifest `reply:` field path on `emit: turn.ended`), so no turn starts a 64-100 MB runtime.
+2. Every hook of ours that only reports runs native where hive-net is: the session tracker and the
+   turn's reply too (a manifest `reply:` field path on `emit: turn.ended`), so Claude's and Codex's
+   turns start no runtime. The scripts left (Kiro's supervision check, Hermes's and Droid's turn
+   ends) are written ceilings with their cost and upgrade path.
 3. Main answers "which agent is this tile" from a memo keyed on the store's core identity, with a
    tile index, and records sessions in memory: no per-event folder of boards, no per-event file read.
 4. A tile's transcript is looked up when its status changes, not every second, and what its file
@@ -181,9 +183,11 @@ agent count, set it), while the agent list was quadratic.
    connection: main hands a signed-in connection's notifications to the plane in order and at
    once (hcp-server.ts:76, plane.ts:344), so the reply is in before its turn ends, with no round
    trip and no wait on `ready()`. The standalone daemon's control socket accepts the same
-   notification once signed in (pty-daemon.ts, track 1's file). The reply is cut to 256 KB.
+   notification once signed in (pty-daemon.ts, track 1's file). Not cut: the SDK's `reportReply`
+   sends it whole too, and the door's line limit (4 MB) still holds.
    Claude's and Codex's `Stop` become `emit: turn.ended, reply: last_assistant_message`; their
-   `hive-turn-end.cjs` goes (plugins repository too).
+   `hive-turn-end.cjs` goes (plugins repository too) once the standalone daemon accepts the
+   notification; until then a remote machine would drop the reply.
 4. **Boards held, by identity** (packages/host `needs.ts`). `heldBoards(store)` returns the same
    array while `repos()` and each `getCore(repo)` are the same; a tile index per array answers
    `agentOf`, `manifestOf`, `runsIn` and the agent's board in O(1). The agent list becomes
@@ -193,11 +197,12 @@ agent count, set it), while the agent list was quadratic.
    file then) and when the tile goes. A session id is checked (`isSessionId`) where it is parsed,
    written and read: today any string up to 256 characters reaches `--resume <id>`.
 6. **Transcripts on events** (`conversations.ts`, `conversation.ts`). Where a session's file is
-   (`sessionFile`, a folder scan) is kept once found: a session's file does not move. `followAgent`
-   re-checks when anything is heard of its agent (a hook event or a status change), not every
-   second; while its file is missing that is every hook event, so Claude's first file, written
-   during the first turn, is found at the turn's first tool use. `pendingTool` is kept per file
-   until its size or mtime changes.
+   (`sessionFile`, a folder scan) is kept once found and looked for again only once it is gone from
+   there. `followAgent` re-checks when its agent's status changes (the status store, one
+   subscription per `conversations()`, a map by tile), not every second. A session begun without
+   its file yet is looked for once a second for at most a minute after that change; a later
+   change (the turn's end, written after the file) restarts it. `askingOf` keeps what the file says
+   the agent waits on per tile until the file, its size or its mtime changes.
 7. **Push subscriptions in memory** (`push.ts`). Read once; the class is the file's only writer.
 
 ## Review (fresh reviewer, round 1) and answers
@@ -222,21 +227,79 @@ agent count, set it), while the agent list was quadratic.
    long-lived door-to-main connection is the next step if it is the connect. Encryption runs per
    phone per needs/done edge only. "Flat in agent count" is claimed for the per-event path; the
    list stays O(agents) per rebuild (ceiling below).
-8. *`reply:` needs limits.* Taken: validation, the hook's own token (never the daemon's), 256 KB.
+8. *`reply:` needs limits.* Taken: validation (a string at the named path, else no reply), the
+   hook's own token (never the daemon's), and 256 KB: a longer reply is cut, since a line past the
+   host's 1 MB would end the connection and the turn end with it (72561b4).
    No new disclosure line: `launch.hcp`, which `reply` requires, has one.
 
 Checked and sound: the memo (every change to ownership, a tile's command, arguments or frame
 gives a new core); the kept fields (`asks`, `chosen`, `leave` read inside `tool_input`).
 Also taken: the tile index holds tiles, never manifests (the catalog can change without a core).
 
+## Review round 2 and answers
+
+1. *Step 6 needs a per-tile feed, wired in the app and `hive host`, and a bounded re-check.* Taken:
+   `conversations({ status })`, lazy (headless builds it before its plane); re-check once a second
+   for a minute while the file is missing.
+2. *"No turn starts a runtime" is false: Kiro's `preToolUse` (`matcher: '*'`) runs a script on every
+   tool call, Droid's and Hermes's turn ends run scripts.* Taken as ceilings with numbers (below):
+   these cost the agent's own process tree, not main or the daemon.
+3. *`agent.reply` takes any tile from any tile's token.* Taken: a tile's `agent.reply` request
+   naming another tile is refused and recorded (991a15a), and a notification after `initialize`
+   naming another tile is dropped (757be9d). That left an `agent.event` sent before `initialize`
+   heard for any tile; round 3 closed it (below).
+4. *`HIVE_EVENT_KEEP` placement.* Taken: launch environment for any manifest with hooks or assets,
+   in `TILE_ENV`, empty counts as unset, rendered with or without hive-net.
+5. *Borrow raw values.* Taken (`&RawValue`): a lone surrogate in a key not kept no longer forces
+   the whole payload.
+6. *`sessionFile` cache.* Taken, keyed by the filled pattern (home and id in it), dropped when the
+   file is gone; at most 4096 entries, the oldest forgotten first.
+7. *Push read errors cached.* Fixed: cached only on a good read or a missing file.
+
+## Review round 3 and answers
+
+1. *The boards memo goes stale when a workspace has no layout.* Fixed (67695a9): owners of
+   workspaces with a null core are part of the key. Reading every owner instead cost 600 µs a call
+   at 50 workspaces; this costs 33 µs (27 µs before), load 18-30.
+2. *An unsigned `agent.event` moves any tile.* Fixed (0134b28): every hook signs in with its tile's
+   token first (the shared hook lines, the SDK's `emit`, the pi extension); the desktop's and
+   `hive host`'s socket and a machine's own daemon hear no notification before that. Which tile a
+   token speaks for is one function (`speaksFor`, one id normalisation) for all four checks; the
+   daemon compared raw ids, so a tile reporting under its bare id was dropped there and heard by
+   the host.
+3. *The doc overstated three things* (a 256 KB limit that did not exist, a test that did not exist,
+   a fix "wider than asked"). Corrected above.
+
+## Built
+
+| Commit | Step | Before | After | Load (16 CPUs) |
+|---|---|---|---|---|
+| d1ec1c9 | 4 | agent list, 600 agents: 1,599 ms | 10-20 ms | 74-105 |
+| 05790f5, a968132 | 5, 7 | main per hook event, 72 and 600 agents: 1.9 ms | 0.23-0.25 ms | 100-105 |
+| a90b3dd | 6 | `askingOf` per waiting agent: 19-23 ms CPU | 0.2-0.4 ms | 60-78 |
+| ddaa96a | 1 | door CPU per hook (node), 1 MB / 4 MB stdin: 23 / 76 ms | 3.2 / 1.9 ms | ~70 |
+| d44417c | 3 | Claude/Codex turn end: a script per turn | the generic hook, native (after the fixtures switch) | |
+| 67695a9 | 4 | cached `heldBoards`, 50 workspaces: 27 µs | 33 µs, and right with no layout | 18-30 |
+| 0134b28, 72561b4 | | (security, limits) | | |
+
+The door's floor at that load is the sockets: one unix-socket accept alone measured 1.0 ms CPU, and
+a hook is three (door accept, door to main, main's accept). The hook process itself, 100 B to 4 MB
+of stdin, load 65-78: hive-net 7-11 MB RSS, 0-15 ms CPU, 20-81 ms wall; the generic script under
+node 44-58 MB, 160-255 ms CPU, 580-840 ms wall (Electron as node is larger still).
+
+What remains on main per event is the status fold; `heldBoards` is an identity check.
+
 ## Pre-mortem
 
 1. *A field the host reads is not kept, so status breaks for one agent.* The conformance table
    (`agent-event-hook.test.ts`) runs every case through the script and the native hook; it fails
-   when the kept list drops a field the script used. `keptFields` and `hookLines` sit side by side
-   with a test that a kept payload gives the same lines as the whole one.
+   when the kept list drops a field the script used: each case runs with the keep list the host
+   renders for its entry (`keptFields`), so a field `hookLines` reads but the list leaves out shows
+   up as a missing id there.
 2. *The memo serves a stale board.* Its key is the store's own invalidation (a new frozen core per
-   change). A test changes a tile's command and its owner and asserts the next answer sees it.
+   change), and the owner of each workspace with no core, which keeps a null core while its owner
+   arrives (67695a9). A test changes a tile's command, adds and forgets a workspace, and imports an
+   owner into a replica with a layout and with none, and asserts the next answer sees each.
 3. *A conversation never follows a session that began without a status change.* A new session
    comes with `session.started` (Claude, Codex, Droid) or the tracker; both change the status
    (`session` is in it). Kiro reports only through its tracker: the door's write is not an event,
@@ -264,9 +327,21 @@ Also taken: the tile index holds tiles, never manifests (the catalog can change 
 - The agent list is still rebuilt whole per change (O(agents), throttled to 4/s by the feed). The
   upgrade is an item per agent, rebuilt on that agent's change.
 - Each conversation caller keeps its own file watch and 1 s stat poll (audit-broadcast #12).
+- Scripts that still start a runtime, each in the agent's own process tree (node: 44-58 MB,
+  160-255 ms CPU a start at load 65-78), never on main or the daemon:
+  - Kiro `preToolUse` on every tool call (its supervision check exits at once when the tile is not
+    supervised, before any connection). Its hooks are written once per install, so the matcher
+    cannot name the tile's policy. Upgrade: a `when: supervised`-style render per tile, once Kiro's
+    hook file can be per tile, or a shell guard if Kiro runs hooks through a shell (probe first).
+  - Kiro's tracker on `agentSpawn` and every `userPromptSubmit`; Claude's on `SessionStart`.
+    Upgrade: step 2 (the door records the session), waiting on pty-daemon.ts.
+  - Hermes `post_llm_call` (every model call: its reply lives in `extra.assistant_response`) and
+    `on_session_end`. Upgrade: `reply:` on any emit entry, recorded as the pending reply, which the
+    host already keeps until the turn ends.
+  - Droid's turn end reads its reply from its transcript. Upgrade: none from the hook; a
+    `transcript`-mapped manifest would let the host read the last reply when the turn ends.
 
 ## Unknown
 
-- hive-net hook's own start time and RSS on this build (step 1 measures).
 - Whether Codex's Stop payload names its reply `last_assistant_message` in every version: its
   script reads that field today, so the manifest change says no more than the script did.
