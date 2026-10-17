@@ -135,6 +135,8 @@ function tilesOf(event: EventMessage): string[] | null {
 
 /** While events stream to a peer, a frame at most this often. */
 export const PEER_FRAME_MS = 25;
+/** A frame of events to a peer holds at most this many bytes; an event larger goes alone. */
+export const PEER_FRAME_BYTES = 256 * 1024;
 
 /** The peers with a frame waiting for the next tick of the one clock they all keep: a moment's
  *  frames to every peer go out together, in one write to the network daemon. */
@@ -210,9 +212,20 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     due = false;
     if (queued.length === 0) return;
     sentAt = Date.now();
-    const events = queued;
+    const events = queued.map(json);
     queued = [];
-    channel.send(events.length === 1 ? json(events[0]!) : `[${events.map(json).join(",")}]`);
+    let frame: string[] = [];
+    let bytes = 0;
+    const send = (): void => {
+      channel.send(frame.length === 1 ? frame[0]! : `[${frame.join(",")}]`);
+      [frame, bytes] = [[], 0];
+    };
+    for (const event of events) {
+      if (frame.length > 0 && bytes + event.length > PEER_FRAME_BYTES) send();
+      frame.push(event);
+      bytes += event.length + 1;
+    }
+    send();
   };
   const connection: Connection = {
     actor: peer.actor,

@@ -13,7 +13,7 @@ import type { Access } from "@hivemind/workspace-host/access";
 import { WorkspaceClient } from "../src/client.ts";
 import { WorkspaceServer, type Connection } from "../src/server.ts";
 import { ApiError } from "../src/protocol.ts";
-import { PEER_FRAME_MS, peerTransport, servePeer, workspaceUrl, type TextChannel } from "../src/peers.ts";
+import { PEER_FRAME_BYTES, PEER_FRAME_MS, peerTransport, servePeer, workspaceUrl, type TextChannel } from "../src/peers.ts";
 
 let tmp: string;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), "peers-")); });
@@ -439,6 +439,24 @@ test("the events of one moment reach a peer as one frame, and each is heard", as
   server.publish("terminal.data", "in-1", "alone");
   await client.call("status.all");
   expect(JSON.parse(frames[2]!)).toEqual({ event: "terminal.data", params: ["in-1", "alone"] });
+});
+
+test("a moment of more output than one frame holds goes in several, each at most its size, in order; an event larger goes alone", async () => {
+  const { server, client, guest } = connect("view");
+  const frames: string[] = [];
+  guest.on((text) => frames.push(text));
+  const heard: string[] = [];
+  client.on("terminal.data", (tile, data) => heard.push(`${tile}:${data.length}`));
+  await client.call("file.read", workspaceUrl(W), "a.ts"); // connected
+  frames.length = 0;
+  const sizes = [...Array.from({ length: 40 }, () => 30 * 1024), 600 * 1024, ...Array.from({ length: 5 }, () => 30 * 1024)];
+  sizes.forEach((size, n) => server.publish("terminal.data", `in-${n}`, "x".repeat(size)));
+  await client.call("status.all");
+  expect(heard).toEqual(sizes.map((size, n) => `in-${n}:${size}`));
+  const events = frames.slice(0, -1);
+  expect(events.length).toBe(Math.ceil((40 * 30) / 256) + 2);
+  for (const f of events) if (Array.isArray(JSON.parse(f))) expect(f.length).toBeLessThanOrEqual(PEER_FRAME_BYTES);
+  expect(events.filter((f) => f.length > PEER_FRAME_BYTES).map((f) => JSON.parse(f).params[0])).toEqual(["in-40"]);
 });
 
 test("while events stream a peer is sent a frame at most every 25 ms, each heard; after a quiet spell the next goes at once", async () => {
