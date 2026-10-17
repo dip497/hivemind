@@ -128,6 +128,7 @@ jobs:
   hive-phone:
     # The phone's Rust core (M5): conformance/pairing.json from the phone's side, and what it keeps;
     # the facade the apps link (crates/hive-phone-ffi), and the Swift generated from it, committed.
+    # That crates/hive-web builds for a browser with them is phone-page's: it builds its wasm.
     runs-on: ubuntu-latest
     timeout-minutes: 40
     defaults:
@@ -139,14 +140,13 @@ jobs:
       - name: Rust (rust-toolchain.toml)
         run: rustup toolchain install
 
-      - uses: actions/cache@v6
+      # Dependencies only: the whole target dirs were a 4.2 GB cache, 2 min to restore, that pushed
+      # the other caches out of the repository's 10 GB.
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            crates/hive-phone/target
-            crates/hive-phone-ffi/target
-          key: hive-phone-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'crates/hive-phone/Cargo.lock', 'crates/hive-phone-ffi/Cargo.lock') }}
+          workspaces: |
+            crates/hive-phone -> target
+            crates/hive-phone-ffi -> target
 
       - name: Test
         run: cargo test --locked
@@ -157,13 +157,6 @@ jobs:
           if cargo tree --locked -e normal --prefix none | grep -E '^(iroh-dns-server|tokio-rustls-acme) '; then
             echo "the phone links hive-net's server roles"; exit 1
           fi
-
-      - name: It builds for a browser
-        # crates/hive-web links its pairing and readers as they are (phone-browser design §10).
-        working-directory: crates/hive-web
-        run: |
-          rustup target add wasm32-unknown-unknown
-          cargo check --locked --target wasm32-unknown-unknown --lib
 
       - name: Test the facade
         working-directory: crates/hive-phone-ffi
