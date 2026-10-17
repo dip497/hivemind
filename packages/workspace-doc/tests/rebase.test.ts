@@ -7,6 +7,7 @@ import { addFrame, addTile, readCore, removeFrame, removeTile, writeCore, writeT
 import { readObjects, writeObjects } from "../src/objects.ts";
 import { readView, writeView } from "../src/views.ts";
 import type { BoardObject } from "../src/shapes.ts";
+import { rebaseFields, rebaseRecords } from "../src/rebase.ts";
 
 type Fields = Record<string, unknown>;
 const frame = (id: string, fields: Fields = {}) => ({ id, x: 0, y: 0, w: 400, h: 300, title: id, color: "#888", z: 1, ...fields });
@@ -179,4 +180,17 @@ test("a frame is taken out with the frames nested in it; their tiles stay, in no
   expect(Object.values(after.frameOf).some((f) => gone.includes(f))).toBe(false);
   expect(after.tiles).toEqual(READ.tiles);
   expect(removeFrame(doc, "gone")).toEqual([]);
+});
+
+test("a read that brings nothing new gives the reader its own records back, and only what changed is new", () => {
+  const base = [{ id: "a", label: "A" }, { id: "b", label: "B" }];
+  const mine = [{ id: "a", label: "A" }, { id: "b", label: "B" }];
+  expect(rebaseRecords(base, mine, structuredClone(base))).toBe(mine);
+  const theirs = [{ id: "a", label: "A" }, { id: "b", label: "renamed" }];
+  const read = rebaseRecords(base, mine, theirs);
+  expect(read).toEqual(theirs);
+  expect([read === mine, read[0] === mine[0], read[1] === mine[1]]).toEqual([false, true, false]);
+  const names = { a: "x", b: "y" };
+  expect(rebaseFields({ a: "x", b: "y" }, names, { a: "x", b: "y" })).toBe(names);
+  expect(rebaseFields({ a: "x", b: "y" }, names, { a: "x", b: "z" })).toEqual({ a: "x", b: "z" });
 });

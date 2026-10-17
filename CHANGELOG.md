@@ -25,6 +25,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
+- A change from another window, your phone or an agent no longer redraws every tile in the window. Only the tiles it changed are drawn again: with 100 tiles open, a rename used to rebuild all 100.
 - Opening several agents at once no longer freezes the window for most of a second. Each terminal's GPU drawing is set up in a frame of its own, the focused one first, instead of all of them in one go.
 - Terminals no longer freeze every two seconds while an agent prints. The saved copy of a busy terminal (what comes back after a crash) keeps its last 500 lines instead of all 5000, which took up to half a second to write and held every terminal's output meanwhile; quitting, closing a window and a program ending still save all of it.
 - Agents changing status no longer slow every window down. The app used to re-read every workspace from disk several times per status change, 16 ms with 6 workspaces and 47 ms with 50; it is now under 1.1 ms.

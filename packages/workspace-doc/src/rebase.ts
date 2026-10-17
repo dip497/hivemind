@@ -48,7 +48,8 @@ export function rebaseRecords<T extends { id: string }>(
   }
   const known = new Set([...was.keys(), ...next.map((r) => r.id)]);
   for (const record of current) if (!known.has(record.id)) out.push(record);
-  return out;
+  // Nothing new: the writer's own list back, so a reader whose records did not change keeps them.
+  return out.length === next.length && out.every((r, i) => r === next[i]) ? next as T[] : out;
 }
 
 /**
@@ -66,7 +67,8 @@ export function rebaseFields<T extends Fields>(base: T, next: T, current: T, dep
     else if (depth > 1 && isObject(mine) && isObject(now)) out[key] = rebaseFields(isObject(base[key]) ? base[key] : {}, mine, now, depth - 1);
     else out[key] = mine;
   }
-  return out as T;
+  const keys = Object.keys(out);
+  return (keys.length === Object.keys(next).length && keys.every((key) => key in next && sameJson(out[key], next[key])) ? next : out) as T;
 }
 
 /**
