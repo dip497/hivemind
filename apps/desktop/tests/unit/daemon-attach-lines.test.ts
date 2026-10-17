@@ -15,10 +15,11 @@ const dir = fs.mkdtempSync("/tmp/hal-");
 let daemon: ChildProcess | undefined;
 after(() => { daemon?.kill("SIGKILL"); fs.rmSync(dir, { recursive: true, force: true }); });
 
-test("an attach asking for 5 lines of scrollback is replayed the 5 newest above the screen; one asking nothing, all of them", { skip: process.platform === "win32" }, async () => {
+test("an attach asking for 5 lines of scrollback is replayed the 5 newest above the screen; one asking nothing, all of them", { skip: process.platform === "win32", timeout: 120_000 }, async () => {
   const sock = path.join(dir, "d.sock");
   daemon = spawn(process.execPath, ["--import", "tsx", DAEMON, sock], { stdio: "ignore" });
-  for (let i = 0; i < 100 && !fs.existsSync(sock); i++) await new Promise((r) => setTimeout(r, 100));
+  // Started from source, it takes seconds to listen on a busy machine.
+  for (let i = 0; i < 600 && !fs.existsSync(sock); i++) await new Promise((r) => setTimeout(r, 100));
   const connect = async () => {
     const c = net.connect(sock);
     await new Promise((r) => c.once("connect", r));
@@ -31,7 +32,7 @@ test("an attach asking for 5 lines of scrollback is replayed the 5 newest above 
     }));
     return { c, replays, out: () => out, send: (m: ClientMsg) => c.write(frame(m)) };
   };
-  const until = async (what: () => boolean) => { for (let i = 0; i < 200 && !what(); i++) await new Promise((r) => setTimeout(r, 25)); };
+  const until = async (what: () => boolean) => { for (let i = 0; i < 1200 && !what(); i++) await new Promise((r) => setTimeout(r, 25)); };
   const spec = { cwd: dir, cmd: "sh", args: ["-c", "i=0; while [ $i -lt 100 ]; do echo LINE$i; i=$((i+1)); done; echo done; while :; do sleep 1; done"], cols: 80, rows: 24 };
   const first = await connect();
   try {
