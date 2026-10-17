@@ -121,6 +121,22 @@ test("a frame's agents sleep in the folders they run in, those of the frames in 
   assert.deepEqual(await api.sleep(REPO, "a1", false), { slept: [], skipped: [{ tile: "a1", why: "asleep already" }] });
 });
 
+test("named nothing, every agent of the workspace sleeps, in every frame; a tile that runs nothing is not even listed", async () => {
+  const { p, calls } = plane();
+  p.event("agent.event", { tileId: "hm:a5", event: "turn.started" });
+  const api = await p.api();
+  assert.deepEqual(sorted(await api.sleep(REPO, undefined, false)), {
+    slept: ["a1", "a2", "a3", "a4"],
+    skipped: [
+      { tile: "a5", why: "working: --force puts it to sleep anyway" },
+      { tile: "p1", why: "Plain cannot resume its conversation: it would wake blank" },
+      { tile: "s1", why: "not an agent: only an agent comes back where it was" },
+      { tile: "x1", why: "it shows a session started elsewhere, which is theirs" },
+    ],
+  });
+  assert.equal(calls.length, 4);
+});
+
 test("a tile is named by its id or its name; a name two tiles share, and one nothing answers to, are refused", async () => {
   const { p } = plane();
   const api = await p.api();
